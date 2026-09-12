@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { SLOT_NAME_RE } from "./slot.mjs";
+
 const CADDYFILE = fileURLToPath(
   new URL(
     "../../infra/deploy/compose/stg-infra/Caddyfile",
@@ -25,8 +27,11 @@ const NEWLINE = "\n";
 // and a newline must never be collapsed into one.
 const SPACES = /[^\S\n]+/;
 
-/** The one slot-name alternation, as every copy must spell it. */
-const SLOT_ALTERNATION = "(main|pr-[0-9]+)";
+// The one slot-name alternation — DERIVED from the tool's authority rather than
+// re-typed, so the edge cannot drift from the names `slot up` can actually create
+// (a name the edge admits but the tool refuses mints a certificate, and the
+// issuance quota is the only bound the static edge has).
+const SLOT_ALTERNATION = `(${SLOT_NAME_RE.source.replace(/^\^\(\?:/, "").replace(/\)\$$/, "")})`;
 /** The one app-label alternation, as §3 «Hostnames» lists it. */
 const APP_ALTERNATION = "(academy|doctor|admin|api)";
 
@@ -74,6 +79,18 @@ test("every host matcher uses the same slot alternation", () => {
       pattern.includes(SLOT_ALTERNATION),
       `matcher ${name} must spell the slot as ${SLOT_ALTERNATION}, got ${pattern}`,
     );
+  }
+});
+
+test("the edge admits exactly the slot names the tool can create", () => {
+  const alternation = new RegExp(`^${SLOT_ALTERNATION}$`);
+  for (const name of ["main", "pr-1", "pr-42", "pr-1234567890"]) {
+    assert.ok(alternation.test(name), `${name} must be admitted`);
+    assert.ok(SLOT_NAME_RE.test(name), `${name} must be a valid slot name`);
+  }
+  for (const name of ["pr-0", "pr-007", "pr-", "PR-1", "staging", "pr-12345678901"]) {
+    assert.ok(!alternation.test(name), `${name} must not be admitted`);
+    assert.ok(!SLOT_NAME_RE.test(name), `${name} must not be a valid slot name`);
   }
 });
 

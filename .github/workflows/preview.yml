@@ -13,8 +13,8 @@
 # rejected here so a malformed dispatch never reaches the box. The run summary then
 # states the exact operator command.
 #
-# INTERIM STATE, said plainly: until §8 step 6 wires the regression suite (a separate
-# Issue) and §8 step 7 writes the suite itself, this workflow only validates and
+# INTERIM STATE, said plainly: until §8 step 6 wires the regression suite (Issue #2066)
+# and §8 step 7 writes the suite itself, this workflow only validates and
 # echoes. It is kept rather than deleted because step 6 attaches to this same
 # `workflow_dispatch` route and its `slot`/`sha` inputs.
 name: Preview slots

@@ -101,6 +101,19 @@ test("2194: several preserved files each get their own shell variable", () => {
   );
 });
 
+test("2194: a repo-root-level preserved path emits no truncated mkdir", () => {
+  const script = shipTreeCommand({
+    liveDir: "$HOME/ds-platform.slots/pr-42",
+    preserved: ["root.env"],
+  });
+  assert.ok(script.includes('preserved_rel="root.env"'));
+  assert.ok(!script.includes("mkdir -p " + JSON.stringify("$stage/root.en")));
+  assert.ok(!script.includes("mkdir -p " + JSON.stringify("$stage/")));
+  assert.ok(
+    script.includes('cp -p "$live/$preserved_rel" "$stage/$preserved_rel"'),
+  );
+});
+
 // ── sshBaseArgs ─────────────────────────────────────────────────────────────
 
 test("2194: every ssh channel keeps the #905 keepalive flags and the host last", () => {

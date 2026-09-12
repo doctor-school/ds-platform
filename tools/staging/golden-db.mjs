@@ -158,7 +158,12 @@ export function terminateBackendsStatement(name) {
  * this module stays free of a cycle and the planners stay pure.
  *
  * `DATABASE_URL` is overridden per one-shot with `-e`: the template generation
- * being filled is `ds_golden_next`, not the slot's own database.
+ * being filled is `ds_golden_next`, not the slot's own database. That URL is part of
+ * the argv, so the staging Postgres password is visible in the box's process table
+ * while the one-shot runs — accepted: `stage-1` is single-tenant and carries no
+ * production credential (spec §3 «Trust boundary»), and every alternative that keeps
+ * compose's env override still puts the value on the same box's command line
+ * (recorded in DEBT.md, 2026-09-12).
  */
 export function buildCommands(nextUrl, composeBase) {
   if (!Array.isArray(composeBase) || composeBase.length === 0) {
@@ -267,6 +272,16 @@ async function main() {
 
   // Imported lazily: `slot.mjs` imports this module, so a static import would close
   // a cycle. Only the CLI half needs these — the planners above stay pure.
+  //
+  // Weighed against extracting the four symbols into a `box.mjs` leaf (the shape
+  // `tools/deploy/lib/remote.mjs` has) and rejected as not a straight move:
+  // `composeBase` pulls `STAGE_ENV_FILE`, `slotEnvPath`, `slotComposeFile`,
+  // `composeProjectName` → `assertSlotName` → `SLOT_NAME_RE` → `SlotError` with it,
+  // i.e. the shared spine `slot.mjs` throws from everywhere and both test files import
+  // by name. The cycle is safe in the direction it runs: `slot.mjs` has no top-level
+  // side effect, and this import fires only inside `main()`, after either module has
+  // fully evaluated. A static consumer of this module that also needs `slot.mjs` is
+  // what would make the extraction worth its blast radius.
   const { STAGE_1, POSTGRES_CONTAINER, composeBase, quoteCommand } = await import(
     "./slot.mjs"
   );

@@ -226,10 +226,14 @@ export function shipTreeCommand({
   const preservedCopies = preserved
     .map((rel, i) => {
       const v = varName(i);
-      const dir = rel.slice(0, rel.lastIndexOf("/"));
+      // A repo-root-level preserved path has no directory of its own: emit no
+      // `mkdir` for it rather than a truncated one ("x.env".lastIndexOf("/") is
+      // -1). `$stage` itself is created by the caller before this runs.
+      const slash = rel.lastIndexOf("/");
+      const dir = slash === -1 ? "" : rel.slice(0, slash);
       return (
         `if [ -f "$live/$${v}" ]; then\n` +
-        `  mkdir -p "$stage/${dir}"\n` +
+        (dir ? `  mkdir -p "$stage/${dir}"\n` : "") +
         `  cp -p "$live/$${v}" "$stage/$${v}"\n` +
         `fi\n`
       );

@@ -6,14 +6,12 @@ every preview slot (`main`, `pr-<N>`) is a _separate_ compose project that joins
 `stg-infra` network with its `api` container only.
 
 Plan of record: `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`
-(§3 topology, §8 steps 1-2, §9 recovery). The spec's delivery half has moved to production's
-shape — an operator ships a committed SHA over SSH, the box builds its own images, and the
-edge is one host regexp with no slot registry, no generated include and no host Node. The
-«Slot deployer (#2064)» section below and every registry/GHCR mention in it describe what is
-installed on the box **today**; Issue #2194 reworks that and rewrites those sections. Issue #2061 (Phase A, this directory) and
-#2062 (the edge — «Edge (#2062)» below);
-Phase B — the owner's `terraform apply`, the first bring-up and
-the live acceptance below — is tracked in **#2095**.
+(§3 topology, §8 steps 1-2, §9 recovery). Delivery follows production's shape: an operator
+ships a committed SHA over SSH, the box builds its own images, and the edge is one host
+regexp — no slot registry, no generated include, no host Node. Phase A (this directory) is
+#2061 and the edge is #2062 («Edge (#2062)» below); Phase B — the owner's `terraform apply`,
+the first bring-up and the live acceptance below — is tracked in **#2095**, and the live slot
+run in **#2064**.
 
 Everything here is Phase B: nothing in this file runs on a developer machine.
 
@@ -132,13 +130,17 @@ behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
 → `200.169.178.154`).
 
 - **On-demand TLS.** No certificate is pre-issued. Caddy asks
-  `http://127.0.0.1:2020/ask` before every ACME order, and the allow list is the
-  generated `ask.caddy` include — the shared `id` host plus every host of every
-  registered slot (see «Slots (#2064)» below). An unregistered name under the
-  wildcard therefore fails the TLS handshake instead of burning a Let's Encrypt
-  issuance slot. The site is bound to `127.0.0.1:2020`, not `:2020`: this container
-  is attached to every slot network, so an unbound listener would hand the registry
-  to code running inside a preview.
+  `http://127.0.0.1:2020/ask` before every ACME order, and the answer comes from the
+  host-name convention alone: the `@stage_ask` matcher answers 200 for the shared `id`
+  host and for every well-formed `<app>-<slot>.<base domain>` name, 404 for everything
+  else. There is no registry and no generated include, so `ask` does **not** know which
+  slots are live — any regexp-shaped name, `api-pr-4242` with nothing behind it
+  included, passes the check, gets a REAL Let's Encrypt certificate and then a 502. A
+  malformed name is refused before any ACME order starts. The bound that protects the
+  zone is therefore the issuance quota, not an allow list: see «Certificates cost
+  quota» below. The site is bound to `127.0.0.1:2020`, not `:2020`: this container is
+  attached to every slot network, so an unbound listener would expose the responder to
+  code running inside a preview.
 - **noindex.** The `(staging_guard)` snippet sets `X-Robots-Tag: noindex, nofollow`
   on the wildcard site, so it rides every response — 200, 401, 404 alike.
 - **Basic auth.** ONE pair for the whole stand, `STAGE_BASIC_AUTH_USER` +
@@ -150,18 +152,23 @@ behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
   `/etc/ds-platform/stage-basic-auth.txt`, **`0600 root:root`**, the same mode and
   owner as `stage.env`: it is a live credential, not a note.
 - **Base domain.** The site address `*.{$STAGE_BASE_DOMAIN}`, the `id` vhost and the
-  `(slot)` snippet all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
+  `@stage_ask` matcher all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
   service's `environment:` block. `tools/staging/slot.mjs` reads the SAME variable to
-  derive the literal hosts it writes into the generated includes — one variable, two
+  derive the literal hosts it asserts against after a converge — one variable, two
   consumers, one value. Change it in `stage.env` and both sides follow.
-- **`(slot)` snippet + the generated `import slot <name>` lines.** One `import` line
-  = four vhosts (`academy-`, `doctor-`, `admin-`, `api-<slot>`). Those lines are
-  never typed: they live in `slots.caddy`, rendered from the slot registry by
-  `slot up` / `slot down`, which then reload through the loopback admin API.
+- **One regexp, every slot host.** `@stage_slot` matches
+  `^(academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})[.]` on `Host`, and a `map`
+  table turns the `<app>` label into the slot's compose service and port — four vhosts
+  per slot (`academy-`, `doctor-`, `admin-`, `api-<slot>`) with nothing typed and
+  nothing generated. A slot coming up or going down never reloads Caddy. The slot
+  alternation is the same one `SLOT_NAME_RE` in `tools/staging/slot.mjs` spells, and
+  `tools/staging/stage-edge.test.mjs` derives its expectation FROM that constant: a
+  name the edge admitted but the tool could not create would mint a certificate for a
+  slot that can never exist.
 - **`id` vhost.** The shared Zitadel: `/ui/v2/login/*` → `idp-login:3000`, everything
   else → `h2c://idp:8080`, the production shape of `id.doctor.school`.
 
-**Alias contract — satisfied since #2064 part 1.** The `(slot)` snippet proxies to the
+**Alias contract — satisfied since #2064 part 1.** The slot handler proxies to the
 container names `<slot>-portal:3001`, `<slot>-doctor:3004`, `<slot>-admin:3002`,
 `<slot>-api:3000`, `<slot>-centrifugo:8000`. `infra/deploy/compose/slot/compose.yml`
 publishes exactly those as `container_name: ${SLOT}-<service>` on the slot's own
@@ -182,10 +189,16 @@ browser credentials and authenticates by its own mechanism:
    nothing — Zitadel authenticates every caller on its own. `noindex` still applies to
    `id`.
 
-**Never `curl --resolve` an unregistered or unresolving host.** Each attempt makes
-Caddy start an ACME order that fails validation, and failed validations count against
-the Let's Encrypt rate limit for the whole zone. Test only names the `ask` stub
-already answers 200 for.
+**Certificates cost quota — a probe is an issuance, not a refusal.** Any name matching
+the `<app>-<slot>.<base domain>` convention is admitted by `ask` whether or not a slot
+is live, so a `curl --resolve` or an `openssl s_client` against one makes Caddy order a
+REAL certificate. Let's Encrypt counts issuance per REGISTERED domain, which is
+`doctor.school` — the same bucket production's `academy.`, `api.` and `id.` certificates
+renew from, not a staging-only one (and a retry additionally spends the
+duplicate-certificate limit). A name that does not resolve additionally fails validation, which counts against
+the failed-validation limit. So: probe only hosts of slots that are actually up, and never
+invent a name to test the edge — a malformed name (refused by `ask` before any ACME order)
+is the only free probe there is.
 
 ### Acceptance (observed 2026-09-10, from an external client unless noted)
 
@@ -206,18 +219,18 @@ openssl s_client -connect academy-main.stage.doctor.school:443 \
 # observed: issuer C=US, O=Let's Encrypt, CN=YE1
 #           subject CN=academy-main.stage.doctor.school
 #           notBefore 2026-09-10 02:21:32 GMT, notAfter 2026-12-09
-
-openssl s_client -connect api-pr-0.stage.doctor.school:443 \
-  -servername api-pr-0.stage.doctor.school </dev/null
-# observed: handshake refused, no certificate issued — `ask` answered 404.
-# (This host RESOLVES via the wildcard; that is why probing it is safe.)
 ```
 
 On the box, with the pair from `/etc/ds-platform/stage-basic-auth.txt`: `academy-main`
 → 502 and `api-main /v1/health` → 502 (authenticated, no slot upstream yet), a wrong
-password → 401. The pair was rotated 2026-09-10. The `ask` stub answered 200 for `id`,
-`academy-main`, `api-main` and 404 for `api-pr-0`; `/healthz` by IP → 200; `Host:
-academy-main…` on `:80` → 308 to https; `Host: foo.example` → 404.
+password → 401. The pair was rotated 2026-09-10. The `ask` responder answered 200 for
+`id`, `academy-main` and `api-main`; `/healthz` by IP → 200; `Host: academy-main…` on
+`:80` → 308 to https; `Host: foo.example` → 404.
+
+The current `Caddyfile` is re-verified on the box at the start of the owner-gated live
+run tracked by **#2064** — `docker exec stg-infra-caddy-1 caddy validate --config
+/etc/caddy/Caddyfile` and `docker compose -f infra/deploy/compose/stg-infra/compose.yml
+config` before any `slot up` (spec §8 step 4).
 
 ## Zitadel converge
 

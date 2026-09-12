@@ -26,6 +26,22 @@ import {
 
 const ADMIN_URL = "postgres://ops:secret@staging.internal:5432/postgres";
 
+// The `main` slot's compose argv prefix, as `composeBase("main")` renders it in
+// `slot.mjs`. Passed in rather than imported so this file stays a pure unit test.
+const COMPOSE_BASE = [
+  "sudo",
+  "docker",
+  "compose",
+  "--env-file",
+  "/etc/ds-platform/stage.env",
+  "--env-file",
+  "/etc/ds-platform/slots/main.env",
+  "-p",
+  "ds-slot-main",
+  "-f",
+  "/home/deploy/ds-platform.slots/main/infra/deploy/compose/slot/compose.yml",
+];
+
 test("the three generations are derived from one base name", () => {
   const names = templateDatabaseNames();
   assert.deepEqual(
@@ -109,22 +125,55 @@ test("every rename is preceded by a disconnect of that database", () => {
   }
 });
 
-test("the migrate is the same entry point the api image runs", () => {
-  const [migrate, seed] = buildCommands("postgres://x/ds_golden_next");
-  assert.deepEqual(migrate.args, [
-    "--filter",
-    "@ds/api",
+test("both fill steps run in the slot's migrate one-shot, never on the host", () => {
+  const [migrate, seed] = buildCommands(
+    "postgres://x/ds_golden_next",
+    COMPOSE_BASE,
+  );
+  for (const command of [migrate, seed]) {
+    assert.equal(command.kind, "sh");
+    // The container one-shot, in the production shape (`tools/deploy/prod.mjs`).
+    assert.deepEqual(command.command.slice(0, COMPOSE_BASE.length), COMPOSE_BASE);
+    const tail = command.command.slice(COMPOSE_BASE.length);
+    assert.deepEqual(tail.slice(0, 7), [
+      "--profile",
+      "migrate",
+      "run",
+      "--rm",
+      "-e",
+      "DATABASE_URL=postgres://x/ds_golden_next",
+      "migrate",
+    ]);
+    // No host invocation survives: every token before `migrate` is compose's.
+    assert.ok(
+      !command.command.slice(0, COMPOSE_BASE.length + 7).includes("pnpm"),
+      "the host never runs pnpm",
+    );
+  }
+  assert.deepEqual(migrate.command.slice(-3), [
+    "pnpm",
     "run",
     "drizzle:migrate:ci",
   ]);
-  assert.deepEqual(seed.args, ["--filter", "@ds/db", "run", "seed:golden"]);
-  for (const command of [migrate, seed]) {
-    assert.equal(command.env.DATABASE_URL, "postgres://x/ds_golden_next");
-  }
+  assert.deepEqual(seed.command.slice(-5), [
+    "pnpm",
+    "--filter",
+    "@ds/db",
+    "run",
+    "seed:golden",
+  ]);
+});
+
+test("a fill plan without the slot's compose prefix is refused", () => {
+  assert.throws(
+    () => buildCommands("postgres://x/ds_golden_next"),
+    GoldenDbError,
+  );
+  assert.throws(() => planGoldenDbBuild({ adminUrl: ADMIN_URL }), GoldenDbError);
 });
 
 test("the plan runs prepare → fill → publish", async () => {
-  const plan = planGoldenDbBuild({ adminUrl: ADMIN_URL });
+  const plan = planGoldenDbBuild({ adminUrl: ADMIN_URL, composeBase: COMPOSE_BASE });
   const trace = [];
   await runGoldenDbBuild(plan, {
     sql: (statement) => {
@@ -153,7 +202,7 @@ test("the plan runs prepare → fill → publish", async () => {
 });
 
 test("a failed fill leaves the live template untouched", async () => {
-  const plan = planGoldenDbBuild({ adminUrl: ADMIN_URL });
+  const plan = planGoldenDbBuild({ adminUrl: ADMIN_URL, composeBase: COMPOSE_BASE });
   const executed = [];
   await assert.rejects(
     runGoldenDbBuild(plan, {

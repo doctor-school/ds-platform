@@ -380,14 +380,10 @@ services:
         "caddyfile",
       ]
     volumes:
+      # The edge is STATIC (#2194): the Caddyfile alone describes every slot host
+      # through one host regexp, so there is no generated include to mount and no
+      # reload when a slot comes up or goes down.
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # The two GENERATED includes (#2064): `ask.caddy` (on-demand-TLS allow list)
-      # and `slots.caddy` (one `import slot <name>` per live slot), both rendered
-      # from /var/lib/ds-platform/slots.json by `tools/staging/slot.mjs`. Mounted
-      # READ-ONLY: only the slot deployer on the host writes them, and it reloads
-      # this container afterwards. `slot render` must have run once before the
-      # first bring-up, or the Caddyfile's `import` lines have nothing to read.
-      - /etc/ds-platform/caddy:/etc/caddy/slots:ro
       - caddydata:/data
       - caddyconfig:/config
       # Read-only docker socket is NOT mounted: `slot up` attaches this container to

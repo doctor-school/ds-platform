@@ -1,4 +1,4 @@
-# stg-infra Caddy — the STAGE edge (C2, spec 2026-09-08 §3 «Hostnames», Issue #2062).
+# stg-infra Caddy — the STAGE edge (C2, spec 2026-09-08 §3 «Hostnames», Issues #2062/#2194).
 #
 # One public entry for every slot under `*.stage.doctor.school` (wildcard A record,
 # owner-managed in the DNS zone). Per-host certificates are issued ON DEMAND: Caddy
@@ -6,6 +6,20 @@
 # wildcard never burns a Let's Encrypt slot. Every staging host sends
 # `X-Robots-Tag: noindex` and sits behind ONE basic-auth pair (`STAGE_BASIC_AUTH_*`
 # from /etc/ds-platform/stage.env, passed in by compose.yml → caddy.environment).
+#
+# THE EDGE IS STATIC (#2194). There is no slot registry, no generated include and no
+# reload on bring-up: this file alone describes every host that can ever exist,
+# through ONE host regexp over the §3 naming convention
+#
+#     <app>-<slot>.{$STAGE_BASE_DOMAIN}   app  ∈ academy|doctor|admin|api
+#                                         slot ∈ main|pr-<N>
+#
+# mapped to the slot's own container `<slot>-<service>` (`academy` → the `portal`
+# service; the `map` table below is the §3 «Hostnames» mapping verbatim). A slot
+# coming up or going down changes NOTHING here — Caddy is never reloaded by
+# `tools/staging/slot.mjs`. Until a slot is up its hosts answer 401 (no credentials)
+# or 502 (credentials, no upstream) — never a certificate error, never an indexable
+# page.
 #
 # Basic-auth exemptions — exactly two, both because the caller carries no browser
 # credentials and is authenticated by its own mechanism:
@@ -19,37 +33,23 @@
 #
 # Upstream ports mirror production (api 3000, portal 3001, admin 3002, doctor 3004,
 # centrifugo 8000, zitadel core 8080 h2c, login 3000). Slot containers are reached
-# by the container name `<slot>-<service>` on the slot network `slot up` attaches
-# this container to — `containerAliases` in tools/staging/slot.mjs, published as
-# `container_name` by infra/deploy/compose/slot/compose.yml. Until a slot is up its
-# hosts answer 401 (no credentials) or 502 (credentials, no upstream) — never a
-# certificate error and never an indexable page.
-#
-# GENERATED INCLUDES. Two files under /etc/caddy/slots (host path
-# /etc/ds-platform/caddy, mounted read-only by compose.yml) are rendered by
-# `tools/staging/slot.mjs` from ONE slot registry and are never edited by hand:
-#   - `ask.caddy`   — the on-demand-TLS allow list (the 127.0.0.1:2020 site below);
-#   - `slots.caddy` — one `import slot <name>` line per live slot.
-# They move in lockstep because they come from the same registry. `slot render`
-# writes both (comment-only files when no slot is up), so this Caddyfile parses on
-# a box where nothing has been deployed yet — run it once before the first bring-up.
+# by the container name `<slot>-<service>` on the slot network this container is
+# attached to — `containerAliases` in tools/staging/slot.mjs, published as
+# `container_name` by infra/deploy/compose/slot/compose.yml.
 #
 # HOSTNAMES come from `{$STAGE_BASE_DOMAIN}` (/etc/ds-platform/stage.env, passed in
-# by compose.yml → caddy.environment). `slot.mjs` reads the SAME variable to derive
-# the literal hosts it writes into the includes: one variable, two consumers, one
-# value.
+# by compose.yml → caddy.environment).
 {
 	# ACME contact for expiry notices — same as production.
 	email a@preencipium.com
 
-	# The admin API on the loopback is what the compose healthcheck probes and what
-	# `slot up` uses for a config reload. Bound to localhost inside the container;
-	# never published.
+	# The admin API on the loopback is what the compose healthcheck probes. Bound to
+	# localhost inside the container; never published.
 	admin localhost:2019
 
 	# On-demand issuance is gated by the `ask` endpoint served by this same Caddy on
-	# a loopback-only port (the 127.0.0.1:2020 site below): 200 only for the hosts of
-	# currently registered slots, straight from the rendered registry include.
+	# a loopback-only port (the 127.0.0.1:2020 site below): 200 for any WELL-FORMED
+	# slot host plus the shared IdP host, 404 for everything else.
 	on_demand_tls {
 		ask http://127.0.0.1:2020/ask
 	}
@@ -64,61 +64,32 @@
 
 # The one credential pair guarding every staging host (bcrypt hash from
 # `caddy hash-password`; the env value must be single-quoted in stage.env because
-# a bcrypt hash contains `$`).
+# a bcrypt hash contains a dollar sign).
 (staging_basic_auth) {
 	basic_auth {
 		{$STAGE_BASIC_AUTH_USER} {$STAGE_BASIC_AUTH_HASH}
 	}
 }
 
-# One slot = four vhosts. The `import slot <name>` lines live in the GENERATED
-# `slots.caddy` include, rendered from the slot registry by `slot up` / `slot down`,
-# which then reload this config.
-(slot) {
-	@academy_{args[0]} host academy-{args[0]}.{$STAGE_BASE_DOMAIN}
-	handle @academy_{args[0]} {
-		import staging_basic_auth
-		reverse_proxy {args[0]}-portal:3001
-	}
-
-	@doctor_{args[0]} host doctor-{args[0]}.{$STAGE_BASE_DOMAIN}
-	handle @doctor_{args[0]} {
-		import staging_basic_auth
-		reverse_proxy {args[0]}-doctor:3004
-	}
-
-	@admin_{args[0]} host admin-{args[0]}.{$STAGE_BASE_DOMAIN}
-	handle @admin_{args[0]} {
-		import staging_basic_auth
-		reverse_proxy {args[0]}-admin:3002
-	}
-
-	@api_{args[0]} host api-{args[0]}.{$STAGE_BASE_DOMAIN}
-	handle @api_{args[0]} {
-		# Centrifugo path families — the single basic-auth exemption on a slot
-		# (spec §3): browser websocket + the api's key-gated publish path.
-		handle /connection/websocket {
-			reverse_proxy {args[0]}-centrifugo:8000
-		}
-		handle /api/* {
-			reverse_proxy {args[0]}-centrifugo:8000
-		}
-		handle {
-			import staging_basic_auth
-			reverse_proxy {args[0]}-api:3000
-		}
-	}
-}
-
 # --- ask endpoint (on-demand TLS gate) -----------------------------------------
-
-# Caddy calls `GET /ask?domain=<name>` before issuing. The allow list is the
-# GENERATED `ask.caddy` include — the shared IdP host plus every host of every
-# registered slot; anything else falls through to the 404 and never reaches ACME.
+#
+# Caddy calls `GET /ask?domain=<name>`. The answer is a PURE REGEXP TEST over the
+# §3 convention — no registry read, no file under /etc/ds-platform/caddy. A
+# well-formed name with nothing behind it therefore gets a certificate and then a
+# 502 behind the basic-auth challenge; a malformed name is refused before any ACME
+# order starts.
+#
+# THE ALTERNATIONS BELOW MUST AGREE WITH THE `@stage_slot` / `@stage_centrifugo`
+# MATCHERS IN THE HTTPS SITE AT THE BOTTOM OF THIS FILE. That agreement is asserted
+# by tools/staging/stage-edge.test.mjs — change one, change the other.
+#
+# The dots inside `{$STAGE_BASE_DOMAIN}` are not escaped (the value is an env
+# substitution, not a literal), so they stay regexp wildcards. Harmless: Caddy only
+# consults `ask` for names that already matched the `*.{$STAGE_BASE_DOMAIN}` site
+# address.
 #
 # Bound to 127.0.0.1, not `:2020`: this container is attached to every slot network,
-# so an unbound listener would expose the registry to code running inside a preview.
-# Caddy dials its own `ask` over the container loopback, which 127.0.0.1 serves.
+# so an unbound listener would be reachable from code running inside a preview.
 #
 # The `http://` scheme is load-bearing, not decoration. A bare `127.0.0.1:2020`
 # address names an IP host, and automatic HTTPS activates for an IP just as it does
@@ -129,7 +100,15 @@
 # HTTPS off for this site and keeps the loopback-only bind. `caddy validate` does not
 # catch the difference: both forms are syntactically valid.
 http://127.0.0.1:2020 {
-	import /etc/caddy/slots/ask.caddy
+	# The asked name arrives as a query parameter; fold it into the path so a plain
+	# `path_regexp` can judge it.
+	rewrite * /ask/{query.domain}
+
+	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[0-9]+)|id)[.]{$STAGE_BASE_DOMAIN}$"
+	handle @stage_ask {
+		respond 200
+	}
+
 	respond 404
 }
 
@@ -142,8 +121,6 @@ http://127.0.0.1:2020 {
 # No explicit redirect to HTTPS here: automatic HTTPS is expected to answer 308 for
 # every host the wildcard site below matches, before this site is consulted, so a
 # `redir @stage … permanent` line would be config that never runs (#2153 review).
-# The wildcard address makes that an expectation, not an observation — «HTTP → 308 on
-# a slot host» is on the part-2 on-box check list (README «Slots (#2064)»).
 :80 {
 	respond /healthz "ok" 200
 
@@ -171,13 +148,40 @@ http://127.0.0.1:2020 {
 		}
 	}
 
-	# Registered slots — one import line per live slot, generated from the registry
-	# (see «GENERATED INCLUDES» in the header).
-	import /etc/caddy/slots/slots.caddy
+	# Centrifugo path families on `api-<slot>` — the ONE basic-auth exemption on a
+	# slot (spec §3): browser websocket + the api's key-gated publish path. The
+	# capture name `slot` is shared with `@stage_slot` below, so `{re.slot.2}` names
+	# the slot in either branch.
+	@stage_centrifugo {
+		header_regexp slot Host "^(api)-(main|pr-[0-9]+)[.]"
+		path /connection/websocket /api/*
+	}
+	handle @stage_centrifugo {
+		reverse_proxy {re.slot.2}-centrifugo:8000
+	}
 
-	# A host under the wildcard that no slot owns: still guarded, still noindex.
+	# Every slot host, live or not. The domain suffix is already guaranteed by this
+	# site's address, so the regexp only judges the single label in front of it.
+	# MUST AGREE WITH the `@stage_ask` matcher above (asserted by
+	# tools/staging/stage-edge.test.mjs).
+	@stage_slot header_regexp slot Host "^(academy|doctor|admin|api)-(main|pr-[0-9]+)[.]"
+	handle @stage_slot {
+		# §3 «Hostnames»: the public <app> label → the slot's compose service.
+		map {re.slot.1} {slot_service} {slot_port} {
+			academy portal 3001
+			doctor  doctor 3004
+			admin   admin  3002
+			api     api    3000
+		}
+
+		import staging_basic_auth
+		reverse_proxy {re.slot.2}-{slot_service}:{slot_port}
+	}
+
+	# A host under the wildcard that is not a well-formed slot host: still guarded,
+	# still noindex.
 	handle {
 		import staging_basic_auth
-		respond "stage-1 edge: no slot owns this host" 404
+		respond "stage-1 edge: unknown staging host" 404
 	}
 }

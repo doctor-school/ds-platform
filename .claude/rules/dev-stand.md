@@ -11,7 +11,7 @@ paths:
 
 Canon: AGENTS.md §9 one-liner. Applies to any dev-stand operation, migration, or live UI verification.
 
-**This stand is the agent's own loop, not the owner's.** Stage-B handbacks go to a per-PR staging slot (AGENTS.md §10, `tools/staging/README.md` → «Stage-B: the owner-facing stand»); a `localhost` URL reaches the owner only when the staging box is unreachable AND the ask says so out loud.
+**This stand is the agent's own loop, not the owner's.** Stage-B handbacks go to a per-PR staging slot (AGENTS.md §9, `tools/staging/README.md` → «Stage-B: the owner-facing stand»); a `localhost` URL reaches the owner only when the staging box is unreachable AND the ask says so out loud.
 
 The stand (Postgres, Redis, MinIO, `idp`, Centrifugo, Cerbos, Mailpit) runs as a Docker Compose stack — a two-layer model: portable contract in git (`infra/dev-stand/compose.core.yml`, `.env.example`, README) + per-developer recipe outside git (`.env.local`, `compose.override.yml`). The rules below are portable — they hold on every recipe; recipe-specific endpoints/paths/failure modes live in the developer's personal `~/.ds-platform/AGENT_NOTES.md`, never in repo files.
 

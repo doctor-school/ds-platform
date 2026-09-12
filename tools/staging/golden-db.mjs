@@ -21,9 +21,10 @@
 // statement order — is a pure function, unit-tested in `golden-db.test.mjs`; the
 // executor (`runGoldenDbBuild`) is injectable so the tests never touch Postgres.
 
-import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+
+import { sshCapture, sshScript } from "../deploy/lib/remote.mjs";
 
 /** Default base name of the template. */
 export const GOLDEN_DB_BASE = "ds_golden";
@@ -141,26 +142,56 @@ export function terminateBackendsStatement(name) {
 }
 
 /**
- * The commands that fill `ds_golden_next`.
+ * The commands that fill `ds_golden_next` — both inside the `main` slot's own
+ * `migrate` one-shot, never on the host (#2194, spec §4 / §3 «Host runtime»).
  *
- * The migrate is the SAME entry point the api image runs on the box
- * (`@ds/api drizzle:migrate:ci` → `drizzle-kit migrate`), not a second
+ * The migrate is the SAME entry point production runs (`docker compose --profile
+ * migrate run --rm migrate pnpm run drizzle:migrate:ci`, `tools/deploy/prod.mjs`;
+ * the slot form is `migrateCommandPlan` in `slot.mjs`), not a second
  * implementation: a template built by a private migrate path would prove nothing
- * about the migrations production actually applies.
+ * about the migrations production actually applies. The box carries neither `pnpm`
+ * nor a workspace checkout to run one with, so a host invocation is not merely
+ * inelegant here — it cannot work.
+ *
+ * `composeBase` is the argv prefix that selects the `main` slot's compose project
+ * (`composeBase("main")` in `slot.mjs`); it is passed IN rather than imported so
+ * this module stays free of a cycle and the planners stay pure.
+ *
+ * `DATABASE_URL` is overridden per one-shot with `-e`: the template generation
+ * being filled is `ds_golden_next`, not the slot's own database. That URL is part of
+ * the argv, so the staging Postgres password is visible in the box's process table
+ * while the one-shot runs — accepted: `stage-1` is single-tenant and carries no
+ * production credential (spec §3 «Trust boundary»), and every alternative that keeps
+ * compose's env override still puts the value on the same box's command line
+ * (recorded in DEBT.md, 2026-09-12).
  */
-export function buildCommands(nextUrl) {
+export function buildCommands(nextUrl, composeBase) {
+  if (!Array.isArray(composeBase) || composeBase.length === 0) {
+    throw new GoldenDbError(
+      "buildCommands requires the slot's compose argv prefix — both fill steps run in the containerized `migrate` one-shot, never on the host",
+    );
+  }
+  const oneShot = (...argv) => [
+    ...composeBase,
+    "--profile",
+    "migrate",
+    "run",
+    "--rm",
+    "-e",
+    `DATABASE_URL=${nextUrl}`,
+    "migrate",
+    ...argv,
+  ];
   return [
     {
       label: "migrate",
-      command: "pnpm",
-      args: ["--filter", "@ds/api", "run", "drizzle:migrate:ci"],
-      env: { DATABASE_URL: nextUrl },
+      kind: "sh",
+      command: oneShot("pnpm", "run", "drizzle:migrate:ci"),
     },
     {
       label: "seed:golden",
-      command: "pnpm",
-      args: ["--filter", "@ds/db", "run", "seed:golden"],
-      env: { DATABASE_URL: nextUrl },
+      kind: "sh",
+      command: oneShot("pnpm", "--filter", "@ds/db", "run", "seed:golden"),
     },
   ];
 }
@@ -175,6 +206,7 @@ export function planGoldenDbBuild({
   adminUrl,
   base = GOLDEN_DB_BASE,
   hasCurrent = true,
+  composeBase,
 }) {
   const names = templateDatabaseNames(base);
   const nextUrl = withDatabase(adminUrl, names.next);
@@ -182,7 +214,7 @@ export function planGoldenDbBuild({
     names,
     nextUrl,
     prepare: prepareStatements(names),
-    fill: buildCommands(nextUrl),
+    fill: buildCommands(nextUrl, composeBase),
     publish: renameCycleStatements(names, { hasCurrent }),
   });
 }
@@ -234,56 +266,87 @@ async function main() {
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {
     throw new GoldenDbError(
-      "DATABASE_URL is required — the maintenance connection of the staging Postgres (read it from the box env, never hardcode)",
+      "DATABASE_URL is required — the maintenance connection of the staging Postgres AS THE CONTAINERS SEE IT (read it from the box env, never hardcode)",
     );
   }
 
-  const { default: pg } = await import("pg");
-  const admin = new pg.Client({ connectionString: adminUrl });
-  await admin.connect();
+  // Imported lazily: `slot.mjs` imports this module, so a static import would close
+  // a cycle. Only the CLI half needs these — the planners above stay pure.
+  //
+  // Weighed against extracting the four symbols into a `box.mjs` leaf (the shape
+  // `tools/deploy/lib/remote.mjs` has) and rejected as not a straight move:
+  // `composeBase` pulls `STAGE_ENV_FILE`, `slotEnvPath`, `slotComposeFile`,
+  // `composeProjectName` → `assertSlotName` → `SLOT_NAME_RE` → `SlotError` with it,
+  // i.e. the shared spine `slot.mjs` throws from everywhere and both test files import
+  // by name. The cycle is safe in the direction it runs: `slot.mjs` has no top-level
+  // side effect, and this import fires only inside `main()`, after either module has
+  // fully evaluated. A static consumer of this module that also needs `slot.mjs` is
+  // what would make the extraction worth its blast radius.
+  const { STAGE_1, POSTGRES_CONTAINER, composeBase, quoteCommand } = await import(
+    "./slot.mjs"
+  );
 
-  let hasCurrent;
-  try {
-    const names = templateDatabaseNames(options.base);
-    const existing = await admin.query(
-      "SELECT 1 FROM pg_database WHERE datname = $1",
-      [names.current],
-    );
-    hasCurrent = existing.rowCount > 0;
+  const psql = (statement, extra = []) =>
+    quoteCommand([
+      "sudo",
+      "docker",
+      "exec",
+      "-i",
+      POSTGRES_CONTAINER,
+      "psql",
+      "-U",
+      "ds",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      ...extra,
+      "-c",
+      statement,
+    ]);
 
-    const plan = planGoldenDbBuild({
-      adminUrl,
-      base: options.base,
-      hasCurrent,
-    });
+  const names = templateDatabaseNames(options.base);
+  const existing = (
+    await sshCapture(
+      STAGE_1,
+      psql(`SELECT 1 FROM pg_database WHERE datname = '${names.current}'`, [
+        "-tA",
+      ]),
+    )
+  ).trim();
+  const hasCurrent = existing === "1";
 
-    if (options.dryRun) {
-      for (const statement of [...plan.prepare, ...plan.publish]) {
-        console.log(statement);
-      }
-      for (const command of plan.fill) {
-        console.log(`${command.command} ${command.args.join(" ")}`);
-      }
-      return;
+  const plan = planGoldenDbBuild({
+    adminUrl,
+    base: options.base,
+    hasCurrent,
+    // The template is built in the `main` slot's project: it is the only slot whose
+    // images are the `main` head, which is what the template must contain (§4).
+    composeBase: composeBase("main"),
+  });
+
+  if (options.dryRun) {
+    for (const statement of [...plan.prepare, ...plan.publish]) {
+      console.log(psql(statement));
     }
-
-    await runGoldenDbBuild(plan, {
-      sql: (statement) => admin.query(statement),
-      run: (command) => {
-        execFileSync(command.command, command.args, {
-          stdio: "inherit",
-          env: { ...process.env, ...command.env },
-          shell: process.platform === "win32",
-        });
-      },
-      log: (line) => console.log(line),
-    });
-    console.log(
-      `${plan.names.current} rebuilt${hasCurrent ? `; previous generation kept as ${plan.names.prev}` : ""}`,
-    );
-  } finally {
-    await admin.end();
+    for (const command of plan.fill) {
+      console.log(quoteCommand(command.command));
+    }
+    return;
   }
+
+  await runGoldenDbBuild(plan, {
+    sql: (statement) =>
+      sshScript(STAGE_1, psql(statement), { label: "golden-db sql" }),
+    run: (command) =>
+      sshScript(STAGE_1, quoteCommand(command.command), {
+        label: command.label,
+      }),
+    log: (line) => console.log(line),
+  });
+  console.log(
+    `${plan.names.current} rebuilt${hasCurrent ? `; previous generation kept as ${plan.names.prev}` : ""}`,
+  );
 }
 
 const invokedDirectly =

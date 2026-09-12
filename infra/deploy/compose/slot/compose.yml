@@ -11,16 +11,23 @@
 #
 # The two env files are what makes one file serve every slot: `stage.env` is the
 # box's single secret set (0600 root:root), `<slot>.env` is the GENERATED non-secret
-# per-slot projection (`renderSlotEnv` — SLOT, SLOT_SHA7, SLOT_DB, DEPLOY_SHA,
+# per-slot projection (`renderSlotEnv` — SLOT, SLOT_DB, DEPLOY_SHA,
 # REDIS_URL, public URLs, IDP_ISSUER, MAILER_SMTP_FROM). No secret is ever copied
 # into the per-slot file: `DATABASE_URL` is assembled BELOW from stage.env's
 # `POSTGRES_PASSWORD` and the slot's `SLOT_DB`, so the password lives in one file.
 #
-# IMAGES. Never built here: the box has no build capacity budgeted for five Next
-# builds per converge (spec §9 «Disk pressure»). `.github/workflows/preview.yml`
-# builds and pushes `ghcr.io/doctor-school/ds-platform/<app>:<slot>-<sha7>` on a
-# GitHub runner and `slot up` pulls those tags — hence no `build:` block anywhere in
-# this file, and `${SLOT}` / `${SLOT_SHA7}` interpolated from the per-slot env file.
+# IMAGES. Built ON THE BOX from the shipped tree, never pulled — the production
+# shape (api-prod precedent, `pnpm deploy:prod`): no registry, no GHCR, no build
+# half in CI (Issue #2194). `slot up` ships the worktree to the box and runs
+# `docker compose build` there, exactly as production does.
+#
+# The tags are `ds-<app>:${DEPLOY_SHA:-local}` — SHA-scoped but NOT slot-scoped, so
+# two slots standing on the same commit SHARE one image set instead of building it
+# twice. That sharing is why `slot down` must subtract the images still used by
+# other live slot projects before pruning (`planSlotDown` in
+# tools/staging/slot.mjs, unit-tested there); a per-slot tag would have hidden it.
+# `:local` is the fallback for a manual `docker compose build` with no DEPLOY_SHA,
+# mirroring api-prod.
 #
 # NETWORKS. The project default network is NAMED `slot-<slot>` so the edge can be
 # attached to exactly this slot (`docker network connect slot-<slot>
@@ -51,7 +58,10 @@ name: slot
 services:
   # --- api — NestJS BFF/API, the only service on the shared stg-infra network -----
   api:
-    image: ghcr.io/doctor-school/ds-platform/api:${SLOT:?}-${SLOT_SHA7:?}
+    build:
+      context: ../../../.. # repo root (the tree `slot up` ships) — see .dockerignore
+      dockerfile: apps/api/Dockerfile
+    image: ds-api:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-api
     restart: unless-stopped
     env_file:
@@ -82,11 +92,23 @@ services:
       start_period: 30s
 
   # --- portal — Next.js standalone, the academy storefront (academy-<slot>.…) ------
-  # API_PROXY_TARGET and the SmartCaptcha SITE key are baked at BUILD time by
-  # preview.yml (Next freezes `rewrites()` destinations into routes-manifest.json —
-  # DSO-100); the runtime copies below exist only so the container env matches prod.
+  # API_PROXY_TARGET and the SmartCaptcha SITE key are baked at BUILD time by the
+  # `build:` block below (Next freezes `rewrites()` destinations into
+  # routes-manifest.json — DSO-100); the runtime copies below exist only so the
+  # container env matches prod.
   portal:
-    image: ghcr.io/doctor-school/ds-platform/portal:${SLOT:?}-${SLOT_SHA7:?}
+    build:
+      context: ../../../..
+      dockerfile: apps/portal/Dockerfile
+      args:
+        # PUBLIC SmartCaptcha site key, inlined into the client bundle at build
+        # time (NEXT_PUBLIC_*). From stage.env; empty ⇒ inactive placeholder.
+        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
+        # BUILD-time on purpose (DSO-100): Next freezes `rewrites()` destinations
+        # into .next/routes-manifest.json, so a runtime-only value is ignored and
+        # the baked localhost fallback ECONNREFUSEDs the same-origin /v1/* proxy.
+        API_PROXY_TARGET: http://api:3000
+    image: ds-portal:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-portal
     restart: unless-stopped
     env_file:
@@ -117,7 +139,13 @@ services:
 
   # --- doctor — Next.js standalone, the doctor storefront (doctor-<slot>.…) --------
   doctor:
-    image: ghcr.io/doctor-school/ds-platform/doctor:${SLOT:?}-${SLOT_SHA7:?}
+    build:
+      context: ../../../..
+      dockerfile: apps/doctor/Dockerfile
+      args:
+        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
+        API_PROXY_TARGET: http://api:3000
+    image: ds-doctor:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-doctor
     restart: unless-stopped
     env_file:
@@ -143,7 +171,12 @@ services:
 
   # --- admin — Next.js + Refine standalone, the operator app (admin-<slot>.…) ------
   admin:
-    image: ghcr.io/doctor-school/ds-platform/admin:${SLOT:?}-${SLOT_SHA7:?}
+    build:
+      context: ../../../..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        API_PROXY_TARGET: http://api:3000
+    image: ds-admin:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-admin
     restart: unless-stopped
     env_file:
@@ -217,7 +250,11 @@ services:
   # FULL workspace (WORKDIR /repo/apps/api), which is what lets the same container
   # also run the branch seed `pnpm --filter @ds/db run seed:golden`.
   migrate:
-    image: ghcr.io/doctor-school/ds-platform/api-migrate:${SLOT:?}-${SLOT_SHA7:?}
+    build:
+      context: ../../../..
+      dockerfile: apps/api/Dockerfile
+      target: migrate # carries drizzle-kit + the full workspace, absent from runtime
+    image: ds-api-migrate:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-migrate
     profiles: ["migrate"]
     restart: "no"

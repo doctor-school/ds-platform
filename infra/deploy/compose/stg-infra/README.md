@@ -6,14 +6,12 @@ every preview slot (`main`, `pr-<N>`) is a _separate_ compose project that joins
 `stg-infra` network with its `api` container only.
 
 Plan of record: `apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md`
-(§3 topology, §8 steps 1-2, §9 recovery). The spec's delivery half has moved to production's
-shape — an operator ships a committed SHA over SSH, the box builds its own images, and the
-edge is one host regexp with no slot registry, no generated include and no host Node. The
-«Slot deployer (#2064)» section below and every registry/GHCR mention in it describe what is
-installed on the box **today**; Issue #2194 reworks that and rewrites those sections. Issue #2061 (Phase A, this directory) and
-#2062 (the edge — «Edge (#2062)» below);
-Phase B — the owner's `terraform apply`, the first bring-up and
-the live acceptance below — is tracked in **#2095**.
+(§3 topology, §8 steps 1-2, §9 recovery). Delivery follows production's shape: an operator
+ships a committed SHA over SSH, the box builds its own images, and the edge is one host
+regexp — no slot registry, no generated include, no host Node. Phase A (this directory) is
+#2061 and the edge is #2062 («Edge (#2062)» below); Phase B — the owner's `terraform apply`,
+the first bring-up and the live acceptance below — is tracked in **#2095**, and the live slot
+run in **#2064**.
 
 Everything here is Phase B: nothing in this file runs on a developer machine.
 
@@ -132,13 +130,17 @@ behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
 → `200.169.178.154`).
 
 - **On-demand TLS.** No certificate is pre-issued. Caddy asks
-  `http://127.0.0.1:2020/ask` before every ACME order, and the allow list is the
-  generated `ask.caddy` include — the shared `id` host plus every host of every
-  registered slot (see «Slots (#2064)» below). An unregistered name under the
-  wildcard therefore fails the TLS handshake instead of burning a Let's Encrypt
-  issuance slot. The site is bound to `127.0.0.1:2020`, not `:2020`: this container
-  is attached to every slot network, so an unbound listener would hand the registry
-  to code running inside a preview.
+  `http://127.0.0.1:2020/ask` before every ACME order, and the answer comes from the
+  host-name convention alone: the `@stage_ask` matcher answers 200 for the shared `id`
+  host and for every well-formed `<app>-<slot>.<base domain>` name, 404 for everything
+  else. There is no registry and no generated include, so `ask` does **not** know which
+  slots are live — any regexp-shaped name, `api-pr-4242` with nothing behind it
+  included, passes the check, gets a REAL Let's Encrypt certificate and then a 502. A
+  malformed name is refused before any ACME order starts. The bound that protects the
+  zone is therefore the issuance quota, not an allow list: see «Certificates cost
+  quota» below. The site is bound to `127.0.0.1:2020`, not `:2020`: this container is
+  attached to every slot network, so an unbound listener would expose the responder to
+  code running inside a preview.
 - **noindex.** The `(staging_guard)` snippet sets `X-Robots-Tag: noindex, nofollow`
   on the wildcard site, so it rides every response — 200, 401, 404 alike.
 - **Basic auth.** ONE pair for the whole stand, `STAGE_BASIC_AUTH_USER` +
@@ -150,18 +152,23 @@ behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
   `/etc/ds-platform/stage-basic-auth.txt`, **`0600 root:root`**, the same mode and
   owner as `stage.env`: it is a live credential, not a note.
 - **Base domain.** The site address `*.{$STAGE_BASE_DOMAIN}`, the `id` vhost and the
-  `(slot)` snippet all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
+  `@stage_ask` matcher all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
   service's `environment:` block. `tools/staging/slot.mjs` reads the SAME variable to
-  derive the literal hosts it writes into the generated includes — one variable, two
+  derive the literal hosts it asserts against after a converge — one variable, two
   consumers, one value. Change it in `stage.env` and both sides follow.
-- **`(slot)` snippet + the generated `import slot <name>` lines.** One `import` line
-  = four vhosts (`academy-`, `doctor-`, `admin-`, `api-<slot>`). Those lines are
-  never typed: they live in `slots.caddy`, rendered from the slot registry by
-  `slot up` / `slot down`, which then reload through the loopback admin API.
+- **One regexp, every slot host.** `@stage_slot` matches
+  `^(academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})[.]` on `Host`, and a `map`
+  table turns the `<app>` label into the slot's compose service and port — four vhosts
+  per slot (`academy-`, `doctor-`, `admin-`, `api-<slot>`) with nothing typed and
+  nothing generated. A slot coming up or going down never reloads Caddy. The slot
+  alternation is the same one `SLOT_NAME_RE` in `tools/staging/slot.mjs` spells, and
+  `tools/staging/stage-edge.test.mjs` derives its expectation FROM that constant: a
+  name the edge admitted but the tool could not create would mint a certificate for a
+  slot that can never exist.
 - **`id` vhost.** The shared Zitadel: `/ui/v2/login/*` → `idp-login:3000`, everything
   else → `h2c://idp:8080`, the production shape of `id.doctor.school`.
 
-**Alias contract — satisfied since #2064 part 1.** The `(slot)` snippet proxies to the
+**Alias contract — satisfied since #2064 part 1.** The slot handler proxies to the
 container names `<slot>-portal:3001`, `<slot>-doctor:3004`, `<slot>-admin:3002`,
 `<slot>-api:3000`, `<slot>-centrifugo:8000`. `infra/deploy/compose/slot/compose.yml`
 publishes exactly those as `container_name: ${SLOT}-<service>` on the slot's own
@@ -182,10 +189,16 @@ browser credentials and authenticates by its own mechanism:
    nothing — Zitadel authenticates every caller on its own. `noindex` still applies to
    `id`.
 
-**Never `curl --resolve` an unregistered or unresolving host.** Each attempt makes
-Caddy start an ACME order that fails validation, and failed validations count against
-the Let's Encrypt rate limit for the whole zone. Test only names the `ask` stub
-already answers 200 for.
+**Certificates cost quota — a probe is an issuance, not a refusal.** Any name matching
+the `<app>-<slot>.<base domain>` convention is admitted by `ask` whether or not a slot
+is live, so a `curl --resolve` or an `openssl s_client` against one makes Caddy order a
+REAL certificate. Let's Encrypt counts issuance per REGISTERED domain, which is
+`doctor.school` — the same bucket production's `academy.`, `api.` and `id.` certificates
+renew from, not a staging-only one (and a retry additionally spends the
+duplicate-certificate limit). A name that does not resolve additionally fails validation, which counts against
+the failed-validation limit. So: probe only hosts of slots that are actually up, and never
+invent a name to test the edge — a malformed name (refused by `ask` before any ACME order)
+is the only free probe there is.
 
 ### Acceptance (observed 2026-09-10, from an external client unless noted)
 
@@ -206,18 +219,18 @@ openssl s_client -connect academy-main.stage.doctor.school:443 \
 # observed: issuer C=US, O=Let's Encrypt, CN=YE1
 #           subject CN=academy-main.stage.doctor.school
 #           notBefore 2026-09-10 02:21:32 GMT, notAfter 2026-12-09
-
-openssl s_client -connect api-pr-0.stage.doctor.school:443 \
-  -servername api-pr-0.stage.doctor.school </dev/null
-# observed: handshake refused, no certificate issued — `ask` answered 404.
-# (This host RESOLVES via the wildcard; that is why probing it is safe.)
 ```
 
 On the box, with the pair from `/etc/ds-platform/stage-basic-auth.txt`: `academy-main`
 → 502 and `api-main /v1/health` → 502 (authenticated, no slot upstream yet), a wrong
-password → 401. The pair was rotated 2026-09-10. The `ask` stub answered 200 for `id`,
-`academy-main`, `api-main` and 404 for `api-pr-0`; `/healthz` by IP → 200; `Host:
-academy-main…` on `:80` → 308 to https; `Host: foo.example` → 404.
+password → 401. The pair was rotated 2026-09-10. The `ask` responder answered 200 for
+`id`, `academy-main` and `api-main`; `/healthz` by IP → 200; `Host: academy-main…` on
+`:80` → 308 to https; `Host: foo.example` → 404.
+
+The current `Caddyfile` is re-verified on the box at the start of the owner-gated live
+run tracked by **#2064** — `docker exec stg-infra-caddy-1 caddy validate --config
+/etc/caddy/Caddyfile` and `docker compose -f infra/deploy/compose/stg-infra/compose.yml
+config` before any `slot up` (spec §8 step 4).
 
 ## Zitadel converge
 
@@ -320,56 +333,49 @@ Two standing rules come with the shared instance (spec §3 «Identity»):
 A **slot** is one deployed copy of the platform: `main` (the persistent staging copy
 of `origin/main`) or `pr-<N>` (a preview of one open PR). Its compose project is
 `infra/deploy/compose/slot/compose.yml`, one file for every slot, driven only by
-`tools/staging/slot.mjs`, installed on the box as `/opt/ds-platform/slot.mjs` — the box
-has no workspace checkout, so the script runs on the pinned host Node under `/opt/node`.
-
-Humans drive it through the installed wrapper `/usr/local/bin/ds-slot`, which sources
-`stage.env` and execs that script — the same path the timer takes:
+`tools/staging/slot.mjs` — which runs on the **operator's machine**, out of a worktree,
+and reaches the box over SSH. The box carries no workspace checkout, no Node of ours and
+no script of ours: it runs containers, and that is all (spec §3 «Host runtime», §8 step 4).
 
 ```bash
-sudo ds-slot render            # write both Caddy includes
-sudo ds-slot up   main <sha>   # first bring-up / converge
-sudo ds-slot sync pr-2064 <sha>  # re-converge to a new SHA
-sudo ds-slot down pr-2064      # tear down, drop the database
-sudo ds-slot status            # registry JSON + the IdP redirect set
-sudo ds-slot gc                # reclaim unregistered images
-sudo ds-slot reset main --yes  # re-clone ds_main from ds_golden, then converge again
+pnpm stage:slot up   main    --ref <sha>   # first bring-up / converge
+pnpm stage:slot sync pr-2064 --ref <sha>   # re-converge to a new SHA
+pnpm stage:slot down pr-2064               # tear down, drop the database
+pnpm stage:slot status                     # live slots + the IdP redirect set
+pnpm stage:slot gc                         # reclaim disk
+pnpm stage:slot reset main --yes --ref <sha>   # re-clone ds_main, then converge again
+pnpm stage:slot reset-identities main      # re-converge the golden accounts only
 ```
 
-`reset main --yes` is the escape hatch for a poisoned staging database: it drops
-`ds_main`, re-clones it from `ds_golden` and re-runs the ordinary `up` plan on the SHA
-the registry already holds. `main` is the only resettable slot (a preview is cheaper to
-`down`/`up`), `--yes` is mandatory, `ds_golden` is never touched, and every run appends
-one audit line to `/var/log/ds-platform/slot.log` **before** it drops anything.
-`reset-identities <slot>` is part 2b of #2064 and the CLI still **refuses** it with an
-explicit «not implemented until part 2b» error rather than silently doing nothing.
+`--ref` takes the FULL 40-character commit SHA and there is no second spelling: a bare
+positional SHA is refused, because two spellings is how a workflow edit ships the wrong
+ref silently. `DS_STAGE_SSH` (default `ds-stage-1`) picks the SSH destination, and
+`STAGE_BASIC_AUTH_PASS` must be exported on the operator machine — the box stores only
+the bcrypt hash, so without the plaintext the post-converge health assertion cannot
+authenticate past Caddy's 401.
 
-**One registry, two rendered includes.** `/var/lib/ds-platform/slots.json` is the
-single source of truth (`{ slots: { "<name>": { sha, redisDb, hosts, updatedAt } } }`).
-From it the script renders, and Caddy mounts read-only from
-`/etc/ds-platform/caddy` → `/etc/caddy/slots`:
+`reset main --yes --ref <sha>` is the escape hatch for a poisoned staging database: it
+drops `ds_main`, re-clones it from `ds_golden` and re-runs the ordinary converge on that
+SHA. `main` is the only resettable slot (a preview's database is re-cloned by its every
+converge, so `sync` already is its reset), `--yes` is mandatory, `ds_golden` is never
+touched, and every run appends one audit line to `/var/log/ds-platform/slot.log`
+**before** it drops anything.
 
-| file          | what it carries                                  | consumed by                          |
-| ------------- | ------------------------------------------------ | ------------------------------------ |
-| `ask.caddy`   | the on-demand-TLS allow list (`id` + slot hosts) | the `http://127.0.0.1:2020` ask site |
-| `slots.caddy` | one `import slot <name>` line per live slot      | the wildcard HTTPS site              |
+**No registry, no rendered includes.** Nothing on the box records which slots exist:
+`docker ps` and its compose-project labels are the single authority, and `status` reads
+them live. The edge no longer mounts anything generated — see «The edge is static» below —
+so `/var/lib/ds-platform/slots.json` and `/etc/ds-platform/caddy` are gone, together with
+the `slot render` subcommand that used to write them.
 
-The two move in **lockstep** because they come from the same registry, and neither is
-ever edited by hand — a hand-added vhost whose host is not in `ask.caddy` cannot get a
-certificate, and a certificate for a host with no vhost is a wasted issuance.
-
-**`slot render` before the first bring-up.** Caddy fails to start if either include is
-missing, so run `slot render` once (an empty registry yields comment-only files that
-parse fine) before `docker compose up -d caddy` on a fresh box. `up` / `sync` / `down`
-call the same renderer and then reload Caddy through the loopback admin API — never
-`restart caddy`, which would drop live connections and re-read certificates.
-
-**What a converge does, in order.** Write the per-slot env file → clone the database
-from `ds_golden` (never for `main`, which is persistent and forward-migrated) → pull
-the five images → migrate → branch seed → `up -d` → attach this Caddy to the slot
-network → register the slot → re-render both includes → reload. Registration happens
-strictly AFTER the containers are up, and de-registration strictly BEFORE teardown, so
-a registered host always has an upstream.
+**The edge is static.** `Caddyfile` derives the upstream from the matched host name with
+ONE regexp over the `<app>-<slot>.<base domain>` convention (`academy` → the slot's
+`portal`, `doctor`, `admin`, `api`, plus the two Centrifugo path families on `api-<slot>`),
+so a slot coming up or going down **never reloads Caddy**. The on-demand-TLS `ask`
+responder answers 200 from that same regexp plus the shared IdP host and 404 for
+everything else: a well-formed name with nothing behind it gets a certificate and then a
+502, while a malformed name is refused before any ACME order starts.
+`tools/staging/stage-edge.test.mjs` asserts the two copies of the regexp agree and that
+nothing generated is imported or mounted.
 
 **The ask site is plain HTTP on loopback, by design.** Its address is
 `http://127.0.0.1:2020` — the scheme is load-bearing. `on_demand_tls { ask … }` dials
@@ -377,56 +383,52 @@ it over the container loopback in plain HTTP, while a bare `127.0.0.1:2020` addr
 would activate automatic HTTPS (Caddy does that for an IP host exactly as for a
 domain) and answer TLS on that port; every ask would then fail and **no** host under
 the wildcard site could ever get a certificate. The loopback bind still stands: this
-container is attached to every slot network, so the registry must not be reachable
-from inside a preview. `caddy validate` accepts both forms, so this is a review-and-
-on-box check, not a lint.
+container is attached to every slot network, so the responder must not be reachable
+from inside a preview.
+
+**What a converge does, in order.** Ship the committed tree at `--ref` into
+`$HOME/ds-platform.slots/<slot>` over SSH → write the per-slot env file → **build the
+service set on the box** (image tag = the full commit SHA, so it is global per commit and
+two slots on one commit share images) → clone the database from `ds_golden` (never for
+`main`, which is persistent and forward-migrated) → migrate and seed through the
+containerized `migrate` one-shot → `up -d` → attach this Caddy to the slot network →
+converge the golden identities and the whole redirect-URI set at the shared Zitadel →
+assert `/v1/health` reports the deployed SHA. Nothing pulls an image and nothing writes a
+registry file.
 
 **Teardown is total, and never silent.** `down` re-renders
 `/etc/ds-platform/slots/<slot>.env` before it calls compose (compose aborts on a
 missing `--env-file`, so a deleted file would otherwise make the slot un-tearable),
-then detaches Caddy, de-registers, `compose down -v`, and finally makes the
-`slot-<slot>` network and the slot's images **absent**: each is probed
-(`docker network inspect` / `docker image inspect`) and removed only if it is still
-there. Compose owns that network and normally takes it with `down -v`, so «already
-gone» is the expected success and removes nothing; a resource that survives and then
-refuses to be removed is a hard failure.
+then detaches Caddy, `compose down -v`, and finally makes the `slot-<slot>` network and
+the slot's images **absent**: each is probed (`docker network inspect` / `docker image
+inspect`) and removed only if it is still there. Compose owns that network and normally
+takes it with `down -v`, so «already gone» is the expected success and removes nothing;
+a resource that survives and then refuses to be removed is a hard failure.
 
-**No step is allowed to fail.** Every command — `up`, `sync`, `down`, `gc`, `render`
-— aborts on the first failure and exits non-zero, and no step's failure is merely
-printed. The two commands that are not idempotent on their own, `docker network
-connect` and `docker network disconnect`, are expressed as the membership fact
-instead: the tool asks `docker network inspect slot-<slot> --format
-'{{json .Containers}}'` whether Caddy is already on the network and issues the
-`connect`/`disconnect` only when the answer says it must. So a `sync` (or a second
-`up`) of a live slot re-converges and exits **0** — it never re-attaches — and a
-`down` of a slot whose `up` never reached the attach tears down cleanly. What is left
-when a `connect` does run and fail is unambiguous: the slot's hostnames would resolve
-to nothing, and the run stops before the registry write rather than advertising a host
-it cannot serve.
+**No step is allowed to fail.** Every command — `up`, `sync`, `down`, `gc` — aborts on
+the first failure and exits non-zero, and no step's failure is merely printed. The two
+commands that are not idempotent on their own, `docker network connect` and `docker
+network disconnect`, are expressed as the membership fact instead: the tool asks
+`docker network inspect slot-<slot> --format '{{json .Containers}}'` whether Caddy is
+already on the network and issues the `connect`/`disconnect` only when the answer says it
+must. So a `sync` (or a second `up`) of a live slot re-converges and exits **0** — it
+never re-attaches — and a `down` of a slot whose `up` never reached the attach tears down
+cleanly.
 
-**Status output.** `slot status` prints two labelled blocks: the registry JSON exactly
-as it is on disk, then the whole redirect-URI set the shared Zitadel app must hold
-(rendered when `STAGE_BASE_DOMAIN` is in the environment). The set is computed and
-printed, but not yet registered — see «Part 2b owns…» below.
+**Status output.** `pnpm stage:slot status` prints the live slots as `docker ps` reports
+them, then the whole redirect-URI set the shared Zitadel app must hold (rendered when
+`STAGE_BASE_DOMAIN` is in the box env), then the free space on `/var/lib/docker`.
 
-**Part 2b owns the redirect-URI convergence.** The shared Zitadel app accepts only
-registered redirect URIs, and that registration is a **whole-set** write
-(`IDP_REDIRECT_URIS` / `IDP_POST_LOGOUT_URIS` through `provision.sh`), so a per-slot
-write would silently drop the other slots. What has landed so far is the pure seam
-`renderIdpRedirectUris(registry, base)` — the full ordered set for every registered
-slot — printed in `slot status`; **part 2b makes `slot up|down` converge that set
-onto the shared app through the same management API and PAT path `provision.sh` uses.**
-Until part 2b lands, a slot's `IDP_REDIRECT_URI` is emitted but not registered, and
-login on that slot fails with `invalid redirect_uri`.
-
-**On-box checks part 2b still owes.** `centrifugo checkconfig`
-(not available in this repo's toolchain), and «HTTP → 308 on a slot host»: the
-`:80` site no longer carries a `redir` line because automatic HTTPS is expected to
-answer the 308 first, but the site here is a **wildcard** address and the earlier 308
-observation was captured with the `redir` line present. `caddy validate` against the
-rendered includes is no longer owed — it runs on the box as `docker exec
-stg-infra-caddy-1 caddy validate --config /etc/caddy/Caddyfile` and was recorded with
-the slot-deployer install.
+**Redirect URIs and golden identities are converged, not owed.** The shared Zitadel app
+accepts only registered redirect URIs, and that registration is a **whole-set** write, so
+a per-slot write would silently drop the other slots: `up`, `sync`, `down` and `reset`
+each write the full ordered set for every LIVE slot as their last step, ensure-present
+(the current `oidc_config` is read first and the `PUT` is skipped when the sets already
+match). `reset-identities` converges the golden accounts, writes the tool-owned
+`DS_GOLDEN_SUB_*` file and flushes the slot's Redis logical database; it is **folded into
+every `up`/`sync`** and is idempotent, and it also stands as a subcommand for an
+identities-only re-run. Detail:
+[`tools/staging/README.md`](../../../../tools/staging/README.md).
 
 **Secrets stay in one file.** `/etc/ds-platform/slots/<slot>.env` is generated and
 carries only non-secret values (`SLOT`, `SLOT_SHA7`, `SLOT_DB`, `DEPLOY_SHA`,
@@ -447,92 +449,41 @@ range keeps the deterministic start (`1 + (N % 15)`) short and its collisions ra
 raising the cap would be a one-constant change (`REDIS_DB_MAX` in `tools/staging/slot.mjs`)
 if the box ever grows past three previews.
 
-**Building images.** The box never builds. Dispatch
-`.github/workflows/preview.yml` («Preview images») with the full SHA and the slot
-name; it pushes `ghcr.io/doctor-school/ds-platform/{api,api-migrate,portal,doctor,admin}:<slot>-<sha7>`,
-which is exactly what `slot up` pulls. The SmartCaptcha SITE key is baked at build
-time from the repository variable `STAGE_SMARTCAPTCHA_SITE_KEY` (empty until the owner
-provisions it with the separate stage-captcha task — empty renders the inactive
-placeholder, and an image built before it was set must be rebuilt).
+**Building images.** The box builds, exactly as api-prod does. `pnpm stage:slot up|sync`
+ships the tree and runs the build there; no registry is involved and
+`.github/workflows/preview.yml` no longer pushes anything. The SmartCaptcha SITE key is
+baked at build time from the box env's `STAGE_SMARTCAPTCHA_SITE_KEY` (empty until the
+owner provisions it with the separate stage-captcha task — empty renders the inactive
+placeholder, and a slot built before it was set must be re-converged).
 
-**Disk.** `slot gc` removes slot-tagged images whose slot is not in the registry, and
+**Disk.** `pnpm stage:slot gc` removes slot-tagged images whose slot is not live, and
 only then, if free space on `/var/lib/docker` is below **10 GB**, additionally runs
-`docker image prune -af --filter until=24h`. That is the same figure production uses
-as `BUILD_CACHE_RESERVED_SPACE` in `tools/deploy/prod.mjs`, by a **different
-mechanism**: on api-prod it is a BuildKit cache cap (`buildx prune --reserved-space`),
-here it is a free-disk floor, because this box never builds and has no BuildKit cache
-to cap. `slot gc` never calls `buildx`.
+`docker image prune -af --filter until=24h`. It is an **operator subcommand and not a
+timer**: the box runs no unit of ours, so nothing sweeps nightly — `status` prints the
+free-space figure that tells an operator to run it. The 10 GB is the same figure
+production uses as `BUILD_CACHE_RESERVED_SPACE` in `tools/deploy/prod.mjs`, by a
+**different mechanism**: there it is a BuildKit cache cap (`buildx prune
+--reserved-space`), here a free-disk floor. `gc` never calls `buildx`.
 
-## Slot deployer (#2064)
+## Trust boundary
 
-No CI agent runs on this box. The repository is **public**, so no job of it may ever
-execute here; images are built and the regression suite runs on GitHub-hosted runners
-(spec §5). What converges slots is a **pull-based deployer** installed on the box: the
-systemd unit pair `ds-slot-deployer.service` (`Type=oneshot`) and
-`ds-slot-deployer.timer` (60 s), plus `ds-slot-gc.service` / `.timer` (daily 03:30 box
-time) for the image sweep. `cloud-init` installs none of it — it stays prod-length
-(§3 / #2121); the units, the scripts and the box's only host runtime arrive over SSH:
+No CI agent runs on this box and no job of this public repository may ever execute here
+(spec §5). Nothing pushes into the box either: an **operator** pulls the work in, from
+their own machine, over their own SSH key — the same direction and the same shape
+`tools/deploy/prod.mjs` uses for production.
 
-```bash
-node tools/staging/install.mjs deploy@<box>            # from a repo checkout, one SSH session
-node tools/staging/install.mjs deploy@<box> --dry-run  # payload list + the remote command
-```
+What is in reach here: the box env (`/etc/ds-platform/stage.env`, the sinks and test
+keys) and the box's Docker daemon. What can put code inside that reach: only a commit an
+operator names with `--ref`, shipped from a worktree they control — a fork PR reaches the
+box only if an operator deliberately converges it. What is out of reach: production
+Postgres and Redis (no route — separate VPC) and every repository secret, which never
+leaves the hosted runners. The box holds **no GitHub credential at all**: with the
+registry gone there is nothing for it to authenticate to, so `STAGE_GH_READ_TOKEN` is no
+longer a variable of this stand — an owner who minted one should revoke it and delete the
+line from `/etc/ds-platform/stage.env`.
 
-The install is **idempotent and probe-then-act**: every step prints exactly one
-`ensured <thing>` or `already <thing>` line, and a second run prints only `already` lines
-and touches no file. It lands the pinned Node LTS from the official `nodejs.org` tarball
-(version **and** SHA-256, verified before unpack) under `/opt/node` with only `bin/node`
-symlinked — no `npm`, no `pnpm`, no workspace checkout on the host — the three scripts
-under `/opt/ds-platform`, the slot compose project under
-`/opt/ds-platform/compose/slot/`, the four units, and the two root wrappers
-`/usr/local/bin/ds-slot` and `/usr/local/bin/ds-slot-deployer`. The wrappers are the one
-env-sourcing path (`set -a; . /etc/ds-platform/stage.env; set +a`); the units `ExecStart=`
-them and carry no `EnvironmentFile=`, because systemd's parser and bash disagree about
-quoting in that file. Both run as root: the `docker` group is root-equivalent here
-anyway and `/etc/ds-platform` is root-0700 by design. Bumping the Node pin is two
-constants in `tools/staging/install-host.sh` and a re-run — procedure in
-[`tools/staging/README.md`](../../../../tools/staging/README.md).
-
-**What one tick does.** Every 60 s `ds-slot-deployer tick` reads the open non-draft
-same-repository PRs and the `main` head from GitHub with `STAGE_GH_READ_TOKEN` (a
-`/var/lib/ds-platform/main-pin.json` written by step 5 wins over the `main` head when
-present), caps the previews at 3 keeping already-registered slots and filling free seats
-by `updated_at`, probes GHCR **anonymously** for the five image tags, and then spawns
-`ds-slot up|sync|down` per slot — downs first, so capacity frees before it is claimed.
-`main` is never `down`ed. A slot whose images are not pushed yet is `skip`ped and any
-existing slot is left alone, which is also the steady state on a fresh box before
-`preview.yml` has ever run. One slot's failure never stops the others: the tick finishes
-the rest and exits non-zero, and the journal line names the slot and the step.
-
-```bash
-systemctl list-timers 'ds-slot*'                  # both timers armed and their next fire
-journalctl -u ds-slot-deployer -n 50 --no-pager   # the last ticks, one line per decision
-systemctl start ds-slot-deployer.service          # force a tick now (oneshot, no overlap)
-sudo ds-slot status                               # what the registry actually holds
-```
-
-Overlap needs no lock: the service is `Type=oneshot` and a timer never starts a unit that
-is still active, so a slow tick delays the next one instead of racing it.
-
-**Part 2b still owes** the redirect-URI convergence onto the shared Zitadel app and
-`reset-identities` (both above), plus the golden-account env and the `slot up pr-0` live
-acceptance.
-
-The one thing to provision now, so the owner writes `stage.env` once:
-`STAGE_GH_READ_TOKEN` — a fine-grained **read-only** token («Pull requests: read»,
-«Metadata: read»), scoped to this repository. It grants nothing an anonymous visitor
-of a public repository lacks; its only job is lifting the unauthenticated rate limit.
-Nothing on this box holds a write credential to GitHub.
-
-**Trust boundary.** Outbound only: the box exposes no inbound CI path, needs no deploy
-key and no CI-facing port 22. What is in reach here: the box env
-(`/etc/ds-platform/stage.env`, sinks and test keys) and the box's Docker daemon. What
-can put code inside that reach: only images the preview workflow built from a branch
-of this repository — a fork PR's `GITHUB_TOKEN` is read-only, cannot push to GHCR, and
-therefore gets no slot at all, by construction rather than by a maintainer withholding
-approval. What is out of reach: production Postgres and Redis (no route — separate
-VPC) and every repository secret, which never leaves the hosted runners. The PR-job
-side of the contract is step 6 (#2066).
+The PR-job side of the contract — dispatching a converge from a workflow and running the
+regression suite against the slot — is step 6 (#2066).
 
 ## Day-to-day
 
@@ -588,7 +539,10 @@ systemctl is-active docker                   # expected: active
 ls /opt | grep -i runner ; echo "exit=$?"    # expected: no output, exit=1
 systemctl list-units --all --no-legend | grep -i runner ; echo "exit=$?"   # same
 # expected: nothing named like a CI agent, on disk or in systemd — slots are converged
-# by the pull-based deployer step 4 (#2064) installs, and CI never executes here.
+# by an OPERATOR from their own machine over SSH (`pnpm stage:slot`), and CI never
+# executes here. The box runs no unit and no Node of ours at all:
+#   command -v node ; command -v pnpm            # expected: both empty
+#   systemctl list-units --all --no-legend | grep -i ds-slot ; echo "exit=$?"  # exit=1
 ```
 
 **AC4 — no production credential on the box.** Two halves, defined in

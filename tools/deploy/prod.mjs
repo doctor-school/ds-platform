@@ -50,9 +50,7 @@
 // `drizzle-kit migrate` are all no-ops when already current.
 
 import { spawn, spawnSync } from "node:child_process";
-import { createReadStream, createWriteStream, readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -105,10 +103,27 @@ import {
   rollbackBoundaryVerdict,
   shellVarName,
 } from "./service-set.mjs";
+import {
+  PROD_HEALTH_URL,
+  STALL_BUDGET_BUILD_MS,
+  shipTree,
+  sshCapture,
+  sshScript,
+} from "./lib/remote.mjs";
 
-// Prod health endpoint — the status record's `log_url` and the verify-over-HTTP
-// pointer (#942/#927). Kept in one place so the record and the printed hint agree.
-export const PROD_HEALTH_URL = "https://api.doctor.school/v1/health";
+// The ssh/ship primitives live in ./lib/remote.mjs so the staging slot tool
+// drives its box through exactly the same channel (#2194). They are re-exported
+// here unchanged: tools/lint/guard-tests/deploy-*.spec.ts import them from this
+// module, and the import path of a guard test is part of its contract.
+export {
+  PROD_HEALTH_URL,
+  STALL_BUDGET_BUILD_MS,
+  STALL_BUDGET_DEFAULT_MS,
+  createStallWatchdog,
+  formatStallMessage,
+  shipTreeCommand,
+  sshBaseArgs,
+} from "./lib/remote.mjs";
 
 // --- config (env-overridable; SSH aliases live in ~/.ssh/config) ----------
 
@@ -553,159 +568,6 @@ function assertGreenCi(sha) {
   ok(`CI green — ${verdict.count} check(s) passed for ${sha.slice(0, 12)}`);
 }
 
-// --- ssh helpers ----------------------------------------------------------
-
-// Keepalive on EVERY ssh channel (#905). Without these flags a half-open TCP
-// connection (NAT table flush, Wi-Fi/VPN flap, box-side reset the client never
-// saw) hangs the deploy silently forever — the local process just waits on a
-// socket nobody will ever write to. With them the client probes the server
-// every 15s and gives up after 4 missed probes (~60s): the channel dies LOUDLY
-// (non-zero ssh exit → the existing die() path) instead of hanging half-open.
-export function sshBaseArgs(host) {
-  return ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", host];
-}
-
-// Per-step no-output budgets for the sshScript inactivity watchdog (#905).
-// Build-class steps (docker compose build of three images) legitimately go
-// minutes between log lines; everything else (compose up, pgbackrest, caddy
-// reload, retention) prints within seconds when healthy.
-export const STALL_BUDGET_BUILD_MS = 5 * 60 * 1000;
-export const STALL_BUDGET_DEFAULT_MS = 2 * 60 * 1000;
-
-// The loud STALLED line. A tripped watchdog proves only that the LOCAL channel
-// went quiet — the remote docker/pgbackrest work may have completed (or still
-// be running), so the message routes the operator to the box-reality probe
-// before any re-run / rollback decision.
-export function formatStallMessage(label, budgetMs, host) {
-  const mins = budgetMs / 60000;
-  const n = Number.isInteger(mins) ? String(mins) : mins.toFixed(1);
-  return (
-    `STALLED: ${label} — no output for ${n}m; remote work MAY have completed.\n` +
-    `  Verify by hand: pnpm deploy:probe\n` +
-    `  (or: curl -fsS ${PROD_HEALTH_URL} ; ssh ${host} docker ps)`
-  );
-}
-
-// Inactivity watchdog: arms on creation, `touch()` on every data chunk resets
-// the timer, `stop()` disarms for good (close/error paths). Fires `onStall`
-// with the formatted STALLED message at most once. Pure timer logic — unit
-// tested on fake timers (tools/lint/guard-tests/deploy-stall.spec.ts).
-export function createStallWatchdog({ label, budgetMs, host, onStall }) {
-  let timer = null;
-  let done = false;
-  const arm = () => {
-    timer = setTimeout(() => {
-      done = true;
-      timer = null;
-      onStall(formatStallMessage(label, budgetMs, host));
-    }, budgetMs);
-  };
-  const disarm = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-  arm();
-  return {
-    touch() {
-      if (done) return;
-      disarm();
-      arm();
-    },
-    stop() {
-      done = true;
-      disarm();
-    },
-  };
-}
-
-// Run a bash script on a box, fed over stdin (no shell-quoting hell). Streams
-// the box's stdout/stderr live. Rejects on non-zero exit.
-//
-// The remote command DRAINS the whole script into a variable first
-// (`script=$(cat)`) and only then executes it. Never use a bare `bash -s`
-// here: bash -s reads the script from stdin INCREMENTALLY, so any command
-// that itself reads stdin — `docker compose run` attaches the container's
-// stdin by default — silently EATS the rest of the script and bash exits 0
-// at EOF. That exact failure skipped the `build` + `up -d` lines after the
-// migrate step and made every deploy a silent no-op (DSO-127 rework: prod
-// kept running :local while the script reported "DEPLOY OK").
-// --norc: with stdin on the ssh channel, bash's remote-shell heuristic would
-// source /etc/bash.bashrc (PS1 unbound under -u → stderr noise); inhibit it.
-const REMOTE_BASH =
-  'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
-
-// Inactivity watchdog (#905): stdout/stderr are PIPED (not inherited) so the
-// parent observes every remote byte — chunks are forwarded verbatim to the
-// local streams (same live-streaming UX as before) and each one resets the
-// per-step no-output timer. A step whose channel goes quiet past its budget is
-// killed and the deploy exits non-zero with the loud STALLED message — it
-// never hangs silently again. Callers pass `stallBudgetMs` per step
-// (build-class → STALL_BUDGET_BUILD_MS, default → STALL_BUDGET_DEFAULT_MS).
-function sshScript(host, script, { label, stallBudgetMs } = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [...sshBaseArgs(host), REMOTE_BASH], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stalled = false;
-    const watchdog = createStallWatchdog({
-      label: label || "ssh",
-      budgetMs: stallBudgetMs ?? STALL_BUDGET_DEFAULT_MS,
-      host,
-      onStall: (msg) => {
-        stalled = true;
-        console.error(`\n✗ ${msg}`);
-        child.kill();
-        reject(new Error(msg));
-      },
-    });
-    child.stdout.on("data", (d) => {
-      watchdog.touch();
-      process.stdout.write(d);
-    });
-    child.stderr.on("data", (d) => {
-      watchdog.touch();
-      process.stderr.write(d);
-    });
-    child.on("error", (e) => {
-      watchdog.stop();
-      reject(e);
-    });
-    child.on("close", (code) => {
-      watchdog.stop();
-      if (stalled) return; // already rejected with the STALLED message
-      if (code === 0) resolve();
-      else reject(new Error(`${label || "ssh"} on ${host} exited ${code}`));
-    });
-    child.stdin.write(script);
-    child.stdin.end();
-  });
-}
-
-// Capture a box's stdout (small commands: image inspect, pgbackrest info).
-// Same stdin-drain contract as sshScript (see REMOTE_BASH). Keepalive flags
-// only, no inactivity watchdog: verifyRunningSha's on-box poll is legitimately
-// silent for up to ~4 min (it prints once, at the end) — a dead channel is
-// caught by ServerAlive (~60s), a quiet-but-alive one is normal here.
-function sshCapture(host, script) {
-  return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [...sshBaseArgs(host), REMOTE_BASH], {
-      stdio: ["pipe", "pipe", "inherit"],
-    });
-    let out = "";
-    child.stdout.on("data", (d) => (out += d.toString("utf8")));
-    child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0
-        ? resolve(out.trim())
-        : reject(new Error(`ssh capture on ${host} exited ${code}`)),
-    );
-    child.stdin.write(script);
-    child.stdin.end();
-  });
-}
-
 // Container-name prefix compose derives from the project name (`name:
 // ds-api-prod` in the api-prod compose file): `<project>-<service>-1`.
 const CONTAINER_PREFIX = "ds-api-prod-";
@@ -1003,84 +865,6 @@ ${probed.map((s) => `probe ${s.name} ${s.image} ${s.port}`).join("\n")}`,
       12,
     )} boot and serve / before the swap`,
   );
-}
-
-// Ship the committed tree to a box through a sibling staging directory. The
-// committed archive is extracted completely before the live tree is swapped,
-// carrying forward only the documented api-prod compose interpolation file.
-// Streams are piped in-process (Windows-safe — no shell pipe / redirection).
-export function shipTreeCommand() {
-  return `set -eu
-live="$HOME/ds-platform"
-work=$(mktemp -d "$HOME/ds-platform.ship.XXXXXX")
-stage="$work/stage"
-previous="$work/previous"
-preserved_rel="infra/deploy/compose/api-prod/.env"
-swapping=0
-restore_live() {
-  status="$1"
-  trap - EXIT HUP INT TERM
-  if [ "$swapping" -eq 1 ] && [ ! -e "$live" ] && [ -e "$previous" ]; then
-    if ! mv "$previous" "$live"; then
-      printf 'EMERGENCY: previous deploy tree remains recoverable at %s\\n' "$previous" >&2
-      exit "$status"
-    fi
-  fi
-  rm -rf "$work"
-  exit "$status"
-}
-trap 'restore_live $?' EXIT
-trap 'restore_live 129' HUP
-trap 'restore_live 130' INT
-trap 'restore_live 143' TERM
-
-mkdir -p "$stage"
-tar xzf - --strip-components=1 -C "$stage"
-if [ -f "$live/$preserved_rel" ]; then
-  mkdir -p "$stage/infra/deploy/compose/api-prod"
-  cp -p "$live/$preserved_rel" "$stage/$preserved_rel"
-fi
-
-if [ -e "$live" ]; then
-  swapping=1
-  mv "$live" "$previous"
-fi
-mv "$stage" "$live"
-swapping=0
-rm -rf "$work"
-trap - EXIT HUP INT TERM`;
-}
-
-async function shipTree(sha, host) {
-  const tmp = join(tmpdir(), `ds-deploy-${sha.slice(0, 12)}.tar.gz`);
-  await new Promise((resolve, reject) => {
-    const out = createWriteStream(tmp);
-    const gitp = spawn("git", [
-      "archive",
-      "--format=tar.gz",
-      "--prefix=ds-platform/",
-      sha,
-    ]);
-    gitp.stdout.pipe(out);
-    gitp.on("error", reject);
-    gitp.on("close", (c) =>
-      c === 0 ? resolve() : reject(new Error(`git archive exited ${c}`)),
-    );
-  });
-  try {
-    await new Promise((resolve, reject) => {
-      const child = spawn("ssh", [...sshBaseArgs(host), shipTreeCommand()], {
-        stdio: ["pipe", "inherit", "inherit"],
-      });
-      child.on("error", reject);
-      child.on("close", (c) =>
-        c === 0 ? resolve() : reject(new Error(`tar x on ${host} exited ${c}`)),
-      );
-      createReadStream(tmp).pipe(child.stdin);
-    });
-  } finally {
-    await rm(tmp, { force: true });
-  }
 }
 
 // --- deploy ---------------------------------------------------------------

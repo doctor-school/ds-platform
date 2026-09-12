@@ -1,1654 +1,1245 @@
-// tools/staging/slot.test.mjs — Issue #2064 part 1 (staging tech spec §3 «Slots»,
-// §5 «Converge», §8 step 4).
+// tools/staging/slot.test.mjs — Issue #2194 (the slot tool on the production
+// deploy shape; staging tech spec §3 «Slots», §5 «Converge», §8 step 4).
 //
 // The regressions these lock: a slot name never reaches raw SQL, a shell argument
-// or a hostname unvalidated; two slots never share a Redis logical database; the
-// fourth preview is refused; `main` is never cloned or dropped; the `ask` registry
-// and the `import slot` lines are rendered from ONE registry, so a host can never
-// get a certificate for a slot that is not up; and the box never builds anything.
-// All offline — every effect is injected.
+// or a hostname unvalidated; two slots never share a Redis logical database, and
+// the allocation does not depend on the order docker happened to list containers
+// in; the fourth preview is refused; `main` is never cloned or dropped; the live
+// docker state — not a registry file — is the single authority on which slots are
+// up; a teardown never removes an image another live slot is still running; and
+// every remote command is rendered as TEXT (quoted, heredoc'd) rather than executed
+// locally. All offline — every effect is injected.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
 import {
-  GOLDEN_SUBJECTS_PATH,
-  GOLDEN_SUBJECT_ENV_VARS,
-} from "./idp.mjs";
-import {
+  BUILD_CACHE_RESERVED_SPACE,
   CADDY_CONTAINER,
-  CADDY_INCLUDE_DIR,
   GC_FREE_SPACE_FLOOR_BYTES,
-  GHCR_REPO,
+  IMAGE_RETENTION,
   PREVIEW_SLOT_CAP,
   REDIS_CONTAINER,
-  REGISTRY_PATH,
   SLOT_ENV_DIR,
-  SLOT_IMAGE_APPS,
+  STAGE_ENV_FILE,
   SLOT_LOG_PATH,
   SlotError,
   allocateRedisDatabase,
+  assertImagesBoot,
   assertPreviewCapacity,
+  assertRunningVerdict,
   assertSlotName,
+  basicAuthHeader,
+  buildCommandPlan,
   caddyAttachCommand,
   caddyDetachCommand,
   caddyIsAttached,
-  caddyReloadCommand,
   cloneDatabaseStatements,
+  composeBase,
   composeProjectName,
   containerAliases,
   databaseAction,
-  deregisterSlot,
   dropDatabaseStatements,
-  emptyRegistry,
+  healthVerdict,
   migrateCommandPlan,
   parseArgs,
-  parseRegistry,
-  planImageGc,
+  parseAvailBytes,
+  parseEnvFile,
+  parseLiveSlots,
   planPruneByFreeSpace,
   planResetIdentities,
   planSlotDown,
   planSlotReset,
   planSlotUp,
-  readRegistry,
-  registerSlot,
-  renderAskInclude,
+  planUnreferencedImageGc,
+  pruneScript,
+  quoteCommand,
+  remoteWriteScript,
+  requiredOperatorPassword,
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
-  renderSlotsInclude,
-  resolveIdpBaseUrl,
-  resolveDesiredRedirectSet,
   resetIdentitiesLogLine,
   resetLogLine,
+  resolveDesiredRedirectSet,
+  resolveIdpBaseUrl,
   runSlotCommand,
   runSlotPlan,
   seedCommandPlan,
-  serializeRegistry,
   shortSha,
+  slotComposeFile,
   slotDatabaseName,
   slotEnvPath,
   slotHostnames,
-  slotImageRefs,
   slotNetworkName,
-  slotOfImageTag,
+  slotServiceSet,
+  slotTreeDir,
+  slotsWithClosedPrs,
+  verifyImagesScript,
+  verifyRunningScript,
 } from "./slot.mjs";
 
 const BASE = "stage.doctor.school";
-// The five tool-owned subject ids `ds-slot reset-identities` writes to
-// GOLDEN_SUBJECTS_PATH. Opaque by contract, so the fixture may be anything stable.
-const GOLDEN_SUBJECTS = Object.fromEntries(
-  GOLDEN_SUBJECT_ENV_VARS.map((name, index) => [name, `sub-000${index + 1}`]),
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+const SHA2 = "89abcdef0123456789abcdef0123456789abcdef";
+
+/** The five tool-owned subject ids the golden-identity converge returns. */
+const SUBJECTS = Object.fromEntries(
+  GOLDEN_SUBJECT_ENV_VARS.map((name, index) => [name, `sub-${index + 1}`]),
 );
 
-const SHA = "0123456789abcdef0123456789abcdef01234567";
+/** What `parseLiveSlots` produces: the live compose projects and their images. */
+function live(entries) {
+  return Object.fromEntries(
+    Object.entries(entries).map(([slot, images]) => [slot, { images }]),
+  );
+}
 
-// --- name derivation ---------------------------------------------------------
+const SLOT_IMAGES = (sha) => [
+  `ds-api:${sha}`,
+  `ds-portal:${sha}`,
+  `ds-admin:${sha}`,
+  `ds-doctor:${sha}`,
+];
+
+function labels(plan) {
+  return plan.steps.map((step) => step.label);
+}
+
+function stepOf(plan, label) {
+  const step = plan.steps.find((entry) => entry.label === label);
+  assert.ok(step, `no step labelled "${label}" in ${JSON.stringify(labels(plan))}`);
+  return step;
+}
+
+// --- names -------------------------------------------------------------------
 
 test("a slot name is `main` or `pr-<N>` and nothing else", () => {
   assert.equal(assertSlotName("main"), "main");
   assert.equal(assertSlotName("pr-2034"), "pr-2034");
-  for (const bad of [
-    "pr-0",
-    "PR-1",
-    "pr-1a",
-    "pr_1",
-    "main; rm -rf /",
-    "../main",
-    "",
-    undefined,
-    "prod",
-  ]) {
-    assert.throws(() => assertSlotName(bad), SlotError, `accepted ${bad}`);
+  for (const bad of ["", "pr-0", "PR-1", "pr-01", "main; DROP", "../etc", undefined]) {
+    assert.throws(() => assertSlotName(bad), SlotError);
   }
 });
 
 test("the compose project and network of a slot are derived from its name", () => {
-  assert.equal(composeProjectName("main"), "slot-main");
-  assert.equal(composeProjectName("pr-2034"), "slot-pr-2034");
-  assert.equal(slotNetworkName("pr-2034"), "slot-pr-2034");
+  assert.equal(composeProjectName("pr-7"), "slot-pr-7");
+  assert.equal(slotNetworkName("pr-7"), "slot-pr-7");
 });
 
 test("the slot database name passes the golden-db identifier guard", () => {
   assert.equal(slotDatabaseName("main"), "ds_main");
   assert.equal(slotDatabaseName("pr-2034"), "ds_pr_2034");
-  // No dash survives into an identifier that reaches CREATE DATABASE.
-  assert.doesNotMatch(slotDatabaseName("pr-2034"), /-/);
 });
 
-test("the five hostnames of a slot follow the wildcard record", () => {
-  const hosts = slotHostnames("pr-2034", BASE);
-  assert.deepEqual(hosts, {
-    academy: "academy-pr-2034.stage.doctor.school",
-    doctor: "doctor-pr-2034.stage.doctor.school",
-    admin: "admin-pr-2034.stage.doctor.school",
-    api: "api-pr-2034.stage.doctor.school",
+test("the four hostnames of a slot follow the wildcard record", () => {
+  assert.deepEqual(slotHostnames("pr-7", BASE), {
+    academy: `academy-pr-7.${BASE}`,
+    doctor: `doctor-pr-7.${BASE}`,
+    admin: `admin-pr-7.${BASE}`,
+    api: `api-pr-7.${BASE}`,
   });
-  assert.deepEqual(slotHostnames("main", BASE).academy, [
-    "academy-main.stage.doctor.school",
-  ][0]);
-});
-
-test("a base domain that is not a hostname is refused", () => {
-  for (const bad of ["", "not a domain", "stage.doctor.school/", undefined]) {
-    assert.throws(() => slotHostnames("main", bad), SlotError);
-  }
+  assert.throws(() => slotHostnames("pr-7", "not a domain"), SlotError);
 });
 
 test("container aliases are exactly what the Caddy (slot) snippet dials", () => {
-  assert.deepEqual(containerAliases("pr-2034"), {
-    api: "pr-2034-api",
-    portal: "pr-2034-portal",
-    doctor: "pr-2034-doctor",
-    admin: "pr-2034-admin",
-    centrifugo: "pr-2034-centrifugo",
+  assert.deepEqual(containerAliases("pr-7"), {
+    api: "pr-7-api",
+    portal: "pr-7-portal",
+    doctor: "pr-7-doctor",
+    admin: "pr-7-admin",
+    centrifugo: "pr-7-centrifugo",
   });
 });
 
-test("image refs are GHCR tags of <slot>-<sha7>, five apps, never a local build", () => {
-  const refs = slotImageRefs("pr-2034", SHA);
-  assert.deepEqual(Object.keys(refs).sort(), [...SLOT_IMAGE_APPS].sort());
-  assert.equal(refs.api, `${GHCR_REPO}/api:pr-2034-0123456`);
-  assert.equal(refs["api-migrate"], `${GHCR_REPO}/api-migrate:pr-2034-0123456`);
-  assert.equal(refs.doctor, `${GHCR_REPO}/doctor:pr-2034-0123456`);
-  assert.equal(shortSha(SHA), "0123456");
-});
-
 test("a SHA that is not a full lowercase hex commit id is refused", () => {
-  for (const bad of ["0123456", "ZZZ", "", undefined, `${SHA}0`]) {
+  assert.equal(shortSha(SHA), SHA.slice(0, 7));
+  for (const bad of ["", "abc", SHA.toUpperCase(), `${SHA}0`]) {
     assert.throws(() => shortSha(bad), SlotError);
   }
 });
 
-// --- Redis database allocation ----------------------------------------------
+test("the slot tree and its compose file live under $HOME, one directory per slot", () => {
+  assert.equal(slotTreeDir("pr-7"), "$HOME/ds-platform.slots/pr-7");
+  assert.equal(
+    slotComposeFile("pr-7"),
+    "$HOME/ds-platform.slots/pr-7/infra/deploy/compose/slot/compose.yml",
+  );
+  assert.throws(() => slotTreeDir("../etc"), SlotError);
+});
+
+// --- live docker state replaces the registry ---------------------------------
+
+test("live slots are read off the compose project label, never off a registry file", () => {
+  const parsed = parseLiveSlots(
+    [
+      `slot-main\tds-api:${SHA}`,
+      `slot-main\tds-portal:${SHA}`,
+      `slot-main\tds-api:${SHA}`,
+      `slot-pr-7\tds-api:${SHA2}`,
+      `stg-infra\tcaddy:2`,
+      "\tsome/dangling:latest",
+      "",
+    ].join("\n"),
+  );
+  assert.deepEqual(Object.keys(parsed).sort(), ["main", "pr-7"]);
+  assert.deepEqual(parsed.main.images, [`ds-api:${SHA}`, `ds-portal:${SHA}`]);
+  assert.deepEqual(parsed["pr-7"].images, [`ds-api:${SHA2}`]);
+});
+
+test("a compose project that is not a slot is never mistaken for one", () => {
+  const parsed = parseLiveSlots(`slot-pr-0\tds-api:${SHA}\nslot-nope\tds-api:${SHA}`);
+  assert.deepEqual(parsed, {});
+});
 
 test("main owns Redis database 0 and a preview never does", () => {
-  assert.equal(allocateRedisDatabase("main", emptyRegistry()), 0);
-  for (const n of [1, 2, 14, 15, 16, 30, 2034]) {
-    const db = allocateRedisDatabase(`pr-${n}`, emptyRegistry());
-    assert.ok(db >= 1 && db <= 15, `pr-${n} → ${db}`);
-  }
+  assert.equal(allocateRedisDatabase("main", live({})), 0);
+  assert.notEqual(allocateRedisDatabase("pr-1", live({})), 0);
 });
 
 test("the Redis database of a preview is deterministic", () => {
-  const first = allocateRedisDatabase("pr-2034", emptyRegistry());
-  const second = allocateRedisDatabase("pr-2034", emptyRegistry());
-  assert.equal(first, second);
+  assert.equal(allocateRedisDatabase("pr-1", live({})), 1 + (1 % 15));
+  assert.equal(allocateRedisDatabase("pr-2034", live({})), 1 + (2034 % 15));
 });
 
 test("a taken Redis database is probed past, never shared", () => {
-  const db = allocateRedisDatabase("pr-2034", emptyRegistry());
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-19",
-    sha: SHA,
-    redisDb: db,
-    hosts: Object.values(slotHostnames("pr-19", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  // `1 + (N % 15)` collides for PR numbers 15 apart; the probe moves the newcomer
-  // to the next free database instead of dead-ending the converge.
-  const probed = allocateRedisDatabase("pr-2034", registry);
-  assert.notEqual(probed, db);
-  assert.ok(probed >= 1 && probed <= 15);
-  // Re-allocating for the slot that already holds it is not a collision.
-  assert.equal(allocateRedisDatabase("pr-19", registry), db);
+  // `pr-1` and `pr-16` both start at 1 + (N % 15) = 2.
+  const slots = live({ "pr-1": [], "pr-16": [] });
+  const first = allocateRedisDatabase("pr-1", slots);
+  const second = allocateRedisDatabase("pr-16", slots);
+  assert.notEqual(first, second);
 });
 
-test("Redis allocation refuses only when every database 1..15 is held", () => {
-  let registry = emptyRegistry();
-  for (let db = 1; db <= 15; db += 1) {
-    registry = registerSlot(registry, {
-      slot: `pr-${100 + db}`,
-      sha: SHA,
-      redisDb: db,
-      hosts: Object.values(slotHostnames(`pr-${100 + db}`, BASE)),
-      updatedAt: "2026-09-10T00:00:00.000Z",
-    });
+test("Redis allocation does not depend on the order docker listed the slots", () => {
+  const a = live({ "pr-1": [], "pr-16": [], "pr-31": [] });
+  const b = live({ "pr-31": [], "pr-1": [], "pr-16": [] });
+  for (const slot of ["pr-1", "pr-16", "pr-31"]) {
+    assert.equal(allocateRedisDatabase(slot, a), allocateRedisDatabase(slot, b));
   }
-  assert.throws(
-    () => allocateRedisDatabase("pr-2034", registry),
-    (err) => err instanceof SlotError && /no free Redis database/.test(err.message),
+  // …and the three are still mutually exclusive.
+  const assigned = ["pr-1", "pr-16", "pr-31"].map((slot) => allocateRedisDatabase(slot, a));
+  assert.equal(new Set(assigned).size, 3);
+});
+
+test("`main` never counts against the preview cap, and the fourth preview is refused", () => {
+  const full = live({ main: [], "pr-1": [], "pr-2": [], "pr-3": [] });
+  assert.equal(assertPreviewCapacity("main", full), "main");
+  // An already-live preview converging again is not a fourth one.
+  assert.equal(assertPreviewCapacity("pr-2", full), "pr-2");
+  assert.throws(() => assertPreviewCapacity("pr-9", full), SlotError);
+  assert.equal(PREVIEW_SLOT_CAP, 3);
+});
+
+// --- shell rendering ---------------------------------------------------------
+
+test("a command is rendered as quoted TEXT, and `$HOME` is the one expansion kept", () => {
+  assert.equal(quoteCommand(["sudo", "docker", "ps", "-a"]), "sudo docker ps -a");
+  assert.equal(quoteCommand(["echo", "a b"]), "echo 'a b'");
+  assert.equal(quoteCommand(["echo", "it's"]), "echo 'it'\\''s'");
+  assert.equal(quoteCommand(["echo", "$USER"]), "echo '$USER'");
+  assert.equal(
+    quoteCommand(["ls", "$HOME/ds-platform.slots/pr-7"]),
+    "ls $HOME/ds-platform.slots/pr-7",
+  );
+  assert.equal(
+    quoteCommand(["sudo", "BUILDX_NO_DEFAULT_ATTESTATIONS=1", "docker", "compose", "build"]),
+    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build",
   );
 });
 
-test("the fourth preview is refused; main never counts against the cap", () => {
-  assert.equal(PREVIEW_SLOT_CAP, 3);
-  let registry = emptyRegistry();
-  for (const slot of ["main", "pr-1", "pr-2", "pr-3"]) {
-    registry = registerSlot(registry, {
-      slot,
-      sha: SHA,
-      redisDb: allocateRedisDatabase(slot, registry),
-      hosts: Object.values(slotHostnames(slot, BASE)),
-      updatedAt: "2026-09-10T00:00:00.000Z",
-    });
-  }
-  assert.throws(() => assertPreviewCapacity("pr-4", registry), SlotError);
-  // A slot already registered may be re-converged at the cap.
-  assert.doesNotThrow(() => assertPreviewCapacity("pr-3", registry));
-  assert.doesNotThrow(() => assertPreviewCapacity("main", registry));
+test("a remote write is a root-owned heredoc, never a redirect the caller owns", () => {
+  const script = remoteWriteScript("/etc/ds-platform/slots/main.env", "SLOT=main\n", 0o640);
+  assert.match(script, /^sudo mkdir -p \/etc\/ds-platform\/slots$/m);
+  assert.match(script, /^sudo tee \/etc\/ds-platform\/slots\/main\.env >\/dev\/null <<'DS_SLOT_EOF'$/m);
+  assert.match(script, /^SLOT=main$/m);
+  assert.match(script, /^DS_SLOT_EOF$/m);
+  assert.match(script, /^sudo chmod 0640 \/etc\/ds-platform\/slots\/main\.env$/m);
+  // `sudo cat > path` would redirect as the CALLING user and fail on a root-owned
+  // directory — the whole reason this is `tee`.
+  assert.ok(!/cat >/.test(script));
 });
 
-// --- database clone ----------------------------------------------------------
+test("an append never truncates, and the delimiter can never be forged", () => {
+  const appended = remoteWriteScript("/var/log/ds-platform/slot.log", "line\n", 0o640, {
+    append: true,
+  });
+  assert.match(appended, /^sudo tee -a \/var\/log\/ds-platform\/slot\.log >\/dev\/null <<'DS_SLOT_EOF'$/m);
+  assert.throws(
+    () => remoteWriteScript("/tmp/x", "a\nDS_SLOT_EOF\nb\n", 0o640),
+    SlotError,
+  );
+  // A body that does not end in a newline would silently gain one from the heredoc,
+  // so the bytes on the box would differ from the bytes that were rendered.
+  assert.throws(() => remoteWriteScript("/tmp/x", "no trailing newline", 0o640), SlotError);
+});
+
+test("the box env file is parsed, not sourced", () => {
+  const env = parseEnvFile(
+    [
+      "# a comment",
+      "",
+      "STAGE_BASE_DOMAIN=stage.doctor.school",
+      "export IDP_EXTERNAL_SECURE=true",
+      'IDP_PROJECT_NAME="DS Platform"',
+      "DS_GOLDEN_PASSWORD_DOCTOR='p=a s$s'",
+      "MALFORMED",
+    ].join("\n"),
+  );
+  assert.equal(env.STAGE_BASE_DOMAIN, "stage.doctor.school");
+  assert.equal(env.IDP_EXTERNAL_SECURE, "true");
+  assert.equal(env.IDP_PROJECT_NAME, "DS Platform");
+  assert.equal(env.DS_GOLDEN_PASSWORD_DOCTOR, "p=a s$s");
+  assert.ok(!("MALFORMED" in env));
+});
+
+test("free space on the box is read from `df`, never from the operator's own disk", () => {
+  assert.equal(parseAvailBytes("Avail\n123456789\n"), 123456789);
+  assert.equal(parseAvailBytes("42"), 42);
+  assert.throws(() => parseAvailBytes("not a number"), SlotError);
+});
+
+// --- database ----------------------------------------------------------------
 
 test("a preview database is dropped and re-cloned from the golden template", () => {
-  const statements = cloneDatabaseStatements("pr-2034");
-  assert.match(statements[0], /pg_terminate_backend.*'ds_pr_2034'/);
-  assert.equal(statements[1], 'DROP DATABASE IF EXISTS "ds_pr_2034"');
-  assert.match(statements[2], /pg_terminate_backend.*'ds_golden'/);
-  assert.equal(
-    statements[3],
-    'CREATE DATABASE "ds_pr_2034" TEMPLATE "ds_golden"',
-  );
+  const statements = cloneDatabaseStatements("pr-7");
+  assert.equal(statements.length, 4);
+  assert.match(statements[1], /DROP DATABASE IF EXISTS "ds_pr_7"/);
+  assert.match(statements[3], /CREATE DATABASE "ds_pr_7" TEMPLATE "ds_golden"/);
 });
 
 test("main is never cloned and never dropped — it is forward-migrated", () => {
   assert.throws(() => cloneDatabaseStatements("main"), SlotError);
   assert.throws(() => dropDatabaseStatements("main"), SlotError);
-  assert.equal(databaseAction({ slot: "main", action: "sync" }), "reuse");
-  assert.equal(
-    databaseAction({ slot: "main", action: "up", exists: true }),
-    "reuse",
-  );
-  // The very first `up main` has no database yet — bootstrap it from the template.
-  assert.equal(
-    databaseAction({ slot: "main", action: "up", exists: false }),
-    "bootstrap",
-  );
-  for (const action of ["up", "sync"]) {
-    assert.equal(databaseAction({ slot: "pr-2034", action }), "clone");
-  }
+  const bootstrap = cloneDatabaseStatements("main", { bootstrap: true });
+  assert.ok(!bootstrap.some((statement) => /DROP DATABASE/.test(statement)));
+  assert.deepEqual(dropDatabaseStatements("main", { allowMain: true }).length, 2);
 });
 
-test("the main bootstrap clone is allowed exactly once, through its own seam", () => {
-  const statements = cloneDatabaseStatements("main", { bootstrap: true });
-  assert.equal(statements.at(-1), 'CREATE DATABASE "ds_main" TEMPLATE "ds_golden"');
-  assert.ok(!statements.some((s) => /DROP DATABASE/.test(s)));
+test("what a converge does to the slot database", () => {
+  assert.equal(databaseAction({ slot: "pr-7", action: "up", exists: true }), "clone");
+  assert.equal(databaseAction({ slot: "main", action: "up", exists: false }), "bootstrap");
+  assert.equal(databaseAction({ slot: "main", action: "up", exists: true }), "reuse");
+  assert.equal(databaseAction({ slot: "main", action: "sync", exists: false }), "reuse");
 });
 
-test("dropping a preview database terminates its backends first", () => {
-  const statements = dropDatabaseStatements("pr-2034");
-  assert.match(statements[0], /pg_terminate_backend/);
-  assert.equal(statements[1], 'DROP DATABASE IF EXISTS "ds_pr_2034"');
+// --- compose -----------------------------------------------------------------
+
+test("every compose invocation is `sudo`, pinned to the slot's own shipped tree", () => {
+  const base = composeBase("pr-7");
+  assert.equal(base[0], "sudo");
+  assert.deepEqual(base.slice(1, 3), ["docker", "compose"]);
+  assert.ok(base.includes("/etc/ds-platform/stage.env"));
+  assert.ok(base.includes(slotEnvPath("pr-7")));
+  assert.ok(base.includes("slot-pr-7"));
+  assert.ok(base.includes(slotComposeFile("pr-7")));
+  assert.equal(slotEnvPath("pr-7"), `${SLOT_ENV_DIR}/pr-7.env`);
 });
 
-// --- migrate + branch seed ---------------------------------------------------
+test("images are BUILT on the box from the shipped tree, never pulled from a registry", () => {
+  const build = buildCommandPlan("pr-7");
+  assert.equal(build.kind, "sh");
+  assert.deepEqual(build.command.slice(0, 2), ["sudo", "BUILDX_NO_DEFAULT_ATTESTATIONS=1"]);
+  assert.equal(build.command.at(-1), "build");
+  assert.equal(build.stallBudget, "build");
+  const rendered = quoteCommand(build.command);
+  assert.ok(!/ pull/.test(rendered));
+  assert.ok(!/ghcr\.io/.test(rendered));
+});
 
 test("migrate and the branch golden seed run in the slot's own migrate image", () => {
-  const migrate = migrateCommandPlan("pr-2034");
-  const seed = seedCommandPlan("pr-2034");
-  for (const plan of [migrate, seed]) {
-    assert.equal(plan.command[0], "docker");
-    assert.deepEqual(plan.command.slice(0, 2), ["docker", "compose"]);
+  for (const plan of [migrateCommandPlan("pr-7"), seedCommandPlan("pr-7")]) {
+    assert.equal(plan.kind, "sh");
     assert.ok(plan.command.includes("--profile"));
-    assert.ok(plan.command.includes("run"));
-    assert.ok(plan.command.includes("--rm"));
     assert.ok(plan.command.includes("migrate"));
-    assert.ok(plan.command.includes("slot-pr-2034"));
-    // Nothing pnpm-shaped may run on the HOST (spec §3 «Host runtime»).
-    assert.notEqual(plan.command[0], "pnpm");
+    assert.ok(plan.command.includes("--rm"));
+    assert.equal(plan.command[0], "sudo");
   }
-  assert.deepEqual(migrate.command.slice(-3), [
-    "pnpm",
-    "run",
-    "drizzle:migrate:ci",
-  ]);
-  assert.deepEqual(seed.command.slice(-5), [
-    "pnpm",
-    "--filter",
-    "@ds/db",
-    "run",
-    "seed:golden",
-  ]);
+  assert.ok(migrateCommandPlan("pr-7").command.includes("drizzle:migrate:ci"));
+  assert.ok(seedCommandPlan("pr-7").command.includes("seed:golden"));
 });
 
-// --- Caddy attach/detach + reload -------------------------------------------
+test("the boot probe skips the one-shot migrate service instead of demanding a PORT", () => {
+  const compose = [
+    "services:",
+    "  api:",
+    "    image: ds-api:${DEPLOY_SHA:-local}",
+    "  migrate:",
+    "    image: ds-api-migrate:${DEPLOY_SHA:-local}",
+    "  portal:",
+    "    image: ds-portal:${DEPLOY_SHA:-local}",
+    "    environment:",
+    '      PORT: "3001"',
+    "",
+  ].join("\n");
+  const set = slotServiceSet(compose);
+  assert.deepEqual(
+    set.services.map((service) => service.name),
+    ["api", "migrate", "portal"],
+  );
+  assert.deepEqual(
+    set.longRunning.map((service) => service.name),
+    ["api", "portal"],
+  );
+  // `api` is excluded from the probe by service-set.mjs itself; `migrate` would
+  // otherwise throw for having no pinned PORT.
+  assert.deepEqual(
+    set.bootProbe.map((service) => service.name),
+    ["portal"],
+  );
+});
+
+// --- caddy -------------------------------------------------------------------
 
 test("Caddy's attachment is planned as verify-then-act in BOTH directions", () => {
-  const attach = caddyAttachCommand("pr-2034");
-  const detach = caddyDetachCommand("pr-2034");
+  const attach = caddyAttachCommand("pr-7");
   assert.equal(attach.kind, "ensure-present");
-  assert.equal(detach.kind, "ensure-absent");
-  // Neither direction is tolerated: the expected no-op is decided by the PROBE, so a
-  // connect/disconnect that actually runs and fails is a real failure.
-  assert.ok(!attach.tolerateFailure);
-  assert.ok(!detach.tolerateFailure);
   assert.deepEqual(attach.items[0].apply, [
+    "sudo",
     "docker",
     "network",
     "connect",
-    "slot-pr-2034",
+    "slot-pr-7",
     CADDY_CONTAINER,
   ]);
+  const detach = caddyDetachCommand("pr-7");
+  assert.equal(detach.kind, "ensure-absent");
   assert.deepEqual(detach.items[0].remove, [
+    "sudo",
     "docker",
     "network",
     "disconnect",
-    "slot-pr-2034",
+    "slot-pr-7",
     CADDY_CONTAINER,
   ]);
-  // One probe answers both questions.
-  assert.deepEqual(attach.items[0].probe, detach.items[0].probe);
-  assert.deepEqual(attach.items[0].probe, [
-    "docker",
-    "network",
-    "inspect",
-    "slot-pr-2034",
-    "--format",
-    "{{json .Containers}}",
-  ]);
+  assert.equal(attach.items[0].match, detach.items[0].match);
 });
 
 test("the attachment probe is read for CONTENT, not for its exit status", () => {
-  assert.equal(
-    caddyIsAttached(
-      JSON.stringify({
-        "9f0": { Name: CADDY_CONTAINER },
-        a1b: { Name: "pr-2034-portal-1" },
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    caddyIsAttached(JSON.stringify({ a1b: { Name: "pr-2034-portal-1" } })),
-    false,
-  );
-  // A network with nothing attached prints an empty map; docker prints nothing at all
-  // for a format that resolves to no value.
-  assert.equal(caddyIsAttached("{}"), false);
-  assert.equal(caddyIsAttached("   "), false);
-  // Output that is not the documented shape is an anomaly, never a silent «absent».
-  assert.throws(() => caddyIsAttached("<html>"), SlotError);
+  assert.equal(caddyIsAttached(""), false);
+  assert.equal(caddyIsAttached("null"), false);
+  assert.equal(caddyIsAttached('{"abc":{"Name":"other"}}'), false);
+  assert.equal(caddyIsAttached(`{"abc":{"Name":"${CADDY_CONTAINER}"}}`), true);
+  assert.throws(() => caddyIsAttached("not json"), SlotError);
+  assert.throws(() => caddyIsAttached("[]"), SlotError);
 });
 
-test("the reload goes through the container's own admin API, never a restart", () => {
-  const { command } = caddyReloadCommand();
-  assert.deepEqual(command, [
-    "docker",
-    "exec",
-    CADDY_CONTAINER,
-    "caddy",
-    "reload",
-    "--config",
-    "/etc/caddy/Caddyfile",
-  ]);
-  assert.ok(!command.includes("restart"));
-});
+// --- the slot env ------------------------------------------------------------
 
-// --- the registry and the rendered Caddy includes ----------------------------
-
-test("an absent or empty registry file reads as an empty registry", () => {
-  assert.deepEqual(parseRegistry(""), emptyRegistry());
-  assert.deepEqual(parseRegistry(null), emptyRegistry());
-  assert.deepEqual(parseRegistry('{"slots":{}}'), emptyRegistry());
-  assert.throws(() => parseRegistry("{not json"), SlotError);
-});
-
-test("register and deregister are pure — the input registry is untouched", () => {
-  const before = emptyRegistry();
-  const after = registerSlot(before, {
+test("the per-slot env file carries no secret and no short-SHA tag", () => {
+  const text = renderSlotEnv({
     slot: "pr-7",
-    sha: SHA,
-    redisDb: 7,
-    hosts: Object.values(slotHostnames("pr-7", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  assert.deepEqual(before, emptyRegistry());
-  assert.equal(after.slots["pr-7"].sha, SHA);
-  assert.deepEqual(deregisterSlot(after, "pr-7"), emptyRegistry());
-  assert.deepEqual(deregisterSlot(emptyRegistry(), "pr-7"), emptyRegistry());
-  assert.match(serializeRegistry(after), /"pr-7"/);
-});
-
-test("the ask include answers 200 for registered hosts and for the shared IdP only", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-7",
-    sha: SHA,
-    redisDb: 7,
-    hosts: Object.values(slotHostnames("pr-7", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const rendered = renderAskInclude(registry, { baseDomain: BASE });
-  assert.match(rendered, /domain=id\.stage\.doctor\.school/);
-  assert.match(rendered, /domain=academy-pr-7\.stage\.doctor\.school/);
-  assert.match(rendered, /domain=api-pr-7\.stage\.doctor\.school/);
-  assert.match(rendered, /^respond @registered 200$/m);
-  // An unregistered slot never appears — that is what bounds ACME.
-  assert.doesNotMatch(rendered, /pr-8/);
-  // Generated: a hand edit is a bug, so the file says so.
-  assert.match(rendered, /^# generated by tools\/staging\/slot\.mjs/m);
-});
-
-test("an EMPTY registry still renders includes Caddy can parse", () => {
-  const ask = renderAskInclude(emptyRegistry(), { baseDomain: BASE });
-  const slots = renderSlotsInclude(emptyRegistry());
-  // The IdP host is registered unconditionally — it is not a slot.
-  assert.match(ask, /domain=id\.stage\.doctor\.school/);
-  assert.match(ask, /respond @registered 200/);
-  // No slot lines, but a parseable file (comments only).
-  assert.ok(!/import slot/.test(slots));
-  for (const line of slots.split("\n")) {
-    assert.ok(line === "" || line.startsWith("#"), `stray line: ${line}`);
-  }
-});
-
-test("the slots include imports exactly the registered slots, sorted", () => {
-  let registry = emptyRegistry();
-  for (const slot of ["pr-9", "main", "pr-2"]) {
-    registry = registerSlot(registry, {
-      slot,
-      sha: SHA,
-      redisDb: allocateRedisDatabase(slot, registry),
-      hosts: Object.values(slotHostnames(slot, BASE)),
-      updatedAt: "2026-09-10T00:00:00.000Z",
-    });
-  }
-  const lines = renderSlotsInclude(registry)
-    .split("\n")
-    .filter((line) => line.startsWith("import"));
-  assert.deepEqual(lines, [
-    "import slot main",
-    "import slot pr-2",
-    "import slot pr-9",
-  ]);
-});
-
-test("ask and slots are rendered from the SAME registry — they cannot drift", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-3",
-    sha: SHA,
-    redisDb: 3,
-    hosts: Object.values(slotHostnames("pr-3", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const ask = renderAskInclude(registry, { baseDomain: BASE });
-  const slots = renderSlotsInclude(registry);
-  for (const slot of Object.keys(registry.slots)) {
-    assert.ok(slots.includes(`import slot ${slot}`));
-    for (const host of registry.slots[slot].hosts) {
-      assert.ok(ask.includes(`domain=${host}`), `${host} missing from ask`);
-    }
-  }
-});
-
-// --- the per-slot env file ---------------------------------------------------
-
-test("the per-slot env file carries no secret — the password stays in stage.env", () => {
-  const env = renderSlotEnv({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
     sha: SHA,
     baseDomain: BASE,
     redisDb: 4,
+    goldenSubjects: SUBJECTS,
   });
-  assert.doesNotMatch(env, /PASSWORD/);
-  assert.doesNotMatch(env, /DATABASE_URL/); // built by compose from POSTGRES_PASSWORD
-  assert.match(env, /^SLOT=pr-2034$/m);
-  assert.match(env, /^SLOT_SHA7=0123456$/m);
-  assert.match(env, new RegExp(`^DEPLOY_SHA=${SHA}$`, "m"));
-  assert.match(env, /^SLOT_DB=ds_pr_2034$/m);
-  assert.match(env, /^REDIS_URL=redis:\/\/redis:6379\/4$/m);
-  assert.match(
-    env,
-    /^CENTRIFUGO_URL=https:\/\/api-pr-2034\.stage\.doctor\.school$/m,
+  assert.match(text, /^SLOT=pr-7$/m);
+  assert.match(text, new RegExp(`^DEPLOY_SHA=${SHA}$`, "m"));
+  assert.match(text, /^SLOT_DB=ds_pr_7$/m);
+  assert.match(text, /^REDIS_URL=redis:\/\/redis:6379\/4$/m);
+  assert.match(text, new RegExp(`^IDP_ISSUER=https://id\\.${BASE.replace(/\./g, "\\.")}$`, "m"));
+  // The image tag is now the FULL sha, exactly as production tags — there is no
+  // `<slot>-<sha7>` tag family left to interpolate.
+  assert.ok(!/SLOT_SHA7/.test(text));
+  assert.ok(!/PASSWORD/.test(text));
+  assert.ok(!/DATABASE_URL/.test(text));
+  for (const name of GOLDEN_SUBJECT_ENV_VARS) {
+    assert.match(text, new RegExp(`^${name}=${SUBJECTS[name]}$`, "m"));
+  }
+});
+
+test("a slot env asked for before the golden identities converged refuses and names it", () => {
+  assert.throws(
+    () =>
+      renderSlotEnv({ slot: "pr-7", sha: SHA, baseDomain: BASE, redisDb: 4, goldenSubjects: {} }),
+    (err) => err instanceof SlotError && /reset-identities/.test(err.message),
   );
-  assert.match(env, /^IDP_ISSUER=https:\/\/id\.stage\.doctor\.school$/m);
-  assert.match(
-    env,
-    /^IDP_REDIRECT_URI=https:\/\/api-pr-2034\.stage\.doctor\.school\/auth\/callback$/m,
-  );
-  assert.match(
-    env,
-    /^MAILER_PORTAL_BASE_URL=https:\/\/academy-pr-2034\.stage\.doctor\.school$/m,
-  );
-  // Sink partitioning is by sender local part (spec §3 «Sink partitioning»).
-  assert.match(
-    env,
-    /^MAILER_SMTP_FROM=no-reply\+pr-2034@stage\.doctor\.school$/m,
-  );
-  assert.equal(slotEnvPath("pr-2034"), `${SLOT_ENV_DIR}/pr-2034.env`);
 });
 
 test("main's Redis database is 0 in the env file it gets", () => {
-  const env = renderSlotEnv({
-    goldenSubjects: GOLDEN_SUBJECTS,
+  const text = renderSlotEnv({
     slot: "main",
     sha: SHA,
     baseDomain: BASE,
     redisDb: 0,
+    goldenSubjects: SUBJECTS,
   });
-  assert.match(env, /^REDIS_URL=redis:\/\/redis:6379\/0$/m);
-  assert.match(env, /^SLOT_DB=ds_main$/m);
+  assert.match(text, /^REDIS_URL=redis:\/\/redis:6379\/0$/m);
+});
+
+test("a teardown renders only what compose needs to ADDRESS the project", () => {
+  const text = renderSlotDownEnv({ slot: "pr-7" });
+  assert.match(text, /^SLOT=pr-7$/m);
+  assert.match(text, /^SLOT_DB=ds_pr_7$/m);
+  // No subjects, no SHA: `down` matches containers by project label, and a teardown
+  // must stay possible on a box where the golden identities never converged.
+  assert.ok(!/DS_GOLDEN_SUB_/.test(text));
+  assert.ok(!/DEPLOY_SHA=/.test(text));
+});
+
+// --- the shared IdP redirect set ---------------------------------------------
+
+test("the IdP redirect set covers every live slot, ordered and de-duplicated", () => {
+  const set = renderIdpRedirectUris(["pr-7", "main", "pr-7"], BASE);
+  assert.deepEqual(set.redirectUris, [
+    `https://api-main.${BASE}/auth/callback`,
+    `https://api-pr-7.${BASE}/auth/callback`,
+  ]);
+  assert.deepEqual(set.postLogoutUris, [
+    `https://academy-main.${BASE}`,
+    `https://doctor-main.${BASE}`,
+    `https://admin-main.${BASE}`,
+    `https://academy-pr-7.${BASE}`,
+    `https://doctor-pr-7.${BASE}`,
+    `https://admin-pr-7.${BASE}`,
+  ]);
+});
+
+test("no live slot yields an empty redirect set, never a wildcard", () => {
+  assert.deepEqual(renderIdpRedirectUris([], BASE), {
+    redirectUris: [],
+    postLogoutUris: [],
+  });
+});
+
+test("the converge writes the env pins unioned with the rendered slot set", () => {
+  const step = { desired: renderIdpRedirectUris(["pr-7"], BASE) };
+  const resolved = resolveDesiredRedirectSet(step, {
+    IDP_REDIRECT_URIS: `https://api.${BASE}/auth/callback`,
+    IDP_POST_LOGOUT_URIS: `https://academy.${BASE}`,
+  });
+  assert.deepEqual(resolved.redirectUris, [
+    `https://api.${BASE}/auth/callback`,
+    `https://api-pr-7.${BASE}/auth/callback`,
+  ]);
+  assert.ok(resolved.postLogoutUris.includes(`https://academy.${BASE}`));
+  assert.ok(resolved.postLogoutUris.includes(`https://academy-pr-7.${BASE}`));
+});
+
+test("no pins in the env leaves the rendered set untouched", () => {
+  const step = { desired: renderIdpRedirectUris(["pr-7"], BASE) };
+  assert.deepEqual(resolveDesiredRedirectSet(step, {}), step.desired);
 });
 
 // --- gc ----------------------------------------------------------------------
 
-test("a slot-tagged image names the slot that owns it", () => {
-  assert.equal(slotOfImageTag("pr-2034-0123456"), "pr-2034");
-  assert.equal(slotOfImageTag("main-0123456"), "main");
-  for (const bad of ["latest", "local", "pr-2034", "", undefined]) {
-    assert.equal(slotOfImageTag(bad), null);
-  }
-});
-
-test("gc removes images of unregistered slots and keeps every live one", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-3",
-    sha: SHA,
-    redisDb: 3,
-    hosts: Object.values(slotHostnames("pr-3", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
+test("gc removes only `ds-*:<sha>` images no live slot is running", () => {
+  const slots = live({ main: SLOT_IMAGES(SHA) });
+  const plan = planUnreferencedImageGc({
+    images: [...SLOT_IMAGES(SHA), ...SLOT_IMAGES(SHA2), "caddy:2", "postgres:17"],
+    liveSlots: slots,
   });
-  const images = [
-    `${GHCR_REPO}/api:pr-3-0123456`,
-    `${GHCR_REPO}/portal:pr-3-0123456`,
-    `${GHCR_REPO}/api:pr-9-bbbbbbb`,
-    `${GHCR_REPO}/api:main-ccccccc`,
-    "caddy:2.11.4-alpine",
-  ];
-  const plan = planImageGc({ images, registry });
-  assert.deepEqual(plan.remove, [
-    `${GHCR_REPO}/api:pr-9-bbbbbbb`,
-    `${GHCR_REPO}/api:main-ccccccc`,
-  ]);
-  // Non-slot images (the shared infra) are never touched by gc.
-  assert.ok(!plan.remove.includes("caddy:2.11.4-alpine"));
-  // Verify-then-remove, like the teardown: an image another gc already took is the
-  // desired end state, and one that refuses to go is a hard failure.
+  assert.deepEqual(plan.remove.sort(), SLOT_IMAGES(SHA2).sort());
   assert.equal(plan.commands[0].kind, "ensure-absent");
-  assert.ok(!plan.commands[0].tolerateFailure);
-  assert.deepEqual(
-    plan.commands[0].items.map((item) => item.remove.at(-1)),
-    plan.remove,
-  );
-});
-
-test("gc never invokes buildx — this box builds nothing", () => {
-  const plan = planImageGc({ images: [], registry: emptyRegistry() });
-  const prune = planPruneByFreeSpace({ freeBytes: 1 });
-  for (const step of [...plan.commands, ...prune.commands]) {
-    assert.ok(!step.command.includes("buildx"), step.command.join(" "));
-    assert.ok(!step.command.includes("build"), step.command.join(" "));
-    // The prune is idempotent on its own — nothing to reclaim exits 0 — so it needs
-    // no tolerance either, and a prune that fails is a real docker failure.
-    assert.ok(!step.tolerateFailure);
-  }
-});
-
-test("the unconditional prune only fires below the 10GB free-disk floor", () => {
-  assert.equal(GC_FREE_SPACE_FLOOR_BYTES, 10 * 1024 ** 3);
-  const above = planPruneByFreeSpace({
-    freeBytes: GC_FREE_SPACE_FLOOR_BYTES + 1,
-  });
-  assert.deepEqual(above.commands, []);
-  const below = planPruneByFreeSpace({
-    freeBytes: GC_FREE_SPACE_FLOOR_BYTES - 1,
-  });
-  assert.deepEqual(below.commands[0].command, [
+  assert.deepEqual(plan.commands[0].items[0].remove.slice(0, 4), [
+    "sudo",
     "docker",
     "image",
-    "prune",
-    "-af",
-    "--filter",
-    "until=24h",
+    "rm",
   ]);
+});
+
+test("gc never touches the shared infra images, and plans nothing when there is nothing to do", () => {
+  const plan = planUnreferencedImageGc({
+    images: ["caddy:2", "postgres:17", "ghcr.io/zitadel/zitadel:v2"],
+    liveSlots: live({}),
+  });
+  assert.deepEqual(plan.remove, []);
+  assert.deepEqual(plan.commands, []);
+});
+
+test("gc takes down the slots whose PR is no longer open, and never `main`", () => {
+  const slots = live({ main: [], "pr-7": [], "pr-8": [] });
+  assert.deepEqual(slotsWithClosedPrs(slots, [8]), ["pr-7"]);
+  assert.deepEqual(slotsWithClosedPrs(slots, [7, 8]), []);
+});
+
+test("the unconditional prune only fires below the free-disk floor", () => {
+  assert.deepEqual(planPruneByFreeSpace({ freeBytes: GC_FREE_SPACE_FLOOR_BYTES }).commands, []);
+  const low = planPruneByFreeSpace({ freeBytes: GC_FREE_SPACE_FLOOR_BYTES - 1 });
+  assert.equal(low.commands.length, 1);
+  assert.equal(low.commands[0].command[0], "sudo");
 });
 
 // --- the ordered plans -------------------------------------------------------
 
-function planLabels(plan) {
-  return plan.steps.map((step) => step.label);
-}
-
-test("up: env file → clone → pull → migrate → seed → up → attach → register → reload", () => {
-  const plan = planSlotUp({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
+function upPlan(overrides = {}) {
+  return planSlotUp({
+    slot: "pr-7",
     sha: SHA,
-    registry: emptyRegistry(),
+    liveSlots: live({}),
     baseDomain: BASE,
     action: "up",
+    subjects: SUBJECTS,
+    actor: "tech-lead",
+    ...overrides,
   });
-  assert.deepEqual(planLabels(plan), [
+}
+
+test("up: ship → env → build → verify → clone → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
+  assert.deepEqual(labels(upPlan()), [
+    "ship the tree",
     "write slot env",
+    "build images",
+    "verify images boot",
     "clone database",
-    "pull images",
     "migrate",
     "seed:golden",
     "up -d",
     "attach caddy",
-    "write registry",
-    "render caddy includes",
-    "reload caddy",
     "converge the shared IdP redirect set",
+    "verify the running images",
+    "health",
+    "prune images and build cache",
+    "write the tool-owned golden subjects",
+    "flush the slot's redis logical database",
+    "audit the identity reset",
   ]);
-  // The registry write happens only after the containers are up: a host that is
-  // registered before its upstream exists gets a certificate for a 502.
-  assert.ok(
-    planLabels(plan).indexOf("write registry") >
-      planLabels(plan).indexOf("up -d"),
-  );
-  assert.equal(plan.redisDb, allocateRedisDatabase("pr-2034", emptyRegistry()));
-  assert.ok(
-    plan.steps.some(
-      (step) => step.kind === "sh" && step.command.includes("pull"),
-    ),
-  );
-  // Nothing in the plan builds an image on the box.
-  for (const step of plan.steps) {
-    if (step.kind !== "sh") continue;
-    assert.ok(!step.command.includes("build"), step.command.join(" "));
-  }
 });
 
-test("sync of main forward-migrates and never clones or seeds a fresh database", () => {
-  const registry = registerSlot(emptyRegistry(), {
+test("up ships the slot's own tree at the requested SHA, into the slot's own directory", () => {
+  const ship = stepOf(upPlan(), "ship the tree");
+  assert.equal(ship.kind, "ship");
+  assert.equal(ship.sha, SHA);
+  assert.equal(ship.liveDir, slotTreeDir("pr-7"));
+  assert.equal(ship.tmpPrefix, "ds-slot-pr-7");
+  // Nothing of the previous deploy is preserved: the slot tree is disposable.
+  assert.deepEqual(ship.preserved, []);
+});
+
+test("up verifies the images it built and the containers it started, against the SAME sha", () => {
+  const plan = upPlan();
+  assert.equal(stepOf(plan, "verify images boot").sha, SHA);
+  assert.equal(stepOf(plan, "verify the running images").sha, SHA);
+  const health = stepOf(plan, "health");
+  assert.equal(health.kind, "health");
+  assert.equal(health.url, `https://api-pr-7.${BASE}/v1/health`);
+  assert.equal(health.sha, SHA);
+});
+
+test("up prunes on production's retention, never on an invented one", () => {
+  const prune = stepOf(upPlan(), "prune images and build cache");
+  assert.equal(prune.kind, "prune");
+  assert.equal(prune.retention, IMAGE_RETENTION);
+  assert.equal(prune.reservedSpace, BUILD_CACHE_RESERVED_SPACE);
+});
+
+test("up converges the shared IdP set over the live slots PLUS the one coming up", () => {
+  const step = stepOf(
+    upPlan({ liveSlots: live({ main: [], "pr-7": [] }) }),
+    "converge the shared IdP redirect set",
+  );
+  assert.deepEqual(step.desired, renderIdpRedirectUris(["main", "pr-7"], BASE));
+});
+
+test("sync of main forward-migrates and never clones a fresh database", () => {
+  const plan = planSlotUp({
     slot: "main",
     sha: SHA,
-    redisDb: 0,
-    hosts: Object.values(slotHostnames("main", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const plan = planSlotUp({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "main",
-    sha: "89abcdef89abcdef89abcdef89abcdef89abcdef",
-    registry,
+    liveSlots: live({ main: [] }),
     baseDomain: BASE,
     action: "sync",
+    databaseExists: true,
+    subjects: SUBJECTS,
+    actor: "tech-lead",
   });
-  assert.ok(!planLabels(plan).includes("clone database"));
-  assert.ok(planLabels(plan).includes("migrate"));
-  for (const step of plan.steps) {
-    if (step.kind !== "sql") continue;
-    assert.doesNotMatch(step.statement, /DROP DATABASE/);
-    assert.doesNotMatch(step.statement, /TEMPLATE/);
-  }
+  assert.ok(!labels(plan).includes("clone database"));
+  assert.ok(labels(plan).includes("migrate"));
 });
 
-test("down: detach → compose down -v → drop database → deregister → reload → images", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-2034",
+test("the first `up main` on an empty box bootstraps ds_main from the template", () => {
+  const plan = planSlotUp({
+    slot: "main",
     sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames("pr-2034", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
+    liveSlots: live({}),
+    baseDomain: BASE,
+    action: "up",
+    databaseExists: false,
+    subjects: SUBJECTS,
+    actor: "tech-lead",
   });
-  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
-  assert.deepEqual(planLabels(plan), [
+  const clone = stepOf(plan, "clone database");
+  assert.ok(!clone.statements.some((statement) => /DROP DATABASE/.test(statement)));
+});
+
+test("an unknown converge action is refused rather than defaulted to `up`", () => {
+  assert.throws(() => upPlan({ action: "maybe" }), SlotError);
+});
+
+test("down: env → detach → compose down → network → database → images → tree → env → idp", () => {
+  const plan = planSlotDown({
+    slot: "pr-7",
+    liveSlots: live({ "pr-7": SLOT_IMAGES(SHA) }),
+    baseDomain: BASE,
+  });
+  assert.deepEqual(labels(plan), [
     "ensure slot env",
     "detach caddy",
-    "write registry",
-    "render caddy includes",
-    "reload caddy",
     "compose down",
     "remove slot network",
     "drop database",
     "remove slot images",
+    "remove the slot tree",
     "remove slot env",
     "converge the shared IdP redirect set",
   ]);
-  // Deregistration precedes teardown: a host must stop being certifiable before
-  // its upstream disappears.
-  assert.ok(
-    planLabels(plan).indexOf("reload caddy") <
-      planLabels(plan).indexOf("compose down"),
-  );
-  const composeDown = plan.steps.find((step) => step.label === "compose down");
-  assert.ok(composeDown.command.includes("-v"));
-  assert.equal(plan.registry.slots["pr-2034"], undefined);
+  assert.ok(stepOf(plan, "compose down").command.includes("-v"));
 });
 
 test("down of main tears the containers down but keeps its persistent database", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "main",
-    sha: SHA,
-    redisDb: 0,
-    hosts: Object.values(slotHostnames("main", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const plan = planSlotDown({ slot: "main", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
-  assert.ok(!planLabels(plan).includes("drop database"));
-  const composeDown = plan.steps.find((step) => step.label === "compose down");
-  assert.ok(!composeDown.command.includes("-v"));
+  const plan = planSlotDown({ slot: "main", liveSlots: live({ main: [] }), baseDomain: BASE });
+  const names = labels(plan);
+  assert.ok(!names.includes("drop database"));
+  assert.ok(!names.includes("remove slot env"));
+  assert.ok(!names.includes("remove the slot tree"));
+  assert.ok(!stepOf(plan, "compose down").command.includes("-v"));
 });
 
-// --- the executor ------------------------------------------------------------
-
-test("the executor runs every step in order through injected effects", async () => {
-  const seen = [];
-  const plan = planSlotUp({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
-    sha: SHA,
-    registry: emptyRegistry(),
+test("down removes an image no OTHER live slot is running", () => {
+  const plan = planSlotDown({
+    slot: "pr-7",
+    liveSlots: live({ "pr-7": SLOT_IMAGES(SHA), main: SLOT_IMAGES(SHA2) }),
     baseDomain: BASE,
-    action: "up",
   });
-  await runSlotPlan(plan, {
-    sql: (statement) => seen.push(["sql", statement]),
-    sh: (command) => seen.push(["sh", command.join(" ")]),
-    // Caddy is not on the fresh slot's network yet, so the attach runs.
-    probe: (command) => {
-      seen.push(["probe", command.join(" ")]);
-      return { ok: true, stdout: "{}" };
-    },
-    write: (path) => seen.push(["write", path]),
-    idp: (step) => seen.push(["idp", step.op]),
-  });
-  assert.equal(seen[0][0], "write");
-  assert.equal(seen[0][1], `${SLOT_ENV_DIR}/pr-2034.env`);
-  assert.ok(seen.some(([kind, arg]) => kind === "write" && arg === REGISTRY_PATH));
-  assert.ok(
-    seen.some(
-      ([kind, arg]) => kind === "write" && arg === `${CADDY_INCLUDE_DIR}/ask.caddy`,
-    ),
-  );
-  assert.ok(
-    seen.some(([kind, arg]) => kind === "sql" && /CREATE DATABASE/.test(arg)),
+  const step = stepOf(plan, "remove slot images");
+  assert.deepEqual(
+    step.items.map((item) => item.remove.at(-1)).sort(),
+    SLOT_IMAGES(SHA).sort(),
   );
 });
 
-test("a failing step aborts the run", async () => {
-  const plan = planSlotUp({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
-    sha: SHA,
-    registry: emptyRegistry(),
+test("down NEVER removes an image a second slot at the same SHA is still running", () => {
+  // The registry used to hide this: image tags are now global per SHA, so two slots
+  // converged on one commit share every tag. Removing them would take the other slot
+  // down with an ImageNotFound on its next restart.
+  const plan = planSlotDown({
+    slot: "pr-7",
+    liveSlots: live({ "pr-7": SLOT_IMAGES(SHA), "pr-8": SLOT_IMAGES(SHA) }),
     baseDomain: BASE,
-    action: "up",
   });
-  await assert.rejects(
-    runSlotPlan(plan, {
-      sql: () => {},
-      sh: (command) => {
-        if (command.includes("pull")) throw new Error("manifest unknown");
-        return undefined;
-      },
-      write: () => {},
-      idp: () => {},
+  assert.ok(!labels(plan).includes("remove slot images"));
+});
+
+test("down converges the IdP set over the slots that REMAIN", () => {
+  const step = stepOf(
+    planSlotDown({
+      slot: "pr-7",
+      liveSlots: live({ main: [], "pr-7": [] }),
+      baseDomain: BASE,
     }),
-    /manifest unknown/,
+    "converge the shared IdP redirect set",
   );
-
-  // A re-converge finds Caddy already attached: the probe says so, `connect` is never
-  // issued, and the rest of the plan runs. (`sh` would throw if it ever were.)
-  let reached = false;
-  await runSlotPlan(plan, {
-    sql: () => {},
-    sh: (command) => {
-      if (command.includes("connect")) throw new Error("already exists");
-      if (command.includes("reload")) reached = true;
-      return undefined;
-    },
-    probe: () => ({
-      ok: true,
-      stdout: JSON.stringify({ c9: { Name: CADDY_CONTAINER } }),
-    }),
-    write: () => {},
-    idp: () => {},
-  });
-  assert.equal(reached, true);
+  assert.deepEqual(step.desired, renderIdpRedirectUris(["main"], BASE));
 });
 
-// --- the CLI surface ---------------------------------------------------------
-
-test("the CLI parses the commands step 4 part 1 actually implements", () => {
-  assert.deepEqual(parseArgs(["up", "pr-2034", SHA]), {
-    command: "up",
-    slot: "pr-2034",
-    sha: SHA,
-  });
-  assert.deepEqual(parseArgs(["down", "pr-2034"]), {
-    command: "down",
-    slot: "pr-2034",
-    sha: undefined,
-  });
-  assert.deepEqual(parseArgs(["status"]), {
-    command: "status",
-    slot: undefined,
-    sha: undefined,
-  });
-  assert.deepEqual(parseArgs(["render"]), {
-    command: "render",
-    slot: undefined,
-    sha: undefined,
-  });
-  assert.throws(() => parseArgs(["up", "pr-2034"]), SlotError);
-  assert.throws(() => parseArgs(["frobnicate"]), SlotError);
-  assert.throws(() => parseArgs([]), SlotError);
-});
-
-test("the CLI parses `reset-identities <slot>` like any other slot command", () => {
-  assert.deepEqual(parseArgs(["reset-identities", "pr-2034"]), {
-    command: "reset-identities",
-    slot: "pr-2034",
-    sha: undefined,
-  });
-  assert.throws(() => parseArgs(["reset-identities"]), /requires <slot>/);
-  assert.throws(() => parseArgs(["reset-identities", "PR-2034"]), SlotError);
-});
-
-// --- the IdP redirect-URI set (Mode (a) #2168) --------------------------------
-
-test("the IdP redirect set covers every registered slot, ordered and de-duplicated", () => {
-  let registry = registerSlot(emptyRegistry(), {
-    slot: "pr-2034",
-    sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames("pr-2034", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  registry = registerSlot(registry, {
-    slot: "main",
-    sha: SHA,
-    redisDb: 0,
-    hosts: Object.values(slotHostnames("main", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-
-  const set = renderIdpRedirectUris(registry, BASE);
-  // Ordered `main` first, then previews — the whole-set write stays diffable.
-  assert.deepEqual(set.redirectUris, [
-    "https://api-main.stage.doctor.school/auth/callback",
-    "https://api-pr-2034.stage.doctor.school/auth/callback",
-  ]);
-  assert.deepEqual(set.postLogoutUris, [
-    "https://academy-main.stage.doctor.school",
-    "https://doctor-main.stage.doctor.school",
-    "https://admin-main.stage.doctor.school",
-    "https://academy-pr-2034.stage.doctor.school",
-    "https://doctor-pr-2034.stage.doctor.school",
-    "https://admin-pr-2034.stage.doctor.school",
-  ]);
-  // The path is exactly the one the per-slot env file hands the api.
-  const env = renderSlotEnv({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
-    sha: SHA,
+test("the network and image removals are planned as verify-then-remove steps", () => {
+  const plan = planSlotDown({
+    slot: "pr-7",
+    liveSlots: live({ "pr-7": SLOT_IMAGES(SHA) }),
     baseDomain: BASE,
-    redisDb: 4,
   });
-  const perSlot = /^IDP_REDIRECT_URI=(.+)$/m.exec(env)[1];
-  assert.ok(set.redirectUris.includes(perSlot));
+  for (const label of ["remove slot network", "remove slot images"]) {
+    assert.equal(stepOf(plan, label).kind, "ensure-absent");
+  }
 });
 
-test("an empty registry yields an empty redirect set, never a wildcard", () => {
-  const set = renderIdpRedirectUris(emptyRegistry(), BASE);
-  assert.deepEqual(set.redirectUris, []);
-  assert.deepEqual(set.postLogoutUris, []);
+// --- reset -------------------------------------------------------------------
+
+test("`reset main` audits, stops the slot, then drops and re-clones `ds_main`", () => {
+  const plan = planSlotReset({
+    sha: SHA,
+    liveSlots: live({ main: [] }),
+    baseDomain: BASE,
+    actor: "tech-lead",
+    subjects: SUBJECTS,
+  });
+  const names = labels(plan);
+  assert.deepEqual(names.slice(0, 3), [
+    "audit the reset",
+    "compose down",
+    "re-clone the main database from the template",
+  ]);
+  const sql = stepOf(plan, "re-clone the main database from the template");
+  assert.ok(sql.statements.some((statement) => /DROP DATABASE IF EXISTS "ds_main"/.test(statement)));
+  assert.ok(!sql.statements.some((statement) => /DROP DATABASE IF EXISTS "ds_golden"/.test(statement)));
+  // The converge that follows must NOT emit a second clone.
+  assert.equal(names.filter((name) => name === "clone database").length, 0);
+});
+
+test("`reset main` refuses without a SHA to re-converge on", () => {
   assert.throws(
-    () => renderIdpRedirectUris(emptyRegistry(), "not a domain"),
+    () =>
+      planSlotReset({
+        sha: undefined,
+        liveSlots: live({ main: [] }),
+        baseDomain: BASE,
+        actor: "tech-lead",
+        subjects: SUBJECTS,
+      }),
     SlotError,
   );
 });
 
-test("the converge writes the env pins unioned with the rendered slot set", () => {
-  // The write is whole-set: dropping the pins would unregister the stage's own hosts
-  // that `infra/dev-stand/idp/provision.sh` registered (#2064 addendum 6). Pins come
-  // first and a host present in both appears exactly once.
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-2034",
-    sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames("pr-2034", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const step = { desired: renderIdpRedirectUris(registry, BASE) };
-  const desired = resolveDesiredRedirectSet(step, {
-    IDP_REDIRECT_URIS:
-      "https://api-main.stage.doctor.school/auth/callback, https://api-pr-2034.stage.doctor.school/auth/callback",
-    IDP_POST_LOGOUT_URIS: "https://academy-main.stage.doctor.school",
-  });
-  assert.deepEqual(desired.redirectUris, [
-    "https://api-main.stage.doctor.school/auth/callback",
-    "https://api-pr-2034.stage.doctor.school/auth/callback",
-  ]);
-  assert.deepEqual(desired.postLogoutUris, [
-    "https://academy-main.stage.doctor.school",
-    "https://academy-pr-2034.stage.doctor.school",
-    "https://doctor-pr-2034.stage.doctor.school",
-    "https://admin-pr-2034.stage.doctor.school",
-  ]);
-});
-
-test("no pins in the env leaves the rendered set untouched", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "main",
-    sha: SHA,
-    redisDb: 1,
-    hosts: Object.values(slotHostnames("main", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const step = { desired: renderIdpRedirectUris(registry, BASE) };
-  assert.deepEqual(resolveDesiredRedirectSet(step, {}), step.desired);
-});
-
-// --- teardown survives a missing env file and takes the network with it -------
-
-test("down re-renders the slot env file first, so a deleted one cannot block compose", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-2034",
-    sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames("pr-2034", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const plan = planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
-  const labels = planLabels(plan);
-  assert.equal(labels[0], "ensure slot env");
-  assert.ok(labels.indexOf("ensure slot env") < labels.indexOf("compose down"));
-  const ensure = plan.steps[0];
-  assert.equal(ensure.path, `${SLOT_ENV_DIR}/pr-2034.env`);
-  assert.match(ensure.contents, /^SLOT_DB=ds_pr_2034$/m);
-});
-
-test("a slot missing from the registry still renders enough env to be torn down", () => {
-  const contents = renderSlotDownEnv({
-    slot: "pr-2034",
-    entry: undefined,
-    baseDomain: BASE,
-  });
-  assert.match(contents, /^SLOT=pr-2034$/m);
-  assert.match(contents, /^SLOT_DB=ds_pr_2034$/m);
-  assert.match(contents, /^SLOT_SHA7=/m);
-  assert.doesNotMatch(contents, /PASSWORD/);
-
-  const plan = planSlotDown({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
-    registry: emptyRegistry(),
-    baseDomain: BASE,
-  });
-  assert.equal(planLabels(plan)[0], "ensure slot env");
-});
-
-test("down removes the slot network after the detach, and never before compose down", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "pr-2034",
-    sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames("pr-2034", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const labels = planLabels(
-    planSlotDown({ slot: "pr-2034", registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS }),
+test("the audit lines name the human, the moment and the SHA", () => {
+  const now = new Date("2026-09-11T10:00:00.000Z");
+  assert.equal(
+    resetLogLine({ actor: "tech-lead", sha: SHA, now }),
+    `2026-09-11T10:00:00.000Z reset main by tech-lead sha=${SHA}\n`,
   );
-  assert.ok(labels.includes("remove slot network"));
-  assert.ok(labels.indexOf("compose down") < labels.indexOf("remove slot network"));
-  assert.ok(labels.indexOf("detach caddy") < labels.indexOf("remove slot network"));
+  assert.equal(
+    resetIdentitiesLogLine({ slot: "pr-7", actor: "tech-lead", now }),
+    "2026-09-11T10:00:00.000Z reset-identities pr-7 by tech-lead\n",
+  );
 });
 
-// --- absent is not a failure --------------------------------------------------
-//
-// Compose owns `slot-<slot>` (infra/deploy/compose/slot/compose.yml), so a healthy
-// `compose down` takes the network with it and the follow-up `docker network rm`
-// says «not found». Treating that as a tolerated failure made a SUCCESSFUL teardown
-// exit non-zero. The removals below verify first and only then remove.
+// --- reset-identities --------------------------------------------------------
 
-function downPlan(slot = "pr-2034") {
-  const registry = registerSlot(emptyRegistry(), {
-    slot,
-    sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames(slot, BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
+test("`reset-identities` writes the subjects, flushes the slot's database and audits", () => {
+  const plan = planResetIdentities({
+    slot: "pr-7",
+    liveSlots: live({ "pr-7": [] }),
+    subjects: SUBJECTS,
+    actor: "tech-lead",
   });
-  return planSlotDown({ slot, registry, baseDomain: BASE, goldenSubjects: GOLDEN_SUBJECTS });
+  assert.deepEqual(labels(plan), [
+    "write the tool-owned golden subjects",
+    "flush the slot's redis logical database",
+    "audit the identity reset",
+  ]);
+  assert.equal(stepOf(plan, "write the tool-owned golden subjects").path, GOLDEN_SUBJECTS_PATH);
+  const flush = stepOf(plan, "flush the slot's redis logical database");
+  assert.deepEqual(flush.command, [
+    "sudo",
+    "docker",
+    "exec",
+    REDIS_CONTAINER,
+    "redis-cli",
+    "-n",
+    String(plan.redisDb),
+    "FLUSHDB",
+  ]);
+  assert.equal(stepOf(plan, "audit the identity reset").path, SLOT_LOG_PATH);
+});
+
+test("`reset-identities` flushes `main`'s database 0, never a preview's", () => {
+  const plan = planResetIdentities({
+    slot: "main",
+    liveSlots: live({ main: [] }),
+    subjects: SUBJECTS,
+    actor: "tech-lead",
+  });
+  assert.equal(plan.redisDb, 0);
+});
+
+test("`reset-identities` refuses a preview that is not up and so owns no database", () => {
+  assert.throws(
+    () =>
+      planResetIdentities({
+        slot: "pr-7",
+        liveSlots: live({ main: [] }),
+        subjects: SUBJECTS,
+        actor: "tech-lead",
+      }),
+    SlotError,
+  );
+});
+
+// --- the executor ------------------------------------------------------------
+
+function recordingEffects(extra = {}) {
+  const calls = [];
+  return {
+    calls,
+    effects: {
+      sql: async (statement) => calls.push(["sql", statement]),
+      sh: async (command) => calls.push(["sh", command.join(" ")]),
+      write: async (path) => calls.push(["write", path]),
+      append: async (path) => calls.push(["append", path]),
+      probe: async () => ({ ok: false, stdout: "", stderr: "" }),
+      idp: async (step) => {
+        calls.push(["idp", step.op]);
+        return undefined;
+      },
+      ...extra,
+    },
+  };
 }
 
-test("the network and image removals are planned as verify-then-remove steps", () => {
-  const plan = downPlan();
-  for (const label of ["remove slot network", "remove slot images"]) {
-    const step = plan.steps.find((candidate) => candidate.label === label);
-    assert.equal(step.kind, "ensure-absent");
-    assert.ok(!step.tolerateFailure, `${label} must not be a tolerated failure`);
-    assert.ok(step.items.length >= 1);
-    for (const item of step.items) {
-      assert.ok(item.probe.includes("inspect"));
-      assert.ok(item.remove.includes("rm"));
-    }
+test("the executor runs every step in order through injected effects", async () => {
+  const { calls, effects } = recordingEffects();
+  await runSlotPlan(
+    {
+      steps: [
+        { kind: "sql", label: "sql", statements: ["SELECT 1", "SELECT 2"] },
+        { kind: "sh", label: "sh", command: ["true"] },
+        { kind: "write", label: "write", path: "/tmp/a", contents: "x\n", mode: 0o640 },
+        { kind: "append", label: "append", path: "/tmp/b", contents: "x\n", mode: 0o640 },
+        { kind: "idp", label: "idp", op: "redirect-uris", desired: {} },
+      ],
+    },
+    effects,
+  );
+  assert.deepEqual(calls, [
+    ["sql", "SELECT 1"],
+    ["sql", "SELECT 2"],
+    ["sh", "true"],
+    ["write", "/tmp/a"],
+    ["append", "/tmp/b"],
+    ["idp", "redirect-uris"],
+  ]);
+});
+
+test("a failing step aborts the run", async () => {
+  const { calls, effects } = recordingEffects({
+    sh: async () => {
+      throw new Error("boom");
+    },
+  });
+  await assert.rejects(
+    runSlotPlan(
+      {
+        steps: [
+          { kind: "sh", label: "sh", command: ["false"] },
+          { kind: "sql", label: "sql", statements: ["SELECT 1"] },
+        ],
+      },
+      effects,
+    ),
+    /boom/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("an `ensure-absent` item a probe finds absent is a success with nothing to do", async () => {
+  const { calls, effects } = recordingEffects();
+  await runSlotPlan(
+    {
+      steps: [
+        {
+          kind: "ensure-absent",
+          label: "remove",
+          items: [{ probe: ["inspect"], remove: ["rm"] }],
+        },
+      ],
+    },
+    effects,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("an `ensure-present` item a probe finds absent IS applied, and a failure aborts", async () => {
+  const { calls, effects } = recordingEffects();
+  await runSlotPlan(
+    {
+      steps: [
+        {
+          kind: "ensure-present",
+          label: "attach",
+          items: [{ probe: ["inspect"], apply: ["connect"] }],
+        },
+      ],
+    },
+    effects,
+  );
+  assert.deepEqual(calls, [["sh", "connect"]]);
+});
+
+test("an item that reads its probe's OUTPUT refuses an effect set with no `probe`", async () => {
+  const { effects } = recordingEffects({ probe: undefined });
+  await assert.rejects(
+    runSlotPlan({ steps: [caddyAttachCommand("pr-7")] }, effects),
+    /needs a `probe` effect/,
+  );
+});
+
+test("an `append` step refuses a `write`-only effect set rather than truncating the trail", async () => {
+  const { effects } = recordingEffects({ append: undefined });
+  await assert.rejects(
+    runSlotPlan(
+      { steps: [{ kind: "append", label: "audit", path: "/tmp/x", contents: "x\n", mode: 0o640 }] },
+      effects,
+    ),
+    /needs an `append`/,
+  );
+});
+
+test("an `idp` step refuses an effect set without one rather than skipping the converge", async () => {
+  const { effects } = recordingEffects({ idp: undefined });
+  await assert.rejects(
+    runSlotPlan(
+      { steps: [{ kind: "idp", label: "converge", op: "redirect-uris", desired: {} }] },
+      effects,
+    ),
+    /needs an `idp`/,
+  );
+});
+
+test("every remote-only step kind refuses by NAME rather than being silently skipped", async () => {
+  const { effects } = recordingEffects();
+  for (const [kind, effect] of [
+    ["ship", "ship"],
+    ["verify-images", "verifyImages"],
+    ["verify-running", "verifyRunning"],
+    ["health", "health"],
+    ["prune", "prune"],
+  ]) {
+    await assert.rejects(
+      runSlotPlan({ steps: [{ kind, label: kind }] }, effects),
+      new RegExp(`needs (a|an) \`${effect}\` effect`),
+    );
   }
 });
 
-test("a network compose already removed leaves `down` clean and skips `network rm`", async () => {
-  const seen = [];
-  await runSlotPlan(downPlan(), {
-    sql: () => {},
-    sh: (command) => {
-      seen.push(command.join(" "));
-      return undefined;
-    },
-    probe: (command) => {
-      seen.push(command.join(" "));
-      return { ok: false, stdout: "", stderr: "Error: No such network: slot-pr-2034" };
-    },
-    write: () => {},
-    idp: () => {},
-  });
-  // Nothing is there, so nothing is removed — and the run does not fail.
-  assert.ok(!seen.some((command) => /network rm/.test(command)));
-  assert.ok(!seen.some((command) => /image rm/.test(command)));
-  assert.ok(!seen.some((command) => /network disconnect/.test(command)));
-});
-
-test("a network that is still there IS removed, and a failing removal fails `down`", async () => {
-  const seen = [];
+test("an unknown step kind is a hard failure, never a no-op", async () => {
+  const { effects } = recordingEffects();
   await assert.rejects(
-    runSlotPlan(downPlan(), {
-      sql: () => {},
-      sh: (command) => {
-        seen.push(command.join(" "));
-        if (command.includes("rm") && command.includes("network")) {
-          throw new Error("network slot-pr-2034 has active endpoints");
-        }
-        return undefined;
-      },
-      probe: (command) => {
-        seen.push(command.join(" "));
-        // The network is there with nothing attached to it any more.
-        return { ok: true, stdout: "{}" };
-      },
-      write: () => {},
-      idp: () => {},
-    }),
-    /active endpoints/,
+    runSlotPlan({ steps: [{ kind: "teleport", label: "t" }] }, effects),
+    /unknown step kind/,
   );
-  assert.ok(seen.some((command) => /network inspect/.test(command)));
-  assert.ok(seen.some((command) => /network rm/.test(command)));
 });
 
-test("an injected probe effect decides presence without going through `sh`", async () => {
-  const probed = [];
-  const seen = [];
-  const result = await runSlotPlan(downPlan(), {
-    sql: () => {},
-    sh: (command) => seen.push(command.join(" ")),
-    probe: (command) => {
-      probed.push(command.join(" "));
-      return { ok: false, stdout: "", stderr: "No such network" };
-    },
-    write: () => {},
-    idp: () => {},
-  });
-  assert.ok(probed.some((command) => /network inspect/.test(command)));
-  assert.ok(!seen.some((command) => /network rm/.test(command)));
-  assert.equal(result.slot, "pr-2034");
-});
+// --- the CLI -----------------------------------------------------------------
 
-// --- the CLI command branches -------------------------------------------------
-//
-// The regression these lock: `sync` (and a second `up`) exited non-zero on a slot
-// that had genuinely converged, because `docker network connect` reports «endpoint
-// already exists» on a re-attach. No plan-level test could see it — it only appears
-// when the command branch itself runs — so these drive `runSlotCommand` end to end
-// with injected effects. `preview.yml` re-runs `sync` on every push to an open PR,
-// so «green means converged» is the whole contract of this surface.
-
-function liveRegistry(slot = "pr-2034") {
-  return registerSlot(emptyRegistry(), {
-    slot,
+test("the CLI takes the ref as `--ref <sha>`, the spelling the spec uses", () => {
+  assert.deepEqual(parseArgs(["up", "pr-7", "--ref", SHA]), {
+    command: "up",
+    slot: "pr-7",
     sha: SHA,
-    redisDb: 4,
-    hosts: Object.values(slotHostnames(slot, BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
   });
-}
-
-function recordingEffects({ attached = false, connectFails = false } = {}) {
-  const seen = [];
-  const effects = {
-    sql: () => {},
-    sh: (command) => {
-      seen.push(command.join(" "));
-      if (connectFails && command.includes("connect")) {
-        throw new Error(
-          "Error response from daemon: endpoint with name stg-infra-caddy-1 already exists in network slot-pr-2034",
-        );
-      }
-      return undefined;
-    },
-    probe: (command) => {
-      seen.push(command.join(" "));
-      if (command.includes("network") && command.includes("inspect")) {
-        return {
-          ok: true,
-          stdout: JSON.stringify(attached ? { c9: { Name: CADDY_CONTAINER } } : {}),
-        };
-      }
-      // Images and everything else: absent.
-      return { ok: false, stdout: "", stderr: "No such object" };
-    },
-    write: () => {},
-    idp: () => {},
-  };
-  return { seen, effects };
-}
-
-test("a fresh `up` attaches Caddy and exits 0", async () => {
-  const { seen, effects } = recordingEffects({ attached: false });
-  const line = await runSlotCommand({
-    options: { command: "up", slot: "pr-2034", sha: SHA },
-    registry: emptyRegistry(),
-    baseDomain: BASE,
-    effects,
-    goldenSubjects: GOLDEN_SUBJECTS,
+  assert.deepEqual(parseArgs(["sync", "main", "--ref", SHA]), {
+    command: "sync",
+    slot: "main",
+    sha: SHA,
   });
-  assert.ok(seen.some((command) => /network connect slot-pr-2034/.test(command)));
-  assert.match(line, /converged/);
+  assert.throws(() => parseArgs(["up", "pr-7", SHA]), SlotError);
+  assert.throws(() => parseArgs(["up", "pr-7"]), SlotError);
+  assert.throws(() => parseArgs(["up", "pr-7", "--ref", "nope"]), SlotError);
 });
 
-test("`sync` on an already attached slot never issues the connect, and exits 0", async () => {
-  // `connectFails` is the point: were the connect still issued, this would reject with
-  // the very «already exists» that made every routine preview refresh red.
-  const { seen, effects } = recordingEffects({ attached: true, connectFails: true });
-  const line = await runSlotCommand({
-    options: { command: "sync", slot: "pr-2034", sha: SHA },
-    registry: liveRegistry(),
-    baseDomain: BASE,
-    effects,
-    goldenSubjects: GOLDEN_SUBJECTS,
+test("the CLI parses the slot-only and argument-less commands", () => {
+  assert.deepEqual(parseArgs(["down", "pr-7"]), {
+    command: "down",
+    slot: "pr-7",
+    sha: undefined,
   });
-  assert.ok(!seen.some((command) => /network connect/.test(command)));
-  assert.match(line, /converged/);
+  assert.deepEqual(parseArgs(["reset-identities", "pr-7"]).command, "reset-identities");
+  assert.equal(parseArgs(["status"]).command, "status");
+  assert.equal(parseArgs(["gc"]).command, "gc");
+  assert.throws(() => parseArgs(["status", "extra"]), SlotError);
+  assert.throws(() => parseArgs([]), SlotError);
+  assert.throws(() => parseArgs(["teleport"]), SlotError);
 });
 
-test("a connect that actually runs and fails fails `up`", async () => {
-  const { effects } = recordingEffects({ attached: false, connectFails: true });
-  await assert.rejects(
-    runSlotCommand({
-      options: { command: "up", slot: "pr-2034", sha: SHA },
-      registry: emptyRegistry(),
-      baseDomain: BASE,
-      effects,
-      goldenSubjects: GOLDEN_SUBJECTS,
-    }),
-    /already exists in network/,
-  );
+test("`render` is gone — the edge is a static regexp vhost, not a generated include", () => {
+  assert.throws(() => parseArgs(["render"]), SlotError);
 });
 
-test("`down` on a slot whose Caddy was never attached exits 0 without disconnecting", async () => {
-  const { seen, effects } = recordingEffects({ attached: false });
-  const line = await runSlotCommand({
-    options: { command: "down", slot: "pr-2034" },
-    registry: liveRegistry(),
-    baseDomain: BASE,
-    effects,
-    goldenSubjects: GOLDEN_SUBJECTS,
-  });
-  assert.ok(!seen.some((command) => /network disconnect/.test(command)));
-  assert.match(line, /is down/);
-});
-
-test("a disconnect that actually runs and fails fails `down`", async () => {
-  const { effects } = recordingEffects({ attached: true });
-  const sh = effects.sh;
-  effects.sh = (command) => {
-    if (command.includes("disconnect")) throw new Error("permission denied");
-    return sh(command);
-  };
-  await assert.rejects(
-    runSlotCommand({
-      options: { command: "down", slot: "pr-2034" },
-      registry: liveRegistry(),
-      baseDomain: BASE,
-      effects,
-      goldenSubjects: GOLDEN_SUBJECTS,
-    }),
-    /permission denied/,
-  );
-});
-
-// --- `reset main` and the lazy database probe (part 2a) -----------------------
-//
-// The regressions these lock: `reset` never runs without `--yes`, never touches a
-// preview (whose every converge already re-clones it) and never drops `ds_golden`;
-// the audit line lands BEFORE the destructive SQL; and `slot down main` no longer
-// reaches into Postgres for an answer its plan never asks for — that probe cost a
-// `docker exec … psql` round trip on every teardown (Mode (a) NIT, PR #2168).
-
-test("`reset` refuses without `--yes`", () => {
-  assert.throws(() => parseArgs(["reset", "main"]), /--yes/);
+test("`reset` refuses without `--yes`, and only `main` is resettable", () => {
   assert.deepEqual(parseArgs(["reset", "main", "--yes"]), {
     command: "reset",
     slot: "main",
     sha: undefined,
     yes: true,
   });
+  assert.throws(() => parseArgs(["reset", "main"]), SlotError);
+  assert.throws(() => parseArgs(["reset", "pr-7", "--yes"]), SlotError);
+  assert.throws(() => parseArgs(["reset", "main", "--force"]), SlotError);
 });
 
-test("only `main` is resettable — a preview's every converge already re-clones it", () => {
-  assert.throws(() => parseArgs(["reset", "pr-5", "--yes"]), /only `main` is resettable/);
-  assert.throws(() => parseArgs(["reset"]), /requires <slot>/);
-  assert.throws(() => parseArgs(["reset", "main", "--force"]), /unknown option/);
-});
+// --- the command layer -------------------------------------------------------
 
-
-test("`reset main` audits, stops the slot, then drops and re-clones `ds_main` — never `ds_golden`", () => {
-  const registry = registerSlot(emptyRegistry(), {
-    slot: "main",
-    sha: SHA,
-    redisDb: 0,
-    hosts: Object.values(slotHostnames("main", BASE)),
-    updatedAt: "2026-09-10T00:00:00.000Z",
-  });
-  const plan = planSlotReset({ registry, baseDomain: BASE, actor: "anton", goldenSubjects: GOLDEN_SUBJECTS });
-
-  assert.equal(plan.steps[0].kind, "append");
-  assert.equal(plan.steps[0].path, SLOT_LOG_PATH);
-  assert.match(plan.steps[0].contents, /reset main by anton sha=0123456789abcdef/);
-
-  // The compose project is stopped BEFORE any SQL: dropping `ds_main` under a live
-  // api pool fails with 55006 after the audit line has already been appended.
-  assert.equal(plan.steps[1].kind, "sh");
-  assert.deepEqual(plan.steps[1].command.slice(-2), ["down", "--remove-orphans"]);
-  const firstSqlIndex = plan.steps.findIndex((step) => step.kind === "sql");
-  assert.ok(
-    firstSqlIndex > 1,
-    `the compose stop must precede the first SQL step (sql at ${firstSqlIndex})`,
-  );
-  // `main` keeps its volumes: the down is a stop, not a wipe.
-  assert.ok(!plan.steps[1].command.includes("-v"));
-
-  const sql = plan.steps[firstSqlIndex].statements.join("\n");
-  assert.match(sql, /DROP DATABASE IF EXISTS "ds_main"/);
-  assert.match(sql, /CREATE DATABASE "ds_main" TEMPLATE "ds_golden"/);
-  assert.ok(!/DROP DATABASE IF EXISTS "ds_golden"/.test(sql));
-
-  // Exactly one clone: the converge that follows must not emit a second one.
-  const clones = plan.steps.filter(
-    (step) => step.kind === "sql" && /CREATE DATABASE/.test(step.statements.join(" ")),
-  );
-  assert.equal(clones.length, 1);
-  assert.equal(plan.sha, SHA);
-});
-
-test("`reset main` refuses on a box where `main` is not registered", () => {
-  assert.throws(
-    () => planSlotReset({ registry: emptyRegistry(), baseDomain: BASE }),
-    /not in the registry/,
-  );
-});
-
-test("the audit line names the human, the moment and the SHA", () => {
-  const line = resetLogLine({ actor: "anton", sha: SHA, now: new Date("2026-09-10T12:00:00Z") });
-  assert.equal(line, `2026-09-10T12:00:00.000Z reset main by anton sha=${SHA}\n`);
-  assert.match(resetLogLine({ actor: undefined, sha: SHA }), /by unknown /);
-});
-
-test("an `append` step refuses a `write`-only effect set rather than truncating the trail", async () => {
-  await assert.rejects(
-    runSlotPlan(
-      { steps: [{ kind: "append", label: "audit", path: SLOT_LOG_PATH, contents: "x" }] },
-      { sql: () => {}, sh: () => {}, write: () => {} },
-    ),
-    /needs an `append` effect/,
-  );
-});
-
-test("`down main` never asks Postgres whether `ds_main` exists", async () => {
-  let asked = false;
-  const { effects } = recordingEffects({ attached: false });
-  await runSlotCommand({
-    options: { command: "down", slot: "main" },
-    registry: liveRegistry("main"),
-    baseDomain: BASE,
-    effects,
-    goldenSubjects: GOLDEN_SUBJECTS,
-    databaseExists: () => {
-      asked = true;
-      return true;
+test("`up` converges the golden identities FIRST — its subjects are the plan's input", async () => {
+  const seen = [];
+  const effects = {
+    sql: async () => {},
+    sh: async () => {},
+    write: async (path, contents) => seen.push([path, contents]),
+    append: async () => {},
+    probe: async () => ({ ok: true, stdout: `{"a":{"Name":"${CADDY_CONTAINER}"}}` }),
+    idp: async (step) => {
+      seen.push(["idp", step.op]);
+      return step.op === "golden-identities" ? SUBJECTS : undefined;
     },
-  });
-  assert.equal(asked, false);
-});
-
-test("`up main` asks exactly once, lazily, through the thunk", async () => {
-  let asks = 0;
-  const { effects } = recordingEffects({ attached: false });
-  await runSlotCommand({
-    options: { command: "up", slot: "main", sha: SHA },
-    registry: emptyRegistry(),
-    baseDomain: BASE,
-    effects,
-    goldenSubjects: GOLDEN_SUBJECTS,
-    databaseExists: () => {
-      asks += 1;
-      return false;
-    },
-  });
-  assert.equal(asks, 1);
-});
-
-test("`up pr-<N>` never asks — a preview is cloned regardless of what exists", async () => {
-  let asked = false;
-  const { effects } = recordingEffects({ attached: false });
-  await runSlotCommand({
-    options: { command: "up", slot: "pr-2034", sha: SHA },
-    registry: emptyRegistry(),
-    baseDomain: BASE,
-    effects,
-    goldenSubjects: GOLDEN_SUBJECTS,
-    databaseExists: () => {
-      asked = true;
-      return true;
-    },
-  });
-  assert.equal(asked, false);
-});
-
-test("`readRegistry` is exported so the deployer reads the SAME file through the SAME parser", () => {
-  assert.equal(typeof readRegistry, "function");
-});
-
-// --- the golden subject merge and the IdP converge step (part 2b) -------------
-//
-// The regressions these lock: a slot env is never rendered with BLANK
-// `DS_GOLDEN_SUB_*` (the seed would then fail deep inside a one-shot container
-// instead of here); the redirect converge is a step of `up` AND of `down`, so a
-// slot's callback appears with it and disappears with it; and a failing converge
-// fails the command rather than leaving a slot nobody can log into.
-
-test("the slot env carries the five tool-owned golden subjects, and no password", () => {
-  const env = renderSlotEnv({
-    slot: "pr-2034",
-    sha: SHA,
-    baseDomain: BASE,
-    redisDb: 4,
-    goldenSubjects: GOLDEN_SUBJECTS,
-  });
-  for (const name of GOLDEN_SUBJECT_ENV_VARS) {
-    assert.match(env, new RegExp(`^${name}=${GOLDEN_SUBJECTS[name]}$`, "m"));
-  }
-  assert.doesNotMatch(env, /PASSWORD/);
-});
-
-test("a slot env asked for before `reset-identities` ever ran refuses and names it", () => {
-  assert.throws(
-    () =>
-      renderSlotEnv({ slot: "pr-2034", sha: SHA, baseDomain: BASE, redisDb: 4 }),
-    (err) =>
-      err instanceof SlotError &&
-      err.message.includes("ds-slot reset-identities") &&
-      err.message.includes(GOLDEN_SUBJECTS_PATH),
-  );
-  // A partial set is refused exactly like an absent one — a blank value would reach
-  // `seed:golden` as «provisioned but empty».
-  const partial = { ...GOLDEN_SUBJECTS };
-  delete partial[GOLDEN_SUBJECT_ENV_VARS[0]];
-  assert.throws(
-    () =>
-      renderSlotEnv({
-        slot: "pr-2034",
-        sha: SHA,
-        baseDomain: BASE,
-        redisDb: 4,
-        goldenSubjects: partial,
-      }),
-    new RegExp(GOLDEN_SUBJECT_ENV_VARS[0]),
-  );
-});
-
-test("a teardown still renders an env file on a box with no golden subjects yet", () => {
-  const contents = renderSlotDownEnv({
-    slot: "pr-2034",
-    entry: { sha: SHA, redisDb: 4 },
-    baseDomain: BASE,
-  });
-  assert.match(contents, /^SLOT_DB=ds_pr_2034$/m);
-  assert.doesNotMatch(contents, /DS_GOLDEN_SUB_/);
-});
-
-test("`up` and `down` both converge the whole redirect set, after the registry write", () => {
-  const up = planSlotUp({
-    goldenSubjects: GOLDEN_SUBJECTS,
-    slot: "pr-2034",
-    sha: SHA,
-    registry: emptyRegistry(),
-    baseDomain: BASE,
-    action: "up",
-  });
-  const upStep = up.steps.at(-1);
-  assert.equal(upStep.kind, "idp");
-  assert.equal(upStep.op, "redirect-uris");
-  assert.deepEqual(upStep.desired, renderIdpRedirectUris(up.registry, BASE));
-  assert.ok(
-    upStep.desired.redirectUris.includes(
-      "https://api-pr-2034.stage.doctor.school/auth/callback",
-    ),
-  );
-  assert.ok(
-    planLabels(up).indexOf("write registry") < planLabels(up).length - 1,
-  );
-
-  const down = planSlotDown({
-    slot: "pr-2034",
-    registry: up.registry,
-    baseDomain: BASE,
-    goldenSubjects: GOLDEN_SUBJECTS,
-  });
-  const downStep = down.steps.at(-1);
-  assert.equal(downStep.kind, "idp");
-  // The slot is gone from the registry, so its callback is gone from the desired set.
-  assert.deepEqual(downStep.desired.redirectUris, []);
-});
-
-test("a failing IdP converge fails `up` — an unregistered callback is worse than a refusal", async () => {
-  const { effects } = recordingEffects({ attached: false });
-  effects.idp = () => {
-    throw new Error("403 from the management API");
+    ship: async () => {},
+    verifyImages: async () => {},
+    verifyRunning: async () => {},
+    health: async () => {},
+    prune: async () => {},
   };
-  await assert.rejects(
-    runSlotCommand({
-      options: { command: "up", slot: "pr-2034", sha: SHA },
-      registry: emptyRegistry(),
-      baseDomain: BASE,
-      effects,
-      goldenSubjects: GOLDEN_SUBJECTS,
-    }),
-    /403 from the management API/,
-  );
-});
-
-test("an `idp` step refuses an effect set without one rather than skipping the converge", async () => {
-  await assert.rejects(
-    runSlotPlan(
-      {
-        steps: [
-          {
-            kind: "idp",
-            op: "redirect-uris",
-            label: "converge the shared IdP redirect set",
-            desired: { redirectUris: [], postLogoutUris: [] },
-          },
-        ],
-      },
-      { sql: () => {}, sh: () => {}, write: () => {} },
-    ),
-    /needs an `idp` effect/,
-  );
-});
-
-// --- `reset-identities` -------------------------------------------------------
-
-test("`reset-identities` converges the IdP first, then writes the subjects, flushes and audits", async () => {
-  const order = [];
-  const written = [];
   const line = await runSlotCommand({
-    options: { command: "reset-identities", slot: "pr-2034", actor: "anton" },
-    registry: liveRegistry(),
+    options: { command: "up", slot: "pr-7", sha: SHA, actor: "tech-lead" },
+    liveSlots: live({}),
     baseDomain: BASE,
-    effects: {
-      sql: () => {},
-      sh: (command) => order.push(command.join(" ")),
-      write: (path, contents, mode) => {
-        order.push(`write ${path}`);
-        written.push({ path, contents, mode });
-      },
-      append: (path, contents) => order.push(`append ${path} ${contents.trim()}`),
-      idp: (step) => {
-        order.push(`idp ${step.op}`);
-        return GOLDEN_SUBJECTS;
-      },
-    },
+    effects,
   });
-
-  // The converge is first: the subjects it returns are the file's content, so a file
-  // written before it would claim ids the IdP does not hold.
-  assert.equal(order[0], "idp golden-identities");
-  assert.equal(order[1], `write ${GOLDEN_SUBJECTS_PATH}`);
-  assert.match(
-    order[2],
-    new RegExp(`docker exec ${REDIS_CONTAINER} redis-cli -n 4 FLUSHDB`),
-  );
-  assert.match(order[3], /append .*reset-identities pr-2034 by anton/);
-
-  const file = written[0];
-  assert.equal(file.mode, 0o644);
-  for (const name of GOLDEN_SUBJECT_ENV_VARS) {
-    assert.match(file.contents, new RegExp(`^${name}=${GOLDEN_SUBJECTS[name]}$`, "m"));
-  }
-  // Subjects are opaque ids, not secrets; the passwords stay owner-placed in stage.env.
-  assert.doesNotMatch(file.contents, /^DS_GOLDEN_PASSWORD/m);
-  assert.match(line, /golden identities converged/);
+  assert.equal(seen[0][1], "golden-identities");
+  const env = seen.find(([path]) => path === slotEnvPath("pr-7"));
+  assert.ok(env, "the slot env was written");
+  assert.match(env[1], new RegExp(`${GOLDEN_SUBJECT_ENV_VARS[0]}=${SUBJECTS[GOLDEN_SUBJECT_ENV_VARS[0]]}`));
+  assert.match(line, /slot pr-7 converged/);
 });
 
-test("`reset-identities` flushes `main`'s database 0, not a preview's", () => {
-  const plan = planResetIdentities({
-    slot: "main",
-    registry: liveRegistry("main"),
-    subjects: GOLDEN_SUBJECTS,
-    actor: "anton",
+test("`down` needs no golden identities — a teardown must never be blocked by them", async () => {
+  const calls = [];
+  const effects = {
+    sql: async () => {},
+    sh: async (command) => calls.push(command.join(" ")),
+    write: async () => {},
+    append: async () => {},
+    probe: async () => ({ ok: false, stdout: "" }),
+    idp: async () => undefined,
+  };
+  const line = await runSlotCommand({
+    options: { command: "down", slot: "pr-7", actor: "tech-lead" },
+    liveSlots: live({ "pr-7": [] }),
+    baseDomain: BASE,
+    effects,
   });
-  assert.equal(plan.redisDb, 0);
-  const flush = plan.steps.find((step) => step.label.includes("flush"));
-  assert.ok(flush.command.includes("FLUSHDB"));
-  assert.deepEqual(flush.command.slice(-3), ["-n", "0", "FLUSHDB"]);
-});
-
-test("`reset-identities` refuses a preview that owns no Redis database yet", () => {
-  assert.throws(
-    () =>
-      planResetIdentities({
-        slot: "pr-77",
-        registry: emptyRegistry(),
-        subjects: GOLDEN_SUBJECTS,
-      }),
-    /not in the registry/,
-  );
+  assert.match(line, /slot pr-7 is down/);
+  assert.ok(calls.some((command) => /compose .*down/.test(command)));
 });
 
 test("`reset-identities` refuses an effect set with no `idp` effect", async () => {
   await assert.rejects(
     runSlotCommand({
-      options: { command: "reset-identities", slot: "pr-2034" },
-      registry: liveRegistry(),
+      options: { command: "reset-identities", slot: "main", actor: "tech-lead" },
+      liveSlots: live({ main: [] }),
       baseDomain: BASE,
-      effects: { sql: () => {}, sh: () => {}, write: () => {}, append: () => {} },
+      effects: { sql: async () => {}, sh: async () => {}, write: async () => {} },
     }),
     /needs an `idp` effect/,
   );
 });
 
-test("the identity-reset audit line names the slot, the human and the moment", () => {
-  assert.equal(
-    resetIdentitiesLogLine({
-      slot: "pr-2034",
-      actor: "anton",
-      now: new Date("2026-09-11T12:00:00Z"),
-    }),
-    "2026-09-11T12:00:00.000Z reset-identities pr-2034 by anton\n",
-  );
-  assert.match(resetIdentitiesLogLine({ slot: "main" }), /by unknown/);
-});
-
-// --- the shared IdP origin (Issue #2064 part 2c) -----------------------------
-//
-// The regression these lock: `stage.env` carries no `IDP_BASE_URL` by design, so
-// every IdP step (`up`/`sync`/`down`/`reset`/`reset-identities`) must derive the
-// origin from the `IDP_EXTERNAL_*` trio the box does carry.
+// --- the shared IdP origin ---------------------------------------------------
 
 test("an explicit `IDP_BASE_URL` wins over the `IDP_EXTERNAL_*` trio", () => {
   assert.equal(
-    resolveIdpBaseUrl({
-      IDP_BASE_URL: "https://id.example.test",
-      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
-      IDP_EXTERNAL_PORT: "443",
-      IDP_EXTERNAL_SECURE: "true",
-    }),
-    "https://id.example.test",
-  );
-  assert.equal(
-    resolveIdpBaseUrl({ IDP_BASE_URL: "  https://id.example.test/  " }),
-    "https://id.example.test",
+    resolveIdpBaseUrl({ IDP_BASE_URL: "https://id.example.org/", IDP_EXTERNAL_DOMAIN: "other" }),
+    "https://id.example.org",
   );
 });
 
-test("the shared IdP origin comes from the trio, with 443 left implicit", () => {
+test("the shared IdP origin comes from the trio, with the default port left implicit", () => {
   assert.equal(
     resolveIdpBaseUrl({
-      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_DOMAIN: `id.${BASE}`,
       IDP_EXTERNAL_PORT: "443",
       IDP_EXTERNAL_SECURE: "true",
     }),
-    "https://id.stage.doctor.school",
+    `https://id.${BASE}`,
   );
-  // An empty `IDP_BASE_URL` is the shape `set -a; . stage.env` produces for a key
-  // that is absent — it must not win over the trio.
   assert.equal(
     resolveIdpBaseUrl({
-      IDP_BASE_URL: "",
-      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
-      IDP_EXTERNAL_SECURE: "1",
-    }),
-    "https://id.stage.doctor.school",
-  );
-});
-
-test("a non-default port is appended, and `http` is used when not secure", () => {
-  // The pre-#2062 shape, recorded at stg-infra/README.md — it must round-trip.
-  assert.equal(
-    resolveIdpBaseUrl({
-      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
+      IDP_EXTERNAL_DOMAIN: "localhost",
       IDP_EXTERNAL_PORT: "8080",
       IDP_EXTERNAL_SECURE: "false",
     }),
-    "http://id.stage.doctor.school:8080",
-  );
-  assert.equal(
-    resolveIdpBaseUrl({
-      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
-      IDP_EXTERNAL_PORT: "8443",
-      IDP_EXTERNAL_SECURE: "true",
-    }),
-    "https://id.stage.doctor.school:8443",
-  );
-  // Port 80 is the `http` default and stays implicit.
-  assert.equal(
-    resolveIdpBaseUrl({
-      IDP_EXTERNAL_DOMAIN: "id.stage.doctor.school",
-      IDP_EXTERNAL_PORT: "80",
-    }),
-    "http://id.stage.doctor.school",
+    "http://localhost:8080",
   );
 });
 
 test("an env carrying neither route is refused naming BOTH", () => {
   assert.throws(
     () => resolveIdpBaseUrl({}),
-    (err) => {
-      assert.ok(err instanceof SlotError);
-      assert.match(err.message, /IDP_BASE_URL/);
-      assert.match(err.message, /IDP_EXTERNAL_DOMAIN/);
-      assert.match(err.message, /IDP_EXTERNAL_PORT/);
-      assert.match(err.message, /IDP_EXTERNAL_SECURE/);
-      // The old message told the operator to source a file that never held the key.
-      assert.doesNotMatch(err.message, /source \/etc\/ds-platform\/stage\.env/);
-      return true;
-    },
+    (err) =>
+      err instanceof SlotError &&
+      /IDP_BASE_URL/.test(err.message) &&
+      /IDP_EXTERNAL_DOMAIN/.test(err.message),
   );
+});
+
+// --- the five remote-only routines -------------------------------------------
+//
+// `ship` / `verify-images` / `verify-running` / `health` / `prune` are the steps with
+// no offline fallback, so what is locked here is the TEXT each one sends to the box
+// and the verdict each one reads back — never a live ssh. The shapes are production's
+// (`tools/deploy/prod.mjs` `verifyImagesBoot` / `verifyRunningSha` / retention), and
+// these tests are what keeps the pair from drifting into two different verifications.
+
+/** The slot compose's SHA-tagged set, as `slotServiceSet` derives it. */
+const BOOT_SERVICES = [
+  { name: "api", image: "ds-api", port: 3000 },
+  { name: "portal", image: "ds-portal", port: 3001 },
+];
+const RUNNING_SERVICES = [
+  ...BOOT_SERVICES,
+  { name: "doctor", image: "ds-doctor", port: 3004 },
+];
+
+test("the boot probe runs each image with BOTH compose env files and no published port", () => {
+  const script = verifyImagesScript({ slot: "pr-7", sha: SHA, services: BOOT_SERVICES });
+  assert.ok(script.includes(`--env-file ${STAGE_ENV_FILE}`));
+  assert.ok(script.includes(`--env-file ${slotEnvPath("pr-7")}`));
+  // Slot-scoped throwaway name: two slots boot-probing the same commit at once must
+  // not collide on one container name.
+  assert.match(script, /name="ds-slotcheck-pr-7-\$svc"/);
+  assert.ok(script.includes(`"$repo:${SHA}"`));
+  assert.ok(!/-p \d|--publish/.test(script), "the probe publishes no port");
+  assert.match(script, /^probe api ds-api 3000$/m);
+  assert.match(script, /^probe portal ds-portal 3001$/m);
+});
+
+test("the boot probe refuses a slot name and a SHA that are not derivable", () => {
+  assert.throws(() => verifyImagesScript({ slot: "prod", sha: SHA, services: BOOT_SERVICES }), SlotError);
+  assert.throws(() => verifyImagesScript({ slot: "pr-7", sha: "deadbeef", services: BOOT_SERVICES }), SlotError);
+});
+
+test("a non-booting image fails the converge by name; all-OK passes", () => {
   assert.throws(
-    () => resolveIdpBaseUrl({ IDP_BASE_URL: "   ", IDP_EXTERNAL_DOMAIN: "  " }),
-    /not resolvable/,
+    () => assertImagesBoot("api=OK\nportal=EXITED\n---- portal boot log ----", BOOT_SERVICES),
+    (err) => err instanceof SlotError && /portal=EXITED/.test(err.message),
   );
+  // A service the box printed no verdict for is a FAILURE, never a pass: a probe
+  // whose output was truncated must not read as "everything booted".
+  assert.throws(() => assertImagesBoot("api=OK", BOOT_SERVICES), /portal=NO-VERDICT/);
+  assert.doesNotThrow(() => assertImagesBoot("api=OK\nportal=OK", BOOT_SERVICES));
+});
+
+test("the running verify asserts the SHA-tagged image AND health, per the container-name contract", () => {
+  const script = verifyRunningScript({ slot: "pr-7", sha: SHA, services: RUNNING_SERVICES });
+  for (const service of RUNNING_SERVICES) {
+    // `container_name: ${SLOT}-<service>` — the Caddyfile dials these names too.
+    assert.match(script, new RegExp(`docker inspect ${containerAliases("pr-7")[service.name]} `));
+    assert.match(script, new RegExp(`= "${service.image}:${SHA}"`));
+  }
+  assert.match(script, /_h" = healthy/);
+});
+
+test("a running verify that did not converge fails the run rather than reporting success", () => {
+  assert.throws(
+    () => assertRunningVerdict("TIMEOUT api=ds-api:old(healthy)", { slot: "pr-7", sha: SHA }),
+    (err) => err instanceof SlotError && /do NOT carry/.test(err.message) && /TIMEOUT/.test(err.message),
+  );
+  assert.doesNotThrow(() => assertRunningVerdict(`OK api=ds-api:${SHA}(healthy)`, { slot: "pr-7", sha: SHA }));
+});
+
+test("the prune derives the `ds-*` repos from the box and caps the BuildKit cache", () => {
+  const script = pruneScript({ retention: IMAGE_RETENTION, reservedSpace: BUILD_CACHE_RESERVED_SPACE });
+  assert.match(script, /docker images --format '\{\{\.Repository\}\}'/);
+  assert.match(script, /\^ds-/);
+  assert.ok(script.includes(`prune_repo "$repo" ${IMAGE_RETENTION}`));
+  assert.match(script, new RegExp(`buildx prune -f --reserved-space ${BUILD_CACHE_RESERVED_SPACE}`));
+});
+
+test("the health verdict reads the version the slot's api actually serves", () => {
+  assert.deepEqual(healthVerdict({ status: 200, body: `{"version":"${SHA}"}`, sha: SHA }).ok, true);
+  // Caddy's stand-wide basic auth answers 401 when the operator password is wrong.
+  assert.match(healthVerdict({ status: 401, body: "", sha: SHA }).reason, /401/);
+  assert.match(
+    healthVerdict({ status: 200, body: `{"version":"${SHA2}"}`, sha: SHA }).reason,
+    new RegExp(SHA2.slice(0, 12)),
+  );
+  assert.match(healthVerdict({ status: 200, body: "not json", sha: SHA }).reason, /JSON/);
+  assert.match(healthVerdict({ status: 200, body: "{}", sha: SHA }).reason, /version/);
+});
+
+test("the health step fails closed without the operator-machine basic-auth password", () => {
+  assert.throws(
+    () => requiredOperatorPassword({}),
+    (err) => err instanceof SlotError && /STAGE_BASIC_AUTH_PASS/.test(err.message),
+  );
+  assert.equal(requiredOperatorPassword({ STAGE_BASIC_AUTH_PASS: "s3cret" }), "s3cret");
+  assert.equal(basicAuthHeader("stage", "s3cret"), `Basic ${Buffer.from("stage:s3cret").toString("base64")}`);
 });

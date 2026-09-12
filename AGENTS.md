@@ -26,7 +26,7 @@ Read the indexed reference in full before its action, once per session and after
 | Migration                                       | → Snapshot before migrate                         |
 | DB/volume operations, stand-capable brief       | → Shared-stand discipline                         |
 | Ports, listeners, branch DB                     | → Parallel sessions                               |
-| Browser/live UI/Stage-B handback                | → Rules for agents; `build-ui-from-design-system` |
+| Browser/live UI/Stage-B handback, staging slot  | → Rules for agents; `build-ui-from-design-system` |
 
 ---
 
@@ -36,7 +36,7 @@ Medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor 
 
 **Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs (static prose rots).
 
-Stack (detail in `apps/docs/content/adr/` + `README.md`): NestJS + Zod + REST + openapi-typescript SDK (0002); Postgres 17 + Drizzle + pgvector (0003); Next.js 15 + Refine — promo / portal / admin / cms-Payload-v3 (0004); React Native + Expo + WatermelonDB (0005); Fumadocs + glossary (0006).
+Stack (ADR-0002–0006 in `apps/docs/content/adr/` + `README.md`): NestJS + Zod + REST + openapi-typescript SDK; Postgres 17 + Drizzle + pgvector; Next.js 15 + Refine (promo/portal/admin/cms-Payload-v3); React Native + Expo + WatermelonDB; Fumadocs + glossary.
 
 ---
 
@@ -121,8 +121,7 @@ CI lint guards surface as PR Checks. Authoritative list + severity: `.github/wor
 - **Live-infra destructive actions — pre-flight, don't thrash.** On live paid infra, before ANY irreversible/destructive provider call (reinstall/replace/delete/network change/write-`action` API): (1) confirm action + params in provider docs/schema first — firing an unknown action to read the error is banned; (2) exclude the prior hypothesis with read-only evidence before the next state-change — a reboot/reinstall/recreate is not a free probe; (3) blast radius = the failing resource only — a "fix" that also mutates a working box is a stop-and-confirm signal; (4) anything irreversible needs an explicit owner "go" — a rhetorical owner question is not consent; an owner/vendor recommendation is binding and deviation needs sign-off.
 - **UI from the design system — adopt before bespoke.** All UI from `@ds/design-system`: tokens-only styling (arbitrary Tailwind values lint-blocked, §5), interactive elements and their states from its primitives, never hand-assembled. Anything bespoke runs the `build-ui-from-design-system` gate first (inventory → approved whitelist → report; bespoke = recorded last resort); canvas-derived UI is vendored into `design-source/` and built from those files, never from issue prose. Licensing, whitelist, canvas + parity procedure: ADR-0013 + the skill.
 - **Cross-front capability reuse before invention.** One canonical shared-package core per cross-front behavior (feed/card/calendar/filter/query/live/room). Apps add only thin defaults/authz/envelope/route/copy projections. No app-to-app imports, copied state/query logic or fork UI. Canon: ADR-0013 A1; registry `specs/product/two-site-ia/capability-ownership.md`; Issue `Reuse:` + cross-front-reuse guard.
-- **UI design is approved before it's built — and re-confirmed live before merge.** On a `user-facing` surface (notification emails/SMS included) look + behavior are product decisions, not lead calls. Stage A: reuse valid recorded approval; unresolved/new look or behavior needs research + concrete options and owner choice before implementation. Stage B: the rendered result re-confirmed by the owner on the LIVE stand before merge — stand up until the verdict, an unanswered question BLOCKS the merge. Only the exact batched/behavioral-self-cert routes in `build-ui-from-design-system` apply; markers: repo-conventions → pre-merge gates.
-- **Verify UI live before "done".** Drive any UI-checkable feature in the actual running UI (Playwright, live dev-stand) — build/typecheck/lint/Mode-a are necessary, not sufficient. Cover affected journeys and their dependent states, reject + accept, error language + timing; a user-facing dev placeholder is a banned stub.
+- **UI is approved, then driven by the agent, then re-confirmed live by the owner.** On a `user-facing` surface (notification emails/SMS included) look + behavior are product decisions, not lead calls. Stage A: reuse valid recorded approval; unresolved/new look or behavior needs research + concrete options and owner choice before implementation. DRIVE any UI-checkable feature in the running UI (Playwright, local stand) — build/typecheck/lint/Mode-a are necessary, not sufficient; cover affected journeys and their dependent states, reject + accept, error language + timing; a user-facing dev placeholder is a banned stub. Stage B: the owner re-confirms the rendered result on a per-PR staging slot (§9), never localhost; the stand stays up until the verdict, an unanswered question BLOCKS the merge. Only the exact batched/behavioral-self-cert routes in `build-ui-from-design-system` apply; markers: repo-conventions → pre-merge gates.
 - **Complete the requested outcome.** Finish the PR tail: required review → green CI → canonical merge (§4) → Issue/board Done → re-sweep. Continue any remaining authorized release/other requested work; merging or reporting does not finish it. Status questions steer, not cancel. Real blockers follow portable discipline’s partial-progress/wait rule. Read `report-task-outcome` at report time. Stage B still gates user-facing merge and stand teardown.
 - **TDD.** No production code without a failing test. `it('EARS-N: ...')`; flat numbering per ADR-0006 §4; nested `N.M` only for a handler with multiple shall-clauses.
 - **Trackers.** Code-level → GitHub Issues here; strategic/cross-team → Plane `doctor-school`. Never both.
@@ -161,6 +160,6 @@ In Phase 0, Tech Lead is the single CODEOWNERS owner (ADR-0008 §2.7) and the si
 
 ---
 
-## 9. Local Dev Stand
+## 9. Stands
 
-Docker Compose stack driven by `pnpm dev:*`; read endpoints from `~/.ds-platform/.env.local`, never hardcode. Operating rules, DX cheat sheet, migration safety, failure modes: `.claude/rules/dev-stand.md`.
+Local dev stand — Compose via `pnpm dev:*`; endpoints from `~/.ds-platform/.env.local` (never hardcode); the AGENT's loop. Rules, DX, migrations, failures: `.claude/rules/dev-stand.md`. Owner-facing Stage-B stand = a per-PR slot on `stage.doctor.school` (`pnpm stage:slot up pr-<N>`): `tools/staging/README.md`.

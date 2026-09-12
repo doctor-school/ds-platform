@@ -254,7 +254,7 @@ the box, no secret committed to git.
 
 **Before a migration.** Always run `pnpm dev:snapshot pre-mig-<desc>` before
 `pnpm drizzle:migrate`. The portable agent rules for the stand — snapshot-before-migrate,
-never-edit-volumes, LAN-is-trusted — live in [`AGENTS.md` §9](../../AGENTS.md#9-local-dev-stand).
+never-edit-volumes, LAN-is-trusted — live in [`AGENTS.md` §9](../../AGENTS.md#9-stands).
 
 **Recipe-specific commands.** `dev:snapshot` / `dev:rollback` carry no portable
 implementation — their logic lives per recipe in

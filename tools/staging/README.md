@@ -41,10 +41,45 @@ The box's own configuration lives in `/etc/ds-platform/stage.env` (template:
 [`infra/deploy/stage.env.example`](../../infra/deploy/stage.env.example)) and the scripts
 read it over SSH. Two variables are the exception and belong to the **operator machine**:
 
-| variable                | why it is not a box variable                                                                                                                                                                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STAGE_BASIC_AUTH_PASS` | the stand sits behind one basic-auth pair and the box stores only the bcrypt hash (`STAGE_BASIC_AUTH_HASH`). The post-converge health assertion has to authenticate, so the plaintext must be exported here. Absent ⇒ a named refusal, never a skipped verification. |
-| `DS_STAGE_SSH`          | the SSH destination, default `ds-stage-1` — an alias in your own `~/.ssh/config`.                                                                                                                                                                                    |
+| variable                                                      | why it is not a box variable                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STAGE_BASIC_AUTH_PASS`                                       | the stand sits behind one basic-auth pair and the box stores only the bcrypt hash (`STAGE_BASIC_AUTH_HASH`). The post-converge health assertion has to authenticate, so the plaintext must be exported here. The box keeps the plaintext for the operator at `/etc/ds-platform/stage-basic-auth.txt` (`user=stage`) — read it, never invent one: `export STAGE_BASIC_AUTH_PASS="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^password=//p" /etc/ds-platform/stage-basic-auth.txt' \| tr -d ' |
+| ')"`. Absent ⇒ a named refusal, never a skipped verification. |
+| `DS_STAGE_SSH`                                                | the SSH destination, default `ds-stage-1` — an alias in your own `~/.ssh/config`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+
+## Stage-B: the owner-facing stand
+
+**A per-PR slot is the stand the owner judges at Stage-B** (AGENTS.md §6; canonical
+procedure: `apps/docs/content/skills/build-ui-from-design-system/design-approval.md`). The
+local dev stand (`pnpm dev:ports`, `.claude/rules/dev-stand.md`) is the agent's own
+iteration loop and is never handed to the owner: it dies with the lead's session, has no
+HTTPS and no real IdP, and cannot be opened from a phone.
+
+```bash
+export STAGE_BASIC_AUTH_PASS="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^password=//p" /etc/ds-platform/stage-basic-auth.txt' | tr -d '
+')"
+pnpm stage:slot up pr-<N> --ref "$(git rev-parse <branch>)"
+# → https://academy-pr-<N>.stage.doctor.school  (basic auth: stage / $STAGE_BASIC_AUTH_PASS)
+#   https://doctor-pr-<N>.stage.doctor.school
+#   https://admin-pr-<N>.stage.doctor.school
+#   https://api-pr-<N>.stage.doctor.school/v1/health
+```
+
+Three prerequisites the commands do NOT solve for you, in the order they bite:
+
+1. **`ds_golden` must already exist on the box.** `slot up` only CLONES the template; it
+   never builds it. On a box where it was never built the converge dies at
+   `[clone database]` with a raw `ERROR: template database "ds_golden" does not exist` —
+   run `pnpm staging:golden-db` once (see below) and repeat the converge.
+2. **`--ref` takes the FULL 40-character lowercase SHA**, never the short form a `git log`
+   prints. `--ref 42be0e92` is refused, `--ref "$(git rev-parse 42be0e92)"` is accepted.
+3. **`STAGE_BASIC_AUTH_PASS` must be exported** from the box file above, or the converge
+   refuses at its health assertion.
+
+**Lifetime is the verdict, not a clock.** The lead raises the slot when asking for
+Stage-B, the slot stays up until the owner answers, and the closeout tail takes it down
+with `pnpm stage:slot down pr-<N>` alongside the worktree teardown. Nothing sweeps a slot
+on a timer — `gc` is an operator subcommand and reclaims disk, not live slots.
 
 ## `slot.mjs` in one paragraph
 

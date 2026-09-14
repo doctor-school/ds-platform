@@ -55,6 +55,15 @@ COPY --from=build --chown=node:node /repo/apps/doctor/.next/standalone ./
 # Static assets + public are NOT in standalone — copy them alongside.
 COPY --from=build --chown=node:node /repo/apps/doctor/.next/static ./apps/doctor/.next/static
 COPY --from=build --chown=node:node /repo/apps/doctor/public ./apps/doctor/public
+# The ROUTE MANIFEST, published as a static file — staging/regression-contour
+# tech spec §6.3: the derived route walk fetches the list of routes the IMAGE
+# actually mounts from the slot itself, because the repo only says what the
+# source declares. `.next/server/app-paths-manifest.json` is a build artifact the
+# standalone bundle does not carry (#2012: `/documents/[slug]` 200-ed in dev and
+# broke in the image), so it is copied into `public/` where the standalone server
+# serves it. The path is `MANIFEST_PATH` in `packages/e2e/hosts.ts` — one
+# constant, two Dockerfiles, and they must never disagree.
+COPY --from=build --chown=node:node /repo/apps/doctor/.next/server/app-paths-manifest.json ./apps/doctor/public/__contour/app-paths-manifest.json
 USER node
 EXPOSE 3004
 ENV PORT=3004 HOSTNAME=0.0.0.0

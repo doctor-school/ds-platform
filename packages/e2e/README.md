@@ -11,10 +11,11 @@ feature files as the suite, and the navigation model both headers render from.
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `navigation-model.ts`  | The model TYPE (`NavigationItem`, `NavigationModel`, `Audience`) plus the pure projections `itemsFor` / `landingEvidence` / `byId`.                                                                  |
 | `hosts.ts`             | The `HostConfig` registry: one entry per storefront (`academy` = `apps/portal`, `doctor` = `apps/doctor`) with its base-URL env var, its login surface, and the PATH of its navigation-model module. |
-| `route-params.ts`      | Dynamic-segment resolution for the route walk (§6.3) — empty until the walk lands.                                                                                                                   |
+| `route-params.ts`      | Dynamic-segment resolution for the route walk (§6.3): route pattern → the golden entity that renders it, keyed per host.                                                                             |
+| `derived/`             | The two derived walks (§6.3): `navigation.walk.spec.ts` and `routes.walk.spec.ts`. Plain Playwright specs, run by the `walks` project.                                                               |
 | `steps/`               | The shared Gherkin vocabulary: `support/fixtures.ts` (the `host` fixture), `golden.steps.ts`, `navigation.steps.ts`.                                                                                 |
-| `lib/`                 | The pure, unit-tested seams (`golden.ts`: seed name → `@ds/db` golden account).                                                                                                                      |
-| `playwright.config.ts` | `bddgen` over the spec feature files + the two host projects.                                                                                                                                        |
+| `lib/`                 | The pure, unit-tested seams (`golden.ts`: seed name → `@ds/db` golden account; `routes.ts`: route-manifest → visitable addresses) plus `sign-in.ts`, the package's one login path.                   |
+| `playwright.config.ts` | `bddgen` over the spec feature files + the two host projects + the `walks` project.                                                                                                                  |
 
 ## Running it
 
@@ -93,6 +94,53 @@ the host's own single list. The type travels the other way, which is allowed and
 is how a host pins its model to the contract: `import type { NavigationModel }
 from "@ds/e2e/navigation-model"` + `satisfies`.
 
+## Derived walks
+
+Two specs under `derived/`, both of which contain **no list of destinations** —
+they read the host's own artifacts, which is what «ten new links in a release
+enter both walks with zero edits to any list» (§6.3) means in practice.
+
+**`navigation.walk.spec.ts`** loads each host's navigation model and visits every
+item twice: as a guest (`itemsFor(model, "guest")`) and as the golden signed-in
+doctor. Per item it asserts status 200, the pathname, and the item's declared
+landing evidence. A guest item that redirects to the host's login surface instead
+asserts the login `h1` and that `returnTo` still carries the original href — a
+redirect that loses `returnTo` strands the guest after sign-in.
+
+**`routes.walk.spec.ts`** fetches the slot's own route manifest, filters it to
+the addresses a visitor can type (`lib/routes.ts` — route handlers, `/api/**`,
+`/_not-found`, `/_next/**`, parallel slots and intercepting routes are out; route
+groups are stripped from the address), resolves dynamic segments through
+`route-params.ts`, and asserts 200 + a non-empty `h1`. Three conditions are
+FAILING tests rather than skips, each titled with what is missing: an
+unconfigured base URL, a manifest the slot does not serve, and a dynamic route
+with no `route-params.ts` entry.
+
+`/documents/[slug]` is that last case today on both hosts: the golden catalogue
+seeds no document row, so the walk fails naming the route — deliberately, because
+`/documents/[slug]` is the exact route whose runtime files went missing from the
+standalone image in #2012, and a silent skip would hide it again.
+
+### The route manifest is published by the image
+
+The walk reads `.next/server/app-paths-manifest.json`, which the standalone
+bundle does not carry. Both `apps/portal/Dockerfile` and `apps/doctor/Dockerfile`
+copy it out of the build stage into the runtime image's `public/` tree at
+
+```
+/__contour/app-paths-manifest.json
+```
+
+exported from `hosts.ts` as `MANIFEST_PATH` — one constant shared by the two
+Dockerfiles, the walk and this README. Reading it from the SLOT rather than from
+the repo is the whole point: the repo says what the source declares, the slot
+says what the image actually serves.
+
+Both hosts run inside ONE Playwright project (`walks`). The Gherkin projects are
+per host because `bddgen` writes a different generated directory per host tag
+filter; the walks have no such artifact — the host is data, read from `HOSTS`,
+and each test title names the host it walked.
+
 ## Golden entities by seed name
 
 `Given the golden doctor "verified-cardiologist" is signed in` (§6.1). A feature
@@ -103,6 +151,9 @@ mistyped name fails loudly with the accepted names listed.
 
 The sign-in adds no auth primitive: it drives the host's real login surface the
 way the shipped 008 shell journey does (`apps/portal/e2e/steps/shell.steps.ts`).
+It lives in `lib/sign-in.ts` and is the package's ONE login path — the Gherkin
+step and the navigation walk's doctor pass both call it, so they cannot drift
+into two different notions of «signed in».
 
 ## Running this suite against a staging slot
 

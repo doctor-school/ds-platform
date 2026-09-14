@@ -63,6 +63,8 @@
     "lint:ui-parity": "tsx tools/lint/ui-parity-lint.ts",
     "lint:retained-data": "tsx tools/lint/retained-data-lint.ts",
     "lint:route-targets": "tsx tools/lint/route-target-lint.ts",
+    "lint:scenario-coverage": "tsx tools/lint/scenario-coverage-lint.ts",
+    "lint:scenario-step": "tsx tools/lint/scenario-step-lint.ts",
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
     "lint:showcase-snippet": "tsx tools/lint/showcase-snippet-lint.ts",
     "lint:catalog-deletion": "tsx tools/lint/catalog-deletion-lint.ts",

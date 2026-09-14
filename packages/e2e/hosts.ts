@@ -73,8 +73,10 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
  * says what the source declares) nor from the running container's filesystem (the
  * walk talks HTTP to a slot it does not own). Both Dockerfiles therefore copy the
  * manifest into the image's `public/` tree at this path, where the standalone
- * server serves it as an ordinary static file. One constant, because the two
- * Dockerfiles, the walk and the package README must never disagree about it.
+ * server serves it as an ordinary static file — SLOT IMAGES ONLY, behind the
+ * `CONTOUR_MANIFEST` build arg that defaults to `0` and that only the slot
+ * compose passes, so production serves no `/__contour/*`. One constant, because
+ * the two Dockerfiles, the walk and the package README must never disagree.
  */
 export const MANIFEST_PATH = "/__contour/app-paths-manifest.json";
 

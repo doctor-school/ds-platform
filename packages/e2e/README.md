@@ -143,16 +143,20 @@ standalone image in #2012, and a silent skip would hide it again.
 
 The walk reads `.next/server/app-paths-manifest.json`, which the standalone
 bundle does not carry. Both `apps/portal/Dockerfile` and `apps/doctor/Dockerfile`
-copy it out of the build stage into the runtime image's `public/` tree at
+copy it into the image's `public/` tree at
 
 ```
 /__contour/app-paths-manifest.json
 ```
 
 exported from `hosts.ts` as `MANIFEST_PATH` — one constant shared by the two
-Dockerfiles, the walk and this README. Reading it from the SLOT rather than from
-the repo is the whole point: the repo says what the source declares, the slot
-says what the image actually serves.
+Dockerfiles, the walk and this README. The copy is guarded by the
+`CONTOUR_MANIFEST` build arg, which defaults to `0`: **slot images only**, because
+`infra/deploy/compose/slot/compose.yml` is the one build that passes `"1"`.
+Production images therefore carry no `public/__contour/` and serve no
+`/__contour/*`. Reading it from the SLOT rather than from the repo is the whole
+point: the repo says what the source declares, the slot says what the image
+actually serves.
 
 Both hosts run inside ONE Playwright project (`walks`). The Gherkin projects are
 per host because `bddgen` writes a different generated directory per host tag

@@ -18,10 +18,13 @@ import type { GoldenDoctor } from "./golden.js";
  *
  * It adds NO auth primitive: the sequence is the shipped 008 shell journey's
  * (`apps/portal/e2e/steps/shell.steps.ts`) — open the host's login route, fill
- * the email/password fields, submit. Selectors key off stable `autocomplete`
+ * the identifier/password fields, submit. Selectors key off stable `autocomplete`
  * attributes rather than visible copy, because the two hosts render different
  * labels (#177): the academy card is `next-intl`, the doctor card is Russian
- * literals.
+ * literals. The values are the ones `@ds/design-system`'s `LoginCard` renders:
+ * its identifier box is an `IdentifierField` (`autocomplete="username"` — the
+ * box is an email-or-phone union, never `email`) and its password box a
+ * `PasswordField purpose="current"` (`autocomplete="current-password"`).
  */
 export async function signInGoldenDoctor(
   page: Page,
@@ -35,7 +38,7 @@ export async function signInGoldenDoctor(
   await page.goto(`${baseUrl ?? ""}${host.loginPath}`, {
     waitUntil: "domcontentloaded",
   });
-  await page.locator('input[autocomplete="email"]').fill(doctor.email);
+  await page.locator('input[autocomplete="username"]').fill(doctor.email);
   await page.locator('input[autocomplete="current-password"]').fill(password);
   await page.getByRole("button", { name: /войти|продолжить/i }).click();
 

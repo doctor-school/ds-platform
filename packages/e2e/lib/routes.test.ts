@@ -18,11 +18,12 @@ describe("pageRoutesFrom", () => {
     ).toEqual(["/webinars"]);
   });
 
-  it("drops API, _not-found and _next internals", () => {
+  it("drops API, _not-found, _global-error and _next internals", () => {
     expect(
       pageRoutesFrom({
         "/api/preview/page": "x.js",
         "/_not-found/page": "x.js",
+        "/_global-error/page": "x.js",
         "/_next/thing/page": "x.js",
         "/account/page": "app/account/page.js",
       }),

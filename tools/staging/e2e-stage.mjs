@@ -53,6 +53,9 @@ const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
  * The selectable projects of `packages/e2e/playwright.config.ts`: the two storefront
  * Gherkin projects plus `walks`, the derived navigation/route walks (§6.3), which one
  * project drives across BOTH hosts.
+ *
+ * Hand-kept in TWO places: the `projects:` array of that config is the other half,
+ * and it carries the mirror comment. Rename a project in one and rename it here.
  */
 export const HOST_PROJECTS = Object.freeze(["academy", "doctor"]);
 export const PROJECTS = Object.freeze([...HOST_PROJECTS, "walks"]);

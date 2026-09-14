@@ -101,12 +101,16 @@ const ROOM_ROUTE = /^\/webinars\/[^/]+\/room$/;
  */
 
 /** Per-slot `data-testid`s. Test ids are the HEADER's business, not the model's:
- *  the model is the shared cross-host contract, these are this bar's selectors. */
-const DESKTOP_NAV_TESTIDS: Record<string, string> = {
+ *  the model is the shared cross-host contract, these are this bar's selectors.
+ *  Keyed by the LITERAL top-nav ids, so a new `portalTopNav` entry without a
+ *  testid row is a typecheck error rather than a rendered `data-testid="undefined"`
+ *  — the same drift class this module's move to the model exists to remove. */
+type TopNavId = (typeof portalTopNav)[number]["id"];
+const DESKTOP_NAV_TESTIDS: Record<TopNavId, string> = {
   discovery: "shell-nav-broadcasts",
   "my-events": "shell-nav-my-events",
 };
-const MOBILE_NAV_TESTIDS: Record<string, string> = {
+const MOBILE_NAV_TESTIDS: Record<TopNavId, string> = {
   discovery: "shell-mobile-broadcasts",
   "my-events": "shell-mobile-my-events",
 };
@@ -161,7 +165,7 @@ export function AppShellHeader() {
             key={item.id}
             href={item.href}
             active={isActive(item.href)}
-            testId={DESKTOP_NAV_TESTIDS[item.id]!}
+            testId={DESKTOP_NAV_TESTIDS[item.id]}
           >
             {t(item.label)}
           </NavLink>
@@ -232,7 +236,7 @@ export function AppShellHeader() {
                 key={item.id}
                 href={item.href}
                 active={isActive(item.href)}
-                testId={MOBILE_NAV_TESTIDS[item.id]!}
+                testId={MOBILE_NAV_TESTIDS[item.id]}
               >
                 {t(item.label)}
               </MobileNavLink>

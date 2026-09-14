@@ -134,6 +134,10 @@ export default defineConfig({
     trace: "retain-on-failure",
     httpCredentials,
   },
+  // The project NAMES below are hand-kept in a second place: `PROJECTS` /
+  // `HOST_PROJECTS` in `tools/staging/e2e-stage.mjs`, which validates `--project`
+  // before ever launching Playwright. Rename one here and you must rename it
+  // there, or the selection fails at run time instead of at selection time.
   projects: [
     {
       name: "academy",

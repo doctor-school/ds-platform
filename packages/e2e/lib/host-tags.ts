@@ -76,6 +76,30 @@ export function hostTagViolation(text: string): string | null {
 }
 
 /**
+ * How many feature files each host tag claims — the per-host suite SIZE, printed
+ * by `bin/check-host-tags.ts` on success.
+ *
+ * Retargeting a Feature tag (say `@host:both` → `@host:admin`) removes a whole
+ * spec from both storefront suites while every structural check stays green, so
+ * the counts are the cheap CI-log signal that a suite just shrank. Only files
+ * that pass {@link hostTagViolation} contribute; an invalid or missing tag is the
+ * CLI's error path, never a silently miscounted row.
+ */
+export function hostTagCounts(
+  texts: readonly string[],
+): Record<HostTagValue, number> {
+  const counts = Object.fromEntries(
+    HOST_TAG_VALUES.map((value) => [value, 0]),
+  ) as Record<HostTagValue, number>;
+  for (const text of texts) {
+    if (hostTagViolation(text) !== null) continue;
+    const value = featureHostTags(text)[0]!.slice("@host:".length);
+    counts[value as HostTagValue] += 1;
+  }
+  return counts;
+}
+
+/**
  * The playwright-bdd tag expression for a storefront project: its own features
  * plus the shared ones. Lowercase `or` is the Cucumber tag-expression operator
  * playwright-bdd 9.2 parses.

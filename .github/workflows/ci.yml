@@ -636,6 +636,36 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # scenario-step — a navigation OUTCOME step must name its landing evidence
+      # (regression-contour tech spec §6.2, Issue #2067). `Then the shell
+      # navigates to "/account/events"` asserts an ADDRESS, so the #2012 class —
+      # a route whose runtime files are missing from the standalone image and
+      # that serves a 200 on a fallback page — passes it and the suite stays
+      # green. POSTURE: BLOCK by spec mandate, hence a plain step. Its severity
+      # is tool-encoded on the §6.4 model: only a bare step in a file THIS PR
+      # touched exits 1; pre-contract prose prints a WARN row and exits 0, so the
+      # backfill waves are visible without reddening unrelated PRs. The full
+      # checkout above is what makes the `origin/main` diff behind that split
+      # meaningful.
+      - name: scenario-step
+        run: pnpm lint:scenario-step
+
+      # scenario-coverage — every `EARS-N` handler declared by a `user-facing`
+      # feature spec must be tagged on a live scenario in its
+      # `NNN-scenarios.feature` (tech spec §6.4 + §6.5, Issue #2067); coverage was
+      # a reviewer's memory before this. Same tool-encoded severity split as
+      # scenario-step: BLOCK for a spec this PR created or modified, a WARN row
+      # for untouched ones until the §8 backfill waves close. The ONE finding
+      # that blocks everywhere is §6.5's — a `@quarantine` naming no Issue or a
+      # CLOSED one, which is a test switched off for good rather than tracked
+      # debt. GH_TOKEN is what lets that OPEN-Issue check run (`gh issue view`
+      # via tools/lint/lib/gh.ts); without it the guard reports the quarantine as
+      # unverified instead of guessing.
+      - name: scenario-coverage
+        run: pnpm lint:scenario-coverage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # primitives-first — a raw `<button>`/`<a>`/`<input>`/`<select>`/`<textarea>`
       # (or a `next/link` default import under ANY alias), plus (#1103)
       # summary/details/role=button raw hosts and DS-primitive SHELLs whose

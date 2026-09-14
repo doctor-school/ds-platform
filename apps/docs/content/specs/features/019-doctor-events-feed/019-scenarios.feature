@@ -10,6 +10,7 @@
 # EARS-1 / #1516. Their predecessor Issues prove route-independent components,
 # the API contract, query state, or state matrix and do not publish `/events`.
 
+@host:doctor
 Feature: A doctor opens one screen and sees what is on now, what is on this week and what they missed
 
   Background:

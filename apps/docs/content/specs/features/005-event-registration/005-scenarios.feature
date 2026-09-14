@@ -6,6 +6,7 @@
 # portal-integration + E2E child Issue, open-ears-issues step 3a), not a bare footnote.
 # Tags map scenarios to EARS handlers in 005-requirements-en.md; each EARS realizes a US-N in 005-product.md.
 
+@host:academy
 Feature: Webinar registration — a doctor registers, sees the registered state, and finds it in «мои события»
 
   Background:

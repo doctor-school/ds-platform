@@ -4,6 +4,7 @@
 # against the real portal -> NestJS -> Postgres stack. API/DB-only assertions run
 # in Vitest e2e. @core and @facets mark the delivery wave of each scenario.
 
+@host:academy
 Feature: A finished broadcast keeps its value as a recording, and the archive is browsable
 
   Background:

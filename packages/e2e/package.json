@@ -11,16 +11,18 @@
     "./hosts": "./hosts.ts"
   },
   "scripts": {
-    "bddgen": "bddgen",
+    "check:host-tags": "tsx bin/check-host-tags.ts",
+    "bddgen": "pnpm run check:host-tags && bddgen",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "bddgen && playwright test",
+    "test:e2e": "pnpm run bddgen && playwright test",
     "lint": "eslint ."
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.2.0",
     "playwright-bdd": "^9.2.0",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },

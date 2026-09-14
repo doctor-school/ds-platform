@@ -12,6 +12,7 @@
 # Scenarios tagged @deferred assert an ABSENCE: the release-3 proof of a wave-2
 # clause is that nothing at all is rendered in its place (LD-8), never a stub.
 
+@host:both
 Feature: One event page serves the doctor storefront and the Academy, and a doctor decides in seconds
 
   Background:

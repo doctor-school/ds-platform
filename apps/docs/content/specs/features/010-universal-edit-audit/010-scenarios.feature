@@ -2,6 +2,7 @@
 # Companion to 010-requirements.md / 010-design.md. Backend-only: scenarios are
 # exercised as Vitest e2e against dev-stand Postgres + apps/api — no browser run.
 
+@host:admin
 Feature: Universal edit audit — WHO / WHEN / WHAT / SOURCE for every domain-table mutation
   Every INSERT/UPDATE/DELETE of an audited domain table appends one append-only
   audit_ledger row (event_type data.<table>.<op>) carrying the actor, timestamp,

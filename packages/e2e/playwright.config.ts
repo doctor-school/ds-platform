@@ -4,6 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
 import { HOSTS } from "./hosts.js";
+import { tagExpressionFor } from "./lib/host-tags.js";
 
 /**
  * The C6 REGRESSION SUITE — staging/regression-contour tech spec §6 (Issue #2067).
@@ -16,15 +17,16 @@ import { HOSTS } from "./hosts.js";
  *
  * ── Host selection ───────────────────────────────────────────────────────────
  * One project per storefront, named by its host id, which is what the `host`
- * fixture reads (`steps/support/fixtures.ts`). §6.1 has the projects select by
- * `@host:academy` / `@host:doctor` / `@host:both`, and the tag expressions below
- * are the exact complement of that: `not @host:doctor` on academy, `not
- * @host:academy` on doctor. A scenario tagged for one host is excluded from the
- * other, `@host:both` runs on both — and a scenario NOT YET TAGGED runs on both
- * rather than on neither. That matters today: the 18 spec feature files predate
- * this contract and carry no `@host:*` tag, and a tag expression that dropped
- * them would leave a suite that silently runs nothing until the §8 backfill
- * (#2068) rewords them.
+ * fixture reads (`steps/support/fixtures.ts`). Every spec feature file declares
+ * ONE Feature-level `@host:academy | @host:doctor | @host:both | @host:admin`
+ * tag, and each project selects POSITIVELY: its own tag OR `@host:both`
+ * (`lib/host-tags.ts` builds the expression). `@host:admin` is selected by no
+ * storefront project — admin journeys belong to the admin suite in `apps/admin`,
+ * and running them here would only report false reds.
+ * Positive selection means an UNTAGGED feature runs on neither storefront, so
+ * the `bddgen` script runs `bin/check-host-tags.ts` first: an untagged file
+ * fails generation and names itself, rather than silently vanishing from both
+ * suites.
  *
  * ── Missing steps ────────────────────────────────────────────────────────────
  * `missingSteps: "skip-scenario"`. The three alternatives playwright-bdd 9.2
@@ -101,8 +103,8 @@ const testDirFor = (hostId: keyof typeof HOSTS, tags: string) =>
     missingSteps: "skip-scenario",
   });
 
-const academyTestDir = testDirFor("academy", "not @host:doctor");
-const doctorTestDir = testDirFor("doctor", "not @host:academy");
+const academyTestDir = testDirFor("academy", tagExpressionFor("academy"));
+const doctorTestDir = testDirFor("doctor", tagExpressionFor("doctor"));
 
 export default defineConfig({
   // Serial: the scenarios sign in as SHARED golden accounts on a shared slot, so

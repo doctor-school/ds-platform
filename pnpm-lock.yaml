@@ -789,6 +789,9 @@ importers:
       playwright-bdd:
         specifier: ^9.2.0
         version: 9.2.1(@playwright/test@1.63.0)
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

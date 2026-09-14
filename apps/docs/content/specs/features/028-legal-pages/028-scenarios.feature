@@ -1,3 +1,4 @@
+@host:both
 Feature: 028 — Legal pages (documents and contacts)
   As a visitor of doctor.school or the Academy
   I want to read the platform's legal documents and reach a real contact

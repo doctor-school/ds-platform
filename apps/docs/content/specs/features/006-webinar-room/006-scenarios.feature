@@ -8,6 +8,7 @@
 # not a bare footnote.
 # Tags map scenarios to EARS handlers in 006-requirements-en.md; each EARS realizes a US-N in 006-product.md.
 
+@host:academy
 Feature: Webinar room — a registered doctor watches live, chats in real time, and is silently counted present
 
   Background:

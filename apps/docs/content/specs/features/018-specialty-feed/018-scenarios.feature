@@ -6,6 +6,7 @@
 # Stage-A picks in force: F-018-1 = Б (events first), F-018-2 = Б (typographic
 # card with no cover image), F-018-3 = adjacent areas as their own block.
 
+@host:doctor
 Feature: A doctor returns to one screen that shows what to attend, what to learn and who to grow with
 
   Background:

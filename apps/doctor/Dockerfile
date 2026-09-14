@@ -46,6 +46,18 @@ ENV API_PROXY_TARGET=$API_PROXY_TARGET
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/doctor
+# STAGING-CONTOUR ARTIFACT, OFF BY DEFAULT. `.next/server/app-paths-manifest.json`
+# is the route list the IMAGE actually mounts (tech spec §6.3, #2012) and the
+# standalone bundle does not carry it. Only infra/deploy/compose/slot passes
+# CONTOUR_MANIFEST=1, so production images contain no `public/__contour/**` and
+# serve no `/__contour/*`. The served path is `MANIFEST_PATH` in
+# `packages/e2e/hosts.ts` — one constant, two Dockerfiles, never disagreeing.
+ARG CONTOUR_MANIFEST=0
+RUN if [ "$CONTOUR_MANIFEST" = "1" ]; then \
+      mkdir -p apps/doctor/public/__contour && \
+      cp apps/doctor/.next/server/app-paths-manifest.json \
+         apps/doctor/public/__contour/app-paths-manifest.json; \
+    fi
 
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
@@ -55,15 +67,6 @@ COPY --from=build --chown=node:node /repo/apps/doctor/.next/standalone ./
 # Static assets + public are NOT in standalone — copy them alongside.
 COPY --from=build --chown=node:node /repo/apps/doctor/.next/static ./apps/doctor/.next/static
 COPY --from=build --chown=node:node /repo/apps/doctor/public ./apps/doctor/public
-# The ROUTE MANIFEST, published as a static file — staging/regression-contour
-# tech spec §6.3: the derived route walk fetches the list of routes the IMAGE
-# actually mounts from the slot itself, because the repo only says what the
-# source declares. `.next/server/app-paths-manifest.json` is a build artifact the
-# standalone bundle does not carry (#2012: `/documents/[slug]` 200-ed in dev and
-# broke in the image), so it is copied into `public/` where the standalone server
-# serves it. The path is `MANIFEST_PATH` in `packages/e2e/hosts.ts` — one
-# constant, two Dockerfiles, and they must never disagree.
-COPY --from=build --chown=node:node /repo/apps/doctor/.next/server/app-paths-manifest.json ./apps/doctor/public/__contour/app-paths-manifest.json
 USER node
 EXPOSE 3004
 ENV PORT=3004 HOSTNAME=0.0.0.0

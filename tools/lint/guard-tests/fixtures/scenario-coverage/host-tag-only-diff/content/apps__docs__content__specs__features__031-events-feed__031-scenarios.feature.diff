@@ -1,0 +1,5 @@
+diff --git a/apps/docs/content/specs/features/031-events-feed/031-scenarios.feature b/apps/docs/content/specs/features/031-events-feed/031-scenarios.feature
+--- a/apps/docs/content/specs/features/031-events-feed/031-scenarios.feature
++++ b/apps/docs/content/specs/features/031-events-feed/031-scenarios.feature
+@@ -0,0 +1 @@
++@host:doctor

@@ -91,6 +91,11 @@ apps/docs/brandbook/
 # playwright-bdd generated tests + reports (apps/admin, #595)
 .features-gen/
 
+# The route manifest a local `next build` + Docker build exports for the derived
+# route walk (packages/e2e/hosts.ts MANIFEST_PATH). A build artifact of the image,
+# never a source file — it must not land in the repo from a local build.
+apps/*/public/__contour/
+
 # Codex skill bridge — CONTENTS only (#1261). `.agents/skills` itself is TRACKED
 # (a symlink blob; `pnpm agent:setup` materialises it as a Windows junction onto
 # `apps/docs/content/skills/`). Without this rule git-for-Windows descends INTO the

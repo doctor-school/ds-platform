@@ -7,6 +7,7 @@
 # (see 008-requirements-en.md → Verification, the `all` row: apps/portal/e2e/shell/journey.spec.ts),
 # NOT a bare footnote (F-22). Tags map scenarios to EARS handlers in 008-requirements-en.md.
 
+@host:academy
 Feature: Persistent portal app-shell header and public discovery front-door
 
   Background:

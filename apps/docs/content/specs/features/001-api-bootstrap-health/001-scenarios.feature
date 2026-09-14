@@ -1,3 +1,4 @@
+@host:academy
 Feature: API liveness via GET /v1/health
   As an operator or external uptime probe
   I want a public liveness endpoint

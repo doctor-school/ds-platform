@@ -6,6 +6,7 @@
 # Stage-A picks in force: F-017-1 = variant Б (search-first catalog),
 # F-017-2 = the leaderboard as its own home-page section.
 
+@host:doctor
 Feature: A doctor arrives at their own storefront, picks a specialty, and the site becomes theirs
 
   Background:

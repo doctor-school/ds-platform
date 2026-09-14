@@ -147,7 +147,11 @@ Generation policy for agents: an implementer may use the Playwright **planner/ge
 
 ### 6.2 A navigation step asserts the destination, not the address
 
-Rule for step definitions (enforced by `tools/lint/scenario-step-lint.ts`, BLOCK): a step whose text matches `navigates to|opens|lands on` must also name the landing evidence — the page's `h1` text or its `data-surface` marker — and the step implementation asserts both the pathname **and** the evidence. The bare form `Then the shell navigates to "/account/events"` (today in `shell-journey.feature`) is rejected; the accepted form is `Then the shell lands on "/account/events" showing "Мои события"`. This is the rule that turns «200 but the wrong page» into a red check.
+Rule for scenarios and step definitions, enforced by `tools/lint/scenario-step-lint.ts`: an **outcome** step that asserts an ADDRESS must also name the landing evidence — the page's `h1` text or its `data-surface` marker — and the step implementation asserts the pathname **and** the evidence. An outcome step is a `Then` step and the `And`/`But` steps continuing a `Then` block in a feature file, and a `Then(...)` binding in a step file. The bare form `Then the shell navigates to "/account/events"` is rejected; the accepted form is `Then the shell lands on "/account/events" showing "Мои события"`, and `showing data-surface "documents"` is the accepted alternative for a page that owns no `h1`. This is the rule that turns «200 but the wrong page» into a red check.
+
+The scope is the outcome step, not the verb: a `When the doctor opens the ≡ navigation` is an action the person performs, and a rule keyed on the literal verb would flag non-navigation «opens» actions that assert nothing about where anyone landed — teaching authors to reword the verb rather than to name the evidence. A step asserting the ABSENCE of a destination is likewise out of scope: there is no landing whose evidence could be named.
+
+Severity follows the §6.4 model: BLOCK for a step in a file the PR touches, a reported WARN row for untouched files, until the step-8 backfill ([#2068](https://github.com/doctor-school/ds-platform/issues/2068)) rewords the nine pre-contract rows (the 008 and 013 scenarios and `apps/portal/e2e/features/shell-journey.feature`) together with their step implementations. A `@quarantine` without an open Issue is BLOCK everywhere (§6.5) — a parked scenario is the one case where silence is indistinguishable from deletion.
 
 ### 6.3 Two derived walks, no lists
 

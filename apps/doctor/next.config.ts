@@ -56,8 +56,17 @@ const config: NextConfig = {
   // (ADR-0004 §6), no separate build step. `@ds/room` (#1722) is the shared live
   // room unit this app mounts at /events/:slug/room; it ships TypeScript sources
   // with "use client" boundaries, so it must be transpiled here exactly as the
-  // design system is.
-  transpilePackages: ["@ds/design-system", "@ds/events-storefront", "@ds/room"],
+  // design system is. `@ds/storefront-shell` (#2180) is the same shape — the
+  // shared chrome ships .tsx sources whose "use client" boundaries only become
+  // real client components once Next transpiles them; left out, its hook-bearing
+  // parts are pulled into the SSR graph and the render dies with
+  // «useState is not a function».
+  transpilePackages: [
+    "@ds/design-system",
+    "@ds/events-storefront",
+    "@ds/room",
+    "@ds/storefront-shell",
+  ],
   // Storefront → api proxy. Client-IP note (#1655): this rewrite forwards the
   // incoming request headers VERBATIM to the api, `x-forwarded-for` included, but
   // it does NOT append its own hop — Next's rewrite proxy (httpxy) enriches the

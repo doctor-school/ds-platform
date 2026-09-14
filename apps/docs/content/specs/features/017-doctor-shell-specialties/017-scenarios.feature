@@ -28,7 +28,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
 
     Examples:
       | status    | cluster                            |
-      | a guest   | «Войти» plus «Регистрация»         |
+      | a guest   | «Войти / Регистрация» (one)       |
       | signed in | points plate plus «Личный кабинет» |
 
   @EARS-1 @failure

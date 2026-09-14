@@ -293,7 +293,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       // to its pre-#1083 size — computed 14px at weight ≥ 700 (the large-text
       // `text-xl` route of #1083 was rejected) — and the white chips carry the
       // canvas navy ink #114D9E in BOTH themes (8.14:1 on white).
-      const navLink = page.getByTestId("shell-nav-broadcasts");
+      const navLink = page
+        .getByTestId("shell-nav-desktop")
+        .getByRole("link", { name: "Эфиры" });
       const navStyle = await navLink.evaluate((el) => {
         const cs = getComputedStyle(el);
         return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight) };
@@ -509,7 +511,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       expect(eventHref).toBeTruthy();
       await page.goto(eventHref!, { waitUntil: "domcontentloaded" });
       await applyTheme(page, theme);
-      const broadcastsNav = page.getByTestId("shell-nav-broadcasts");
+      const broadcastsNav = page
+        .getByTestId("shell-nav-desktop")
+        .getByRole("link", { name: "Эфиры" });
       await expect(broadcastsNav).toHaveAttribute("href", "/webinars");
       await broadcastsNav.click();
       await page.waitForURL("**/webinars");

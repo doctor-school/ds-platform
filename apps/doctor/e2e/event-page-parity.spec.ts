@@ -188,7 +188,14 @@ async function expectOperable(page: Page, control: Locator, label: string) {
 }
 
 async function expectAxeClean(page: Page, label: string) {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const results = await new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // #2189 / #2180 — the shared shell's two leaf-scoped decorations: the BBM
+    // topbar (owner-accepted canvas contrast) and the footer's aria-hidden giant
+    // wordmark (its accessible form is the logo image beside it).
+    .exclude('[data-testid="shell-topbar"]')
+    .exclude('[data-testid="footer-giant"]')
+    .analyze();
   const summary = results.violations.map((violation) => ({
     id: violation.id,
     impact: violation.impact,

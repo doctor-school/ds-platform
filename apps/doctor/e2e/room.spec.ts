@@ -240,7 +240,7 @@ test.describe("006 EARS-11 the doctor room renders outside the storefront shell"
     // pinned by `shell.spec.ts`) must not appear over it.
     await expect(page.getByTestId("storefront-header")).toHaveCount(0);
     await expect(page.getByTestId("storefront-footer")).toHaveCount(0);
-    await expect(page.getByTestId("shell-action-cluster")).toHaveCount(0);
+    await expect(page.getByTestId("shell-auth-cluster")).toHaveCount(0);
 
     // Full-height composition: the room fits its viewport rather than extending
     // the document into a page scroll.

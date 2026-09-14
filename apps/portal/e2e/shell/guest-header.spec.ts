@@ -13,7 +13,7 @@ import { shellHeader } from "../support/shell";
 test.describe("008 EARS-4 guest header shows «Войти», no avatar, no «Выйти» (e2e)", () => {
   test.skip(!process.env.E2E_PORTAL_URL, "requires a live portal");
 
-  test("008 EARS-4: a guest sees a «Войти» button to the login surface, with no avatar and no «Выйти»", async ({
+  test("008 EARS-4: a guest sees ONE «Войти / Регистрация» button to the login surface, with no avatar and no «Выйти»", async ({
     page,
     context,
   }) => {
@@ -21,9 +21,12 @@ test.describe("008 EARS-4 guest header shows «Войти», no avatar, no «В�
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     const header = shellHeader(page);
-    // The account affordance resolves (loading → guest) to the «Войти» chip.
+    // The account affordance resolves (loading → guest) to the ONE combined
+    // chip of the canvas (`ds-shell.dc.html` line 220) — the same label the
+    // doctor host carries (#2198 Stage-B finding: a bare «Войти» here).
     const login = page.getByTestId("shell-login");
     await expect(login).toBeVisible();
+    await expect(login).toHaveText("Войти / Регистрация");
     await expect(login).toHaveAttribute("href", "/login");
 
     // No doctor affordance and no sign-out anywhere in the header.

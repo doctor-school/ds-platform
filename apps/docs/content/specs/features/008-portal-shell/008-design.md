@@ -1,6 +1,6 @@
 ---
 title: "008 — Portal shell & discovery front-door (Design)"
-description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/) plus the signed-in auth-cluster resolution (Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to / — amended 2026-08-17 (feature 013): / is the Academy landing, discovery is /webinars, and the post-login landing is the visitor's return target defaulting to /webinars. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
+description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/) plus the signed-in auth-cluster resolution (Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти / Регистрация»); the post-login-landing sequence returning the doctor to / — amended 2026-08-17 (feature 013): / is the Academy landing, discovery is /webinars, and the post-login landing is the visitor's return target defaulting to /webinars. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
 slug: 008-portal-shell
 status: In dev
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
@@ -60,7 +60,7 @@ flowchart LR
     MYEV["Мои события"] --> EVENTS["/account/events — feature 005 (EARS-2)"]
     AVATAR["Avatar icon — «Личный кабинет» (doctor)"] --> ACCOUNT["/account — feature 009 profile (EARS-6)"]
   end
-  LOGIN["«Войти» (guest)"] --> AUTH["login surface — feature 003 (EARS-4)"]
+  LOGIN["«Войти / Регистрация» (guest)"] --> AUTH["login surface — feature 003 (EARS-4)"]
 ```
 
 «Школы» is **not rendered in the v1 nav** (EARS-10 _Retired_, owner 2026-07-15) — no inert placeholder ships, so there is no decision-debt seam to track. «Школы» becomes a nav target only when its own feature is specced and built, entering via that feature's discovery.
@@ -76,7 +76,7 @@ stateDiagram-v2
   Resolving --> Doctor: session present (authenticated)
 
   Guest: Guest header
-  Guest: «Войти» button → login (EARS-4)
+  Guest: «Войти / Регистрация» button → login (EARS-4)
   Guest: no avatar, no «Выйти»
 
   Doctor: Doctor header
@@ -108,14 +108,14 @@ sequenceDiagram
   SHELL->>API: GET /v1/auth/session (derive AuthState)
   API-->>SHELL: { authenticated: true, initials }
   SHELL-->>B: render / (feature-004 discovery listing, EARS-8) + doctor header (avatar icon, EARS-5)
-  Note over SHELL,B: The same / renders for a guest — only the header affordance differs («Войти»).
+  Note over SHELL,B: The same / renders for a guest — only the header affordance differs («Войти / Регистрация»).
 ```
 
 `/` reuses the feature-004 listing surface verbatim (`DiscoveryListing` read model). It does not branch on auth (EARS-8) — the guest and the doctor see the identical listing; the sole difference is the header's account affordance (§3). The `/` «Каркас приложения» scaffold is removed and unreachable (EARS-9), `/` serving the listing in its place.
 
 ## 5. Mobile collapse
 
-At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` dropdown carrying the same **[Эфиры]** plus the signed-in auth cluster (**«Мои события»**, the avatar target) or «Войти» for a guest (EARS-11). Every target's resolution (§2) is preserved inside the dropdown. The geometry (the flat, full-bleed mobile treatment of the listing and header) is specified in the vendored canvas (`events-feed.dc.html` mobile band + the header's responsive rules); this feature reproduces it element-by-element, verified at Stage-B across both breakpoints × both themes (EARS-12, ADR-0013).
+At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` dropdown carrying the same **[Эфиры]** plus the signed-in auth cluster (**«Мои события»**, the avatar target) or «Войти / Регистрация» for a guest (EARS-11). Every target's resolution (§2) is preserved inside the dropdown. The geometry (the flat, full-bleed mobile treatment of the listing and header) is specified in the vendored canvas (`events-feed.dc.html` mobile band + the header's responsive rules); this feature reproduces it element-by-element, verified at Stage-B across both breakpoints × both themes (EARS-12, ADR-0013).
 
 ## 6. What this feature does NOT own (seams & boundaries)
 
@@ -136,4 +136,4 @@ At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` 
 - **`/` = Academy landing; `/webinars` = the discovery listing.** The listing surface is unchanged (feature 004); the header logo and the «Эфиры» target resolve to `/webinars`. §4's sequence therefore ends on `/webinars` (or the captured return target) rather than on `/`, and §3's state edge «completes login → land on `/`» reads «→ land on the return target, `/webinars` by default».
 - **The landing target comes from feature 014's return-to-origin mechanism** (014 EARS-6): a signed same-origin `returnTo` carried through the auth flow, with `/webinars` as the fallback. This shell still mints no session and still only reads `GET /v1/auth/session`.
 
-**What does not change.** Header composition, theme persistence, guest «Войти», the initials-avatar icon-link to `/account`, the absence of a dropdown and of a header sign-out, the `≤900px` `≡` collapse, canvas parity at Stage-B, and the auth-independent rendering of the listing. The scaffold stays retired. No nav entry appears for a route that does not exist — `/projects` and `/experts` arrive with features 015 and 016.
+**What does not change.** Header composition, theme persistence, guest «Войти / Регистрация», the initials-avatar icon-link to `/account`, the absence of a dropdown and of a header sign-out, the `≤900px` `≡` collapse, canvas parity at Stage-B, and the auth-independent rendering of the listing. The scaffold stays retired. No nav entry appears for a route that does not exist — `/projects` and `/experts` arrive with features 015 and 016.

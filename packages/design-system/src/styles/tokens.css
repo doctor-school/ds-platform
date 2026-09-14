@@ -70,6 +70,9 @@
   --color-header-chip-foreground: #114d9e;
   --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
+  --color-header-topbar: #0d3a77;
+  --color-header-topbar-foreground: rgba(255, 255, 255, 0.34);
+  --color-footer-wordmark: oklch(0.945 0.018 250);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
@@ -98,6 +101,8 @@
   --font-family-brand: 'Century Gothic', Inter, sans-serif;
   --font-family-social: Montserrat, Inter, sans-serif;
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-size-chip: 0.84375rem;
+  --font-size-topbar: 0.5625rem;
   --font-size-2xs: 0.625rem;
   --font-size-eyebrow: 0.6875rem;
   --font-size-xs: 0.75rem;
@@ -129,6 +134,7 @@
   --font-letter-spacing-normal: 0em;
   --font-letter-spacing-wide: 0.025em;
   --font-letter-spacing-micro: 0.12em;
+  --font-letter-spacing-topbar: 0.22em;
   --space-0: 0rem;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -153,9 +159,11 @@
   --space-section-sm: 2rem;
   --space-controls: 0.75rem;
   --space-inline: 0.5rem;
+  --space-chip-x: 1.375rem;
   --space-day-band: 0rem;
   --container-content: 69rem;
   --container-calendar: 83.5rem;
+  --container-search: 27.5rem;
   --radius-base: 0rem;
   --radius-control: 0rem;
   --border-width-0: 0px;
@@ -253,6 +261,9 @@
   --color-header-chip-foreground: #114d9e;
   --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
+  --color-header-topbar: #0d3a77;
+  --color-header-topbar-foreground: rgba(255, 255, 255, 0.34);
+  --color-footer-wordmark: rgba(174, 212, 251, 0.09);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
@@ -310,6 +321,9 @@
   --color-header-chip-foreground: #114d9e;
   --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
+  --color-header-topbar: #0d3a77;
+  --color-header-topbar-foreground: rgba(255, 255, 255, 0.34);
+  --color-footer-wordmark: oklch(0.945 0.018 250);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
   --color-hero-muted: #d3e8fd;
@@ -367,6 +381,9 @@
   --color-header-chip-foreground: var(--color-header-chip-foreground);
   --color-header-chip-shadow: var(--color-header-chip-shadow);
   --color-header-hairline: var(--color-header-hairline);
+  --color-header-topbar: var(--color-header-topbar);
+  --color-header-topbar-foreground: var(--color-header-topbar-foreground);
+  --color-footer-wordmark: var(--color-footer-wordmark);
   --color-hero: var(--color-hero);
   --color-hero-foreground: var(--color-hero-foreground);
   --color-hero-muted: var(--color-hero-muted);
@@ -395,6 +412,8 @@
   --font-brand: var(--font-family-brand);
   --font-social: var(--font-family-social);
   --font-mono: var(--font-family-mono);
+  --text-chip: var(--font-size-chip);
+  --text-topbar: var(--font-size-topbar);
   --text-2xs: var(--font-size-2xs);
   --text-eyebrow: var(--font-size-eyebrow);
   --text-xs: var(--font-size-xs);
@@ -421,9 +440,11 @@
   --spacing-section-sm: var(--space-section-sm);
   --spacing-controls: var(--space-controls);
   --spacing-inline: var(--space-inline);
+  --spacing-chip-x: var(--space-chip-x);
   --spacing-day-band: var(--space-day-band);
   --container-content: var(--container-content);
   --container-calendar: var(--container-calendar);
+  --container-search: var(--container-search);
   --shadow-sm: var(--shadow-sm);
   --shadow-base: var(--shadow-base);
   --shadow-md: var(--shadow-md);
@@ -454,5 +475,6 @@
   --animate-skeleton-pulse: live-pulse 1.4s ease-in-out infinite;
   --tracking-micro: var(--font-letter-spacing-micro);
   --tracking-numeric: var(--font-letter-spacing-numeric);
+  --tracking-topbar: var(--font-letter-spacing-topbar);
   --spacing-time-plate: var(--webinar-card-time-plate);
 }

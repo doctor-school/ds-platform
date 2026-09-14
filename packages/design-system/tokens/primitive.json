@@ -155,7 +155,15 @@
     },
     "size": {
       "$type": "dimension",
-      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · xs 12 · caption 13 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
+      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · xs 12 · caption 13 · chip 13.5 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
+      "chip": {
+        "$value": "0.84375rem",
+        "$description": "13.5px — the on-header chip label of the storefront chrome («Войти / Регистрация», «Личный кабинет») and the header search input; source ds-shell.dc.html lines 24/37 (13.5px/800). Between caption (13) and sm (14), and the only kegel of the navy band's controls."
+      },
+      "topbar": {
+        "$value": "0.5625rem",
+        "$description": "9px — the storefront BBM announcement micro-band («BBM: Академия смыслов») above the header on both storefronts; source ds-shell.dc.html line 16 (9px/700/.22em uppercase). Below 2xs (10) — a band of brand decor, never body or label copy."
+      },
       "2xs": { "$value": "0.625rem" },
       "eyebrow": {
         "$value": "0.6875rem",
@@ -194,7 +202,7 @@
     },
     "letter-spacing": {
       "$type": "dimension",
-      "$description": "Neo-brutalist tracking by role: numeric −.04 (tabular figures) · display −.035 · tight −.025 (h1) · heading −.02 (h2/h3) · title −.01 · normal 0 · wide .025 · micro .12 (uppercase micro-label).",
+      "$description": "Neo-brutalist tracking by role: numeric −.04 (tabular figures) · display −.035 · tight −.025 (h1) · heading −.02 (h2/h3) · title −.01 · normal 0 · wide .025 · micro .12 (uppercase micro-label) · topbar .22 (the storefront BBM micro-band, ds-shell.dc.html line 16).",
       "numeric": { "$value": "-0.04em" },
       "display": { "$value": "-0.035em" },
       "tight": { "$value": "-0.025em" },
@@ -202,7 +210,8 @@
       "title": { "$value": "-0.01em" },
       "normal": { "$value": "0em" },
       "wide": { "$value": "0.025em" },
-      "micro": { "$value": "0.12em" }
+      "micro": { "$value": "0.12em" },
+      "topbar": { "$value": "0.22em" }
     }
   },
 
@@ -230,7 +239,11 @@
     "$type": "dimension",
     "$description": "§09 «Раскладка и ритм» content-column max-widths. `content` (1104px = 69rem) caps article / list / form / detail surfaces; `calendar` (1336px = 83.5rem BORDER-BOX = 1240px of content + 2 × 48px desktop-max gutter) yields the canvas-exact 1240px GRID content on the wider calendar surfaces — the canvas caps `main` at 1240px content-box with the gutter outside (`events-feed-month.dc.html` line 44), while Tailwind preflight is border-box, so the token carries the gutter (#1080). The Container primitive centres the column (margin:0 auto) and applies the responsive gutter; below the `layout` breakpoint the cap is dropped (edge-to-edge). Surface as Tailwind `max-w-content` / `max-w-calendar` via the `--container-*` @theme namespace.",
     "content": { "$value": "69rem" },
-    "calendar": { "$value": "83.5rem" }
+    "calendar": { "$value": "83.5rem" },
+    "search": {
+      "$value": "27.5rem",
+      "$description": "440px — the desktop cap of the storefront header search (`flex:1;max-width:440px`, ds-shell.dc.html line 24): it grows into free bar width but never past the cap, so the nav and the auth cluster keep their place. Surface as `max-w-search`; below the `layout` breakpoint the search re-flows to its own full-width row."
+    }
   },
 
   "radius": {

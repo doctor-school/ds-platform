@@ -223,11 +223,11 @@ describe("Feature 013 Academy partnership form", () => {
       name: "Обсудить партнёрство",
     });
     expect(submit).toHaveClass(
-      "border-header-foreground",
       "bg-header-foreground",
       "text-header-chip-foreground",
       "shadow-header-chip",
     );
     expect(submit).not.toHaveClass("bg-primary-action");
+    expect(submit.className).not.toMatch(/(?:^|\s)border-/);
   });
 });

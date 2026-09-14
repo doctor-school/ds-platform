@@ -28,19 +28,52 @@ describe("Button secondary variant reads as enabled", () => {
   });
 });
 
+/**
+ * #2180 — `on-primary` IS the header chip, the ONE definition both storefronts
+ * and the webinar room compose from. The two storefronts drifted (194×44 vs
+ * 191×48) because a second class-string constant carried the geometry beside
+ * this variant; these assertions pin the canvas contract
+ * (`design-source/ds-shell.dc.html` line 37) onto the variant itself.
+ */
 describe("Button surface-safe on-primary variant", () => {
   it("EARS-5: when the submit action sits on primary blue, the system shall render the invariant white CTA with complete interaction states", () => {
     const cls = buttonVariants({ variant: "on-primary" });
 
     expect(cls).toMatch(/bg-header-foreground/);
     expect(cls).toMatch(/text-header-chip-foreground/);
-    expect(cls).toMatch(/border-header-foreground/);
     expect(cls).toMatch(/(?:^|\s)shadow-header-chip(?:\s|$)/);
     expect(cls).toMatch(/hover:shadow-header-chip-hover/);
     expect(cls).toMatch(/active:shadow-none/);
     expect(cls).toMatch(/focus-visible:shadow-focus/);
     expect(cls).toMatch(/disabled:opacity-40/);
     expect(cls).not.toMatch(/bg-primary-action/);
+  });
+
+  it("EARS-5.1: the header chip carries NO border and never shrinks in the bar", () => {
+    // Canvas line 37: `background:#fff` with a 3px offset cast and NO border —
+    // the `border-2` this variant used to add is what made the doctor chip 48px
+    // tall against the academy's 44px (#2198 Stage-B finding).
+    const cls = buttonVariants({ variant: "on-primary" });
+    expect(cls).not.toMatch(/\bborder-/);
+    expect(cls).toMatch(/\bflex-none\b/);
+    expect(cls).toMatch(/\bwhitespace-nowrap\b/);
+  });
+
+  it("EARS-5.2: the chip size IS the canvas geometry — 12×22 padding at 13.5px, token-backed", () => {
+    // `px-chip-x` / `py-3` / `text-chip` are the tokens (`space.chip-x`,
+    // `font.size.chip`), so the chip's size changes in ONE place for both
+    // storefronts rather than in each host's own class string.
+    const cls = buttonVariants({ variant: "on-primary", size: "chip" });
+    expect(cls).toMatch(/\bpx-chip-x\b/);
+    expect(cls).toMatch(/\bpy-3\b/);
+    expect(cls).toMatch(/\btext-chip\b/);
+  });
+
+  it("EARS-5.3: the profile chip is the same variant at the 40px avatar size, not a second constant", () => {
+    const cls = buttonVariants({ variant: "on-primary", size: "avatar" });
+    expect(cls).toMatch(/\bsize-10\b/);
+    expect(cls).toMatch(/bg-header-foreground/);
+    expect(cls).toMatch(/(?:^|\s)shadow-header-chip(?:\s|$)/);
   });
 });
 

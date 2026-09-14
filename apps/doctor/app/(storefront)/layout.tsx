@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
-import { StorefrontFooter } from "@/components/storefront-footer";
-import { StorefrontHeader } from "@/components/storefront-header";
-import { resolveShellAuth } from "@/lib/shell-auth";
+import { StorefrontFooter, StorefrontHeader } from "@ds/storefront-shell";
+import { DOCTOR_SHELL } from "@/lib/shell-config";
+import { resolveShellAuth, shellAuthState } from "@/lib/shell-auth";
 
 /**
  * 017 EARS-1 — THE storefront shell layout.
@@ -13,10 +13,16 @@ import { resolveShellAuth } from "@/lib/shell-auth";
  * inside it; a screen-local re-implementation of any of the three is a defect,
  * not a variation. The group `(storefront)` adds no URL segment — `/` stays `/`.
  *
+ * The chrome itself is `@ds/storefront-shell`, owned ONCE for both storefronts
+ * (#2180, epic #2020 / ADR-0013 A1). This host supplies only VALUES
+ * ({@link DOCTOR_SHELL}) and the resolved sign-in STATE — there is no
+ * doctor-local header, footer or auth-cluster component any more, which is what
+ * stops the two storefronts drifting apart every time either side ships.
+ *
  * The sign-in branch is resolved HERE, on the server, from the request headers
  * (`lib/shell-auth.ts` → the `__Host-ds_session` cookie, ADR-0015 §4) and handed
- * to the header as data. That is what makes "exactly one action cluster, never a
- * transitional state" true of the first byte of HTML rather than of a settled
+ * to the shared chrome as data. That is what makes "exactly one action cluster, never
+ * a transitional state" true of the first byte of HTML rather than of a settled
  * client effect.
  *
  * Reading `headers()` opts every route in this group into dynamic rendering.
@@ -35,9 +41,9 @@ export default async function StorefrontLayout({
       data-testid="storefront-shell"
       className="flex min-h-screen flex-col bg-background text-foreground"
     >
-      <StorefrontHeader auth={auth} />
+      <StorefrontHeader config={DOCTOR_SHELL} auth={shellAuthState(auth)} />
       <main className="flex-1">{children}</main>
-      <StorefrontFooter />
+      <StorefrontFooter config={DOCTOR_SHELL} />
     </div>
   );
 }

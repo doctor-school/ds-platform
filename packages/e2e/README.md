@@ -41,13 +41,31 @@ would report a green pass against nothing.
 exist without the requirement it verifies, and `author-ears-spec` step 7 already
 produces the file for every new feature.
 
-Host selection is by tag. §6.1 tags scenarios `@host:academy` / `@host:doctor` /
-`@host:both`; the projects use the exact complement — `not @host:doctor` on
-academy, `not @host:academy` on doctor. A scenario tagged for one host is
-excluded from the other, `@host:both` runs on both, and a scenario **not yet
-tagged** runs on both rather than on neither. That last case is today's reality:
-the 18 spec feature files predate this contract, and a stricter expression would
-leave a suite that silently runs nothing until the §8 backfill (#2068).
+### Host tags
+
+Every spec feature file declares, once at Feature level, which storefront runs
+it: `@host:academy`, `@host:doctor`, `@host:both`, or `@host:admin`. The
+projects select **positively** — `@host:academy or @host:both` on academy,
+`@host:doctor or @host:both` on doctor (`lib/host-tags.ts` builds both
+expressions, so the vocabulary and the selection can never drift apart).
+
+`@host:admin` is selected by no storefront project on purpose. An admin-surface
+journey (007, 011, 012) or a backend-only one (010) belongs to the admin suite in
+`apps/admin`; running it against a storefront reports a false red, which is the
+one thing this suite must not teach the team to ignore. A pure API spec (001, 002) drives its checks through ONE storefront's API proxy and is tagged
+`@host:academy` — never `@host:both`, which would pay double runtime for one API.
+
+Positive selection is what makes the tag structural: an untagged file is selected
+by NEITHER project, so its scenarios silently stop existing. The `bddgen` script
+therefore runs `bin/check-host-tags.ts` first — it exits 1 naming every feature
+file that carries no Feature-level host tag, or more than one, so generation
+fails loudly instead of quietly shrinking the suite.
+
+Adding or retargeting a host tag is a suite-selection edit, not scenario
+authorship: `tools/lint/lib/diff.ts` keeps such a file OUT of the §6.4/§6.5
+«touched» set, so annotating a spec does not make the annotating PR inherit that
+spec's §8 backfill debt. Change one scenario line in the same file and it counts
+as touched again.
 
 ## Missing-step policy: `skip-scenario`
 

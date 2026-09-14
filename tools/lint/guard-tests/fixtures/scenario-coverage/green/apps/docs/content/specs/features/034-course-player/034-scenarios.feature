@@ -1,3 +1,5 @@
+# 034 — the Feature-level host tag of the C6 suite (§6.1) sits above `Feature:`.
+@host:both
 Feature: 034 Course player
 
   @EARS-1 @happy

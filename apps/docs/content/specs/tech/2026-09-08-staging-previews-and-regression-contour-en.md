@@ -1,6 +1,6 @@
 ---
 title: Staging box, per-PR previews and the end-to-end regression contour
-status: Accepted — owner-directed 2026-09-08, independent second review 2026-09-08, landed on main; delivery shape revised to the production deploy shape per owner 2026-09-11 (#2193); operation revised to the production operating shape per owner 2026-09-14 (#2202: no workflow, no check-run, no unit on the box — the agent runs every step by hand); execution Issues #2061–#2069 tracked in §8
+status: Accepted — owner-directed 2026-09-08, independent second review 2026-09-08, landed on main; delivery shape revised to the production deploy shape per owner 2026-09-11 (#2193); operation revised to the production operating shape per owner 2026-09-14 (#2202 — no workflow, no check-run, no unit on the box — the agent runs every step by hand); execution Issues #2061–#2069 tracked in §8
 date: 2026-09-08
 kind: engineering-task plan (retro-driven, owner-requested)
 issue: 2056

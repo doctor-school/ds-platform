@@ -23,8 +23,10 @@ export type AppPathsManifest = Readonly<Record<string, string>>;
  *   • `…/route`  — a Route Handler. It answers a method contract, not a page;
  *     asserting «200 + an `h1`» on it would be asserting the wrong thing.
  *   • `/api/**`  — the same, by address, for handlers mounted under `/api`.
- *   • `/_not-found`, `/_next/**` — Next's own internals. `/_not-found` renders by
- *     definition only for addresses that do not exist.
+ *   • `/_not-found`, `/_global-error`, `/_next/**` — Next's own internals.
+ *     `/_not-found` renders by definition only for addresses that do not exist;
+ *     `/_global-error` only for a thrown root error, so opening it directly is a
+ *     500 by design (App Router lists it in the manifest since Next 15).
  *   • a `@slot` segment — a PARALLEL route (`/@chrome/[...catchAll]`). It is not
  *     an address: it is a slot the layout composes into another page, and
  *     fetching it directly proves nothing about what the visitor sees.
@@ -39,6 +41,7 @@ function isSkippedKey(key: string): boolean {
       segment.startsWith("@") ||
       segment === "api" ||
       segment === "_not-found" ||
+      segment === "_global-error" ||
       segment === "_next" ||
       /^\((?:\.{1,3}|\.{2}\)\(\.{2})\)/.test(segment),
   );

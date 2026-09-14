@@ -63,6 +63,21 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
   }),
 });
 
+/**
+ * The fixed, host-independent path both storefront images publish their Next
+ * route manifest to — staging/regression-contour tech spec §6.3, second bullet:
+ * «exported at image build time to a fixed path the walk fetches from the slot».
+ *
+ * `.next/server/app-paths-manifest.json` is a BUILD artifact that the standalone
+ * bundle does not carry, so the route walk cannot read it from the repo (the repo
+ * says what the source declares) nor from the running container's filesystem (the
+ * walk talks HTTP to a slot it does not own). Both Dockerfiles therefore copy the
+ * manifest into the image's `public/` tree at this path, where the standalone
+ * server serves it as an ordinary static file. One constant, because the two
+ * Dockerfiles, the walk and the package README must never disagree about it.
+ */
+export const MANIFEST_PATH = "/__contour/app-paths-manifest.json";
+
 /** Every host id, for the config's project list and for a walk that drives both. */
 export const HOST_IDS = Object.freeze(Object.keys(HOSTS) as HostId[]);
 

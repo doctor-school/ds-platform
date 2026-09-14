@@ -149,5 +149,19 @@ export default defineConfig({
         baseURL: process.env[HOSTS.doctor.baseUrlEnv],
       },
     },
+    // ── The two derived walks (§6.3) ──────────────────────────────────────────
+    // One project, not one per host. The Gherkin projects above exist per host
+    // because `bddgen` writes a different generated DIRECTORY per host tag
+    // filter; the walks have no such artifact — they read the host from `HOSTS`
+    // and address it absolutely via `baseUrlFor`, so a single project drives both
+    // and every test title names the host it walked. `testMatch` keeps the
+    // directory open for the walks' own support files without turning them into
+    // tests.
+    {
+      name: "walks",
+      testDir: "./derived",
+      testMatch: /.*\.walk\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
   ],
 });

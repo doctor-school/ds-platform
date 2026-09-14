@@ -3,6 +3,7 @@
 # This is a user-facing spec: admin journeys run through Playwright BDD against
 # the real Refine → NestJS → Postgres stack. API/DB-only assertions run in Vitest e2e.
 
+@host:admin
 Feature: Operators maintain one retained taxonomy that every Academy surface can query
 
   Background:

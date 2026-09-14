@@ -164,3 +164,5 @@ it derives both hostnames from the slot name, reads the stand's basic-auth pair 
 config turns into Playwright `httpCredentials`), refuses a slot that is not converged,
 keeps the HTML + JSON report under `packages/e2e/playwright-report/<slot>-<timestamp>/`,
 and prints the verdict block the operator pastes into the PR body or the release record.
+`--project walks` selects the derived walks alone (the two storefront a11y legs belong to
+the host projects, so that selection runs neither).

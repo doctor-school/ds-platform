@@ -49,8 +49,13 @@ import {
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
-/** The two storefront projects of `packages/e2e/playwright.config.ts`. */
-export const PROJECTS = Object.freeze(["academy", "doctor"]);
+/**
+ * The selectable projects of `packages/e2e/playwright.config.ts`: the two storefront
+ * Gherkin projects plus `walks`, the derived navigation/route walks (§6.3), which one
+ * project drives across BOTH hosts.
+ */
+export const HOST_PROJECTS = Object.freeze(["academy", "doctor"]);
+export const PROJECTS = Object.freeze([...HOST_PROJECTS, "walks"]);
 
 /**
  * The contrast fix that has to be on `main` before the axe suites can join the slot
@@ -66,7 +71,7 @@ export function parseE2eArgs(argv) {
   const slot = rest.shift();
   if (slot === undefined || slot.startsWith("-")) {
     throw new SlotError(
-      "usage: pnpm e2e:stage <slot> [--project academy|doctor] [--grep <re>] " +
+      "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks] [--grep <re>] " +
         "[--no-axe] [--report-dir <path>] — the slot must be named",
     );
   }
@@ -89,7 +94,7 @@ export function parseE2eArgs(argv) {
         const project = takeValue(flag);
         if (!PROJECTS.includes(project)) {
           throw new SlotError(
-            `unusable --project: ${project} — expected academy|doctor`,
+            `unusable --project: ${project} — expected ${PROJECTS.join("|")}`,
           );
         }
         options.project = project;
@@ -406,8 +411,13 @@ export async function runE2eStage(
     issueState: effects.issueState(AXE_GATE_ISSUE),
   });
   effects.log(axe.note);
+  // The axe legs are the two STOREFRONT a11y suites, so a host's leg joins the run
+  // only when that host is the selection — `--project walks` selects neither host and
+  // gets neither leg, instead of silently pulling both storefront suites back in.
+  const axeHost = (host) =>
+    options.project === undefined || options.project === host;
   if (axe.run) {
-    if (options.project !== "doctor") {
+    if (axeHost("academy")) {
       legs.push({
         name: "axe/academy",
         ok:
@@ -416,7 +426,7 @@ export async function runE2eStage(
           }).status === 0,
       });
     }
-    if (options.project !== "academy") {
+    if (axeHost("doctor")) {
       legs.push({
         name: "axe/doctor",
         ok:

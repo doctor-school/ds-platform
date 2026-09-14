@@ -95,6 +95,7 @@ have to hold the stand's credentials to reach the slot at all.
 export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
 pnpm e2e:stage pr-123                     # both storefronts
 pnpm e2e:stage main --project academy --grep "витрина"
+pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
 pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
 ```
 

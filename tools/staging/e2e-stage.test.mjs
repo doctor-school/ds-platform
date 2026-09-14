@@ -55,10 +55,14 @@ describe("parseE2eArgs", () => {
     );
   });
 
+  it("selects the derived-walks project", () => {
+    assert.equal(parseE2eArgs(["main", "--project", "walks"]).project, "walks");
+  });
+
   it("refuses an unknown project, an unknown flag and a missing slot", () => {
     assert.throws(
       () => parseE2eArgs(["main", "--project", "admin"]),
-      /academy\|doctor/,
+      /academy\|doctor\|walks/,
     );
     assert.throws(() => parseE2eArgs(["main", "--rebuild"]), /--rebuild/);
     assert.throws(() => parseE2eArgs([]), /slot/);
@@ -435,6 +439,16 @@ describe("runE2eStage", () => {
     });
     assert.equal(calls.length, 2);
     assert.ok(calls[1].argv.join(" ").includes("room-axe"));
+  });
+
+  it("runs no host axe leg when the derived walks are the selected project", async () => {
+    const { calls, effects } = harness({ issueState: () => "CLOSED" });
+    await runE2eStage(["main", "--project", "walks"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects,
+    });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].argv.slice(4), ["--project", "walks"]);
   });
 
   it("returns 1 and prints the verdict block when a leg fails", async () => {

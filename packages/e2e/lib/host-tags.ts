@@ -55,7 +55,8 @@ export function featureHostTags(text: string): string[] {
  */
 export function hostTagViolation(text: string): string | null {
   const tags = featureHostTags(text);
-  if (tags.length === 0) {
+  const [tag] = tags;
+  if (tag === undefined) {
     return `no @host: tag above \`Feature:\` (expected one of ${HOST_TAG_VALUES.map(
       (value) => `@host:${value}`,
     ).join(", ")})`;
@@ -65,7 +66,6 @@ export function hostTagViolation(text: string): string | null {
       ", ",
     )}) — exactly one is allowed`;
   }
-  const [tag] = tags;
   const value = tag.slice("@host:".length);
   if (!(HOST_TAG_VALUES as readonly string[]).includes(value)) {
     return `unknown host tag ${tag} (expected one of ${HOST_TAG_VALUES.map(

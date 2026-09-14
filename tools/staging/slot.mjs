@@ -2053,7 +2053,9 @@ export function requiredOperatorPassword(env) {
  * The box captcha trio must be COHERENT before a slot is converged (#2207).
  *
  * The api guard (`apps/api/src/bot-protection`) is enabled by `BOT_PROTECTION_ENABLED`
- * and rejects every sign-in that carries no token; the storefront only produces a
+ * and rejects every bot-protected call that carries no token — the login journey's OTP
+ * request, registration, verification resend, password reset (`POST /v1/auth/login`
+ * itself is not decorated); the storefront only produces a
  * token when its image was baked with a real `SMARTCAPTCHA_SITE_KEY` (slot compose →
  * `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`). Half a pair therefore has ONE observable
  * outcome — every slot login answers 403 (seen live on 2026-09-14, all three slots) —

@@ -13,7 +13,7 @@
  * names, it asserts the brief text names that same path.
  *
  * Canon: memory `feedback_orchestration_brief_full_lint_before_pr` item 2e.
- * Sibling of `handoff:verify` (#743) and `dispatch:probe` (#744) — same
+ * Sibling of `dispatch:probe` (#744) — same
  * architecture: a pure, unit-tested core + an injectable `gh` runner so tests
  * never shell out.
  *

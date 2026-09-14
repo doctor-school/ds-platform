@@ -52,7 +52,7 @@
       "branches": [
         "main",
         "docs/741-top-level-readme-coverage-6-9",
-        "docs/wrap-handoff-verify-verbatim"
+        "docs/wrap-handoff-block-verbatim"
       ],
       "dispatches": 6,
       "inline": 3,

@@ -13,9 +13,9 @@
  * notification".
  *
  * Canon: CLAUDE.md → Subagent context economy, rule 6. Natural sibling of
- * `tools/gh/handoff-verify.mjs` (#743) — same deterministic-gate family (pure
- * exported classifier + injectable runner so the core is unit-tested without
- * shelling out).
+ * `tools/gh/dispatch-brief-check.mjs` (#757) — same deterministic-gate family
+ * (pure exported classifier + injectable runner so the core is unit-tested
+ * without shelling out).
  *
  * Usage:
  *   pnpm dispatch:probe <N>       # inspect .claude/worktrees/<N>

@@ -16,12 +16,14 @@ import { resolveRoute } from "../route-params.js";
  * The DERIVED ROUTE WALK — staging/regression-contour tech spec §6.3, second
  * bullet (Issue #2067).
  *
- * It contains no list of routes either. Each storefront image publishes its own
- * Next route manifest at {@link MANIFEST_PATH} (both Dockerfiles copy
- * `.next/server/app-paths-manifest.json` into the image's `public/` tree), and
- * this walk fetches that file FROM THE SLOT, filters it to the page addresses a
- * visitor can type (`lib/routes.ts`), resolves dynamic segments from
- * `route-params.ts`, and asserts 200 + a non-empty `h1` on every one.
+ * It contains no list of routes either. Each SLOT image publishes its own Next
+ * route manifest at {@link MANIFEST_PATH} (both Dockerfiles copy
+ * `.next/server/app-paths-manifest.json` into the image's `public/` tree when the
+ * `CONTOUR_MANIFEST` build arg is on — slot compose only, so production serves no
+ * `/__contour/*`), and this walk fetches that file FROM THE SLOT, filters it to
+ * the page addresses a visitor can type (`lib/routes.ts`), resolves dynamic
+ * segments from `route-params.ts`, and asserts 200 + the landed PATHNAME (or the
+ * lawful login redirect, `returnTo` intact) + a non-empty `h1` on every one.
  *
  * Reading the manifest from the SLOT rather than from the repo is the whole
  * point: the repo says what the source declares, the slot says what the image
@@ -137,6 +139,32 @@ for (const hostId of HOST_IDS) {
         });
         expect(response, `no response for ${address}`).not.toBeNull();
         expect(response!.status(), `status of ${address} (${pattern})`).toBe(200);
+
+        // A 200 alone does not say WHICH page answered (#2012). Assert the landed
+        // pathname, with the one lawful exception the navigation walk already
+        // encodes: a gated address sends the anonymous walker to the host's login
+        // surface, which must render its own `h1` AND keep the original address in
+        // `returnTo`. Anything else is «200 on the wrong page» and stays red.
+        const landed = new URL(page.url()).pathname;
+        if (landed === host.loginPath && address !== host.loginPath) {
+          await expect(
+            page.getByRole("heading", {
+              level: 1,
+              name: host.loginHeading,
+              exact: true,
+            }),
+            `the h1 of ${host.loginPath} after the ${address} redirect`,
+          ).toBeVisible();
+          expect(
+            new URL(page.url()).searchParams.get("returnTo"),
+            `returnTo after the ${address} (${pattern}) redirect`,
+          ).toBe(address);
+          return;
+        }
+
+        expect(landed, `pathname after opening ${address} (${pattern})`).toBe(
+          address,
+        );
         const h1 = page.locator("h1").first();
         await expect(h1, `the h1 of ${address} (${pattern})`).toBeVisible();
         expect(

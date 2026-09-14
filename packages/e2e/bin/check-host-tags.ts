@@ -11,7 +11,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { hostTagViolation } from "../lib/host-tags.js";
+import {
+  HOST_TAG_VALUES,
+  hostTagCounts,
+  hostTagViolation,
+} from "../lib/host-tags.js";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(PACKAGE_ROOT, "..", "..");
@@ -50,6 +54,11 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
+// Per-host SUITE SIZE in the CI log: retargeting a Feature tag removes a spec
+// from both storefront suites with every structural check still green, so the
+// counts are what makes a shrinking suite visible at zero cost.
+const counts = hostTagCounts(files.map((file) => readFileSync(file, "utf8")));
 process.stdout.write(
-  `[host-tags] PASS — ${files.length} feature file(s) each declare exactly one Feature-level host tag.\n`,
+  `[host-tags] PASS — ${files.length} feature file(s) each declare exactly one Feature-level host tag: ` +
+    `${HOST_TAG_VALUES.map((value) => `${value} ${counts[value]}`).join(" / ")}.\n`,
 );

@@ -263,14 +263,15 @@ export const CORRECTION_RE = new RegExp(
 
 // Handoff-prompt continuations are real pasted messages but NOT corrections.
 //
-// #889 — this repo's canonical handoff (the run-wrap stage-5 override) opens
-// with the literal `FIRST ACTION: pipe this verbatim block through
-// `pnpm handoff:verify`` and carries the structural markers `Do next (wave …)`
-// and/or `Next task:`. The original detector saw none of these, so a pasted
+// #889 — this repo's canonical handoff (the run-wrap stage-5 block) opens on a
+// `## Current task` heading and carries the structural markers `Do next (wave …)`
+// and/or `Next task:`; sessions logged before #2204 open on a `FIRST ACTION:`
+// directive line instead. The original detector saw none of these, so a pasted
 // handoff whose body trips CORRECTION_RE («почему», «стоп», …) was miscounted as
-// an owner correction. The `FIRST ACTION:` opener is the decisive signal; the
-// two structural markers are corroborating (scanned only in the first 400 chars
-// so a deep quote inside a long correction never trips them).
+// an owner correction. Recognize all of these openers so the classifier reads
+// current and archived sessions alike; the structural markers are corroborating
+// (scanned only in the first 400 chars so a deep quote inside a long correction
+// never trips them).
 export function isHandoff(t) {
   const s = t.trimStart();
   const head = s.slice(0, 400);

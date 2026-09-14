@@ -16,7 +16,7 @@ For repository changes, open in RU, ≤6 lines, with task kind, active artifact 
 > **Что делаем:** 1–3 numbered deliverables
 > **Зачем:** what they enable
 
-For repository work run `pnpm bootstrap` unless supplied; inspect the named task, not the whole backlog. Verify resumed tracker refs with `pnpm handoff:verify`; retain established findings and evidence unless a relevant change, contradiction or missing proof invalidates them. A new session alone does not. Rollups or failed fetches never prove an empty backlog.
+For repository work run `pnpm bootstrap` unless supplied and inspect the named task. A resumed session checks each named Issue/PR/SHA with `gh` before its first tracker or git action; retain established findings and evidence unless a relevant change, contradiction or missing proof invalidates them. A new session alone does not. Rollups or failed fetches never prove an empty backlog.
 
 Keep authorization, readiness and execution separate. Reuse the owner’s evidenced quote/source, action and conditions; a handoff claim or review verdict is not owner approval. Preparation is not cutover approval. Ask only for a necessary decision outside existing authorization; routine diagnosis/fixes need no new go. Earlier approval never authorizes CI bypass or destructive action outside its scope.
 
@@ -59,11 +59,11 @@ Briefs: `pnpm dispatch:brief <N>`, ownership/worktree, relevant sources, affecte
 
 On ROTATE/exhausted budget: finish the atomic step, commit safe WIP, checkpoint done/remaining/files/branch+SHA/next command/questions, return `ROTATE: <path>`. Re-dispatch a fresh agent; never continue an exhausted child. Unavailable telemetry calls for bounded briefs/checkpoints.
 
-Use compact browser evidence; delegate large interactive payloads when context savings justify the handoff. The lead owns the Stage-B stand. Check child capabilities; do lead-only work first and hand over artifacts. Stand briefs carry dev-stand.md's reset/raw destructive SQL prohibition and command log; audit it on return. Probe progress with `pnpm dispatch:probe <N>` and artifacts, not notification timing.
+Use compact browser evidence; delegate large interactive payloads when context savings justify the handoff. The lead owns the Stage-B stand. Check child capabilities; do lead-only work first and hand over artifacts. Stand briefs carry dev-stand.md's reset/raw destructive SQL prohibition and command log; audit it on return. Probe progress with `pnpm dispatch:probe <N>` and returned artifacts.
 
 ## Shell, verification and evidence
 
-Use the isolated worktree for deliverable reads/writes/tests. Run `pnpm install` before its first commit to install hooks; no borrowed dependencies/docs-only hook skip. Inspect status/diff, stage explicit paths, preserve others' files/listeners. Canonical landing runs from the primary tree (repo-conventions → Closeout).
+Workers isolate themselves and use that worktree for deliverable reads/writes/tests; the lead's cwd stays in the main tree all session — where canonical landing runs (repo-conventions → Closeout) — reaching a worktree through absolute paths and `git -C`. Run `pnpm install` before a worktree's first commit to install hooks; no borrowed dependencies/docs-only hook skip. Inspect status/diff, stage explicit paths, preserve others' files/listeners.
 
 Check dependent command exits immediately (PowerShell `$LASTEXITCODE`); ancestry 1 means stale, other errors do not. Use literal UTF-8 `--body-file` for GitHub multiline text. Select only required allow-listed non-secret config keys/presence flags; redact before stdout. Never print broad env matches. On secret exposure stop repeating its value, record the exposure and assess rotation within authorization; private logs do not make it harmless.
 

@@ -10,23 +10,21 @@ On-demand conventions and dev-stand rules: §0; task procedure: §3. Use establi
 
 ## 0. Read-before-you-act index
 
-Read the indexed reference in full before its action, once per session and after compaction. These scoped rules hold gates but are not auto-loaded by Codex or re-injected after compaction.
+Read the indexed reference in full before its action, once per session and after compaction; these scoped rules hold gates and load on demand only.
 
-| Before action                                   | Read reference / section                          |
-| ----------------------------------------------- | ------------------------------------------------- |
-| Branch naming, closure, `pr:land`               | `repo-conventions.md` → Branches                  |
-| PR creation, changesets, `--no-verify`          | → Commits, versioning, PRs                        |
-| Preflight, merge gate, exemptions, bot releases | → Commits, versioning, PRs                        |
-| Prod deploy/release                             | → Release train; skill `run-prod-deploy`          |
-| Dependency bumps                                | → Dependency bumps                                |
-| Issue creation/fields/claim/dependency/status   | → Issue conventions                               |
-| Resume/handoff verification                     | → Issue conventions                               |
-| ADR/spec/PRD placement                          | → ADRs & specs                                    |
-| `dev:*` or stand endpoints                      | `dev-stand.md` → Endpoints, DX commands           |
-| Migration                                       | → Snapshot before migrate                         |
-| DB/volume operations, stand-capable brief       | → Shared-stand discipline                         |
-| Ports, listeners, branch DB                     | → Parallel sessions                               |
-| Browser/live UI/Stage-B handback, staging slot  | → Rules for agents; `build-ui-from-design-system` |
+| Before action                                  | Read reference / section                          |
+| ---------------------------------------------- | ------------------------------------------------- |
+| Branch naming, closure, `pr:land`              | `repo-conventions.md` → Branches                  |
+| PR creation, changesets, preflight, merge gate | → Commits, versioning, PRs                        |
+| Prod deploy/release                            | → Release train; skill `run-prod-deploy`          |
+| Dependency bumps                               | → Dependency bumps                                |
+| Issues, claims, dependencies, resume checks    | → Issue conventions                               |
+| ADR/spec/PRD placement                         | → ADRs & specs                                    |
+| `dev:*` or stand endpoints                     | `dev-stand.md` → Endpoints, DX commands           |
+| Migration                                      | → Snapshot before migrate                         |
+| DB/volume operations, stand-capable brief      | → Shared-stand discipline                         |
+| Ports, listeners, branch DB                    | → Parallel sessions                               |
+| Browser/live UI/Stage-B handback, staging slot | → Rules for agents; `build-ui-from-design-system` |
 
 ---
 
@@ -42,7 +40,7 @@ Stack (ADR-0002–0006 in `apps/docs/content/adr/` + `README.md`): NestJS + Zod 
 
 ## 2. Repository conventions (detail: `.claude/rules/repo-conventions.md`)
 
-Monorepo pnpm 10 + Turborepo (`apps/`, `packages/`, `tools/`). Trunk-based `<prefix>/<N>-<slug>`, Conventional Commits, squash/delete on merge. Read `repo-conventions.md` before branch/Issue/PR/version/release actions: required fields, changesets, native technical dependency links, board Done and canonical landing are mandatory. New feature specs land before implementation; corrections to approved behavior/docs may share its code PR (repo-conventions → ADRs & specs). Prod ships only through `pnpm deploy:prod` and its release-readiness/authorization policy.
+Monorepo pnpm 10 + Turborepo; trunk-based `<prefix>/<N>-<slug>`, Conventional Commits, squash/delete on merge. Read `repo-conventions.md` before branch/Issue/PR/version/release actions: required fields, changesets, native technical dependency links, board Done and canonical landing are mandatory. New feature specs land before implementation; corrections to approved behavior/docs may share its code PR (repo-conventions → ADRs & specs). Prod ships only through `pnpm deploy:prod` and its release-readiness/authorization policy.
 
 ---
 
@@ -76,7 +74,7 @@ Project execution uses only `apps/docs/content/skills/`; vendor packs are disabl
 
 ### 3.5 Bootstrap
 
-`pnpm bootstrap` gives git/Issue/PR/spec state (Claude Code: automatic on SessionStart). Its rollup is derived, not ground truth. Read the linked task state; full board triage is for requested backlog/continuing-wave work, never a prerequisite for a named task. In an authorized continuing wave, drain matured debt/ops before the next product feature; otherwise finish the requested scope and stop.
+`pnpm bootstrap` gives git/Issue/PR/spec state (Claude Code: automatic on SessionStart); portable discipline governs how far to trust its rollup. Board triage belongs to requested backlog/continuing-wave work; a named task starts from its own linked state. In an authorized continuing wave, drain matured debt/ops before the next product feature; otherwise finish the requested scope and stop.
 
 ### 3.6 Permission-mode disclosure
 
@@ -115,8 +113,8 @@ CI lint guards surface as PR Checks. Authoritative list + severity: `.github/wor
 - **SDD.** New feature behavior requires an approved spec at `apps/docs/content/specs/features/NNN-<slug>/`; absent → `author-feature-spec` first. Maintenance/hotfixes restoring approved behavior need no new spec; update existing docs in the same PR. New product/architecture decisions retain prior approval/spec gates.
 - **Vertical slices over horizontal layers (F-22).** Every feature declares `surface: backend-only | user-facing` in requirements frontmatter. Any UI deliverable/trigger requires `user-facing` with UI and backend in one WBS; backend-first needs a named tracked spec deferral. Backend-only uses Vitest e2e; user-facing owns browser verification. Enforced by `author-ears-spec`, `open-ears-issues` 3a and checklist item 12.
 - **No untracked seam / scaffold (F-22).** A stub/fake/fail-closed seam replacing a deliverable is decision-debt; a comment is not tracking. Open an Issue only when it blocks a product deliverable, is user-visible/prod-risk, must precede release, or blinds a CI guard; otherwise use DEBT.md. The real dependency must be delivered and wired to close it. Canon: `open-ears-issues` 3a.
-- **Proportionate execution.** Follow portable discipline’s outcome, reuse, minimum-solution, risk and stop principles. Implement bounded work inline in an isolated worktree when handoffs cost more than they help; delegate independent or context-heavy work when useful. Required independent review remains separate from authorship.
-- **Subagent context budget.** Use observed effective input/window and the active adapter tiers, not cumulative usage or fabricated `<subagent_tokens>`. On ROTATE return a checkpoint and re-dispatch a fresh agent. One wave ≤4–5 independent Issues, ≤2 dispatch layers, returns ≤30 lines. Missing telemetry is advisory. Model routing, measured tiers and checkpoint contract: `apps/docs/content/agent-discipline.md` → Dispatch, models and context.
+- **Proportionate execution.** Follow portable discipline’s outcome, reuse, minimum-solution, risk and stop principles: design to the stated requirement, start a new environment or operation from the running production mechanism, and add a component when a named requirement needs it. Implement bounded work inline when handoffs cost more than they help; delegate independent or context-heavy work when useful. Required independent review remains separate from authorship.
+- **Subagent context budget.** Use observed effective input/window and the active adapter tiers, not cumulative usage or fabricated `<subagent_tokens>`. On ROTATE return a checkpoint and re-dispatch a fresh agent. One wave ≤4–5 independent Issues, ≤2 dispatch layers, returns ≤30 lines. Model routing, measured tiers and checkpoint contract: `apps/docs/content/agent-discipline.md` → Dispatch, models and context.
 - **No workarounds, no patches, no temporary hacks.** Fix the responsible mechanism; never mask failures with manual data, stand-ins, bypasses or weakened checks. Solve the requested task fully and reliably; one-off actions need no new subsystem or automation. A blocker must prevent acceptance or leave a concrete material risk; a WARN or adjacent improvement is not automatically one. Resolve genuine prerequisites before dependent work; track separately with `blocked_by` only when they need separate delivery. Reversible diagnosis may precede the fix; final verification uses real behavior on committed code.
 - **Live-infra destructive actions — pre-flight, don't thrash.** On live paid infra, before ANY irreversible/destructive provider call (reinstall/replace/delete/network change/write-`action` API): (1) confirm action + params in provider docs/schema first — firing an unknown action to read the error is banned; (2) exclude the prior hypothesis with read-only evidence before the next state-change — a reboot/reinstall/recreate is not a free probe; (3) blast radius = the failing resource only — a "fix" that also mutates a working box is a stop-and-confirm signal; (4) anything irreversible needs an explicit owner "go" — a rhetorical owner question is not consent; an owner/vendor recommendation is binding and deviation needs sign-off.
 - **UI from the design system — adopt before bespoke.** All UI from `@ds/design-system`: tokens-only styling (arbitrary Tailwind values lint-blocked, §5), interactive elements and their states from its primitives, never hand-assembled. Anything bespoke runs the `build-ui-from-design-system` gate first (inventory → approved whitelist → report; bespoke = recorded last resort); canvas-derived UI is vendored into `design-source/` and built from those files, never from issue prose. Licensing, whitelist, canvas + parity procedure: ADR-0013 + the skill.
@@ -127,8 +125,7 @@ CI lint guards surface as PR Checks. Authoritative list + severity: `.github/wor
 - **Trackers.** Code-level → GitHub Issues here; strategic/cross-team → Plane `doctor-school`. Never both.
 - **Plane lifecycle.** `In Progress` + start comment before work; on completion `Done` + result comment (artifacts, what was done, open questions, what is unblocked); incomplete → a "where we stopped / what remains" comment, never silent.
 - **Roles, not names** in any spec / ADR / design doc.
-- **Direct push to `main` is forbidden.** Land via the single §4 merge command.
-- **Worktree-per-session when parallel.** Isolate as the first code/doc action, including analysis reads: `pnpm task:worktree <N>` → explicit `.claude/worktrees/<N>` cwd → `pnpm install` before first commit. Never branch in the shared main tree. A lead delegating ALL edits to isolated workers may stay read-only in main; isolate before its first write. Merge/teardown: `merge-when-green`.
+- **Worktree-per-session when parallel.** Every branch lives in its own worktree (`pnpm task:worktree <N>`; `pnpm install` before its first commit); the main tree stays on `main` and takes changes only through the §4 merge command. Workers isolate themselves as their first code/doc action, reads included; the lead keeps its own cwd in the main tree all session and authors inside `.claude/worktrees/<N>` through absolute paths and `git -C`. Why, closeout and teardown: repo-conventions → Closeout, `merge-when-green`.
 - **Project skill catalog.** Only `apps/docs/content/skills/` (§3.3 — the path is the contract).
 - **Discipline gates.** Record applicable checklist evidence (inline or dispatched per its skill); preserve independent review where required by `request-mode-a-review` §Scope. Required verdicts and green CI cannot be bypassed (ADR-0007 §2.4).
 - **Decision-debt.** Silent deviation from documented convention MUST surface via `surface-decision-debt` before the summary/result comment; route by the significance threshold — Issue (one `source:*` label) or `DEBT.md` line.

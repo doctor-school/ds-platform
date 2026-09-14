@@ -14,7 +14,7 @@ import {
  * coverage gate for dispatch briefs. Only the pure half (AC extraction, path
  * tokenization, coverage) is tested directly; the `gh` side goes through an
  * injectable runner, so nothing here shells out (same harness pattern as
- * handoff-verify.spec.ts — imports the pure exports, never fires `main()`).
+ * dispatch-probe.spec.ts — imports the pure exports, never fires `main()`).
  */
 
 /** Fake gh runner: returns a canned Issue body as `gh issue view --json body`. */

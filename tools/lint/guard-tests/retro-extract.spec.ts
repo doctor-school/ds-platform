@@ -497,16 +497,15 @@ describe("retro extract — CORRECTION_RE hedged/question-form recall (#829)", (
 });
 
 // ── isHandoff FIRST ACTION-opener recall (#889) ─────────────────────────────
-// This repo's canonical handoff (run-wrap stage-5 override) opens with the
-// literal `FIRST ACTION: pipe this verbatim block through `pnpm handoff:verify``
-// and carries the structural markers `Do next (wave …)` and/or `Next task:` —
+// Handoffs carry the structural markers `Do next (wave …)` and/or `Next task:`,
+// and sessions logged before #2204 open on a `FIRST ACTION:` directive line —
 // none of which the original detector (`You are continuing` / `# Agent
 // bootstrap` / `Current task`) recognized, so a pasted handoff was miscounted as
 // an owner correction (its body trips CORRECTION_RE tokens). A handoff is never
 // a correction (run-session-retro §3): widening isHandoff is the fix point.
 describe("retro extract — isHandoff FIRST ACTION-opener recall (#889)", () => {
   const handoff = [
-    "FIRST ACTION: pipe this verbatim block through `pnpm handoff:verify`",
+    "FIRST ACTION: read AGENTS.md before any tracker/git action.",
     "",
     "You are resuming work on the retro tooling.",
     "Do next (wave 3): widen the isHandoff detector, then open the PR.",

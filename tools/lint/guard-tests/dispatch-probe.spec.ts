@@ -16,8 +16,8 @@ import {
  * liveness checkpoint. Only the pure half (verdict classification, age
  * formatting, porcelain parsing, evidence gathering) is tested; the `git` side
  * and fs.stat go through injectable seams, so nothing here shells out (same
- * harness pattern as handoff-verify.spec.ts — imports the pure exports, never
- * fires `main()`).
+ * harness pattern as dispatch-brief-check.spec.ts — imports the pure exports,
+ * never fires `main()`).
  */
 
 /** Fake git runner: canned {status,stdout} per stringified argv. */

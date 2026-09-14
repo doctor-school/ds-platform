@@ -266,6 +266,82 @@ export default [
     },
   },
   {
+    // #2180 — "hosts never style primitives", the system-wide design-element
+    // contract (ADR-0013 §6 Enforcement; tech spec
+    // `2026-09-07-one-code-two-storefronts-plan-en.md` §3/§5). Geometry,
+    // typography, colour and borders live in the `@ds/design-system` primitive;
+    // a host or a shared block passes `variant` / `size` / `tone` and positional
+    // utilities only, so one token change reaches BOTH storefronts by
+    // construction. Severity ERROR = BLOCK (AGENTS.md §5): a silent per-surface
+    // fork is exactly the class #2180 found in the two headers, and it is
+    // invisible in review.
+    //
+    // SCOPE: the storefront hosts plus the shared chrome packages that carry UI
+    // which used to live in a host (`storefront-shell`, `events-storefront`,
+    // `room`). NOT `packages/design-system/**` — a primitive legitimately styles
+    // itself — and not `apps/showcase` (its job is to demonstrate primitives,
+    // including deliberate overrides) nor test / e2e sources.
+    files: [
+      "apps/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+      "packages/storefront-shell/src/**/*.{ts,tsx}",
+      "packages/events-storefront/src/**/*.{ts,tsx}",
+      "packages/room/src/**/*.{ts,tsx}",
+    ],
+    //
+    // LEGACY BASELINE (decision-debt, DEBT.md 2026-09-14). The rule lands with
+    // 170 pre-existing hits across the 27 files enumerated below. Every one of
+    // them is a real per-surface fork, but retiring it means ADDING a
+    // canvas-backed `variant` / `size` / `tone` to the primitive — a product
+    // decision the owner makes on a canvas, never a lint-driven guess (AGENTS.md
+    // §6 "UI is approved, then driven by the agent, then re-confirmed live"), and
+    // changing any of these looks here would mutate the live Stage-B surface of
+    // PR #2198 mid-review. So the severity stays ERROR and the exception set is
+    // ENUMERATED AT FILE GRANULARITY rather than softened to a warning: every new
+    // file and every clean file is blocked from today, and this list only ever
+    // shrinks. Deleting an entry is the definition of done for that surface.
+    ignores: [
+      "apps/showcase/**",
+      "**/*.test.{ts,tsx}",
+      "**/*.spec.{ts,tsx}",
+      "**/__tests__/**",
+      "**/e2e/**",
+      "apps/academy-demo/app/academy-home-view.tsx",
+      "apps/admin/app/events/[[]id[]]/page.tsx",
+      "apps/admin/app/mfa/challenge/page.tsx",
+      "apps/admin/app/mfa/enroll/page.tsx",
+      "apps/admin/components/back-to-list.tsx",
+      "apps/admin/components/fields.tsx",
+      "apps/doctor/app/(storefront)/events/month-pane.tsx",
+      "apps/doctor/app/(storefront)/events/page.tsx",
+      "apps/doctor/components/account-screen.tsx",
+      "apps/doctor/components/specialty-catalog-view.tsx",
+      "apps/portal/app/academy-home-view.tsx",
+      "apps/portal/app/account/events/page.tsx",
+      "apps/portal/app/account/page.tsx",
+      "apps/portal/app/documents/page.tsx",
+      "apps/portal/app/webinars/[[]slug[]]/recording-gate.tsx",
+      "apps/portal/components/calendar-shell.tsx",
+      "apps/portal/components/discovery-listing.tsx",
+      "apps/portal/components/month-calendar-view.tsx",
+      "apps/portal/components/view-switcher.tsx",
+      "packages/room/src/ui/display-name-prompt.tsx",
+      "packages/room/src/ui/room-chat.tsx",
+      "packages/room/src/ui/room-header-bar.tsx",
+      "packages/room/src/ui/room-view.tsx",
+      "packages/storefront-shell/src/shell-search.tsx",
+      "packages/storefront-shell/src/storefront-footer.tsx",
+      "packages/storefront-shell/src/storefront-header.tsx",
+      "packages/storefront-shell/src/theme-toggle.tsx",
+    ],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { local: localRules },
+    rules: {
+      "local/no-primitive-style-override": "error",
+    },
+  },
+  {
     // The host-config FILE CONVENTION (the type is #2027). Same WARN posture.
     files: [
       "apps/portal/**/host-config.{ts,tsx}",

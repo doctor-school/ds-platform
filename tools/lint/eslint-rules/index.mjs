@@ -13,6 +13,7 @@ import authCatchUsesErrorMapper from "./auth-catch-uses-error-mapper.mjs";
 import glossaryCanonicalIds from "./glossary-canonical-ids.mjs";
 import packageImportBoundary from "./package-import-boundary.mjs";
 import hostConfigBoundary from "./host-config-boundary.mjs";
+import noPrimitiveStyleOverride from "./no-primitive-style-override.mjs";
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
@@ -32,6 +33,10 @@ const plugin = {
     // the package dependency graph and host-config purity.
     "package-import-boundary": packageImportBoundary,
     "host-config-boundary": hostConfigBoundary,
+    // #2180 — the system-wide "hosts never style primitives" contract
+    // (ADR-0013 §6): geometry/typography/colour/borders live in the DS
+    // primitive, hosts pass variant/size/tone. BLOCK severity.
+    "no-primitive-style-override": noPrimitiveStyleOverride,
   },
 };
 

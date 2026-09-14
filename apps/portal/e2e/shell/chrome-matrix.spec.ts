@@ -56,6 +56,18 @@ async function expectChromePresent(page: Page, where: string): Promise<void> {
   await expect(page.getByTestId("theme-toggle")).toHaveCount(1);
 }
 
+/**
+ * The first event-page href in the listing currently on screen, or `null` when
+ * this tab carries none. The discovery cards are server-rendered, so the load
+ * state is awaited first: an immediate count after `domcontentloaded` would race
+ * the first paint and report a populated tab as empty.
+ */
+async function firstEventHref(page: Page): Promise<string | null> {
+  await page.waitForLoadState("load");
+  const links = page.locator('main a[href^="/webinars/"]');
+  return (await links.count()) > 0 ? links.first().getAttribute("href") : null;
+}
+
 async function expectChromeAbsent(page: Page, where: string): Promise<void> {
   await expect(
     page.getByTestId("storefront-header"),
@@ -108,11 +120,22 @@ test.describe("008 EARS-12 academy chrome route-visibility matrix (e2e)", () => 
     ).toHaveAttribute("href", DISCOVERY_HREF);
 
     // An EVENT page — one segment under the starred room pattern's parent.
-    const slugHref = await page
-      .locator('main a[href^="/webinars/"]')
-      .first()
-      .getAttribute("href");
-    expect(slugHref, "the listing offers at least one event page").toBeTruthy();
+    // `packages/db/src/seed/golden/now.ts` freezes `GOLDEN_NOW_DEFAULT`, so a
+    // golden-seeded stand holds only PAST events: the default «Расписание» tab
+    // is legitimately empty there and the event pages live under «Архив
+    // записей». Take the schedule when it offers one, else the archive —
+    // only BOTH being empty means the listing ships no event page at all.
+    let slugHref = await firstEventHref(page);
+    if (!slugHref) {
+      await page.goto(`${DISCOVERY_HREF}?tab=past`, {
+        waitUntil: "domcontentloaded",
+      });
+      slugHref = await firstEventHref(page);
+    }
+    expect(
+      slugHref,
+      "neither the schedule nor the archive offers an event page",
+    ).toBeTruthy();
     await page.goto(slugHref!, { waitUntil: "domcontentloaded" });
     expect(new URL(page.url()).pathname).toBe(slugHref);
     await expectChromePresent(page, slugHref!);
@@ -185,6 +208,12 @@ test.describe("008 EARS-12 academy chrome route-visibility matrix (e2e)", () => 
   }) => {
     await context.clearCookies();
     await page.goto(DISCOVERY_HREF, { waitUntil: "domcontentloaded" });
+    // …and then wait for the stream to finish in THIS test only: the toggle is
+    // server-rendered, and a click fired before React attaches its handler is
+    // simply lost (no `.dark`, `aria-pressed` stuck at `false`). Every other
+    // test here reads the DOM rather than driving it, so they keep the cheaper
+    // `domcontentloaded`. Looping the click is not the fix — each click toggles.
+    await page.waitForLoadState("networkidle");
 
     // The portal's dark theme is CLASS-based (`.dark` on `<html>`), so a browser
     // `colorScheme` option is a no-op here — the toggle is the only real driver.
@@ -309,6 +338,13 @@ type ChromeGeometry = {
   menuHeight: number | null;
   /** Signed distance between the topbar text's centre and its band's centre. */
   topbarCentreDelta: number | null;
+  /** How many `shell-search` elements this host renders — the canvas gives the
+   *  doctor one and the academy none, so this is a CONFIG difference, not drift. */
+  searchCount: number;
+  /** The search form's own box, when this host renders one. */
+  searchHeight: number | null;
+  /** The header's computed `row-gap` — what a re-flowed row costs in height. */
+  headerRowGap: number | null;
 };
 
 async function measureChrome(page: Page, url: string): Promise<ChromeGeometry> {
@@ -345,7 +381,24 @@ async function measureChrome(page: Page, url: string): Promise<ChromeGeometry> {
       ? spanBox.y + spanBox.height / 2 - (bandBox.y + bandBox.height / 2)
       : null;
 
-  return { heights, menuHeight, topbarCentreDelta };
+  const search = page.getByTestId("shell-search");
+  const searchCount = await search.count();
+  const searchHeight =
+    searchCount > 0 && (await search.first().isVisible())
+      ? ((await search.first().boundingBox())?.height ?? null)
+      : null;
+  const headerRowGap = await page
+    .getByTestId("storefront-header")
+    .evaluate((el) => Number.parseFloat(getComputedStyle(el).rowGap));
+
+  return {
+    heights,
+    menuHeight,
+    topbarCentreDelta,
+    searchCount,
+    searchHeight,
+    headerRowGap,
+  };
 }
 
 test.describe("017 EARS-1 the two storefronts render one chrome geometry (e2e)", () => {
@@ -355,8 +408,11 @@ test.describe("017 EARS-1 the two storefronts render one chrome geometry (e2e)",
   );
 
   for (const viewport of [
-    { width: 1440, height: 900 },
-    { width: 375, height: 800 },
+    // `mobileSearchRow` = the width at which the doctor's search re-flows onto
+    // its own row, which is the ONE height the two hosts are allowed to differ
+    // by. See the header assertion below.
+    { width: 1440, height: 900, mobileSearchRow: false },
+    { width: 375, height: 800, mobileSearchRow: true },
   ]) {
     test(`017 EARS-1.9: every shared chrome landmark has the same height on both storefronts at ${viewport.width}px`, async ({
       page,
@@ -373,13 +429,39 @@ test.describe("017 EARS-1 the two storefronts render one chrome geometry (e2e)",
 
       for (const testId of SHARED_LANDMARKS) {
         expect(
-          doctor.heights[testId],
-          `${testId} height matches the academy at ${viewport.width}px`,
-        ).toBe(academy.heights[testId]);
-        expect(
           academy.heights[testId],
           `${testId} is rendered on both storefronts at ${viewport.width}px`,
         ).not.toBeNull();
+        // The header is the one landmark the CANVAS lets differ below `layout`:
+        // `design-source/ds-shell.dc.html` gives the doctor host `search: true`
+        // (l.188) and the academy `search: false` (l.202), and `mobileSearch:
+        // h.search && m` (l.256) renders that search as its OWN row on mobile
+        // (l.60–62). The difference is asserted exactly, just below.
+        if (testId === "storefront-header" && viewport.mobileSearchRow)
+          continue;
+        expect(
+          doctor.heights[testId],
+          `${testId} height matches the academy at ${viewport.width}px`,
+        ).toBe(academy.heights[testId]);
+      }
+
+      if (viewport.mobileSearchRow) {
+        expect(
+          academy.searchCount,
+          "the academy renders no header search (canvas `search: false`)",
+        ).toBe(0);
+        expect(
+          doctor.searchHeight,
+          "the doctor's mobile search row is measurable",
+        ).not.toBeNull();
+        expect(
+          doctor.heights["storefront-header"],
+          "the header differs only by the mobile search row the canvas gives the doctor host",
+        ).toBe(
+          academy.heights["storefront-header"]! +
+            doctor.searchHeight! +
+            doctor.headerRowGap!,
+        );
       }
 
       expect(

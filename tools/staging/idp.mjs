@@ -57,8 +57,8 @@ export const DEFAULT_APP_NAME = "ds-platform-dev";
  * The golden fixture catalogue, mirroring `packages/db/src/seed/golden/idp.ts`.
  *
  * That TypeScript module is the SSOT of the contract; this file cannot import it,
- * because `tools/staging/*.mjs` is installed to `/opt/ds-platform` as plain ESM with
- * zero workspace dependencies — `packages/db` is not on the box. `idp.test.mjs`
+ * because `tools/staging/*.mjs` runs as plain ESM with zero workspace dependencies
+ * (`node tools/staging/idp.mjs`, no build step) — `packages/db` is not importable here. `idp.test.mjs`
  * therefore reads the TypeScript source and fails on any drift between the two, so
  * the mirror can never quietly diverge from the seed contract it serves.
  */

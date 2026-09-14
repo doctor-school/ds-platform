@@ -3,7 +3,8 @@
 # `stg-infra` service set (Postgres 17 + pgvector, Redis, Zitadel + login, Cerbos,
 # MinIO, Mailpit, sms-sink, sms-aero-adapter, Caddy) plus every live preview slot
 # (`main` + `pr-*`), each slot running the whole `api-prod` service set from images
-# pulled from GHCR — nothing is built on the box, and no CI agent runs here.
+# the box builds itself out of a tree the operator ships over SSH (the production
+# deploy shape) — no registry, no CI agent and no unit of ours runs here.
 #
 # Resource shapes are the ones already verified against timeweb-cloud/timeweb-cloud
 # provider schema v1.7.1 for the production plane (see network.tf's header): a server

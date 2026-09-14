@@ -450,8 +450,7 @@ raising the cap would be a one-constant change (`REDIS_DB_MAX` in `tools/staging
 if the box ever grows past three previews.
 
 **Building images.** The box builds, exactly as api-prod does. `pnpm stage:slot up|sync`
-ships the tree and runs the build there; no registry is involved and
-`.github/workflows/preview.yml` no longer pushes anything. The SmartCaptcha SITE key is
+ships the tree and runs the build there; no registry and no workflow is involved. The SmartCaptcha SITE key is
 baked at build time from the box env's `STAGE_SMARTCAPTCHA_SITE_KEY` (empty until the
 owner provisions it with the separate stage-captcha task — empty renders the inactive
 placeholder, and a slot built before it was set must be re-converged).
@@ -476,8 +475,8 @@ What is in reach here: the box env (`/etc/ds-platform/stage.env`, the sinks and 
 keys) and the box's Docker daemon. What can put code inside that reach: only a commit an
 operator names with `--ref`, shipped from a worktree they control — a fork PR reaches the
 box only if an operator deliberately converges it. What is out of reach: production
-Postgres and Redis (no route — separate VPC) and every repository secret, which never
-leaves the hosted runners. The box holds **no GitHub credential at all**: with the
+Postgres and Redis (no route — separate VPC) and every repository secret — nothing of
+this stand runs in GitHub Actions, so none is ever needed. The box holds **no GitHub credential at all**: with the
 registry gone there is nothing for it to authenticate to, so `STAGE_GH_READ_TOKEN` is no
 longer a variable of this stand — an owner who minted one should revoke it and delete the
 line from `/etc/ds-platform/stage.env`.

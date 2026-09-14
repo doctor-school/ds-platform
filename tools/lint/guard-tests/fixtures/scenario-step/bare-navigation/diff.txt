@@ -1,0 +1,1 @@
+M	apps/portal/e2e/features/shell-journey.feature

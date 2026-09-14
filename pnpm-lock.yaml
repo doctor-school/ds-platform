@@ -404,6 +404,9 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.13.0
         version: 4.13.0(playwright-core@1.63.0)
+      '@ds/e2e':
+        specifier: workspace:*
+        version: link:../../packages/e2e
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
@@ -491,6 +494,9 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.13.0
         version: 4.13.0(playwright-core@1.63.0)
+      '@ds/e2e':
+        specifier: workspace:*
+        version: link:../../packages/e2e
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
@@ -726,6 +732,10 @@ importers:
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/e2e:
+    dependencies:
+      '@ds/db':
+        specifier: workspace:*
+        version: link:../db
     devDependencies:
       '@playwright/test':
         specifier: ^1.62.1

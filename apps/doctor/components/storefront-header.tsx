@@ -3,6 +3,7 @@ import NextLink from "next/link";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { doctorNav } from "@/lib/navigation-model";
 import type { ShellAuth } from "@/lib/shell-auth";
 
 /**
@@ -24,6 +25,12 @@ import type { ShellAuth } from "@/lib/shell-auth";
  * Styling is tokens-only; the navy header surface is `bg-header` /
  * `text-header-foreground` (the theme-invariant brand roles), and both CTAs are
  * the DS `on-primary` button variant — the white chip designed for that surface.
+ *
+ * Its destinations and their labels come from the DOCTOR NAVIGATION MODEL
+ * (`@/lib/navigation-model`, staging/regression-contour tech spec §6.3), not from
+ * inline `href` strings: the derived navigation walk reads the same array, so the
+ * links this bar paints and the links the regression suite visits are one list by
+ * construction and cannot drift apart.
  */
 export function StorefrontHeader({ auth }: { auth: ShellAuth }) {
   return (
@@ -40,10 +47,10 @@ export function StorefrontHeader({ auth }: { auth: ShellAuth }) {
         static assets copy, code never crosses).
       */}
       <Link asChild className="flex flex-none">
-        <NextLink href="/" data-testid="storefront-logo">
+        <NextLink href={doctorNav.home.href} data-testid="storefront-logo">
           <Image
             src="/brand/logo-white.svg"
-            alt="Doctor.School — на главную"
+            alt={doctorNav.home.label}
             width={500}
             height={164}
             priority
@@ -78,10 +85,14 @@ export function StorefrontHeader({ auth }: { auth: ShellAuth }) {
             className="flex items-center gap-3"
           >
             <Link asChild tone="on-primary" className="whitespace-nowrap">
-              <NextLink href="/login">Войти</NextLink>
+              <NextLink href={doctorNav.login.href}>
+                {doctorNav.login.label}
+              </NextLink>
             </Link>
             <Button asChild variant="on-primary" className="whitespace-nowrap">
-              <NextLink href="/register">Регистрация</NextLink>
+              <NextLink href={doctorNav.register.href}>
+                {doctorNav.register.label}
+              </NextLink>
             </Button>
           </div>
         ) : (
@@ -102,7 +113,9 @@ export function StorefrontHeader({ auth }: { auth: ShellAuth }) {
               silently wrong on screen.
             */}
             <Button asChild variant="on-primary" className="whitespace-nowrap">
-              <NextLink href="/account">Личный кабинет</NextLink>
+              <NextLink href={doctorNav.account.href}>
+                {doctorNav.account.label}
+              </NextLink>
             </Button>
           </div>
         )}

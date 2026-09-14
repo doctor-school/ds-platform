@@ -11,6 +11,7 @@ import { HEADER_CHIP_BASE } from "@ds/design-system";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HeaderUserCluster } from "@/components/header-user-cluster";
 import { useHeaderAuth } from "@/lib/header-auth";
+import { portalNav, portalTopNav } from "@/lib/navigation-model";
 
 /**
  * 008 EARS-1…6 / EARS-11 / EARS-13 — the persistent portal app-shell header,
@@ -82,18 +83,33 @@ const AUTH_ROUTES = new Set(["/login", "/register", "/verify", "/reset"]);
 /** The webinar room owns its `room-header` chrome — no app-shell header. */
 const ROOM_ROUTE = /^\/webinars\/[^/]+\/room$/;
 
-/** The `/account` profile (feature 009) — the avatar affordance's one destination. */
-const PROFILE_HREF = "/account";
-/** The discovery front-door (EARS-2) — logo & «Эфиры». Points straight at the
- *  canonical `/webinars` listing (owner verdict #7 follow-up, 2026-07-17): `/`
- *  permanent-redirects there, so targeting it directly avoids a redirect hop.
- *  `usePathname()` drops the query, so `isActive` highlights «Эфиры» on both
- *  `/webinars` and `/webinars?view=month` (the same pathname). */
-const DISCOVERY_HREF = "/webinars";
-/** «Мои события» (feature 005, EARS-2). */
-const MY_EVENTS_HREF = "/account/events";
-/** The login surface (EARS-4). */
-const LOGIN_HREF = "/login";
+/**
+ * The shell's destinations come from the ACADEMY NAVIGATION MODEL
+ * (`@/lib/navigation-model`, staging/regression-contour tech spec §6.3), not from
+ * inline `href` constants: the derived navigation walk reads that same array, so
+ * a link this bar paints and a link the regression suite visits are one list by
+ * construction. `label` is the `shell` message key, resolved here — the rendered
+ * copy is unchanged.
+ *
+ *   • `portalTopNav` — [Эфиры · Мои события], the desktop strip and the mobile
+ *     `≡` dropdown both map over it (EARS-2 / EARS-11).
+ *   • `portalNav.profile` — the avatar affordance's one destination (EARS-5/6).
+ *   • `portalNav.login` — the guest «Войти» chip (EARS-4).
+ *
+ * «Школы» is intentionally absent (EARS-10 _Retired_, owner 2026-07-15) — the v1
+ * nav is exactly the model's top-nav strip, every target a shipped surface.
+ */
+
+/** Per-slot `data-testid`s. Test ids are the HEADER's business, not the model's:
+ *  the model is the shared cross-host contract, these are this bar's selectors. */
+const DESKTOP_NAV_TESTIDS: Record<string, string> = {
+  discovery: "shell-nav-broadcasts",
+  "my-events": "shell-nav-my-events",
+};
+const MOBILE_NAV_TESTIDS: Record<string, string> = {
+  discovery: "shell-mobile-broadcasts",
+  "my-events": "shell-mobile-my-events",
+};
 
 /** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only, on
  *  the shared {@link HEADER_CHIP_BASE} so the dark-safe `shadow-header-chip` cast
@@ -122,7 +138,7 @@ export function AppShellHeader() {
           the same asset the AuthShell panel uses). No press-colour override
           needed: the link paints only an <img>, text colour is a no-op (#1007). */}
       <DsLink asChild className="flex flex-none hover:no-underline">
-        <Link href={DISCOVERY_HREF} data-testid="shell-logo">
+        <Link href={portalNav.discovery.href} data-testid="shell-logo">
           <Image
             src="/brand/logo-white.svg"
             alt={t("logoAlt")}
@@ -140,20 +156,16 @@ export function AppShellHeader() {
         className="hidden items-center gap-7 text-sm layout:flex"
         data-testid="shell-nav-desktop"
       >
-        <NavLink
-          href={DISCOVERY_HREF}
-          active={isActive(DISCOVERY_HREF)}
-          testId="shell-nav-broadcasts"
-        >
-          {t("navBroadcasts")}
-        </NavLink>
-        <NavLink
-          href={MY_EVENTS_HREF}
-          active={isActive(MY_EVENTS_HREF)}
-          testId="shell-nav-my-events"
-        >
-          {t("navMyEvents")}
-        </NavLink>
+        {portalTopNav.map((item) => (
+          <NavLink
+            key={item.id}
+            href={item.href}
+            active={isActive(item.href)}
+            testId={DESKTOP_NAV_TESTIDS[item.id]!}
+          >
+            {t(item.label)}
+          </NavLink>
+        ))}
         {/* Theme toggle + account affordance — reserve the box while the session
             read resolves (no first-paint flash / layout shift), then branch
             (EARS-4/5). A logged-in doctor's toggle + profile chip are the shared
@@ -170,8 +182,8 @@ export function AppShellHeader() {
           <>
             <ThemeToggle label={t("themeToggle")} />
             <DsLink asChild className={LOGIN_CHIP}>
-              <Link href={LOGIN_HREF} data-testid="shell-login">
-                {t("login")}
+              <Link href={portalNav.login.href} data-testid="shell-login">
+                {t(portalNav.login.label)}
               </Link>
             </DsLink>
           </>
@@ -179,9 +191,9 @@ export function AppShellHeader() {
           <HeaderUserCluster
             className="gap-7"
             themeToggleLabel={t("themeToggle")}
-            profileLabel={t("profile")}
+            profileLabel={t(portalNav.profile.label)}
             initials={auth.initials}
-            profileHref={PROFILE_HREF}
+            profileHref={portalNav.profile.href}
             profileTestId="shell-avatar"
           />
         )}
@@ -197,9 +209,9 @@ export function AppShellHeader() {
           <HeaderUserCluster
             className="gap-3"
             themeToggleLabel={t("themeToggle")}
-            profileLabel={t("profile")}
+            profileLabel={t(portalNav.profile.label)}
             initials={auth.initials}
-            profileHref={PROFILE_HREF}
+            profileHref={portalNav.profile.href}
             profileTestId="shell-mobile-avatar"
           />
         ) : (
@@ -215,20 +227,16 @@ export function AppShellHeader() {
             <span aria-hidden="true">≡</span>
           </summary>
           <nav className="absolute right-0 top-full z-20 mt-2 flex min-w-52 flex-col border-2 border-border bg-card p-2 text-card-foreground shadow-btn">
-            <MobileNavLink
-              href={DISCOVERY_HREF}
-              active={isActive(DISCOVERY_HREF)}
-              testId="shell-mobile-broadcasts"
-            >
-              {t("navBroadcasts")}
-            </MobileNavLink>
-            <MobileNavLink
-              href={MY_EVENTS_HREF}
-              active={isActive(MY_EVENTS_HREF)}
-              testId="shell-mobile-my-events"
-            >
-              {t("navMyEvents")}
-            </MobileNavLink>
+            {portalTopNav.map((item) => (
+              <MobileNavLink
+                key={item.id}
+                href={item.href}
+                active={isActive(item.href)}
+                testId={MOBILE_NAV_TESTIDS[item.id]!}
+              >
+                {t(item.label)}
+              </MobileNavLink>
+            ))}
             {auth.status === "guest" ? (
               /* Blue chip on the card: rest 100 → hover 90 → press 80 — one
                  visible element-opacity step per state (owner rule, Stage-B
@@ -238,8 +246,8 @@ export function AppShellHeader() {
                 asChild
                 className="mt-1.5 bg-header px-4 py-3 text-center text-sm font-extrabold text-header-foreground hover:no-underline hover:opacity-90 active:text-header-foreground active:opacity-80"
               >
-                <Link href={LOGIN_HREF} data-testid="shell-mobile-login">
-                  {t("login")}
+                <Link href={portalNav.login.href} data-testid="shell-mobile-login">
+                  {t(portalNav.login.label)}
                 </Link>
               </DsLink>
             ) : null}

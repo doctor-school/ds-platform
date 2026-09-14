@@ -1,0 +1,27 @@
+{
+  "name": "@ds/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform end-to-end regression contract (C6) — shared Gherkin step definitions, the two derived walks, and the host navigation-model contract both storefronts render from (tech spec 2026-09-08-staging-previews-and-regression-contour-en.md §6).",
+  "exports": {
+    ".": "./index.ts",
+    "./navigation-model": "./navigation-model.ts",
+    "./route-params": "./route-params.ts",
+    "./hosts": "./hosts.ts"
+  },
+  "scripts": {
+    "bddgen": "bddgen",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "bddgen && playwright test",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
+    "playwright-bdd": "^9.2.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

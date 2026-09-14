@@ -60,7 +60,7 @@ Thin host projections are intentional: Academy and Doctor have different targeti
 
 ## Host-file allowlist
 
-This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have. Rows are grouped by directory and sorted by path; 99 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
+This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have. Rows are grouped by directory and sorted by path; 101 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
 
 ### `apps/doctor/app`
 
@@ -100,33 +100,34 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 ### `apps/doctor/lib`
 
-| path                                        | reason                                                              | until          |
-| ------------------------------------------- | ------------------------------------------------------------------- | -------------- |
-| `apps/doctor/lib/academy.ts`                | wave 4 twin — deleted by #2073 (wave 4)                             | wave 4 (#2073) |
-| `apps/doctor/lib/auth-client.ts`            | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/auth-error-message.ts`     | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/bot-protection.ts`         | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/contacts.ts`               | host brand/config                                                   | permanent      |
-| `apps/doctor/lib/event-page.ts`             | wave 3 twin — deleted by #2072 (wave 3)                             | wave 3 (#2072) |
-| `apps/doctor/lib/events-feed-cards.ts`      | wave 2 twin — deleted by #2028                                      | wave 2         |
-| `apps/doctor/lib/events-feed.ts`            | wave 2 twin — deleted by #2028                                      | wave 2         |
-| `apps/doctor/lib/events-live.ts`            | wave 2 twin — deleted by #2028                                      | wave 2         |
-| `apps/doctor/lib/events-month-grid.ts`      | wave 2 twin — deleted by #2028                                      | wave 2         |
-| `apps/doctor/lib/events-month.ts`           | wave 2 twin — deleted by #2028                                      | wave 2         |
-| `apps/doctor/lib/make-resolver.ts`          | host-only (single-locale RHF resolver; Academy twin is next-intl)   | permanent      |
-| `apps/doctor/lib/register-fields.ts`        | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/registration-landing.ts`   | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/registration-success.ts`   | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/return-completion.ts`      | wave 1 twin — deleted by #2027 (host projection of the return rule) | wave 1         |
-| `apps/doctor/lib/return-context.ts`         | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/room.ts`                   | wave 4 twin — deleted by #2073 (wave 4)                             | wave 4 (#2073) |
-| `apps/doctor/lib/session.ts`                | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/shell-auth.ts`             | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/specialties.ts`            | host-only surface (specialty catalog)                               | permanent      |
-| `apps/doctor/lib/specialty-choice.ts`       | host-only surface (specialty catalog)                               | permanent      |
-| `apps/doctor/lib/statistics.ts`             | host-only surface (doctor home statistics)                          | permanent      |
-| `apps/doctor/lib/storefront-auth-client.ts` | wave 1 twin — deleted by #2027                                      | wave 1         |
-| `apps/doctor/lib/theme.ts`                  | wave 1 twin — deleted by #2027                                      | wave 1         |
+| path                                        | reason                                                                           | until          |
+| ------------------------------------------- | -------------------------------------------------------------------------------- | -------------- |
+| `apps/doctor/lib/academy.ts`                | wave 4 twin — deleted by #2073 (wave 4)                                          | wave 4 (#2073) |
+| `apps/doctor/lib/auth-client.ts`            | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/auth-error-message.ts`     | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/bot-protection.ts`         | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/contacts.ts`               | host brand/config                                                                | permanent      |
+| `apps/doctor/lib/event-page.ts`             | wave 3 twin — deleted by #2072 (wave 3)                                          | wave 3 (#2072) |
+| `apps/doctor/lib/events-feed-cards.ts`      | wave 2 twin — deleted by #2028                                                   | wave 2         |
+| `apps/doctor/lib/events-feed.ts`            | wave 2 twin — deleted by #2028                                                   | wave 2         |
+| `apps/doctor/lib/events-live.ts`            | wave 2 twin — deleted by #2028                                                   | wave 2         |
+| `apps/doctor/lib/events-month-grid.ts`      | wave 2 twin — deleted by #2028                                                   | wave 2         |
+| `apps/doctor/lib/events-month.ts`           | wave 2 twin — deleted by #2028                                                   | wave 2         |
+| `apps/doctor/lib/make-resolver.ts`          | host-only (single-locale RHF resolver; Academy twin is next-intl)                | permanent      |
+| `apps/doctor/lib/navigation-model.ts`       | host-only data for the shared `@ds/e2e/navigation-model` type (§6.3 walk source) | permanent      |
+| `apps/doctor/lib/register-fields.ts`        | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/registration-landing.ts`   | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/registration-success.ts`   | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/return-completion.ts`      | wave 1 twin — deleted by #2027 (host projection of the return rule)              | wave 1         |
+| `apps/doctor/lib/return-context.ts`         | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/room.ts`                   | wave 4 twin — deleted by #2073 (wave 4)                                          | wave 4 (#2073) |
+| `apps/doctor/lib/session.ts`                | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/shell-auth.ts`             | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/specialties.ts`            | host-only surface (specialty catalog)                                            | permanent      |
+| `apps/doctor/lib/specialty-choice.ts`       | host-only surface (specialty catalog)                                            | permanent      |
+| `apps/doctor/lib/statistics.ts`             | host-only surface (doctor home statistics)                                       | permanent      |
+| `apps/doctor/lib/storefront-auth-client.ts` | wave 1 twin — deleted by #2027                                                   | wave 1         |
+| `apps/doctor/lib/theme.ts`                  | wave 1 twin — deleted by #2027                                                   | wave 1         |
 
 ### `apps/portal/app`
 
@@ -166,38 +167,39 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 ### `apps/portal/lib`
 
-| path                                               | reason                                                          | until          |
-| -------------------------------------------------- | --------------------------------------------------------------- | -------------- |
-| `apps/portal/lib/academy-partnership-schema.ts`    | host-only surface (academy partnership form)                    | permanent      |
-| `apps/portal/lib/academy-partnership-store.ts`     | host-only surface (academy partnership form)                    | permanent      |
-| `apps/portal/lib/auth-client.ts`                   | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/auth-error-message.ts`            | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/bot-protection.ts`                | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/consent.ts`                       | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/contacts.ts`                      | host brand/config                                               | permanent      |
-| `apps/portal/lib/display-name-client.ts`           | shared already (consumer shim over `@ds/room`)                  | wave 4 (#2073) |
-| `apps/portal/lib/display-name.ts`                  | wave 4 source (#2073) — moves to `packages/account`             | wave 4 (#2073) |
-| `apps/portal/lib/event-lifecycle.ts`               | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/event-playback.ts`                | wave 3 source (#2072) — moves to `packages/event-page`          | wave 3 (#2072) |
-| `apps/portal/lib/header-auth.ts`                   | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/identifier-validation.ts`         | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/month-grid.ts`                    | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/msk.ts`                           | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/my-events.ts`                     | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/participation-cta.ts`             | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/profile-client.ts`                | wave 4 source (#2073) — moves to `packages/account`             | wave 4 (#2073) |
-| `apps/portal/lib/public-events.ts`                 | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/recording-cta.ts`                 | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/recording-signal.ts`              | wave 2 source — moves to `packages/events-storefront`           | wave 2         |
-| `apps/portal/lib/registration-handoff.ts`          | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/registration-resume.ts`           | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/registration-state.ts`            | wave 3 source (#2072) — moves to `packages/event-page`          | wave 3 (#2072) |
-| `apps/portal/lib/return-to-origin.ts`              | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/room-return.ts`                   | wave 4 source (#2073) — moves to `packages/account` (room half) | wave 4 (#2073) |
-| `apps/portal/lib/theme.ts`                         | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/use-localized-resolver.ts`        | host-only surface (Academy `next-intl` resolver wrapper)        | permanent      |
-| `apps/portal/lib/use-redirect-if-authenticated.ts` | wave 1 source — moves to `packages/auth-flow`                   | wave 1         |
-| `apps/portal/lib/webinars-url.ts`                  | host-only surface (Academy `/webinars` route hrefs)             | permanent      |
+| path                                               | reason                                                                           | until          |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------- |
+| `apps/portal/lib/academy-partnership-schema.ts`    | host-only surface (academy partnership form)                                     | permanent      |
+| `apps/portal/lib/academy-partnership-store.ts`     | host-only surface (academy partnership form)                                     | permanent      |
+| `apps/portal/lib/auth-client.ts`                   | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/auth-error-message.ts`            | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/bot-protection.ts`                | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/consent.ts`                       | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/contacts.ts`                      | host brand/config                                                                | permanent      |
+| `apps/portal/lib/display-name-client.ts`           | shared already (consumer shim over `@ds/room`)                                   | wave 4 (#2073) |
+| `apps/portal/lib/display-name.ts`                  | wave 4 source (#2073) — moves to `packages/account`                              | wave 4 (#2073) |
+| `apps/portal/lib/event-lifecycle.ts`               | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/event-playback.ts`                | wave 3 source (#2072) — moves to `packages/event-page`                           | wave 3 (#2072) |
+| `apps/portal/lib/header-auth.ts`                   | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/identifier-validation.ts`         | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/month-grid.ts`                    | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/navigation-model.ts`              | host-only data for the shared `@ds/e2e/navigation-model` type (§6.3 walk source) | permanent      |
+| `apps/portal/lib/msk.ts`                           | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/my-events.ts`                     | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/participation-cta.ts`             | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/profile-client.ts`                | wave 4 source (#2073) — moves to `packages/account`                              | wave 4 (#2073) |
+| `apps/portal/lib/public-events.ts`                 | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/recording-cta.ts`                 | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/recording-signal.ts`              | wave 2 source — moves to `packages/events-storefront`                            | wave 2         |
+| `apps/portal/lib/registration-handoff.ts`          | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/registration-resume.ts`           | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/registration-state.ts`            | wave 3 source (#2072) — moves to `packages/event-page`                           | wave 3 (#2072) |
+| `apps/portal/lib/return-to-origin.ts`              | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/room-return.ts`                   | wave 4 source (#2073) — moves to `packages/account` (room half)                  | wave 4 (#2073) |
+| `apps/portal/lib/theme.ts`                         | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/use-localized-resolver.ts`        | host-only surface (Academy `next-intl` resolver wrapper)                         | permanent      |
+| `apps/portal/lib/use-redirect-if-authenticated.ts` | wave 1 source — moves to `packages/auth-flow`                                    | wave 1         |
+| `apps/portal/lib/webinars-url.ts`                  | host-only surface (Academy `/webinars` route hrefs)                              | permanent      |
 
 ## Route-file registry
 

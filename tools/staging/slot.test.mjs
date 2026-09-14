@@ -57,6 +57,7 @@ import {
   quoteCommand,
   remoteWriteScript,
   requiredOperatorPassword,
+  assertCaptchaCoherent,
   renderIdpRedirectUris,
   renderSlotDownEnv,
   renderSlotEnv,
@@ -1242,4 +1243,51 @@ test("the health step fails closed without the operator-machine basic-auth passw
   );
   assert.equal(requiredOperatorPassword({ STAGE_BASIC_AUTH_PASS: "s3cret" }), "s3cret");
   assert.equal(basicAuthHeader("stage", "s3cret"), `Basic ${Buffer.from("stage:s3cret").toString("base64")}`);
+});
+
+test("up|sync fail closed on an incoherent box captcha trio (#2207)", () => {
+  // OFF is the coherent default: the api guard passes without a token and the
+  // storefront renders the inactive placeholder — the site key MUST be empty then.
+  assert.deepEqual(assertCaptchaCoherent({}), { enabled: false });
+  assert.deepEqual(
+    assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "false", SMARTCAPTCHA_SITE_KEY: "" }),
+    { enabled: false },
+  );
+  assert.throws(
+    () =>
+      assertCaptchaCoherent({
+        BOT_PROTECTION_ENABLED: "false",
+        SMARTCAPTCHA_SITE_KEY: "CHANGE_ME_ysc1_site",
+      }),
+    (err) => err instanceof SlotError && /SMARTCAPTCHA_SITE_KEY/.test(err.message),
+  );
+  // ON needs BOTH real halves: a placeholder or missing half is exactly the
+  // «every slot login answers 403» state observed on 2026-09-14.
+  assert.deepEqual(
+    assertCaptchaCoherent({
+      BOT_PROTECTION_ENABLED: "true",
+      SMARTCAPTCHA_SERVER_KEY: "ysc2_abcdefghijklmnopqrst0123456789",
+      SMARTCAPTCHA_SITE_KEY: "ysc1_abcdefghijklmnopqrst0123456789",
+    }),
+    { enabled: true },
+  );
+  assert.throws(
+    () =>
+      assertCaptchaCoherent({
+        BOT_PROTECTION_ENABLED: "true",
+        SMARTCAPTCHA_SERVER_KEY: "CHANGE_ME_ysc2_vendor_test_server_key",
+        SMARTCAPTCHA_SITE_KEY: "ysc1_abcdefghijklmnopqrst0123456789",
+      }),
+    (err) => err instanceof SlotError && /SMARTCAPTCHA_SERVER_KEY/.test(err.message) && /403/.test(err.message),
+  );
+  assert.throws(
+    () =>
+      assertCaptchaCoherent({
+        BOT_PROTECTION_ENABLED: "true",
+        SMARTCAPTCHA_SERVER_KEY: "ysc2_abcdefghijklmnopqrst0123456789",
+      }),
+    (err) => err instanceof SlotError && /SMARTCAPTCHA_SITE_KEY/.test(err.message) && /403/.test(err.message),
+  );
+  // The schema's truthy set is `true`/`1`; anything else is OFF, never a guess.
+  assert.deepEqual(assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "1", SMARTCAPTCHA_SERVER_KEY: "ysc2_x", SMARTCAPTCHA_SITE_KEY: "ysc1_x" }), { enabled: true });
 });

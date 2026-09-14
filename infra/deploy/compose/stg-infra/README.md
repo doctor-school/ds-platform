@@ -451,9 +451,10 @@ if the box ever grows past three previews.
 
 **Building images.** The box builds, exactly as api-prod does. `pnpm stage:slot up|sync`
 ships the tree and runs the build there; no registry and no workflow is involved. The SmartCaptcha SITE key is
-baked at build time from the box env's `STAGE_SMARTCAPTCHA_SITE_KEY` (empty until the
-owner provisions it with the separate stage-captcha task — empty renders the inactive
-placeholder, and a slot built before it was set must be re-converged).
+baked at build time from the box env's `SMARTCAPTCHA_SITE_KEY` (the slot compose reads that exact
+name; empty renders the inactive placeholder). It is one half of a coherent trio — `stage.env.example`
+→ «Bot protection», enforced by `up|sync` (#2207) — and a slot built before the pair was placed must be
+re-converged.
 
 **Disk.** `pnpm stage:slot gc` removes slot-tagged images whose slot is not live, and
 only then, if free space on `/var/lib/docker` is below **10 GB**, additionally runs
@@ -546,9 +547,8 @@ systemctl list-units --all --no-legend | grep -i runner ; echo "exit=$?"   # sam
 
 **AC4 — no production credential on the box.** Two halves, defined in
 `infra/deploy/stage.env.example` → «C1 ACCEPTANCE»: names that may only ever be
-empty here, and names that MUST carry this box's own value. The second half is
 asserted POSITIVELY — a single must-be-empty grep red-lights on a correctly
-provisioned box (staging legitimately sets a captcha test key and its own secrets),
+provisioned box (staging legitimately sets its own secrets, and a captcha pair when the owner turns it on),
 and blanking those to make it pass would silently stop exercising what they protect.
 
 ```bash
@@ -561,7 +561,7 @@ sudo bash -c "grep -nE '^(RESEND_API_KEY|SMSAERO_EMAIL|SMSAERO_API_KEY|SMSAERO_S
 # expected: NO output and exit=1 — grep matching nothing IS the pass here.
 
 # HALF B — this box's own values: set, and never still a template placeholder.
-sudo grep -nE '^(POSTGRES_PASSWORD|MINIO_ROOT_PASSWORD|IDP_SECRET_KEY|IDP_BOOTSTRAP_ADMIN_PASSWORD|AUDIT_IDENTIFIER_PEPPER|LIFECYCLE_IMPACT_TOKEN_SECRET|IDP_WEBHOOK_SECRET|CENTRIFUGO_API_KEY|CENTRIFUGO_TOKEN_HMAC_SECRET|SMARTCAPTCHA_SERVER_KEY|STAGE_BASIC_AUTH_HASH)=(CHANGE_ME|$)' /etc/ds-platform/stage.env
+sudo grep -nE '^(POSTGRES_PASSWORD|MINIO_ROOT_PASSWORD|IDP_SECRET_KEY|IDP_BOOTSTRAP_ADMIN_PASSWORD|AUDIT_IDENTIFIER_PEPPER|LIFECYCLE_IMPACT_TOKEN_SECRET|IDP_WEBHOOK_SECRET|CENTRIFUGO_API_KEY|CENTRIFUGO_TOKEN_HMAC_SECRET|STAGE_BASIC_AUTH_HASH)=(CHANGE_ME|$)' /etc/ds-platform/stage.env
 # expected: NO output — each is set and none is still a `CHANGE_ME_` placeholder.
 
 # HALF B — the sinks are what is actually selected.
@@ -570,12 +570,18 @@ sudo grep -E '^(EMAIL_DELIVERY_MODE|SMS_DELIVERY_MODE|IDP_SMTP_HOST|IDP_SMS_SINK
 # (`mailpit` IS the email sink — the only values provision.sh and the api env schema
 # accept are `mailpit` and `real`; `EMAIL_DELIVERY_MODE=sink` aborts the converge.)
 
-# HALF B — the captcha key is the vendor TEST pair, not the production pair. The box
-# holds no copy of the production key and no route to it, so the check prints the pair
-# id for the owner to compare against api-prod's — the same 20-char pair-id comparison
+# HALF B — the captcha trio is COHERENT (#2207): OFF with an empty site key, or ON with
+# BOTH vendor TEST halves. Half a pair is the one state that passes every other check
+# and still fails every sign-in with 403. `pnpm stage:slot up|sync` refuse it by name
+# (`assertCaptchaCoherent` in tools/staging/slot.mjs); this is the same rule by hand.
+sudo grep -E '^(BOT_PROTECTION_ENABLED|SMARTCAPTCHA_SERVER_KEY|SMARTCAPTCHA_SITE_KEY)=' /etc/ds-platform/stage.env
+# expected OFF:  BOT_PROTECTION_ENABLED=false / SMARTCAPTCHA_SITE_KEY= (server key ignored)
+# expected ON:   BOT_PROTECTION_ENABLED=true / SMARTCAPTCHA_SERVER_KEY=ysc2_… / SMARTCAPTCHA_SITE_KEY=ysc1_…
+# When ON, the box holds no copy of the production key and no route to it, so print the
+# pair id for the owner to compare against api-prod's — the same 20-char comparison
 # `infra/deploy/README.md` step 3 uses. The comparison is recorded in #2095.
 sudo sed -n 's/^SMARTCAPTCHA_SERVER_KEY=ysc2_\([^[:space:]]\{20\}\).*/stage captcha pair id: \1/p' /etc/ds-platform/stage.env
-# expected: exactly one line, and that pair id is NOT the production one.
+# expected when ON: exactly one line, and that pair id is NOT the production one.
 ```
 
 **AC5 — the Zitadel converge is idempotent** (it will be re-run by every preview that

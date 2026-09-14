@@ -2049,6 +2049,52 @@ export function requiredOperatorPassword(env) {
   return password;
 }
 
+/**
+ * The box captcha trio must be COHERENT before a slot is converged (#2207).
+ *
+ * The api guard (`apps/api/src/bot-protection`) is enabled by `BOT_PROTECTION_ENABLED`
+ * and rejects every sign-in that carries no token; the storefront only produces a
+ * token when its image was baked with a real `SMARTCAPTCHA_SITE_KEY` (slot compose →
+ * `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`). Half a pair therefore has ONE observable
+ * outcome — every slot login answers 403 (seen live on 2026-09-14, all three slots) —
+ * and nothing in the converge noticed. So `up|sync` refuse by name:
+ *   ON  ⇒ a real `ysc2_` server key AND a real `ysc1_` site key (the vendor TEST pair);
+ *   OFF ⇒ an EMPTY site key (a placeholder site key breaks the login form client-side).
+ * Truthiness mirrors the api env schema (`true`/`1`); everything else is OFF, never a guess.
+ */
+export function assertCaptchaCoherent(boxEnv) {
+  const enabled = ["true", "1"].includes((boxEnv?.BOT_PROTECTION_ENABLED ?? "").trim());
+  const serverKey = (boxEnv?.SMARTCAPTCHA_SERVER_KEY ?? "").trim();
+  const siteKey = (boxEnv?.SMARTCAPTCHA_SITE_KEY ?? "").trim();
+  if (!enabled) {
+    if (siteKey !== "") {
+      throw new SlotError(
+        `SMARTCAPTCHA_SITE_KEY is set in ${STAGE_ENV_FILE} on ${STAGE_1} while ` +
+          "BOT_PROTECTION_ENABLED is off — the storefront would mount a captcha widget the " +
+          "api never validates. Empty the site key, or turn bot protection ON with the full " +
+          "vendor TEST pair (infra/deploy/stage.env.example → Bot protection).",
+      );
+    }
+    return { enabled: false };
+  }
+  const halves = [
+    ["SMARTCAPTCHA_SERVER_KEY", serverKey, "ysc2_"],
+    ["SMARTCAPTCHA_SITE_KEY", siteKey, "ysc1_"],
+  ];
+  for (const [name, value, prefix] of halves) {
+    if (!value.startsWith(prefix)) {
+      throw new SlotError(
+        `${name} in ${STAGE_ENV_FILE} on ${STAGE_1} is ${value === "" ? "empty" : "not a real key"} ` +
+          `(expected the \`${prefix}\` vendor TEST half) while BOT_PROTECTION_ENABLED is on — ` +
+          "with half a pair every slot login answers 403 (api guard `missing-token`). Either " +
+          "place BOTH halves of the vendor TEST pair or set BOT_PROTECTION_ENABLED=false with " +
+          "an empty SMARTCAPTCHA_SITE_KEY (infra/deploy/stage.env.example → Bot protection).",
+      );
+    }
+  }
+  return { enabled: true };
+}
+
 export function basicAuthHeader(user, password) {
   return `Basic ${Buffer.from(`${user}:${password}`, "utf8").toString("base64")}`;
 }
@@ -2272,6 +2318,12 @@ async function main() {
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();
   const effects = realEffects(boxEnv);
+  // `up`/`sync` build and run a slot whose sign-in depends on the captcha trio being
+  // coherent — refuse before any build minute is spent (#2207).
+  if (COMMANDS_WITH_SLOT_AND_REF.has(options.command)) {
+    const captcha = assertCaptchaCoherent(boxEnv);
+    console.log(`# bot protection on ${STAGE_1}: ${captcha.enabled ? "ON (vendor pair)" : "OFF"} — coherent`);
+  }
 
   if (options.command === "status") {
     console.log(`# live slots on ${STAGE_1} (docker compose project labels)`);

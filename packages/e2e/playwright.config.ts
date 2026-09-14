@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { defineConfig, devices } from "@playwright/test";
 import { defineBddConfig } from "playwright-bdd";
 
@@ -48,6 +50,41 @@ import { HOSTS } from "./hosts.js";
  * No `webServer`: the slot's topology belongs to `tools/staging`, never to a
  * test config.
  */
+/**
+ * ── Where the reports land ───────────────────────────────────────────────────
+ * `pnpm e2e:stage <slot>` (tools/staging/e2e-stage.mjs) exports `E2E_REPORT_DIR`
+ * pointing at one per-run directory under `packages/e2e/playwright-report/`, so a
+ * regression run over a slot keeps its HTML + JSON side by side and a second run
+ * cannot overwrite the evidence the operator is about to paste. Unset — a bare
+ * `pnpm --filter @ds/e2e test:e2e` — keeps the plain `test-results/` default.
+ *
+ * ── The scenario filter ──────────────────────────────────────────────────────
+ * `E2E_GREP` rather than `playwright test --grep <re>`: `e2e-stage.mjs` runs `pnpm`
+ * through a shell (the `.cmd` shims on the Windows operator box), and a perfectly
+ * ordinary alternation — `"вход|выход"` — would be parsed as a pipeline on the way.
+ * An env var is not parsed by anything.
+ *
+ * ── Basic auth ───────────────────────────────────────────────────────────────
+ * Every staging hostname sits behind ONE basic-auth pair (`tools/staging/README.md`).
+ * The pair arrives as `E2E_HTTP_USER` / `E2E_HTTP_PASS` and becomes Playwright
+ * `httpCredentials` — never a hand-built `authorization` header in a step, which
+ * would have to be re-added on every new request the journey makes.
+ */
+const reportDir = process.env.E2E_REPORT_DIR;
+const jsonReport = reportDir
+  ? path.join(reportDir, "results.json")
+  : "test-results/results.json";
+const grep = process.env.E2E_GREP
+  ? new RegExp(process.env.E2E_GREP)
+  : undefined;
+const httpCredentials =
+  process.env.E2E_HTTP_USER && process.env.E2E_HTTP_PASS
+    ? {
+        username: process.env.E2E_HTTP_USER,
+        password: process.env.E2E_HTTP_PASS,
+      }
+    : undefined;
+
 const FEATURES = "../../apps/docs/content/specs/features/*/*-scenarios.feature";
 const STEPS = ["steps/**/*.ts"];
 
@@ -73,17 +110,27 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
+  ...(grep ? { grep } : {}),
   retries: 0,
   timeout: 120_000,
   expect: { timeout: 20_000 },
   reporter: [
     ["list"],
-    ["json", { outputFile: "test-results/results.json" }],
-  ],
+    ["json", { outputFile: jsonReport }],
+    ...(reportDir
+      ? [
+          [
+            "html",
+            { outputFolder: path.join(reportDir, "html"), open: "never" },
+          ],
+        ]
+      : []),
+  ] as NonNullable<Parameters<typeof defineConfig>[0]["reporter"]>,
   outputDir: "test-results/artifacts",
   use: {
     locale: "ru-RU",
     trace: "retain-on-failure",
+    httpCredentials,
   },
   projects: [
     {

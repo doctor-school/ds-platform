@@ -1876,7 +1876,7 @@ export function resolveIdpBaseUrl(env = process.env) {
 // --- the box ------------------------------------------------------------------
 
 /** One `sudo cat` over ssh, parsed — never sourced. See `parseEnvFile`. */
-async function readBoxEnvFile(path, { optional = false } = {}) {
+export async function readBoxEnvFile(path, { optional = false } = {}) {
   try {
     return parseEnvFile(await sshCapture(STAGE_1, `sudo cat ${path}`));
   } catch (err) {
@@ -2246,6 +2246,24 @@ export function assertCaptchaCoherent(boxEnv) {
   return { enabled: true };
 }
 
+/**
+ * The stand's basic-auth USER, which — unlike the password — is box configuration.
+ *
+ * Extracted so every command that has to come in through the public edge (the converge
+ * health assertion, `e2e-stage.mjs`) reads the one pair from the one place instead of
+ * re-deriving it.
+ */
+export function requiredBasicAuthUser(boxEnv) {
+  const user = boxEnv?.STAGE_BASIC_AUTH_USER;
+  if (!user) {
+    throw new SlotError(
+      `STAGE_BASIC_AUTH_USER is not in ${STAGE_ENV_FILE} on ${STAGE_1} — the ` +
+        "stage provisioning places it there alongside its bcrypt hash",
+    );
+  }
+  return user;
+}
+
 export function basicAuthHeader(user, password) {
   return `Basic ${Buffer.from(`${user}:${password}`, "utf8").toString("base64")}`;
 }
@@ -2385,13 +2403,7 @@ function realEffects(boxEnv) {
     // NOT over ssh: the assertion is worth making only through the edge a reviewer
     // uses — Caddy's routing, the wildcard certificate and the stand's basic auth.
     health: async (step) => {
-      const user = boxEnv.STAGE_BASIC_AUTH_USER;
-      if (!user) {
-        throw new SlotError(
-          `STAGE_BASIC_AUTH_USER is not in ${STAGE_ENV_FILE} on ${STAGE_1} — the ` +
-            "stage provisioning places it there alongside its bcrypt hash",
-        );
-      }
+      const user = requiredBasicAuthUser(boxEnv);
       const headers = {
         authorization: basicAuthHeader(user, requiredOperatorPassword(process.env)),
         accept: "application/json",
@@ -2454,7 +2466,7 @@ function realEffects(boxEnv) {
   };
 }
 
-function requiredBaseDomain(boxEnv) {
+export function requiredBaseDomain(boxEnv) {
   const baseDomain = boxEnv.STAGE_BASE_DOMAIN;
   if (!baseDomain) {
     throw new SlotError(

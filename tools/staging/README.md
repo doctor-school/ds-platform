@@ -11,6 +11,7 @@ Node runtime of ours on the host — the box runs containers and nothing else.
 | `golden-db.mjs` | builds and rebuilds `ds_golden`, the template every slot database is cloned from             | #2063 |
 | `slot.mjs`      | the lifecycle of one slot: `up`, `sync`, `down`, `reset`, `reset-identities`, `status`, `gc` | #2064 |
 | `idp.mjs`       | the two shared-Zitadel converges (whole redirect-URI set; golden identities)                 | #2064 |
+| `e2e-stage.mjs` | the regression run over a CONVERGED slot: the C6 suite (+ the a11y suites) from your machine | #2067 |
 
 Both entry points ship as package scripts, so nothing is invoked by path:
 
@@ -19,6 +20,7 @@ pnpm stage:slot up pr-123 --ref <40-char sha>
 pnpm stage:slot status
 pnpm stage:slot gc
 pnpm staging:golden-db --dry-run
+pnpm e2e:stage pr-123
 ```
 
 SSH transport, tree shipping and the remote-script primitives are NOT duplicated here:
@@ -80,6 +82,50 @@ Three prerequisites the commands do NOT solve for you, in the order they bite:
 Stage-B, the slot stays up until the owner answers, and the closeout tail takes it down
 with `pnpm stage:slot down pr-<N>` alongside the worktree teardown. Nothing sweeps a slot
 on a timer — `gc` is an operator subcommand and reclaims disk, not live slots.
+
+## Regression run: `pnpm e2e:stage <slot>`
+
+The C6 regression contract (`packages/e2e`) driven against a slot's **public** hostnames
+— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7: the verdict is
+pasted into the PR body or the release record **by hand**; there is deliberately no CI
+check-run, because staging is operated by hand like production (#2202) and a runner would
+have to hold the stand's credentials to reach the slot at all.
+
+```bash
+export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
+pnpm e2e:stage pr-123                     # both storefronts
+pnpm e2e:stage main --project academy --grep "витрина"
+pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
+```
+
+**It never raises a slot.** A converged slot is the PRECONDITION: the command makes one
+`/v1/health` read of `api-<slot>.<base domain>` and **exits 2** naming that URL when it
+does not answer — a suite pointed at a half-raised slot reports topology as product
+regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
+
+Everything it needs comes from the same places the converge reads: the hostnames from
+`slotHostnames()`, the base domain and the basic-auth user from `/etc/ds-platform/stage.env`
+over SSH, the password from `STAGE_BASIC_AUTH_PASS` on THIS machine. An operator without
+SSH to the box can export `STAGE_BASE_DOMAIN`, `E2E_HTTP_USER` and `E2E_HTTP_PASS` instead
+and the box is never contacted. The password is passed to Playwright as `httpCredentials`
+and never printed.
+
+The **a11y leg** (§6.6) joins the run only once #1692 — the contrast fix — is on `main`;
+while it is open the command prints
+`axe leg skipped: #1692 open` and runs the suite alone, because a known-red axe leg would
+train the operator to ignore the leg.
+
+Reports land under `packages/e2e/playwright-report/<slot>-<timestamp>/` (HTML +
+`results.json`, gitignored, local only) so a second run cannot overwrite the evidence.
+Stdout ends with a fenced **verdict block** — slot, the SHA `/v1/health` reports, the
+per-project passed/failed/skipped counts, the axe verdict and the report path. That block
+is the artefact you paste. Exit `0` every leg green, `1` a failing leg, `2` pre-flight.
+
+Until the §8 backfill (#2068) rewords the spec feature files in the shared step
+vocabulary, every scenario reports as **skipped** — `missingSteps: "skip-scenario"`, the
+deliberate choice `packages/e2e/playwright.config.ts` records. The verdict block prints
+the skipped count rather than hiding it, so «0 passed / N skipped» is a truthful reading
+of the suite's coverage today, not a defect of this command.
 
 ## `slot.mjs` in one paragraph
 

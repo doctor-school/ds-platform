@@ -103,3 +103,13 @@ mistyped name fails loudly with the accepted names listed.
 
 The sign-in adds no auth primitive: it drives the host's real login surface the
 way the shipped 008 shell journey does (`apps/portal/e2e/steps/shell.steps.ts`).
+
+## Running this suite against a staging slot
+
+`pnpm --filter @ds/e2e test:e2e` runs whatever `E2E_PORTAL_URL` / `E2E_DOCTOR_URL` point
+at. The supported way to point them at a converged staging slot is
+[`pnpm e2e:stage <slot>`](../../tools/staging/README.md#regression-run-pnpm-e2estage-slot):
+it derives both hostnames from the slot name, reads the stand's basic-auth pair (which this
+config turns into Playwright `httpCredentials`), refuses a slot that is not converged,
+keeps the HTML + JSON report under `packages/e2e/playwright-report/<slot>-<timestamp>/`,
+and prints the verdict block the operator pastes into the PR body or the release record.

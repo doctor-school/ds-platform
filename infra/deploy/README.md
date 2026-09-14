@@ -70,9 +70,10 @@ never touches it.
   Timeweb rule model is allow-only; see the header of `terraform/network.tf`).
 - Bootstrap: `cloud-init/stage-1.yaml` — the `api-prod` hardening set plus `git`, and
   deliberately nothing more: the provider hard-resets a new box mid-first-boot (#2121),
-  so anything longer than the prod set is killed part-way. No CI agent runs here at
-  all; images are built and the suite runs on GitHub-hosted runners.
-- Services, bring-up order, the Zitadel converge, the pull-based slot deployer and the
+  so anything longer than the prod set is killed part-way. No CI agent and no unit of
+  ours runs here: the box builds its own images from a tree the operator ships over SSH,
+  and the regression suite runs on the operator's machine (`tools/staging/README.md`).
+- Services, bring-up order, the Zitadel converge, the slot compose projects and the
   acceptance commands: **`compose/stg-infra/README.md`**.
 - Env: `stage.env.example`. The box holds no production credential of any kind; that
   is an acceptance criterion, not an intention.

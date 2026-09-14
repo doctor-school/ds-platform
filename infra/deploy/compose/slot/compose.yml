@@ -7,7 +7,7 @@
 #   docker compose \
 #     --env-file /etc/ds-platform/stage.env \
 #     --env-file /etc/ds-platform/slots/<slot>.env \
-#     -p slot-<slot> -f /opt/ds-platform/compose/slot/compose.yml <command>
+#     -p slot-<slot> -f $HOME/ds-platform.slots/<slot>/infra/deploy/compose/slot/compose.yml <command>
 #
 # The two env files are what makes one file serve every slot: `stage.env` is the
 # box's single secret set (0600 root:root), `<slot>.env` is the GENERATED non-secret

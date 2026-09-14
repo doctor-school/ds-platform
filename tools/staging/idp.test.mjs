@@ -306,7 +306,7 @@ test("the golden subjects file round-trips through render and parse", () => {
 });
 
 test("the golden account catalogue matches the seed contract in packages/db", () => {
-  // `tools/staging` ships to /opt/ds-platform as plain ESM with zero app deps, so it
+  // `tools/staging` runs as plain ESM with zero app deps (no build step), so it
   // cannot import the TypeScript seed contract at runtime. This test reads that file
   // and fails the moment the two drift — the catalogue still has ONE source of truth.
   const source = readFileSync(join(REPO_ROOT, "packages/db/src/seed/golden/idp.ts"), "utf8");

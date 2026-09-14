@@ -13,12 +13,18 @@
  * catalogue is read at run time from `@ds/db/seed/golden` and a slot may be
  * seeded with a different `GOLDEN_NOW`.
  *
- * The map is EMPTY today on purpose: the walk that consumes it lands with
- * deliverable 4 of this step, and an entry with no consumer would be a claim no
- * check backs. The shape §6.3 names is:
- *
- *   "/webinars/[slug]": () => golden.events.upcoming.slug
+ * ── The gap this map deliberately leaves ─────────────────────────────────────
+ * `/documents/[slug]` is missing on BOTH hosts, and that is a finding, not an
+ * oversight. The golden dataset (`packages/db/src/seed/golden/`) seeds no
+ * document row — its «legal documents» are Fumadocs pages plus pinned consent
+ * purposes, not addressable `/documents/<slug>` entities — so there is no golden
+ * value that renders the route. Per §6.3 the walk therefore FAILS naming the
+ * route rather than skipping it: the route that #2012 broke stays visibly
+ * unverified until the golden catalogue gains a document (tracked in the Issue),
+ * which is exactly the signal a silent skip would have destroyed.
  */
+import { golden } from "@ds/db/seed/golden";
+
 import type { HostId } from "./hosts.js";
 
 /** A dynamic route pattern exactly as the Next route manifest spells it. */
@@ -38,6 +44,28 @@ export type RouteParamsMap = Readonly<
 >;
 
 export const routeParams: RouteParamsMap = Object.freeze({
-  academy: Object.freeze({}),
-  doctor: Object.freeze({}),
+  academy: Object.freeze({
+    /** The registration happy path — published and still to come. */
+    "/webinars/[slug]": () => golden.events.upcoming.slug,
+    /** The room: only an event that is on air right now renders it. */
+    "/webinars/[slug]/room": () => golden.events.live.slug,
+  }),
+  doctor: Object.freeze({
+    "/events/[slug]": () => golden.events.upcoming.slug,
+    "/events/[slug]/room": () => golden.events.live.slug,
+  }),
 });
+
+/**
+ * The resolved address for a route pattern on a host, or `undefined` when no
+ * golden entity is registered for it. The walk turns `undefined` into a FAILING
+ * test named after the route — never a skip (§6.3).
+ */
+export function resolveRoute(
+  host: HostId,
+  pattern: string,
+): string | undefined {
+  const resolver = routeParams[host][pattern as RoutePattern];
+  if (!resolver) return undefined;
+  return pattern.replace(/\[(?:\.\.\.)?([^\]]+)\]/g, () => resolver());
+}

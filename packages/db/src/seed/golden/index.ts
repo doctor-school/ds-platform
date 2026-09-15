@@ -37,6 +37,12 @@ export {
   type GoldenDoctorSpecialtyLink,
 } from "./dataset.js";
 export {
+  GOLDEN_VOLUME_ORDINAL_BASE,
+  buildGoldenVolume,
+  isGoldenVolumeId,
+  type GoldenVolume,
+} from "./volume.js";
+export {
   GOLDEN_SEED_ORDER,
   GoldenPlanError,
   buildGoldenSeedPlan,

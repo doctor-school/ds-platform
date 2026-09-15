@@ -11,7 +11,7 @@
 // «Production shape» is a decision the owner made on the Stage-B walk of PR
 // #2216 and it is not a floor: doctor.school runs эфиры EVERY day. So this
 // module lays out a real season — a Monday-anchored calendar that carries two
-// or three эфиров on every weekday, a Saturday эфир every other week and a
+// or three эфиров on every weekday, a Saturday эфир every week and a
 // monthly Sunday «школа», from six months behind the run instant to four months
 // ahead of it. The number of events is an OUTPUT of that shape, never a knob.
 //
@@ -295,8 +295,10 @@ function gridCells(now: Date): GridCell[] {
           push(minutes, slot);
         }
       } else if (day === 5) {
-        // A Saturday эфир every other week — the weekend is lighter, not empty.
-        if (week % 2 === 0) push(11 * 60, 0);
+        // A Saturday эфир every week — the weekend is lighter, never empty.
+        // Every calendar day the reviewer opens has to carry something; a
+        // fortnightly Saturday leaves half of them blank in the calendar.
+        push(11 * 60, 0);
       } else if (week % 4 === 0) {
         // One Sunday «школа» a month: the long-format weekend event.
         push(10 * 60, 0);

@@ -213,17 +213,44 @@ describe("#2063 golden dataset", () => {
   });
 
   it("moves every timestamp when the pin moves — nothing is hardcoded", () => {
+    // Matched BY ID, not positionally. The volume half (#2213) makes the row
+    // COUNT of the date-derived families depend on the pin — how much of the
+    // season lies in the past decides how many recordings exist — so a
+    // positional walk compared unrelated rows and asserted on the length of a
+    // collection the plan never promised to keep constant. What the pin must
+    // move is every instant of a row that exists at BOTH pins, which is the
+    // property this test was written to hold.
     const shifted = buildGoldenDataset(
       resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: "2027-01-15T12:00:00.000Z" }),
       subjects,
     );
-    const before = collectTimestamps(dataset);
-    const after = collectTimestamps(shifted);
-    expect(after.length).toBe(before.length);
-    expect(after.length).toBeGreaterThan(0);
-    for (const [index, value] of after.entries()) {
-      expect(value).not.toBe(before[index]);
+
+    let compared = 0;
+    for (const [family, before] of rowFamilies(dataset)) {
+      const after = new Map(
+        rowsByKey(shifted[family as keyof typeof shifted] as GoldenRow[]),
+      );
+      for (const [key, beforeRow] of rowsByKey(before)) {
+        const afterRow = after.get(key);
+        if (!afterRow) continue; // a row this pin does not reach — see above
+        for (const [column, value] of Object.entries(beforeRow)) {
+          if (!(value instanceof Date)) continue;
+          const moved = afterRow[column];
+          // A column the twin does not carry at all — the row reached a state
+          // whose shape omits it (a published recording drops nothing, a draft
+          // one carries no publication instant). Nothing to compare, and the
+          // state rules are asserted by the #2213 timeline tests.
+          if (!(moved instanceof Date)) continue;
+          expect(
+            (moved as Date).getTime(),
+            `${family}.${column} of ${key}`,
+          ).not.toBe(value.getTime());
+          compared += 1;
+        }
+      }
     }
+    // A pin-invariance test that compared nothing would pass silently.
+    expect(compared).toBeGreaterThan(1_000);
   });
 
   it("carries a doctor in every state the specs distinguish", () => {
@@ -406,25 +433,60 @@ describe("#2212 a re-run rewrites the dates", () => {
 
     expect(second.map((row) => row.id)).toEqual(first.map((row) => row.id));
 
+    // The stronger form of «differ only in date-bearing columns»: at volume a
+    // pin move also moves an эфир ACROSS the run instant, so `state`, `origin`
+    // and the programme reference legitimately change with it. What must never
+    // change is (a) the authored content of the row, and (b) the guarantee that
+    // every column the second run rewrites is a column the upsert refreshes —
+    // a column that moves but is absent from `updateKeys` is exactly the drift
+    // this test exists to catch, and enumerating Date-ness no longer says that.
+    const updateKeys = new Set([
+      ...eventsStep(now).updateKeys,
+      ...eventsStep(laterNow).updateKeys,
+    ]);
+    const authored = [
+      "id",
+      "slug",
+      "title",
+      "description",
+      "durationMin",
+      "school",
+      "specialties",
+      "seatsLeft",
+      "participationFormat",
+      "version",
+      "recordStatus",
+    ];
+
     const moved = new Set<string>();
     for (const [index, before] of first.entries()) {
       const after = second[index]!;
-      expect(Object.keys(after)).toEqual(Object.keys(before));
-      for (const key of Object.keys(before)) {
+      // Not a key-for-key match: at volume a pin move can carry an эфир into a
+      // state whose row omits an optional column (`recordingExpectedBy` once a
+      // recording is published). The union is what the upsert has to cover.
+      const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+      for (const key of authored) {
+        expect(JSON.stringify(after[key]), `${key} of row ${index}`).toBe(
+          JSON.stringify(before[key]),
+        );
+      }
+      for (const key of keys) {
         if (JSON.stringify(after[key]) === JSON.stringify(before[key])) continue;
-        expect(
-          before[key] instanceof Date || key === "recordingExpectedBy",
-        ).toBe(true);
+        expect(updateKeys, `${key} moves but the upsert never rewrites it`)
+          .toContain(key);
         moved.add(key);
       }
     }
-    expect([...moved].sort()).toEqual([
+    // Every date-bearing column of the events step is among the movers.
+    for (const key of [
+      "startsAt",
       "createdAt",
+      "updatedAt",
       "liveAt",
       "recordingExpectedBy",
-      "startsAt",
-      "updatedAt",
-    ]);
+    ]) {
+      expect(moved, key).toContain(key);
+    }
   });
 
   // `taxonomy_first_published_at_set_once` (migration 0015) refuses to move a
@@ -567,6 +629,9 @@ describe("#2213 golden dataset at volume", () => {
     "2025-01-29T12:00:00.000Z",
     "2026-02-28T12:00:00.000Z",
     "2026-12-31T12:00:00.000Z",
+    // Thirty minutes before the year rolls over — in МСК it is already the 1st
+    // of January, so a UTC-day walk and an МСК-day walk disagree here.
+    "2026-12-31T23:30:00.000Z",
     "2027-03-01T12:00:00.000Z",
     "2028-02-29T09:00:00.000Z",
     "2026-04-30T22:30:00.000Z",
@@ -582,6 +647,176 @@ describe("#2213 golden dataset at volume", () => {
     );
     return { pinned, built, upcoming };
   };
+
+  /** The МСК calendar day an instant falls on — the day the operator sees. */
+  const mskDayKey = (date: Date): string =>
+    new Date(date.getTime() + 3 * 3_600_000).toISOString().slice(0, 10);
+
+  /** 0 = Sunday … 6 = Saturday, in МСК. */
+  const mskDayOfWeek = (key: string): number =>
+    new Date(`${key}T00:00:00.000Z`).getUTCDay();
+
+  /** Every МСК day of the season, from −180 to +120 days around a pin. */
+  const seasonDays = (pinned: Date): string[] => {
+    const msk = new Date(pinned.getTime() + 3 * 3_600_000);
+    const midnight = Date.UTC(
+      msk.getUTCFullYear(),
+      msk.getUTCMonth(),
+      msk.getUTCDate(),
+    );
+    const days: string[] = [];
+    for (let k = -180; k <= 120; k += 1) {
+      days.push(new Date(midnight + k * 86_400_000).toISOString().slice(0, 10));
+    }
+    return days;
+  };
+
+  const eventsByMskDay = (events: { startsAt?: unknown; state?: unknown }[]) => {
+    const byDay = new Map<string, { state?: unknown }[]>();
+    for (const event of events) {
+      const key = mskDayKey(event.startsAt as Date);
+      const bucket = byDay.get(key) ?? [];
+      bucket.push(event);
+      byDay.set(key, bucket);
+    }
+    return byDay;
+  };
+
+  it("#2213: carries an эфир on every day of the season, not just most", () => {
+    // The owner's Stage-B verdict on PR #2216 in one assertion: doctor.school
+    // runs эфиры EVERY day, so a calendar walked day by day must never render
+    // an empty weekday. Two a weekday is the floor because one эфир a day makes
+    // the day view a single card — which is the thin schedule that was rejected.
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, built } = atPin(pin);
+      const byDay = eventsByMskDay(built.events);
+      // The floor is read off EVERY event the operator can see; the ceiling
+      // only off the grid, because the named catalogue rows sit at their own
+      // fixed offsets from the pin and legitimately double up on a day.
+      const gridByDay = eventsByMskDay(
+        built.events.filter((e) => isGoldenVolumeUuid(e.id as string)),
+      );
+      const sundaysWithAnEfir: number[] = [];
+
+      for (const [index, day] of seasonDays(pinned).entries()) {
+        const count = (byDay.get(day) ?? []).length;
+        const dow = mskDayOfWeek(day);
+        if (dow === 0) {
+          // Sunday carries the monthly «школа» only — asserted below as a
+          // cadence, not per day: a Sunday with nothing on it is the product's
+          // own weekly rhythm, not a hole in the dataset.
+          if (count > 0) sundaysWithAnEfir.push(index);
+        } else if (dow === 6) {
+          expect(count, `${pin} / Saturday ${day}`).toBeGreaterThanOrEqual(1);
+        } else {
+          expect(count, `${pin} / ${day}`).toBeGreaterThanOrEqual(2);
+          // The ceiling holds everywhere but today: the run day also carries
+          // the two live rooms and the «сегодня» эфир, which are appended to
+          // the grid rather than scheduled in it.
+          if (day !== mskDayKey(pinned)) {
+            expect(
+              (gridByDay.get(day) ?? []).length,
+              `${pin} / ${day}`,
+            ).toBeLessThanOrEqual(3);
+          }
+        }
+      }
+
+      // «Monthly», stated as the property a calendar shows: never two whole
+      // months in a row without a Sunday школа.
+      expect(sundaysWithAnEfir.length, pin).toBeGreaterThanOrEqual(9);
+      for (let i = 1; i < sundaysWithAnEfir.length; i += 1) {
+        expect(
+          sundaysWithAnEfir[i]! - sundaysWithAnEfir[i - 1]!,
+          `${pin} / gap between Sunday школы`,
+        ).toBeLessThanOrEqual(28);
+      }
+    }
+  });
+
+  it("#2213: leaves no future day of the season without a published эфир", () => {
+    // The past is read as an archive, where an empty day is invisible. The
+    // FUTURE is read as a schedule the doctor plans around, and `published` is
+    // the only state that reaches them — a day whose only row is draft or
+    // hidden renders as an empty day on the public calendar.
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, built } = atPin(pin);
+      const byDay = eventsByMskDay(built.events);
+      for (const day of seasonDays(pinned)) {
+        if (day <= mskDayKey(pinned)) continue;
+        if (mskDayOfWeek(day) === 0) continue;
+        const published = (byDay.get(day) ?? []).filter(
+          (e) => e.state === "published",
+        );
+        expect(published.length, `${pin} / ${day}`).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it("#2213: holds the same season whatever day the seed runs on", () => {
+    // The grid is anchored on the pin's MONDAY, so the plan has the same cells
+    // in the same order at every run date; only which of them have already
+    // happened depends on the pin. A count that wobbled with the run date would
+    // mean an ordinal addresses a different эфир on different days — and the
+    // #2067 scenarios address rows by ordinal.
+    const totals = new Set<number>();
+    for (const pin of COVERAGE_PINS) totals.add(atPin(pin).built.events.length);
+    expect([...totals]).toHaveLength(1);
+    // A range, not a golden number: the shape is the decision, the count is its
+    // output, and tightening the cadence must not have to edit an assertion.
+    const total = [...totals][0]!;
+    expect(total).toBeGreaterThanOrEqual(560);
+    expect(total).toBeLessThanOrEqual(700);
+  });
+
+  it("#2213: derives every lifecycle state from the timeline, not from a list", () => {
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, built } = atPin(pin);
+      for (const event of built.events.filter((e) =>
+        isGoldenVolumeUuid(e.id as string),
+      )) {
+        const startsAt = (event.startsAt as Date).getTime();
+        const label = `${pin} / ${event.id as string} (${event.state as string})`;
+        if (event.state === "ended" || event.state === "in_archive") {
+          expect(startsAt, label).toBeLessThan(pinned.getTime());
+        } else if (event.state === "live") {
+          expect(startsAt, label).toBeLessThanOrEqual(pinned.getTime());
+          expect(
+            startsAt + (event.durationMin as number) * 60_000,
+            label,
+          ).toBeGreaterThan(pinned.getTime());
+        } else {
+          expect(startsAt, label).toBeGreaterThan(pinned.getTime());
+        }
+      }
+    }
+  });
+
+  it("#2213: keeps the authored catalogue byte-identical at every run date", () => {
+    // The named rows are the compile target of the #2067 scenarios and of the
+    // owner's walk. The pin moves their dates; it must never move a word of
+    // what they say, or a scenario asserting on copy breaks on the calendar.
+    const authored = (built: ReturnType<typeof buildGoldenDataset>) =>
+      JSON.stringify({
+        events: built.events
+          .filter((e) => !isGoldenVolumeUuid(e.id as string))
+          .map((e) => [e.id, e.slug, e.title, e.description, e.durationMin]),
+        experts: built.experts
+          .filter((e) => !isGoldenVolumeUuid(e.id as string))
+          .map((e) => [e.id, e.fullName, e.bio, e.credentials, e.affiliation]),
+        projects: built.projects
+          .filter((p) => !isGoldenVolumeUuid(p.id as string))
+          .map((p) => [p.id, p.name, p.description]),
+        users: built.users
+          .filter((u) => !isGoldenVolumeUuid(u.id as string))
+          .map((u) => [u.id, u.email, u.fullName, u.role]),
+      });
+
+    const baseline = authored(dataset);
+    for (const pin of COVERAGE_PINS) {
+      expect(authored(atPin(pin).built), pin).toBe(baseline);
+    }
+  });
 
   it("#2213: carries every entity family at volume, not one positive case", () => {
     expect(dataset.events.length).toBeGreaterThanOrEqual(48);
@@ -705,6 +940,94 @@ describe("#2213 golden dataset at volume", () => {
       expect(expertsPer.get(id) ?? 0).toBeLessThanOrEqual(4);
       expect(projectsPer.get(id) ?? 0).toBeGreaterThanOrEqual(1);
       expect(projectsPer.get(id) ?? 0).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("#2213: gives most panels a Модератор, not a wall of Спикеры", () => {
+    // The role is rendered on the эфир page and in the programme PDF, so a
+    // roster that only ever says «Спикер» leaves the moderated-panel layout
+    // unreachable on the walk. Most, not all: a two-speaker эфир without a
+    // moderator is a real shape the product also has to render.
+    const roles = new Map<string, Set<string>>();
+    for (const link of dataset.eventExperts) {
+      const id = link.eventId as string;
+      if (!isGoldenVolumeUuid(id)) continue;
+      const set = roles.get(id) ?? new Set<string>();
+      set.add(link.role as string);
+      roles.set(id, set);
+    }
+    const moderated = [...roles.values()].filter((set) =>
+      set.has("Модератор"),
+    ).length;
+    expect(moderated / volumeEvents.length).toBeGreaterThanOrEqual(0.6);
+    expect(
+      [...roles.values()].filter((set) => set.has("Эксперт")).length,
+    ).toBeGreaterThanOrEqual(10);
+  });
+
+  it("#2213: gives each volume doctor a personal history, not one row", () => {
+    // «Мои эфиры» and the /account projection page on the count: a doctor with
+    // two registrations never paginates and never shows a mixed past/future
+    // history, which is the journey the owner walks.
+    const perDoctor = new Map<string, { eventId: string; row: unknown }[]>();
+    for (const row of dataset.registrations) {
+      const holder = row.userId as string;
+      const list = perDoctor.get(holder) ?? [];
+      list.push({ eventId: row.eventId as string, row });
+      perDoctor.set(holder, list);
+    }
+
+    const volumeDoctors = volumeUsers.filter(
+      (u) => u.role === "doctor_guest" && u.emailVerified,
+    );
+    expect(volumeDoctors.length).toBeGreaterThanOrEqual(8);
+    for (const doctor of volumeDoctors) {
+      const rows = perDoctor.get(doctor.id as string) ?? [];
+      expect(rows.length, doctor.id as string).toBeGreaterThanOrEqual(15);
+      expect(rows.length, doctor.id as string).toBeLessThanOrEqual(40);
+      // A doctor cannot register for the same эфир twice — the unique index
+      // would reject the seed, and the slot would come up half-populated.
+      expect(new Set(rows.map((r) => r.eventId)).size).toBe(rows.length);
+    }
+  });
+
+  it("#2213: never registers a doctor before their account existed", () => {
+    // The volume registrations derive their window from the HOLDER's own
+    // `createdAt`, including the two IdP-backed named doctors, whose creation
+    // instant lives in `dataset.ts`. A registration older than its account is
+    // a row the product can never produce — and the first thing that breaks if
+    // those two windows drift apart.
+    const userById = new Map(
+      dataset.users.map((u) => [u.id as string, u]),
+    );
+    expect(dataset.registrations.length).toBeGreaterThan(0);
+    for (const row of dataset.registrations) {
+      const user = userById.get(row.userId as string)!;
+      const registeredAt = (row.registeredAt as Date).getTime();
+      expect(registeredAt, row.userId as string).toBeGreaterThan(
+        (user.createdAt as Date).getTime(),
+      );
+      if (user.deletedAt instanceof Date) {
+        expect(registeredAt, row.userId as string).toBeLessThan(
+          user.deletedAt.getTime(),
+        );
+      }
+    }
+  });
+
+  it("#2213: cancels about a tenth of the roster, at every run date", () => {
+    // Cancellation is a rendered state on both sides — the doctor's own list
+    // and the admin roster — and a seat count that never moved is a seat count
+    // nobody can check. A share, not a count: the roster grows with the season.
+    for (const pin of COVERAGE_PINS) {
+      const { built } = atPin(pin);
+      const cancelled = built.registrations.filter(
+        (r) => r.recordStatus === "retired",
+      );
+      const share = cancelled.length / built.registrations.length;
+      expect(share, pin).toBeGreaterThan(0.05);
+      expect(share, pin).toBeLessThan(0.15);
+      for (const row of cancelled) expect(row.deletedAt).toBeInstanceOf(Date);
     }
   });
 
@@ -1171,12 +1494,24 @@ describe("#2213 golden volume content and media", () => {
   }, 30_000);
 
   it("#2213: plans the same bytes for the same pin", async () => {
-    const again = await buildGoldenMediaPlan(buildGoldenDataset(now, subjects));
-    expect(again.map((o) => o.key)).toEqual(plan.map((o) => o.key));
-    expect(again.map((o) => sha(o.bytes))).toEqual(
-      plan.map((o) => sha(o.bytes)),
-    );
-  }, 120_000);
+    // The determinism proof, not a second full render. A whole second plan at
+    // production volume is ~650 PDF renders for the same answer; this builds
+    // the plan again over a TRIMMED slice of the same dataset and compares it,
+    // key for key and hash for hash, against the full plan in `beforeAll`. Two
+    // independent builds of the same rows still have to agree on every byte —
+    // and the pair of dataset builds behind them is the part that could drift.
+    const trimmed = {
+      ...buildGoldenDataset(now, subjects),
+      events: dataset.events.slice(0, 20),
+    };
+    const again = await buildGoldenMediaPlan(trimmed);
+    expect(again.length).toBeGreaterThanOrEqual(20);
+
+    const fullByKey = new Map(plan.map((o) => [o.key, sha(o.bytes)]));
+    for (const object of again) {
+      expect(fullByKey.get(object.key), object.key).toBe(sha(object.bytes));
+    }
+  }, 30_000);
 });
 
 function collectIds(node: unknown, out: string[] = []): string[] {
@@ -1189,11 +1524,36 @@ function collectIds(node: unknown, out: string[] = []): string[] {
   return out;
 }
 
-function collectTimestamps(node: unknown, out: string[] = []): string[] {
-  if (node instanceof Date) out.push(node.toISOString());
-  else if (Array.isArray(node))
-    for (const item of node) collectTimestamps(item, out);
-  else if (node && typeof node === "object")
-    for (const value of Object.values(node)) collectTimestamps(value, out);
-  return out;
+type GoldenRow = Record<string, unknown>;
+
+/** The row families of a built dataset, in a stable order. */
+function rowFamilies(dataset: object): [string, GoldenRow[]][] {
+  return Object.entries(dataset)
+    .filter((entry): entry is [string, GoldenRow[]] => Array.isArray(entry[1]))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+/**
+ * Index rows by the identity the seed upserts on, so two builds are compared
+ * row-for-row rather than position-for-position. Link tables carry no surrogate
+ * id — their identity is the pair of foreign keys they join.
+ */
+function rowsByKey(rows: GoldenRow[]): [string, GoldenRow][] {
+  return rows.map((row) => {
+    const key =
+      typeof row.id === "string"
+        ? row.id
+        : [
+            row.eventId,
+            row.userId,
+            row.doctorId,
+            row.expertId,
+            row.projectId,
+            row.purpose,
+            row.specialtyName,
+          ]
+            .filter((part) => part != null)
+            .join("|");
+    return [key, row] as [string, GoldenRow];
+  });
 }

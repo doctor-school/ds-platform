@@ -72,7 +72,10 @@ export {
   renderProgrammePdf,
   writeGoldenMedia,
   type GoldenMediaObject,
+  type GoldenMediaRefresh,
   type GoldenMediaStore,
+  type GoldenMediaWriteResult,
+  type StoredGoldenMediaObject,
 } from "./media.js";
 export {
   composeDescription,

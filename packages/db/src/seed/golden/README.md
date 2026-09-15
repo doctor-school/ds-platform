@@ -285,13 +285,27 @@ check: there is no skip flag and no fake store on the production path, because a
 seed that quietly wrote rows pointing at objects nobody uploaded is worse than a
 seed that failed. The per-slot bucket and this environment are wired by #2223.
 
-**Idempotency.** The plan is pure — a list of `{key, contentType, bytes}` built
-from the dataset at the pin — and the writer PUTs only the keys `exists()`
-reports absent, eight at a time. A re-seed of an unchanged template therefore
-writes 0 objects, and the media half obeys the same «a second run changes
-nothing observable» rule as the rows. Media is written **before** the row
-transaction: a failed upload aborts the seed with no rows referring to a missing
-object.
+**Idempotency.** The plan is pure — a list of
+`{key, contentType, bytes, refresh}` built from the dataset at the pin — and
+each entry says how it is written, eight at a time:
+
+- `refresh: "if-absent"` (the **portraits**) is PUT only when `exists()` reports
+  the key absent. File and key both come from git, so an object already in the
+  bucket is exactly the object the plan would upload, and a slot re-raise should
+  not re-send thirty-four faces.
+- `refresh: "always"` (the **programmes**) is PUT unconditionally. The key is
+  ordinal-derived and therefore pin-invariant while the page is re-dated at
+  every pin, so a skip-on-`exists` writer would leave the persistent `main` slot
+  serving a programme dated at whatever pin first filled the bucket, disagreeing
+  with its own эфир row for as long as the bucket lives.
+
+So a re-seed re-renders every programme (it always matches the rows) and writes
+0 portraits; `writeGoldenMedia` reports the two counts separately (`written` /
+`skipped`) and `seed:golden` prints both. Because the bytes are pin-deterministic
+the unconditional PUT is still a no-op change at an unchanged pin — the media
+half keeps the same «a second run changes nothing observable» rule as the rows.
+Media is written **before** the row transaction: a failed upload aborts the seed
+with no rows referring to a missing object.
 
 ### Two recorded deviations
 

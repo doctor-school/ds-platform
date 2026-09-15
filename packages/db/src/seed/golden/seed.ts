@@ -30,6 +30,11 @@ export interface GoldenSeedResult {
   total: number;
   /** Objects PUT into the media store, or `null` when no store was supplied. */
   mediaWritten: number | null;
+  /**
+   * Objects the store already had and the plan left alone — the committed
+   * portraits. Generated programmes are always re-PUT, so they never land here.
+   */
+  mediaSkipped: number | null;
   /** Objects the dataset's rows reference in total. */
   mediaPlanned: number;
 }
@@ -148,7 +153,7 @@ export async function seedGolden(
   // is a broken portrait and a 404 programme for as long as the gap lasts, and
   // an interrupted seed must never leave the database ahead of the bucket.
   const mediaPlan = await buildGoldenMediaPlan(dataset);
-  const mediaWritten = options.media
+  const media = options.media
     ? await writeGoldenMedia(options.media, mediaPlan)
     : null;
 
@@ -166,7 +171,8 @@ export async function seedGolden(
       now: now.toISOString(),
       steps,
       total: steps.reduce((sum, s) => sum + s.rows, 0),
-      mediaWritten,
+      mediaWritten: media?.written ?? null,
+      mediaSkipped: media?.skipped ?? null,
       mediaPlanned: mediaPlan.length,
     };
   });

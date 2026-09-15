@@ -42,7 +42,7 @@ async function main(): Promise<void> {
       console.log(`  ${step.name.padEnd(20)} ${String(step.rows).padStart(4)}`);
     }
     console.log(
-      `  ${"media".padEnd(20)} ${String(result.mediaWritten ?? 0).padStart(4)} of ${result.mediaPlanned} objects written`,
+      `  ${"media".padEnd(20)} ${String(result.mediaWritten ?? 0).padStart(4)} of ${result.mediaPlanned} objects written, ${result.mediaSkipped ?? 0} already present`,
     );
     console.log(
       `golden seed OK — ${result.total} rows, GOLDEN_NOW=${result.now}`,

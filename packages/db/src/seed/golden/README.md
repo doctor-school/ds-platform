@@ -129,19 +129,61 @@ same pin, ordinals ≥ `GOLDEN_VOLUME_ORDINAL_BASE` (1000) in every id group, so
 the named catalogue keeps its ids, its offsets and its position in each array.
 `isGoldenVolumeUuid(id)` answers «is this a volume row?» from the id alone.
 
-| Family               | Volume rows | Shape                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `events`             | 55          | 17 `published` upcoming: one per ISO week for 16 weeks (≈4 calendar months) plus one **сегодня**, six hours out, which is both a schedule state of its own and the row that keeps the CURRENT month non-empty when the seed runs near a month end · 2 `live` · 3 `draft` · 3 `hidden` · 22 `ended` back to −197d (15 with a recording, of which 3 are still a draft montage; 7 with none) · 8 `in_archive` with `origin = legacy` and a published recording each, back to −385d. Mixed `online`/`offline`/`hybrid`; one offline event in eleven is sold out (`seats_left = 0`). |
-| `experts`            | 32          | all `published` with `first_published_at`; each carries `photo_ref` (a committed portrait — «Media» below), a 2–3 sentence `bio`, `credentials` (степень / звание / категория), `affiliation` and `professional_role`; each linked to ≥6 events                                                                                                                                                                                                                                                                                                                                 |
-| `projects`           | 12          | `school` and `media` mixed, all published, each with a two-paragraph description; each on ≥4 events                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `event_experts`      | 2–4/event   | co-prime strides over the expert list, deduped, positions 0…3; roles `Спикер` / `Модератор` / `Эксперт`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `event_projects`     | 1–2/event   | co-prime strides over the project list, deduped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `users`              | 13          | 8 verified · 3 unverified · 2 retired (`deleted_at` + `deactivated_at`) — all `doctor_guest`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `registrations`      | 46          | 39 generated (3 per volume doctor on co-prime slots, past and future; 1 in 7 `retired` + `deleted_at` = a cancellation) + 7 extra for the two IdP-backed named doctors, so «мои эфиры» is walkable as a real signed-in user. Slots cover only `published`/`live`/`ended` эфиры — the product refuses a `draft` or `hidden` one — and `registered_at` is derived from the event's own offset, so it always precedes both the эфир and «now»                                                                                                                                      |
-| `event_recordings`   | 32          | 20 `published` · 8 `draft` · 4 `retired`; `edited` and `raw` both present                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `stream_config`      | 17          | the 2 live and the 15 recorded ended events; never on a `legacy` archive row                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `consent_records`    | 39          | the same 3 purposes × 13 doctors as the named rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `doctor_specialties` | 13          | one primary specialty per volume doctor, names from the closed Минздрав book                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+#### The calendar rule
+
+The dataset is not a list of эфиры with dates attached — it is a **season**, and
+the season is what the rest of the numbers fall out of. `gridCells` anchors on
+the МСК Monday of the pin's own week and lays down weeks **−28 … +18** around it
+(a little over ten months, so the archive has depth and «Расписание» has four
+months of future to page through). Inside each week:
+
+| Day      | Эфиры                                                      | Time МСК                                                          |
+| -------- | ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| Mon–Fri  | 2 or 3, on the running counter `[2, 3, 2, 3, 3, 2, 3]`     | `13:00`/`16:00` + `19:30`, or `11:00`/`13:00` + `18:00` + `19:30` |
+| Saturday | 1, **every** week                                          | `11:00`                                                           |
+| Sunday   | the «школа» — one week in four, nothing on the other three | `10:00`                                                           |
+
+Seven cadence entries against five weekdays make the pattern drift instead of
+stamping «Monday is always a two-эфир day» into the calendar, and the slot set
+alternates on the day counter, so two neighbouring days never look like copies
+of each other. Saturday is deliberately weekly rather than fortnightly: every
+day the owner opens in «Расписание» has to carry something, and a fortnightly
+Saturday leaves half of them blank — the defect the Stage-B walk of PR #2216
+found.
+
+Three rows are appended after the grid, in a fixed order so no grid ordinal ever
+moves: two `live` rooms (a grid cell is «live» for ninety minutes a week, and the
+room happy path has to be reachable at _any_ pin) and one эфир later **today** —
+its own schedule state, the badge and the countdown, and the row that keeps «этот
+месяц» non-empty on a pin in the last hours of a month.
+
+**State is a function of position, never of a quota.** A cell ahead of the pin is
+`published` (with one `draft` and one `hidden` per future month, always on the
+first slot of a day that carries two or three, so the doctor still sees a
+published эфир there); a cell behind it is `ended`, and the oldest 35 % of the
+past is `in_archive`. Seven ended эфиры in ten carry a recording; one recorded
+эфир in thirteen is still a draft montage, so the доктор sees the same «запись
+готовится» plaque either way.
+
+Every count in the table below is therefore an **output of the rule, not an
+input**. Because the grid is anchored on the pin's own Monday, the outputs are
+also pin-invariant: 672 эфиров at `2026-01-15T12:00:00.000Z` and 672 at every
+other pin the suite replays, with only the per-state split breathing by a row or
+two as the week boundary moves.
+
+| Family               | Rows at the pin   | Shape                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`             | 672               | 253 `published` · 263 `ended` · 142 `in_archive` (`origin = legacy`, a published recording each) · 6 `draft` · 5 `hidden` · 3 `live`. 666 of them are volume rows, the other 6 the named catalogue. Formats are evenly mixed (223 `online` · 221 `offline` · 222 `hybrid`); 40 of the room-bound ones are sold out (`seats_left = 0`). 93 ended эфиры carry `recording_expected_by` — the dated «запись готовится» plaque — half of them still ahead of the pin, half deliberately overdue                                                                                    |
+| `experts`            | 34                | 32 volume + the 2 named, all `published` with `first_published_at`; each carries `photo_ref` (a committed portrait — «Media» below), a 2–3 sentence `bio`, `credentials` (степень / звание / категория), `affiliation` and `professional_role`                                                                                                                                                                                                                                                                                                                                |
+| `projects`           | 14                | 12 volume + the 2 named; `school` and `media` mixed, all published, each with a two-paragraph description                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `event_experts`      | 1 899 (2–4/event) | co-prime strides over the expert list, deduped, positions 0…3; roles `Спикер` / `Модератор` / `Эксперт`, with a `Модератор` on 666 of the 672 эфиры — a panel without a moderator is not the shape the page renders                                                                                                                                                                                                                                                                                                                                                           |
+| `event_projects`     | 1 001 (1–2/event) | co-prime strides over the project list, deduped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `users`              | 18                | 13 volume doctors (8 verified · 3 unverified · 2 retired with `deleted_at` + `deactivated_at`) + the 5 named accounts — all `doctor_guest` except the one `platform_admin`                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `registrations`      | 379               | 15 to 40 per verified volume doctor, spread over the WHOLE season (past and future) on a prime stride, so «мои эфиры» paginates and holds a mixed history; the two IdP-backed named doctors hold 12 generated rows each on top of their catalogue ones, short enough to read on one screen. 37 rows (9.8 %) are `retired` + `deleted_at` — the cancellation shape. Slots cover only `published`/`live`/`ended` эфиры (the product refuses a `draft` or `hidden` one), and `registered_at` falls after the HOLDER's own account was created and before both the эфир and «now» |
+| `event_recordings`   | 435               | 312 `published` · 77 `draft` · 46 `retired`; 372 `edited` and 63 `raw`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `stream_config`      | 188               | one per эфир that has a room to configure — the live ones and the recorded ended ones; never on a `legacy` archive row                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `consent_records`    | 51                | the same 3 purposes × every consenting doctor, volume and named alike                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `doctor_specialties` | 15                | one primary specialty per doctor, names from the closed Минздрав book                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Design rules this half obeys, each locked by a `#2213:` test in `golden.spec.ts`:
 
@@ -161,10 +203,15 @@ Design rules this half obeys, each locked by a `#2213:` test in `golden.spec.ts`
    shape PR #2216 was rejected for. `durationMin` is not invented either: it is
    the sum of the эфир's own programme (115–185 min), so the card, the page and
    the downloadable programme agree.
-4. **Floors, not censuses.** The tests assert minimums (≥48 events, >20
-   archive-visible rows, gap-free 16-week coverage, each of the previous 6
-   months, ≥2 doctors per state …). Add rows freely; raising a floor means
-   adding the rows _and_ the assertion in the same PR, never relaxing one.
+4. **Floors under a shape, not censuses.** The calendar rule above is the
+   decision; the tests pin floors _under_ it and replay them at several pins
+   rather than counting rows once — every day of the season carries an эфир, no
+   future non-Sunday day is without a `published` one, the season total stays in
+   the same band whatever weekday the seed runs on, every lifecycle state is
+   derived from the timeline, every verified volume doctor holds 15 to 40
+   эфиров, about a tenth of the roster is cancelled. Add rows freely; raising a
+   floor means adding the rows _and_ the assertion in the same PR, never
+   relaxing one.
 5. **No IdP account.** Volume doctors carry a synthetic
    `zitadel_sub = golden-volume-<ordinal>` and exist to populate rosters, lists
    and admin tables. Only a doctor a scenario signs _in_ as needs a real
@@ -193,7 +240,7 @@ Rows alone cannot make those surfaces real, so the seed writes objects too.
 | Key                                     | Content type      | Count | Source                                           |
 | --------------------------------------- | ----------------- | ----- | ------------------------------------------------ |
 | `golden/experts/<ordinal>.webp`         | `image/webp`      | 34    | committed file, `media/portraits/<ordinal>.webp` |
-| `golden/events/<ordinal>/programme.pdf` | `application/pdf` | 46    | rendered at seed time from the эфир's own rows   |
+| `golden/events/<ordinal>/programme.pdf` | `application/pdf` | 616   | rendered at seed time from the эфир's own rows   |
 
 `<ordinal>` is the same ordinal the row's UUID is derived from (`ids.ts`), so a
 key is reconstructible from an id and nothing needs a lookup table. Both named
@@ -223,10 +270,10 @@ not list. The bytes are deterministic: fixed `CreationDate` / `ModDate`, fixed
 Producer and Creator, no generated `/ID`, fonts embedded unsubsetted. Two builds
 at the same `GOLDEN_NOW` produce identical bytes; two builds at different pins
 differ only in the dated lines. Coverage follows a pure ordinal rule — every
-`published` / `live` / `ended` / `in_archive` volume эфир carries one except 3
-of the 17 upcoming ones (46 of 49 eligible rows, ~94 %), which keeps the
-«программа готовится» plaque on the page walkable. `draft` and `hidden` эфиры
-carry none.
+`published` / `live` / `ended` / `in_archive` volume эфир carries one except
+every sixth upcoming one (616 of 657 eligible rows, ~94 %; 41 of the 252
+upcoming эфиры are left without), which keeps the «программа готовится» plaque
+on the page walkable at any pin. `draft` and `hidden` эфиры carry none.
 
 **Where the objects go.** `seedGolden(db, { media })` takes a
 `GoldenMediaStore { exists, put }`; the unit suite injects

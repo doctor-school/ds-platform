@@ -351,12 +351,42 @@ export function composeDescription(i: number, specialty: string): string {
       `golden volume: specialty "${specialty}" has no paragraph bank in content.ts`,
     );
   }
-  const paragraphs: string[] = [bank[i % 2], bank[2 + (Math.floor(i / 2) % 2)]];
+  const paragraphs: string[] = [
+    paragraphAt(bank, i % 2, specialty),
+    paragraphAt(bank, 2 + (Math.floor(i / 2) % 2), specialty),
+  ];
   const count = 3 + (i % 3);
-  if (count >= 4) paragraphs.push(bank[4]);
-  paragraphs.push(FORMAT_PARAGRAPHS[i % FORMAT_PARAGRAPHS.length] as string);
-  if (count >= 5) paragraphs.push(bank[5]);
+  if (count >= 4) paragraphs.push(paragraphAt(bank, 4, specialty));
+  paragraphs.push(
+    paragraphAt(FORMAT_PARAGRAPHS, i % FORMAT_PARAGRAPHS.length, "format"),
+  );
+  if (count >= 5) paragraphs.push(paragraphAt(bank, 5, specialty));
   return paragraphs.join("\n\n");
+}
+
+/**
+ * Reads one paragraph out of a bank, naming the bank that came up short.
+ *
+ * `composeDescription` needs six paragraphs per specialty and cycles the format
+ * bank by modulus, so every index below is inside a bank of the documented size
+ * — but the banks are hand-written literals, and a specialty edited down to five
+ * paragraphs would otherwise surface as `undefined` glued into an эфир's
+ * description on the stand. This turns that editing slip into a seed that
+ * refuses to run and says which bank is short, the same failure shape the
+ * missing-bank check above already has.
+ */
+function paragraphAt(
+  bank: readonly string[],
+  index: number,
+  label: string,
+): string {
+  const paragraph = bank[index];
+  if (paragraph === undefined) {
+    throw new RangeError(
+      `golden volume: paragraph bank "${label}" holds ${bank.length} paragraphs, needs at least ${index + 1}`,
+    );
+  }
+  return paragraph;
 }
 
 /**

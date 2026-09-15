@@ -48,10 +48,6 @@ const config: NextConfig = {
   // `import.meta.url` to its source path under the tracing root, which is why the
   // files must land at `<standalone>/packages/legal-content/documents/`; the glob
   // below is what puts them there.
-  outputFileTracingIncludes: {
-    "/documents": ["../../packages/legal-content/documents/**"],
-    "/documents/[slug]": ["../../packages/legal-content/documents/**"],
-  },
   // Consume the internal packages as source (.tsx) — owned-code shadcn model
   // (ADR-0004 §6), no separate build step. `@ds/room` (#1722) is the shared live
   // room unit this app mounts at /events/:slug/room; it ships TypeScript sources

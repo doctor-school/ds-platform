@@ -19,6 +19,7 @@ import {
   CADDY_CONTAINER,
   GC_FREE_SPACE_FLOOR_BYTES,
   IMAGE_RETENTION,
+  MINIO_CONTAINER,
   PREVIEW_SLOT_CAP,
   REDIS_CONTAINER,
   SLOT_ENV_DIR,
@@ -69,6 +70,10 @@ import {
   runSlotPlan,
   seedCommandPlan,
   shortSha,
+  s3Hostname,
+  slotBucketCreateCommand,
+  slotBucketName,
+  slotBucketRemoveCommand,
   slotComposeFile,
   slotDatabaseName,
   slotEnvPath,
@@ -425,6 +430,57 @@ test("the attachment probe is read for CONTENT, not for its exit status", () => 
   assert.throws(() => caddyIsAttached("[]"), SlotError);
 });
 
+// --- the slot bucket ---------------------------------------------------------
+
+test("a slot's bucket is DNS-shaped: the dash survives where the database name loses it", () => {
+  assert.equal(slotBucketName("pr-7"), "ds-pr-7");
+  assert.equal(slotBucketName("main"), "ds-main");
+  assert.equal(slotDatabaseName("pr-7"), "ds_pr_7");
+  assert.throws(() => slotBucketName("PR-7"), SlotError);
+});
+
+test("the bucket is planned verify-then-act in BOTH directions, `mc mb` / `mc rb --force`", () => {
+  const create = slotBucketCreateCommand("pr-7");
+  assert.equal(create.kind, "ensure-present");
+  const remove = slotBucketRemoveCommand("pr-7");
+  assert.equal(remove.kind, "ensure-absent");
+  // Same probe in both directions — one membership fact, driven to two ends.
+  assert.deepEqual(create.items[0].probe, remove.items[0].probe);
+  assert.match(create.items[0].apply.at(-1), /mc mb local\/ds-pr-7$/);
+  assert.match(remove.items[0].remove.at(-1), /mc rb --force local\/ds-pr-7$/);
+});
+
+test("the bucket steps run inside the MinIO container and never put the secret in argv", () => {
+  for (const step of [slotBucketCreateCommand("pr-7"), slotBucketRemoveCommand("pr-7")]) {
+    for (const argv of [step.items[0].probe, step.items[0].apply ?? step.items[0].remove]) {
+      assert.deepEqual(argv.slice(0, 5), ["sudo", "docker", "exec", MINIO_CONTAINER, "sh"]);
+      // The credentials are shell variables expanded INSIDE the container, so they
+      // reach neither the host's process list nor the run log.
+      assert.match(argv.at(-1), /"\$MINIO_ROOT_USER" "\$MINIO_ROOT_PASSWORD"/);
+      assert.ok(!/MINIO_ROOT_PASSWORD=/.test(argv.at(-1)));
+    }
+  }
+});
+
+test("a `sync` keeps the bucket: the step is ensure-present, never a re-create", () => {
+  const plan = planSlotUp({
+    slot: "pr-7",
+    sha: SHA,
+    liveSlots: live({ "pr-7": [] }),
+    baseDomain: BASE,
+    action: "sync",
+    databaseExists: true,
+    subjects: SUBJECTS,
+    actor: "tech-lead",
+  });
+  const names = labels(plan);
+  assert.equal(stepOf(plan, "create slot bucket").kind, "ensure-present");
+  assert.ok(!names.includes("remove slot bucket"));
+  // Before the migrate/seed pair: the seed may write objects.
+  assert.ok(names.indexOf("create slot bucket") < names.indexOf("migrate"));
+  assert.ok(names.indexOf("create slot bucket") < names.indexOf("seed:golden"));
+});
+
 // --- the slot env ------------------------------------------------------------
 
 test("the per-slot env file carries no secret and no short-SHA tag", () => {
@@ -445,6 +501,18 @@ test("the per-slot env file carries no secret and no short-SHA tag", () => {
   assert.ok(!/SLOT_SHA7/.test(text));
   assert.ok(!/PASSWORD/.test(text));
   assert.ok(!/DATABASE_URL/.test(text));
+  // Object storage: the four ADDRESSING keys, and never the credential half — the
+  // slot compose interpolates S3_SECRET_KEY from MINIO_ROOT_PASSWORD in stage.env.
+  assert.match(text, new RegExp(`^S3_ENDPOINT=https://s3\\.${BASE.replace(/\./g, "\\.")}$`, "m"));
+  assert.match(text, /^S3_BUCKET_UPLOADS=ds-pr-7$/m);
+  assert.match(text, /^S3_REGION=us-east-1$/m);
+  assert.match(text, /^S3_FORCE_PATH_STYLE=true$/m);
+  assert.ok(!/S3_SECRET_KEY/.test(text));
+  assert.ok(!/S3_ACCESS_KEY/.test(text));
+  // The PUBLIC host, never the container-internal one: a presigned SigV4 GET is
+  // signed for the host the browser must fetch it from.
+  assert.ok(!/minio:9000/.test(text));
+  assert.equal(s3Hostname(BASE), `s3.${BASE}`);
   for (const name of GOLDEN_SUBJECT_ENV_VARS) {
     assert.match(text, new RegExp(`^${name}=${SUBJECTS[name]}$`, "m"));
   }
@@ -578,13 +646,14 @@ function upPlan(overrides = {}) {
   });
 }
 
-test("up: ship → env → build → verify → clone → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
+test("up: ship → env → build → verify → clone → bucket → migrate → seed → up → caddy → idp → verify → health → prune → identities", () => {
   assert.deepEqual(labels(upPlan()), [
     "ship the tree",
     "write slot env",
     "build images",
     "verify images boot",
     "clone database",
+    "create slot bucket",
     "migrate",
     "seed:golden",
     "up -d",
@@ -668,7 +737,7 @@ test("an unknown converge action is refused rather than defaulted to `up`", () =
   assert.throws(() => upPlan({ action: "maybe" }), SlotError);
 });
 
-test("down: env → detach → compose down → network → database → images → tree → env → idp", () => {
+test("down: env → detach → compose down → network → database → bucket → images → tree → env → idp", () => {
   const plan = planSlotDown({
     slot: "pr-7",
     liveSlots: live({ "pr-7": SLOT_IMAGES(SHA) }),
@@ -680,6 +749,7 @@ test("down: env → detach → compose down → network → database → images 
     "compose down",
     "remove slot network",
     "drop database",
+    "remove slot bucket",
     "remove slot images",
     "remove the slot tree",
     "remove slot env",
@@ -692,6 +762,9 @@ test("down of main tears the containers down but keeps its persistent database",
   const plan = planSlotDown({ slot: "main", liveSlots: live({ main: [] }), baseDomain: BASE });
   const names = labels(plan);
   assert.ok(!names.includes("drop database"));
+  // Objects are as persistent as rows on `main`: `reset main` re-seeds the database
+  // and never touches the bucket.
+  assert.ok(!names.includes("remove slot bucket"));
   assert.ok(!names.includes("remove slot env"));
   assert.ok(!names.includes("remove the slot tree"));
   assert.ok(!stepOf(plan, "compose down").command.includes("-v"));

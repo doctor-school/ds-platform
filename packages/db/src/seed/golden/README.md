@@ -39,6 +39,14 @@ moment the calendar passes it, and «Расписание эфиров» on the 
 every date-bearing column of the rows it already wrote (see «Idempotency and the
 build»).
 
+Publication instants are the one exception. `first_published_at` is set once by
+the `taxonomy_first_published_at_set_once` trigger (migration 0015): an UPDATE
+that moves or clears it raises a `check_violation`. A slot database is cloned
+from `ds_golden`, so those rows arrive already published — a re-run therefore
+keeps the instant of the first build and refreshes every other date. A
+from-scratch `ds_golden` build starts from an empty database, so its inserts
+write the instants at its own run time.
+
 `GOLDEN_NOW` pins the instant explicitly (strict ISO-8601 UTC with millisecond
 precision; a `2026-01-15` or a `+03:00` offset is refused rather than silently
 reinterpreted — a malformed pin fails the seed, it never falls back to the
@@ -132,10 +140,11 @@ rebuild. Slugs are `golden-*`.
 ## Idempotency and the build
 
 `seed:golden` upserts every row on its fixed UUID inside **one** transaction,
-refreshing every column it wrote. A second run under the same `GOLDEN_NOW`
-therefore changes nothing observable; a second run without a pin rewrites exactly
-the time-derived columns and leaves every id, slug and relation alone — that is
-how the slot's schedule stays in the future. All-or-nothing, because a
+refreshing every column it wrote except the set-once publication instants. A
+second run under the same `GOLDEN_NOW` therefore changes nothing observable; a
+second run without a pin rewrites exactly the time-derived columns it is allowed
+to move and leaves every id, slug, relation and `first_published_at` alone —
+that is how the slot's schedule stays in the future. All-or-nothing, because a
 half-written template that still looks buildable would be inherited by every slot
 cloned from it.
 

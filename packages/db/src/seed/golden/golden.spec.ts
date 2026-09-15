@@ -361,6 +361,11 @@ describe("#2212 a re-run rewrites the dates", () => {
       (s) => s.name === "events",
     )!;
 
+  const stepNamed = (name: string, at: Date) =>
+    buildGoldenSeedPlan(buildGoldenDataset(at, subjects), specialtyIdByName).find(
+      (s) => s.name === name,
+    )!;
+
   it("#2212: the events upsert refreshes every date-bearing column", () => {
     const step = eventsStep(now);
     expect(step.conflictKeys).toEqual(["id"]);
@@ -394,6 +399,47 @@ describe("#2212 a re-run rewrites the dates", () => {
       "startsAt",
       "updatedAt",
     ]);
+  });
+
+  // `taxonomy_first_published_at_set_once` (migration 0015) refuses to move a
+  // publication instant once written. A slot database is cloned from the
+  // `ds_golden` template, so those rows arrive already published — the re-run
+  // upsert must not try to rewrite the instant, or the whole seed transaction
+  // rolls back.
+  it.each(["experts", "projects", "event_recordings"])(
+    "#2212: the %s upsert writes first_published_at on insert but never updates it",
+    (name) => {
+      const step = stepNamed(name, now);
+      expect(
+        step.rows.some((row) => row.firstPublishedAt instanceof Date),
+      ).toBe(true);
+      expect(step.updateKeys).not.toContain("firstPublishedAt");
+      expect(step.conflictKeys).toEqual(["id"]);
+      // Every other date-bearing column still refreshes.
+      expect(step.updateKeys).toContain("updatedAt");
+    },
+  );
+
+  it("#2212: the exclusion is a no-op for steps that never publish", () => {
+    const step = eventsStep(now);
+    expect(step.rows.some((row) => "firstPublishedAt" in row)).toBe(false);
+    expect(step.updateKeys).not.toContain("firstPublishedAt");
+  });
+
+  it("#2212: a publication instant moves in the rows but not in the upsert", () => {
+    const first = stepNamed("experts", now);
+    const second = stepNamed("experts", laterNow);
+
+    const movedInRows = first.rows.filter((row, index) => {
+      const after = second.rows[index]!;
+      return (
+        row.firstPublishedAt instanceof Date &&
+        (after.firstPublishedAt as Date).getTime() !==
+          row.firstPublishedAt.getTime()
+      );
+    });
+    expect(movedInRows.length).toBeGreaterThan(0);
+    expect(second.updateKeys).not.toContain("firstPublishedAt");
   });
 });
 

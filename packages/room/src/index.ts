@@ -27,6 +27,13 @@ export {
   type PlayerStatus,
 } from "./model/room-player-state";
 export { applyPresenceCountPublication } from "./model/presence-channel";
+export {
+  buildRoomReturnHref,
+  isSafeRoomReturnTarget,
+  parseRoomReturnTarget,
+  type RoomReturnRoutes,
+  type RoomReturnTarget,
+} from "./model/room-return";
 
 // Client — "use client" hooks and the browser transport.
 export {

@@ -1,7 +1,8 @@
 import type { EventRegistrationState } from "@ds/schemas";
+import { buildRoomReturnHref } from "@ds/room";
 
 import type { CanvasStatus } from "./event-lifecycle";
-import { buildRoomReturnHref } from "./room-return";
+import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
  * 005 EARS-4/EARS-5 — the Academy's per-user layer over the 004 event page.
@@ -15,7 +16,7 @@ import { buildRoomReturnHref } from "./room-return";
  *
  * What stays HERE is the render decision this host layers on top: the join
  * signpost and the room-entry href, both of which read the Academy's own
- * lifecycle (`lib/event-lifecycle`) and route table (`lib/room-return`).
+ * lifecycle (`lib/event-lifecycle`) and room route values (`lib/room-config`).
  */
 export {
   type ForwardedSession,
@@ -91,6 +92,6 @@ export function resolveRoomEntryHref(
   slug: string,
 ): string | null {
   return resolveJoinSignpost(state, status).kind === "live"
-    ? buildRoomReturnHref(slug)
+    ? buildRoomReturnHref(slug, ACADEMY_ROOM_ROUTES)
     : null;
 }

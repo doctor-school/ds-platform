@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRoomReturnHref, parseRoomReturnTarget } from "./room-return";
+import {
+  buildRoomReturnHref,
+  parseRoomReturnTarget,
+  type RoomReturnRoutes,
+} from "./room-return";
 
 /**
  * 006 EARS-6 — the room-return target guard. When an UNAUTHENTICATED visitor
@@ -16,10 +20,21 @@ import { buildRoomReturnHref, parseRoomReturnTarget } from "./room-return";
  * hardened `@ds/schemas` slug validation (via `parseReturnTarget`) so a hostile
  * slug can never surface a cross-origin / traversal target, and it accepts ONLY a
  * canonical `/webinars/<slug>/room` — nothing else.
+ *
+ * The room PATH is host data, not a package constant (wave-1 entry gate §2.1 rows
+ * 1–5, `config: routes.room`): the Academy's template is supplied here exactly as
+ * `apps/portal/lib/room-config.ts` supplies it in production.
  */
+const ACADEMY_ROOM_ROUTES = {
+  room: "/webinars/:slug/room",
+} as const satisfies RoomReturnRoutes;
+
 describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
   it("EARS-6: accepts a canonical `/webinars/<slug>/room` and reconstructs the canonical room path", () => {
-    const target = parseRoomReturnTarget("/webinars/ahilles-042/room");
+    const target = parseRoomReturnTarget(
+      "/webinars/ahilles-042/room",
+      ACADEMY_ROOM_ROUTES,
+    );
     expect(target).toEqual({
       eventSlug: "ahilles-042",
       returnTo: "/webinars/ahilles-042/room",
@@ -27,7 +42,9 @@ describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
   });
 
   it("EARS-6: rejects the bare event page (no `/room` suffix) — that is the 005 registration-intent, not a room return", () => {
-    expect(parseRoomReturnTarget("/webinars/ahilles-042")).toBeNull();
+    expect(
+      parseRoomReturnTarget("/webinars/ahilles-042", ACADEMY_ROOM_ROUTES),
+    ).toBeNull();
   });
 
   it("EARS-6: rejects a cross-origin / open-redirect / traversal room target — never a navigation off-origin", () => {
@@ -43,7 +60,10 @@ describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
       "/webinars/ahilles-042/heartbeat",
       "/webinars/%2e%2e/room",
     ]) {
-      expect(parseRoomReturnTarget(evil), `must reject: ${evil}`).toBeNull();
+      expect(
+        parseRoomReturnTarget(evil, ACADEMY_ROOM_ROUTES),
+        `must reject: ${evil}`,
+      ).toBeNull();
     }
   });
 
@@ -59,26 +79,45 @@ describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
       "/events/room",
     ]) {
       expect(
-        parseRoomReturnTarget(feedShaped),
+        parseRoomReturnTarget(feedShaped, ACADEMY_ROOM_ROUTES),
         `must reject: ${feedShaped}`,
       ).toBeNull();
     }
     // The bare feed target has no `/room` suffix at all — rejected a step earlier.
-    expect(parseRoomReturnTarget("/events?tense=upcoming&resume=abc")).toBeNull();
+    expect(
+      parseRoomReturnTarget(
+        "/events?tense=upcoming&resume=abc",
+        ACADEMY_ROOM_ROUTES,
+      ),
+    ).toBeNull();
   });
 
   it("EARS-6: rejects a non-string", () => {
-    expect(parseRoomReturnTarget(null)).toBeNull();
-    expect(parseRoomReturnTarget(undefined)).toBeNull();
-    expect(parseRoomReturnTarget(42)).toBeNull();
+    expect(parseRoomReturnTarget(null, ACADEMY_ROOM_ROUTES)).toBeNull();
+    expect(parseRoomReturnTarget(undefined, ACADEMY_ROOM_ROUTES)).toBeNull();
+    expect(parseRoomReturnTarget(42, ACADEMY_ROOM_ROUTES)).toBeNull();
+  });
+
+  it("EARS-6: a host that serves no room admits no room return — an otherwise canonical target is refused", () => {
+    // `undefined` is how a host states it serves no room route (gate §2.1 row 1).
+    // The codec is shared; the ROUTE is not, so the doctor storefront — which has
+    // no room today — can never be handed an academy path by this parser.
+    expect(
+      parseRoomReturnTarget("/webinars/ahilles-042/room", undefined),
+    ).toBeNull();
+    expect(parseRoomReturnTarget("/webinars/ahilles-042/room", {})).toBeNull();
   });
 
   it("EARS-6: builds a same-origin room href for a slug, escaping a hostile slug so it can never front a cross-origin target", () => {
-    expect(buildRoomReturnHref("ahilles-042")).toBe(
+    expect(buildRoomReturnHref("ahilles-042", ACADEMY_ROOM_ROUTES)).toBe(
       "/webinars/ahilles-042/room",
     );
-    for (const evil of ["//evil.example", "https://evil.example", "../../etc"]) {
-      const href = buildRoomReturnHref(evil);
+    for (const evil of [
+      "//evil.example",
+      "https://evil.example",
+      "../../etc",
+    ]) {
+      const href = buildRoomReturnHref(evil, ACADEMY_ROOM_ROUTES);
       expect(href.startsWith("/webinars/")).toBe(true);
       expect(href.endsWith("/room")).toBe(true);
       expect(href).not.toMatch(/^\/\//);

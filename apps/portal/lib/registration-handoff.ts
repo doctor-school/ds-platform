@@ -19,8 +19,9 @@ import {
   parseAcademyEventReturnTarget,
   parseSameOriginReturnTarget,
 } from "@ds/schemas";
+import { parseRoomReturnTarget } from "@ds/room";
 
-import { parseRoomReturnTarget } from "./room-return";
+import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
  * 005 EARS-2 / 014 EARS-6 — carry a `returnTo` ONWARD through an intermediate
@@ -42,7 +43,7 @@ export function withReturnTarget(
   // ANY same-origin page, so a visitor sent to auth from any other login-gated
   // surface keeps their origin across the hop instead of silently losing it here.
   const safe =
-    parseRoomReturnTarget(rawReturnTo)?.returnTo ??
+    parseRoomReturnTarget(rawReturnTo, ACADEMY_ROOM_ROUTES)?.returnTo ??
     parseAcademyEventReturnTarget(rawReturnTo)?.returnTo ??
     parseSameOriginReturnTarget(rawReturnTo);
   if (!safe) return path;

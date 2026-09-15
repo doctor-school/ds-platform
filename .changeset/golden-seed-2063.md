@@ -5,12 +5,16 @@
 #2063 — `@ds/db` gains the golden dataset and its seed (`src/seed/golden`), the
 deterministic fixture the staging regression contour restores from.
 
-Every row is pinned: fixed UUIDs (`goldenUuid`), timestamps derived from one
-`GOLDEN_NOW` (default `2026-01-15T12:00:00.000Z`, overridable for the drift
-check), and a typed `golden` catalogue of the entities scenarios address by name
+Every identity is pinned: fixed UUIDs (`goldenUuid`) and a typed `golden`
+catalogue of the entities scenarios address by name
 (`golden.events.upcoming.slug`, `golden.doctors.verifiedCardiologist`, …).
-`seedGolden` upserts the whole set in one transaction keyed on those ids, so a
-second run rewrites the same values into the same rows and changes nothing
+Timestamps are derived from one «now» that defaults to the seed run time — so an
+«upcoming» event stays upcoming on a stand whose apps read the real clock — with
+`GOLDEN_NOW` as the explicit pin for the unit suite and the drift check; the
+set-once publication instants (`first_published_at`) are excluded from the
+upsert's update set and keep the value of the first write. `seedGolden` upserts
+the whole set in one transaction keyed on those ids, so a second run under the
+same pin rewrites the same values into the same rows and changes nothing
 observable; it refuses to run when a golden IdP account's subject is missing
 rather than inventing one.
 

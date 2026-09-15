@@ -139,6 +139,19 @@ export function buildGoldenSeedPlan(
   return steps;
 }
 
+/**
+ * Columns a re-run must NOT rewrite.
+ *
+ * `first_published_at` is a publication instant: the `taxonomy_first_published_at_set_once`
+ * trigger (migration 0015, attached to every publishable taxonomy table) raises a
+ * `check_violation` when an UPDATE moves or clears it. A slot database is cloned from the
+ * `ds_golden` template, so its rows already carry the instant the template build wrote —
+ * a re-run that tried to refresh it would abort the whole seed transaction. The insert
+ * still writes it; a re-run keeps the instant of that first write and refreshes every
+ * other column.
+ */
+const SET_ONCE_KEYS = ["firstPublishedAt"] as const;
+
 function step(
   name: string,
   table: unknown,
@@ -152,10 +165,15 @@ function step(
     table,
     rows: rows as Record<string, unknown>[],
     conflictKeys,
-    // A re-run refreshes every non-key column it wrote. Columns the dataset
-    // never sets are left alone rather than reset to a default: the seed owns
-    // what it writes, not the whole row.
-    updateKeys: [...keys].filter((key) => !conflictKeys.includes(key)),
+    // A re-run refreshes every non-key column it wrote, minus the set-once
+    // publication instants. Columns the dataset never sets are left alone
+    // rather than reset to a default: the seed owns what it writes, not the
+    // whole row.
+    updateKeys: [...keys].filter(
+      (key) =>
+        !conflictKeys.includes(key) &&
+        !(SET_ONCE_KEYS as readonly string[]).includes(key),
+    ),
   };
 }
 

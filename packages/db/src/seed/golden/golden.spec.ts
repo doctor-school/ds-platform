@@ -24,7 +24,6 @@ import {
   type GoldenSubjectMap,
 } from "./idp.js";
 import {
-  GOLDEN_NOW_DEFAULT,
   GOLDEN_NOW_ENV_VAR,
   GoldenNowError,
   goldenDateOnly,
@@ -53,11 +52,26 @@ const specialtyIdByName = new Map(
   RAZDEL_I_NAMES.map((name, index) => [name, goldenUuid(0x00ff, index + 1)]),
 );
 
-const now = resolveGoldenNow({});
+// Every dataset assertion below is deterministic, so the suite pins the instant
+// explicitly rather than inheriting the run-time default.
+const PINNED_NOW = "2026-01-15T12:00:00.000Z";
+
+const now = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW });
 
 describe("#2063 golden «now» pin", () => {
-  it("defaults to the pinned instant when nothing overrides it", () => {
-    expect(resolveGoldenNow({}).toISOString()).toBe(GOLDEN_NOW_DEFAULT);
+  it("#2212: falls back to the seed run time when nothing pins it", () => {
+    const runTime = new Date("2026-09-15T09:41:07.123Z");
+    expect(resolveGoldenNow({}, () => runTime).toISOString()).toBe(
+      runTime.toISOString(),
+    );
+  });
+
+  it("#2212: lets an explicit pin win over the run-time clock", () => {
+    const pin = "2026-01-15T12:00:00.000Z";
+    const clock = () => new Date("2026-09-15T09:41:07.123Z");
+    expect(
+      resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: pin }, clock).toISOString(),
+    ).toBe(pin);
   });
 
   it("honours an explicit override", () => {
@@ -167,7 +181,10 @@ describe("#2063 golden dataset", () => {
   const dataset = buildGoldenDataset(now, subjects);
 
   it("is byte-identical across two builds at the same pin", () => {
-    const again = buildGoldenDataset(resolveGoldenNow({}), subjects);
+    const again = buildGoldenDataset(
+      resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW }),
+      subjects,
+    );
     expect(JSON.stringify(again)).toBe(JSON.stringify(dataset));
   });
 
@@ -328,6 +345,101 @@ describe("#2063 golden seed plan", () => {
     expect(() =>
       resolveDoctorSpecialtyRows(dataset.doctorSpecialties, new Map()),
     ).toThrow(GoldenPlanError);
+  });
+});
+
+describe("#2212 a re-run rewrites the dates", () => {
+  // The seed now moves with the wall clock, so the property that makes that
+  // safe is the upsert: a second run over the SAME ids must refresh every
+  // time-derived column rather than leave yesterday's schedule in place.
+  const laterNow = resolveGoldenNow({
+    [GOLDEN_NOW_ENV_VAR]: "2026-03-20T12:00:00.000Z",
+  });
+
+  const eventsStep = (at: Date) =>
+    buildGoldenSeedPlan(buildGoldenDataset(at, subjects), specialtyIdByName).find(
+      (s) => s.name === "events",
+    )!;
+
+  const stepNamed = (name: string, at: Date) =>
+    buildGoldenSeedPlan(buildGoldenDataset(at, subjects), specialtyIdByName).find(
+      (s) => s.name === name,
+    )!;
+
+  it("#2212: the events upsert refreshes every date-bearing column", () => {
+    const step = eventsStep(now);
+    expect(step.conflictKeys).toEqual(["id"]);
+    for (const key of ["startsAt", "createdAt", "updatedAt"]) {
+      expect(step.updateKeys).toContain(key);
+    }
+  });
+
+  it("#2212: two runs keep the ids and differ only in date-bearing columns", () => {
+    const first = eventsStep(now).rows;
+    const second = eventsStep(laterNow).rows;
+
+    expect(second.map((row) => row.id)).toEqual(first.map((row) => row.id));
+
+    const moved = new Set<string>();
+    for (const [index, before] of first.entries()) {
+      const after = second[index]!;
+      expect(Object.keys(after)).toEqual(Object.keys(before));
+      for (const key of Object.keys(before)) {
+        if (JSON.stringify(after[key]) === JSON.stringify(before[key])) continue;
+        expect(
+          before[key] instanceof Date || key === "recordingExpectedBy",
+        ).toBe(true);
+        moved.add(key);
+      }
+    }
+    expect([...moved].sort()).toEqual([
+      "createdAt",
+      "liveAt",
+      "recordingExpectedBy",
+      "startsAt",
+      "updatedAt",
+    ]);
+  });
+
+  // `taxonomy_first_published_at_set_once` (migration 0015) refuses to move a
+  // publication instant once written. A slot database is cloned from the
+  // `ds_golden` template, so those rows arrive already published — the re-run
+  // upsert must not try to rewrite the instant, or the whole seed transaction
+  // rolls back.
+  it.each(["experts", "projects", "event_recordings"])(
+    "#2212: the %s upsert writes first_published_at on insert but never updates it",
+    (name) => {
+      const step = stepNamed(name, now);
+      expect(
+        step.rows.some((row) => row.firstPublishedAt instanceof Date),
+      ).toBe(true);
+      expect(step.updateKeys).not.toContain("firstPublishedAt");
+      expect(step.conflictKeys).toEqual(["id"]);
+      // Every other date-bearing column still refreshes.
+      expect(step.updateKeys).toContain("updatedAt");
+    },
+  );
+
+  it("#2212: the exclusion is a no-op for steps that never publish", () => {
+    const step = eventsStep(now);
+    expect(step.rows.some((row) => "firstPublishedAt" in row)).toBe(false);
+    expect(step.updateKeys).not.toContain("firstPublishedAt");
+  });
+
+  it("#2212: a publication instant moves in the rows but not in the upsert", () => {
+    const first = stepNamed("experts", now);
+    const second = stepNamed("experts", laterNow);
+
+    const movedInRows = first.rows.filter((row, index) => {
+      const after = second.rows[index]!;
+      return (
+        row.firstPublishedAt instanceof Date &&
+        (after.firstPublishedAt as Date).getTime() !==
+          row.firstPublishedAt.getTime()
+      );
+    });
+    expect(movedInRows.length).toBeGreaterThan(0);
+    expect(second.updateKeys).not.toContain("firstPublishedAt");
   });
 });
 

@@ -1,5 +1,5 @@
 // #2063 — the golden dataset itself: every row the staging template database
-// carries, derived from ONE pinned instant and a fixed identity catalogue.
+// carries, derived from ONE resolved «now» and a fixed identity catalogue.
 //
 // Shape rules this module obeys, all of them load-bearing for the §9 drift rule:
 //   * no `Date.now()`, no `new Date()` without an argument, no `defaultNow()`
@@ -95,7 +95,7 @@ export class GoldenDatasetError extends Error {
 }
 
 /**
- * Builds every golden row for the pinned instant.
+ * Builds every golden row for the resolved «now» (see `now.ts`).
  *
  * Deterministic in both arguments: the same `now` and the same subject map
  * always yield byte-identical rows.

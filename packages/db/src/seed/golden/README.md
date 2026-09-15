@@ -132,9 +132,9 @@ the named catalogue keeps its ids, its offsets and its position in each array.
 | Family               | Volume rows | Shape                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `events`             | 55          | 17 `published` upcoming: one per ISO week for 16 weeks (≈4 calendar months) plus one **сегодня**, six hours out, which is both a schedule state of its own and the row that keeps the CURRENT month non-empty when the seed runs near a month end · 2 `live` · 3 `draft` · 3 `hidden` · 22 `ended` back to −197d (15 with a recording, of which 3 are still a draft montage; 7 with none) · 8 `in_archive` with `origin = legacy` and a published recording each, back to −385d. Mixed `online`/`offline`/`hybrid`; one offline event in eleven is sold out (`seats_left = 0`). |
-| `experts`            | 8           | all `published` with `first_published_at`; each linked to ≥6 events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `projects`           | 5           | 3 `school` + 2 `media`, all published; each on ≥4 events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `event_experts`      | 1–3/event   | co-prime strides over the expert list, deduped, positions 0…2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `experts`            | 32          | all `published` with `first_published_at`; each carries `photo_ref` (a committed portrait — «Media» below), a 2–3 sentence `bio`, `credentials` (степень / звание / категория), `affiliation` and `professional_role`; each linked to ≥6 events                                                                                                                                                                                                                                                                                                                                 |
+| `projects`           | 12          | `school` and `media` mixed, all published, each with a two-paragraph description; each on ≥4 events                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `event_experts`      | 2–4/event   | co-prime strides over the expert list, deduped, positions 0…3; roles `Спикер` / `Модератор` / `Эксперт`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `event_projects`     | 1–2/event   | co-prime strides over the project list, deduped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `users`              | 13          | 8 verified · 3 unverified · 2 retired (`deleted_at` + `deactivated_at`) — all `doctor_guest`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `registrations`      | 46          | 39 generated (3 per volume doctor on co-prime slots, past and future; 1 in 7 `retired` + `deleted_at` = a cancellation) + 7 extra for the two IdP-backed named doctors, so «мои эфиры» is walkable as a real signed-in user. Slots cover only `published`/`live`/`ended` эфиры — the product refuses a `draft` or `hidden` one — and `registered_at` is derived from the event's own offset, so it always precedes both the эфир and «now»                                                                                                                                      |
@@ -152,7 +152,15 @@ Design rules this half obeys, each locked by a `#2213:` test in `golden.spec.ts`
    every instant is `shiftFromNow(now, …)`. Same pin ⇒ same bytes.
 3. **Product-like text.** Russian titles, names and specialties from a curated
    programme. «Event 17» would make an operator walk unreadable and would hide
-   the text-length problems a real catalogue has.
+   the text-length problems a real catalogue has. The banks live in
+   `content.ts`: 133 titles across 14 specialties of the Минздрав book, 6
+   paragraphs per specialty plus 8 shared format/НМО paragraphs, 32 expert
+   specs and 12 projects. `composeDescription(i, specialty)` assembles 3–5
+   paragraphs (101–247 words per эфир) from those banks by index alone, so
+   neighbouring cards never repeat and no description is a single line — the
+   shape PR #2216 was rejected for. `durationMin` is not invented either: it is
+   the sum of the эфир's own programme (115–185 min), so the card, the page and
+   the downloadable programme agree.
 4. **Floors, not censuses.** The tests assert minimums (≥48 events, >20
    archive-visible rows, gap-free 16-week coverage, each of the previous 6
    months, ≥2 doctors per state …). Add rows freely; raising a floor means
@@ -174,6 +182,69 @@ Design rules this half obeys, each locked by a `#2213:` test in `golden.spec.ts`
    carrying `first_published_at`; the upsert still writes it on insert and never
    on update, or the `taxonomy_first_published_at_set_once` trigger rolls the
    whole re-seed back.
+
+### Media
+
+A catalogue of эфиры without a single speaker photo and without a single
+programme is not the product: the doctor page renders a portrait next to every
+speaker and a «Скачать программу» download when `events.program_pdf_ref` is set.
+Rows alone cannot make those surfaces real, so the seed writes objects too.
+
+| Key                                     | Content type      | Count | Source                                           |
+| --------------------------------------- | ----------------- | ----- | ------------------------------------------------ |
+| `golden/experts/<ordinal>.webp`         | `image/webp`      | 34    | committed file, `media/portraits/<ordinal>.webp` |
+| `golden/events/<ordinal>/programme.pdf` | `application/pdf` | 46    | rendered at seed time from the эфир's own rows   |
+
+`<ordinal>` is the same ordinal the row's UUID is derived from (`ids.ts`), so a
+key is reconstructible from an id and nothing needs a lookup table. Both named
+experts get a portrait too; their ids, slugs and every other column stay
+byte-identical.
+
+**Portraits.** The 34 committed WebP files are **synthetic faces** produced by a
+StyleGAN2-class generator (`thispersondoesnotexist.com`) — no real person, no
+model release to chase, no stock licence to track. Each was normalised once, by
+hand, to 512×512 WebP (`ffmpeg` + `libwebp`, quality 80, generator watermark
+cropped before the resize) and is ≤25 KB; the whole set is well under a
+megabyte. They are read with `fs.readFile` relative to `import.meta.url`, which
+is correct because `seed:golden` always runs from source (`tsx
+src/seed/golden/run.ts` inside the `migrate` one-shot). A consumer that ran a
+compiled `dist` copy would get a loud `ENOENT` rather than a silent skip — the
+right failure for a fixture that is supposed to be complete.
+
+**Programmes.** Nothing is committed: each PDF is rendered at seed time by
+`renderProgrammePdf` (`pdf-lib` + `@pdf-lib/fontkit`) over the two committed
+Inter faces in `media/fonts/` (`Inter-Regular.ttf`, `Inter-SemiBold.ttf`, SIL
+Open Font License 1.1, `OFL.txt` alongside them). The document is derived from
+the эфир's own rows — title, date and time МСК, format, the timed sessions from
+`programme.ts`, each named speaker with the role that row actually gives them, a
+«Вопросы и ответы» block and the sponsoring project from the event's first
+`event_projects` link — so a programme can never name a speaker the page does
+not list. The bytes are deterministic: fixed `CreationDate` / `ModDate`, fixed
+Producer and Creator, no generated `/ID`, fonts embedded unsubsetted. Two builds
+at the same `GOLDEN_NOW` produce identical bytes; two builds at different pins
+differ only in the dated lines. Coverage follows a pure ordinal rule — every
+`published` / `live` / `ended` / `in_archive` volume эфир carries one except 3
+of the 17 upcoming ones (46 of 49 eligible rows, ~94 %), which keeps the
+«программа готовится» plaque on the page walkable. `draft` and `hidden` эфиры
+carry none.
+
+**Where the objects go.** `seedGolden(db, { media })` takes a
+`GoldenMediaStore { exists, put }`; the unit suite injects
+`createInMemoryGoldenMediaStore()`, and `run.ts` builds an S3 store from
+`S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET_UPLOADS`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
+(`S3_FORCE_PATH_STYLE` defaults on, for MinIO). A missing variable **refuses the
+run** and names every missing one at once, exactly like the `DATABASE_URL`
+check: there is no skip flag and no fake store on the production path, because a
+seed that quietly wrote rows pointing at objects nobody uploaded is worse than a
+seed that failed. The per-slot bucket and this environment are wired by #2223.
+
+**Idempotency.** The plan is pure — a list of `{key, contentType, bytes}` built
+from the dataset at the pin — and the writer PUTs only the keys `exists()`
+reports absent, eight at a time. A re-seed of an unchanged template therefore
+writes 0 objects, and the media half obeys the same «a second run changes
+nothing observable» rule as the rows. Media is written **before** the row
+transaction: a failed upload aborts the seed with no rows referring to a missing
+object.
 
 ### Two recorded deviations
 

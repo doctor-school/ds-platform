@@ -5,6 +5,10 @@
  * The display-name helpers are deliberately NOT re-exported here — they live on the
  * `@ds/room/display-name` subpath (D20) so a non-room surface can use them without
  * pulling the chat transport into its module graph.
+ *
+ * The room-return codec follows the same rule on `@ds/room/room-return`: `/login`,
+ * `/register` and `/verify` parse a room `returnTo` without reaching the room's
+ * browser transport or parts at all.
  */
 
 // Model — pure, no I/O, no React.

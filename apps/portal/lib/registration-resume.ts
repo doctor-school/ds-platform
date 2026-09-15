@@ -5,9 +5,10 @@ import {
   type ReturnHost,
   completeReturnTarget as completeSharedReturnTarget,
 } from "@ds/events-storefront";
+import { parseRoomReturnTarget } from "@ds/room/room-return";
 
 import { resolveReturnTarget } from "./return-to-origin";
-import { parseRoomReturnTarget } from "./room-return";
+import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
  * 005 EARS-2 — the ACADEMY projection of the shared completion-on-return rule.
@@ -31,11 +32,12 @@ import { parseRoomReturnTarget } from "./room-return";
  * `/events?…&resume=<slug>` (019 EARS-12) from being an intent here: it fires no
  * `RegisterForEvent` and is never treated as an academy event page.
  *
- * Consumers (`/login`, `/register`, `/verify`, `lib/room-return`) keep this import
+ * Consumers (`/login`, `/register`, `/verify`, the room route table) keep this import
  * path and this signature — the extraction moved the rule, not the seam.
  */
 const ACADEMY_RETURN_HOST: ReturnHost = {
-  parseRoomReturn: parseRoomReturnTarget,
+  parseRoomReturn: (returnTo) =>
+    parseRoomReturnTarget(returnTo, ACADEMY_ROOM_ROUTES),
   parseIntent: parseAcademyEventReturnTarget,
   defaultLanding: "/webinars",
 };

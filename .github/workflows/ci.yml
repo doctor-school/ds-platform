@@ -1569,7 +1569,9 @@ jobs:
   #
   # This job builds both standalone outputs and boots each one, asserting a
   # non-5xx HTTP response on `/` inside a bounded deadline; a crash before first
-  # response, a server that never listens, or a 5xx-only server is red. Guard
+  # response, a server that never listens, or a 5xx-only server is red. After
+  # liveness it probes the per-app runtime-fs routes (`/documents*`, #2012) and
+  # requires HTTP 200 — a route whose asset never entered the trace is red. Guard
   # logic lives in `tools/ci/standalone-boot-check.mjs` so the command CI runs is
   # runnable verbatim on a workstation (`pnpm ci:standalone-boot`).
   #

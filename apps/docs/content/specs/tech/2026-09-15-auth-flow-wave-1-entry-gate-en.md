@@ -216,6 +216,8 @@ Absorbed here: **#1548**, **#1549**, **#1550** (021 EARS-12/13/14, closed as dup
 
 **No clause of the seven absorbed Issues is unlisted.** #1548, #1549 and #1550 are closed as duplicates of this extraction; #1987 and #2001 close with PR 1.4 and PR 1.3; #1393 closes with PR 1.8; #1394 is closed as rejected with the Q2 quote in section 5.
 
+**One deferral retires with it.** `pnpm lint:ears-tests` today reports `003:EARS-39 uncovered — tracked in #1394`. That deferral is discharged by **PR 1.7**, which closes #1394 as rejected and rewrites the `/verify` cold-step tests to the decided behaviour; this docs slice does not edit the approved 003 spec, because the correction belongs with the code PR that makes it true (`repo-conventions.md` → ADRs & specs).
+
 ## 4. PR sequence of wave 1
 
 Eight PRs, in this order. Each one is a complete slice of the four wave steps of the plan's §4 (`(a)` Academy into the package, `(b)` doctor consumes and its copy is deleted, `(c)` registry row + allowlist in the SAME PR, `(d)` no `mirror-of` markers left). Step (d) is satisfied by construction for the whole wave — `grep -rn "mirror-of: " apps/doctor` returns nothing today (§1) — so no PR below owes a marker deletion, and none may introduce one.

@@ -30,6 +30,22 @@ export function goldenUuid(group: number, ordinal: number): string {
   return `${GOLDEN_UUID_PREFIX}-${g}-4d5b-8b63-${o}`;
 }
 
+/** The exact shape `goldenUuid` mints — prefix, version and variant included. */
+const GOLDEN_UUID_RE = new RegExp(
+  `^${GOLDEN_UUID_PREFIX}-[0-9a-f]{4}-4d5b-8b63-[0-9a-f]{12}$`,
+);
+
+/**
+ * True only for a uuid this module minted.
+ *
+ * The marker is the whole prefix, not the ordinal tail: a production uuid can
+ * carry any tail at all, so a tail-only test answers `true` for rows the golden
+ * seed never wrote.
+ */
+export function isGoldenUuid(id: string): boolean {
+  return GOLDEN_UUID_RE.test(id);
+}
+
 function assertRange(label: string, value: number, max: number): void {
   if (!Number.isInteger(value) || value < 0 || value > max) {
     throw new RangeError(

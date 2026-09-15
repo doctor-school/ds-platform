@@ -37,7 +37,7 @@ import {
   GOLDEN_SEED_ORDER,
   goldenReferentialIssues,
   GoldenPlanError,
-  isGoldenVolumeId,
+  isGoldenVolumeUuid,
   resolveDoctorSpecialtyRows,
 } from "./index.js";
 
@@ -500,7 +500,7 @@ describe("#2213 golden dataset at volume", () => {
   const dataset = buildGoldenDataset(now, subjects);
 
   const isVolume = (row: { id?: unknown }) =>
-    typeof row.id === "string" && isGoldenVolumeId(row.id);
+    typeof row.id === "string" && isGoldenVolumeUuid(row.id);
 
   const volumeEvents = dataset.events.filter(isVolume);
   const volumeUsers = dataset.users.filter(isVolume);
@@ -525,9 +525,41 @@ describe("#2213 golden dataset at volume", () => {
   const monthKey = (date: Date): string =>
     `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 
-  /** `now`'s month shifted by whole months — never by days, which skips a 31st. */
-  const shiftedMonthKey = (months: number): string =>
-    monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, 1)));
+  /** A pin's month shifted by whole months — never by days, which skips a 31st. */
+  const shiftedMonthKey = (base: Date, months: number): string =>
+    monthKey(
+      new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + months, 1)),
+    );
+
+  /**
+   * The pins the calendar floors are replayed at.
+   *
+   * The floors are a property of the PLAN, not of one lucky pin: the suite's
+   * own `PINNED_NOW` is mid-month, which is exactly the run date at which a
+   * missing current-month row cannot be seen. These add both month ends, a leap
+   * day, a year boundary, a month starting on a Monday, and a run ninety
+   * minutes before a month rolls over.
+   */
+  const COVERAGE_PINS = [
+    PINNED_NOW,
+    "2025-01-29T12:00:00.000Z",
+    "2026-02-28T12:00:00.000Z",
+    "2026-12-31T12:00:00.000Z",
+    "2027-03-01T12:00:00.000Z",
+    "2028-02-29T09:00:00.000Z",
+    "2026-04-30T22:30:00.000Z",
+  ] as const;
+
+  const atPin = (pin: string) => {
+    const pinned = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: pin });
+    const built = buildGoldenDataset(pinned, subjects);
+    const upcoming = built.events.filter(
+      (e) =>
+        e.state === "published" &&
+        (e.startsAt as Date).getTime() > pinned.getTime(),
+    );
+    return { pinned, built, upcoming };
+  };
 
   it("#2213: carries every entity family at volume, not one positive case", () => {
     expect(dataset.events.length).toBeGreaterThanOrEqual(48);
@@ -571,38 +603,61 @@ describe("#2213 golden dataset at volume", () => {
   });
 
   it("#2213: puts a future event in each of the next 16 ISO weeks", () => {
-    const upcoming = dataset.events.filter(
-      (e) => e.state === "published" && (e.startsAt as Date).getTime() > now.getTime(),
-    );
-    const weeks = [...new Set(upcoming.map((e) => weekStart(e.startsAt as Date)))].sort(
-      (a, b) => a - b,
-    );
-    expect(weeks.length).toBeGreaterThanOrEqual(16);
-    // The first bucket is this week or the next one — no gap in front.
-    expect(weeks[0]!).toBeLessThanOrEqual(weekStart(now) + 7 * 86_400_000);
-    // …and no gap inside: a week view must never render empty mid-range.
-    for (let i = 1; i < weeks.length; i += 1) {
-      expect(weeks[i]! - weeks[i - 1]!).toBe(7 * 86_400_000);
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, upcoming } = atPin(pin);
+      const weeks = [
+        ...new Set(upcoming.map((e) => weekStart(e.startsAt as Date))),
+      ].sort((a, b) => a - b);
+      expect(weeks.length, pin).toBeGreaterThanOrEqual(16);
+      // The first bucket is this week or the next one — no gap in front.
+      expect(weeks[0]!, pin).toBeLessThanOrEqual(
+        weekStart(pinned) + 7 * 86_400_000,
+      );
+      // …and no gap inside: a week view must never render empty mid-range.
+      for (let i = 1; i < weeks.length; i += 1) {
+        expect(weeks[i]! - weeks[i - 1]!, pin).toBe(7 * 86_400_000);
+      }
     }
   });
 
   it("#2213: fills each of the next 4 calendar months and the previous 6", () => {
-    const upcoming = dataset.events.filter(
-      (e) => e.state === "published" && (e.startsAt as Date).getTime() > now.getTime(),
-    );
-    const futureMonths = new Set(upcoming.map((e) => monthKey(e.startsAt as Date)));
-    for (let m = 0; m < 4; m += 1) {
-      expect(futureMonths).toContain(shiftedMonthKey(m));
-    }
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, built, upcoming } = atPin(pin);
+      const futureMonths = new Set(upcoming.map((e) => monthKey(e.startsAt as Date)));
+      // m = 0 is the month the operator opens the schedule IN. The weekly grid
+      // starts three days out, so on the last days of a month it lands entirely
+      // in the next one — the «сегодня» row is what makes this month non-empty
+      // at every run date, not just at a mid-month pin.
+      for (let m = 0; m < 4; m += 1) {
+        expect(futureMonths, pin).toContain(shiftedMonthKey(pinned, m));
+      }
 
-    // The past side is read as one archive, so ended and in_archive count together.
-    const pastMonths = new Set(
-      dataset.events
-        .filter((e) => e.state === "ended" || e.state === "in_archive")
-        .map((e) => monthKey(e.startsAt as Date)),
-    );
-    for (let m = 1; m <= 6; m += 1) {
-      expect(pastMonths).toContain(shiftedMonthKey(-m));
+      // The past side is read as one archive, so ended and in_archive count together.
+      const pastMonths = new Set(
+        built.events
+          .filter((e) => e.state === "ended" || e.state === "in_archive")
+          .map((e) => monthKey(e.startsAt as Date)),
+      );
+      for (let m = 1; m <= 6; m += 1) {
+        expect(pastMonths, pin).toContain(shiftedMonthKey(pinned, -m));
+      }
+    }
+  });
+
+  it("#2213: always carries an эфир later today, whatever the run date", () => {
+    for (const pin of COVERAGE_PINS) {
+      const { pinned, upcoming } = atPin(pin);
+      // «Сегодня» is a schedule state of its own — the badge, the countdown and
+      // the «начнётся сегодня» copy are only reachable through it.
+      const today = upcoming.filter(
+        (e) =>
+          (e.startsAt as Date).getTime() - pinned.getTime() <= 24 * 3_600_000,
+      );
+      expect(today.length, pin).toBeGreaterThanOrEqual(1);
+      expect(
+        today.map((e) => monthKey(e.startsAt as Date)),
+        pin,
+      ).toContain(monthKey(pinned));
     }
   });
 
@@ -613,11 +668,11 @@ describe("#2213 golden dataset at volume", () => {
     const projectsPer = new Map<string, number>();
     for (const link of dataset.eventExperts) {
       const id = link.eventId as string;
-      if (isGoldenVolumeId(id)) expertsPer.set(id, (expertsPer.get(id) ?? 0) + 1);
+      if (isGoldenVolumeUuid(id)) expertsPer.set(id, (expertsPer.get(id) ?? 0) + 1);
     }
     for (const link of dataset.eventProjects) {
       const id = link.eventId as string;
-      if (isGoldenVolumeId(id)) projectsPer.set(id, (projectsPer.get(id) ?? 0) + 1);
+      if (isGoldenVolumeUuid(id)) projectsPer.set(id, (projectsPer.get(id) ?? 0) + 1);
     }
     expect(volumeEvents.length).toBeGreaterThan(0);
     for (const event of volumeEvents) {
@@ -688,6 +743,72 @@ describe("#2213 golden dataset at volume", () => {
     }
   });
 
+  it("#2213: gives every archived эфир the published recording it needs", () => {
+    // `hidden -> in_archive` is offered only when a published recording exists
+    // (014 EARS-25), so an archived row without one is a shape the product
+    // cannot produce — and in «Прошедшие» it renders as a card that promises a
+    // recording forever.
+    const publishedFor = new Set(
+      dataset.eventRecordings
+        .filter((r) => r.status === "published")
+        .map((r) => r.eventId as string),
+    );
+    const archived = dataset.events.filter(
+      (e) => e.state === "in_archive" && isGoldenVolumeUuid(e.id as string),
+    );
+    expect(archived.length).toBeGreaterThanOrEqual(8);
+    for (const event of archived) {
+      expect(publishedFor).toContain(event.id as string);
+    }
+  });
+
+  it("#2213: dates «запись готовится» only where the plaque is rendered", () => {
+    // `recordings.projection.ts` projects the date ONLY when the event has no
+    // published recording; written anywhere else it is invisible, and the dated
+    // plaque (014-design §2) becomes a state no walk can reach.
+    const publishedFor = new Set(
+      dataset.eventRecordings
+        .filter((r) => r.status === "published")
+        .map((r) => r.eventId as string),
+    );
+    const bare = dataset.events.filter(
+      (e) =>
+        isGoldenVolumeUuid(e.id as string) &&
+        e.state === "ended" &&
+        !publishedFor.has(e.id as string),
+    );
+    expect(bare.length).toBeGreaterThanOrEqual(6);
+    for (const event of bare) expect(event.recordingExpectedBy).toBeTruthy();
+    for (const event of dataset.events.filter(
+      (e) => isGoldenVolumeUuid(e.id as string) && publishedFor.has(e.id as string),
+    )) {
+      expect(event.recordingExpectedBy).toBeUndefined();
+    }
+
+    // Both sides of the promise: a date still ahead of «now», and one already
+    // missed — the overdue copy is its own rendered state.
+    const dates = bare.map((e) => Date.parse(`${e.recordingExpectedBy}T00:00:00Z`));
+    expect(dates.filter((d) => d > now.getTime()).length).toBeGreaterThanOrEqual(3);
+    expect(dates.filter((d) => d < now.getTime()).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("#2213: registers doctors only where registration is possible", () => {
+    const byId = new Map(dataset.events.map((e) => [e.id as string, e]));
+    for (const row of dataset.registrations.filter(isVolume)) {
+      const event = byId.get(row.eventId as string)!;
+      // `doctor-register.service.ts` refuses a draft or hidden эфир, and a
+      // `legacy` archive row predates the registration flow entirely.
+      expect(["published", "live", "ended"]).toContain(event.state);
+      const registeredAt = (row.registeredAt as Date).getTime();
+      expect(registeredAt).toBeLessThan((event.startsAt as Date).getTime());
+      expect(registeredAt).toBeLessThan(now.getTime());
+      if (row.deletedAt instanceof Date) {
+        expect(row.deletedAt.getTime()).toBeGreaterThan(registeredAt);
+        expect(row.deletedAt.getTime()).toBeLessThan(now.getTime());
+      }
+    }
+  });
+
   it("#2213: keeps `legacy` origin and the stream room mutually exclusive", () => {
     const byId = new Map(dataset.events.map((e) => [e.id as string, e]));
     for (const event of dataset.events) {
@@ -748,8 +869,11 @@ describe("#2213 golden dataset at volume", () => {
   it("#2213: never renumbers a named row into the volume range", () => {
     // The named catalogue is the compile target of the #2067 scenarios; volume
     // ids live strictly above it, so a scenario `Given` can never collide.
-    expect(isGoldenVolumeId(golden.events.upcoming.id)).toBe(false);
-    expect(isGoldenVolumeId(golden.doctors.verifiedCardiologist.id)).toBe(false);
+    expect(isGoldenVolumeUuid(golden.events.upcoming.id)).toBe(false);
+    expect(isGoldenVolumeUuid(golden.doctors.verifiedCardiologist.id)).toBe(false);
+    // The marker is the golden prefix, not the ordinal tail: a production uuid
+    // whose last twelve hex digits exceed the base is still not a volume row.
+    expect(isGoldenVolumeUuid("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).toBe(false);
     const ids = collectIds(dataset);
     expect(new Set(ids).size).toBe(ids.length);
   });

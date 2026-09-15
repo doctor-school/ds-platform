@@ -16,6 +16,7 @@ export {
   GOLDEN_GROUP,
   golden,
   goldenUuid,
+  isGoldenUuid,
   type GoldenAccountKey,
   type GoldenCatalogue,
 } from "./ids.js";
@@ -39,7 +40,7 @@ export {
 export {
   GOLDEN_VOLUME_ORDINAL_BASE,
   buildGoldenVolume,
-  isGoldenVolumeId,
+  isGoldenVolumeUuid,
   type GoldenVolume,
 } from "./volume.js";
 export {

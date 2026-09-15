@@ -34,7 +34,7 @@ import type {
 import type { NewUser } from "../../schema/users.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 import type { GoldenDoctorSpecialtyLink } from "./dataset.js";
-import { golden, GOLDEN_GROUP, goldenUuid } from "./ids.js";
+import { golden, GOLDEN_GROUP, goldenUuid, isGoldenUuid } from "./ids.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
 
 /**
@@ -47,8 +47,16 @@ import { goldenDateOnly, shiftFromNow } from "./now.js";
  */
 export const GOLDEN_VOLUME_ORDINAL_BASE = 1000;
 
-/** True for a golden id minted by this module (ordinal ≥ the volume base). */
-export function isGoldenVolumeId(id: string): boolean {
+/**
+ * True for a golden uuid minted by this module (ordinal ≥ the volume base).
+ *
+ * The golden prefix is part of the question: without it any production uuid
+ * whose last twelve hex digits happen to exceed the base would answer `true`,
+ * and this predicate is exported — it is used to scope assertions and dumps to
+ * the volume half, never to classify a row the platform itself created.
+ */
+export function isGoldenVolumeUuid(id: string): boolean {
+  if (!isGoldenUuid(id)) return false;
   const ordinal = Number.parseInt(id.slice(-12), 16);
   return Number.isInteger(ordinal) && ordinal >= GOLDEN_VOLUME_ORDINAL_BASE;
 }
@@ -137,6 +145,8 @@ const VOLUME_PROGRAMME: readonly (readonly [string, string])[] = [
   ["Пищевая аллергия у взрослых", "Аллергология и иммунология"],
   ["Ведение пациента с деменцией", "Гериатрия"],
   ["Дерматоскопия для терапевта", "Дерматовенерология"],
+  // The «сегодня» эфир — last in the programme because it is last in the plan.
+  ["Неотложные состояния в кабинете терапевта", "Терапия"],
 ];
 
 /** Descriptions, cycled by ordinal — varied prose, zero randomness. */
@@ -295,7 +305,7 @@ const VOLUME_UNVERIFIED_DOCTORS = 3;
 /** Event-expert roles, by presentation slot. */
 const VOLUME_EXPERT_ROLES = ["Спикер", "Модератор", "Эксперт"] as const;
 
-/** The state plan: how the 54 programme entries are distributed. */
+/** The state plan: how the 55 programme entries are distributed. */
 const UPCOMING_COUNT = 16;
 const LIVE_COUNT = 2;
 const DRAFT_COUNT = 3;
@@ -312,8 +322,10 @@ const LIVE_OFFSETS_MIN = [-20, -45] as const;
 interface VolumeEventPlan {
   index: number;
   state: NonNullable<NewEvent["state"]>;
-  /** Whether an ended event received its recording. */
+  /** Whether the event carries a recording (ended-with-recording, or archived). */
   recorded: boolean;
+  /** The recording exists but is still a draft — so nothing is PUBLISHED yet. */
+  draftOnlyRecording?: boolean;
   /** Days from the pin — the anchor every child row of this event derives from. */
   offsetDays: number;
   startsAt: Date;
@@ -330,7 +342,7 @@ export function buildGoldenVolume(now: Date): GoldenVolume {
   const at = (offset: Parameters<typeof shiftFromNow>[1]) =>
     shiftFromNow(now, offset);
 
-  const plans = planVolumeEvents(at);
+  const plans = planVolumeEvents(now, at);
   if (plans.length !== VOLUME_PROGRAMME.length) {
     throw new RangeError(
       `golden volume plan covers ${plans.length} events but the programme carries ${VOLUME_PROGRAMME.length}`,
@@ -372,10 +384,15 @@ type At = (offset: Parameters<typeof shiftFromNow>[1]) => Date;
  * Upcoming events sit on a strict weekly grid (`+3 + 7k` days) so BOTH calendar
  * views the schedule offers are populated — every one of the next sixteen ISO
  * weeks has an эфир, and the four months those weeks span each have several.
+ * The grid alone leaves two holes, both closed by the «сегодня» row appended
+ * last: today is a schedule state the nearest grid row (three days out) never
+ * reaches, and a seed run in the last days of a month puts the whole grid in
+ * the NEXT month, leaving the doctor's «этот месяц» view empty — the exact
+ * symptom #2212/#2213 exist to prevent.
  * Ended events walk backwards on a nine-day stride, which puts at least one row
  * in every one of the previous six months whatever day the pin falls on.
  */
-function planVolumeEvents(at: At): VolumeEventPlan[] {
+function planVolumeEvents(now: Date, at: At): VolumeEventPlan[] {
   const plans: VolumeEventPlan[] = [];
   let index = 0;
 
@@ -421,37 +438,86 @@ function planVolumeEvents(at: At): VolumeEventPlan[] {
     });
   }
 
+  let recordedEnded = 0;
+  let dated = 0;
   for (let k = 0; k < ENDED_COUNT; k += 1, index += 1) {
     const days = -8 - 9 * k;
     const startsAt = at({ days });
     // Two ended events in three got their recording; the rest are the «запись
-    // готовится» plaque, which is a state the archive has to render too.
+    // готовится» plaque, which is a state the archive has to render too. One
+    // recorded event in four is still a DRAFT montage — published to nobody, so
+    // the доктор sees the same plaque.
     const recorded = k % 3 !== 2;
-    plans.push({
+    const draftOnly = recorded && recordedEnded % 4 === 3;
+    if (recorded) recordedEnded += 1;
+    const plan: VolumeEventPlan = {
       index,
       state: "ended",
       recorded,
       offsetDays: days,
       startsAt,
       liveAt: startsAt,
-      recordingExpectedBy: goldenDateOnly(at({ days: days + 7 })),
-    });
+    };
+    if (draftOnly) plan.draftOnlyRecording = true;
+    if (!recorded || draftOnly) {
+      // The DATED plaque is projected ONLY when the event has no PUBLISHED
+      // recording (`recordings.projection.ts` reads the column exactly on the
+      // rows whose LEFT JOIN found nothing), so the promise belongs to these
+      // rows and to no other. The first five promise a date still ahead of the
+      // pin; the older ones are deliberately overdue, because «обещанная дата
+      // уже прошла» is its own rendered state.
+      const expectedDays = dated < 5 ? 2 + dated * 3 : days + 14;
+      dated += 1;
+      plan.recordingExpectedBy = goldenDateOnly(at({ days: expectedDays }));
+    }
+    plans.push(plan);
   }
 
   for (let k = 0; k < ARCHIVED_COUNT; k += 1, index += 1) {
     const days = -210 - 25 * k;
     const startsAt = at({ days });
+    // An archived эфир always carries a published recording: `hidden ->
+    // in_archive` is offered only when one exists (014 EARS-25), so an archive
+    // row without it is a shape the product cannot produce — and it renders as
+    // a permanent «запись готовится» card in «Прошедшие».
     plans.push({
       index,
       state: "in_archive",
-      recorded: false,
+      recorded: true,
       offsetDays: days,
       startsAt,
       liveAt: startsAt,
     });
   }
 
+  // «Сегодня» — six hours out, appended last so no existing volume ordinal
+  // moves. See `upcomingTodayStart` for why it is not simply `at({ hours: 6 })`.
+  plans.push({
+    index,
+    state: "published",
+    recorded: false,
+    offsetDays: 0,
+    startsAt: upcomingTodayStart(now, at),
+  });
+
   return plans;
+}
+
+/**
+ * Start of the «сегодня» эфир: six hours after the pin.
+ *
+ * Six hours can land in the NEXT calendar month when the seed runs late on the
+ * last day of one, which is precisely the case this row exists to cover. In
+ * that window it moves to the midpoint between the pin and the month's last
+ * instant instead — still today, still strictly ahead of «now», and still
+ * inside the month the doctor is looking at.
+ */
+function upcomingTodayStart(now: Date, at: At): Date {
+  const sixHours = at({ hours: 6 });
+  const monthEnd =
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) - 1;
+  if (sixHours.getTime() <= monthEnd) return sixHours;
+  return new Date(now.getTime() + Math.ceil((monthEnd - now.getTime()) / 2));
 }
 
 function buildEvent(plan: VolumeEventPlan, at: At): NewEvent {
@@ -490,7 +556,7 @@ function buildEvent(plan: VolumeEventPlan, at: At): NewEvent {
     updatedAt: at({ days: -2 - (i % 20) }),
   };
   if (plan.liveAt) row.liveAt = plan.liveAt;
-  if (plan.recorded && plan.recordingExpectedBy) {
+  if (plan.recordingExpectedBy) {
     row.recordingExpectedBy = plan.recordingExpectedBy;
   }
   return row;
@@ -611,7 +677,11 @@ function buildEventProjects(
 
 function buildStreamConfig(plans: VolumeEventPlan[]): NewStreamConfigRow[] {
   return plans
-    .filter((plan) => plan.state === "live" || plan.recorded)
+    // An archived эфир is `legacy`: it has a recording but never a room.
+    .filter(
+      (plan) =>
+        plan.state === "live" || (plan.recorded && plan.state === "ended"),
+    )
     .map((plan) => ({
       eventId: goldenUuid(
         GOLDEN_GROUP.events,
@@ -666,7 +736,12 @@ function buildDoctors(at: At): NewUser[] {
   });
 }
 
-/** Which volume events the two IdP-backed doctors are registered for. */
+/**
+ * Which registrable volume events the two IdP-backed doctors sign up for.
+ *
+ * The numbers index the REGISTRABLE list below, not the plan, so a slot can
+ * never silently become a draft row when the plan grows.
+ */
 const NAMED_DOCTOR_SLOTS: readonly (readonly [string, readonly number[]])[] = [
   [golden.doctors.verifiedCardiologist.id, [0, 4, 30, 40]],
   [golden.doctors.mfaEnrolled.id, [1, 5, 31]],
@@ -681,15 +756,34 @@ const NAMED_DOCTOR_SLOTS: readonly (readonly [string, readonly number[]])[] = [
  * cancellation shape `registrations_retired_iff_deleted` pins — so the roster
  * read path is exercised with rows it must filter OUT.
  *
+ * Only registrable эфиры take a roster: `draft` and `hidden` are refused by
+ * `doctor-register.service.ts`, and an archived `legacy` эфир predates the
+ * platform's registration flow, so a row on one is a shape production can never
+ * hold. `registeredAt` is derived from the EVENT's own offset rather than from
+ * a flat window, for the same reason — the ended rows reach two hundred days
+ * back, and a registration created after its эфир is equally impossible.
+ *
  * The two IdP-backed doctors get their own slots on top, because «мои эфиры» is
  * walked as THEM: a signed-in doctor with three rows proves the list, a doctor
  * with none proves only the empty state.
  */
 function buildRegistrations(plans: VolumeEventPlan[], at: At): NewRegistration[] {
   const rows: NewRegistration[] = [];
-  const total = plans.length;
-  const eventId = (slot: number) =>
-    goldenUuid(GOLDEN_GROUP.events, GOLDEN_VOLUME_ORDINAL_BASE + (slot % total));
+  const registrable = plans.filter(
+    (plan) =>
+      plan.state === "published" ||
+      plan.state === "live" ||
+      plan.state === "ended",
+  );
+  const total = registrable.length;
+  const slotPlan = (slot: number) => registrable[slot % total] as VolumeEventPlan;
+  const eventId = (plan: VolumeEventPlan) =>
+    goldenUuid(GOLDEN_GROUP.events, GOLDEN_VOLUME_ORDINAL_BASE + plan.index);
+  /** Strictly before the эфир starts AND strictly in the past. */
+  const registeredDays = (plan: VolumeEventPlan, n: number) =>
+    Math.min(-(1 + (n % 30)), plan.offsetDays - (2 + (n % 14)));
+  const registeredAt = (plan: VolumeEventPlan, n: number) =>
+    at({ days: registeredDays(plan, n) });
   let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
   let n = 0;
 
@@ -699,14 +793,21 @@ function buildRegistrations(plans: VolumeEventPlan[], at: At): NewRegistration[]
       GOLDEN_VOLUME_ORDINAL_BASE + d,
     );
     for (const offset of [0, 7, 17]) {
+      const plan = slotPlan(d * 3 + offset);
       const row: NewRegistration = {
         id: goldenUuid(GOLDEN_GROUP.registrations, ordinal),
         userId,
-        eventId: eventId(d * 3 + offset),
-        registeredAt: at({ days: -(3 + (n % 45)) }),
+        eventId: eventId(plan),
+        registeredAt: registeredAt(plan, n),
         recordStatus: n % 7 === 6 ? "retired" : "active",
       };
-      if (row.recordStatus === "retired") row.deletedAt = at({ days: -(1 + (n % 5)) });
+      if (row.recordStatus === "retired") {
+        // Cancelled AFTER it was created and BEFORE «now» — a cancellation
+        // instant ahead of its own registration is not a shape a roster has.
+        row.deletedAt = at({
+          days: Math.min(-1, registeredDays(plan, n) + 1 + (n % 3)),
+        });
+      }
       rows.push(row);
       ordinal += 1;
       n += 1;
@@ -715,11 +816,12 @@ function buildRegistrations(plans: VolumeEventPlan[], at: At): NewRegistration[]
 
   for (const [userId, slots] of NAMED_DOCTOR_SLOTS) {
     for (const slot of slots) {
+      const plan = slotPlan(slot);
       rows.push({
         id: goldenUuid(GOLDEN_GROUP.registrations, ordinal),
         userId,
-        eventId: eventId(slot),
-        registeredAt: at({ days: -(4 + (n % 40)) }),
+        eventId: eventId(plan),
+        registeredAt: registeredAt(plan, n),
         recordStatus: "active",
       });
       ordinal += 1;
@@ -751,7 +853,11 @@ function buildRecordings(plans: VolumeEventPlan[], at: At): NewEventRecording[] 
     );
     const createdAt = at({ days: plan.offsetDays + 2 });
     const publishedAt = at({ days: plan.offsetDays + 5 });
-    const draftEdited = r % 4 === 3;
+    // Only an ENDED event may carry an unpublished montage: an archived row
+    // is in the archive BECAUSE a published recording exists (014 EARS-25), so
+    // it gets exactly one, published, and none of the variety below.
+    const ended = plan.state === "ended";
+    const draftEdited = plan.draftOnlyRecording === true;
 
     const edited: NewEventRecording = {
       id: goldenUuid(GOLDEN_GROUP.eventRecordings, ordinal),
@@ -770,7 +876,7 @@ function buildRecordings(plans: VolumeEventPlan[], at: At): NewEventRecording[] 
     rows.push(edited);
     ordinal += 1;
 
-    if (r % 3 === 0) {
+    if (ended && r % 3 === 0) {
       rows.push({
         id: goldenUuid(GOLDEN_GROUP.eventRecordings, ordinal),
         eventId,
@@ -786,7 +892,7 @@ function buildRecordings(plans: VolumeEventPlan[], at: At): NewEventRecording[] 
       ordinal += 1;
     }
 
-    if (r % 4 === 0) {
+    if (ended && r % 4 === 0) {
       // A superseded montage: retired, so it no longer occupies the event's
       // active `edited` slot, but its publication instant survives.
       rows.push({

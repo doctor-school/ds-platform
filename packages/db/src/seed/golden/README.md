@@ -115,6 +115,58 @@ Identities are literal (`ids.ts`), never generated: a scenario compiled against
 `golden.events.live.id` must address the same row in every slot and every
 rebuild. Slugs are `golden-*`.
 
+### The volume half
+
+The named rows above prove that every state _exists_. They do not make a stand
+look like the product, and a walk against one row per state cannot see a
+pagination defect, an empty cell in a week view, a month view with a single
+point, or a list that sorts fine at n=1. Production data never reaches the
+staging box (152-ФЗ), so the **shape** of this dataset is the only substitute
+for it.
+
+`volume.ts` therefore appends a second half at every rebuild — same builder,
+same pin, ordinals ≥ `GOLDEN_VOLUME_ORDINAL_BASE` (1000) in every id group, so
+the named catalogue keeps its ids, its offsets and its position in each array.
+`isGoldenVolumeId(id)` answers «is this a volume row?» from the id alone.
+
+| Family               | Volume rows | Shape                                                                                                                                                                                                                                                                                                                              |
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`             | 54          | 16 `published` upcoming, one per ISO week for 16 weeks (≈4 calendar months) · 2 `live` · 3 `draft` · 3 `hidden` · 22 `ended` back to −197d (15 with a recording, 7 without) · 8 `in_archive` with `origin = legacy`, back to −385d. Mixed `online`/`offline`/`hybrid`; one offline event in eleven is sold out (`seats_left = 0`). |
+| `experts`            | 8           | all `published` with `first_published_at`; each linked to ≥6 events                                                                                                                                                                                                                                                                |
+| `projects`           | 5           | 3 `school` + 2 `media`, all published; each on ≥4 events                                                                                                                                                                                                                                                                           |
+| `event_experts`      | 1–3/event   | co-prime strides over the expert list, deduped, positions 0…2                                                                                                                                                                                                                                                                      |
+| `event_projects`     | 1–2/event   | co-prime strides over the project list, deduped                                                                                                                                                                                                                                                                                    |
+| `users`              | 13          | 8 verified · 3 unverified · 2 retired (`deleted_at` + `deactivated_at`) — all `doctor_guest`                                                                                                                                                                                                                                       |
+| `registrations`      | 46          | 39 generated (3 per volume doctor on co-prime slots, past and future; 1 in 7 `retired` + `deleted_at` = a cancellation) + 7 extra for the two IdP-backed named doctors, so «мои эфиры» is walkable as a real signed-in user                                                                                                        |
+| `event_recordings`   | 24          | 12 `published` · 8 `draft` · 4 `retired`; `edited` and `raw` both present                                                                                                                                                                                                                                                          |
+| `stream_config`      | 17          | the 2 live and the 15 recorded ended events; never on a `legacy` archive row                                                                                                                                                                                                                                                       |
+| `consent_records`    | 39          | the same 3 purposes × 13 doctors as the named rows                                                                                                                                                                                                                                                                                 |
+| `doctor_specialties` | 13          | one primary specialty per volume doctor, names from the closed Минздрав book                                                                                                                                                                                                                                                       |
+
+Design rules this half obeys, each locked by a `#2213:` test in `golden.spec.ts`:
+
+1. **Append, never renumber.** A scenario compiled against a named id sees
+   exactly what it saw before the volume half existed.
+2. **Deterministic without a random source.** No `Math.random`, no faker, no
+   `new Date()` — rows are index-driven plans over curated literal lists and
+   every instant is `shiftFromNow(now, …)`. Same pin ⇒ same bytes.
+3. **Product-like text.** Russian titles, names and specialties from a curated
+   programme. «Event 17» would make an operator walk unreadable and would hide
+   the text-length problems a real catalogue has.
+4. **Floors, not censuses.** The tests assert minimums (≥48 events, >20
+   archive-visible rows, gap-free 16-week coverage, each of the previous 6
+   months, ≥2 doctors per state …). Add rows freely; raising a floor means
+   adding the rows _and_ the assertion in the same PR, never relaxing one.
+5. **No IdP account.** Volume doctors carry a synthetic
+   `zitadel_sub = golden-volume-<ordinal>` and exist to populate rosters, lists
+   and admin tables. Only a doctor a scenario signs _in_ as needs a real
+   Zitadel account, and those are the five named ones above — so `volume.ts`
+   never touches `idp.ts` or the box's provisioning path.
+6. **Set-once instants stay set-once.** The volume half multiplies the rows
+   carrying `first_published_at`; the upsert still writes it on insert and never
+   on update, or the `taxonomy_first_published_at_set_once` trigger rolls the
+   whole re-seed back.
+
 ### Two recorded deviations
 
 1. **«Legal documents» are stored as `consent_records`.** There is no
@@ -219,7 +271,7 @@ database whose book predates the derivation.
 ### `audit_ledger` — build bookkeeping, not dataset content
 
 The dataset is written with `source: db-direct`, and the audit trigger records
-each of those 42 inserts. Those ledger rows are _derived_: their whole payload
+every one of those inserts — the named catalogue and the volume half alike. Those ledger rows are _derived_: their whole payload
 (`metadata.diff`, `metadata.pk`, `event_type`, `table`) is a function of the
 golden rows and is byte-identical between builds. What is not identical is the
 ledger's own write-provenance — `id`, `event_id`, `created_at` and

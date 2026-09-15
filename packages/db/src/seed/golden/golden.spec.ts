@@ -33,9 +33,11 @@ import {
 import {
   applyGoldenStep,
   buildGoldenSeedPlan,
+  buildGoldenVolume,
   GOLDEN_SEED_ORDER,
   goldenReferentialIssues,
   GoldenPlanError,
+  isGoldenVolumeId,
   resolveDoctorSpecialtyRows,
 } from "./index.js";
 
@@ -225,7 +227,9 @@ describe("#2063 golden dataset", () => {
   });
 
   it("carries an event in every lifecycle state", () => {
-    expect(dataset.events.map((e) => e.state).sort()).toEqual(
+    // A set, not the row list: since #2213 the dataset carries dozens of events
+    // per state, so what this locks is coverage of the enum, not a census.
+    expect([...new Set(dataset.events.map((e) => e.state))].sort()).toEqual(
       ["draft", "ended", "hidden", "in_archive", "live", "published"].sort(),
     );
   });
@@ -484,6 +488,287 @@ describe("#2063 golden step execution", () => {
     await expect(applyGoldenStep({ insert: () => ({}) }, step)).rejects.toThrow(
       GoldenPlanError,
     );
+  });
+});
+
+// #2213 — the volume half. What the named catalogue proves is that every state
+// EXISTS; what these lock is that the staging contour is walked against a
+// dataset with the SHAPE of production — dozens of rows, several pages, a
+// schedule that fills a week view and a month view, an archive that paginates.
+// A one-row-per-state fixture hides exactly the defects a walk is looking for.
+describe("#2213 golden dataset at volume", () => {
+  const dataset = buildGoldenDataset(now, subjects);
+
+  const isVolume = (row: { id?: unknown }) =>
+    typeof row.id === "string" && isGoldenVolumeId(row.id);
+
+  const volumeEvents = dataset.events.filter(isVolume);
+  const volumeUsers = dataset.users.filter(isVolume);
+
+  const byState = (state: string) =>
+    dataset.events.filter((e) => e.state === state);
+
+  const recordedEventIds = new Set(
+    dataset.eventRecordings.map((r) => r.eventId as string),
+  );
+
+  /** UTC midnight of the Monday that owns `date` — the ISO week bucket. */
+  const weekStart = (date: Date): number => {
+    const day = Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+    );
+    return day - ((date.getUTCDay() + 6) % 7) * 86_400_000;
+  };
+
+  const monthKey = (date: Date): string =>
+    `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  /** `now`'s month shifted by whole months — never by days, which skips a 31st. */
+  const shiftedMonthKey = (months: number): string =>
+    monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, 1)));
+
+  it("#2213: carries every entity family at volume, not one positive case", () => {
+    expect(dataset.events.length).toBeGreaterThanOrEqual(48);
+    expect(dataset.experts.length).toBeGreaterThanOrEqual(8);
+    expect(dataset.projects.length).toBeGreaterThanOrEqual(5);
+    expect(dataset.users.filter((u) => u.role === "doctor_guest").length)
+      .toBeGreaterThanOrEqual(12);
+    expect(dataset.registrations.length).toBeGreaterThanOrEqual(30);
+    expect(dataset.eventRecordings.length).toBeGreaterThanOrEqual(20);
+    expect(dataset.doctorSpecialties.length).toBeGreaterThanOrEqual(12);
+    expect(dataset.consentRecords.length).toBeGreaterThanOrEqual(36);
+  });
+
+  it("#2213: every lifecycle state arrives with a walkable multiplicity", () => {
+    expect(byState("published").length).toBeGreaterThanOrEqual(14);
+    expect(byState("ended").length).toBeGreaterThanOrEqual(20);
+    expect(byState("in_archive").length).toBeGreaterThanOrEqual(8);
+    expect(byState("live").length).toBeGreaterThanOrEqual(2);
+    expect(byState("draft").length).toBeGreaterThanOrEqual(3);
+    expect(byState("hidden").length).toBeGreaterThanOrEqual(3);
+
+    const ended = byState("ended");
+    expect(ended.filter((e) => recordedEventIds.has(e.id as string)).length)
+      .toBeGreaterThanOrEqual(14);
+    expect(ended.filter((e) => !recordedEventIds.has(e.id as string)).length)
+      .toBeGreaterThanOrEqual(6);
+  });
+
+  it("#2213: fills more than one page of the archive and of the admin list", () => {
+    // Public archive listing and the admin event table both page at 20
+    // (`public-listing.schema.ts`, `apps/admin/app/events/page.tsx`), so a
+    // pagination defect only shows above that floor.
+    const archiveVisible = dataset.events.filter(
+      (e) => e.state === "ended" || e.state === "in_archive",
+    );
+    expect(archiveVisible.length).toBeGreaterThan(20);
+    const adminVisible = dataset.events.filter(
+      (e) => e.recordStatus !== "retired",
+    );
+    expect(adminVisible.length).toBeGreaterThan(20);
+  });
+
+  it("#2213: puts a future event in each of the next 16 ISO weeks", () => {
+    const upcoming = dataset.events.filter(
+      (e) => e.state === "published" && (e.startsAt as Date).getTime() > now.getTime(),
+    );
+    const weeks = [...new Set(upcoming.map((e) => weekStart(e.startsAt as Date)))].sort(
+      (a, b) => a - b,
+    );
+    expect(weeks.length).toBeGreaterThanOrEqual(16);
+    // The first bucket is this week or the next one — no gap in front.
+    expect(weeks[0]!).toBeLessThanOrEqual(weekStart(now) + 7 * 86_400_000);
+    // …and no gap inside: a week view must never render empty mid-range.
+    for (let i = 1; i < weeks.length; i += 1) {
+      expect(weeks[i]! - weeks[i - 1]!).toBe(7 * 86_400_000);
+    }
+  });
+
+  it("#2213: fills each of the next 4 calendar months and the previous 6", () => {
+    const upcoming = dataset.events.filter(
+      (e) => e.state === "published" && (e.startsAt as Date).getTime() > now.getTime(),
+    );
+    const futureMonths = new Set(upcoming.map((e) => monthKey(e.startsAt as Date)));
+    for (let m = 0; m < 4; m += 1) {
+      expect(futureMonths).toContain(shiftedMonthKey(m));
+    }
+
+    // The past side is read as one archive, so ended and in_archive count together.
+    const pastMonths = new Set(
+      dataset.events
+        .filter((e) => e.state === "ended" || e.state === "in_archive")
+        .map((e) => monthKey(e.startsAt as Date)),
+    );
+    for (let m = 1; m <= 6; m += 1) {
+      expect(pastMonths).toContain(shiftedMonthKey(-m));
+    }
+  });
+
+  it("#2213: gives every volume event 1–3 experts and 1–2 projects", () => {
+    // Scoped to the volume rows on purpose: the named draft/hidden/archived
+    // rows legitimately carry no link, and #1943 already pins the named ones.
+    const expertsPer = new Map<string, number>();
+    const projectsPer = new Map<string, number>();
+    for (const link of dataset.eventExperts) {
+      const id = link.eventId as string;
+      if (isGoldenVolumeId(id)) expertsPer.set(id, (expertsPer.get(id) ?? 0) + 1);
+    }
+    for (const link of dataset.eventProjects) {
+      const id = link.eventId as string;
+      if (isGoldenVolumeId(id)) projectsPer.set(id, (projectsPer.get(id) ?? 0) + 1);
+    }
+    expect(volumeEvents.length).toBeGreaterThan(0);
+    for (const event of volumeEvents) {
+      const id = event.id as string;
+      expect(expertsPer.get(id) ?? 0).toBeGreaterThanOrEqual(1);
+      expect(expertsPer.get(id) ?? 0).toBeLessThanOrEqual(3);
+      expect(projectsPer.get(id) ?? 0).toBeGreaterThanOrEqual(1);
+      expect(projectsPer.get(id) ?? 0).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("#2213: works every expert and every project, not just the first", () => {
+    const perExpert = new Map<string, number>();
+    for (const link of dataset.eventExperts) {
+      const id = link.expertId as string;
+      perExpert.set(id, (perExpert.get(id) ?? 0) + 1);
+    }
+    for (const expert of dataset.experts.filter(isVolume)) {
+      expect(perExpert.get(expert.id as string) ?? 0).toBeGreaterThanOrEqual(3);
+    }
+    const perProject = new Map<string, number>();
+    for (const link of dataset.eventProjects) {
+      const id = link.projectId as string;
+      perProject.set(id, (perProject.get(id) ?? 0) + 1);
+    }
+    for (const project of dataset.projects.filter(isVolume)) {
+      expect(perProject.get(project.id as string) ?? 0).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("#2213: carries at least two doctors in each state the DB distinguishes", () => {
+    const doctors = dataset.users.filter((u) => u.role === "doctor_guest");
+    expect(doctors.filter((u) => u.emailVerified && u.recordStatus === "active").length)
+      .toBeGreaterThanOrEqual(2);
+    expect(doctors.filter((u) => !u.emailVerified && u.recordStatus === "active").length)
+      .toBeGreaterThanOrEqual(2);
+    expect(doctors.filter((u) => u.recordStatus === "retired").length)
+      .toBeGreaterThanOrEqual(2);
+    for (const user of volumeUsers) {
+      expect(user.recordStatus === "retired").toBe(user.deletedAt != null);
+    }
+  });
+
+  it("#2213: spreads the roster over past and future, cancellations included", () => {
+    expect(
+      dataset.registrations.filter((r) => r.recordStatus === "retired").length,
+    ).toBeGreaterThanOrEqual(2);
+    const startsAtById = new Map(
+      dataset.events.map((e) => [e.id as string, e.startsAt as Date]),
+    );
+    const past = dataset.registrations.filter(
+      (r) => startsAtById.get(r.eventId as string)!.getTime() < now.getTime(),
+    );
+    expect(past.length).toBeGreaterThanOrEqual(5);
+    expect(dataset.registrations.length - past.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("#2213: carries recordings in every kind and every status", () => {
+    for (const status of ["draft", "published", "retired"]) {
+      expect(
+        dataset.eventRecordings.filter((r) => r.status === status).length,
+      ).toBeGreaterThanOrEqual(2);
+    }
+    for (const kind of ["edited", "raw"]) {
+      expect(
+        dataset.eventRecordings.filter((r) => r.kind === kind).length,
+      ).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("#2213: keeps `legacy` origin and the stream room mutually exclusive", () => {
+    const byId = new Map(dataset.events.map((e) => [e.id as string, e]));
+    for (const event of dataset.events) {
+      if (event.origin === "legacy") expect(event.state).toBe("in_archive");
+    }
+    for (const config of dataset.streamConfig) {
+      expect(byId.get(config.eventId as string)?.origin).toBe("platform");
+    }
+  });
+
+  it("#2213: is byte-identical across two builds of the volume half", () => {
+    const first = buildGoldenVolume(
+      resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW }),
+    );
+    const again = buildGoldenVolume(
+      resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: PINNED_NOW }),
+    );
+    expect(JSON.stringify(again)).toBe(JSON.stringify(first));
+    expect(first.events.length).toBeGreaterThanOrEqual(48);
+  });
+
+  it("#2213: is referentially sound over the volume rows too", () => {
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+    const userIds = new Set(dataset.users.map((u) => u.id as string));
+    const eventIds = new Set(dataset.events.map((e) => e.id as string));
+    const expertIds = new Set(dataset.experts.map((e) => e.id as string));
+    const projectIds = new Set(dataset.projects.map((p) => p.id as string));
+
+    for (const row of dataset.registrations.filter(isVolume)) {
+      expect(userIds).toContain(row.userId as string);
+      expect(eventIds).toContain(row.eventId as string);
+    }
+    for (const row of dataset.eventExperts.filter(isVolume)) {
+      expect(eventIds).toContain(row.eventId as string);
+      expect(expertIds).toContain(row.expertId as string);
+    }
+    for (const row of dataset.eventProjects.filter(isVolume)) {
+      expect(eventIds).toContain(row.eventId as string);
+      expect(projectIds).toContain(row.projectId as string);
+    }
+    for (const row of dataset.eventRecordings.filter(isVolume)) {
+      expect(eventIds).toContain(row.eventId as string);
+    }
+    // stream_config is keyed on its event, not on a surrogate id, so there is
+    // no ordinal to scope by — every row is checked.
+    for (const row of dataset.streamConfig) {
+      expect(eventIds).toContain(row.eventId as string);
+    }
+    for (const row of dataset.consentRecords.filter(isVolume)) {
+      expect(userIds).toContain(row.userId as string);
+    }
+    for (const row of dataset.doctorSpecialties.filter(isVolume)) {
+      expect(userIds).toContain(row.doctorId);
+    }
+    expect(goldenSpecialtyIssues(dataset.doctorSpecialties)).toEqual([]);
+  });
+
+  it("#2213: never renumbers a named row into the volume range", () => {
+    // The named catalogue is the compile target of the #2067 scenarios; volume
+    // ids live strictly above it, so a scenario `Given` can never collide.
+    expect(isGoldenVolumeId(golden.events.upcoming.id)).toBe(false);
+    expect(isGoldenVolumeId(golden.doctors.verifiedCardiologist.id)).toBe(false);
+    const ids = collectIds(dataset);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("#2213: keeps every publication instant out of the update set at volume", () => {
+    // `taxonomy_first_published_at_set_once` (migration 0015) rolls the whole
+    // seed transaction back on a re-run if a publication instant is updated —
+    // and the volume half multiplies the rows that carry one.
+    for (const name of ["experts", "projects", "event_recordings"]) {
+      const step = buildGoldenSeedPlan(dataset, specialtyIdByName).find(
+        (s) => s.name === name,
+      )!;
+      const published = step.rows.filter(
+        (row) => row.firstPublishedAt instanceof Date,
+      );
+      expect(published.length).toBeGreaterThanOrEqual(2);
+      expect(step.updateKeys).not.toContain("firstPublishedAt");
+      expect(step.updateKeys).toContain("updatedAt");
+    }
   });
 });
 

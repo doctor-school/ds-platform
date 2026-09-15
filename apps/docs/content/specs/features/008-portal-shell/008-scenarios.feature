@@ -33,6 +33,12 @@ Feature: Persistent portal app-shell header and public discovery front-door
     When the doctor activates the avatar icon
     Then the portal navigates to the profile "/account"
 
+  # Amended 2026-09-14 (source: canvas ds-shell.dc.html line 220 guestCluster.primary,
+  # owner Stage-B round 1 on PR #2198; see 008-requirements-en.md → Amendment — 2026-09-14):
+  # the guest control is ONE «Войти / Регистрация» button routing to /login. The examples
+  # below carry the new label because PR #2198 ships the label and this spec edit together
+  # — guest-header.spec.ts and shell.test.tsx are named deliverables of that same PR, so the
+  # spec and production stay coupled.
   @EARS-4 @EARS-8 @happy
   Scenario: A guest sees «Войти / Регистрация» and the same public discovery front-door
     Given a visitor with no authenticated session

@@ -15,6 +15,13 @@
 // Dockerfile), and asserts the server answers HTTP on `/` before the deadline.
 // A crash-on-boot, an entry that never listens, or a 5xx-only server is red.
 //
+// #2012: liveness on `/` is not enough. A route whose runtime asset never entered
+// the trace (`@ds/legal-content` reads its Markdown with `fs` at request time; the
+// tracer follows imports, not `fs` joins) boots fine and answers 404 in the image
+// only — #1967/#2008/#2009 shipped exactly that, and #2220 shipped it again via
+// the root `.dockerignore`. So after liveness, every route in ROUTE_PROBES must
+// answer HTTP 200 — not "< 500" — and the verdict names the failing route.
+//
 // Usage:  node tools/ci/standalone-boot-check.mjs [app ...]  (default: portal admin doctor)
 // Requires the app's production build to exist already:
 //         pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
@@ -29,6 +36,15 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const DEFAULT_APPS = ["portal", "admin", "doctor"];
+
+// Per-app routes that depend on a RUNTIME-fs asset (#2012). Declared next to the
+// app list so a new runtime-`fs` route is one line to cover. Each must answer 200
+// from the isolated standalone bundle; `/` liveness stays the first probe.
+const ROUTE_PROBES = {
+  portal: ["/documents", "/documents/privacy-policy"],
+  admin: [],
+  doctor: ["/documents", "/documents/privacy-policy"],
+};
 const DEADLINE_MS = Number(process.env.STANDALONE_BOOT_DEADLINE_MS || 90_000);
 const POLL_MS = 500;
 
@@ -178,6 +194,34 @@ async function bootOne(app) {
       break;
     }
     await sleep(POLL_MS);
+  }
+
+  // Liveness is green — now the runtime-fs routes (#2012), HTTP 200 exactly.
+  if (verdict.ok) {
+    const routes = ROUTE_PROBES[app] ?? [];
+    for (const route of routes) {
+      let status;
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}${route}`, {
+          redirect: "manual",
+        });
+        status = res.status;
+      } catch (err) {
+        status = `no response (${err?.message ?? err})`;
+      }
+      if (status !== 200) {
+        verdict = {
+          ok: false,
+          reason:
+            `the standalone server answered HTTP ${status} on ${route} (expected 200) — ` +
+            `a runtime asset of that route is missing from the traced bundle (#2012)`,
+        };
+        break;
+      }
+    }
+    if (verdict.ok && routes.length > 0) {
+      verdict.reason += `; 200 on ${routes.join(", ")}`;
+    }
   }
 
   if (!exited) {

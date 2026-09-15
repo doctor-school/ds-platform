@@ -95,7 +95,28 @@ test("the edge admits exactly the slot names the tool can create", () => {
 });
 
 test("the ask responder answers for the shared IdP host too", () => {
-  assert.match(matcherRegexp("stage_ask"), /\|id\)/);
+  assert.match(matcherRegexp("stage_ask"), /\|id\|/);
+});
+
+test("the ask responder admits the shared object-storage host, and only that label", () => {
+  const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
+  assert.ok(ask.test("/ask/s3.stage.test"), "s3 must be admitted");
+  // A single fixed label, not a family: `s3-pr-1` would mint a certificate for a
+  // host nothing routes, and the on-demand issuance quota is the only bound here.
+  assert.ok(!ask.test("/ask/s3-pr-1.stage.test"), "s3-pr-1 must not be admitted");
+  assert.ok(!ask.test("/ask/console.s3.stage.test"), "no wildcard beneath s3");
+});
+
+test("the object-storage host is routed to MinIO's S3 port with no gate and no console", () => {
+  // The `@s3` handler carries no `import staging_basic_auth`: a presigned SigV4 GET
+  // is its own authorization and an `<img src>` sends no basic-auth credentials.
+  const at = text.split(NEWLINE).findIndex((line) => line.trimStart().startsWith("@s3 "));
+  assert.notEqual(at, -1, "the @s3 matcher is missing from the Caddyfile");
+  const block = text.split(NEWLINE).slice(at, at + 4).join(NEWLINE);
+  assert.match(block, /host s3\.\{\$STAGE_BASE_DOMAIN\}/);
+  assert.match(block, /reverse_proxy minio:9000/);
+  assert.doesNotMatch(block, /staging_basic_auth/);
+  assert.doesNotMatch(text, /minio:9001/);
 });
 
 test("the Centrifugo exemption is scoped to the api host and its two path families", () => {

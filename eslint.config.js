@@ -289,16 +289,22 @@ export default [
     ],
     //
     // LEGACY BASELINE (decision-debt, DEBT.md 2026-09-14). The rule lands with
-    // 170 pre-existing hits across the 27 files enumerated below. Every one of
+    // 143 pre-existing hits across the 23 files enumerated below. Every one of
     // them is a real per-surface fork, but retiring it means ADDING a
     // canvas-backed `variant` / `size` / `tone` to the primitive — a product
     // decision the owner makes on a canvas, never a lint-driven guess (AGENTS.md
     // §6 "UI is approved, then driven by the agent, then re-confirmed live"), and
-    // changing any of these looks here would mutate the live Stage-B surface of
-    // PR #2198 mid-review. So the severity stays ERROR and the exception set is
-    // ENUMERATED AT FILE GRANULARITY rather than softened to a warning: every new
-    // file and every clean file is blocked from today, and this list only ever
-    // shrinks. Deleting an entry is the definition of done for that surface.
+    // changing any of these looks would mutate a LIVE surface. So the severity
+    // stays ERROR and the exception set is ENUMERATED AT FILE GRANULARITY rather
+    // than softened to a warning: every file outside this list is blocked, and
+    // the list only ever shrinks. Deleting an entry is the definition of done for
+    // that surface.
+    //
+    // The four `packages/storefront-shell/src/*` files this PR creates are NOT in
+    // it: a guard blind to its own subject proves nothing, so the shell chrome
+    // carries its look as `variant` / `size` / `tone` / `weight` on the DS
+    // primitives instead (27 of the original 170 hits, retired — the rendered
+    // result is unchanged, every value is the same one, moved).
     ignores: [
       "apps/showcase/**",
       "**/*.test.{ts,tsx}",
@@ -328,10 +334,6 @@ export default [
       "packages/room/src/ui/room-chat.tsx",
       "packages/room/src/ui/room-header-bar.tsx",
       "packages/room/src/ui/room-view.tsx",
-      "packages/storefront-shell/src/shell-search.tsx",
-      "packages/storefront-shell/src/storefront-footer.tsx",
-      "packages/storefront-shell/src/storefront-header.tsx",
-      "packages/storefront-shell/src/theme-toggle.tsx",
     ],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },

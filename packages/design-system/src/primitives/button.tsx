@@ -112,10 +112,21 @@ const buttonVariants = cva(
         // class-string constant.
         avatar: "size-10 text-sm",
       },
+      // The SURFACE the control sits on, declared LAST so it wins the ink over
+      // the variant's own resting colour. `header` is the invariant navy band of
+      // `design-source/ds-shell.dc.html` line 36 (`color:#fff` on a transparent
+      // control): a quiet chrome control — the theme toggle — reads in the band's
+      // own foreground instead of the page ink, without the call site re-colouring
+      // the primitive (#2180, ADR-0013 §6).
+      tone: {
+        default: "",
+        header: "text-header-foreground",
+      },
     },
     defaultVariants: {
       variant: "default",
       size: "default",
+      tone: "default",
     },
   },
 );
@@ -172,6 +183,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       variant,
       size,
+      tone,
       asChild = false,
       loading = false,
       disabled,
@@ -194,7 +206,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size, tone, className }))}
         ref={ref}
         disabled={disabled || showSpinner}
         aria-busy={loading || undefined}

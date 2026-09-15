@@ -83,7 +83,8 @@ export function ThemeToggle({
       aria-pressed={dark}
       aria-label={dark ? labels.toLight : labels.toDark}
       onClick={onClick}
-      className={cn("flex-none text-header-foreground", className)}
+      tone="header"
+      className={cn("flex-none", className)}
     >
       {/* Decorative glyph — the accessible name lives on `aria-label`. U+FE0E
           forces monochrome TEXT presentation so the glyph takes the CSS colour

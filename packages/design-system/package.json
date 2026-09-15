@@ -12,6 +12,7 @@
     "./lib/utils": "./src/lib/utils.ts",
     "./button": "./src/primitives/button.tsx",
     "./link": "./src/primitives/link.tsx",
+    "./disclosure-summary": "./src/primitives/disclosure-summary.tsx",
     "./input": "./src/primitives/input.tsx",
     "./native-select": "./src/primitives/native-select.tsx",
     "./label": "./src/primitives/label.tsx",

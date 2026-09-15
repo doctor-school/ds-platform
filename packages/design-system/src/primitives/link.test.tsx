@@ -46,6 +46,74 @@ describe("Link variant classes", () => {
   });
 });
 
+/**
+ * The storefront-chrome axes (#2180). Every one of these looks used to be a
+ * `className` on the shared shell's call site, which forked the primitive for
+ * that surface only and left `local/no-primitive-style-override` blind to the
+ * package that introduced it. Values are unchanged — they MOVED — and each is
+ * backed by `design-source/ds-shell.dc.html`.
+ */
+describe("Link storefront-chrome axes (#2180, canvas ds-shell.dc.html)", () => {
+  it("008 EARS-2: the desktop nav tone is the canvas on-navy tier with the opacity press step, not the brand ink", () => {
+    const cls = linkVariants({ tone: "header-nav" });
+    expect(cls).toMatch(/(?:^|\s)text-header-foreground(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)no-underline(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)opacity-80(?:\s|$)/);
+    expect(cls).toMatch(/active:text-header-foreground/);
+    expect(cls).toMatch(/active:opacity-60/);
+    expect(cls).toMatch(/(?:^|\s)font-bold(?:\s|$)/);
+    // The DS press tint IS the band colour — it would paint the label invisible.
+    expect(cls).not.toMatch(/text-primary-action/);
+  });
+
+  it("008 EARS-2: the wrapper variant suppresses the hover underline for a link around the wordmark", () => {
+    const cls = linkVariants({ variant: "wrapper" });
+    expect(cls).toMatch(/hover:no-underline/);
+    expect(cls).not.toMatch(/(?:^|\s)underline(?:\s|$)/);
+  });
+
+  it("008 EARS-11: the mobile nav row is a full-bleed target in page ink with a surface tint on hover", () => {
+    const cls = linkVariants({
+      tone: "neutral",
+      variant: "mobile-nav-row",
+      size: "sm",
+    });
+    expect(cls).toMatch(/(?:^|\s)px-4(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)py-3(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)text-sm(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)font-bold(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)text-foreground(?:\s|$)/);
+    expect(cls).toMatch(/hover:bg-muted/);
+    expect(cls).toMatch(/hover:no-underline/);
+  });
+
+  it("008 EARS-14 · 017 EARS-12: the footer link is the sm step, and the cross link adds the canvas 800 weight", () => {
+    const footer = linkVariants({ size: "sm" });
+    expect(footer).toMatch(/(?:^|\s)text-sm(?:\s|$)/);
+    expect(footer).toMatch(/(?:^|\s)font-bold(?:\s|$)/);
+    expect(footer).not.toMatch(/font-extrabold/);
+
+    const cross = linkVariants({ variant: "inline", size: "sm", weight: "strong" });
+    expect(cross).toMatch(/(?:^|\s)underline(?:\s|$)/);
+    expect(cross).toMatch(/(?:^|\s)text-sm(?:\s|$)/);
+    expect(cross).toMatch(/(?:^|\s)font-extrabold(?:\s|$)/);
+    expect(cross).not.toMatch(/(?:^|\s)font-bold(?:\s|$)/);
+  });
+
+  it("008 EARS-2: the chrome axes never leak onto the anchor as DOM attributes", () => {
+    render(
+      <Link href="/events" tone="header-nav" size="sm" weight="strong">
+        Events
+      </Link>,
+    );
+    const link = screen.getByRole("link", { name: "Events" });
+    expect(link).toHaveClass("text-header-foreground", "text-sm", "font-extrabold");
+    for (const attr of ["tone", "size", "weight", "variant"]) {
+      expect(link).not.toHaveAttribute(attr);
+    }
+  });
+});
+
 describe("Link rendering + routing", () => {
   it("renders a styled anchor carrying its href and hover/focus classes", () => {
     render(<Link href="/login">Sign in</Link>);

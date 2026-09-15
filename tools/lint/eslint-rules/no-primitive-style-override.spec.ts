@@ -128,6 +128,25 @@ describe("no-primitive-style-override", () => {
           code: `import { Card } from "@ds/design-system/blocks";\nconst A = () => <Card.Header className="p-8">x</Card.Header>;`,
           errors: [{ messageId: "primitiveStyleOverride" }],
         },
+        // REGRESSION PIN (#2198 Mode (a) round 1). The shell search band that
+        // shipped WITH this rule was itself on the baseline ignore list, so the
+        // guard could not see the package that introduced it. The ignore entries
+        // are gone and the look now lives on `Input variant="header"`; this
+        // fixture is the exact line that used to be exempt, and it must fail.
+        {
+          filename: "packages/storefront-shell/src/shell-search.tsx",
+          code: `import { Input } from "@ds/design-system/input";
+const A = () => <Input className="w-full border-header-hairline bg-transparent font-semibold text-header-foreground placeholder:text-header-foreground focus-visible:border-header-foreground" />;`,
+          // `w-full` is positional; the other six utilities are the fork.
+          errors: [
+            { messageId: "primitiveStyleOverride" },
+            { messageId: "primitiveStyleOverride" },
+            { messageId: "primitiveStyleOverride" },
+            { messageId: "primitiveStyleOverride" },
+            { messageId: "primitiveStyleOverride" },
+            { messageId: "primitiveStyleOverride" },
+          ],
+        },
       ],
     });
   });

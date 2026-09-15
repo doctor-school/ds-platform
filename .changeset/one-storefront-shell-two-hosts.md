@@ -40,3 +40,12 @@ line-height strut.
 The BBM topbar keeps the contrast the canvas paints; that is an owner-accepted
 a11y exception recorded as Issue #2189 and carried in the e2e axe scans as a
 single leaf-scoped node exclusion.
+
+The chrome's look lives in the primitives, not at the shell's call sites:
+`@ds/design-system` gains `Input variant="header"` (the navy-band search field),
+`Link` `tone="header-nav" | "neutral"`, `variant="wrapper" | "mobile-nav-row"`,
+`size="sm"` and `weight="strong"`, `Button tone="header"`, and a new
+`DisclosureSummary` primitive (the `≡` control as the on-header chip). Every
+value is the canvas value, moved — the rendered result is unchanged — and the
+four shell files are consequently NOT on the `local/no-primitive-style-override`
+legacy baseline, which now stands at 143 hits across 23 files.

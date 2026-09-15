@@ -45,7 +45,8 @@ export function ShellSearch({
         name="q"
         placeholder={search.placeholder}
         aria-label={search.placeholder}
-        className="w-full border-header-hairline bg-transparent font-semibold text-header-foreground placeholder:text-header-foreground focus-visible:border-header-foreground"
+        variant="header"
+        className="w-full"
       />
     </form>
   );

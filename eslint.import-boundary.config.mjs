@@ -54,6 +54,10 @@ export const PACKAGE_GRAPH = {
   "design-system": ["schemas"],
   room: ["schemas", "design-system"],
   "events-storefront": ["schemas", "design-system"],
+  // The shared storefront chrome (#2180): primitives only — it must never
+  // reach for a sibling capability package, or the two storefronts would inherit
+  // that dependency through their shell.
+  "storefront-shell": ["schemas", "design-system"],
   "auth-flow": ["schemas", "design-system", "room", "events-storefront"],
   account: ["schemas", "design-system", "room", "events-storefront", "auth-flow"],
 };

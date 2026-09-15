@@ -1,7 +1,6 @@
 import Image from "next/image";
 import NextLink from "next/link";
-import { buttonVariants } from "@ds/design-system/button";
-import { cn } from "@ds/design-system/lib/utils";
+import { DisclosureSummary } from "@ds/design-system/disclosure-summary";
 import { Link as DsLink } from "@ds/design-system/link";
 
 import { ShellAuthCluster } from "./auth-cluster";
@@ -97,7 +96,7 @@ function HeaderChrome({
         data-testid="storefront-header"
         className="flex flex-wrap items-center gap-4 bg-header px-4 py-3.5 text-header-foreground layout:flex-nowrap layout:px-12"
       >
-        <DsLink asChild className="flex flex-none hover:no-underline">
+        <DsLink asChild variant="wrapper" className="flex flex-none">
           <NextLink href={logo.href} data-testid="storefront-logo">
             <Image
               src="/brand/logo-white.svg"
@@ -137,15 +136,9 @@ function HeaderChrome({
             data-testid="shell-mobile-menu"
             className="relative layout:hidden"
           >
-            <summary
-              aria-label={config.footer.navTitle}
-              className={cn(
-                buttonVariants({ variant: "on-primary", size: "icon" }),
-                "cursor-pointer list-none text-xl [&::-webkit-details-marker]:hidden",
-              )}
-            >
+            <DisclosureSummary aria-label={config.footer.navTitle}>
               <span aria-hidden="true">≡</span>
-            </summary>
+            </DisclosureSummary>
             <nav
               data-testid="shell-nav-mobile"
               className="absolute right-0 top-full z-20 mt-2 flex min-w-52 flex-col border-2 border-border bg-card p-2 text-card-foreground shadow-btn"
@@ -154,7 +147,9 @@ function HeaderChrome({
                 <DsLink
                   key={item.href}
                   asChild
-                  className="px-4 py-3 text-sm font-bold text-foreground hover:bg-muted hover:no-underline"
+                  tone="neutral"
+                  variant="mobile-nav-row"
+                  size="sm"
                 >
                   <NextLink href={item.href}>{item.label}</NextLink>
                 </DsLink>
@@ -173,10 +168,7 @@ function HeaderChrome({
  *  colour, so the base press painted the label invisible, #1007). */
 function NavLink({ item }: { item: ShellLink }) {
   return (
-    <DsLink
-      asChild
-      className="font-bold text-header-foreground no-underline opacity-80 active:text-header-foreground active:opacity-60"
-    >
+    <DsLink asChild tone="header-nav">
       <NextLink href={item.href}>{item.label}</NextLink>
     </DsLink>
   );

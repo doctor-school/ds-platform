@@ -109,8 +109,9 @@ function FooterChrome({ config }: { config: StorefrontShellConfig }) {
         <FooterColumn testId="footer-cross" title={footer.cross.title}>
           <DsLink
             variant="inline"
+            size="sm"
+            weight="strong"
             href={footer.cross.href}
-            className="text-sm font-extrabold"
           >
             {footer.cross.label}
           </DsLink>
@@ -166,7 +167,7 @@ function FooterLinks({ items }: { items: readonly ShellLink[] }) {
     <ul className="flex flex-col gap-2.5">
       {items.map((item) => (
         <li key={item.href}>
-          <DsLink asChild className="text-sm">
+          <DsLink asChild size="sm">
             <NextLink href={item.href}>{item.label}</NextLink>
           </DsLink>
         </li>

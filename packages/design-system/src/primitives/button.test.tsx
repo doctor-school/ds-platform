@@ -212,3 +212,33 @@ describe("Button loading state", () => {
     expect(link.querySelector("svg")).toBeNull();
   });
 });
+
+/**
+ * The `tone` axis (#2180) — the SURFACE a control sits on. The storefront theme
+ * toggle used to re-colour the `ghost` button at the call site with
+ * `text-header-foreground`; the value is unchanged, it MOVED here so the guard
+ * `local/no-primitive-style-override` can see the shell it ships with.
+ * Canvas: `design-source/ds-shell.dc.html` line 36 (`color:#fff` on the band).
+ */
+describe("Button tone (#2180, canvas ds-shell.dc.html line 36)", () => {
+  it("008 EARS-3: the header tone paints a quiet control in the band foreground, not the page ink", () => {
+    const cls = buttonVariants({ variant: "ghost", size: "icon", tone: "header" });
+    expect(cls).toMatch(/(?:^|\s)text-header-foreground(?:\s|$)/);
+    // `tone` emits last, so the ghost variant's own ink loses (tailwind-merge).
+    expect(cls).toMatch(/(?:^|\s)size-11(?:\s|$)/);
+    expect(cls).toMatch(/hover:bg-tint/);
+  });
+
+  it("008 EARS-3: the default tone adds nothing and the axis never reaches the DOM", () => {
+    expect(buttonVariants({ variant: "ghost" })).not.toMatch(/text-header-foreground/);
+    render(
+      <Button variant="ghost" size="icon" tone="header" aria-label="Theme">
+        <span aria-hidden="true">x</span>
+      </Button>,
+    );
+    const btn = screen.getByRole("button", { name: "Theme" });
+    expect(btn).toHaveClass("text-header-foreground");
+    expect(btn).not.toHaveClass("text-foreground");
+    expect(btn).not.toHaveAttribute("tone");
+  });
+});

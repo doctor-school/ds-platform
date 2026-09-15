@@ -111,11 +111,14 @@ test.describe("#351 interaction-state runtime smoke on the showcase (backend-fre
       const surfaceBackground = await cssProp(surface, "background-color");
       const buttonBackground = await cssProp(button, "background-color");
       const buttonForeground = await cssProp(button, "color");
-      const buttonBorder = await cssProp(button, "border-color");
+      // The canvas paints the on-header chip with NO border (#2180): the fill
+      // and the raised shadow are the whole edge, so no contrasting ring may
+      // ever appear between the chip and its surface.
+      const buttonBorderWidth = await cssProp(button, "border-top-width");
 
       expect(buttonBackground).not.toBe(surfaceBackground);
       expect(buttonForeground).toBe(surfaceBackground);
-      expect(buttonBorder).toBe(buttonBackground);
+      expect(buttonBorderWidth).toBe("0px");
       expect(await cssProp(button, "box-shadow")).not.toBe("none");
     }
   });

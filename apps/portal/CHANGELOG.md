@@ -1,5 +1,80 @@
 # @ds/portal
 
+## 1.1.0
+
+### Minor Changes
+
+- [#2198](https://github.com/doctor-school/ds-platform/pull/2198) [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One shared storefront shell for both storefronts ([#2180](https://github.com/doctor-school/ds-platform/issues/2180)). The topbar, header,
+  footer and theme control now live in `@ds/storefront-shell`, built from the
+  owner-approved `design-source/ds-shell.dc.html` canvas, and each host supplies
+  values only: a `lib/shell-config.ts` config object and an `auth: ShellAuthState`
+  DATA prop it maps its own session onto — the cluster's markup, geometry and press
+  chain are the package's, so neither host can draw its own chip. The Doctor showcase mounts the pair from its `(storefront)` layout; the
+  Academy mounts the header through its three `@chrome` slots and the footer —
+  new to that host, 008 EARS-14 — from the root layout. The six host twins
+  (`app-shell-header`, `header-user-cluster`, `storefront-header`,
+  `storefront-footer`, and both `theme-toggle` copies) are deleted, closing the
+  2026-09-03 duplicated-theme-toggle debt line.
+
+  `minor` on all four: `@ds/storefront-shell` is net-new to `main` (additive),
+  both apps gain shell surface rather than losing a capability, and
+  `@ds/design-system` gains five additive tokens for the canvas-exact chrome —
+  `--font-size-topbar` / `--font-letter-spacing-topbar` (the 9px / .22em BBM
+  micro-band), `--container-search` (the 440px desktop search cap) and
+  `--font-size-chip` / `--spacing-chip-x` (the 13.5px / 22px header-chip geometry).
+  The `on-primary` Button variant IS that chip now: it absorbs the deleted
+  `HEADER_CHIP_BASE` constant, loses its `border-2` (the canvas paints none) and
+  gains the `chip` and `avatar` sizes, so the chip changes in ONE place for both
+  storefronts. Every other `on-primary` call site loses the border with it. Three
+  visible deltas ride along — the storefront footer appears on every non-auth,
+  non-room Academy route; the guest control is the ONE «Войти / Регистрация»
+  chip of the canvas on BOTH hosts (the Academy label was «Войти», the Doctor
+  showcase drew a «Войти» + «Регистрация» pair), one cluster at every width
+  instead of a separate entry inside the mobile `≡` menu (017 EARS-1 forbids a
+  second cluster in the DOM); the Doctor header search stops at the canvas cap
+  instead of spanning the bar; and the BBM topbar's micro type moves onto the band
+  itself, so its text is centred in the band rather than riding the body's
+  line-height strut.
+
+  The BBM topbar keeps the contrast the canvas paints; that is an owner-accepted
+  a11y exception recorded as Issue [#2189](https://github.com/doctor-school/ds-platform/issues/2189) and carried in the e2e axe scans as a
+  single leaf-scoped node exclusion.
+
+  The chrome's look lives in the primitives, not at the shell's call sites:
+  `@ds/design-system` gains `Input variant="header"` (the navy-band search field),
+  `Link` `tone="header-nav" | "neutral"`, `variant="wrapper" | "mobile-nav-row"`,
+  `size="sm"` and `weight="strong"`, `Button tone="header"`, and a new
+  `DisclosureSummary` primitive (the `≡` control as the on-header chip). Every
+  value is the canvas value, moved — the rendered result is unchanged — and the
+  four shell files are consequently NOT on the `local/no-primitive-style-override`
+  legacy baseline, which now stands at 143 hits across 23 files.
+
+### Patch Changes
+
+- [#2222](https://github.com/doctor-school/ds-platform/pull/2222) [`5130f8a`](https://github.com/doctor-school/ds-platform/commit/5130f8a3eab111d3258d52deb93b76211f6f5860) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `/documents/<slug>` (privacy policy, photo/video consent) answers 200 again in the built image: the root `.dockerignore` no longer strips `packages/legal-content/documents/*.md` from the on-box build context, so `outputFileTracingIncludes` ships the texts into the standalone bundle. The `standalone-boot` CI check now probes `/documents` and `/documents/privacy-policy` per app and requires HTTP 200 ([#2012](https://github.com/doctor-school/ds-platform/issues/2012)).
+
+- [#2057](https://github.com/doctor-school/ds-platform/pull/2057) [`5dc1a61`](https://github.com/doctor-school/ds-platform/commit/5dc1a617adcb66eb5716d498b4223a133e6947db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Forward the client's `x-forwarded-for` on every SSR authed read ([#2054](https://github.com/doctor-school/ds-platform/issues/2054)).
+
+  Since [#1655](https://github.com/doctor-school/ds-platform/issues/1655) the api runs behind `FastifyAdapter({ trustProxy })`, so `request.ip`
+  is the real browser taken from the forwarded chain and the BFF session
+  fingerprint (ADR-0001 §6) is bound to the BROWSER's IP/24. Every server-side read
+  from the Next containers built its own header set and dropped the chain, so the
+  api saw the container address (172.18.0.x), re-derived a different fingerprint and
+  401'd valid sessions — signed-in doctors were bounced off «Мои события» and the
+  event/room pages.
+
+  `ForwardedSession` gains a required `forwardedFor`, and one canonical
+  `forwardedSessionFrom` / `forwardedHeaders` pair in `@ds/events-storefront/server`
+  now builds every hop's headers (`@ds/room` mirrors it as `roomForwardedHeaders`
+  for its own structural `RoomSession`, which likewise gains the field). Both are
+  required-field additions to an exported interface, i.e. breaking for consumers.
+
+- Updated dependencies [[`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f), [`5dc1a61`](https://github.com/doctor-school/ds-platform/commit/5dc1a617adcb66eb5716d498b4223a133e6947db)]:
+  - @ds/storefront-shell@0.2.0
+  - @ds/design-system@5.5.0
+  - @ds/events-storefront@1.0.0
+  - @ds/room@1.0.0
+
 ## 1.0.0
 
 ### Major Changes

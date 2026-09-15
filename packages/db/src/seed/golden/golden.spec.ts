@@ -6,7 +6,11 @@
 // DB round-trip (idempotency, drift) is proven on a stand by re-running
 // `seed:golden` and diffing `pg_dump --data-only`; it cannot be faked here.
 
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+
+import { PDFDocument } from "pdf-lib";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
 import {
@@ -32,13 +36,31 @@ import {
 } from "./now.js";
 import {
   applyGoldenStep,
+  buildGoldenMediaPlan,
   buildGoldenSeedPlan,
   buildGoldenVolume,
+  composeDescription,
+  createInMemoryGoldenMediaStore,
+  eventProgrammeKey,
+  expertPhotoKey,
   GOLDEN_SEED_ORDER,
+  goldenProgrammeSpecs,
   goldenReferentialIssues,
   GoldenPlanError,
+  hasProgramme,
+  isDatedProgrammeLine,
   isGoldenVolumeUuid,
+  ordinalFromExpertPhotoKey,
+  programmeLines,
+  programmeTotalMinutes,
+  renderProgrammePdf,
   resolveDoctorSpecialtyRows,
+  specialtiesWithoutParagraphBank,
+  VOLUME_EXPERTS,
+  VOLUME_PROGRAMME,
+  VOLUME_PROJECTS,
+  writeGoldenMedia,
+  type GoldenMediaObject,
 } from "./index.js";
 
 const SUBJECT_ENV = Object.fromEntries(
@@ -563,8 +585,8 @@ describe("#2213 golden dataset at volume", () => {
 
   it("#2213: carries every entity family at volume, not one positive case", () => {
     expect(dataset.events.length).toBeGreaterThanOrEqual(48);
-    expect(dataset.experts.length).toBeGreaterThanOrEqual(8);
-    expect(dataset.projects.length).toBeGreaterThanOrEqual(5);
+    expect(dataset.experts.length).toBeGreaterThanOrEqual(34);
+    expect(dataset.projects.length).toBeGreaterThanOrEqual(12);
     expect(dataset.users.filter((u) => u.role === "doctor_guest").length)
       .toBeGreaterThanOrEqual(12);
     expect(dataset.registrations.length).toBeGreaterThanOrEqual(30);
@@ -661,7 +683,7 @@ describe("#2213 golden dataset at volume", () => {
     }
   });
 
-  it("#2213: gives every volume event 1–3 experts and 1–2 projects", () => {
+  it("#2213: gives every volume event 2–4 experts and 1–2 projects", () => {
     // Scoped to the volume rows on purpose: the named draft/hidden/archived
     // rows legitimately carry no link, and #1943 already pins the named ones.
     const expertsPer = new Map<string, number>();
@@ -677,8 +699,10 @@ describe("#2213 golden dataset at volume", () => {
     expect(volumeEvents.length).toBeGreaterThan(0);
     for (const event of volumeEvents) {
       const id = event.id as string;
-      expect(expertsPer.get(id) ?? 0).toBeGreaterThanOrEqual(1);
-      expect(expertsPer.get(id) ?? 0).toBeLessThanOrEqual(3);
+      // Two is the floor: a single-speaker эфир is part of what the owner
+      // rejected on PR #2216, and the programme PDF needs a panel to schedule.
+      expect(expertsPer.get(id) ?? 0).toBeGreaterThanOrEqual(2);
+      expect(expertsPer.get(id) ?? 0).toBeLessThanOrEqual(4);
       expect(projectsPer.get(id) ?? 0).toBeGreaterThanOrEqual(1);
       expect(projectsPer.get(id) ?? 0).toBeLessThanOrEqual(2);
     }
@@ -894,6 +918,265 @@ describe("#2213 golden dataset at volume", () => {
       expect(step.updateKeys).toContain("updatedAt");
     }
   });
+});
+
+// #2213 — the CONTENT of the volume half, and the objects its rows promise.
+//
+// PR #2216 passed every structural assertion above and the owner still rejected
+// the stand: one-sentence descriptions, empty programmes, single speakers with
+// no faces. Shape is not content, so these are the assertions that hold the
+// content — and, because the rows reference object-storage keys, the bytes too.
+describe("#2213 golden volume content and media", () => {
+  const dataset = buildGoldenDataset(now, subjects);
+  const volumeEvents = dataset.events.filter((e) =>
+    isGoldenVolumeUuid(e.id as string),
+  );
+  const volumeExperts = dataset.experts.filter((e) =>
+    isGoldenVolumeUuid(e.id as string),
+  );
+
+  let plan: GoldenMediaObject[] = [];
+  beforeAll(async () => {
+    plan = await buildGoldenMediaPlan(dataset);
+  }, 120_000);
+
+  const sha = (bytes: Uint8Array): string =>
+    createHash("sha256").update(bytes).digest("hex");
+
+  it("#2213: gives every expert a face, a biography and a place of work", () => {
+    expect(volumeExperts.length).toBeGreaterThanOrEqual(32);
+    for (const expert of volumeExperts) {
+      expect(expert.photoRef).toBeTruthy();
+      expect(ordinalFromExpertPhotoKey(expert.photoRef as string)).not.toBeNull();
+      expect((expert.bio ?? "").length).toBeGreaterThanOrEqual(120);
+      expect(expert.credentials).toBeTruthy();
+      expect(expert.affiliation).toBeTruthy();
+      expect(expert.professionalRole).toBeTruthy();
+    }
+    // The two named experts are golden rows like any other: an expert page
+    // walked from the published catalogue must show a face as well.
+    const named = dataset.experts.filter(
+      (e) => !isGoldenVolumeUuid(e.id as string),
+    );
+    expect(named.length).toBeGreaterThanOrEqual(2);
+    for (const expert of named) {
+      expect(expert.photoRef).toBeTruthy();
+      expect(expert.bio).toBeTruthy();
+    }
+    expect(named[0]?.photoRef).toBe(expertPhotoKey(1));
+  });
+
+  it("#2213: backs every portrait key with a committed file", () => {
+    const keys = dataset.experts
+      .map((e) => e.photoRef)
+      .filter((key): key is string => Boolean(key));
+    expect(keys.length).toBeGreaterThanOrEqual(34);
+    for (const key of keys) {
+      const ordinal = ordinalFromExpertPhotoKey(key);
+      expect(ordinal).not.toBeNull();
+      const file = new URL(
+        `./media/portraits/${ordinal}.webp`,
+        import.meta.url,
+      );
+      expect(existsSync(file), `missing portrait for ${key}`).toBe(true);
+    }
+  });
+
+  it("#2213: plans one unique object per key it promises", () => {
+    const keys = plan.map((object) => object.key);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    const promised = new Set<string>([
+      ...dataset.experts
+        .map((e) => e.photoRef)
+        .filter((key): key is string => Boolean(key)),
+      ...dataset.events
+        .map((e) => e.programPdfRef)
+        .filter((key): key is string => Boolean(key)),
+    ]);
+    expect(new Set(keys)).toEqual(promised);
+    for (const object of plan) {
+      expect(object.bytes.byteLength).toBeGreaterThan(512);
+      expect(
+        object.contentType === "image/webp" ||
+          object.contentType === "application/pdf",
+      ).toBe(true);
+    }
+  });
+
+  it("#2213: describes an эфир in paragraphs, not in one line", () => {
+    const seen: string[] = [];
+    for (const event of volumeEvents) {
+      const paragraphs = (event.description as string).split("\n\n");
+      expect(paragraphs.length).toBeGreaterThanOrEqual(3);
+      expect(paragraphs.length).toBeLessThanOrEqual(5);
+      for (const paragraph of paragraphs) {
+        expect(paragraph.split(/\s+/).length).toBeGreaterThanOrEqual(30);
+      }
+      seen.push(event.description as string);
+    }
+    // Adjacent cards are what a schedule shows side by side; identical prose
+    // there is what makes a stand read as a fixture.
+    for (let i = 1; i < seen.length; i += 1) {
+      expect(seen[i]).not.toBe(seen[i - 1]);
+    }
+    const titles = volumeEvents.map((e) => e.title as string);
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  it("#2213: carries a prose bank wide enough for the whole catalogue", () => {
+    expect(VOLUME_PROGRAMME.length).toBeGreaterThanOrEqual(120);
+    expect(new Set(VOLUME_PROGRAMME.map(([, s]) => s)).size)
+      .toBeGreaterThanOrEqual(10);
+    expect(new Set(VOLUME_PROGRAMME.map(([t]) => t)).size).toBe(
+      VOLUME_PROGRAMME.length,
+    );
+    // Every specialty a title names must have prose behind it, or
+    // `composeDescription` throws for the first event that reaches it.
+    expect(specialtiesWithoutParagraphBank()).toEqual([]);
+    expect(VOLUME_EXPERTS.length).toBeGreaterThanOrEqual(32);
+    expect(VOLUME_PROJECTS.length).toBeGreaterThanOrEqual(12);
+    for (const project of VOLUME_PROJECTS) {
+      expect(project.description.split("\n\n").length).toBe(2);
+    }
+    for (const [, specialty] of VOLUME_PROGRAMME) {
+      const text = composeDescription(0, specialty);
+      expect(text.split("\n\n").length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("#2213: advertises the length its own programme adds up to", () => {
+    for (const event of volumeEvents) {
+      const index =
+        Number.parseInt((event.id as string).slice(-12), 16) - 1000;
+      expect(event.durationMin).toBe(programmeTotalMinutes(index));
+      expect(event.durationMin as number).toBeGreaterThanOrEqual(115);
+    }
+  });
+
+  it("#2213: publishes a programme everywhere the page renders one", () => {
+    let withProgramme = 0;
+    let upcomingWithout = 0;
+    for (const event of volumeEvents) {
+      const index =
+        Number.parseInt((event.id as string).slice(-12), 16) - 1000;
+      const expected = hasProgramme(event.state as string, index);
+      expect(Boolean(event.programPdfRef), `${String(event.slug)}`).toBe(
+        expected,
+      );
+      if (expected) {
+        expect(event.programPdfRef).toBe(eventProgrammeKey(1000 + index));
+        withProgramme += 1;
+      } else if (event.state === "published") {
+        upcomingWithout += 1;
+      }
+      // A draft or hidden эфир publishes nothing at all.
+      if (event.state === "draft" || event.state === "hidden") {
+        expect(event.programPdfRef).toBeUndefined();
+      }
+    }
+    expect(withProgramme).toBeGreaterThanOrEqual(30);
+    // «Программа готовится» is a rendered state of its own
+    // (`event-page-view.ts` → `eventProgrammeContent`) and a stand where it never
+    // appears cannot show the owner what that block looks like.
+    expect(upcomingWithout).toBeGreaterThanOrEqual(2);
+  });
+
+  it("#2213: names the эфир and its own speakers in the programme", () => {
+    const specs = goldenProgrammeSpecs(dataset);
+    expect(specs.length).toBeGreaterThanOrEqual(30);
+    const expertById = new Map(
+      dataset.experts.map((row) => [row.id as string, row]),
+    );
+    for (const spec of specs) {
+      const text = programmeLines(spec).join("\n");
+      expect(text).toContain(spec.title);
+      expect(spec.speakers.length).toBeGreaterThanOrEqual(2);
+      for (const speaker of spec.speakers) {
+        expect(text).toContain(speaker.name);
+      }
+      expect(text).toContain("Вопросы и ответы");
+      const sessionLines = programmeLines(spec).filter((line) =>
+        /^\d{2}:\d{2} — \d{2}:\d{2}/.test(line.trim()),
+      );
+      expect(sessionLines.length).toBeGreaterThanOrEqual(6);
+    }
+    // Every speaker the programme names is an expert of THAT event.
+    const first = specs[0]!;
+    const names = new Set(
+      dataset.eventExperts
+        .filter(
+          (link) =>
+            (link.eventId as string) ===
+            (volumeEvents.find((e) => e.programPdfRef)?.id as string),
+        )
+        .map((link) => {
+          const expert = expertById.get(link.expertId as string)!;
+          return [expert.familyName, expert.givenName, expert.patronymic]
+            .filter(Boolean)
+            .join(" ");
+        }),
+    );
+    for (const speaker of first.speakers) expect(names.has(speaker.name)).toBe(true);
+  });
+
+  it("#2213: renders a programme PDF that parses and carries its title", async () => {
+    const spec = goldenProgrammeSpecs(dataset)[0]!;
+    const bytes = await renderProgrammePdf(spec);
+    expect(Buffer.from(bytes.subarray(0, 5)).toString()).toBe("%PDF-");
+    const parsed = await PDFDocument.load(bytes);
+    expect(parsed.getTitle()).toContain(spec.title);
+    expect(parsed.getPageCount()).toBeGreaterThanOrEqual(1);
+  }, 30_000);
+
+  it("#2213: renders byte-identical programmes at the same pin", async () => {
+    const specs = goldenProgrammeSpecs(dataset).slice(0, 3);
+    for (const spec of specs) {
+      const [a, b] = await Promise.all([
+        renderProgrammePdf(spec),
+        renderProgrammePdf(spec),
+      ]);
+      expect(sha(a)).toBe(sha(b));
+    }
+  }, 60_000);
+
+  it("#2213: re-dates the programme at a new pin without re-authoring it", () => {
+    const later = resolveGoldenNow({
+      [GOLDEN_NOW_ENV_VAR]: "2026-03-04T08:30:00.000Z",
+    });
+    const a = goldenProgrammeSpecs(dataset)[0]!;
+    const b = goldenProgrammeSpecs(buildGoldenDataset(later, subjects))[0]!;
+    expect(b.title).toBe(a.title);
+    const linesA = programmeLines(a);
+    const linesB = programmeLines(b);
+    expect(linesB.length).toBe(linesA.length);
+    let moved = 0;
+    for (const [i, line] of linesA.entries()) {
+      if (line === linesB[i]) continue;
+      moved += 1;
+      expect(isDatedProgrammeLine(line)).toBe(true);
+    }
+    expect(moved).toBeGreaterThan(0);
+  });
+
+  it("#2213: writes every object once and nothing on a re-run", async () => {
+    const store = createInMemoryGoldenMediaStore();
+    expect(await writeGoldenMedia(store, plan)).toBe(plan.length);
+    expect(store.objects.size).toBe(plan.length);
+    // The template bucket is cloned per slot and re-seeded on every `slot up`;
+    // a writer that re-uploaded everything would make the seed's cost grow with
+    // the dataset for no gain.
+    expect(await writeGoldenMedia(store, plan)).toBe(0);
+    expect(store.objects.size).toBe(plan.length);
+  }, 30_000);
+
+  it("#2213: plans the same bytes for the same pin", async () => {
+    const again = await buildGoldenMediaPlan(buildGoldenDataset(now, subjects));
+    expect(again.map((o) => o.key)).toEqual(plan.map((o) => o.key));
+    expect(again.map((o) => sha(o.bytes))).toEqual(
+      plan.map((o) => sha(o.bytes)),
+    );
+  }, 120_000);
 });
 
 function collectIds(node: unknown, out: string[] = []): string[] {

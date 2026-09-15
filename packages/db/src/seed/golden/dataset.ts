@@ -28,6 +28,7 @@ import { golden, GOLDEN_GROUP, goldenUuid } from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
+import { expertPhotoKey } from "./programme.js";
 import { buildGoldenVolume } from "./volume.js";
 
 // The pinned legal acceptances live in `consent.ts` so the volume half can write
@@ -165,6 +166,9 @@ export function buildGoldenDataset(
       credentials: "д.м.н., профессор",
       affiliation: "НМИЦ кардиологии",
       bio: "Эталонный эксперт золотого набора: опубликован, привязан к опубликованному событию и к проекту-школе.",
+      // Ordinals 1 and 2 of the `experts` group — the two named portraits,
+      // committed next to the volume ones (golden README → Media).
+      photoRef: expertPhotoKey(1),
       status: "published",
       firstPublishedAt: at({ days: -60 }),
       version: 1,
@@ -178,6 +182,8 @@ export function buildGoldenDataset(
       givenName: "Ольга",
       patronymic: "Викторовна",
       professionalRole: "Врач-невролог",
+      bio: "Эталонный эксперт-черновик: заполнен так же, как опубликованный, чтобы предпросмотр карточки в админке показывал настоящую карточку, а не пустой каркас.",
+      photoRef: expertPhotoKey(2),
       status: "draft",
       version: 1,
       createdAt: created,

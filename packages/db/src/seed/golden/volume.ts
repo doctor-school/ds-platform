@@ -33,9 +33,21 @@ import type {
 } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
+import {
+  composeDescription,
+  VOLUME_EXPERTS,
+  VOLUME_PROGRAMME,
+  VOLUME_PROJECTS,
+} from "./content.js";
 import type { GoldenDoctorSpecialtyLink } from "./dataset.js";
 import { golden, GOLDEN_GROUP, goldenUuid, isGoldenUuid } from "./ids.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
+import {
+  eventProgrammeKey,
+  expertPhotoKey,
+  hasProgramme,
+  programmeTotalMinutes,
+} from "./programme.js";
 
 /**
  * First ordinal the volume half may use, in every group.
@@ -75,204 +87,6 @@ export interface GoldenVolume {
   consentRecords: NewConsentRecord[];
   doctorSpecialties: GoldenDoctorSpecialtyLink[];
 }
-
-/**
- * Curated event programme: `[title, specialty]`, one entry per volume event.
- *
- * Literal and product-like on purpose. Generated titles («Event 17») make a
- * staging walk unreadable — the operator cannot tell a layout defect from a
- * fixture artefact — and they hide the text-length problems a real catalogue
- * has. The list is also the length contract: one entry = one event.
- */
-const VOLUME_PROGRAMME: readonly (readonly [string, string])[] = [
-  ["Современные подходы к терапии ХСН", "Кардиология"],
-  ["Артериальная гипертензия: цели и тактика", "Кардиология"],
-  ["Фибрилляция предсердий: антикоагулянтная терапия", "Кардиология"],
-  ["Острый коронарный синдром на догоспитальном этапе", "Кардиология"],
-  ["Дислипидемии: от скрининга до статинов", "Кардиология"],
-  ["Хроническая ишемия мозга: что доказано", "Неврология"],
-  ["Мигрень: профилактика и купирование приступа", "Неврология"],
-  ["Эпилепсия взрослых: подбор терапии", "Неврология"],
-  ["Болезнь Паркинсона: ранние признаки", "Неврология"],
-  ["Ишемический инсульт: терапевтическое окно", "Неврология"],
-  ["ГЭРБ: длительная терапия ИПП", "Гастроэнтерология"],
-  ["Воспалительные заболевания кишечника", "Гастроэнтерология"],
-  ["НАЖБП: диагностика и ведение", "Гастроэнтерология"],
-  ["Хронический панкреатит: ферментная терапия", "Гастроэнтерология"],
-  [
-    "Лекарственные взаимодействия в практике терапевта",
-    "Клиническая фармакология",
-  ],
-  ["Антибиотикотерапия: выбор и деэскалация", "Клиническая фармакология"],
-  ["Полипрагмазия у пожилых пациентов", "Гериатрия"],
-  ["Саркопения и падения: что может врач", "Гериатрия"],
-  ["Ведение беременности высокого риска", "Акушерство и гинекология"],
-  ["Преэклампсия: ранняя диагностика", "Акушерство и гинекология"],
-  ["Менопаузальная гормональная терапия", "Акушерство и гинекология"],
-  ["Периоперационное ведение пациента", "Анестезиология-реаниматология"],
-  ["Сепсис: первые шесть часов", "Анестезиология-реаниматология"],
-  ["Респираторная поддержка вне ОРИТ", "Анестезиология-реаниматология"],
-  ["Атопический дерматит: тактика ведения", "Дерматовенерология"],
-  ["Псориаз: биологическая терапия", "Дерматовенерология"],
-  ["Акне у взрослых: алгоритмы", "Дерматовенерология"],
-  ["ХБП: нефропротекция в амбулаторной практике", "Нефрология"],
-  ["Диабетическая нефропатия", "Нефрология"],
-  ["Анемии: дифференциальный диагноз", "Гематология"],
-  ["Тромбоцитопении в амбулаторной практике", "Гематология"],
-  ["Антикоагулянты: ошибки назначения", "Гематология"],
-  ["Внебольничная пневмония: маршрутизация", "Инфекционные болезни"],
-  ["Хронические вирусные гепатиты", "Инфекционные болезни"],
-  ["Вакцинопрофилактика взрослых", "Инфекционные болезни"],
-  [
-    "Лекарственная аллергия: подтвердить или снять",
-    "Аллергология и иммунология",
-  ],
-  ["Бронхиальная астма: тяжёлое течение", "Аллергология и иммунология"],
-  ["Крапивница: когда это не аллергия", "Аллергология и иммунология"],
-  ["Скрининг колоректального рака", "Колопроктология"],
-  ["Геморрой: консервативная тактика", "Колопроктология"],
-  ["Синдром раздражённого кишечника", "Гастроэнтерология"],
-  ["Остеопороз: кому и когда лечить", "Гериатрия"],
-  ["Старт инсулинотерапии при диабете 2 типа", "Клиническая фармакология"],
-  ["Кардиореабилитация после инфаркта", "Кардиология"],
-  ["Головокружение: алгоритм первичного звена", "Неврология"],
-  ["Хроническая боль: мультимодальный подход", "Анестезиология-реаниматология"],
-  ["Ведение пациента после тяжёлой респираторной инфекции", "Инфекционные болезни"],
-  ["Нарушения сна у взрослых", "Неврология"],
-  ["Железодефицит без анемии", "Гематология"],
-  ["Профилактика внезапной сердечной смерти", "Кардиология"],
-  ["Гипотиреоз: рутинные ошибки ведения", "Клиническая фармакология"],
-  ["Пищевая аллергия у взрослых", "Аллергология и иммунология"],
-  ["Ведение пациента с деменцией", "Гериатрия"],
-  ["Дерматоскопия для терапевта", "Дерматовенерология"],
-  // The «сегодня» эфир — last in the programme because it is last in the plan.
-  ["Неотложные состояния в кабинете терапевта", "Терапия"],
-];
-
-/** Descriptions, cycled by ordinal — varied prose, zero randomness. */
-const VOLUME_DESCRIPTIONS: readonly string[] = [
-  "Практический разбор клинических рекомендаций с ответами на вопросы аудитории.",
-  "Клинические случаи из реальной практики и пошаговые алгоритмы ведения.",
-  "Обзор доказательной базы и типичных ошибок амбулаторного приёма.",
-  "Разбор маршрутизации пациента между амбулаторным и стационарным этапом.",
-  "Интерактивная сессия с разбором назначений и лекарственных взаимодействий.",
-  "Пошаговый алгоритм: от первичного осмотра до контроля эффективности терапии.",
-];
-
-interface VolumeExpertSpec {
-  familyName: string;
-  givenName: string;
-  patronymic: string;
-  professionalRole: string;
-  credentials: string;
-  affiliation: string;
-}
-
-const VOLUME_EXPERTS: readonly VolumeExpertSpec[] = [
-  {
-    familyName: "Иванова",
-    givenName: "Мария",
-    patronymic: "Сергеевна",
-    professionalRole: "Заведующая отделением кардиологии",
-    credentials: "к.м.н.",
-    affiliation: "Городская клиническая больница",
-  },
-  {
-    familyName: "Кузнецов",
-    givenName: "Андрей",
-    patronymic: "Владимирович",
-    professionalRole: "Профессор кафедры неврологии",
-    credentials: "д.м.н., профессор",
-    affiliation: "Медицинский университет",
-  },
-  {
-    familyName: "Смирнова",
-    givenName: "Елена",
-    patronymic: "Борисовна",
-    professionalRole: "Доцент кафедры гастроэнтерологии",
-    credentials: "к.м.н., доцент",
-    affiliation: "Медико-стоматологический университет",
-  },
-  {
-    familyName: "Орлов",
-    givenName: "Сергей",
-    patronymic: "Николаевич",
-    professionalRole: "Клинический фармаколог",
-    credentials: "к.м.н.",
-    affiliation: "НМИЦ терапии и профилактической медицины",
-  },
-  {
-    familyName: "Морозова",
-    givenName: "Ольга",
-    patronymic: "Дмитриевна",
-    professionalRole: "Врач акушер-гинеколог высшей категории",
-    credentials: "к.м.н.",
-    affiliation: "Перинатальный центр",
-  },
-  {
-    familyName: "Гаврилов",
-    givenName: "Пётр",
-    patronymic: "Ильич",
-    professionalRole: "Заведующий отделением реанимации",
-    credentials: "д.м.н.",
-    affiliation: "НИИ скорой помощи",
-  },
-  {
-    familyName: "Белова",
-    givenName: "Наталья",
-    patronymic: "Викторовна",
-    professionalRole: "Врач-дерматовенеролог",
-    credentials: "к.м.н.",
-    affiliation: "Центр дерматовенерологии и косметологии",
-  },
-  {
-    familyName: "Зайцев",
-    givenName: "Максим",
-    patronymic: "Олегович",
-    professionalRole: "Врач-нефролог",
-    credentials: "к.м.н.",
-    affiliation: "Федеральный медико-биологический центр",
-  },
-];
-
-interface VolumeProjectSpec {
-  kind: "school" | "media";
-  title: string;
-  description: string;
-}
-
-const VOLUME_PROJECTS: readonly VolumeProjectSpec[] = [
-  {
-    kind: "school",
-    title: "Школа кардиолога: практикум",
-    description:
-      "Годовой цикл разборов по кардиологии: от амбулаторного приёма до неотложных состояний.",
-  },
-  {
-    kind: "school",
-    title: "Школа неврологии",
-    description:
-      "Систематический курс по ведению пациентов с цереброваскулярной и болевой патологией.",
-  },
-  {
-    kind: "school",
-    title: "Школа терапевта: клинические разборы",
-    description:
-      "Междисциплинарные разборы для врачей первичного звена и врачей общей практики.",
-  },
-  {
-    kind: "media",
-    title: "Разбор недели",
-    description:
-      "Короткие выпуски о новых клинических рекомендациях и изменениях в практике.",
-  },
-  {
-    kind: "media",
-    title: "Клинические алгоритмы",
-    description:
-      "Подкаст-серия: один алгоритм ведения за выпуск, без теоретических отступлений.",
-  },
-];
 
 /** Volume doctors, by ordinal. Thirteen names, thirteen specialties. */
 const VOLUME_DOCTORS: readonly (readonly [string, string])[] = [
@@ -343,9 +157,13 @@ export function buildGoldenVolume(now: Date): GoldenVolume {
     shiftFromNow(now, offset);
 
   const plans = planVolumeEvents(now, at);
-  if (plans.length !== VOLUME_PROGRAMME.length) {
+  // The programme bank is a CEILING, not an equality: the bank is append-only
+  // (its first entries are positionally pinned, so a recorded walk keeps
+  // resolving) and the plan grows into it. A plan that outran the bank would
+  // read an undefined entry, which is the failure worth refusing.
+  if (plans.length > VOLUME_PROGRAMME.length) {
     throw new RangeError(
-      `golden volume plan covers ${plans.length} events but the programme carries ${VOLUME_PROGRAMME.length}`,
+      `golden volume plan covers ${plans.length} events but the programme carries only ${VOLUME_PROGRAMME.length}`,
     );
   }
 
@@ -537,10 +355,11 @@ function buildEvent(plan: VolumeEventPlan, at: At): NewEvent {
     title,
     school: "Doctor.School",
     startsAt: plan.startsAt,
-    durationMin: 45 + (i % 4) * 15,
-    description: VOLUME_DESCRIPTIONS[
-      i % VOLUME_DESCRIPTIONS.length
-    ] as string,
+    // The эфир's length is its programme's length, not an independent number:
+    // an эфир advertising 45 minutes while handing out a seven-session
+    // programme is the PR #2216 defect with more paper.
+    durationMin: programmeTotalMinutes(i),
+    description: composeDescription(i, specialty),
     specialties: i % 3 === 0 ? [specialty, "Терапия"] : [specialty],
     state: plan.state,
     origin,
@@ -555,6 +374,9 @@ function buildEvent(plan: VolumeEventPlan, at: At): NewEvent {
     createdAt: at({ days: -120 - (i % 30) }),
     updatedAt: at({ days: -2 - (i % 20) }),
   };
+  if (hasProgramme(plan.state, i)) {
+    row.programPdfRef = eventProgrammeKey(GOLDEN_VOLUME_ORDINAL_BASE + i);
+  }
   if (plan.liveAt) row.liveAt = plan.liveAt;
   if (plan.recordingExpectedBy) {
     row.recordingExpectedBy = plan.recordingExpectedBy;
@@ -572,7 +394,8 @@ function buildExperts(at: At): NewExpert[] {
     professionalRole: spec.professionalRole,
     credentials: spec.credentials,
     affiliation: spec.affiliation,
-    bio: `${spec.professionalRole}. Ведёт эфиры и клинические разборы на платформе.`,
+    bio: spec.bio,
+    photoRef: expertPhotoKey(GOLDEN_VOLUME_ORDINAL_BASE + i),
     status: "published" as const,
     firstPublishedAt: at({ days: -120 - i * 5 }),
     version: 1,
@@ -597,16 +420,23 @@ function buildProjects(at: At): NewProject[] {
 }
 
 /**
- * Speakers per event: one to three, chosen by three co-prime index strides.
+ * Speakers per event: TWO to four, chosen by four co-prime index strides.
+ *
+ * Two is the floor because one is not a panel: the owner's Stage-B verdict on
+ * PR #2216 named single-speaker эфиры as part of what made the stand read as a
+ * fixture. The first two strides always fire, so `VOLUME_EXPERT_ROLES` puts a
+ * Модератор in position 1 on EVERY event; the third and fourth add an Эксперт
+ * and a second Спикер on a schedule that is neither constant nor aligned.
  *
  * The strides are what make the distribution even without a random generator —
- * every expert ends up on at least six events, so an expert page is never a
+ * every expert ends up on several events, so an expert page is never a
  * single-row page either.
  */
 function expertSlotsFor(i: number): number[] {
-  const slots = [i % VOLUME_EXPERTS.length];
-  if (i % 2 === 1) slots.push((i * 3 + 1) % VOLUME_EXPERTS.length);
-  if (i % 3 === 0) slots.push((i * 5 + 2) % VOLUME_EXPERTS.length);
+  const n = VOLUME_EXPERTS.length;
+  const slots = [i % n, (i * 7 + 3) % n];
+  if (i % 3 !== 2) slots.push((i * 11 + 5) % n);
+  if (i % 5 === 0) slots.push((i * 13 + 9) % n);
   return [...new Set(slots)];
 }
 

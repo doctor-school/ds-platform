@@ -1,22 +1,18 @@
-// #2063 — the pinned «now» of the golden dataset (staging tech spec §4).
+// #2063/#2212 — the «now» the golden dataset is built around (staging tech spec §4).
 //
-// Every timestamp the golden dataset writes is derived from ONE instant. Nothing
-// in the dataset may read the wall clock: two builds of `ds_golden` a week apart
-// must produce byte-identical data, so that `pg_dump --data-only` of build N and
-// build N+1 differ in nothing at all (the §9 «Golden seed drift» rule). The only
-// sanctioned variation is an explicit `GOLDEN_NOW` override, which the drift
-// test uses to prove that the WHOLE dataset moves with the pin rather than a
-// subset of it.
+// Every timestamp the dataset writes is derived from ONE instant, and by default
+// that instant is the SEED RUN TIME. The stand's apps read the real clock, so a
+// dataset frozen at a literal date turns every «upcoming» event into a past one
+// the moment the calendar moves past it — which is what «Расписание эфиров»
+// rendered empty on the staging slot. Re-running the seed moves the whole
+// schedule forward with it (the upsert refreshes every date-bearing column).
+//
+// `GOLDEN_NOW` is the explicit pin, and it is the reproducibility tool: the unit
+// suite pins it so dataset assertions stay deterministic, and the §9 «Golden
+// seed drift» rule runs BOTH builds under the same pin so a `pg_dump --data-only`
+// difference means a defect in the dataset rather than the clock ticking.
 
-/**
- * The pinned instant the golden dataset is built around. A Thursday midday UTC,
- * chosen so that «+3 days» and «-3 days» never land on a month or year boundary
- * and so the local-time rendering on the Moscow-facing storefront (UTC+3) stays
- * inside the same calendar day.
- */
-export const GOLDEN_NOW_DEFAULT = "2026-01-15T12:00:00.000Z";
-
-/** Environment variable that overrides {@link GOLDEN_NOW_DEFAULT}. */
+/** Environment variable that pins the instant instead of using the run time. */
 export const GOLDEN_NOW_ENV_VAR = "GOLDEN_NOW";
 
 /**
@@ -38,20 +34,25 @@ export class GoldenNowError extends Error {
 }
 
 /**
- * Resolves the pinned instant from the environment.
+ * Resolves the instant the dataset is built around: the explicit `GOLDEN_NOW`
+ * pin when one is set, otherwise the seed run time.
  *
- * Throws rather than falling back to the wall clock or to the default when an
- * override is present but malformed: an operator who sets `GOLDEN_NOW` and gets
- * a silently ignored value would ship a template database that does not match
- * the scenario fixtures built against it.
+ * A malformed pin throws rather than falling back to the clock: an operator who
+ * sets `GOLDEN_NOW` and gets a silently ignored value would ship a template
+ * database that does not match the scenario fixtures built against it.
+ *
+ * `clock` is an injection point for the tests only — production callers pass
+ * nothing and get `new Date()`.
  */
 export function resolveGoldenNow(
   env: Record<string, string | undefined> = process.env,
+  clock: () => Date = () => new Date(),
 ): Date {
-  const raw = env[GOLDEN_NOW_ENV_VAR] ?? GOLDEN_NOW_DEFAULT;
+  const raw = env[GOLDEN_NOW_ENV_VAR];
+  if (raw === undefined) return clock();
   if (!GOLDEN_NOW_PATTERN.test(raw)) {
     throw new GoldenNowError(
-      `${GOLDEN_NOW_ENV_VAR} must be an ISO-8601 UTC instant with millisecond precision (e.g. ${GOLDEN_NOW_DEFAULT}), got: ${raw}`,
+      `${GOLDEN_NOW_ENV_VAR} must be an ISO-8601 UTC instant with millisecond precision (e.g. 2026-01-15T12:00:00.000Z), got: ${raw}`,
     );
   }
   const at = new Date(raw);
@@ -63,7 +64,7 @@ export function resolveGoldenNow(
   return at;
 }
 
-/** A signed offset from the pinned instant. Every field is optional. */
+/** A signed offset from the resolved «now». Every field is optional. */
 export interface GoldenOffset {
   days?: number;
   hours?: number;
@@ -79,9 +80,10 @@ const MS = {
 };
 
 /**
- * Derives an instant relative to the pin. This is the ONLY way the dataset is
- * allowed to produce a timestamp — a literal date in a row would not move when
- * `GOLDEN_NOW` moves, and the drift test would not catch it.
+ * Derives an instant relative to the resolved «now». This is the ONLY way the
+ * dataset is allowed to produce a timestamp — a literal date in a row would move
+ * neither with the run time nor with `GOLDEN_NOW`, so an «upcoming» event would
+ * quietly rot into a past one and the drift test would not catch it.
  */
 export function shiftFromNow(now: Date, offset: GoldenOffset): Date {
   const delta =

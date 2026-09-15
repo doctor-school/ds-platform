@@ -4,7 +4,6 @@
 // `run.ts` is deliberately NOT re-exported: it is a CLI with side effects.
 
 export {
-  GOLDEN_NOW_DEFAULT,
   GOLDEN_NOW_ENV_VAR,
   GoldenNowError,
   goldenDateOnly,

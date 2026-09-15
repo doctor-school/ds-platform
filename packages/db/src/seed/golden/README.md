@@ -24,18 +24,27 @@ exists to keep two builds of that template byte-identical.
 Production seeds nothing. `pnpm seed:golden` is a staging-only step and is
 deliberately not wired into `tools/deploy/prod.mjs`.
 
-## The pinned «now»
+## The «now» the dataset is built around
 
-Every timestamp in the dataset is derived from one instant,
-`GOLDEN_NOW_DEFAULT = 2026-01-15T12:00:00.000Z`, via `shiftFromNow`. Nothing
-reads the wall clock and no row relies on a `defaultNow()` column default —
-`created_at` / `updated_at` are written explicitly. That is what makes
-`pg_dump --data-only` of build _N_ and build _N+1_ identical.
+Every timestamp in the dataset is derived from one instant via `shiftFromNow`,
+and by default that instant is **the seed run time**. No row relies on a
+`defaultNow()` column default — `created_at` / `updated_at` are written
+explicitly, all from the same resolved «now», so the whole scenario moves as one
+piece.
 
-Override with `GOLDEN_NOW` (strict ISO-8601 UTC with millisecond precision; a
-`2026-01-15` or a `+03:00` offset is refused rather than silently reinterpreted).
-The drift check runs two builds and diffs the dumps — a difference that is not
-explained by a changed `GOLDEN_NOW` is a defect in the dataset, not in the box.
+The run time is the default because the stand's apps read the real clock. A
+dataset frozen at a literal date turns «Предстоящий эфир» into a past event the
+moment the calendar passes it, and «Расписание эфиров» on the slot renders empty
+(#2212). Re-running the seed moves the schedule forward: the upsert refreshes
+every date-bearing column of the rows it already wrote (see «Idempotency and the
+build»).
+
+`GOLDEN_NOW` pins the instant explicitly (strict ISO-8601 UTC with millisecond
+precision; a `2026-01-15` or a `+03:00` offset is refused rather than silently
+reinterpreted — a malformed pin fails the seed, it never falls back to the
+clock). The pin is the reproducibility tool: the unit suite pins it so the
+dataset assertions stay deterministic, and the drift check below runs **both**
+builds under the same pin.
 
 ## Identity-provider accounts
 
@@ -122,10 +131,13 @@ rebuild. Slugs are `golden-*`.
 
 ## Idempotency and the build
 
-`seed:golden` upserts every row on its pinned identity inside **one**
-transaction, refreshing every column it wrote. A second run therefore changes
-nothing observable — all-or-nothing, because a half-written template that still
-looks buildable would be inherited by every slot cloned from it.
+`seed:golden` upserts every row on its fixed UUID inside **one** transaction,
+refreshing every column it wrote. A second run under the same `GOLDEN_NOW`
+therefore changes nothing observable; a second run without a pin rewrites exactly
+the time-derived columns and leaves every id, slug and relation alone — that is
+how the slot's schedule stays in the future. All-or-nothing, because a
+half-written template that still looks buildable would be inherited by every slot
+cloned from it.
 
 `tools/staging/golden-db.mjs` never migrates in place. It builds
 `ds_golden_next` beside the live template, and only after the migrate and the
@@ -135,15 +147,25 @@ leaves `ds_golden` serving the previous generation untouched.
 
 ## Drift rule (§9)
 
-Two consecutive template builds must produce an empty
-`pg_dump --data-only` diff modulo `GOLDEN_NOW`, over every table except the two
-bookkeeping tables named below:
+Two consecutive template builds **run under the same explicit `GOLDEN_NOW` pin**
+must produce an empty `pg_dump --data-only` diff, over every table except the two
+bookkeeping tables named below. Without a pin the two builds differ in exactly
+the time-derived columns, which is now the intended behaviour — so the drift
+check supplies one.
+
+The seed step runs as a one-shot in the slot's `migrate` container (the box has
+no host `pnpm`, §3 «Host runtime»), which is where the pin is injected:
 
 ```sh
+PIN=2026-01-15T12:00:00.000Z
 EXCL='--exclude-table=__drizzle_migrations --exclude-table=audit_ledger'
-pnpm staging:golden-db
+SEED="docker compose --profile migrate run --rm \
+  -e DATABASE_URL=$DATABASE_URL_GOLDEN -e GOLDEN_NOW=$PIN migrate \
+  pnpm --filter @ds/db run seed:golden"
+
+$SEED
 pg_dump --data-only --no-owner $EXCL "$DATABASE_URL_GOLDEN" > /tmp/golden-1.sql
-pnpm staging:golden-db
+$SEED
 pg_dump --data-only --no-owner $EXCL "$DATABASE_URL_GOLDEN" > /tmp/golden-2.sql
 diff /tmp/golden-1.sql /tmp/golden-2.sql   # must be empty
 ```
@@ -152,8 +174,9 @@ The comparison excludes exactly two tables — `__drizzle_migrations` and
 `audit_ledger` — and no others. Neither holds dataset content: each records the
 fact and the moment of a write, so its rows carry per-build ids and timestamps by
 design. Every one of the 22 dataset tables is compared in full, column for
-column. A non-empty diff means something in the dataset read a clock, generated
-an id, or relied on a column default — fix the dataset, never the diff.
+column. A non-empty diff under a fixed pin means something in the dataset read
+the clock on its own, generated an id, or relied on a column default — fix the
+dataset, never the diff.
 
 ### Why the rule holds on the specialty book too
 
@@ -168,10 +191,11 @@ the template and part of the diff. Three properties keep it byte-identical:
   sets `name`, `is_other`, `frequent_rank` and `updated_at` only. A live database
   that already handed out random ids keeps them, and every stored reference to a
   doctor's specialty stays valid; the derivation applies to fresh inserts alone.
-- **Timestamps are pinned on the golden path.** `seedGolden` passes the pinned
-  `now` to the book seed, so `created_at` / `updated_at` move with `GOLDEN_NOW`
-  like every other golden timestamp. Without that argument — the API boot path —
-  the database clock still decides, exactly as before.
+- **Timestamps follow the golden «now».** `seedGolden` passes the resolved `now`
+  to the book seed, so `created_at` / `updated_at` move with the run time — or
+  with `GOLDEN_NOW` when one is pinned — like every other golden timestamp.
+  Without that argument — the API boot path — the database clock still decides,
+  exactly as before.
 
 A re-seed of unchanged data therefore writes nothing at all: the frequent-rank
 pre-clear skips rows that already hold the rank they are about to be given, and

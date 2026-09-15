@@ -1,5 +1,6 @@
 import type { RoomEntryRoutes } from "@ds/room/server";
-import { buildRoomReturnHref, type RoomRoutes } from "@ds/room";
+import type { RoomRoutes } from "@ds/room";
+import { buildRoomReturnHref } from "@ds/room/room-return";
 
 import { ACADEMY_ROOM_ROUTES } from "../../../../lib/room-config";
 

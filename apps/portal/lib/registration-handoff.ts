@@ -19,7 +19,7 @@ import {
   parseAcademyEventReturnTarget,
   parseSameOriginReturnTarget,
 } from "@ds/schemas";
-import { parseRoomReturnTarget } from "@ds/room";
+import { parseRoomReturnTarget } from "@ds/room/room-return";
 
 import { ACADEMY_ROOM_ROUTES } from "./room-config";
 

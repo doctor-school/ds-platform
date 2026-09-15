@@ -108,6 +108,31 @@ describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
     expect(parseRoomReturnTarget("/webinars/ahilles-042/room", {})).toBeNull();
   });
 
+  it("EARS-6: refuses a malformed host template — `:slug` must be the template's ONE placeholder, with a suffix after it", () => {
+    // Gate §2.1 contract: the host states a template with «`:slug` as its only
+    // placeholder». A second placeholder would survive interpolation as a literal
+    // `:slug` in a live href, so both halves of the codec refuse it outright rather
+    // than shipping a half-built redirect.
+    for (const malformed of [
+      "/rooms/:slug/x/:slug",
+      "/webinars/:slug/room/:slug",
+      "/webinars/:slug",
+      "/webinars/room",
+      "",
+    ]) {
+      expect(
+        parseRoomReturnTarget("/webinars/ahilles-042/room", {
+          room: malformed,
+        }),
+        `must reject template: ${malformed}`,
+      ).toBeNull();
+      expect(
+        () => buildRoomReturnHref("ahilles-042", { room: malformed }),
+        `must refuse to build on template: ${malformed}`,
+      ).toThrow(TypeError);
+    }
+  });
+
   it("EARS-6: builds a same-origin room href for a slug, escaping a hostile slug so it can never front a cross-origin target", () => {
     expect(buildRoomReturnHref("ahilles-042", ACADEMY_ROOM_ROUTES)).toBe(
       "/webinars/ahilles-042/room",

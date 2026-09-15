@@ -1,5 +1,5 @@
 import type { EventRegistrationState } from "@ds/schemas";
-import { buildRoomReturnHref } from "@ds/room";
+import { buildRoomReturnHref } from "@ds/room/room-return";
 
 import type { CanvasStatus } from "./event-lifecycle";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";

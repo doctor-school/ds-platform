@@ -1,4 +1,4 @@
-import type { RoomReturnRoutes } from "@ds/room";
+import type { RoomReturnRoutes } from "@ds/room/room-return";
 
 /**
  * 006 EARS-6 — the ACADEMY storefront's HOST VALUES for the shared room unit

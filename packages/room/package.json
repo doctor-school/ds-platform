@@ -9,6 +9,7 @@
     "./ui": "./src/ui/index.ts",
     "./server": "./src/server/index.ts",
     "./embed": "./src/model/room-player.ts",
+    "./room-return": "./src/model/room-return.ts",
     "./display-name": "./src/client/display-name.ts"
   },
   "scripts": {

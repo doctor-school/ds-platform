@@ -59,11 +59,13 @@ export interface RoomReturnTarget {
 }
 
 /**
- * Split a host's room template into the text before and after `:slug`. Returns
- * `null` for a template this codec cannot honour — no placeholder, or nothing
- * after it (a suffix-less template would make the bare event page parse as a room
- * return). Fail-closed: a malformed host value refuses room returns rather than
- * widening the guard.
+ * Split a host's room template into the text before and after its SINGLE `:slug`.
+ * Returns `null` for a template this codec cannot honour — no placeholder, MORE
+ * THAN ONE placeholder (the contract is «`:slug` as its only placeholder», and a
+ * second one would survive interpolation as a literal `:slug` in a live href), or
+ * nothing after it (a suffix-less template would make the bare event page parse as
+ * a room return). Fail-closed: a malformed host value refuses room returns rather
+ * than widening the guard.
  */
 function splitRoomTemplate(
   template: string | undefined,
@@ -71,6 +73,7 @@ function splitRoomTemplate(
   if (!template) return null;
   const at = template.indexOf(SLUG_PLACEHOLDER);
   if (at === -1) return null;
+  if (template.lastIndexOf(SLUG_PLACEHOLDER) !== at) return null;
   const prefix = template.slice(0, at);
   const suffix = template.slice(at + SLUG_PLACEHOLDER.length);
   if (suffix.length === 0) return null;
@@ -112,14 +115,6 @@ export function parseRoomReturnTarget(
   };
 }
 
-/** `true` iff `returnTo` is a safe same-origin room return target (EARS-6). */
-export function isSafeRoomReturnTarget(
-  returnTo: unknown,
-  routes: RoomReturnRoutes | undefined,
-): boolean {
-  return parseRoomReturnTarget(returnTo, routes) !== null;
-}
-
 /**
  * Build the same-origin room `returnTo` the auth flow carries for an event
  * identified by `slug`, on a host that DOES serve a room (hence the required
@@ -128,10 +123,22 @@ export function isSafeRoomReturnTarget(
  * never front a protocol-relative or cross-origin target — mirroring the
  * server-side register href the `ParticipationCta` resolver emits
  * (004 EARS-3 / 005 EARS-2).
+ *
+ * The href is assembled from the SAME {@link splitRoomTemplate} the parser uses, so
+ * the builder and the guard cannot disagree about which templates this codec
+ * honours. A template the guard refuses (no `:slug`, more than one, nothing after
+ * it) throws here rather than shipping a half-interpolated path into a live
+ * redirect — a host-config defect, surfaced where it is introduced.
  */
 export function buildRoomReturnHref(
   slug: string,
   routes: Required<RoomReturnRoutes>,
 ): string {
-  return routes.room.replace(SLUG_PLACEHOLDER, encodeURIComponent(slug));
+  const template = splitRoomTemplate(routes.room);
+  if (!template) {
+    throw new TypeError(
+      `room route template must contain exactly one \`${SLUG_PLACEHOLDER}\` placeholder with a suffix after it: ${routes.room}`,
+    );
+  }
+  return `${template.prefix}${encodeURIComponent(slug)}${template.suffix}`;
 }

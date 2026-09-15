@@ -5,7 +5,7 @@ import {
   type ReturnHost,
   completeReturnTarget as completeSharedReturnTarget,
 } from "@ds/events-storefront";
-import { parseRoomReturnTarget } from "@ds/room";
+import { parseRoomReturnTarget } from "@ds/room/room-return";
 
 import { resolveReturnTarget } from "./return-to-origin";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";

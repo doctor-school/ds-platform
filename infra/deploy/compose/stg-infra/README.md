@@ -350,6 +350,29 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
   ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
 ```
 
+**Then hand the api its credentials (#2226).** The converge registers the OIDC app, but
+nothing writes the API-side keys: a slot's `api` binds the real Zitadel adapter only when
+`IDP_ISSUER` (rendered per slot by `slot.mjs`) AND `IDP_SERVICE_TOKEN` are both set
+(`apps/api/src/auth/idp/idp.module.ts`); otherwise it boots the in-memory
+`FakeIdpClient` with no error — registration and login "work", the accounts live in
+that container's memory and vanish on the next `sync`, and the golden accounts
+`reset-identities` writes into Zitadel answer 401 on `POST /v1/auth/login`. That is how
+the stand ran from its bring-up until 2026-09-15. Fill the four keys in
+`/etc/ds-platform/stage.env` exactly as `api.env` on prod (`stage.env.example` → «API-side
+IdP credentials»: the bootstrap PAT as the service token, client id / project id from
+the provision output, the client secret from creation or `_generate_client_secret`),
+then recreate the api of every live slot:
+
+```bash
+for S in $(ls /etc/ds-platform/slots | sed 's/\.env$//'); do
+  sudo docker compose --env-file /etc/ds-platform/stage.env --env-file /etc/ds-platform/slots/$S.env \
+    -p slot-$S -f /home/deploy/ds-platform.slots/$S/infra/deploy/compose/slot/compose.yml \
+    up -d --no-deps --force-recreate api
+done
+# proof: golden.doctor.verified@example.test + DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED →
+# POST https://api-<slot>.<base>/v1/auth/login → 200 {"status":"authenticated"}
+```
+
 Two standing rules come with the shared instance (spec §3 «Identity»):
 
 - A PR that changes `provision.sh` or `idp-policy.mjs` is **serialized repo-wide like

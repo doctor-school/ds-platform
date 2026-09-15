@@ -1,5 +1,12 @@
 # @ds/admin
 
+## 3.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f)]:
+  - @ds/design-system@5.5.0
+
 ## 3.0.0
 
 ### Major Changes

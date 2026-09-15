@@ -1,5 +1,19 @@
 # @ds/api
 
+## 4.0.1
+
+### Patch Changes
+
+- [#2125](https://github.com/doctor-school/ds-platform/pull/2125) [`31ba498`](https://github.com/doctor-school/ds-platform/commit/31ba49863d99564905db934f46d52a122cb738b0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add explicit Postbox SMTP selection with bounded, cancellable email attempts and opt-in fallback. Keep uncertain acceptance from triggering duplicate sends, and report provider acceptance separately from delivery.
+
+- [#2190](https://github.com/doctor-school/ds-platform/pull/2190) [`42c3d48`](https://github.com/doctor-school/ds-platform/commit/42c3d483e808611ecbcdfc2bb11d8deec553c6e2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Send verified-account login codes through the existing shared email template without native action links.
+
+- [#2163](https://github.com/doctor-school/ds-platform/pull/2163) [`c94c3de`](https://github.com/doctor-school/ds-platform/commit/c94c3de46a378d9a2c0abb96be228d7708e54b10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Select a separate native Postbox SMTP profile while retaining the existing mail.ru profile for deliberate rollback.
+
+- [#2176](https://github.com/doctor-school/ds-platform/pull/2176) [`0e8d27a`](https://github.com/doctor-school/ds-platform/commit/0e8d27aa624dc62a7abd9982c48a245aac1dab10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Reuse the existing code-email layout for BFF transactional notices, keep only the duplicate-registration login action, and clarify code entry in the requesting tab with consistent Doctor.School sender naming.
+- Updated dependencies [[`390c917`](https://github.com/doctor-school/ds-platform/commit/390c9178288cc3737efbad87ba9ee1dbe5289d6b)]:
+  - @ds/db@3.1.0
+
 ## 4.0.0
 
 ### Major Changes

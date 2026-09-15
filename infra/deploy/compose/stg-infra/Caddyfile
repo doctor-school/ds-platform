@@ -7,6 +7,18 @@
 # `X-Robots-Tag: noindex` and sits behind ONE basic-auth pair (`STAGE_BASIC_AUTH_*`
 # from /etc/ds-platform/stage.env, passed in by compose.yml → caddy.environment).
 #
+# THE GATE IS ASKED ONCE PER BROWSER, NOT ONCE PER SLOT (#2210). Browsers remember
+# basic-auth credentials per HOST, and every slot is a new set of hosts, so the owner
+# used to be prompted on every preview. Now the first basic-auth success on any slot
+# host sets the stand-wide gate cookie `ds_stage_gate` on the PARENT domain
+# (`Domain={$STAGE_BASE_DOMAIN}`), and a request carrying that cookie skips
+# `basic_auth` on every current and future slot host. The cookie VALUE is the stand
+# secret `STAGE_GATE_TOKEN` (stage.env → compose.yml → caddy.environment), same trust
+# level as the basic-auth password: rotate it by editing the line and recreating the
+# caddy container (README → «Basic auth» bullet). Callers without the
+# cookie — agents, `pnpm stage:slot up`'s health leg, curl — go through `basic_auth`
+# exactly as before; they never see the cookie unless they authenticate.
+#
 # THE EDGE IS STATIC (#2194). There is no slot registry, no generated include and no
 # reload on bring-up: this file alone describes every host that can ever exist,
 # through ONE host regexp over the §3 naming convention
@@ -70,6 +82,9 @@
 		{$STAGE_BASIC_AUTH_USER} {$STAGE_BASIC_AUTH_HASH}
 	}
 }
+
+# The stand-wide gate cookie (#2210) is matched and issued inline in the slot
+# handler below — the matcher and the `Set-Cookie` line are the whole mechanism.
 
 # --- ask endpoint (on-demand TLS gate) -----------------------------------------
 #
@@ -179,12 +194,34 @@ http://127.0.0.1:2020 {
 			api     api    3000
 		}
 
-		import staging_basic_auth
-		reverse_proxy {re.slot.2}-{slot_service}:{slot_port}
+		# Gate (#2210): the stand-wide cookie skips the challenge; anything else is
+		# challenged, and a success issues the cookie for every slot host at once.
+		#
+		# The regexp anchors the cookie name and the FULL token between cookie
+		# separators, so a prefix or another cookie with the same value never
+		# matches. `STAGE_GATE_TOKEN` is `openssl rand -hex 32` — hex only, so the
+		# substituted value is regexp-inert.
+		@gated header_regexp gate Cookie "(^|;[ ]*)ds_stage_gate={$STAGE_GATE_TOKEN}(;|$)"
+		handle @gated {
+			reverse_proxy {re.slot.2}-{slot_service}:{slot_port}
+		}
+		handle {
+			# `route` pins the order: `basic_auth` FIRST, the cookie only on its
+			# success. Outside a `route`, Caddy's default directive order puts
+			# `header` before `basic_auth` and applies it immediately, so the token
+			# would ride the 401 challenge out to an unauthenticated client. `+`
+			# appends, so an upstream `Set-Cookie` (the app session) survives.
+			route {
+				import staging_basic_auth
+				header +Set-Cookie "ds_stage_gate={$STAGE_GATE_TOKEN}; Domain={$STAGE_BASE_DOMAIN}; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
+				reverse_proxy {re.slot.2}-{slot_service}:{slot_port}
+			}
+		}
 	}
 
 	# A host under the wildcard that is not a well-formed slot host: still guarded,
-	# still noindex.
+	# still noindex. Nothing lives here, so the gate cookie is neither honoured nor
+	# issued — the plain challenge is the whole answer.
 	handle {
 		import staging_basic_auth
 		respond "stage-1 edge: unknown staging host" 404

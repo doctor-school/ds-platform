@@ -77,6 +77,7 @@ export {
 export {
   composeDescription,
   specialtiesWithoutParagraphBank,
+  volumeEventTitle,
   VOLUME_EXPERTS,
   VOLUME_PROGRAMME,
   VOLUME_PROJECTS,

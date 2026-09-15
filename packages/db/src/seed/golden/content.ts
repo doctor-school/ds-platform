@@ -359,6 +359,32 @@ export function composeDescription(i: number, specialty: string): string {
   return paragraphs.join("\n\n");
 }
 
+/**
+ * The title and specialty of volume event `i`.
+ *
+ * The daily schedule (#2213 part C) runs several hundred эфиров while the bank
+ * above carries a curated few hundred titles, so the catalogue is a SEASON of
+ * editions rather than a one-shot list: entry `slot` is re-run as «… · выпуск N»
+ * once the bank has been walked through. That is what doctor.school actually
+ * does — a lecture series returns — and it keeps the mapping injective, because
+ * `(slot, edition)` is just `i` written in base `VOLUME_PROGRAMME.length`. The
+ * first pass through the bank is the bank VERBATIM, in bank order, so every
+ * title recorded against an early ordinal keeps resolving.
+ */
+export function volumeEventTitle(i: number): {
+  title: string;
+  specialty: string;
+} {
+  const bank = VOLUME_PROGRAMME.length;
+  const slot = ((i % bank) + bank) % bank;
+  const edition = Math.floor(i / bank);
+  const [title, specialty] = VOLUME_PROGRAMME[slot] as readonly [string, string];
+  return {
+    title: edition === 0 ? title : `${title} · выпуск ${edition + 1}`,
+    specialty,
+  };
+}
+
 /** Specialties a programme entry names but no paragraph bank covers. */
 export function specialtiesWithoutParagraphBank(): string[] {
   const missing = new Set<string>();

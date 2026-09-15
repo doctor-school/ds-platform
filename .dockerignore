@@ -15,6 +15,12 @@
 .claude
 docs
 **/*.md
+# Exception: the legal texts are runtime files, not docs. `@ds/legal-content` reads
+# packages/legal-content/documents/*.md with `fs` at request time and the app
+# `next.config.ts` `outputFileTracingIncludes` copies what exists under that glob
+# into the standalone bundle — so a build context without them ships an image whose
+# /documents/<slug> answers 404 while every local tier is green (#2220).
+!packages/legal-content/documents/*.md
 
 # Never ship deploy state / secrets into a build layer.
 infra/deploy/.env

@@ -117,6 +117,22 @@ export const POSTGRES_CONTAINER = "stg-infra-postgres-1";
  */
 export const REDIS_CONTAINER = "stg-infra-redis-1";
 
+/**
+ * The shared MinIO container, one bucket per slot.
+ *
+ * Staging never touches the production Timeweb bucket (`infra/deploy/compose/stg-infra/compose.yml`
+ * → `minio`), so a slot's uploads need a bucket of their own here — created by
+ * {@link slotBucketCreateCommand} on every converge and dropped with the rest of a
+ * preview's state by {@link slotBucketRemoveCommand}.
+ */
+export const MINIO_CONTAINER = "stg-infra-minio-1";
+
+/** The public S3 host every slot's api signs its URLs for (one host, many buckets). */
+export function s3Hostname(baseDomain) {
+  assertBaseDomain(baseDomain);
+  return `s3.${baseDomain}`;
+}
+
 /** Per-slot, non-secret env files. The box secret set stays in ONE file. */
 export const SLOT_ENV_DIR = "/etc/ds-platform/slots";
 export const STAGE_ENV_FILE = "/etc/ds-platform/stage.env";
@@ -853,6 +869,99 @@ export function caddyDetachCommand(slot) {
   };
 }
 
+// --- the per-slot object-storage bucket --------------------------------------
+
+/**
+ * `main` → `ds-main`, `pr-2034` → `ds-pr-2034`.
+ *
+ * The dash SURVIVES here, unlike {@link slotDatabaseName}: an S3 bucket name is
+ * DNS-shaped (lowercase letters, digits and dashes, 3–63 characters), and an
+ * underscore would be rejected by MinIO itself. `SLOT_NAME_RE` already admits only
+ * lowercase-and-dash names, so the prefix is the whole transformation.
+ */
+export function slotBucketName(slot) {
+  assertSlotName(slot);
+  const bucket = `ds-${slot}`;
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) {
+    throw new SlotError(`unusable S3 bucket name for slot ${slot}: ${bucket}`);
+  }
+  return bucket;
+}
+
+/**
+ * One `mc` invocation inside the MinIO container, credentials never in the argv.
+ *
+ * `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` are the container's OWN environment
+ * (compose sets them from `S3_ACCESS_KEY` / `MINIO_ROOT_PASSWORD` in `stage.env`), so
+ * the secret is expanded by the shell INSIDE the container and never appears in the
+ * host's process list, in the ssh command line or in the run log.
+ *
+ * The alias is re-set on every call rather than assumed: `mc ready local` in the
+ * healthcheck proves `mc` exists in the image, not that the alias survives a restart.
+ */
+function minioCommand(script) {
+  return [
+    "sudo",
+    "docker",
+    "exec",
+    MINIO_CONTAINER,
+    "sh",
+    "-c",
+    'mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && ' +
+      script,
+  ];
+}
+
+/**
+ * The slot's bucket, made PRESENT before `migrate` and the application start.
+ *
+ * `ensure-present` for the same reason the Caddy attach is: `mc mb` on an existing
+ * bucket exits 1 with «already own it», which is the EXPECTED state of every `sync`
+ * and every second `up`. Probing first keeps the re-converge a success with nothing
+ * to do — and keeps the objects, so pushing a commit to an open PR never wipes what
+ * its slot has already uploaded.
+ *
+ * Before `migrate`, not after `up -d`: the api resolves `S3_BUCKET_UPLOADS` at boot
+ * and the branch seed (`seed:golden`) may write objects, so the bucket has to exist
+ * before anything in the slot can reach for it.
+ */
+export function slotBucketCreateCommand(slot) {
+  const bucket = slotBucketName(slot);
+  return {
+    kind: "ensure-present",
+    label: "create slot bucket",
+    items: [
+      {
+        probe: minioCommand(`mc ls local/${bucket} >/dev/null`),
+        apply: minioCommand(`mc mb local/${bucket}`),
+      },
+    ],
+  };
+}
+
+/**
+ * A PREVIEW's bucket, made ABSENT with the rest of its state.
+ *
+ * Planned only for a preview, exactly like the database drop: `main`'s bucket is as
+ * persistent as `ds_main`, and `slot reset main` re-seeds rows without touching
+ * objects (`tools/staging/README.md`). `--force` because a bucket with objects in it
+ * is the normal case, and a teardown that stopped there would leave the preview's
+ * uploads on the box forever.
+ */
+export function slotBucketRemoveCommand(slot) {
+  const bucket = slotBucketName(slot);
+  return {
+    kind: "ensure-absent",
+    label: "remove slot bucket",
+    items: [
+      {
+        probe: minioCommand(`mc ls local/${bucket} >/dev/null`),
+        remove: minioCommand(`mc rb --force local/${bucket}`),
+      },
+    ],
+  };
+}
+
 // --- the per-slot env file ---------------------------------------------------
 
 /**
@@ -874,6 +983,14 @@ export function caddyDetachCommand(slot) {
  * without them. Missing ⇒ a REFUSAL naming `ds-slot reset-identities`, never a blank
  * value: a blank would reach the seed as «provisioned but empty» and fail deep inside
  * a one-shot container instead of here, where the operator can act on it.
+ *
+ * The `S3_*` set is the same shape as `DATABASE_URL`'s: the ADDRESSING half is
+ * slot-derived and non-secret and lives here, while the credential half stays in
+ * `stage.env` — `S3_ACCESS_KEY` read straight from it, `S3_SECRET_KEY` interpolated
+ * from `MINIO_ROOT_PASSWORD` by the slot compose. `S3_ENDPOINT` is the PUBLIC host,
+ * not `http://minio:9000`: `urlFor` presigns a SigV4 GET whose signature is bound to
+ * the host it was signed for (`apps/api/src/storage/storage.s3.ts`), so a browser
+ * fetching the image has to reach the very host the api signed for.
  */
 export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }) {
   assertSlotName(slot);
@@ -901,6 +1018,15 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     // Sink partitioning is by sender local part, not by a Mailpit per slot
     // (spec §3 «Sink partitioning across slots»).
     `MAILER_SMTP_FROM=no-reply+${slot}@${baseDomain}`,
+    // Object storage: addressing only. `S3_SECRET_KEY` is deliberately ABSENT — the
+    // slot compose interpolates it from `MINIO_ROOT_PASSWORD` in stage.env, so the
+    // box keeps exactly one copy of that secret.
+    `S3_ENDPOINT=https://${s3Hostname(baseDomain)}`,
+    `S3_BUCKET_UPLOADS=${slotBucketName(slot)}`,
+    "S3_REGION=us-east-1",
+    // MinIO serves buckets as a PATH, not as a `<bucket>.` sub-domain: the edge routes
+    // exactly one `s3.` host and no wildcard beneath it.
+    "S3_FORCE_PATH_STYLE=true",
     // Tool-managed and non-secret (`idp.mjs`): the golden fixture's subject ids, which
     // `seed:golden` needs. The golden PASSWORDS are secrets and stay in stage.env.
     ...GOLDEN_SUBJECT_ENV_VARS.map((name) => `${name}=${goldenSubjects[name]}`),
@@ -1209,6 +1335,10 @@ export function planSlotUp({
   }
 
   steps.push(
+    // BEFORE the migrate/seed pair and before `up -d`: the branch seed may write
+    // objects and the api resolves its bucket at boot. Kept across a `sync`, so a
+    // push to an open PR never drops what the slot has already uploaded.
+    slotBucketCreateCommand(slot),
     migrateCommandPlan(slot),
     seedCommandPlan(slot),
     upCommandPlan(slot),
@@ -1277,6 +1407,9 @@ export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) 
       label: "drop database",
       statements: dropDatabaseStatements(slot),
     });
+    // The object half of the same sentence: a preview's uploads are as disposable as
+    // its database. `main` keeps its bucket exactly as it keeps `ds_main`.
+    steps.push(slotBucketRemoveCommand(slot));
     const stillReferenced = new Set(
       Object.entries(live)
         .filter(([name]) => name !== slot)

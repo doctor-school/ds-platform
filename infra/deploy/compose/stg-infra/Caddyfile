@@ -33,7 +33,7 @@
 # or 502 (credentials, no upstream) — never a certificate error, never an indexable
 # page.
 #
-# Basic-auth exemptions — exactly two, both because the caller carries no browser
+# Basic-auth exemptions — exactly three, each because the caller carries no browser
 # credentials and is authenticated by its own mechanism:
 #   1. the two Centrifugo path families on `api-<slot>` (websocket upgrade + the
 #      api's X-API-Key publish path) — protected by Centrifugo's HMAC token / API
@@ -42,6 +42,13 @@
 #      machine-to-machine through this public origin (IDP_ISSUER is the public URL,
 #      infra/deploy/api.env.example), and so does the converge form (b)
 #      (README → «Zitadel converge»); Zitadel authenticates on its own.
+#   3. the shared object-storage host `s3.stage.doctor.school` — every object URL the
+#      api hands a browser is a PRESIGNED SigV4 GET (apps/api/src/storage/storage.s3.ts),
+#      which is its own, per-object, time-bounded authorization; an unsigned request
+#      gets MinIO's own 403. The gate could not apply anyway: an `<img src>` never
+#      carries basic-auth credentials, so every uploaded image on every slot would
+#      render as a broken icon. Only the S3 API port (9000) is proxied — MinIO's
+#      console (9001) is not published here and has no host of its own.
 #
 # Upstream ports mirror production (api 3000, portal 3001, admin 3002, doctor 3004,
 # centrifugo 8000, zitadel core 8080 h2c, login 3000). Slot containers are reached
@@ -119,7 +126,7 @@ http://127.0.0.1:2020 {
 	# `path_regexp` can judge it.
 	rewrite * /ask/{query.domain}
 
-	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})|id)[.]{$STAGE_BASE_DOMAIN}$"
+	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})|id|s3)[.]{$STAGE_BASE_DOMAIN}$"
 	handle @stage_ask {
 		respond 200
 	}
@@ -161,6 +168,15 @@ http://127.0.0.1:2020 {
 		handle {
 			reverse_proxy h2c://idp:8080
 		}
+	}
+
+	# Shared object storage — one MinIO, one bucket per slot (`ds-<slot>`, created by
+	# `slot up`). Not behind basic auth: see the header of this file (exemption 3).
+	# Path style, so the bucket is the first path segment and this single host serves
+	# every slot; no wildcard beneath it and no console.
+	@s3 host s3.{$STAGE_BASE_DOMAIN}
+	handle @s3 {
+		reverse_proxy minio:9000
 	}
 
 	# Centrifugo path families on `api-<slot>` — the ONE basic-auth exemption on a

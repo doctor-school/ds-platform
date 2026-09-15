@@ -80,6 +80,25 @@ jobs:
           docker exec ds-runtime-app node --version >> readiness.txt
           docker inspect --format '{{.Image}}' ds-runtime-app >> readiness.txt
           cat readiness.txt
+      # Runtime-fs routes must answer 200 FROM THE IMAGE (#2220/#2012). The legal
+      # texts are Markdown read with `fs` at request time; the root .dockerignore
+      # once stripped them from the build context and every /documents/<slug>
+      # answered 404 on prod while `/` readiness and every in-repo tier were green.
+      # This is the one job that builds with the real .dockerignore, so it is the
+      # only place the build-context half of that defect can be caught.
+      - name: Verify runtime-fs routes answer 200 from the image
+        if: matrix.app == 'portal' || matrix.app == 'doctor'
+        run: |
+          for route in /documents /documents/privacy-policy; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$route")"
+            echo "$route -> $code" | tee -a readiness.txt
+            if [ "$code" != 200 ]; then
+              echo "::error::$route answered HTTP $code from the $APP image (expected 200) — a runtime asset is missing from the image (#2220)"
+              exit 1
+            fi
+          done
+        env:
+          APP: ${{ matrix.app }}
       - name: Upload image readiness evidence
         uses: actions/upload-artifact@v7
         with:

@@ -1288,6 +1288,19 @@ test("up|sync fail closed on an incoherent box captcha trio (#2207)", () => {
       }),
     (err) => err instanceof SlotError && /SMARTCAPTCHA_SITE_KEY/.test(err.message) && /403/.test(err.message),
   );
-  // The schema's truthy set is `true`/`1`; anything else is OFF, never a guess.
+  // The api schema's sets are `true`/`1` and `false`/`0`/``, lower-cased before matching
+  // (`z.stringbool`): `TRUE` + an empty site key is the #2207 403 again, never "OFF".
   assert.deepEqual(assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "1", SMARTCAPTCHA_SERVER_KEY: "ysc2_x", SMARTCAPTCHA_SITE_KEY: "ysc1_x" }), { enabled: true });
+  assert.deepEqual(assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "TRUE", SMARTCAPTCHA_SERVER_KEY: "ysc2_x", SMARTCAPTCHA_SITE_KEY: "ysc1_x" }), { enabled: true });
+  assert.throws(
+    () => assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "True", SMARTCAPTCHA_SITE_KEY: "" }),
+    (err) => err instanceof SlotError && /SMARTCAPTCHA_SITE_KEY/.test(err.message) && /403/.test(err.message),
+  );
+  assert.deepEqual(assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "False" }), { enabled: false });
+  assert.deepEqual(assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "0" }), { enabled: false });
+  // A value outside both sets is refused by name: the api container would not boot on it.
+  assert.throws(
+    () => assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "yes" }),
+    (err) => err instanceof SlotError && /BOT_PROTECTION_ENABLED="yes"/.test(err.message),
+  );
 });

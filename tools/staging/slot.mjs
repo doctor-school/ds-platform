@@ -2062,10 +2062,26 @@ export function requiredOperatorPassword(env) {
  * and nothing in the converge noticed. So `up|sync` refuse by name:
  *   ON  ⇒ a real `ysc2_` server key AND a real `ysc1_` site key (the vendor TEST pair);
  *   OFF ⇒ an EMPTY site key (a placeholder site key breaks the login form client-side).
- * Truthiness mirrors the api env schema (`true`/`1`); everything else is OFF, never a guess.
+ * Truthiness mirrors the api env schema exactly (`apps/api/src/config/env.schema.ts` →
+ * `z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })`, which lower-cases
+ * its input): `TRUE`/`True` are ON like `true`; a value outside both sets is refused here
+ * by name — the api container refuses to boot on it, so "OFF" would be a guess.
  */
+const BOT_PROTECTION_TRUTHY = ["true", "1"];
+const BOT_PROTECTION_FALSY = ["false", "0", ""];
+
 export function assertCaptchaCoherent(boxEnv) {
-  const enabled = ["true", "1"].includes((boxEnv?.BOT_PROTECTION_ENABLED ?? "").trim());
+  const rawEnabled = (boxEnv?.BOT_PROTECTION_ENABLED ?? "").trim();
+  const flag = rawEnabled.toLowerCase();
+  const enabled = BOT_PROTECTION_TRUTHY.includes(flag);
+  if (!enabled && !BOT_PROTECTION_FALSY.includes(flag)) {
+    throw new SlotError(
+      `BOT_PROTECTION_ENABLED=${JSON.stringify(rawEnabled)} in ${STAGE_ENV_FILE} on ${STAGE_1} is ` +
+        "neither true/1 nor false/0 (the api env schema accepts nothing else, case-insensitively, " +
+        "and the api container fails to boot on it). Set it to true with BOTH vendor TEST halves " +
+        "or to false with an empty SMARTCAPTCHA_SITE_KEY (infra/deploy/stage.env.example → Bot protection).",
+    );
+  }
   const serverKey = (boxEnv?.SMARTCAPTCHA_SERVER_KEY ?? "").trim();
   const siteKey = (boxEnv?.SMARTCAPTCHA_SITE_KEY ?? "").trim();
   if (!enabled) {

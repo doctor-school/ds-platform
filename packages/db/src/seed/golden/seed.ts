@@ -10,6 +10,11 @@ import { specialtiesMinzdrav } from "../../schema/specialties.js";
 import { seedSpecialtiesMinzdrav } from "../specialties-minzdrav.js";
 import { buildGoldenDataset, GoldenDatasetError } from "./dataset.js";
 import { resolveGoldenSubjects, type GoldenSubjectMap } from "./idp.js";
+import {
+  buildGoldenMediaPlan,
+  writeGoldenMedia,
+  type GoldenMediaStore,
+} from "./media.js";
 import { resolveGoldenNow } from "./now.js";
 import {
   buildGoldenSeedPlan,
@@ -23,6 +28,10 @@ export interface GoldenSeedResult {
   now: string;
   steps: { name: string; rows: number }[];
   total: number;
+  /** Objects PUT into the media store, or `null` when no store was supplied. */
+  mediaWritten: number | null;
+  /** Objects the dataset's rows reference in total. */
+  mediaPlanned: number;
 }
 
 /** The minimum of a Drizzle handle this module uses. */
@@ -100,6 +109,16 @@ export interface RunGoldenSeedOptions {
    * idempotent, so running it here costs nothing on a re-seed.
    */
   ensureSpecialtyBook?: boolean;
+  /**
+   * Where expert portraits and programme PDFs are written.
+   *
+   * `run.ts` — the only production entry point — resolves an S3 store and
+   * REFUSES to start without one, because the rows reference those objects
+   * unconditionally. It stays optional here for the unit suite, which injects
+   * an in-memory store, and for a caller that wants rows alone; a run without
+   * it reports `mediaWritten: null` rather than pretending the objects exist.
+   */
+  media?: GoldenMediaStore;
 }
 
 /**
@@ -125,6 +144,14 @@ export async function seedGolden(
     );
   }
 
+  // Media BEFORE rows: a row that references an object which is not there yet
+  // is a broken portrait and a 404 programme for as long as the gap lasts, and
+  // an interrupted seed must never leave the database ahead of the bucket.
+  const mediaPlan = await buildGoldenMediaPlan(dataset);
+  const mediaWritten = options.media
+    ? await writeGoldenMedia(options.media, mediaPlan)
+    : null;
+
   return db.transaction(async (tx: GoldenExecutor) => {
     if (options.ensureSpecialtyBook !== false) {
       await seedSpecialtiesMinzdrav(tx, { now });
@@ -139,6 +166,8 @@ export async function seedGolden(
       now: now.toISOString(),
       steps,
       total: steps.reduce((sum, s) => sum + s.rows, 0),
+      mediaWritten,
+      mediaPlanned: mediaPlan.length,
     };
   });
 }

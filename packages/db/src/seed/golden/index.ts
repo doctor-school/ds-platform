@@ -44,6 +44,46 @@ export {
   type GoldenVolume,
 } from "./volume.js";
 export {
+  eventProgrammeKey,
+  expertPhotoKey,
+  formatMskDate,
+  formatMskTime,
+  hasProgramme,
+  isDatedProgrammeLine,
+  ordinalFromExpertPhotoKey,
+  programmeLines,
+  programmeSessionCount,
+  programmeSessionMinutes,
+  programmeSessions,
+  programmeTotalMinutes,
+  PROGRAMME_QA_MINUTES,
+  type ProgrammeSession,
+  type ProgrammeSpeaker,
+  type ProgrammeSpec,
+} from "./programme.js";
+export {
+  buildGoldenMediaPlan,
+  createInMemoryGoldenMediaStore,
+  goldenProgrammeSpecs,
+  GOLDEN_MEDIA_CONCURRENCY,
+  GoldenMediaError,
+  PORTRAIT_CONTENT_TYPE,
+  PROGRAMME_CONTENT_TYPE,
+  renderProgrammePdf,
+  writeGoldenMedia,
+  type GoldenMediaObject,
+  type GoldenMediaStore,
+} from "./media.js";
+export {
+  composeDescription,
+  specialtiesWithoutParagraphBank,
+  VOLUME_EXPERTS,
+  VOLUME_PROGRAMME,
+  VOLUME_PROJECTS,
+  type VolumeExpertSpec,
+  type VolumeProjectSpec,
+} from "./content.js";
+export {
   GOLDEN_SEED_ORDER,
   GoldenPlanError,
   buildGoldenSeedPlan,

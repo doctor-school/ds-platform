@@ -1490,16 +1490,62 @@ describe("#2213 golden volume content and media", () => {
     expect(moved).toBeGreaterThan(0);
   });
 
-  it("#2213: writes every object once and nothing on a re-run", async () => {
+  it("#2213: writes every object once and re-writes only the generated half", async () => {
     const store = createInMemoryGoldenMediaStore();
-    expect(await writeGoldenMedia(store, plan)).toBe(plan.length);
+    const first = await writeGoldenMedia(store, plan);
+    expect(first.written).toBe(plan.length);
+    expect(first.skipped).toBe(0);
     expect(store.objects.size).toBe(plan.length);
-    // The template bucket is cloned per slot and re-seeded on every `slot up`;
-    // a writer that re-uploaded everything would make the seed's cost grow with
-    // the dataset for no gain.
-    expect(await writeGoldenMedia(store, plan)).toBe(0);
+    // The template bucket is cloned per slot and re-seeded on every `slot up`.
+    // The committed portraits never change, so re-uploading them would make the
+    // seed's cost grow with the dataset for no gain; the generated programmes
+    // are pin-dependent under a pin-invariant key, so they must be re-PUT.
+    const generated = plan.filter((o) => o.refresh === "always").length;
+    expect(generated).toBeGreaterThan(0);
+    const again = await writeGoldenMedia(store, plan);
+    expect(again.written).toBe(generated);
+    expect(again.skipped).toBe(plan.length - generated);
     expect(store.objects.size).toBe(plan.length);
   }, 30_000);
+
+  it("#2213: re-renders programme PDFs on every seed and writes portraits once", async () => {
+    // Two pins, two plans, ONE bucket — the life of the persistent `main` slot.
+    // A programme key is ordinal-derived and therefore pin-invariant, while its
+    // bytes carry the эфир's date: a writer that skipped on `exists` would leave
+    // every downloaded programme dated at the pin the bucket was first filled
+    // at, permanently disagreeing with the эфир row beside it.
+    const later = resolveGoldenNow({
+      [GOLDEN_NOW_ENV_VAR]: "2026-03-04T08:30:00.000Z",
+    });
+    const planAt = async (pin: Date): Promise<GoldenMediaObject[]> => {
+      const full = buildGoldenDataset(pin, subjects);
+      return await buildGoldenMediaPlan({
+        ...full,
+        events: full.events.slice(0, 40),
+      });
+    };
+    const before = await planAt(now);
+    const after = await planAt(later);
+
+    const store = createInMemoryGoldenMediaStore();
+    await writeGoldenMedia(store, before);
+
+    const pdfs = after.filter((o) => o.refresh === "always");
+    const portraits = after.filter((o) => o.refresh === "if-absent");
+    expect(pdfs.length).toBeGreaterThan(0);
+    expect(portraits.length).toBeGreaterThanOrEqual(32);
+
+    const second = await writeGoldenMedia(store, after);
+    expect(second.written).toBe(pdfs.length);
+    expect(second.skipped).toBe(portraits.length);
+
+    const beforeByKey = new Map(before.map((o) => [o.key, o.bytes]));
+    const moved = pdfs.find((o) => beforeByKey.has(o.key));
+    expect(moved, "the two pins share no programme key").toBeDefined();
+    const stored = store.objects.get(moved!.key);
+    expect(sha(stored!.bytes)).toBe(sha(moved!.bytes));
+    expect(sha(moved!.bytes)).not.toBe(sha(beforeByKey.get(moved!.key)!));
+  }, 120_000);
 
   it("#2213: plans the same bytes for the same pin", async () => {
     // The determinism proof, not a second full render. A whole second plan at

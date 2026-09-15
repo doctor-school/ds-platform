@@ -803,13 +803,21 @@ describe("#2213 golden dataset at volume", () => {
           .map((e) => [e.id, e.slug, e.title, e.description, e.durationMin]),
         experts: built.experts
           .filter((e) => !isGoldenVolumeUuid(e.id as string))
-          .map((e) => [e.id, e.fullName, e.bio, e.credentials, e.affiliation]),
+          .map((e) => [
+            e.id,
+            e.familyName,
+            e.givenName,
+            e.patronymic,
+            e.bio,
+            e.credentials,
+            e.affiliation,
+          ]),
         projects: built.projects
           .filter((p) => !isGoldenVolumeUuid(p.id as string))
-          .map((p) => [p.id, p.name, p.description]),
+          .map((p) => [p.id, p.title, p.description]),
         users: built.users
           .filter((u) => !isGoldenVolumeUuid(u.id as string))
-          .map((u) => [u.id, u.email, u.fullName, u.role]),
+          .map((u) => [u.id, u.email, u.displayName, u.role]),
       });
 
     const baseline = authored(dataset);

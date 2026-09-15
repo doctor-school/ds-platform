@@ -263,6 +263,52 @@ run tracked by **#2064** — `docker exec stg-infra-caddy-1 caddy validate --con
 /etc/caddy/Caddyfile` and `docker compose -f infra/deploy/compose/stg-infra/compose.yml
 config` before any `slot up` (spec §8 step 4).
 
+Object storage per slot (#2223, observed 2026-09-15 with slots `main`, `pr-2205`,
+`pr-2216` live and `pr-2216` converged on `15a5655`):
+
+```bash
+sudo docker exec stg-infra-minio-1 sh -c \
+  'mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc ls local'
+# observed: [2026-09-15 12:27:33 UTC]     0B ds-pr-2216/
+
+sudo docker inspect pr-2216-api --format '{{json .Config.Env}}'
+# observed keys: S3_ACCESS_KEY S3_BUCKET_UPLOADS S3_ENDPOINT S3_FORCE_PATH_STYLE
+#                S3_REGION S3_SECRET_KEY
+# /etc/ds-platform/slots/pr-2216.env carries only the four non-secret ones —
+# S3_SECRET_KEY reaches api/migrate by compose interpolation of MINIO_ROOT_PASSWORD
+
+curl -sI https://s3.stage.doctor.school/
+# observed: HTTP/2 400, server: MinIO, via: 1.1 Caddy,
+#           x-robots-tag: noindex, nofollow — and NO 401, i.e. no gate (exemption 3)
+```
+
+Round trip from an operator machine against the slot bucket, using the api's own
+adapter: `apps/api/test/taxonomy/media-real-storage.e2e-spec.ts` with
+`S3_ENDPOINT=https://s3.stage.doctor.school` → **3/3 pass** (the three EARS-21 refusal
+
+- recovery cases); a presigned GET produced by `S3ObjectStorage.urlFor` → `200`,
+  `server: MinIO`, body intact, while the same object unsigned → `403`.
+
+A single-file bind mount does not survive an in-place rewrite of the host file: writing
+a new `Caddyfile` replaces the inode, the running container keeps the old one and
+`caddy reload` re-reads the stale content (seen 2026-09-15 — the reload reported success
+while `docker exec stg-infra-caddy-1 grep stage_ask /etc/caddy/Caddyfile` still printed
+the previous regexp). Recreate the container instead:
+
+```bash
+cd /srv/ds-platform/infra/deploy/compose/stg-infra
+sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
+  docker compose -p stg-infra up -d --force-recreate --no-deps caddy'
+for n in $(docker network ls --format '{{.Name}}' | grep '^slot-'); do
+  sudo docker network connect "$n" stg-infra-caddy-1
+done
+```
+
+The recreate DROPS every slot-network attachment, so the re-attach loop is part of the
+step, not an afterthought — `slot up` would repair only the slot it converges. Observed
+after doing both: `/v1/health` → 200 on `academy-main` (`5130f8a3`), `academy-pr-2216`
+(`a824744f`, before the re-converge) and `academy-pr-2205` (`c35253e9`).
+
 ## Zitadel converge
 
 The same idempotent read-before-write converge the dev stand and production use

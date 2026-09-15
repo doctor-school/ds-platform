@@ -69,6 +69,23 @@ describe("Button surface-safe on-primary variant", () => {
     expect(cls).toMatch(/\btext-chip\b/);
   });
 
+  it("EARS-5.4: the rendered chip keeps the chip INK — the size is not merged as a colour", () => {
+    // The Stage-B defect lived in `cn()`, not in the variant: `text-chip` was
+    // unregistered, so tailwind-merge classified it as a COLOUR and dropped
+    // `text-header-chip-foreground` when the component merged its classes —
+    // the chip rendered as a white box with invisible white text on both
+    // storefronts. `buttonVariants()` alone cannot see this; the RENDERED class
+    // list can.
+    render(
+      <Button variant="on-primary" size="chip">
+        Log in
+      </Button>,
+    );
+    const cls = screen.getByRole("button", { name: "Log in" }).className;
+    expect(cls).toMatch(/(?:^|\s)text-header-chip-foreground(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)text-chip(?:\s|$)/);
+  });
+
   it("EARS-5.3: the profile chip is the same variant at the 40px avatar size, not a second constant", () => {
     const cls = buttonVariants({ variant: "on-primary", size: "avatar" });
     expect(cls).toMatch(/\bsize-10\b/);

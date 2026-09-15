@@ -3,9 +3,9 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 /**
  * Our design tokens add font-size utilities that tailwind-merge does not ship in
- * its default config: `text-2xs`, `text-eyebrow`, `text-caption`,
- * `text-body-compact`, `text-title-lg` (the custom `--text-*` theme keys
- * generated from `tokens/*.json`). tailwind-merge classifies
+ * its default config: `text-chip`, `text-topbar`, `text-2xs`, `text-eyebrow`,
+ * `text-caption`, `text-body-compact`, `text-title-lg` (the custom `--text-*`
+ * theme keys generated from `tokens/*.json`). tailwind-merge classifies
  * an unknown `text-*` class into the **text-COLOUR** group by default — so a
  * naïve `twMerge` treats `text-caption` as a colour and, in a `cn(...)` where a
  * colour and a size co-occur (e.g. a `sm` button = `text-primary-foreground` +
@@ -21,13 +21,25 @@ import { extendTailwindMerge } from "tailwind-merge";
  * list is the COMPLETE set of custom `--text-*` theme keys in `tokens.css` — an
  * unregistered size is silently eaten by the next colour in the same `cn()`
  * (`text-eyebrow` + `text-tint-foreground` stripped the 11px scale off every
- * composed month-grid pill, the #1052 → #1065 rework defect).
+ * composed month-grid pill, the #1052 → #1065 rework defect; `text-chip` ate
+ * `text-header-chip-foreground` and rendered the header chip as a white box
+ * with invisible white text on both storefronts, the #2180 Stage-B defect).
  */
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
       "font-size": [
-        { text: ["2xs", "eyebrow", "caption", "body-compact", "title-lg"] },
+        {
+          text: [
+            "chip",
+            "topbar",
+            "2xs",
+            "eyebrow",
+            "caption",
+            "body-compact",
+            "title-lg",
+          ],
+        },
       ],
     },
   },

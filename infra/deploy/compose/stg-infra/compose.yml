@@ -365,6 +365,11 @@ services:
     environment:
       STAGE_BASIC_AUTH_USER: ${STAGE_BASIC_AUTH_USER:?}
       STAGE_BASIC_AUTH_HASH: ${STAGE_BASIC_AUTH_HASH:?}
+      # The stand-wide gate cookie value (Caddyfile → staging_gate_cookie /
+      # staging_gate_issue, #2210): one basic-auth success per browser, then every
+      # slot host accepts the cookie. Rotating it = edit stage.env + `up -d caddy`
+      # (an environment change needs a container recreate, not a reload).
+      STAGE_GATE_TOKEN: ${STAGE_GATE_TOKEN:?}
       # The wildcard site address, the `id` vhost, the `:80` probe site and the
       # `(slot)` snippet all read this. `tools/staging/slot.mjs` reads the SAME
       # variable to derive the literal hosts it writes into the generated includes

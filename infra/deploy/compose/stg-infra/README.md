@@ -151,6 +151,26 @@ behind the owner-managed wildcard A record (added in the Beget zone 2026-09-10,
   cleartext pair the operator types lives beside it in
   `/etc/ds-platform/stage-basic-auth.txt`, **`0600 root:root`**, the same mode and
   owner as `stage.env`: it is a live credential, not a note.
+- **One prompt per browser, then a stand-wide gate cookie (#2210).** Browsers cache
+  basic-auth per HOST and every slot is a new set of hosts, so without this the owner
+  was challenged on every preview. On a basic-auth success the slot handler appends
+  `Set-Cookie: ds_stage_gate=<STAGE_GATE_TOKEN>; Domain=<STAGE_BASE_DOMAIN>; Path=/;
+Max-Age=31536000; Secure; HttpOnly; SameSite=Lax`; a request carrying that cookie
+  (matched by `header_regexp` on the full token between cookie separators) skips
+  `basic_auth` on every current and future slot host. The `Set-Cookie` sits inside a
+  `route` block AFTER `basic_auth` — outside one Caddy orders `header` before
+  `basic_auth` and the token would ride the 401 out to strangers. `STAGE_GATE_TOKEN`
+  is generated on the box (`openssl rand -hex 32`, hex so it is regexp-inert), lives
+  in `stage.env` next to the basic-auth pair and holds the same trust level as the
+  password. Rotate it by writing a new value and `srv up -d --no-deps caddy` (an
+  environment change needs a recreate; a reload keeps the old value), then RE-ATTACH
+  the live slot networks — a recreated container comes back on `stg-infra` only, and
+  every slot answers 502 until `docker network connect slot-<slot> stg-infra-caddy-1`
+  is repeated for each live slot (see «Operating» below) — after which every browser
+  is asked once more. Non-browser callers (`pnpm stage:slot up`'s `/v1/health` leg, `pnpm e2e:stage`,
+  curl) keep basic-auth and never receive the cookie unless they authenticate. The
+  `id` vhost and the Centrifugo paths are untouched (no challenge, no cookie); the
+  unknown-host 404 stays a plain challenge.
 - **Base domain.** The site address `*.{$STAGE_BASE_DOMAIN}`, the `id` vhost and the
   `@stage_ask` matcher all read `STAGE_BASE_DOMAIN` from `stage.env` via the `caddy`
   service's `environment:` block. `tools/staging/slot.mjs` reads the SAME variable to
@@ -220,6 +240,17 @@ openssl s_client -connect academy-main.stage.doctor.school:443 \
 #           subject CN=academy-main.stage.doctor.school
 #           notBefore 2026-09-10 02:21:32 GMT, notAfter 2026-12-09
 ```
+
+Gate cookie (#2210, observed 2026-09-15 from an external client, slots `main`,
+`pr-2198`, `pr-2205` live): no cookie and no credentials → 401 on `academy-pr-2205`,
+`doctor-main`, `api-pr-2198`, `admin-pr-2205`, none of the 401s carrying a
+`Set-Cookie`; basic-auth success on `academy-pr-2205` → 200 with
+`Set-Cookie: ds_stage_gate=<64 hex>; Domain=stage.doctor.school; Path=/;
+Max-Age=31536000; Secure; HttpOnly; SameSite=Lax`; that cookie alone → 200 on
+`doctor-main`, `api-pr-2198/v1/health`, `admin-pr-2205`; a wrong token, the token with
+a suffix, or another cookie carrying the same value → 401; a wrong basic-auth password
+→ 401 with no cookie; basic-auth alone on `api-pr-2205/v1/health` → 200 (the health
+leg of `slot up` is unchanged); `id` and `/connection/websocket` untouched.
 
 On the box, with the pair from `/etc/ds-platform/stage-basic-auth.txt`: `academy-main`
 → 502 and `api-main /v1/health` → 502 (authenticated, no slot upstream yet), a wrong
@@ -494,6 +525,11 @@ srv() { sudo bash -c "set -a; . /etc/ds-platform/stage.env; set +a; docker compo
 srv ps                       # health of the shared set
 srv logs -f idp              # the usual suspect
 srv restart caddy            # after a Caddyfile edit (a slot reload uses the admin API)
+srv up -d --no-deps caddy    # after a stage.env change Caddy reads (STAGE_GATE_TOKEN rotation);
+                             # the recreate drops the slot networks — put them back:
+for n in $(sudo docker network ls --format '{{.Name}}' | grep '^slot-'); do
+  sudo docker network connect "$n" stg-infra-caddy-1
+done
 srv up -d --build postgres   # after a postgres/Dockerfile change
 ```
 

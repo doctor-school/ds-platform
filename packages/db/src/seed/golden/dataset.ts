@@ -23,35 +23,17 @@ import type {
 } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
+import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 import { golden, GOLDEN_GROUP, goldenUuid } from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
+import { buildGoldenVolume } from "./volume.js";
 
-/**
- * The consent purposes the golden «legal documents» pin.
- *
- * DEVIATION, recorded in the README and the PR body: the schema has no
- * legal-documents table. Legal texts are Fumadocs pages (028), not rows; what
- * the database actually stores about them is the per-purpose acceptance in
- * `consent_records`. The golden dataset therefore carries the ACCEPTANCES at a
- * pinned purpose/version instead of the documents, which is the part a
- * regression scenario can assert on.
- *
- * The strings mirror `DOCTOR_REGISTER_CONSENT_PURPOSES` (021,
- * `@ds/schemas/storefront`). They are duplicated rather than imported on
- * purpose: `@ds/db` sits BELOW `@ds/schemas` in the dependency order, and
- * inverting that to fetch three string literals would make the data layer
- * depend on the contract layer for a fixture.
- */
-export const GOLDEN_CONSENT_PURPOSES = Object.freeze([
-  "medical-worker-declaration",
-  "partner-data-sharing",
-  "marketing-communications",
-]);
-
-/** The pinned legal version every golden acceptance is recorded against. */
-export const GOLDEN_CONSENT_VERSION = "2026-01";
+// The pinned legal acceptances live in `consent.ts` so the volume half can write
+// them without importing this module back (a runtime cycle). Re-exported here so
+// the public surface of the dataset is unchanged.
+export { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 
 /**
  * A doctor↔specialty link BEFORE resolution.
@@ -127,6 +109,11 @@ export function buildGoldenDataset(
   const doctors = golden.doctors;
   const admin = golden.admins.platform;
 
+  // #2213 — the volume half. APPENDED after every named row, never interleaved:
+  // the catalogue rows keep their ids, their offsets and their position, so a
+  // scenario compiled against the named dataset sees exactly what it saw before.
+  const volume = buildGoldenVolume(now);
+
   const users: NewUser[] = [
     mirrorUser(doctors.unverified, subjectOf("doctorUnverified"), {
       role: accountOf("doctorUnverified").role,
@@ -164,6 +151,7 @@ export function buildGoldenDataset(
       created,
       updated: created,
     }),
+    ...volume.users,
   ];
 
   const experts: NewExpert[] = [
@@ -195,6 +183,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.experts,
   ];
 
   const projects: NewProject[] = [
@@ -221,6 +210,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.projects,
   ];
 
   const events: NewEvent[] = [
@@ -300,6 +290,7 @@ export function buildGoldenDataset(
       origin: "legacy",
       liveAt: at({ days: -365 }),
     },
+    ...volume.events,
   ];
 
   const streamConfig: NewStreamConfigRow[] = [
@@ -313,6 +304,7 @@ export function buildGoldenDataset(
       provider: "rutube",
       embedRef: "golden-past-embed",
     },
+    ...volume.streamConfig,
   ];
 
   // #1943 — the seeded event carries an expert, so the event page's expert block
@@ -351,6 +343,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.eventExperts,
   ];
 
   const eventProjects: NewEventProject[] = [
@@ -372,6 +365,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.eventProjects,
   ];
 
   const registrations: NewRegistration[] = [
@@ -403,6 +397,7 @@ export function buildGoldenDataset(
       registeredAt: at({ days: -40 }),
       recordStatus: "active",
     },
+    ...volume.registrations,
   ];
 
   const eventRecordings: NewEventRecording[] = [
@@ -432,6 +427,7 @@ export function buildGoldenDataset(
       createdAt: at({ days: -29 }),
       updatedAt: at({ days: -29 }),
     },
+    ...volume.eventRecordings,
   ];
 
   // Golden «legal documents»: the pinned acceptances (see GOLDEN_CONSENT_PURPOSES).
@@ -441,8 +437,8 @@ export function buildGoldenDataset(
     doctors.mfaEnrolled,
     doctors.deleted,
   ];
-  const consentRecords: NewConsentRecord[] = consentBearers.flatMap(
-    (doctor, doctorIndex) =>
+  const consentRecords: NewConsentRecord[] = [
+    ...consentBearers.flatMap((doctor, doctorIndex) =>
       GOLDEN_CONSENT_PURPOSES.map((purpose, purposeIndex) => ({
         id: goldenUuid(
           GOLDEN_GROUP.consentRecords,
@@ -453,7 +449,9 @@ export function buildGoldenDataset(
         version: GOLDEN_CONSENT_VERSION,
         capturedAt: created,
       })),
-  );
+    ),
+    ...volume.consentRecords,
+  ];
 
   const doctorSpecialties: GoldenDoctorSpecialtyLink[] = [
     {
@@ -470,6 +468,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.doctorSpecialties,
   ];
 
   const specialtyIssues = goldenSpecialtyIssues(doctorSpecialties);

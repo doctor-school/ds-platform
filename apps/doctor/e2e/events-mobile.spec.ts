@@ -86,6 +86,11 @@ async function accessiblePage(page: Page) {
   ).toBeLessThanOrEqual(1);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    // #2189 / #2180 — the shared shell's two leaf-scoped decorations: the BBM
+    // topbar (owner-accepted canvas contrast) and the footer's aria-hidden giant
+    // wordmark (its accessible form is the logo image beside it).
+    .exclude('[data-testid="shell-topbar"]')
+    .exclude('[data-testid="footer-giant"]')
     .analyze();
   expect(
     results.violations.map(({ id, impact, nodes }) => ({

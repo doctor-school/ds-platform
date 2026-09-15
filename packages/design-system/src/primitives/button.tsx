@@ -3,6 +3,7 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../lib/utils";
+import { HEADER_CHIP_SURFACE } from "./header-chip";
 
 /**
  * Neo-brutalist button (#512, re-skin from `design-source/ds-foundation.dc.html`).
@@ -16,8 +17,8 @@ import { cn } from "../lib/utils";
  *
  * FIDELITY TRAP (brief): the offset-shadow COLOUR differs per variant — a FILLED
  * action (`default`/`destructive`) casts in the INK/structural border tone
- * (`shadow-btn`, source `4px 4px 0 {border}`), the white `on-primary` action
- * uses the theme-invariant white-chip cast (`shadow-header-chip`), and a
+ * (`shadow-btn`, source `4px 4px 0 {border}`), the white `on-primary` header
+ * chip uses the theme-invariant white-chip cast (`shadow-header-chip`), and a
  * BORDERED surface (`outline`/`secondary`) casts in the SOFT elevation tone
  * (`shadow-ghost`, source `4px 4px 0 {shadowSm}`). They are NOT the same token.
  */
@@ -25,6 +26,8 @@ import { cn } from "../lib/utils";
 // The raised-button motion + collapse shared by every offset-shadow variant:
 // hover slides into the cast, press flattens it, disabled removes it (opacity .4,
 // no shadow, source lines 219/231). The per-variant classes own the shadow COLOUR.
+// `on-primary` is the exception — the header chip carries the canvas's own 1px
+// slide, declared on the variant.
 const RAISED_MOTION =
   "hover:translate-x-0.5 hover:translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-none disabled:opacity-40";
 
@@ -39,13 +42,31 @@ const buttonVariants = cva(
           "hover:bg-primary-hover hover:border-primary-hover hover:shadow-btn-hover focus-visible:shadow-btn-focus",
           RAISED_MOTION,
         ),
-        // On primary — the Canvas white CTA on the invariant navy surface.
-        // The header-chip roles are the existing theme-invariant white/blue
-        // pair and dark cast; generic button roles flip in dark and disappear.
+        // On primary — THE header chip: the canvas white control on the
+        // invariant navy band (`ds-shell.dc.html` line 37 — `background:#fff`,
+        // navy `#114D9E` ink, NO border, a 3px offset cast that shrinks as the
+        // control slides 1px into it). It is the single definition BOTH
+        // storefronts and the webinar room compose from — the guest chip, the
+        // profile chip and the mobile `≡` are this variant at a different size,
+        // never a second class-string constant (#2180).
+        //
+        // The surface is {@link HEADER_CHIP_SURFACE}, declared once: its
+        // `shadow-header-chip` cast is the theme-INVARIANT dark ink offset, NOT
+        // the generic `shadow-btn`, whose `border` cast flips to WHITE in dark
+        // and rendered the chip a white square with a white shadow on the navy
+        // band (#1145).
+        //
+        // Its press chain is the chip's own, not {@link RAISED_MOTION}: the
+        // canvas slides the chip 1px (not 2) and the ink is PINNED full-strength
+        // on press, because the primitive's press tint goes near-white on a
+        // white chip in dark.
         "on-primary": cn(
-          "border-2 border-header-foreground bg-header-foreground text-header-chip-foreground font-extrabold shadow-header-chip",
-          "hover:shadow-header-chip-hover focus-visible:shadow-focus",
-          RAISED_MOTION,
+          "flex-none font-extrabold",
+          HEADER_CHIP_SURFACE,
+          "hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-header-chip-hover",
+          "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground",
+          "focus-visible:shadow-focus",
+          "disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-none disabled:opacity-40",
         ),
         // Destructive — filled danger red, same ink offset cast as primary.
         destructive: cn(
@@ -79,11 +100,33 @@ const buttonVariants = cva(
         sm: "px-4 py-2 text-caption",
         lg: "px-8 py-4",
         icon: "size-11",
+        // The on-header chip geometry of the canvas (`ds-shell.dc.html` line
+        // 37): 12×22 padding at 13.5px/800. Both halves are tokens
+        // (`space.3` / `space.chip-x` / `font.size.chip`), so the chip's size
+        // changes in ONE place for both storefronts. `leading-5` pins the line
+        // box so the chip's height is the same 44px as the theme toggle and the
+        // `≡` beside it instead of following the font's `normal` metrics.
+        chip: "px-chip-x py-3 text-chip leading-5",
+        // The 40px initials/profile square (§05 avatar geometry) as a chip size,
+        // so the profile chip is this one variant rather than a parallel
+        // class-string constant.
+        avatar: "size-10 text-sm",
+      },
+      // The SURFACE the control sits on, declared LAST so it wins the ink over
+      // the variant's own resting colour. `header` is the invariant navy band of
+      // `design-source/ds-shell.dc.html` line 36 (`color:#fff` on a transparent
+      // control): a quiet chrome control — the theme toggle — reads in the band's
+      // own foreground instead of the page ink, without the call site re-colouring
+      // the primitive (#2180, ADR-0013 §6).
+      tone: {
+        default: "",
+        header: "text-header-foreground",
       },
     },
     defaultVariants: {
       variant: "default",
       size: "default",
+      tone: "default",
     },
   },
 );
@@ -140,6 +183,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       variant,
       size,
+      tone,
       asChild = false,
       loading = false,
       disabled,
@@ -162,7 +206,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size, tone, className }))}
         ref={ref}
         disabled={disabled || showSpinner}
         aria-busy={loading || undefined}

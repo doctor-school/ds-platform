@@ -29,7 +29,15 @@ describe("cn() keeps a custom font-size AND a text colour (no group collision)",
     expect(out).not.toMatch(/(?:^|\s)text-sm(?:\s|$)/);
   });
 
-  it.each(["2xs", "caption", "body-compact", "eyebrow", "title-lg"])(
+  it.each([
+    "2xs",
+    "caption",
+    "body-compact",
+    "eyebrow",
+    "title-lg",
+    "chip",
+    "topbar",
+  ])(
     "keeps text-%s alongside a colour",
     (size) => {
       const out = cn("text-destructive-foreground", `text-${size}`);
@@ -48,6 +56,25 @@ describe("cn() keeps a custom font-size AND a text colour (no group collision)",
     const out = cn("text-eyebrow", "text-tint-foreground");
     expect(out).toContain("text-eyebrow");
     expect(out).toContain("text-tint-foreground");
+  });
+
+  /**
+   * The #2180 Stage-B regression: the header chip composes
+   * `text-header-chip-foreground` (from `HEADER_CHIP_SURFACE`) BEFORE the
+   * `chip` size — with `chip` unregistered, tailwind-merge classified
+   * `text-chip` as a COLOUR and dropped the navy ink, so the chip rendered as a
+   * white box with INVISIBLE white text on both storefronts.
+   */
+  it("keeps text-header-chip-foreground when text-chip follows it (header chip order)", () => {
+    const out = cn("text-header-chip-foreground", "text-chip");
+    expect(out).toContain("text-header-chip-foreground");
+    expect(out).toContain("text-chip");
+  });
+
+  it("keeps text-header-foreground when text-topbar follows it (topbar order)", () => {
+    const out = cn("text-header-foreground", "text-topbar");
+    expect(out).toContain("text-header-foreground");
+    expect(out).toContain("text-topbar");
   });
 });
 

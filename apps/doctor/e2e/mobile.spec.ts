@@ -217,7 +217,7 @@ async function present(page: Page, theme: "light" | "dark") {
 async function expectShell(page: Page) {
   await expect(page.getByTestId("storefront-header")).toBeVisible();
   await expect(page.getByTestId("storefront-logo")).toBeVisible();
-  await expect(page.getByTestId("shell-action-cluster")).toBeVisible();
+  await expect(page.getByTestId("shell-auth-cluster")).toBeVisible();
 }
 
 /** No composition may push the document wider than the viewport it renders in. */
@@ -241,15 +241,25 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 /**
  * The full-page axe scan plus the exactly-one-non-empty-h1 sentinel: the axe
  * rule page-has-heading-one asserts only «at least one», and a page that
- * rendered nothing would otherwise be trivially clean. No rule is allowlisted
- * and no node excluded — a violation is a defect in the surface, not the scan.
+ * rendered nothing would otherwise be trivially clean. No rule is allowlisted;
+ * the only excluded nodes are the two leaf-scoped shell decorations below — a
+ * violation anywhere else is a defect in the surface, not the scan.
  */
 async function expectAxeClean(page: Page, render: string) {
   const h1 = page.locator("h1");
   await expect(h1, `h1 count on / (${render})`).toHaveCount(1);
   await expect(h1, `h1 text on / (${render})`).not.toHaveText(/^\s*$/);
 
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const results = await new AxeBuilder({ page })
+    .withTags(WCAG_TAGS)
+    // #2189 — the shared shell's BBM topbar keeps its owner-approved canvas
+    // contrast; leaf-scoped, every interactive shell control stays IN the scan.
+    .exclude('[data-testid="shell-topbar"]')
+    // #2180 — the footer's giant wordmark is aria-hidden decoration at the
+    // canvas-drawn alpha; its accessible form is the logo image beside it. Same
+    // leaf exclusion as the academy home's `academy-footer-wordmark`.
+    .exclude('[data-testid="footer-giant"]')
+    .analyze();
   expect(
     results.violations.map(({ id, impact, help, nodes }) => ({
       id,
@@ -390,7 +400,7 @@ test.describe("017 EARS-14.3: labelled controls and keyboard reach (#1489)", () 
       // A single forward Tab run, in DOM order: the action cluster, then the
       // field, then the first entry, then the expand control.
       const clusterLink = page
-        .getByTestId("shell-action-cluster")
+        .getByTestId("shell-auth-cluster")
         .getByRole("link")
         .first();
       await expect(clusterLink).toHaveAccessibleName(/\S/);

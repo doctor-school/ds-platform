@@ -139,8 +139,10 @@ const SECTION = "mt-11 px-4 layout:mt-20 layout:px-12";
  * A Tailwind scale step near it (`max-w-6xl` = 1152px) is token-safe but 48px
  * wider, which puts this section's heading and rule line visibly outside the
  * hero's edges at a wide viewport — two sections of one page out of alignment.
+ * The utility is `max-w-content`: Tailwind's `--container-*` namespace drops
+ * its prefix in the class name (`max-w-container-content` never existed).
  */
-const INNER = "mx-auto w-full max-w-container-content";
+const INNER = "mx-auto w-full max-w-content";
 const CHIP_ROW = "flex flex-wrap justify-center gap-2";
 
 function Heading() {

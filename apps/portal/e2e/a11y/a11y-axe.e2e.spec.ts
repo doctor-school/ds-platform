@@ -65,6 +65,15 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
     // the rest of the poster band (titles, full-strength chips, the footer CTA,
     // and any interactive header control) stays IN the a11y scan.
     .exclude('[data-testid="poster-decor"]')
+    // #2189 — the shared shell's BBM topbar (#2180) keeps the contrast its
+    // owner-approved canvas paints; accepted by the owner 2026-09-11 and
+    // recorded on Issue #2189. Leaf-scoped like the line above, so every
+    // interactive shell control stays IN the scan.
+    .exclude('[data-testid="shell-topbar"]')
+    // #2180 — the footer's giant wordmark is aria-hidden decoration at the
+    // canvas-drawn alpha; its accessible form is the logo image beside it. Same
+    // leaf exclusion as the academy home's `academy-footer-wordmark`.
+    .exclude('[data-testid="footer-giant"]')
     .analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,

@@ -1,6 +1,6 @@
 # 008 — Portal shell & discovery front-door scenarios
 # Gherkin for the persistent app-shell header + the public discovery front-door at /.
-# Happy path (doctor login -> / -> nav -> profile) + branches (guest sees «Войти» and
+# Happy path (doctor login -> / -> nav -> profile) + branches (guest sees «Войти / Регистрация» and
 # the same /; mobile ≡ nav collapse). «Школы» is not in the v1 nav (EARS-10 Retired, owner 2026-07-15).
 # Translated to Playwright via playwright-bdd — this is a user-facing spec, so an
 # end-to-end browser run is a REQUIRED deliverable owned in this feature's WBS
@@ -33,14 +33,20 @@ Feature: Persistent portal app-shell header and public discovery front-door
     When the doctor activates the avatar icon
     Then the portal navigates to the profile "/account"
 
+  # Amended 2026-09-14 (source: canvas ds-shell.dc.html line 220 guestCluster.primary,
+  # owner Stage-B round 1 on PR #2198; see 008-requirements-en.md → Amendment — 2026-09-14):
+  # the guest control is ONE «Войти / Регистрация» button routing to /login. The examples
+  # below carry the new label because PR #2198 ships the label and this spec edit together
+  # — guest-header.spec.ts and shell.test.tsx are named deliverables of that same PR, so the
+  # spec and production stay coupled.
   @EARS-4 @EARS-8 @happy
-  Scenario: A guest sees «Войти» and the same public discovery front-door
+  Scenario: A guest sees «Войти / Регистрация» and the same public discovery front-door
     Given a visitor with no authenticated session
     When the visitor opens "/"
     Then "/" shows the same discovery listing of upcoming broadcasts a doctor sees
-    And the header shows a «Войти» button instead of an avatar icon
+    And the header shows a «Войти / Регистрация» button instead of an avatar icon
     And the header shows no avatar and no «Выйти»
-    When the visitor activates «Войти»
+    When the visitor activates «Войти / Регистрация»
     Then the portal navigates to the login surface
 
   @EARS-8 @happy
@@ -48,7 +54,7 @@ Feature: Persistent portal app-shell header and public discovery front-door
     Given the feature-004 listing renders a set of upcoming broadcasts
     When a guest opens "/" and then the same doctor opens "/"
     Then both are shown the identical discovery listing content
-    And the only difference between the two renders is the header's account affordance (avatar icon vs «Войти»)
+    And the only difference between the two renders is the header's account affordance (avatar icon vs «Войти / Регистрация»)
 
   @EARS-5 @happy
   Scenario: The account affordance is an icon, not a dropdown, and carries no sign-out

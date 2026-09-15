@@ -4,8 +4,8 @@
 # REAL mechanism is the `bdd` project, exactly as the 005 registration journey has
 # no hand-written journey.spec.ts). The per-EARS guarantees are pinned by the
 # e2e/shell/*.spec.ts route pins; HERE we drive the connected arc a person walks:
-# a doctor logs in → lands on the discovery listing `/webinars` (013 EARS-15) → uses the shell nav
-# (→ /account/events) and the avatar icon (→ /account); a guest sees «Войти» and
+# a doctor logs in → lands on the discovery listing `/webinars` (013 EARS-15) → uses the avatar
+# icon (→ /account) and the shell nav «Эфиры» (→ /webinars); a guest sees «Войти» and
 # the SAME `/`; and on a mobile viewport the nav collapses into a ≡ dropdown.
 #
 # The @stage-b canvas render-parity scenario (008-scenarios.feature EARS-12) is the
@@ -25,10 +25,10 @@ Feature: 008 Portal shell journey — login lands on the discovery front-door, s
     When the doctor completes login via the feature-003 auth flow
     Then the doctor lands on the discovery front-door at "/webinars"
     And the persistent header shows the logo, the top-nav, a theme toggle, and the doctor's avatar icon
-    When the doctor activates «Мои события» in the header nav
-    Then the shell navigates to "/account/events"
     When the doctor activates the header avatar icon
     Then the shell navigates to the profile "/account"
+    When the doctor activates «Эфиры» in the header nav
+    Then the shell navigates to "/webinars"
 
   @EARS-4 @EARS-8 @happy
   Scenario: A guest sees «Войти» and the same public discovery front-door
@@ -41,7 +41,7 @@ Feature: 008 Portal shell journey — login lands on the discovery front-door, s
 
   @EARS-11 @EARS-2 @branch
   Scenario: On a mobile viewport the nav collapses into a ≡ dropdown
-    Given a doctor on the discovery front-door at a mobile viewport
+    Given a doctor on an authenticated surface at a mobile viewport
     When the doctor opens the header ≡ navigation
-    Then the ≡ dropdown carries the items [Эфиры · Мои события]
-    And selecting «Мои события» in the ≡ dropdown navigates to "/account/events"
+    Then the ≡ dropdown carries the same nav items as the desktop bar
+    And selecting «Эфиры» in the ≡ dropdown navigates to "/webinars"

@@ -26,7 +26,7 @@ export function StorefrontHero() {
       data-testid="storefront-hero"
       className="bg-hero px-4 py-12 text-hero-foreground layout:px-12 layout:py-20"
     >
-      <div className="mx-auto w-full max-w-container-content">
+      <div className="mx-auto w-full max-w-content">
         <p className="mb-5 text-xs font-extrabold uppercase tracking-widest text-hero-muted">
           Медицинская образовательная платформа
         </p>

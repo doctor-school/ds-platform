@@ -18,6 +18,12 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
 
   # ------------------------------------------------------------------- shell
 
+  # Amended 2026-09-14 (source: canvas ds-shell.dc.html line 220 guestCluster.primary,
+  # owner Stage-B round 1 on PR #2198; see 017-requirements-en.md → Amendment — 2026-09-14):
+  # the guest cluster is ONE «Войти / Регистрация» control routing to /login, resolving the
+  # pre-amendment EARS-1 «Войти» + «Регистрация» pair against US-7 in US-7's favour. The
+  # example below carries the new shape because PR #2198 ships the control and this spec edit
+  # together — shell.test.tsx and the chrome-matrix e2e are named deliverables of that PR.
   @EARS-1 @happy
   Scenario Outline: The header states sign-in status with exactly one action cluster
     Given a visitor who is <status>
@@ -28,7 +34,7 @@ Feature: A doctor arrives at their own storefront, picks a specialty, and the si
 
     Examples:
       | status    | cluster                            |
-      | a guest   | «Войти» plus «Регистрация»         |
+      | a guest   | «Войти / Регистрация» (one)        |
       | signed in | points plate plus «Личный кабинет» |
 
   @EARS-1 @failure

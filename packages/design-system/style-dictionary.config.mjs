@@ -315,6 +315,14 @@ async function build() {
     name: "--tracking-numeric",
     ref: "var(--font-letter-spacing-numeric)",
   });
+  // The storefront BBM micro-band tracking as a token-backed `tracking-topbar`
+  // utility (#2180). The band above the header (`ds-shell.dc.html` line 16)
+  // tracks at +.22em — wider than the micro-label rung and than any default
+  // Tailwind rung (`tracking-widest` is .1em).
+  themeEntries.push({
+    name: "--tracking-topbar",
+    ref: "var(--font-letter-spacing-topbar)",
+  });
   // The webinar-card time-plate width as a SIZING utility (`w-time-plate`, #514).
   // A named `--spacing-*` key drives the sizing utilities (`w-*` / `basis-*`) the
   // same way the §09 role keys drive gap/padding; the value lives in the component

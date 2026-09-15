@@ -1,6 +1,6 @@
 ---
 title: "008 — Portal shell & discovery front-door (Design)"
-description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/) plus the signed-in auth-cluster resolution (Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to / — amended 2026-08-17 (feature 013): / is the Academy landing, discovery is /webinars, and the post-login landing is the visitor's return target defaulting to /webinars. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
+description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/) plus the signed-in auth-cluster resolution (Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to / — amended 2026-08-17 (feature 013): / is the Academy landing, discovery is /webinars, and the post-login landing is the visitor's return target defaulting to /webinars. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold. Amended 2026-09-14: the guest control is one «Войти / Регистрация» button (see the Amendment)."
 slug: 008-portal-shell
 status: In dev
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
@@ -49,6 +49,8 @@ The `ShellRendered` invariant (EARS-1): no portal route renders without this she
 
 ## 2. Nav route resolution to shipped surfaces
 
+_[Amended 2026-09-14 — the guest control is one «Войти / Регистрация» button. See the Amendment at the end of this document.]_
+
 Every nav and auth-cluster target resolves to a **shipped** surface (EARS-2) — the v1 nav carries no deferred or inert target. Route targets are resolved through the portal routing layer, never string-duplicated. «Мои события» is not a nav item — per the `ds-shell.dc.html` (`host=academy`) canvas it sits in the signed-in auth cluster alongside the avatar (EARS-5).
 
 ```mermaid
@@ -66,6 +68,8 @@ flowchart LR
 «Школы» is **not rendered in the v1 nav** (EARS-10 _Retired_, owner 2026-07-15) — no inert placeholder ships, so there is no decision-debt seam to track. «Школы» becomes a nav target only when its own feature is specced and built, entering via that feature's discovery.
 
 ## 3. Auth-state header branch
+
+_[Amended 2026-09-14 — the guest control is one «Войти / Регистрация» button. See the Amendment at the end of this document.]_
 
 The header truthfully reflects the session state (EARS-4 / EARS-5). `AuthState` is derived from `GET /v1/auth/session`: `{ authenticated, initials? }`. Only the account affordance branches — the rest of the header (logo, nav, theme toggle) and the whole of `/` are auth-invariant.
 
@@ -93,6 +97,8 @@ Note the sign-out edge is **owned by feature 009** (the profile), not this heade
 
 _[Amended 2026-08-17 — the post-login landing is the visitor's return target, defaulting to `/webinars`; `/` is the Academy landing. See the Amendment at the end of this document.]_
 
+_[Amended 2026-09-14 — the guest control is one «Войти / Регистрация» button. See the Amendment at the end of this document.]_
+
 Post-login landing is `/` (EARS-7). This feature does **not** mint the session — the feature-003 auth flow does — it only supplies `/` as the return target and guarantees the doctor lands on the discovery front-door, not a scaffold.
 
 ```mermaid
@@ -114,6 +120,8 @@ sequenceDiagram
 `/` reuses the feature-004 listing surface verbatim (`DiscoveryListing` read model). It does not branch on auth (EARS-8) — the guest and the doctor see the identical listing; the sole difference is the header's account affordance (§3). The `/` «Каркас приложения» scaffold is removed and unreachable (EARS-9), `/` serving the listing in its place.
 
 ## 5. Mobile collapse
+
+_[Amended 2026-09-14 — the guest control is one «Войти / Регистрация» button. See the Amendment at the end of this document.]_
 
 At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` dropdown carrying the same **[Эфиры]** plus the signed-in auth cluster (**«Мои события»**, the avatar target) or «Войти» for a guest (EARS-11). Every target's resolution (§2) is preserved inside the dropdown. The geometry (the flat, full-bleed mobile treatment of the listing and header) is specified in the vendored canvas (`events-feed.dc.html` mobile band + the header's responsive rules); this feature reproduces it element-by-element, verified at Stage-B across both breakpoints × both themes (EARS-12, ADR-0013).
 
@@ -137,3 +145,13 @@ At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` 
 - **The landing target comes from feature 014's return-to-origin mechanism** (014 EARS-6): a signed same-origin `returnTo` carried through the auth flow, with `/webinars` as the fallback. This shell still mints no session and still only reads `GET /v1/auth/session`.
 
 **What does not change.** Header composition, theme persistence, guest «Войти», the initials-avatar icon-link to `/account`, the absence of a dropdown and of a header sign-out, the `≤900px` `≡` collapse, canvas parity at Stage-B, and the auth-independent rendering of the listing. The scaffold stays retired. No nav entry appears for a route that does not exist — `/projects` and `/experts` arrive with features 015 and 016.
+
+### Amendment — 2026-09-14: the guest header control is one «Войти / Регистрация» button (source: canvas `ds-shell.dc.html` line 220 `guestCluster.primary`, owner Stage-B round 1 on PR [#2198](https://github.com/doctor-school/ds-platform/pull/2198), 017 US-7)
+
+> **Status:** feature 008 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). Everything above remains the decision as originally taken; this block changes one label and nothing else. The requirements-side counterpart is [`008-requirements-en.md`](./008-requirements-en.md) → «Amendment — 2026-09-14», with the identical contract.
+
+**Source.** The vendored shell canvas `design-source/ds-shell.dc.html` (line 220, `guestCluster.primary`) draws the guest cluster as **one** control labelled «Войти / Регистрация», identical on both hosts; the product owner confirmed it on PR [#2198](https://github.com/doctor-school/ds-platform/pull/2198) Stage-B round 1. Feature 017 US-7 asked for a single entry point all along.
+
+**The amendment.** One label fact changes: §2's `LOGIN` node, §3's guest state, §4's «only the header affordance differs» note and §5's mobile guest affordance all read **«Войти / Регистрация»** — a single button rendered from the shared storefront-shell auth-cluster slot, routing to `/login` (the shipped sign-in surface, which links on to `/register`). The combined sign-in/registration surface drawn as `auth.dc.html` is tracked separately as [#2080](https://github.com/doctor-school/ds-platform/issues/2080); until it ships, the destination stays `/login`.
+
+**What does not change.** The auth-state branch itself, the header composition and layout, the theme toggle and its persistence key, the initials-avatar icon-link to `/account`, the absence of a dropdown and of a header sign-out, the `≤900px` `≡` collapse, the RU-catalog string rule and the canvas-parity requirement. The 2026-08-17 amendment above is untouched — its «What does not change» sentence is history, not a live clause. The catalog string `shell.login` carries the new label; no new key is introduced.

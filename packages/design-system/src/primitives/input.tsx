@@ -1,4 +1,5 @@
 import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../lib/utils";
 
@@ -30,9 +31,33 @@ function hasValue(v: unknown): boolean {
  * `aria-invalid`. The success cell (source §07) is the mirror — a green `success`
  * border + pale `success-tint` fill, keyed on `data-success` threaded by the field
  * composite. Disabled dims to the muted track. Token-only → light + `.dark`.
+ *
+ * `variant="header"` is the SAME control on the invariant navy band of
+ * `design-source/ds-shell.dc.html` (line 24 / line 62): a transparent field with
+ * the translucent white hairline, white 600-weight type, a white placeholder and
+ * a solid-white border on focus. It lives here, not at the storefront call site,
+ * so both storefronts get the band field from one definition (#2180, ADR-0013 §6).
  */
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, value, defaultValue, onChange, ...props }, ref) => {
+const inputVariants = cva("", {
+  variants: {
+    variant: {
+      default: "",
+      header:
+        "border-header-hairline bg-transparent font-semibold text-header-foreground placeholder:text-header-foreground focus-visible:border-header-foreground",
+    },
+  },
+  defaultVariants: { variant: "default" },
+});
+
+export interface InputProps
+  extends React.ComponentProps<"input">,
+    VariantProps<typeof inputVariants> {}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  (
+    { className, type, variant, value, defaultValue, onChange, ...props },
+    ref,
+  ) => {
     const isControlled = value !== undefined;
     const [uncontrolledFilled, setUncontrolledFilled] = React.useState(() =>
       hasValue(defaultValue),
@@ -58,6 +83,10 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground",
           "data-[success=true]:border-success data-[success=true]:bg-success-tint",
           "aria-invalid:border-destructive aria-invalid:bg-destructive-tint",
+          // The surface variant emits LAST of the primitive's own classes, so it
+          // wins the resting border, background, ink and focus border over the
+          // base; a positional utility from the call site still wins over it.
+          inputVariants({ variant }),
           className,
         )}
         ref={ref}
@@ -68,4 +97,4 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
 );
 Input.displayName = "Input";
 
-export { Input };
+export { Input, inputVariants };

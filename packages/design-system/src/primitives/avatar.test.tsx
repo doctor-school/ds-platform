@@ -2,7 +2,8 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Avatar } from "./avatar";
-import { HEADER_CHIP_BASE, HEADER_CHIP_SURFACE } from "./header-chip";
+import { buttonVariants } from "./button";
+import { HEADER_CHIP_SURFACE } from "./header-chip";
 
 afterEach(cleanup);
 
@@ -40,14 +41,18 @@ describe("Avatar (#513)", () => {
       "shadow-header-chip",
     );
     // The variant is for chips that are NOT links: no hover/press affordance
-    // (020 EARS-4 forbids a dead one). The interactive chip is HEADER_CHIP_BASE.
+    // (020 EARS-4 forbids a dead one). The interactive chip is the Button
+    // `on-primary` variant.
     expect(av.className).not.toMatch(/\b(hover|active):/);
   });
 
-  it("the header variant and the interactive chip base share one surface constant", () => {
-    // #1145 lesson: the dark-safe `shadow-header-chip` cast is declared ONCE.
+  it("the static header chip and the interactive one share one surface constant", () => {
+    // #1145 lesson: the dark-safe `shadow-header-chip` cast is declared ONCE,
+    // in HEADER_CHIP_SURFACE, and BOTH consumers compose it — the `header`
+    // Avatar (static) and the `on-primary` Button (interactive, #2180).
+    const interactive = buttonVariants({ variant: "on-primary" }).split(" ");
     for (const cls of HEADER_CHIP_SURFACE.split(" ")) {
-      expect(HEADER_CHIP_BASE.split(" ")).toContain(cls);
+      expect(interactive).toContain(cls);
     }
   });
 });

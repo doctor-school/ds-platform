@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 import type { CSSProperties, ReactNode } from "react";
 import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { StorefrontFooter } from "@ds/storefront-shell";
 import { ThemeWatcher } from "../components/theme-watcher";
+import { academyShellConfig } from "../lib/shell-config";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
@@ -55,6 +57,7 @@ export default async function RootLayout({
 }) {
   const locale = await getLocale();
   const messages = await getMessages();
+  const shell = academyShellConfig(await getTranslations("shell"));
 
   return (
     <html
@@ -86,6 +89,13 @@ export default async function RootLayout({
               every route, the public Academy home at `/` included (#1877). */}
           {chrome}
           {children}
+          {/* 008 EARS-14 — the storefront footer, mounted from the ROOT layout
+              rather than from the `@chrome` slot: the slot owns the header only,
+              and the footer must close every route's document. It carries the
+              SAME host config as the header, so the «Разделы» column and the nav
+              cannot drift apart, and the same `hiddenOnPaths` keeps it off the
+              auth surfaces and out of the webinar room. */}
+          <StorefrontFooter config={shell} />
         </NextIntlClientProvider>
       </body>
     </html>

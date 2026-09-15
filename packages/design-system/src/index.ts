@@ -6,7 +6,8 @@ export { interactiveBase } from "./primitives/interactive-base";
 // ── Primitives (owned shadcn components) ──────────────────────────────────────
 export { Button, buttonVariants, type ButtonProps } from "./primitives/button";
 export { Link, linkVariants, type LinkProps } from "./primitives/link";
-export { Input } from "./primitives/input";
+export { Input, inputVariants, type InputProps } from "./primitives/input";
+export { DisclosureSummary } from "./primitives/disclosure-summary";
 export {
   NativeSelect,
   type NativeSelectProps,
@@ -85,10 +86,7 @@ export {
 export { Badge, badgeVariants, type BadgeProps } from "./primitives/badge";
 export { ContactChip, type ContactChipProps } from "./primitives/contact-chip";
 export { Avatar, avatarVariants, type AvatarProps } from "./primitives/avatar";
-export {
-  HEADER_CHIP_SURFACE,
-  HEADER_CHIP_BASE,
-} from "./primitives/header-chip";
+export { HEADER_CHIP_SURFACE } from "./primitives/header-chip";
 export { Checkbox, type CheckboxProps } from "./primitives/checkbox";
 export { Radio, type RadioProps } from "./primitives/radio";
 export { Switch, type SwitchProps } from "./primitives/switch";

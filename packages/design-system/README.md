@@ -27,6 +27,8 @@ import {
 } from "@ds/design-system/input-otp";
 ```
 
+**Consumers style through props, never through `className`.** A primitive's look — geometry, spacing, typography, colour, borders, shadow — is owned here and selected with `variant` / `size` / `tone`. The `className` a host or a shared package passes may carry POSITIONAL utilities only: where the element sits and how it participates in its parent's layout (placement, display, flex/grid participation, order, alignment, external margin, overflow, layout width, `sr-only`). If the look you need does not exist, the answer is a new canvas-backed variant ADDED here (an owner design decision on a canvas, ADR-0013 §6), never a class stack at the call site — that is how one component becomes a fork per surface. Enforced as a BLOCK guard, `local/no-primitive-style-override`; the same rule makes a raw `<a>` / `<button>` / `<input>` with non-positional styling an error (compose `Link` / `Button` / `Input` instead), and a disable directive must carry ` -- <reason>`.
+
 Each component is a subpath export (see `package.json` `exports`); the barrel
 `@ds/design-system` re-exports all of them.
 

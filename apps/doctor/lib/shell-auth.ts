@@ -1,3 +1,5 @@
+import type { ShellAuthState } from "@ds/storefront-shell";
+
 import { fetchSessionClaims, forwardedSessionFrom } from "@/lib/session";
 
 /**
@@ -46,4 +48,29 @@ export async function resolveShellAuth(
   } catch {
     return { status: "guest" };
   }
+}
+
+/** The ONE guest control of the canvas (`ds-shell.dc.html` line 220) — a single
+ *  combined label on both hosts (017 US-7), opening the shipped `/login`
+ *  surface, which carries the way on to `/register`. */
+const GUEST_LABEL = "Войти / Регистрация";
+/** The signed-in affordance the doctor storefront ships — a LABELLED chip
+ *  (canvas lines 192/209), not the academy's initials square: this host has no
+ *  display-name read in the header and 017 EARS-1 asserts the words. */
+const DOCTOR_LABEL = "Личный кабинет";
+
+/**
+ * 017 EARS-1 — project the server-resolved {@link ShellAuth} onto the shared
+ * chrome's data prop.
+ *
+ * This is the whole of the doctor host's auth-cluster ownership since #2180:
+ * WHERE the session is read (here, on the server, before the first byte) and
+ * WHICH copy the chip carries. The chip itself — geometry, surface, press chain
+ * — belongs to `@ds/storefront-shell`, so it cannot drift from the academy's.
+ * Omitting `initials` is what selects the labelled chip over the initials one.
+ */
+export function shellAuthState(auth: ShellAuth): ShellAuthState {
+  return auth.status === "doctor"
+    ? { status: "doctor", profileHref: "/account", label: DOCTOR_LABEL }
+    : { status: "guest", loginHref: "/login", label: GUEST_LABEL };
 }

@@ -8,7 +8,11 @@ describe("rendered UI source classification", () => {
     "apps/admin/app/page.tsx",
     "apps/cms/src/components/custom.tsx",
     "apps/docs/app/page.tsx",
-    "apps/doctor/components/storefront-header.tsx",
+    // The doctor storefront's chrome — the auth cluster included since #2180 —
+    // lives in `@ds/storefront-shell`; what the host still owns are its own
+    // page blocks, which is the live doctor component this row pins.
+    "apps/doctor/components/storefront-hero.tsx",
+    "packages/storefront-shell/src/storefront-header.tsx",
     "apps/mobile/src/screens/home.tsx",
     "apps/portal/app/page.tsx",
     "apps/promo/app/page.tsx",

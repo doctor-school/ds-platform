@@ -2,7 +2,7 @@
 
 import { Avatar } from "@ds/design-system/avatar";
 import { initialsFromDisplayName } from "@ds/room/display-name";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeToggle } from "@ds/storefront-shell";
 
 /**
  * 006 EARS-12 / EARS-15 (#1722, slice 3) — the DOCTOR host's chrome cluster for

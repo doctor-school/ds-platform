@@ -28,19 +28,69 @@ describe("Button secondary variant reads as enabled", () => {
   });
 });
 
+/**
+ * #2180 — `on-primary` IS the header chip, the ONE definition both storefronts
+ * and the webinar room compose from. The two storefronts drifted (194×44 vs
+ * 191×48) because a second class-string constant carried the geometry beside
+ * this variant; these assertions pin the canvas contract
+ * (`design-source/ds-shell.dc.html` line 37) onto the variant itself.
+ */
 describe("Button surface-safe on-primary variant", () => {
   it("EARS-5: when the submit action sits on primary blue, the system shall render the invariant white CTA with complete interaction states", () => {
     const cls = buttonVariants({ variant: "on-primary" });
 
     expect(cls).toMatch(/bg-header-foreground/);
     expect(cls).toMatch(/text-header-chip-foreground/);
-    expect(cls).toMatch(/border-header-foreground/);
     expect(cls).toMatch(/(?:^|\s)shadow-header-chip(?:\s|$)/);
     expect(cls).toMatch(/hover:shadow-header-chip-hover/);
     expect(cls).toMatch(/active:shadow-none/);
     expect(cls).toMatch(/focus-visible:shadow-focus/);
     expect(cls).toMatch(/disabled:opacity-40/);
     expect(cls).not.toMatch(/bg-primary-action/);
+  });
+
+  it("EARS-5.1: the header chip carries NO border and never shrinks in the bar", () => {
+    // Canvas line 37: `background:#fff` with a 3px offset cast and NO border —
+    // the `border-2` this variant used to add is what made the doctor chip 48px
+    // tall against the academy's 44px (#2198 Stage-B finding).
+    const cls = buttonVariants({ variant: "on-primary" });
+    expect(cls).not.toMatch(/\bborder-/);
+    expect(cls).toMatch(/\bflex-none\b/);
+    expect(cls).toMatch(/\bwhitespace-nowrap\b/);
+  });
+
+  it("EARS-5.2: the chip size IS the canvas geometry — 12×22 padding at 13.5px, token-backed", () => {
+    // `px-chip-x` / `py-3` / `text-chip` are the tokens (`space.chip-x`,
+    // `font.size.chip`), so the chip's size changes in ONE place for both
+    // storefronts rather than in each host's own class string.
+    const cls = buttonVariants({ variant: "on-primary", size: "chip" });
+    expect(cls).toMatch(/\bpx-chip-x\b/);
+    expect(cls).toMatch(/\bpy-3\b/);
+    expect(cls).toMatch(/\btext-chip\b/);
+  });
+
+  it("EARS-5.4: the rendered chip keeps the chip INK — the size is not merged as a colour", () => {
+    // The Stage-B defect lived in `cn()`, not in the variant: `text-chip` was
+    // unregistered, so tailwind-merge classified it as a COLOUR and dropped
+    // `text-header-chip-foreground` when the component merged its classes —
+    // the chip rendered as a white box with invisible white text on both
+    // storefronts. `buttonVariants()` alone cannot see this; the RENDERED class
+    // list can.
+    render(
+      <Button variant="on-primary" size="chip">
+        Log in
+      </Button>,
+    );
+    const cls = screen.getByRole("button", { name: "Log in" }).className;
+    expect(cls).toMatch(/(?:^|\s)text-header-chip-foreground(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)text-chip(?:\s|$)/);
+  });
+
+  it("EARS-5.3: the profile chip is the same variant at the 40px avatar size, not a second constant", () => {
+    const cls = buttonVariants({ variant: "on-primary", size: "avatar" });
+    expect(cls).toMatch(/\bsize-10\b/);
+    expect(cls).toMatch(/bg-header-foreground/);
+    expect(cls).toMatch(/(?:^|\s)shadow-header-chip(?:\s|$)/);
   });
 });
 
@@ -160,5 +210,35 @@ describe("Button loading state", () => {
     expect(link).toHaveAttribute("aria-busy", "true");
     // Slot must keep the single child intact — no injected spinner.
     expect(link.querySelector("svg")).toBeNull();
+  });
+});
+
+/**
+ * The `tone` axis (#2180) — the SURFACE a control sits on. The storefront theme
+ * toggle used to re-colour the `ghost` button at the call site with
+ * `text-header-foreground`; the value is unchanged, it MOVED here so the guard
+ * `local/no-primitive-style-override` can see the shell it ships with.
+ * Canvas: `design-source/ds-shell.dc.html` line 36 (`color:#fff` on the band).
+ */
+describe("Button tone (#2180, canvas ds-shell.dc.html line 36)", () => {
+  it("008 EARS-3: the header tone paints a quiet control in the band foreground, not the page ink", () => {
+    const cls = buttonVariants({ variant: "ghost", size: "icon", tone: "header" });
+    expect(cls).toMatch(/(?:^|\s)text-header-foreground(?:\s|$)/);
+    // `tone` emits last, so the ghost variant's own ink loses (tailwind-merge).
+    expect(cls).toMatch(/(?:^|\s)size-11(?:\s|$)/);
+    expect(cls).toMatch(/hover:bg-tint/);
+  });
+
+  it("008 EARS-3: the default tone adds nothing and the axis never reaches the DOM", () => {
+    expect(buttonVariants({ variant: "ghost" })).not.toMatch(/text-header-foreground/);
+    render(
+      <Button variant="ghost" size="icon" tone="header" aria-label="Theme">
+        <span aria-hidden="true">x</span>
+      </Button>,
+    );
+    const btn = screen.getByRole("button", { name: "Theme" });
+    expect(btn).toHaveClass("text-header-foreground");
+    expect(btn).not.toHaveClass("text-foreground");
+    expect(btn).not.toHaveAttribute("tone");
   });
 });

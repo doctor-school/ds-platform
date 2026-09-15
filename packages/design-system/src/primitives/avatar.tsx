@@ -14,7 +14,7 @@ import { HEADER_CHIP_SURFACE } from "./header-chip";
  *     BOTH themes, offset `shadow-header-chip` cast. This is the chip a room /
  *     app-shell header carries; it is STATIC (no hover, no press) because the
  *     variant exists for chips that are not links — an interactive header chip
- *     composes {@link HEADER_CHIP_BASE} instead. Both derive from the one
+ *     is the `on-primary` Button instead. Both derive from the one
  *     {@link HEADER_CHIP_SURFACE} constant, so they cannot drift.
  * Token-only, both themes. Purely presentational — pass an `aria-label` (or wrap
  * with visible text) if the initials must be announced.

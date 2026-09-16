@@ -1,6 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { LIVE_STAND, provisionLoggedInDoctor } from "../support/doctor-session";
-import { shellHeader, setMyDisplayName } from "../support/shell";
+import {
+  shellHeader,
+  setMyDisplayName,
+  MY_EVENTS_HREF,
+  MY_EVENTS_LABEL,
+} from "../support/shell";
 
 /**
  * 008 EARS-5 / EARS-6 — while the caller is a logged-in doctor, the header renders
@@ -48,5 +53,57 @@ test.describe("008 EARS-5/6 doctor header avatar icon → /account, no dropdown,
     // EARS-6: a single tap navigates straight to the profile — no interim menu.
     await avatar.click();
     await expect(page).toHaveURL(/\/account$/);
+  });
+
+  test("008 EARS-5: the signed-in cluster carries «Мои события» → /account/events on the desktop bar", async ({
+    page,
+  }) => {
+    // #2243 — the canvas draws this link inside the auth cluster
+    // (`design-source/ds-shell.dc.html`, `user.links` line 209, rendered at
+    // line 33). It vanished when this storefront moved onto the shared chrome.
+    await provisionLoggedInDoctor(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const cluster = page.getByTestId("shell-auth-cluster");
+    await expect(cluster).toHaveAttribute("data-cluster", "doctor");
+    const link = cluster.getByTestId("shell-auth-link");
+    await expect(link).toBeVisible();
+    await expect(link).toHaveText(MY_EVENTS_LABEL);
+    await expect(link).toHaveAttribute("href", MY_EVENTS_HREF);
+
+    // It really navigates, and the page it lands on is the right one — the h1,
+    // not just the URL.
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`${MY_EVENTS_HREF}(?:$|[?#])`));
+    await expect(
+      page.getByRole("heading", { level: 1, name: MY_EVENTS_LABEL }),
+    ).toBeVisible();
+  });
+
+  test("008 EARS-11: below the breakpoint the same link is a row of the ≡ menu", async ({
+    page,
+  }) => {
+    // Canvas line 50. The mobile copies are nav ROWS, never a second cluster —
+    // 017 EARS-1 allows exactly ONE `shell-auth-cluster` in the DOM.
+    await provisionLoggedInDoctor(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByTestId("shell-auth-cluster")).toHaveCount(1);
+    const menu = shellHeader(page).getByTestId("shell-mobile-menu");
+    await menu.locator("summary").click();
+
+    const mobileNav = page.getByTestId("shell-nav-mobile");
+    const row = mobileNav.getByTestId("shell-auth-link-mobile");
+    await expect(row).toBeVisible();
+    await expect(row).toHaveText(MY_EVENTS_LABEL);
+    await expect(row).toHaveAttribute("href", MY_EVENTS_HREF);
+
+    await row.click();
+    await expect(page).toHaveURL(new RegExp(`${MY_EVENTS_HREF}(?:$|[?#])`));
+    await expect(
+      page.getByRole("heading", { level: 1, name: MY_EVENTS_LABEL }),
+    ).toBeVisible();
   });
 });

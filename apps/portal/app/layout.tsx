@@ -79,7 +79,7 @@ export default async function RootLayout({
       }
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-background text-foreground antialiased">
+      <body className="flex min-h-screen flex-col bg-background text-foreground antialiased">
         {/* EARS-12 FOUC guard — MUST stay the first element of <body> (it blocks
             the parser, so the theme class lands before any content can paint). */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
@@ -88,7 +88,13 @@ export default async function RootLayout({
           {/* The route-owned `@chrome` slot supplies the persistent app shell on
               every route, the public Academy home at `/` included (#1877). */}
           {chrome}
-          {children}
+          {/* #2228 — the route content is the growing member of the body's flex
+              column, so on a page shorter than the viewport the footer below is
+              pushed to the bottom edge instead of ending with the content. Pages
+              therefore never claim `min-h-screen` of their own: this frame owns
+              the fill (a page-level full-height wrapper would push the footer a
+              whole viewport below the fold). */}
+          <div className="flex-1">{children}</div>
           {/* 008 EARS-14 — the storefront footer, mounted from the ROOT layout
               rather than from the `@chrome` slot: the slot owns the header only,
               and the footer must close every route's document. It carries the

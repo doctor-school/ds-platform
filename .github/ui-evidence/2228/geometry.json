@@ -1,0 +1,79 @@
+{
+  "academy-desktop-light": {
+    "footers": 1,
+    "footerBottom": 1400,
+    "documentHeight": 1400,
+    "viewport": 1400,
+    "bodyDisplay": "flex"
+  },
+  "academy-desktop-dark": {
+    "footers": 1,
+    "footerBottom": 1400,
+    "documentHeight": 1400,
+    "viewport": 1400,
+    "bodyDisplay": "flex"
+  },
+  "academy-mobile-light": {
+    "footers": 1,
+    "footerBottom": 1640,
+    "documentHeight": 1640,
+    "viewport": 844,
+    "bodyDisplay": "flex"
+  },
+  "academy-mobile-dark": {
+    "footers": 1,
+    "footerBottom": 1640,
+    "documentHeight": 1640,
+    "viewport": 844,
+    "bodyDisplay": "flex"
+  },
+  "academy-hidden-/": {
+    "footers": 0,
+    "footerBottom": null,
+    "documentHeight": 6401,
+    "viewport": 1400,
+    "bodyDisplay": "flex"
+  },
+  "academy-hidden-/login": {
+    "footers": 0,
+    "footerBottom": null,
+    "documentHeight": 1400,
+    "viewport": 1400,
+    "bodyDisplay": "flex"
+  },
+  "doctor-desktop-light": {
+    "footers": 1,
+    "footerBottom": 1400,
+    "documentHeight": 1400,
+    "viewport": 1400,
+    "bodyDisplay": "block"
+  },
+  "doctor-desktop-dark": {
+    "footers": 1,
+    "footerBottom": 1400,
+    "documentHeight": 1400,
+    "viewport": 1400,
+    "bodyDisplay": "block"
+  },
+  "doctor-mobile-light": {
+    "footers": 1,
+    "footerBottom": 1694,
+    "documentHeight": 1694,
+    "viewport": 844,
+    "bodyDisplay": "block"
+  },
+  "doctor-mobile-dark": {
+    "footers": 1,
+    "footerBottom": 1694,
+    "documentHeight": 1694,
+    "viewport": 844,
+    "bodyDisplay": "block"
+  },
+  "doctor-hidden-/login": {
+    "footers": 0,
+    "footerBottom": null,
+    "documentHeight": 1400,
+    "viewport": 1400,
+    "bodyDisplay": "block"
+  }
+}

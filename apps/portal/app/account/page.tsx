@@ -118,7 +118,7 @@ export default function AccountPage() {
 
   if (state.kind === "loading") {
     return (
-      <main className="min-h-screen bg-background text-foreground">
+      <main className="bg-background text-foreground">
         <Container className="py-16">
           <p className="text-sm text-muted-foreground" role="status">
             {t("loading")}
@@ -130,7 +130,7 @@ export default function AccountPage() {
 
   if (state.kind === "error") {
     return (
-      <main className="min-h-screen bg-background text-foreground">
+      <main className="bg-background text-foreground">
         <Container className="py-16">
           <p className="text-sm text-muted-foreground" role="alert">
             {t("error")}

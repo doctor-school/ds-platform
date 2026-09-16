@@ -269,3 +269,11 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
     );
   });
 });
+
+describe("017 EARS-1 (#2228): the cabinet does not push the shared footer below the fold", () => {
+  it("EARS-1.13: no state wrapper claims min-h-screen — the storefront frame owns the fill", () => {
+    h.getMyProfile.mockReturnValue(new Promise(() => {}));
+    const html = renderToStaticMarkup(<AccountScreen />);
+    expect(html).not.toContain("min-h-screen");
+  });
+});

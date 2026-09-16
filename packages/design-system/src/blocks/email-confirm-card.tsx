@@ -223,7 +223,15 @@ export function EmailConfirmCard({
           {copy.newAccountHeading}
         </h2>
         <Form {...form}>
-          <form onSubmit={submit} className="space-y-4" noValidate>
+          {/* Same pre-hydration rule as `<LoginCard>`: a native submit before
+              the bundle loads must POST, never GET the one-time code into the
+              URL and the access logs. */}
+          <form
+            method="post"
+            onSubmit={submit}
+            className="space-y-4"
+            noValidate
+          >
             <FormField
               control={form.control}
               name="code"

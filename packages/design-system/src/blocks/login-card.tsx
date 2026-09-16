@@ -322,6 +322,15 @@ function PasswordLogin({
   return (
     <Form {...form}>
       <form
+        // Pre-hydration safety net: a visitor who presses submit before the
+        // bundle loads submits NATIVELY, and a `<form>` with no `method` is a
+        // GET — which would put the password (or the one-time code) in the URL,
+        // in the browser history and in every access log along the way. `post`
+        // makes that native submit carry the fields in the BODY instead. `action`
+        // is deliberately left off: the HTML default is the current document URL,
+        // which is exactly the current path the fix calls for, and a path prop
+        // would put a host route inside the design system.
+        method="post"
         onSubmit={form.handleSubmit(onSubmit)}
         className="space-y-4"
         noValidate
@@ -448,6 +457,15 @@ function OtpLogin({
 
           <Form {...requestForm}>
             <form
+              // Pre-hydration safety net: a visitor who presses submit before the
+              // bundle loads submits NATIVELY, and a `<form>` with no `method` is a
+              // GET — which would put the password (or the one-time code) in the URL,
+              // in the browser history and in every access log along the way. `post`
+              // makes that native submit carry the fields in the BODY instead. `action`
+              // is deliberately left off: the HTML default is the current document URL,
+              // which is exactly the current path the fix calls for, and a path prop
+              // would put a host route inside the design system.
+              method="post"
               // `values.channel` — not the `channel` state — so the submitted
               // channel is the one the resolver just validated the identifier
               // against; the two are kept in step by the `reset` on switch above.

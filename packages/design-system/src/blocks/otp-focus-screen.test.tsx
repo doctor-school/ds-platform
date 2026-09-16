@@ -240,3 +240,26 @@ describe("OtpFocusScreen", () => {
     expect(screen.getByTestId("otp-submit")).toBeDisabled();
   });
 });
+
+/**
+ * #2027 — no credential may ride a URL before hydration.
+ *
+ * Every auth `<form>` in this package is submitted by a handler that only exists
+ * once the bundle has run. A visitor who presses the button before that submits
+ * NATIVELY, and a `<form>` with no `method` is a GET: the chosen password and the
+ * one-time code go into the query string, the browser history and every access
+ * log on the way. `method="post"` moves them into the request body, which is the
+ * whole of the fix — the submitted path is unchanged, `action` stays off so the
+ * browser uses the current document URL, and the rendered surface is
+ * byte-identical, so there is no visual delta to review.
+ */
+describe("#2027 <OtpFocusScreen> pre-hydration submit", () => {
+  it("EARS-16.5: the code form posts — a native submit never puts the one-time code in the URL", () => {
+    const { container } = render(<Harness />);
+    const forms = container.querySelectorAll("form");
+    expect(forms.length).toBeGreaterThan(0);
+    for (const form of forms) {
+      expect(form.getAttribute("method")).toBe("post");
+    }
+  });
+});

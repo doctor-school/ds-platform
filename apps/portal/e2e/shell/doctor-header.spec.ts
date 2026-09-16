@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { LIVE_STAND, provisionLoggedInDoctor } from "../support/doctor-session";
 import {
   shellHeader,
@@ -80,13 +80,19 @@ test.describe("008 EARS-5/6 doctor header avatar icon → /account, no dropdown,
 
     // The canvas order is GEOMETRY, so assert it on the painted bar:
     // «Эфиры · Мои события · ☾ · Личный кабинет», left to right.
-    const x = async (locator) => (await locator.boundingBox()).x;
+    const x = async (locator: Locator): Promise<number> => {
+      const box = await locator.boundingBox();
+      if (!box) throw new Error("expected a painted element, got none");
+      return box.x;
+    };
     const navItem = page
       .getByTestId("shell-nav-desktop")
       .getByRole("link")
       .first();
     expect(await x(navItem)).toBeLessThan(await x(link));
-    expect(await x(link)).toBeLessThan(await x(page.getByTestId("theme-toggle")));
+    expect(await x(link)).toBeLessThan(
+      await x(page.getByTestId("theme-toggle")),
+    );
     expect(await x(page.getByTestId("theme-toggle"))).toBeLessThan(
       await x(page.getByTestId("shell-avatar")),
     );

@@ -35,7 +35,11 @@ function stubFetch(routes, calls = []) {
     const path = new URL(url).pathname;
     const method = init.method ?? "GET";
     const key = `${method} ${path}`;
-    calls.push({ key, body: init.body ? JSON.parse(init.body) : undefined, init });
+    calls.push({
+      key,
+      body: init.body ? JSON.parse(init.body) : undefined,
+      init,
+    });
     const answer = routes[key];
     if (!answer) throw new Error(`unrouted request: ${key}`);
     return {
@@ -62,7 +66,10 @@ const APP_ROUTES = {
 
 test("the deleted doctor's subject is deterministic, marked and never a Zitadel id", () => {
   const first = goldenDeletedSubject("golden.doctor.deleted@example.test");
-  assert.equal(first, goldenDeletedSubject("golden.doctor.deleted@example.test"));
+  assert.equal(
+    first,
+    goldenDeletedSubject("golden.doctor.deleted@example.test"),
+  );
   assert.match(first, /^golden-deleted-[0-9a-f]{32}$/);
   assert.notEqual(first, goldenDeletedSubject("someone.else@example.test"));
 });
@@ -84,7 +91,10 @@ test("a redirect set that already matches converges to a skip", () => {
 
 test("a differing redirect set converges to a PUT carrying the whole ordered set", () => {
   const plan = planRedirectUriConverge({
-    current: { redirectUris: ["https://a/auth/callback"], postLogoutRedirectUris: [] },
+    current: {
+      redirectUris: ["https://a/auth/callback"],
+      postLogoutRedirectUris: [],
+    },
     desired: {
       redirectUris: ["https://a/auth/callback", "https://b/auth/callback"],
       postLogoutUris: ["https://a", "https://b"],
@@ -95,7 +105,10 @@ test("a differing redirect set converges to a PUT carrying the whole ordered set
     "https://a/auth/callback",
     "https://b/auth/callback",
   ]);
-  assert.deepEqual(plan.body.postLogoutRedirectUris, ["https://a", "https://b"]);
+  assert.deepEqual(plan.body.postLogoutRedirectUris, [
+    "https://a",
+    "https://b",
+  ]);
   // The PUT is the FULL oidc_config, not a redirect-only patch: the Zitadel update
   // replaces the config wholesale, and `name` is not part of the config resource.
   assert.equal(plan.body.appType, "OIDC_APP_TYPE_WEB");
@@ -108,18 +121,20 @@ test("a URI the registry no longer renders is dropped by the converge", () => {
       redirectUris: ["https://a/auth/callback", "https://gone/auth/callback"],
       postLogoutRedirectUris: ["https://a"],
     },
-    desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: ["https://a"] },
+    desired: {
+      redirectUris: ["https://a/auth/callback"],
+      postLogoutUris: ["https://a"],
+    },
   });
   assert.equal(plan.action, "put");
   assert.deepEqual(plan.body.redirectUris, ["https://a/auth/callback"]);
 });
 
 test("pinned URIs from stage.env survive a registry-derived converge", () => {
-  assert.deepEqual(unionUris(["https://pinned", "https://a"], ["https://a", "https://b"]), [
-    "https://pinned",
-    "https://a",
-    "https://b",
-  ]);
+  assert.deepEqual(
+    unionUris(["https://pinned", "https://a"], ["https://a", "https://b"]),
+    ["https://pinned", "https://a", "https://b"],
+  );
 });
 
 test("the pinned URI lists are split exactly the way provision.sh splits them", () => {
@@ -145,7 +160,10 @@ test("a failing read of the app config is a hard failure", async () => {
   await assert.rejects(
     convergeRedirectUris({
       client,
-      desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: [] },
+      desired: {
+        redirectUris: ["https://a/auth/callback"],
+        postLogoutUris: [],
+      },
     }),
     IdpError,
   );
@@ -156,7 +174,9 @@ test("a failing write of the redirect set is a hard failure", async () => {
     fetch: stubFetch({
       ...APP_ROUTES,
       "GET /management/v1/projects/p1/apps/a1": {
-        body: { app: { oidcConfig: { redirectUris: [], postLogoutRedirectUris: [] } } },
+        body: {
+          app: { oidcConfig: { redirectUris: [], postLogoutRedirectUris: [] } },
+        },
       },
       "PUT /management/v1/projects/p1/apps/a1/oidc_config": { status: 500 },
     }),
@@ -166,7 +186,10 @@ test("a failing write of the redirect set is a hard failure", async () => {
   await assert.rejects(
     convergeRedirectUris({
       client,
-      desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: [] },
+      desired: {
+        redirectUris: ["https://a/auth/callback"],
+        postLogoutUris: [],
+      },
     }),
     IdpError,
   );
@@ -196,7 +219,10 @@ test("an already converged app is read and left alone", async () => {
   });
   const result = await convergeRedirectUris({
     client,
-    desired: { redirectUris: ["https://a/auth/callback"], postLogoutUris: ["https://a"] },
+    desired: {
+      redirectUris: ["https://a/auth/callback"],
+      postLogoutUris: ["https://a"],
+    },
   });
   assert.equal(result.action, "skip");
   assert.equal(calls.filter((call) => call.key.startsWith("PUT ")).length, 0);
@@ -204,12 +230,17 @@ test("an already converged app is read and left alone", async () => {
 
 test("an app the shared project does not carry is a hard failure, never a create", async () => {
   const client = createIdpClient({
-    fetch: stubFetch({ "POST /management/v1/projects/_search": { body: { result: [] } } }),
+    fetch: stubFetch({
+      "POST /management/v1/projects/_search": { body: { result: [] } },
+    }),
     baseUrl: "https://id.stage.example",
     pat: "pat-value",
   });
   await assert.rejects(
-    convergeRedirectUris({ client, desired: { redirectUris: [], postLogoutUris: [] } }),
+    convergeRedirectUris({
+      client,
+      desired: { redirectUris: [], postLogoutUris: [] },
+    }),
     /provision\.sh/,
   );
 });
@@ -231,10 +262,12 @@ test("a fresh box plans a create for every expected golden account", () => {
 
 test("a converged box plans no creates and still sets every password", () => {
   const existing = Object.fromEntries(
-    GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map((account) => [
-      account.username,
-      { userId: `id-${account.key}`, emailVerified: account.emailVerified },
-    ]),
+    GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map(
+      (account) => [
+        account.username,
+        { userId: `id-${account.key}`, emailVerified: account.emailVerified },
+      ],
+    ),
   );
   const { steps, subjects } = planGoldenIdentities({
     accounts: GOLDEN_IDP_ACCOUNTS,
@@ -251,11 +284,16 @@ test("a golden account is re-verified when the IdP lost the verified flag", () =
   const { steps } = planGoldenIdentities({
     accounts: GOLDEN_IDP_ACCOUNTS,
     existing: {
-      "golden.doctor.verified@example.test": { userId: "id-v", emailVerified: false },
+      "golden.doctor.verified@example.test": {
+        userId: "id-v",
+        emailVerified: false,
+      },
     },
   });
   assert.deepEqual(
-    steps.filter((step) => step.op === "verify-email").map((step) => step.userId),
+    steps
+      .filter((step) => step.op === "verify-email")
+      .map((step) => step.userId),
     ["id-v"],
   );
 });
@@ -264,7 +302,10 @@ test("an account verified when the fixture says it must not be is rebuilt", () =
   const { steps } = planGoldenIdentities({
     accounts: GOLDEN_IDP_ACCOUNTS,
     existing: {
-      "golden.doctor.unverified@example.test": { userId: "id-u", emailVerified: true },
+      "golden.doctor.unverified@example.test": {
+        userId: "id-u",
+        emailVerified: true,
+      },
     },
   });
   const ops = steps
@@ -276,7 +317,10 @@ test("an account verified when the fixture says it must not be is rebuilt", () =
 });
 
 test("a created account is always granted its catalogue role", () => {
-  const { steps } = planGoldenIdentities({ accounts: GOLDEN_IDP_ACCOUNTS, existing: {} });
+  const { steps } = planGoldenIdentities({
+    accounts: GOLDEN_IDP_ACCOUNTS,
+    existing: {},
+  });
   const grants = steps.filter((step) => step.op === "ensure-grant");
   // One per expected account, never for the soft-deleted doctor, and always as an
   // ADD (`grantId: null`) because a freshly minted user holds no authorization.
@@ -312,16 +356,21 @@ test("a live account holding the wrong role is re-granted, not re-created", () =
 
 test("a live account already holding its role plans no grant step", () => {
   const existing = Object.fromEntries(
-    GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map((account) => [
-      account.username,
-      {
-        userId: `id-${account.key}`,
-        emailVerified: account.emailVerified,
-        grant: { id: `g-${account.key}`, roleKeys: [account.role] },
-      },
-    ]),
+    GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map(
+      (account) => [
+        account.username,
+        {
+          userId: `id-${account.key}`,
+          emailVerified: account.emailVerified,
+          grant: { id: `g-${account.key}`, roleKeys: [account.role] },
+        },
+      ],
+    ),
   );
-  const { steps } = planGoldenIdentities({ accounts: GOLDEN_IDP_ACCOUNTS, existing });
+  const { steps } = planGoldenIdentities({
+    accounts: GOLDEN_IDP_ACCOUNTS,
+    existing,
+  });
   assert.equal(steps.filter((step) => step.op === "ensure-grant").length, 0);
 });
 
@@ -329,7 +378,10 @@ test("the deleted doctor is removed when a live account carries its username", (
   const { steps } = planGoldenIdentities({
     accounts: GOLDEN_IDP_ACCOUNTS,
     existing: {
-      "golden.doctor.deleted@example.test": { userId: "id-d", emailVerified: true },
+      "golden.doctor.deleted@example.test": {
+        userId: "id-d",
+        emailVerified: true,
+      },
     },
   });
   assert.deepEqual(
@@ -337,29 +389,43 @@ test("the deleted doctor is removed when a live account carries its username", (
     ["id-d"],
   );
   assert.equal(
-    steps.filter((step) => step.username.includes("deleted") && step.op === "create").length,
+    steps.filter(
+      (step) => step.username.includes("deleted") && step.op === "create",
+    ).length,
     0,
     "the soft-deleted doctor must never be re-created",
   );
 });
 
 test("the deleted doctor being absent is a no-op", () => {
-  const { steps } = planGoldenIdentities({ accounts: GOLDEN_IDP_ACCOUNTS, existing: {} });
-  assert.equal(steps.filter((step) => step.username.includes("deleted")).length, 0);
+  const { steps } = planGoldenIdentities({
+    accounts: GOLDEN_IDP_ACCOUNTS,
+    existing: {},
+  });
+  assert.equal(
+    steps.filter((step) => step.username.includes("deleted")).length,
+    0,
+  );
 });
 
 test("the golden subjects file round-trips through render and parse", () => {
   const subjects = Object.fromEntries(
     GOLDEN_SUBJECT_ENV_VARS.map((name, index) => [name, `sub-${index}`]),
   );
-  assert.deepEqual(parseGoldenSubjectsEnv(renderGoldenSubjectsEnv(subjects)), subjects);
+  assert.deepEqual(
+    parseGoldenSubjectsEnv(renderGoldenSubjectsEnv(subjects)),
+    subjects,
+  );
 });
 
 test("the golden account catalogue matches the seed contract in packages/db", () => {
   // `tools/staging` runs as plain ESM with zero app deps (no build step), so it
   // cannot import the TypeScript seed contract at runtime. This test reads that file
   // and fails the moment the two drift — the catalogue still has ONE source of truth.
-  const source = readFileSync(join(REPO_ROOT, "packages/db/src/seed/golden/idp.ts"), "utf8");
+  const source = readFileSync(
+    join(REPO_ROOT, "packages/db/src/seed/golden/idp.ts"),
+    "utf8",
+  );
   const field = (block, name) => {
     const match = new RegExp(name + ': ("[^"]+"|true|false)').exec(block);
     return match ? match[1].replaceAll('"', "") : undefined;
@@ -390,12 +456,18 @@ test("a converge creates the absent accounts and collects every subject", async 
     fetch: stubFetch(
       {
         "POST /v2/users": { body: { result: [] } },
-        "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
+        "GET /auth/v1/users/me": {
+          body: { user: { details: { resourceOwner: "org-1" } } },
+        },
         // The REAL CreateUser response: `{ id, creationDate, emailCode }` (#203).
-        "POST /v2/users/new": { body: { id: "new-id", creationDate: "2026-09-11T00:00:00Z" } },
+        "POST /v2/users/new": {
+          body: { id: "new-id", creationDate: "2026-09-11T00:00:00Z" },
+        },
         "POST /v2/users/new-id/password": { body: {} },
         ...APP_ROUTES,
-        "POST /management/v1/users/new-id/grants": { body: { userGrantId: "g-new" } },
+        "POST /management/v1/users/new-id/grants": {
+          body: { userGrantId: "g-new" },
+        },
       },
       calls,
     ),
@@ -411,9 +483,14 @@ test("a converge creates the absent accounts and collects every subject", async 
   });
   assert.equal(subjects.DS_GOLDEN_SUB_ADMIN, "new-id");
   assert.match(subjects.DS_GOLDEN_SUB_DOCTOR_DELETED, /^golden-deleted-/);
-  assert.equal(calls.filter((call) => call.key === "POST /v2/users/new").length, 4);
+  assert.equal(
+    calls.filter((call) => call.key === "POST /v2/users/new").length,
+    4,
+  );
   // Every created account is granted, and the admin's grant carries its own role.
-  const grants = calls.filter((call) => call.key === "POST /management/v1/users/new-id/grants");
+  const grants = calls.filter(
+    (call) => call.key === "POST /management/v1/users/new-id/grants",
+  );
   assert.equal(grants.length, 4);
   assert.ok(grants.some((call) => call.body.roleKeys[0] === "platform_admin"));
   assert.ok(grants.every((call) => call.body.projectId === "p1"));
@@ -422,16 +499,26 @@ test("a converge creates the absent accounts and collects every subject", async 
 });
 
 test("a converge re-grants a live account whose role drifted, and says so", async () => {
-  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const admin = GOLDEN_IDP_ACCOUNTS.find(
+    (account) => account.role === "platform_admin",
+  );
   const calls = [];
   const client = createIdpClient({
     fetch: stubFetch(
       {
         "POST /v2/users": {
-          body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
+          body: {
+            result: [
+              { userId: "id-a", human: { email: { isVerified: true } } },
+            ],
+          },
         },
         "POST /management/v1/users/grants/_search": {
-          body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["doctor_guest"] }] },
+          body: {
+            result: [
+              { id: "g-1", projectId: "p1", roleKeys: ["doctor_guest"] },
+            ],
+          },
         },
         "POST /v2/users/id-a/password": { body: {} },
         "PUT /management/v1/users/id-a/grants/g-1": { body: {} },
@@ -449,27 +536,40 @@ test("a converge re-grants a live account whose role drifted, and says so", asyn
     passwords: PASSWORDS,
     log: (line) => lines.push(line),
   });
-  const put = calls.find((call) => call.key === "PUT /management/v1/users/id-a/grants/g-1");
+  const put = calls.find(
+    (call) => call.key === "PUT /management/v1/users/id-a/grants/g-1",
+  );
   assert.deepEqual(put.body, { roleKeys: ["platform_admin"] });
   // An ADD alongside the existing authorization would be a second grant, not a fix.
   assert.equal(
-    calls.filter((call) => call.key === "POST /management/v1/users/id-a/grants").length,
+    calls.filter((call) => call.key === "POST /management/v1/users/id-a/grants")
+      .length,
     0,
   );
   assert.match(lines.join("\n"), /re-granted platform_admin/);
 });
 
 test("a converge leaves a correct grant alone and logs that it already holds it", async () => {
-  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const admin = GOLDEN_IDP_ACCOUNTS.find(
+    (account) => account.role === "platform_admin",
+  );
   const calls = [];
   const client = createIdpClient({
     fetch: stubFetch(
       {
         "POST /v2/users": {
-          body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
+          body: {
+            result: [
+              { userId: "id-a", human: { email: { isVerified: true } } },
+            ],
+          },
         },
         "POST /management/v1/users/grants/_search": {
-          body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["platform_admin"] }] },
+          body: {
+            result: [
+              { id: "g-1", projectId: "p1", roleKeys: ["platform_admin"] },
+            ],
+          },
         },
         "POST /v2/users/id-a/password": { body: {} },
         ...APP_ROUTES,
@@ -491,26 +591,43 @@ test("a converge leaves a correct grant alone and logs that it already holds it"
     0,
     "an equal role set must not be written back",
   );
-  assert.match(lines.join("\n"), /golden\.admin@example\.test already holds platform_admin/);
+  assert.match(
+    lines.join("\n"),
+    /golden\.admin@example\.test already holds platform_admin/,
+  );
 });
 
 test("a grant on some other project does not pass for the shared one", async () => {
-  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const admin = GOLDEN_IDP_ACCOUNTS.find(
+    (account) => account.role === "platform_admin",
+  );
   const calls = [];
   const client = createIdpClient({
     fetch: stubFetch(
       {
         "POST /v2/users": {
-          body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
+          body: {
+            result: [
+              { userId: "id-a", human: { email: { isVerified: true } } },
+            ],
+          },
         },
         // Right roles, WRONG project — reading it as a match would leave the shared
         // project ungranted while the converge reported success.
         "POST /management/v1/users/grants/_search": {
-          body: { result: [{ id: "g-x", projectId: "other", roleKeys: ["platform_admin"] }] },
+          body: {
+            result: [
+              { id: "g-x", projectId: "other", roleKeys: ["platform_admin"] },
+            ],
+          },
         },
         "POST /v2/users/id-a/password": { body: {} },
-        "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
-        "POST /management/v1/users/id-a/grants": { body: { userGrantId: "g-new" } },
+        "GET /auth/v1/users/me": {
+          body: { user: { details: { resourceOwner: "org-1" } } },
+        },
+        "POST /management/v1/users/id-a/grants": {
+          body: { userGrantId: "g-new" },
+        },
         ...APP_ROUTES,
       },
       calls,
@@ -518,8 +635,14 @@ test("a grant on some other project does not pass for the shared one", async () 
     baseUrl: "https://id.stage.example",
     pat: "pat-value",
   });
-  await convergeGoldenIdentities({ client, accounts: [admin], passwords: PASSWORDS });
-  const added = calls.find((call) => call.key === "POST /management/v1/users/id-a/grants");
+  await convergeGoldenIdentities({
+    client,
+    accounts: [admin],
+    passwords: PASSWORDS,
+  });
+  const added = calls.find(
+    (call) => call.key === "POST /management/v1/users/id-a/grants",
+  );
   assert.deepEqual(added.body, {
     projectId: "p1",
     organizationId: "org-1",
@@ -532,16 +655,24 @@ test("the subject of a created account comes from the CreateUser `id` field", as
   // `userId` at all; reading `userId` yields «returned no user id» on a live converge.
   // This stub carries ONLY `id`, so the old read cannot pass it.
   const calls = [];
-  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const admin = GOLDEN_IDP_ACCOUNTS.find(
+    (account) => account.role === "platform_admin",
+  );
   const client = createIdpClient({
     fetch: stubFetch(
       {
         "POST /v2/users": { body: { result: [] } },
-        "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
-        "POST /v2/users/new": { body: { id: "created-id", emailCode: "123456" } },
+        "GET /auth/v1/users/me": {
+          body: { user: { details: { resourceOwner: "org-1" } } },
+        },
+        "POST /v2/users/new": {
+          body: { id: "created-id", emailCode: "123456" },
+        },
         "POST /v2/users/created-id/password": { body: {} },
         ...APP_ROUTES,
-        "POST /management/v1/users/created-id/grants": { body: { userGrantId: "g-new" } },
+        "POST /management/v1/users/created-id/grants": {
+          body: { userGrantId: "g-new" },
+        },
       },
       calls,
     ),
@@ -556,7 +687,9 @@ test("the subject of a created account comes from the CreateUser `id` field", as
   });
   assert.equal(subjects[admin.subjectEnvVar], "created-id");
   // The password write must address the same id the create returned.
-  assert.ok(calls.some((call) => call.key === "POST /v2/users/created-id/password"));
+  assert.ok(
+    calls.some((call) => call.key === "POST /v2/users/created-id/password"),
+  );
 });
 
 test("a missing golden password is refused before anything is written to the IdP", async () => {
@@ -567,7 +700,11 @@ test("a missing golden password is refused before anything is written to the IdP
     pat: "pat-value",
   });
   await assert.rejects(
-    convergeGoldenIdentities({ client, accounts: GOLDEN_IDP_ACCOUNTS, passwords: {} }),
+    convergeGoldenIdentities({
+      client,
+      accounts: GOLDEN_IDP_ACCOUNTS,
+      passwords: {},
+    }),
     /DS_GOLDEN_PASSWORD_ADMIN/,
   );
   assert.deepEqual(calls, []);
@@ -577,7 +714,9 @@ test("a failing create aborts the converge", async () => {
   const client = createIdpClient({
     fetch: stubFetch({
       "POST /v2/users": { body: { result: [] } },
-      "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
+      "GET /auth/v1/users/me": {
+        body: { user: { details: { resourceOwner: "org-1" } } },
+      },
       "POST /v2/users/new": { status: 500 },
     }),
     baseUrl: "https://id.stage.example",
@@ -597,7 +736,9 @@ test("a failing password write aborts the converge", async () => {
   const client = createIdpClient({
     fetch: stubFetch({
       "POST /v2/users": {
-        body: { result: [{ userId: "id-1", human: { email: { isVerified: false } } }] },
+        body: {
+          result: [{ userId: "id-1", human: { email: { isVerified: false } } }],
+        },
       },
       "POST /v2/users/id-1/password": { status: 500 },
     }),
@@ -615,11 +756,15 @@ test("a failing password write aborts the converge", async () => {
 });
 
 test("a failing delete of the soft-deleted doctor aborts the converge", async () => {
-  const deleted = GOLDEN_IDP_ACCOUNTS.find((account) => !account.idpAccountExpected);
+  const deleted = GOLDEN_IDP_ACCOUNTS.find(
+    (account) => !account.idpAccountExpected,
+  );
   const client = createIdpClient({
     fetch: stubFetch({
       "POST /v2/users": {
-        body: { result: [{ userId: "id-d", human: { email: { isVerified: true } } }] },
+        body: {
+          result: [{ userId: "id-d", human: { email: { isVerified: true } } }],
+        },
       },
       "DELETE /v2/users/id-d": { status: 500 },
     }),
@@ -627,7 +772,11 @@ test("a failing delete of the soft-deleted doctor aborts the converge", async ()
     pat: "pat-value",
   });
   await assert.rejects(
-    convergeGoldenIdentities({ client, accounts: [deleted], passwords: PASSWORDS }),
+    convergeGoldenIdentities({
+      client,
+      accounts: [deleted],
+      passwords: PASSWORDS,
+    }),
     IdpError,
   );
 });
@@ -635,7 +784,10 @@ test("a failing delete of the soft-deleted doctor aborts the converge", async ()
 test("the bearer token is sent but never echoed into an error message", async () => {
   const calls = [];
   const client = createIdpClient({
-    fetch: stubFetch({ "POST /v2/users": { status: 401, body: { message: "nope" } } }, calls),
+    fetch: stubFetch(
+      { "POST /v2/users": { status: 401, body: { message: "nope" } } },
+      calls,
+    ),
     baseUrl: "https://id.stage.example/",
     pat: "pat-value",
   });
@@ -652,4 +804,48 @@ test("the bearer token is sent but never echoed into an error message", async ()
     },
   );
   assert.equal(calls[0].init.headers.Authorization, "Bearer pat-value");
+});
+
+test("the grant converge resolves the project the box names in IDP_PROJECT_NAME, not the dev default", async () => {
+  const admin = GOLDEN_IDP_ACCOUNTS.find(
+    (account) => account.role === "platform_admin",
+  );
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /v2/users": {
+          body: {
+            result: [
+              { userId: "id-a", human: { email: { isVerified: true } } },
+            ],
+          },
+        },
+        "POST /management/v1/users/grants/_search": { body: { result: [] } },
+        "POST /v2/users/id-a/password": { body: {} },
+        "POST /management/v1/users/id-a/grants": { body: {} },
+        // The stage IdP carries only its own project — the dev name must not be looked up.
+        "POST /management/v1/projects/_search": {
+          body: { result: [{ id: "p-stage", name: "ds-platform-stage" }] },
+        },
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await convergeGoldenIdentities({
+    client,
+    accounts: [admin],
+    passwords: PASSWORDS,
+    env: { IDP_PROJECT_NAME: "ds-platform-stage", IDP_ORG_ID: "org-1" },
+  });
+  const search = calls.find(
+    (call) => call.key === "POST /management/v1/projects/_search",
+  );
+  assert.equal(search.body.queries[0].nameQuery.name, "ds-platform-stage");
+  const grant = calls.find(
+    (call) => call.key === "POST /management/v1/users/id-a/grants",
+  );
+  assert.equal(grant.body.projectId, "p-stage");
 });

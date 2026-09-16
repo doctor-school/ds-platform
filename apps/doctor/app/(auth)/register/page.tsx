@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
 
 import type { ConsentTier } from "@ds/schemas";
 import {
@@ -16,6 +17,7 @@ import {
   ReturnContextPanel,
   ReturnContextPlate,
 } from "@/components/return-context-card";
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
@@ -91,16 +93,23 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * door does not open yet — the submit is inert pending the EARS-19 bot-protection
  * client half and the EARS-4/5 consent precondition (see the component header).
  *
- * ONE `headers()` READ, AND ONLY ON A DIRECT ARRIVAL. The rendered screen is
- * not per-visitor — the event read behind the return context is `access:
- * public` and identical for every caller — but the LD-4 landing IS: it depends
- * on the specialty 017 remembers for whoever is at the door, which lives in
- * their session cookie or their profile. So the request headers are read
- * exactly once, on the branch that needs them, and are forwarded through the
- * one shared resolver (`lib/specialty-choice.ts` → `resolveRememberedSpecialty`,
- * the same call `app/(storefront)/page.tsx` makes) rather than inspected here.
- * The route is therefore dynamic; a gate arrival takes the branch that reads no
- * headers at all.
+ * #675 — THE DOOR IS CLOSED TO SOMEONE WHO ALREADY HAS A SESSION. Until #2027
+ * PR 1.4 this route carried no such guard while the Academy's `/register` did,
+ * so a signed-in doctor could re-walk the sign-up form on one storefront and not
+ * the other. Both hosts now ask the ONE shared rule
+ * (`@ds/auth-flow/server` `guardAuthRoute`, wave-1 gate rows 26–28) with their
+ * own route table, and this route contributes only the `landing` — the same
+ * value the screen would have published, so the door and the guard can never
+ * disagree about where the doctor ends up.
+ *
+ * ONE `headers()` READ FOR THE WHOLE RENDER. The rendered screen is not
+ * per-visitor — the event read behind the return context is `access: public` and
+ * identical for every caller — but the session status and the LD-4 landing BOTH
+ * are, so the request headers are read exactly once and forwarded through the
+ * shared resolvers (`@ds/auth-flow/server`, `lib/specialty-choice.ts` →
+ * `resolveRememberedSpecialty`, the same call `app/(storefront)/page.tsx` makes)
+ * rather than inspected here. The route is therefore dynamic on every arrival,
+ * which is the cost of deciding the guard before the first byte.
  */
 /**
  * 021 EARS-5 — the F-021-1 «вариант Б» read model, assembled on the server from
@@ -158,6 +167,8 @@ export default async function DoctorRegisterPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  // ONE read of the request headers, serving both per-visitor facts below.
+  const requestHeaders = await headers();
   const raw = params[RETURN_CONTEXT_PARAM];
   // A repeated param arrives as an array; the FIRST value wins rather than the
   // request being rejected — a malformed return context degrades to no context,
@@ -184,8 +195,19 @@ export default async function DoctorRegisterPage({
     landingTarget && returnEvent
       ? landingTarget
       : resolveDirectArrivalLanding(
-          await resolveRememberedSpecialty(await headers()),
+          await resolveRememberedSpecialty(requestHeaders),
         );
+
+  // #675 — before any of the surface is composed. A guest passes straight
+  // through; a doctor who already holds a session is sent to the landing this
+  // route just resolved instead of being offered a second account.
+  const auth = await resolveServerAuth(requestHeaders);
+  guardAuthRoute({
+    authenticated: auth.status === "doctor",
+    pathname: DOCTOR_AUTH_ROUTES.register,
+    routes: DOCTOR_AUTH_ROUTES,
+    landing,
+  });
 
   // 021 EARS-10 (#1546) — the target CARRIED THROUGH the confirmation, in the
   // doctor-host vocabulary the confirm command's guard accepts. Present only

@@ -179,7 +179,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     // The fix is the Academy's own mechanism — the held password replayed
     // through the real 003 EARS-5 login — and the ONLY place it is observable
     // is here: the session is a cookie set by the upstream, read on the SERVER
-    // by `lib/shell-auth.ts` when the landing page renders.
+    // by `@ds/auth-flow/server` when the landing page renders.
     await registerAndConfirmSucceeding(page, arrival(LIVE));
 
     await page.getByTestId("registration-success-primary").click();

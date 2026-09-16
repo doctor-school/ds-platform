@@ -223,13 +223,49 @@ describe("021 #1945: resolveReturnLandingPath", () => {
     ["a backslash bypass", String.raw`/webinars/\evil`],
     ["traversal", "/webinars/../account"],
     ["a multi-segment slug", "/webinars/a/b"],
-    ["not anchored under a declared shape", "/account"],
+    ["not anchored under a declared shape", "/settings"],
   ])(
     "021 #1945: %s is no landing at all — the same guard, the same refusal",
     (_label, value) => {
       expect(resolveReturnLandingPath(value)).toBeNull();
       // The two functions refuse in lockstep: one parser, one whitelist.
       expect(resolveReturnTargetPath(value)).toBeNull();
+    },
+  );
+});
+
+/**
+ * #1987 — `/account` is a landing target of its own.
+ *
+ * A guest who presses the 017 signed-in affordance, or opens `/account`
+ * directly, is sent to the door carrying `?returnTo=/account`. Until now the
+ * landing codec knew only эфир shapes, so that arrival resolved NO landing and
+ * the doctor was dropped on the LD-4 default after a successful sign-in — the
+ * one place they had just asked not to go.
+ *
+ * The shape is declared on the LANDING codec, not in the 005
+ * `RETURN_TARGET_SHAPES` whitelist: every member of that list yields a
+ * `RegistrationIntent` whose `eventSlug` a consumer fires `RegisterForEvent`
+ * for, and `/account` names no эфир (wave-1 gate row 32). So the two functions
+ * deliberately DISAGREE here, and that disagreement is the assertion.
+ */
+describe("#1987: /account is a landing target", () => {
+  it("#1987: an account arrival lands on this host's own account route", () => {
+    expect(resolveReturnLandingPath("/account")).toBe("/account");
+    // ...while the canonical return target refuses it, because it resolves no
+    // эфир to register anyone for.
+    expect(resolveReturnTargetPath("/account")).toBeNull();
+  });
+
+  it.each([
+    ["cross-origin", "https://evil.example/account"],
+    ["protocol-relative", "//evil.example/account"],
+    ["a prefix collision", "/accounts-payable"],
+    ["a traversal that ends in the word", "/webinars/../account"],
+  ])(
+    "#1987: %s is not the account shape — the same-origin guard still rules",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(value)).toBeNull();
     },
   );
 });

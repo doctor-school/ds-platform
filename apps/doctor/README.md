@@ -86,8 +86,9 @@ One Zitadel identity, but the BFF session cookie is `__Host-ds_session` — the
 origin that set it. `doctor.school` and `academy.doctor.school` therefore hold
 **separate** session cookies of the same name; continuity between them is OIDC
 silent re-auth, never a shared cookie. The host is not an authorization boundary
-either way: the api re-checks roles on every request. This is why `lib/session.ts`
-lives here rather than being imported from the portal.
+either way: the api re-checks roles on every request. This is why the session read is
+shared as `@ds/auth-flow/server` (#2027) rather than copied per host: the
+hosts differ in which COOKIE they hold, never in how it is read.
 
 ## How to run
 
@@ -172,7 +173,7 @@ pnpm --filter @ds/doctor exec playwright test --config=playwright.ci.config.ts e
 ```
 
 The backend-free tier assumes NOTHING answers on the server-side `API_PROXY_TARGET`
-(default `http://localhost:3000`, read at runtime by `lib/session.ts`): the
+(default `http://localhost:3000`, read at runtime by `@ds/auth-flow/server`): the
 server resolve then fails, the client re-issues the read and the spec's
 `page.route` mock answers it. A live local api on `:3000` (a dev stand, a
 Stage-B stand) breaks that chain — the server resolves «nothing chosen» for

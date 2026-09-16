@@ -6,7 +6,12 @@ import {
   type PublicEventPage,
 } from "@ds/schemas";
 
-import { serverApiBase } from "@ds/auth-flow/server";
+import {
+  parseAccountReturnTarget,
+  serverApiBase,
+} from "@ds/auth-flow/server";
+
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 
 /**
  * 021 EARS-2 (#1538) — resolving the RETURN CONTEXT the doctor arrived with.
@@ -210,6 +215,13 @@ export async function resolveReturnContext(
  * `parseReturnTarget` stays the single entry point, so a hostile, cross-origin
  * or traversal value is `null` here for exactly the reasons it is `null` there.
  *
+ * `/account` is the one NON-эфир shape a landing may carry (#1987, wave-1 gate
+ * row 32), and it is answered FIRST: it resolves no эфир at all, so every branch
+ * below would refuse it and a doctor who asked to come back to «Личный
+ * кабинет» would be dropped on the LD-4 default instead. The shared codec owns
+ * the rule and compares against THIS host's own `routes.account`, so the value
+ * that lands is the configured constant and never the visitor's string.
+ *
  * A target that is ALREADY a doctor-host path — 020's `/events/<slug>` or 019's
  * `/events?<feed query>&resume=<slug>` — is served by this app as it stands and
  * passes through verbatim; only the academy shape is re-homed, by rebuilding the
@@ -218,6 +230,9 @@ export async function resolveReturnContext(
 export function resolveReturnLandingPath(
   returnTo: string | undefined,
 ): string | null {
+  const account = parseAccountReturnTarget(returnTo, DOCTOR_AUTH_ROUTES.account);
+  if (account) return account;
+
   const intent = parseReturnTarget(returnTo);
   if (!intent) return null;
   return intent.returnTo.startsWith(RETURN_TARGET_PREFIX)

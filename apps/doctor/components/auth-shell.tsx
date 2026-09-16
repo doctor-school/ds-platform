@@ -26,7 +26,7 @@ import { AuthShell as AuthShellBlock } from "@ds/design-system/blocks";
  * here exactly as it is in every other doctor component. And the shell holds no
  * authenticated-redirect guard: the frame is shared by both doors and the answer is
  * not — `/login` sends a signed-in doctor to its own computed landing (#1955,
- * `app/(auth)/login/page.tsx`, on `lib/shell-auth.ts`) while `/register` still
+ * `app/(auth)/login/page.tsx`, on `@ds/auth-flow/server`) while `/register` still
  * renders — so the decision lives with the route that owns the landing, never in
  * the frame around it.
  *

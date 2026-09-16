@@ -205,7 +205,7 @@ export function LoginScreen({
 
   /**
    * The session now exists on this origin. The 017 shell reads it SERVER-side
-   * (`lib/shell-auth.ts`), so `refresh()` — not a client header-refresh helper —
+   * (`@ds/auth-flow/server`), so `refresh()` — not a client header-refresh helper —
    * is what makes the signed-in cluster appear; `push` then takes the doctor
    * where the completed return decides.
    *

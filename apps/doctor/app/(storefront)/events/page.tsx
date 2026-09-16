@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { Alert } from "@ds/design-system/alert";
 import { Button } from "@ds/design-system/button";
 import { EventList } from "@ds/design-system/blocks";
+import { resolveServerAuth } from "@ds/auth-flow/server";
 import {
   DOCTOR_EVENTS_FEED_RESUME_KEY,
   mintDoctorEventsFeedReturnTarget,
@@ -14,7 +15,6 @@ import { fetchDoctorEventsFeed, showMoreHref } from "@/lib/events-feed";
 import { fetchDoctorEventsLive } from "@/lib/events-live";
 import { toDoctorEventsMonthPane } from "@/lib/events-month-grid";
 import { fetchDoctorEventsMonthGrid } from "@/lib/events-month";
-import { resolveShellAuth } from "@/lib/shell-auth";
 import { DoctorEventsDayAnchorScroll } from "./day-anchor-scroll";
 import { EventsLiveBlock } from "./live-block";
 import { DoctorEventsMonthPaneView } from "./month-pane";
@@ -109,7 +109,7 @@ export default async function DoctorEventsPage({
   const [result, month, shellAuth, live] = await Promise.all([
     fetchDoctorEventsFeed(requestHeaders, raw),
     fetchDoctorEventsMonthGrid(requestHeaders, raw),
-    resolveShellAuth(requestHeaders),
+    resolveServerAuth(requestHeaders),
     fetchDoctorEventsLive(requestHeaders),
   ]);
 

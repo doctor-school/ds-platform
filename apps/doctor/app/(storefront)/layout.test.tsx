@@ -11,9 +11,11 @@ import { describe, expect, it, vi } from "vitest";
  */
 
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
-vi.mock("@/lib/shell-auth", () => ({
-  resolveShellAuth: async () => null,
-  shellAuthState: () => ({ kind: "guest" }),
+vi.mock("@ds/auth-flow/server", () => ({
+  resolveServerAuth: async () => ({ status: "guest" }),
+}));
+vi.mock("@/lib/auth-flow-routes", () => ({
+  doctorShellAuthState: () => ({ kind: "guest" }),
 }));
 vi.mock("@/lib/shell-config", () => ({ DOCTOR_SHELL: {} }));
 vi.mock("@ds/storefront-shell", () => ({

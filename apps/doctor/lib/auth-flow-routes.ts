@@ -2,6 +2,8 @@ import type { AuthFlowRoutes } from "@ds/auth-flow/host-config";
 import type { ServerAuth } from "@ds/auth-flow/server";
 import type { ShellAuthState } from "@ds/storefront-shell";
 
+import { doctorNav } from "@/lib/navigation-model";
+
 /**
  * The doctor storefront's auth-flow ROUTE VALUES and its auth-cluster
  * projection (#2027 PR 1.4, wave-1 gate §4.2).
@@ -28,11 +30,11 @@ export const DOCTOR_AUTH_ROUTES = {
 /** The ONE guest control of the canvas (`ds-shell.dc.html` line 220) — a single
  *  combined label on both hosts (017 US-7), opening the shipped `/login`
  *  surface, which carries the way on to `/register`. */
-const GUEST_LABEL = "Войти / Регистрация";
+const GUEST_LABEL = doctorNav.login.label;
 /** The signed-in affordance the doctor storefront ships — a LABELLED chip
  *  (canvas lines 192/209), not the academy's initials square: this host has no
  *  display-name read in the header and 017 EARS-1 asserts the words. */
-const DOCTOR_LABEL = "Личный кабинет";
+const DOCTOR_LABEL = doctorNav.account.label;
 
 /**
  * 017 EARS-1 — project the server-resolved auth state onto the shared chrome's
@@ -50,12 +52,12 @@ export function doctorShellAuthState(auth: ServerAuth): ShellAuthState {
   return auth.status === "doctor"
     ? {
         status: "doctor",
-        profileHref: DOCTOR_AUTH_ROUTES.account,
+        profileHref: doctorNav.account.href,
         label: DOCTOR_LABEL,
       }
     : {
         status: "guest",
-        loginHref: DOCTOR_AUTH_ROUTES.login,
+        loginHref: doctorNav.login.href,
         label: GUEST_LABEL,
       };
 }

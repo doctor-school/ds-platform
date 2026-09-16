@@ -76,7 +76,7 @@ import { makeResolver } from "@/lib/make-resolver";
  * `__Host-ds_session` cookie here), so the doctor goes straight to `/account`
  * rather than back to the door. `router.refresh()` rides along for the reason
  * `login-screen.tsx` states: the 017 shell reads the session SERVER-side
- * (`lib/shell-auth.ts`), so re-rendering the server tree — not the Academy's
+ * (`@ds/auth-flow/server`), so re-rendering the server tree — not the Academy's
  * client header-refresh helper — is what flips the header from the guest cluster
  * to the signed-in one.
  *
@@ -260,7 +260,7 @@ export function ResetScreen() {
       await authClient.completePasswordReset({ ...values, identifier });
       // #221: the response auto-logged us in ON THIS ORIGIN, so go straight to
       // the authenticated area; `refresh()` re-renders the server tree so the
-      // 017 header shows the signed-in cluster (`lib/shell-auth.ts`).
+      // 017 header shows the signed-in cluster (`@ds/auth-flow/server`).
       router.push("/account");
       router.refresh();
     } catch (error) {

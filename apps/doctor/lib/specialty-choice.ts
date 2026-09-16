@@ -25,7 +25,7 @@ import {
  *
  * Server calls are absolute against the shared `serverApiBase()` and forward the incoming
  * `Cookie` header plus the ADR-0001 §6 fingerprint headers, exactly as
- * `lib/shell-auth.ts` does. Both remembered stores travel on that header: the
+ * `@ds/auth-flow/server` does. Both remembered stores travel on that header: the
  * session cookie for a doctor, `__Host-ds_specialty` for a guest.
  */
 export const SPECIALTY_CHOICE_PUBLIC_PATH = "/v1/public/specialty-choice";
@@ -162,7 +162,7 @@ export async function chooseSpecialty(
  *
  * An unreachable api resolves `choice: null` — «unknown», handed to the client.
  * It never throws: the shell wraps the whole storefront, and one flaky read must
- * not take the home page down (the `lib/shell-auth.ts` rule, same reasoning).
+ * not take the home page down (the `@ds/auth-flow/server` rule, same reasoning).
  */
 export async function resolveRememberedSpecialty(
   headers: Headers,

@@ -9,7 +9,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { fetchDoctorEventPage } from "./event-page";
-import { SESSION_COOKIE_NAME } from "./session";
+import { SESSION_COOKIE_NAME } from "@ds/auth-flow/server";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "./specialty-choice";
 
 const okPage = () =>

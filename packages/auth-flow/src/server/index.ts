@@ -26,3 +26,10 @@ export {
   type AuthRouteGuardInput,
 } from "./auth-route-guard";
 export { parkReturnTarget } from "./return-target-parking";
+/**
+ * Row 32 / #1987 - the account shape of the LANDING codec. It rides on the
+ * server subpath because its only consumers are the hosts' server-side landing
+ * resolvers, which decide where a signed-in visitor is sent before paint; the
+ * codec itself is pure and framework-free.
+ */
+export { parseAccountReturnTarget } from "../return-target";

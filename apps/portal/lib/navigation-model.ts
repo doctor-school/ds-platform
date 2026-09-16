@@ -20,14 +20,18 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  * rendered byte, and the key is what the host resolves.
  *
  * `landing` carries the §6.2 evidence: the `h1` each destination actually paints
- * (`messages/ru.json` → `webinars.title`, `account.title`, `login.title`), so
+ * (`messages/ru.json` → `webinars.title`, `account.title`, `myEvents.title`,
+ * `login.title`), so
  * «200 on the wrong page» is a red check rather than a pass.
  *
- * A destination the chrome does NOT paint has no row here. `/account/events`
- * («Мои события») is the standing example: the owner decision of 2026-09-10
- * (Issue #2180) ships «Эфиры» alone in the nav of BOTH storefronts, so that
- * route is reached from inside `/account`, not from the chrome, and the walk
- * must not assert it as a chrome destination.
+ * A destination the chrome does NOT paint has no row here. The owner decision of
+ * 2026-09-10 (Issue #2180) is about the TOP NAV alone — «Эфиры» on both
+ * storefronts — and `portalTopNav` is what carries it. It never covered the
+ * signed-in auth cluster, which the canvas draws with «Мои события» beside the
+ * avatar (`design-source/ds-shell.dc.html`, `user.links` line 209): reading it as
+ * a chrome-wide rule is what dropped that link from the bar in #2198 (Issue
+ * #2243). Cluster destinations therefore live in this model and in
+ * `portalNavigationModel` — so the walk visits them — but NOT in `portalTopNav`.
  */
 const ITEMS = {
   /** The discovery front-door (008 EARS-2) — the logo and «Эфиры» both target it. */
@@ -44,6 +48,18 @@ const ITEMS = {
     label: "profile",
     href: "/account",
     landing: { h1: "Профиль" },
+    audience: "doctor",
+  },
+  /**
+   * The signed-in doctor's «Мои события» (008 EARS-5/11) — the auth cluster's
+   * second destination, beside the initials chip on desktop and in the `≡` menu
+   * below the breakpoint. Canvas `user.links` line 209; NOT a top-nav item.
+   */
+  myEvents: {
+    id: "my-events",
+    label: "myEvents",
+    href: "/account/events",
+    landing: { h1: "Мои события" },
     audience: "doctor",
   },
   /** The login surface (008 EARS-4) — the ONE guest control's destination. */
@@ -73,5 +89,6 @@ export const portalTopNav = [ITEMS.discovery] as const;
 export const portalNavigationModel: NavigationModel = [
   ITEMS.discovery,
   ITEMS.profile,
+  ITEMS.myEvents,
   ITEMS.login,
 ];

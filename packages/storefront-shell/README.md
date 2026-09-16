@@ -63,7 +63,7 @@ const SHELL: StorefrontShellConfig = {
 
 `auth: ShellAuthState` is a plain serializable value — `{ status: "loading" }`,
 `{ status: "guest"; loginHref; label }` or
-`{ status: "doctor"; profileHref; label; initials? }`. The package renders it
+`{ status: "doctor"; profileHref; label; initials?; links? }`. The package renders it
 itself (`ShellAuthCluster`), so the chip's geometry, surface and press chain come
 from the ONE design-system definition
 (`buttonVariants({ variant: "on-primary", size: "chip" })`) on every host. A host
@@ -76,6 +76,16 @@ avatar chip (the Academy), absent → the labelled text chip (the Doctor
 showcase’s «Личный кабинет», 017 EARS-1). Each storefront still reads its own
 session and maps it to this state; #2027 is what gives that read a shared home.
 The canvas points plate lands inside the same cluster and is Issue #1559.
+
+`links` is the same branch's optional `ShellLink[]` — the canvas `user.links`
+(`ds-shell.dc.html` line 209 for the Academy, line 192 for the Doctor showcase,
+which is empty). The package renders them beside the chip on desktop (canvas
+line 33, testid `shell-auth-link`) and as rows of the `≡` disclosure after the
+nav rows (canvas line 50, testid `shell-auth-link-mobile`); absent and empty are
+the same thing, and a host that passes none gets exactly the cluster #2180
+shipped. They are NOT top-nav items — the nav stays «Эфиры» alone on both hosts
+(owner decision 2026-09-10, #2180) — which is why they travel on the auth state
+rather than in `config.nav` (#2243).
 
 ### Route visibility
 

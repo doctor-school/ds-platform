@@ -40,6 +40,17 @@ export type ShellAuthState =
       profileHref: string;
       label: string;
       initials?: string | null;
+      /**
+       * 008 EARS-5/11 — the extra signed-in destinations the cluster carries
+       * beside the chip: the canvas `user.links` (`ds-shell.dc.html` line 209
+       * for the academy, line 192 — empty — for the doctor storefront),
+       * rendered by the package at line 33 on desktop and as `≡` rows at line
+       * 50. A VALUE like every other host difference: the academy passes
+       * «Мои события» → `/account/events`, the doctor storefront passes none
+       * and its cluster stays exactly what #2180 shipped. Absent and empty are
+       * the same thing — nothing is rendered (#2243).
+       */
+      links?: readonly ShellLink[];
     };
 
 /** The two storefronts that mount this chrome. */

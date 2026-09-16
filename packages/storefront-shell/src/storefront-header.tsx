@@ -4,7 +4,8 @@ import { DisclosureSummary } from "@ds/design-system/disclosure-summary";
 import { Link as DsLink } from "@ds/design-system/link";
 
 import { ShellAuthCluster } from "./auth-cluster";
-import type { ShellAuthState, ShellLink, StorefrontShellConfig } from "./config";
+import type { ShellAuthState, StorefrontShellConfig } from "./config";
+import { HeaderNavLink, MobileNavRow } from "./nav-link";
 import { ShellSearch } from "./shell-search";
 import { ThemeToggle } from "./theme-toggle";
 import { VisibleOffPaths } from "./route-visibility";
@@ -66,6 +67,10 @@ function HeaderChrome({
   auth: ShellAuthState;
 }) {
   const { logo, topbar, search, nav } = config;
+  // 008 EARS-5/11 — the signed-in cluster's own destinations (canvas
+  // `user.links`). The `≡` menu lists them after the nav, exactly as the canvas
+  // draws them at line 50; the desktop copy lives inside the cluster itself.
+  const authLinks = auth.status === "doctor" ? (auth.links ?? []) : [];
   return (
     <div data-host={config.host}>
       {/* The BBM announcement micro-band (canvas line 17) — brand decor on the
@@ -122,7 +127,7 @@ function HeaderChrome({
           className="ml-auto hidden items-center gap-7 text-sm layout:flex"
         >
           {nav.map((item) => (
-            <NavLink key={item.href} item={item} />
+            <HeaderNavLink key={item.href} item={item} />
           ))}
         </nav>
 
@@ -144,32 +149,22 @@ function HeaderChrome({
               className="absolute right-0 top-full z-20 mt-2 flex min-w-52 flex-col border-2 border-border bg-card p-2 text-card-foreground shadow-btn"
             >
               {nav.map((item) => (
-                <DsLink
+                <MobileNavRow key={item.href} item={item} />
+              ))}
+              {/* …followed by the signed-in cluster's links (canvas line 50).
+                  Rows, not a second cluster: 017 EARS-1 allows exactly ONE
+                  `shell-auth-cluster` in the DOM at any width. */}
+              {authLinks.map((item) => (
+                <MobileNavRow
                   key={item.href}
-                  asChild
-                  tone="neutral"
-                  variant="mobile-nav-row"
-                  size="sm"
-                >
-                  <NextLink href={item.href}>{item.label}</NextLink>
-                </DsLink>
+                  item={item}
+                  testId="shell-auth-link-mobile"
+                />
               ))}
             </nav>
           </details>
         </div>
       </header>
     </div>
-  );
-}
-
-/** Desktop nav link — the muted on-navy tier of the canvas, with the press step
- *  one VISIBLE step below the resting tier via ELEMENT opacity (#270), and the
- *  press colour re-anchored off the DS default (`primary-action` IS the band
- *  colour, so the base press painted the label invisible, #1007). */
-function NavLink({ item }: { item: ShellLink }) {
-  return (
-    <DsLink asChild tone="header-nav">
-      <NextLink href={item.href}>{item.label}</NextLink>
-    </DsLink>
   );
 }

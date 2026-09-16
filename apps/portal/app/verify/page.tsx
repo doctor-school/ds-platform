@@ -6,15 +6,20 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { MailCheck } from "lucide-react";
 
-import { VerifyRequestSchema, type LoginRequest } from "@ds/schemas";
+import {
+  VerifyRequestSchema,
+  type LoginRequest,
+  type VerifyRequest,
+  type VerifyResponse,
+} from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
-} from "@/lib/bot-protection";
-import { authClient } from "@/lib/auth-client";
-import { authErrorMessage } from "@/lib/auth-error-message";
+} from "@ds/auth-flow/bot-protection";
+import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import { refreshHeaderAuth } from "@/lib/header-auth";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
@@ -90,6 +95,7 @@ function PortalEmailConfirmCard() {
   const router = useRouter();
   const t = useTranslations("verify");
   const te = useTranslations("errors");
+  const authFlow = useAcademyAuthFlow();
   const params = useSearchParams();
   const queryEmail = params.get("email") ?? undefined;
   // #904: the branded verification email's CTA points at `/verify#email=<addr>` —
@@ -135,10 +141,10 @@ function PortalEmailConfirmCard() {
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
       setCaptchaError(
-        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+        botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) =>
-      setResendError(authErrorMessage(err, te, te("verifyResendFailed"))),
+      setResendError(authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed"))),
   });
 
   const resolver = useLocalizedResolver(VerifyRequestSchema);
@@ -158,10 +164,10 @@ function PortalEmailConfirmCard() {
   // existence-agnostic, so resend never reveals whether the account exists.
   const { resendNonce, onResend } = useResendCooldown({
     resend: async (captchaToken) => {
-      await authClient.resendVerification({
-        identifier: email ?? "",
-        ...(captchaToken ? { captchaToken } : {}),
-      });
+      await authClient.resendVerification(
+        { identifier: email ?? "" },
+        captchaToken,
+      );
     },
     onError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -172,7 +178,7 @@ function PortalEmailConfirmCard() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setResendError(authErrorMessage(err, te, te("verifyResendFailed")));
+      setResendError(authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed")));
     },
     // Clear only resend-owned state; code-verification feedback is unrelated.
     onBeforeResend: () => {
@@ -193,7 +199,12 @@ function PortalEmailConfirmCard() {
       // Mapped field-by-field, not cast: the block's structural values type and the
       // `VerifyRequest` contract coincide today, and a future field on the contract
       // must fail typecheck HERE rather than ship a silent omission.
-      await authClient.verify({ email: values.email, code: values.code });
+      // The host-routed confirmation command (`api.confirmPath`), which takes no
+      // bot-protection token by contract (row 20).
+      await authClient.confirm<VerifyRequest, VerifyResponse>({
+        email: values.email,
+        code: values.code,
+      });
       // Code accepted (server-confirmed) — show the success row while we replay the
       // login below and route. Reverted in the catch if the replay itself fails.
       setSucceeded(true);
@@ -230,7 +241,7 @@ function PortalEmailConfirmCard() {
       // and the user signs in manually at /login. EARS-16: the verify/auth
       // outcome stays generic; only 429/5xx/network surface a specific message.
       setSucceeded(false);
-      setError(authErrorMessage(err, te, te("verifyFailed")));
+      setError(authErrorMessage(err, authFlow.copy.errors, te("verifyFailed")));
     }
   }
 
@@ -301,7 +312,7 @@ function PortalEmailConfirmCard() {
               notice,
               captchaSlot: (
                 <BotProtectionField
-                  sitekey={botProtectionSiteKey()}
+                  sitekey={botProtectionSiteKey(authFlow)}
                   {...captcha.fieldProps}
                 />
               ),

@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthError } from "@ds/auth-flow/client";
 import type { MyProfile } from "@ds/schemas";
 
 /**
@@ -24,17 +25,7 @@ import type { MyProfile } from "@ds/schemas";
  */
 
 const h = vi.hoisted(() => {
-  class StorefrontAuthError extends Error {
-    constructor(
-      readonly status: number,
-      message: string,
-    ) {
-      super(message);
-      this.name = "StorefrontAuthError";
-    }
-  }
   return {
-    StorefrontAuthError,
     getMyProfile: vi.fn(),
     refreshStorefrontSession: vi.fn(),
     logoutStorefront: vi.fn(),
@@ -61,13 +52,15 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/storefront-auth-client", () => ({
-  StorefrontAuthError: h.StorefrontAuthError,
-  getMyProfile: () => h.getMyProfile(),
-  refreshStorefrontSession: () => h.refreshStorefrontSession(),
-  logoutStorefront: () => h.logoutStorefront(),
-  setDoctorDisplayName: (body: { displayName: string }) =>
-    h.setDoctorDisplayName(body),
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+  authClient: {
+    profile: () => h.getMyProfile(),
+    refresh: () => h.refreshStorefrontSession(),
+    logout: () => h.logoutStorefront(),
+    setDisplayName: (body: { displayName: string }) =>
+      h.setDoctorDisplayName(body),
+  },
 }));
 
 import { AccountScreen } from "@/components/account-screen";
@@ -156,7 +149,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
   it("003 EARS-9.3: a refresh that itself refuses is not retried — one dance, then the door", async () => {
     h.getMyProfile.mockResolvedValue(null);
     h.refreshStorefrontSession.mockRejectedValue(
-      new h.StorefrontAuthError(401, "no session"),
+      new AuthError(401, "no session"),
     );
 
     render(<AccountScreen />);
@@ -168,7 +161,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
   });
 
   it("003 EARS-9.4: an upstream failure that is not a 401 shows the error state instead of bouncing", async () => {
-    h.getMyProfile.mockRejectedValue(new h.StorefrontAuthError(503, "down"));
+    h.getMyProfile.mockRejectedValue(new AuthError(503, "down"));
 
     render(<AccountScreen />);
 
@@ -202,7 +195,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
   it("#175.1: a 429 save is mapped onto the rate-limit message, not the generic one", async () => {
     const user = userEvent.setup();
     h.setDoctorDisplayName.mockRejectedValue(
-      new h.StorefrontAuthError(429, "too many"),
+      new AuthError(429, "too many"),
     );
     await renderReady();
 
@@ -218,7 +211,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
   it("#175.2: a 5xx save is mapped onto the temporarily-unavailable message", async () => {
     const user = userEvent.setup();
     h.setDoctorDisplayName.mockRejectedValue(
-      new h.StorefrontAuthError(503, "down"),
+      new AuthError(503, "down"),
     );
     await renderReady();
 
@@ -234,7 +227,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
   it("#175.3: another refusal is the generic retry message, and a thrown fetch is not a validation outcome", async () => {
     const user = userEvent.setup();
     h.setDoctorDisplayName.mockRejectedValue(
-      new h.StorefrontAuthError(400, "bad"),
+      new AuthError(400, "bad"),
     );
     await renderReady();
     await saveName(user);

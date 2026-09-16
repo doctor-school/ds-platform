@@ -19,11 +19,10 @@ import {
 
 import { completeReturnTarget } from "@ds/events-storefront";
 
-import { authClient } from "@/lib/auth-client";
-import {
-  AUTH_GENERIC_MESSAGES,
-  authErrorMessage,
-} from "@/lib/auth-error-message";
+import { authErrorMessage } from "@ds/auth-flow/errors";
+
+import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
+import { DOCTOR_LOGIN_FALLBACK_COPY } from "@/lib/auth-flow-copy";
 import { makeResolver } from "@/lib/make-resolver";
 import { doctorReturnHost } from "@/lib/return-completion";
 
@@ -60,12 +59,13 @@ import { doctorReturnHost } from "@/lib/return-completion";
  * sentence shown to the doctor is doctor-owned.
  *
  * NO BOT-PROTECTION SLOT. The `<LoginCard>` `captchaSlot` is optional and stays
- * unsupplied: the widget is portal-local and the doctor host copy of it is
- * tracked at #1558 (the same dependency keeping `/register` submit inert).
+ * unsupplied: this screen is the LAST doctor auth surface without a challenge —
+ * `/register` and `/reset` mount the shared block and render the widget today —
+ * and wave-1 PR 1.6 of the OPEN #2027 owns filling this one.
  * Ordinary sign-in is unburdened — `POST /v1/auth/login` is `@LoginChallenged()`,
  * captcha-after-N-failures — so the password journey works today; the challenged
  * path and the `@BotProtected("otp-request")` OTP request surface an honest RU
- * message through `lib/auth-error-message.ts` rather than a dead slot.
+ * message through `@ds/auth-flow/errors` rather than a dead slot.
  */
 
 export type LoginScreenProps = {
@@ -236,7 +236,11 @@ export function LoginScreen({
       });
       await finishLogin();
     } catch (err) {
-      setPasswordError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.login));
+      setPasswordError(authErrorMessage(
+          err,
+          DOCTOR_AUTH_FLOW.copy.errors,
+          DOCTOR_LOGIN_FALLBACK_COPY.password,
+        ));
     }
   }
 
@@ -259,7 +263,11 @@ export function LoginScreen({
         setResendNonce(0);
       }
     } catch (err) {
-      setOtpRequestError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.otpSend));
+      setOtpRequestError(authErrorMessage(
+          err,
+          DOCTOR_AUTH_FLOW.copy.errors,
+          DOCTOR_LOGIN_FALLBACK_COPY.otpRequest,
+        ));
     } finally {
       setOtpPending(false);
     }
@@ -278,7 +286,11 @@ export function LoginScreen({
       });
       await finishLogin();
     } catch (err) {
-      setOtpVerifyError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.otpVerify));
+      setOtpVerifyError(authErrorMessage(
+          err,
+          DOCTOR_AUTH_FLOW.copy.errors,
+          DOCTOR_LOGIN_FALLBACK_COPY.otpVerify,
+        ));
     }
   }
 

@@ -5,7 +5,7 @@ import { test, expect, devices, type Page, type Request } from "@playwright/test
  *
  * The contract itself is pinned one tier down
  * (`packages/schemas/src/storefront/register-fields.spec.ts` for the FieldSpec
- * table, `apps/doctor/lib/register-fields.test.ts` for its react-hook-form
+ * table, `packages/auth-flow/src/fields/fields.test.ts` for its react-hook-form
  * projection). What only a browser can prove is what the DOCTOR meets: which
  * message appears in which slot, that the password hint and its error share ONE
  * slot (003 EARS-37, owner decision Б — hint OR error, never both), that a

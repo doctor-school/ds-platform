@@ -72,13 +72,14 @@ const completePasswordReset = vi.fn().mockResolvedValue({});
 // `authClient.session()` on mount — default it to the unauthenticated path so the
 // form renders as before (the authed branch lives in components/auth-shell.test.tsx).
 const session = vi.fn().mockResolvedValue(null);
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
-    requestPasswordReset: (body: unknown) => requestPasswordReset(body),
+    requestPasswordReset: (body: unknown, captchaToken?: string) =>
+      requestPasswordReset(body, captchaToken),
     completePasswordReset: (body: unknown) => completePasswordReset(body),
     session: () => session(),
   },
-  AuthError: class extends Error {},
 }));
 
 beforeEach(() => {
@@ -121,7 +122,8 @@ describe("003 EARS-17 on-demand password-reset protection", () => {
     act(() => captchaProps?.onToken("fresh-reset-token"));
     await waitFor(() => expect(requestPasswordReset).toHaveBeenCalledTimes(1));
     expect(requestPasswordReset).toHaveBeenCalledWith(
-      expect.objectContaining({ captchaToken: "fresh-reset-token" }),
+      expect.anything(),
+      "fresh-reset-token",
     );
   });
 
@@ -146,7 +148,8 @@ describe("003 EARS-17 on-demand password-reset protection", () => {
       await act(async () => Promise.resolve());
       expect(requestPasswordReset).toHaveBeenCalledTimes(2);
       expect(requestPasswordReset).toHaveBeenLastCalledWith(
-        expect.objectContaining({ captchaToken: "fresh-reset-resend-token" }),
+        expect.anything(),
+        "fresh-reset-resend-token",
       );
     } finally {
       vi.useRealTimers();
@@ -210,6 +213,8 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
       expect(requestPasswordReset).toHaveBeenCalledTimes(2);
       expect(requestPasswordReset).toHaveBeenLastCalledWith(
         expect.objectContaining({ identifier: IDENTIFIER }),
+        // No challenge ran in this case, so no token reaches the header.
+        undefined,
       );
       // And the cooldown restarts (disabled again) on the successful resend.
       expect(resend).toBeDisabled();

@@ -16,14 +16,14 @@ import { AuthShell } from "@/components/auth-shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
-} from "@/lib/bot-protection";
-import { authClient } from "@/lib/auth-client";
-import { authErrorMessage } from "@/lib/auth-error-message";
+} from "@ds/auth-flow/bot-protection";
+import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import { refreshHeaderAuth } from "@/lib/header-auth";
 import {
-  LoginIdentifierFormSchema,
+  loginIdentifierFormSchema,
   otpIdentifierFormSchema,
-} from "@/lib/identifier-validation";
+} from "@ds/auth-flow/fields";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -87,6 +87,7 @@ function PortalLoginCard() {
   const t = useTranslations("login");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
+  const authFlow = useAcademyAuthFlow();
   // 005 EARS-2: the carried registration-intent (guard-validated at every
   // consumption point; this surface only forwards or completes it).
   const returnTo = useSearchParams().get("returnTo");
@@ -100,7 +101,7 @@ function PortalLoginCard() {
     onVerified: () => setPasswordCaptchaError(null),
     onChallengeError: (failure) =>
       setPasswordCaptchaError(
-        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+        botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -111,15 +112,14 @@ function PortalLoginCard() {
         setPasswordCaptchaError(te("captchaRequired"));
         return;
       }
-      setPasswordError(authErrorMessage(err, te, te("loginFailed")));
+      setPasswordError(authErrorMessage(err, authFlow.copy.errors, te("loginFailed")));
     },
   });
 
   async function finishLogin(values: LoginRequest, captchaToken?: string) {
-    await authClient.login({
-      ...values,
-      ...(captchaToken ? { captchaToken } : {}),
-    });
+    // Row 18: the captcha token travels as the `x-smartcaptcha-token` HEADER
+    // the package sets, never as a body field — one carrier on both storefronts.
+    await authClient.login(values, captchaToken);
     // The BFF set the `__Host-` cookie; the session shell reads it server-side.
     // 005 EARS-2: with a carried event context the session now exists, so the
     // registration completes and the doctor lands back on that event page;
@@ -150,7 +150,7 @@ function PortalLoginCard() {
       // generic message so the UI never leaks an existence/error oracle. Only the
       // non-oracle statuses get a specific message: 429 → too-many-attempts,
       // 5xx/network → temporarily-unavailable.
-      setPasswordError(authErrorMessage(err, te, te("loginFailed")));
+      setPasswordError(authErrorMessage(err, authFlow.copy.errors, te("loginFailed")));
     }
   }
 
@@ -169,7 +169,7 @@ function PortalLoginCard() {
     onVerified: () => setOtpCaptchaError(null),
     onChallengeError: (failure) =>
       setOtpCaptchaError(
-        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+        botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -180,7 +180,7 @@ function PortalLoginCard() {
         setOtpCaptchaError(te("captchaRequired"));
         return;
       }
-      setOtpRequestError(authErrorMessage(err, te, te("otpSendFailed")));
+      setOtpRequestError(authErrorMessage(err, authFlow.copy.errors, te("otpSendFailed")));
     },
   });
 
@@ -189,11 +189,7 @@ function PortalLoginCard() {
     channel: OtpRequest["channel"],
     captchaToken?: string,
   ) {
-    await authClient.requestOtp({
-      identifier,
-      channel,
-      ...(captchaToken ? { captchaToken } : {}),
-    });
+    await authClient.requestOtp({ identifier, channel }, captchaToken);
   }
 
   function onOtpRequest(values: LoginCardOtpRequestValues) {
@@ -235,7 +231,7 @@ function PortalLoginCard() {
       refreshHeaderAuth();
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
-      setOtpVerifyError(authErrorMessage(err, te, te("otpVerifyFailed")));
+      setOtpVerifyError(authErrorMessage(err, authFlow.copy.errors, te("otpVerifyFailed")));
     }
   }
 
@@ -264,11 +260,18 @@ function PortalLoginCard() {
 
   // ---- resolvers (app-owned: localized messages + the portal identifier guards) --
   const emailRequestSchema = useMemo(
-    () => otpIdentifierFormSchema("email"),
-    [],
+    () => otpIdentifierFormSchema(authFlow, "email"),
+    [authFlow],
   );
-  const smsRequestSchema = useMemo(() => otpIdentifierFormSchema("sms"), []);
-  const passwordResolver = useLocalizedResolver(LoginIdentifierFormSchema);
+  const smsRequestSchema = useMemo(
+    () => otpIdentifierFormSchema(authFlow, "sms"),
+    [authFlow],
+  );
+  const passwordSchema = useMemo(
+    () => loginIdentifierFormSchema(authFlow),
+    [authFlow],
+  );
+  const passwordResolver = useLocalizedResolver(passwordSchema);
   const emailRequestResolver = useLocalizedResolver(emailRequestSchema);
   const smsRequestResolver = useLocalizedResolver(smsRequestSchema);
   const verifyResolver = useLocalizedResolver(OtpVerifySchema);
@@ -338,7 +341,7 @@ function PortalLoginCard() {
         pending: passwordCaptcha.pending,
         captchaSlot: (
           <BotProtectionField
-            sitekey={botProtectionSiteKey()}
+            sitekey={botProtectionSiteKey(authFlow)}
             {...passwordCaptcha.fieldProps}
           />
         ),
@@ -356,7 +359,7 @@ function PortalLoginCard() {
         pending: otpCaptcha.pending,
         captchaSlot: (
           <BotProtectionField
-            sitekey={botProtectionSiteKey()}
+            sitekey={botProtectionSiteKey(authFlow)}
             {...otpCaptcha.fieldProps}
           />
         ),

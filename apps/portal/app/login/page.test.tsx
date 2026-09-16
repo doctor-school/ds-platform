@@ -9,6 +9,8 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthError } from "@ds/auth-flow/client";
+
 import LoginPage from "./page";
 
 /**
@@ -59,26 +61,14 @@ vi.mock("@ds/design-system/blocks", async () => {
   };
 });
 
-const MockAuthError = vi.hoisted(
-  () =>
-    class MockAuthError extends Error {
-      constructor(
-        readonly status: number,
-        message: string,
-        readonly code?: string,
-      ) {
-        super(message);
-      }
-    },
-);
-
 let resolveLogin: (() => void) | undefined;
 let resolveRequestOtp: (() => void) | undefined;
 const login = vi.fn(
-  (_body: unknown) => new Promise<void>((resolve) => (resolveLogin = resolve)),
+  (_body: unknown, _captchaToken?: string) =>
+    new Promise<void>((resolve) => (resolveLogin = resolve)),
 );
 const requestOtp = vi.fn(
-  (_body: unknown) =>
+  (_body: unknown, _captchaToken?: string) =>
     new Promise<void>((resolve) => (resolveRequestOtp = resolve)),
 );
 const loginWithOtp = vi.fn().mockResolvedValue({});
@@ -87,14 +77,15 @@ const loginWithOtp = vi.fn().mockResolvedValue({});
 // (resolves `null`) so the form renders as before; the guard's authed branch is
 // covered by components/auth-shell.test.tsx.
 const session = vi.fn().mockResolvedValue(null);
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
-    login: (body: unknown) => login(body),
-    requestOtp: (body: unknown) => requestOtp(body),
+    login: (body: unknown, captchaToken?: string) => login(body, captchaToken),
+    requestOtp: (body: unknown, captchaToken?: string) =>
+      requestOtp(body, captchaToken),
     loginWithOtp: (body: unknown) => loginWithOtp(body),
     session: () => session(),
   },
-  AuthError: MockAuthError,
 }));
 
 // 005 EARS-2: the post-auth registration resume fires the real EARS-1 command
@@ -144,7 +135,7 @@ describe("003 EARS-17 on-demand login protection", () => {
     captchaMode = "manual";
     login
       .mockRejectedValueOnce(
-        new MockAuthError(403, "challenge required", "BOT_PROTECTION_REQUIRED"),
+        new AuthError(403, "challenge required", "BOT_PROTECTION_REQUIRED"),
       )
       .mockResolvedValueOnce(undefined);
     const user = userEvent.setup();
@@ -154,9 +145,12 @@ describe("003 EARS-17 on-demand login protection", () => {
 
     await user.click(screen.getByTestId("password-login-submit"));
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    // Row 18: an ordinary first attempt carries no token at all — neither a body
+    // field (which no longer exists) nor a header.
     expect(login).toHaveBeenNthCalledWith(
       1,
-      expect.not.objectContaining({ captchaToken: expect.anything() }),
+      expect.objectContaining({ identifier: EMAIL, password: PASSWORD }),
+      undefined,
     );
     await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
 
@@ -164,11 +158,8 @@ describe("003 EARS-17 on-demand login protection", () => {
     await waitFor(() => expect(login).toHaveBeenCalledTimes(2));
     expect(login).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({
-        identifier: EMAIL,
-        password: PASSWORD,
-        captchaToken: "fresh-login-token",
-      }),
+      expect.objectContaining({ identifier: EMAIL, password: PASSWORD }),
+      "fresh-login-token",
     );
     act(() => captchaProps?.onToken("fresh-login-token"));
     expect(login).toHaveBeenCalledTimes(2);
@@ -188,7 +179,8 @@ describe("003 EARS-17 on-demand login protection", () => {
     act(() => captchaProps?.onToken("fresh-otp-token"));
     await waitFor(() => expect(requestOtp).toHaveBeenCalledTimes(1));
     expect(requestOtp).toHaveBeenCalledWith(
-      expect.objectContaining({ captchaToken: "fresh-otp-token" }),
+      expect.objectContaining({ identifier: EMAIL }),
+      "fresh-otp-token",
     );
   });
 
@@ -238,7 +230,8 @@ describe("003 EARS-17 on-demand login protection", () => {
       await act(async () => Promise.resolve());
       expect(requestOtp).toHaveBeenCalledTimes(2);
       expect(requestOtp).toHaveBeenLastCalledWith(
-        expect.objectContaining({ captchaToken: "fresh-otp-resend-token" }),
+        expect.objectContaining({ identifier: EMAIL }),
+        "fresh-otp-resend-token",
       );
     } finally {
       vi.useRealTimers();

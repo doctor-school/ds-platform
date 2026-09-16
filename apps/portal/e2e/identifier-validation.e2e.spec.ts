@@ -278,7 +278,14 @@ test.describe("EARS-22: creation-password RU copy + on-blur validation (client-s
 
     // Length-only policy: lowercase-only is fine, the field must not be flagged.
     await expectValidOrAbsent(pw);
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    // Next's app router injects a permanent `#__next-route-announcer__`
+    // (`role="alert"`, `aria-live="assertive"`, empty until a client navigation)
+    // into EVERY page — `/` included, where this page's code never runs. It is a
+    // framework a11y element, not form copy, so it is excluded by id; the
+    // assertion still demands that the form itself renders no alert at all.
+    await expect(
+      page.locator('[role="alert"]:not(#__next-route-announcer__)'),
+    ).toHaveCount(0);
   });
 
   test("register: a malformed email is flagged on blur, before submit", async ({

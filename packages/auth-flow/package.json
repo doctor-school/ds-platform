@@ -1,0 +1,30 @@
+{
+  "name": "@ds/auth-flow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform shared auth-flow unit — one BFF auth client, one error dictionary, one bot-protection composition and one field-rule set, hosted by both storefronts (ADR-0013 A1, epic #2020 wave 1).",
+  "exports": {
+    "./host-config": "./src/host-config.ts",
+    "./client": "./src/client/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./bot-protection": "./src/bot-protection/index.ts",
+    "./fields": "./src/fields/index.ts",
+    "./test-support": "./src/test-support/host-config-fixtures.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ds/design-system": "workspace:*",
+    "@ds/schemas": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

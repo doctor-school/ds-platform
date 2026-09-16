@@ -23,7 +23,9 @@ describe("rendered UI source classification", () => {
     "packages/design-system/src/primitives/interactive-base.ts",
     "apps/portal/lib/theme.ts",
     "apps/portal/theme.ts",
-    "apps/portal/lib/auth-error-message.ts",
+    // App-owned `.ts` is rendered UI by the filename contract: the doctor
+    // storefront states its RU auth sentences in a `*-copy.ts` file (#2027).
+    "apps/doctor/lib/auth-flow-copy.ts",
   ])("green: %s is rendered UI source", (path) => {
     expect(isUiSourcePath(path)).toBe(true);
   });
@@ -32,6 +34,9 @@ describe("rendered UI source classification", () => {
     "apps/api/src/main.ts",
     "packages/db/src/index.ts",
     "apps/portal/lib/consent.ts",
+    // The host VALUE file states transport, channels and the site key — no
+    // sentence, so no render delta; the Academy's copy lives in `messages/*.json`.
+    "apps/portal/lib/auth-flow-config.ts",
     "apps/admin/lib/admin-auth.ts",
     "apps/docs/lib/source.ts",
   ])("red: %s is outside rendered UI roots", (path) => {

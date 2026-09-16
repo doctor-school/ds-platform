@@ -83,14 +83,16 @@ const resendVerification = vi
 // `authClient.session()` on mount — default it to the unauthenticated path so the
 // surface renders as before (the authed branch lives in components/auth-shell.test.tsx).
 const session = vi.fn().mockResolvedValue(null);
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
-    verify: (body: unknown) => verify(body),
+    // The host-routed confirmation command (`api.confirmPath`).
+    confirm: (body: unknown) => verify(body),
     login: (body: unknown) => login(body),
-    resendVerification: (body: unknown) => resendVerification(body),
+    resendVerification: (body: unknown, captchaToken?: string) =>
+      resendVerification(body, captchaToken),
     session: () => session(),
   },
-  AuthError: class extends Error {},
 }));
 
 // 005 EARS-2: the post-auth registration resume fires the real EARS-1 command
@@ -173,10 +175,8 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
 
       expect(resendVerification).toHaveBeenCalledTimes(1);
       expect(resendVerification).toHaveBeenCalledWith(
-        expect.objectContaining({
-          identifier: EMAIL,
-          captchaToken: "fresh-verify-resend-token",
-        }),
+        expect.objectContaining({ identifier: EMAIL }),
+        "fresh-verify-resend-token",
       );
       act(() => captchaProps?.onToken("fresh-verify-resend-token"));
       expect(resendVerification).toHaveBeenCalledTimes(1);
@@ -223,6 +223,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
       // seeded identifier.
       expect(resendVerification).toHaveBeenCalledWith(
         expect.objectContaining({ identifier: EMAIL }),
+        undefined,
       );
       expect(verify).not.toHaveBeenCalled();
       // Cooldown restarts on the successful resend (nonce bump re-disables it).

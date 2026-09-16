@@ -13,6 +13,7 @@
  * every test green. Declared per app (D15): the design-system entry stylesheet must
  * not `@source` a package downstream of itself.
  */
+@source "../../../packages/auth-flow/src";
 @source "../../../packages/room/src";
 
 /*

@@ -15,6 +15,7 @@
     "test:e2e:shell": "playwright test --config=playwright.shell.config.ts"
   },
   "dependencies": {
+    "@ds/auth-flow": "workspace:*",
     "@ds/design-system": "workspace:*",
     "@ds/events-storefront": "workspace:*",
     "@ds/legal-content": "workspace:*",

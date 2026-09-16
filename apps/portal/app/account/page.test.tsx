@@ -36,12 +36,12 @@ vi.mock("next-intl", () => ({
 
 const logout = vi.fn().mockResolvedValue({});
 const refresh = vi.fn().mockResolvedValue({});
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
     logout: () => logout(),
     refresh: () => refresh(),
   },
-  AuthError: class extends Error {},
 }));
 
 const getMyProfile = vi.fn();

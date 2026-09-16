@@ -4,12 +4,16 @@ import type { z } from "zod";
 import { OtpVerifySchema, SetDisplayNameRequestSchema } from "@ds/schemas";
 
 import {
-  LoginIdentifierFormSchema,
-  ResetIdentifierFormSchema,
+  loginIdentifierFormSchema,
+  resetIdentifierFormSchema,
   ResetCompleteFormSchema,
   otpIdentifierFormSchema,
   registerFormSchema,
-} from "./identifier-validation";
+} from "@ds/auth-flow/fields";
+// The package's own Academy shape: these cases assert how the RESOLVER renders a
+// zod issue, so the schema is an input, and stating a second Academy config here
+// would be the drift the extraction removes.
+import { ACADEMY_FIXTURE } from "@ds/auth-flow/test-support";
 import { translateIssue, type ZodIssueLike } from "./use-localized-resolver";
 
 /**
@@ -69,42 +73,42 @@ const cases: {
 }[] = [
   {
     rule: "identifier union (email-or-phone) — malformed",
-    schema: LoginIdentifierFormSchema as unknown as z.ZodType<unknown, never>,
+    schema: loginIdentifierFormSchema(ACADEMY_FIXTURE) as unknown as z.ZodType<unknown, never>,
     input: { identifier: "99545545445", password: "Aa1!aaaa", captchaToken: "" },
     field: "identifier",
     expected: "identifierRequired",
   },
   {
     rule: "password too short (min 8)",
-    schema: LoginIdentifierFormSchema as unknown as z.ZodType<unknown, never>,
+    schema: loginIdentifierFormSchema(ACADEMY_FIXTURE) as unknown as z.ZodType<unknown, never>,
     input: { identifier: "a@b.co", password: "short" },
     field: "password",
     expected: "passwordTooShort",
   },
   {
     rule: "password too long (max 256)",
-    schema: LoginIdentifierFormSchema as unknown as z.ZodType<unknown, never>,
+    schema: loginIdentifierFormSchema(ACADEMY_FIXTURE) as unknown as z.ZodType<unknown, never>,
     input: { identifier: "a@b.co", password: "A1!".padEnd(300, "a") },
     field: "password",
     expected: "passwordTooLong",
   },
   {
     rule: "reset identifier union — malformed",
-    schema: ResetIdentifierFormSchema as unknown as z.ZodType<unknown, never>,
+    schema: resetIdentifierFormSchema(ACADEMY_FIXTURE) as unknown as z.ZodType<unknown, never>,
     input: { identifier: "12345" },
     field: "identifier",
     expected: "identifierRequired",
   },
   {
     rule: "otp email channel — invalid email",
-    schema: otpIdentifierFormSchema("email") as unknown as z.ZodType<unknown, never>,
+    schema: otpIdentifierFormSchema(ACADEMY_FIXTURE, "email") as unknown as z.ZodType<unknown, never>,
     input: { identifier: "notanemail", channel: "email" },
     field: "identifier",
     expected: "email",
   },
   {
     rule: "otp sms channel — invalid E.164 phone",
-    schema: otpIdentifierFormSchema("sms") as unknown as z.ZodType<unknown, never>,
+    schema: otpIdentifierFormSchema(ACADEMY_FIXTURE, "sms") as unknown as z.ZodType<unknown, never>,
     input: { identifier: "12345", channel: "sms" },
     field: "identifier",
     expected: "phone",

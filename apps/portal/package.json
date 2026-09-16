@@ -16,6 +16,7 @@
     "test:axe": "playwright test --config=playwright.axe.config.ts"
   },
   "dependencies": {
+    "@ds/auth-flow": "workspace:*",
     "@ds/design-system": "workspace:*",
     "@ds/events-storefront": "workspace:*",
     "@ds/legal-content": "workspace:*",

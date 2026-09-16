@@ -11,13 +11,9 @@ import { initialsFromDisplayName } from "@ds/room/display-name";
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
-import {
-  StorefrontAuthError,
-  getMyProfile,
-  logoutStorefront,
-  refreshStorefrontSession,
-  setDoctorDisplayName,
-} from "@/lib/storefront-auth-client";
+import { AuthError } from "@ds/auth-flow/client";
+
+import { authClient } from "@/lib/auth-flow-config";
 
 /**
  * #1958 — the doctor storefront's `/account` projection.
@@ -32,7 +28,8 @@ import {
  *   • RU LITERAL copy, because `apps/doctor` carries no `next-intl` (the
  *     `login-screen.tsx` precedent); the strings are the Academy `ru.json`
  *     `account` block verbatim, so the two hosts read identically;
- *   • the doctor-origin transport (`lib/storefront-auth-client.ts`): the shipped
+ *   • the doctor-origin transport (`@ds/auth-flow/client`, mounted by
+ *     `lib/auth-flow-config.ts`): the shipped
  *     003/006 routes reached through THIS origin's rewrite, so the origin-locked
  *     `__Host-ds_session` cookie of `doctor.school` rides them (ADR-0015 §4);
  *   • the EARS-9 dance — one silent refresh and one retry before the door;
@@ -96,7 +93,7 @@ type State =
  * have, so the same three outcomes are expressed in RU literals here.
  */
 function resolveSaveError(err: unknown): string {
-  if (err instanceof StorefrontAuthError) {
+  if (err instanceof AuthError) {
     if (err.status === 429) return COPY.saveTooMany;
     if (err.status >= 500) return COPY.saveUnavailable;
     return COPY.saveGeneric;
@@ -113,11 +110,11 @@ export function AccountScreen() {
     // EARS-9: one silent refresh + one retry before the doctor is sent to /login.
     let profile: MyProfile | null = null;
     try {
-      profile = await getMyProfile();
+      profile = await authClient.profile();
       if (!profile) {
         try {
-          await refreshStorefrontSession();
-          profile = await getMyProfile();
+          await authClient.refresh();
+          profile = await authClient.profile();
         } catch {
           // refresh 401 (no/expired/reused session) — fall through to the door.
         }
@@ -138,7 +135,7 @@ export function AccountScreen() {
   }, [load]);
 
   async function onSaveDisplayName(displayName: string) {
-    await setDoctorDisplayName({ displayName });
+    await authClient.setDisplayName({ displayName });
     setState((prev) =>
       prev.kind === "ready"
         ? { kind: "ready", profile: { ...prev.profile, displayName } }
@@ -148,7 +145,7 @@ export function AccountScreen() {
 
   async function onSignOut() {
     try {
-      await logoutStorefront();
+      await authClient.logout();
     } catch {
       // A refused or unreachable revoke is swallowed HERE rather than escaping as
       // an unhandled rejection: the block fires this handler as `void onSignOut()`,

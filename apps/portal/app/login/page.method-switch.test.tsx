@@ -8,6 +8,8 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthError } from "@ds/auth-flow/client";
+
 import LoginPage from "./page";
 
 /**
@@ -59,31 +61,19 @@ vi.mock("@ds/design-system/blocks", async () => {
   };
 });
 
-const MockAuthError = vi.hoisted(
-  () =>
-    class MockAuthError extends Error {
-      constructor(
-        readonly status: number,
-        message: string,
-        readonly code?: string,
-      ) {
-        super(message);
-      }
-    },
-);
-
 const login = vi.fn().mockResolvedValue(undefined);
 const requestOtp = vi.fn().mockResolvedValue(undefined);
 const loginWithOtp = vi.fn().mockResolvedValue({});
 const session = vi.fn().mockResolvedValue(null);
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
-    login: (body: unknown) => login(body),
-    requestOtp: (body: unknown) => requestOtp(body),
+    login: (body: unknown, captchaToken?: string) => login(body, captchaToken),
+    requestOtp: (body: unknown, captchaToken?: string) =>
+      requestOtp(body, captchaToken),
     loginWithOtp: (body: unknown) => loginWithOtp(body),
     session: () => session(),
   },
-  AuthError: MockAuthError,
 }));
 
 vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
@@ -139,7 +129,7 @@ describe("003 EARS-17 challenge dismissal on login-method change", () => {
 
   it("EARS-17: switching method terminates an in-flight password challenge — no login the doctor never re-submitted", async () => {
     login.mockRejectedValueOnce(
-      new MockAuthError(403, "challenge required", "BOT_PROTECTION_REQUIRED"),
+      new AuthError(403, "challenge required", "BOT_PROTECTION_REQUIRED"),
     );
     const user = userEvent.setup();
     await renderLogin();

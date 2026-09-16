@@ -27,7 +27,7 @@ vi.mock("@/lib/profile-client", () => ({
 }));
 
 import { AcademyShellHeaderClient } from "./academy-shell-header-client";
-import { refreshHeaderAuth } from "@/lib/header-auth";
+import { refreshShellAuth } from "@ds/storefront-shell";
 import { academyShellConfig, type ShellConfigKey } from "@/lib/shell-config";
 import catalog from "../messages/ru.json";
 
@@ -102,7 +102,7 @@ describe("008 EARS-4/5/6: the academy auth cluster", () => {
 
     getMyProfile.mockResolvedValue(DOCTOR);
     await act(async () => {
-      refreshHeaderAuth();
+      refreshShellAuth();
     });
 
     await waitFor(() =>

@@ -20,7 +20,7 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshHeaderAuth } from "@/lib/header-auth";
+import { refreshShellAuth } from "@ds/storefront-shell";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -227,7 +227,7 @@ function PortalEmailConfirmCard() {
         // the shipped `/account` landing.
         // #1004: soft landing → signal the persistent header to re-read the
         // profile so the avatar appears without a hard reload.
-        refreshHeaderAuth();
+        refreshShellAuth();
         router.replace(await completeReturnTarget(returnTo));
         return;
       }

@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { resolveRoomEntry } from "@ds/room/server";
 import { fetchDoctorEventPage } from "@/lib/event-page";
 import { fetchDoctorDisplayName, fetchDoctorRoomConfig } from "@/lib/room";
-import { forwardedSessionFrom } from "@/lib/session";
+import { forwardedSessionFrom } from "@ds/auth-flow/server";
 import { ROOM_COPY } from "./copy";
 import { RoomClient } from "./room-client";
 import { DOCTOR_ROOM_ROUTES } from "./room-routes";

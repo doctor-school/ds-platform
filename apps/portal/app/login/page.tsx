@@ -19,7 +19,7 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshHeaderAuth } from "@/lib/header-auth";
+import { refreshShellAuth } from "@ds/storefront-shell";
 import {
   loginIdentifierFormSchema,
   otpIdentifierFormSchema,
@@ -126,7 +126,7 @@ function PortalLoginCard() {
     // without one this is the 008 EARS-7 discovery front-door landing.
     // #1004: signal the persistent header to re-read the profile so the avatar
     // appears on this SOFT landing, without a hard reload.
-    refreshHeaderAuth();
+    refreshShellAuth();
     router.push(await completeReturnTarget(returnTo));
   }
 
@@ -228,7 +228,7 @@ function PortalLoginCard() {
       // 005 EARS-2: complete the carried registration (if any) now the session
       // exists, landing on the event page — else the 008 EARS-7 front-door.
       // #1004: soft landing → signal the header's auth re-read (see above).
-      refreshHeaderAuth();
+      refreshShellAuth();
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       setOtpVerifyError(authErrorMessage(err, authFlow.copy.errors, te("otpVerifyFailed")));

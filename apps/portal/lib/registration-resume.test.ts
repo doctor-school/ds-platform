@@ -14,21 +14,20 @@ vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
   registerForEvent,
 }));
 
+import { clearStoredReturnTarget } from "@ds/auth-flow/client";
+
+import { ACADEMY_AUTH_RETURN_TO } from "./auth-flow-routes";
 import { completeReturnTarget } from "./registration-resume";
-import {
-  RETURN_TARGET_COOKIE,
-  clearStoredReturnTarget,
-} from "./return-to-origin";
 
 /** Park a target the way the auth-flow entry does: the same-origin cookie. */
 function park(target: string) {
-  document.cookie = `${RETURN_TARGET_COOKIE}=${encodeURIComponent(target)}; Path=/`;
+  document.cookie = `${ACADEMY_AUTH_RETURN_TO.parkingCookie.name}=${encodeURIComponent(target)}; Path=/`;
 }
 
 beforeEach(() => {
   registerForEvent.mockReset();
   registerForEvent.mockResolvedValue({ registered: true });
-  clearStoredReturnTarget();
+  clearStoredReturnTarget(ACADEMY_AUTH_RETURN_TO.parkingCookie);
 });
 
 describe("014 EARS-6 academy return-target consumption (registration resume)", () => {

@@ -7,7 +7,9 @@ import {
 } from "@ds/events-storefront";
 import { parseRoomReturnTarget } from "@ds/room/room-return";
 
-import { resolveReturnTarget } from "./return-to-origin";
+import { resolveReturnTarget } from "@ds/auth-flow/client";
+
+import { ACADEMY_AUTH_RETURN_TO } from "./auth-flow-routes";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
@@ -20,8 +22,10 @@ import { ACADEMY_ROOM_ROUTES } from "./room-config";
  * What this module owns is the two host-shaped facts the shared rule takes as
  * configuration, plus the CARRY side that cannot be shared:
  *
- *   • the parked-target consume (014 EARS-6, `resolveReturnTarget`) — the store is
- *     per-origin, so each host resolves + clears its own before delegating;
+ *   • the parked-target consume (014 EARS-6, `@ds/auth-flow/client`
+ *     `resolveReturnTarget`) — the RULE (query wins, parked value re-validated,
+ *     consumed exactly once) is the package's; the cookie this host parks in is
+ *     `ACADEMY_AUTH_RETURN_TO`, because the store is per-origin;
  *   • this host's shapes: the academy `/webinars/<slug>` intent guard and the
  *     `/webinars/<slug>/room` return (006 EARS-6);
  *   • this host's default landing, `/webinars` (008 EARS-7 as amended by 013
@@ -57,7 +61,7 @@ export async function completeReturnTarget(
   // Resolve + consume once. Everything below sees a guard-clean same-origin path
   // or `null`; a hostile value never reaches a navigation.
   return completeSharedReturnTarget(
-    resolveReturnTarget(rawReturnTo),
+    resolveReturnTarget(rawReturnTo, ACADEMY_AUTH_RETURN_TO.parkingCookie),
     ACADEMY_RETURN_HOST,
   );
 }

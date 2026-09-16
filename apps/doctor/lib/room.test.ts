@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { fetchDoctorDisplayName, fetchDoctorRoomConfig } from "@/lib/room";
-import type { ForwardedSession } from "@/lib/session";
+import type { ForwardedSession } from "@ds/auth-flow/server";
 
 /**
  * 006 EARS-1 / EARS-6 (#1722, slice 3) — the doctor host's binding of the shared

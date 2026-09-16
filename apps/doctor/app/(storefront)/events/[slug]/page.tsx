@@ -27,7 +27,7 @@ import {
   fetchDoctorEventPage,
   fetchDoctorParticipationCta,
 } from "@/lib/event-page";
-import { forwardedSessionFrom } from "@/lib/session";
+import { forwardedSessionFrom } from "@ds/auth-flow/server";
 
 /**
  * 020 EARS-1 / EARS-18 (#1764, slice 3) — `doctor.school/events/:slug`, the

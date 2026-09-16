@@ -1,5 +1,5 @@
 import type { EventPageView, ParticipationCta } from "@ds/schemas";
-import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
+import { serverApiBase, forwardedHeaders, forwardedSessionFrom } from "@ds/auth-flow/server";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
 
 /**
@@ -48,7 +48,7 @@ export async function fetchDoctorEventPage(
   fetchImpl: typeof fetch = fetch,
 ): Promise<EventPageView | null> {
   const res = await fetchImpl(
-    `${API_BASE}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}`,
+    `${serverApiBase()}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}`,
     {
       headers: {
         // The canonical hop builder with the session surface stripped: the page
@@ -81,7 +81,7 @@ export async function fetchDoctorParticipationCta(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ParticipationCta | null> {
   const res = await fetchImpl(
-    `${API_BASE}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}/participation`,
+    `${serverApiBase()}${DOCTOR_EVENT_PAGE_PATH}/${encodeURIComponent(idOrSlug)}/participation`,
     {
       // The WHOLE cookie header rides on, exactly as before, plus
       // the client chain: since #1655 the api reads `request.ip` from

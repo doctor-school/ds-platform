@@ -6,7 +6,7 @@ import {
   type PublicEventPage,
 } from "@ds/schemas";
 
-import { API_BASE } from "./session";
+import { serverApiBase } from "@ds/auth-flow/server";
 
 /**
  * 021 EARS-2 (#1538) — resolving the RETURN CONTEXT the doctor arrived with.
@@ -175,7 +175,7 @@ export async function resolveReturnContext(
 
   try {
     const res = await fetchImpl(
-      `${API_BASE}/v1/public/events/${encodeURIComponent(key)}`,
+      `${serverApiBase()}/v1/public/events/${encodeURIComponent(key)}`,
       { headers: { accept: "application/json" }, cache: "no-store" },
     );
     if (!res.ok) return null;

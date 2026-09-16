@@ -10,7 +10,7 @@ import type { MyProfile } from "@ds/schemas";
 import { AuthError } from "@ds/auth-flow/client";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshHeaderAuth } from "@/lib/header-auth";
+import { refreshShellAuth } from "@ds/storefront-shell";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";
 import { initialsFromDisplayName } from "@/lib/display-name";
@@ -90,7 +90,7 @@ export default function AccountPage() {
       // #1004: signal the persistent header to re-read the auth state so the
       // avatar flips back to the guest affordance on this soft navigation —
       // mirroring the login-side call sites.
-      refreshHeaderAuth();
+      refreshShellAuth();
       router.replace("/login");
     }
   }

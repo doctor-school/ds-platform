@@ -13,7 +13,7 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshHeaderAuth } from "@/lib/header-auth";
+import { refreshShellAuth } from "@ds/storefront-shell";
 import {
   ResetCompleteFormSchema,
   resetIdentifierFormSchema,
@@ -177,7 +177,7 @@ export default function ResetPage() {
       // cookie), so go straight to the authenticated area instead of /login.
       // #1004: soft landing → signal the persistent header to re-read the
       // profile so the avatar appears without a hard reload.
-      refreshHeaderAuth();
+      refreshShellAuth();
       router.push("/account");
     } catch (err) {
       setCompleteError(authErrorMessage(err, authFlow.copy.errors, te("resetCompleteFailed")));
@@ -230,11 +230,12 @@ export default function ResetPage() {
   };
 
   return (
-    // `allowAuthenticated` (#770 rework): /reset is exempt from the #675
-    // authenticated-redirect — the /account «Сменить пароль» action hands off
-    // HERE for logged-in doctors (003 EARS-28), and completing the reset
+    // /reset is exempt from the #675 signed-in guard — the exemption is stated
+    // on `ACADEMY_AUTH_ROUTES.allowAuthenticated` and applied server-side in
+    // `app/reset/layout.tsx`, because the /account «Сменить пароль» action hands
+    // off HERE for logged-in doctors (003 EARS-28), and completing the reset
     // revokes all sessions + auto-logs-in with the new password (EARS-12).
-    <AuthShell allowAuthenticated>
+    <AuthShell>
       <PasswordRecoveryCard
         icon={<KeyRound className="text-primary" aria-hidden />}
         copy={copy}

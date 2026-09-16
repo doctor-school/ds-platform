@@ -1,9 +1,9 @@
 import { SpecialtyChoiceSchema, type SpecialtyChoice } from "@ds/schemas";
 import {
-  API_BASE,
+  serverApiBase,
   forwardedHeaders,
   forwardedSessionFrom,
-} from "@/lib/session";
+} from "@ds/auth-flow/server";
 
 /**
  * 017 EARS-6 / EARS-7 (#1482) — the storefront half of the choose/change
@@ -23,7 +23,7 @@ import {
  * this origin) and `credentials: "include"`, which is what lets the api set and
  * read the `__Host-` cookies at all — a cross-origin call could not.
  *
- * Server calls are absolute against `API_BASE` and forward the incoming
+ * Server calls are absolute against the shared `serverApiBase()` and forward the incoming
  * `Cookie` header plus the ADR-0001 §6 fingerprint headers, exactly as
  * `lib/shell-auth.ts` does. Both remembered stores travel on that header: the
  * session cookie for a doctor, `__Host-ds_specialty` for a guest.
@@ -180,7 +180,7 @@ export async function resolveRememberedSpecialty(
   });
 
   const read = async (path: string) =>
-    fetchImpl(`${API_BASE}${path}`, { headers: upstream, cache: "no-store" });
+    fetchImpl(`${serverApiBase()}${path}`, { headers: upstream, cache: "no-store" });
 
   try {
     if (session.cookie) {

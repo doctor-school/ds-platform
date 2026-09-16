@@ -8,6 +8,8 @@ import type {
   AuthFlowHostConfig,
 } from "@ds/auth-flow/host-config";
 
+import { ACADEMY_AUTH_ROUTES, ACADEMY_AUTH_RETURN_TO } from "@/lib/auth-flow-routes";
+
 /**
  * What the Academy states about itself so the shared auth flow can serve it
  * (#2027, epic #2020 wave 1).
@@ -53,6 +55,11 @@ export function useAcademyAuthFlow(): AuthFlowHostConfig {
 
   return {
     api: ACADEMY_AUTH_FLOW_API,
+    // The route table and the parking declaration are stated in
+    // `lib/auth-flow-routes.ts`, because `middleware.ts` and the four server
+    // auth layouts read the same values and cannot import this client hook.
+    routes: ACADEMY_AUTH_ROUTES,
+    returnTo: ACADEMY_AUTH_RETURN_TO,
     copy: {
       errors: {
         tooManyAttempts: te("tooManyAttempts"),

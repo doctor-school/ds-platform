@@ -7,8 +7,6 @@ import { useTranslations } from "next-intl";
 import { AuthShell as AuthShellBlock } from "@ds/design-system/blocks";
 import { Link as DsLink } from "@ds/design-system/link";
 
-import { useRedirectIfAuthenticated } from "@/lib/use-redirect-if-authenticated";
-
 /**
  * `<AuthShell>` (#237) — the portal-side projection of the shared
  * `@ds/design-system/blocks` `<AuthShell>`. The four auth surfaces (login /
@@ -18,8 +16,8 @@ import { useRedirectIfAuthenticated } from "@/lib/use-redirect-if-authenticated"
  * WHAT IS LEFT HERE. The frame — the split-screen chrome and the canvas brand
  * panel (mark · value prop · footer) — is the ONE shared block since #1666 slice C
  * (ADR-0013 A1 cross-front reuse); `apps/doctor` projects the same block. This file
- * keeps exactly what the package refuses to hold: the #675 authenticated-redirect
- * guard, the EARS-17 SmartCaptcha processing disclosure rendered under the card, the
+ * keeps exactly what the package refuses to hold: the EARS-17 SmartCaptcha
+ * processing disclosure rendered under the card, the
  * localized `brand` copy (i18n stays in the app, never the package — the same
  * contract as the field/block primitives) and the brand assets.
  *
@@ -38,30 +36,15 @@ import { useRedirectIfAuthenticated } from "@/lib/use-redirect-if-authenticated"
  * `unoptimized` — a tiny static SVG needs no Next re-encode; intrinsic sizes feed
  * `next/image` (viewBox 500×164), `h-* w-auto` scales display.
  */
-export function AuthShell({
-  children,
-  allowAuthenticated = false,
-}: {
-  children: ReactNode;
-  /**
-   * Skip the #675 authenticated-redirect for this surface. ONLY `/reset` sets it:
-   * 003 EARS-28 pins the `/account` change-password action as a handoff to the
-   * existing `/reset` flow, so a logged-in doctor must reach it (#770 rework).
-   */
-  allowAuthenticated?: boolean;
-}) {
+export function AuthShell({ children }: { children: ReactNode }) {
   const t = useTranslations("brand");
   const smartCaptchaConfigured = Boolean(
     process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
   );
-  // #675: an already-authenticated visitor is redirected to `/account` and NO auth
-  // chrome is rendered. While the session check is pending — and once it resolves to
-  // an authenticated principal — the shell renders nothing (both hooks above run
-  // unconditionally first, satisfying the rules of hooks). With
-  // `allowAuthenticated` the guard is disabled and resolves to "anonymous"
-  // immediately (the /reset exemption — see the hook doc).
-  const guard = useRedirectIfAuthenticated(!allowAuthenticated);
-  if (guard !== "anonymous") return null;
+  // #675 is NOT decided here any more. The signed-in visitor is turned away
+  // SERVER-side, in each route's layout (`app/<route>/layout.tsx` →
+  // `@ds/auth-flow/server` `guardAuthRoute`), so no auth chrome is rendered and
+  // there is no client round-trip to flash through first (#2027 PR 1.4).
   return (
     <AuthShellBlock
       logo={

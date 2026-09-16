@@ -372,6 +372,79 @@ describe("StorefrontHeader", () => {
     expect(mobileLinks[0]).toHaveAttribute("href", "/events");
   });
 
+  it("008 EARS-5: the signed-in cluster carries the configured auth links beside the chip", () => {
+    // #2243: the academy's «Мои события» link (canvas `user.links` line 209,
+    // rendered at line 33 of `ds-shell.dc.html`) is a VALUE on the resolved
+    // sign-in state, not a host-assembled node — so it lives inside the one
+    // `data-cluster="doctor"` cluster the package renders.
+    render(
+      <StorefrontHeader
+        config={ACADEMY}
+        auth={{
+          status: "doctor",
+          profileHref: "/account",
+          label: "Мой профиль",
+          initials: "ВК",
+          links: [{ label: "Мои события", href: "/account/events" }],
+        }}
+      />,
+    );
+
+    const cluster = screen.getByTestId("shell-auth-cluster");
+    const link = within(cluster).getByTestId("shell-auth-link");
+    expect(link).toHaveTextContent("Мои события");
+    expect(link).toHaveAttribute("href", "/account/events");
+    // The desktop copy is hidden below the `layout` breakpoint — the mobile
+    // rendering is the `≡` row asserted below, never a second visible copy.
+    expect(link.parentElement!.className).toContain("hidden");
+    expect(link.parentElement!.className).toContain("layout:flex");
+  });
+
+  it("008 EARS-11: the mobile disclosure carries the auth links after the nav rows", () => {
+    render(
+      <StorefrontHeader
+        config={ACADEMY}
+        auth={{
+          status: "doctor",
+          profileHref: "/account",
+          label: "Мой профиль",
+          initials: "ВК",
+          links: [{ label: "Мои события", href: "/account/events" }],
+        }}
+      />,
+    );
+
+    const mobile = within(screen.getByTestId("shell-nav-mobile")).getAllByRole(
+      "link",
+    );
+    expect(mobile.map((a) => a.textContent)).toEqual(["Эфиры", "Мои события"]);
+    expect(mobile[1]).toHaveAttribute("href", "/account/events");
+    // Still ONE auth cluster in the DOM: the mobile copies are nav ROWS, not a
+    // second cluster (017 EARS-1).
+    expect(screen.getAllByTestId("shell-auth-cluster")).toHaveLength(1);
+  });
+
+  it("008 EARS-5: a signed-in state without links renders no auth link at all", () => {
+    // The doctor storefront passes none (canvas `user.links` line 192 = `[]`),
+    // and its cluster must stay byte-identical to what #2180 shipped.
+    render(
+      <StorefrontHeader
+        config={DOCTOR}
+        auth={{
+          status: "doctor",
+          profileHref: "/account",
+          label: "Личный кабинет",
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId("shell-auth-link")).toBeNull();
+    const mobile = within(screen.getByTestId("shell-nav-mobile")).getAllByRole(
+      "link",
+    );
+    expect(mobile.map((a) => a.textContent)).toEqual(["Эфиры"]);
+  });
+
   it("008 EARS-12: hiddenOnPaths suppresses the header on a matching path and renders it elsewhere", () => {
     pathname = "/login";
     const hidden = render(<StorefrontHeader config={ACADEMY} auth={LOADING} />);

@@ -92,7 +92,11 @@ cached. `up`/`sync` ship the tree at `--ref <sha>`, build the service set on the
 `ds_golden` (never for `main`, which is persistent), run migrate and the golden seed
 through the containerized `migrate` one-shot, start
 `infra/deploy/compose/slot/compose.yml`, converge the shared IdP and assert
-`/v1/health`; `down` reverses it. `reset-identities` is folded into every `up`/`sync` and
+`/v1/health`; `down` reverses it. The slot's **object storage** follows its database
+exactly: `up`/`sync` ensure the MinIO bucket `ds-<slot>` is present (before migrate, so
+the branch seed can write objects) and a preview's `down` drops it with
+`mc rb --force`; `main` keeps its bucket, and `reset main` re-clones rows without
+touching a single object. `reset-identities` is folded into every `up`/`sync` and
 is idempotent, so a converge needs no second operator command.
 
 `reset main --yes --ref <sha>` drops `ds_main` and re-clones it from `ds_golden`, then
@@ -133,7 +137,12 @@ One run does four things, in order:
    created when absent, then always has its password set from the `DS_GOLDEN_PASSWORD_*`
    variable the owner placed in `/etc/ds-platform/stage.env` and its email-verified state
    converged; the soft-deleted doctor is ensure-**absent** — probed first, deleted only
-   when a live account carries that username. Every step is probe-then-act and a failing
+   when a live account carries that username. Its GRANT on the shared project is converged
+   the same way: a created account is always granted its catalogue role, a live one only
+   when its role keys drift (a re-grant on the existing authorization, never a second one),
+   and an already-correct grant is logged as «already holds» rather than passing in
+   silence — an admin who signs in without `platform_admin` fails the walkthrough exactly
+   the way a broken login does. Every step is probe-then-act and a failing
    act is a hard failure: there is no blanket tolerated-failure flag in this path.
 2. **Write the subjects.** All five `DS_GOLDEN_SUB_*` are written idempotently to
    `/etc/ds-platform/golden-subjects.env` (root, 0644 — opaque ids, not secrets), and

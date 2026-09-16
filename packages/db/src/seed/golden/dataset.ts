@@ -16,42 +16,36 @@ import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
 import type {
+  NewDirection,
+  NewDirectionAdjacency,
+  NewEventDirection,
   NewEventExpert,
   NewEventProject,
   NewExpert,
+  NewPartner,
   NewProject,
+  NewProjectExpert,
+  NewProjectPartner,
 } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
+import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 import { golden, GOLDEN_GROUP, goldenUuid } from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
+import { expertPhotoKey } from "./programme.js";
+import {
+  buildGoldenVolume,
+  goldenDirectionId,
+  goldenPartnerId,
+  GOLDEN_VOLUME_ORDINAL_BASE,
+} from "./volume.js";
 
-/**
- * The consent purposes the golden «legal documents» pin.
- *
- * DEVIATION, recorded in the README and the PR body: the schema has no
- * legal-documents table. Legal texts are Fumadocs pages (028), not rows; what
- * the database actually stores about them is the per-purpose acceptance in
- * `consent_records`. The golden dataset therefore carries the ACCEPTANCES at a
- * pinned purpose/version instead of the documents, which is the part a
- * regression scenario can assert on.
- *
- * The strings mirror `DOCTOR_REGISTER_CONSENT_PURPOSES` (021,
- * `@ds/schemas/storefront`). They are duplicated rather than imported on
- * purpose: `@ds/db` sits BELOW `@ds/schemas` in the dependency order, and
- * inverting that to fetch three string literals would make the data layer
- * depend on the contract layer for a fixture.
- */
-export const GOLDEN_CONSENT_PURPOSES = Object.freeze([
-  "medical-worker-declaration",
-  "partner-data-sharing",
-  "marketing-communications",
-]);
-
-/** The pinned legal version every golden acceptance is recorded against. */
-export const GOLDEN_CONSENT_VERSION = "2026-01";
+// The pinned legal acceptances live in `consent.ts` so the volume half can write
+// them without importing this module back (a runtime cycle). Re-exported here so
+// the public surface of the dataset is unchanged.
+export { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 
 /**
  * A doctor↔specialty link BEFORE resolution.
@@ -72,6 +66,24 @@ export interface GoldenDoctorSpecialtyLink {
   updatedAt: Date;
 }
 
+/**
+ * A direction↔specialty link BEFORE resolution.
+ *
+ * Carries the specialty's NAME for the same reason {@link GoldenDoctorSpecialtyLink}
+ * does: `specialties_minzdrav.id` belongs to the book seed, and the planner
+ * resolves the name against whatever the target database actually carries
+ * (`resolveDirectionSpecialtyRows`).
+ */
+export interface GoldenDirectionSpecialtyLink {
+  id: string;
+  directionId: string;
+  specialtyName: string;
+  status: "active" | "retired";
+  deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GoldenDataset {
   users: NewUser[];
   experts: NewExpert[];
@@ -84,6 +96,13 @@ export interface GoldenDataset {
   eventRecordings: NewEventRecording[];
   consentRecords: NewConsentRecord[];
   doctorSpecialties: GoldenDoctorSpecialtyLink[];
+  directions: NewDirection[];
+  partners: NewPartner[];
+  directionSpecialties: GoldenDirectionSpecialtyLink[];
+  directionAdjacency: NewDirectionAdjacency[];
+  eventDirections: NewEventDirection[];
+  projectExperts: NewProjectExpert[];
+  projectPartners: NewProjectPartner[];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -127,6 +146,11 @@ export function buildGoldenDataset(
   const doctors = golden.doctors;
   const admin = golden.admins.platform;
 
+  // #2213 — the volume half. APPENDED after every named row, never interleaved:
+  // the catalogue rows keep their ids, their offsets and their position, so a
+  // scenario compiled against the named dataset sees exactly what it saw before.
+  const volume = buildGoldenVolume(now);
+
   const users: NewUser[] = [
     mirrorUser(doctors.unverified, subjectOf("doctorUnverified"), {
       role: accountOf("doctorUnverified").role,
@@ -164,6 +188,7 @@ export function buildGoldenDataset(
       created,
       updated: created,
     }),
+    ...volume.users,
   ];
 
   const experts: NewExpert[] = [
@@ -177,6 +202,9 @@ export function buildGoldenDataset(
       credentials: "д.м.н., профессор",
       affiliation: "НМИЦ кардиологии",
       bio: "Эталонный эксперт золотого набора: опубликован, привязан к опубликованному событию и к проекту-школе.",
+      // Ordinals 1 and 2 of the `experts` group — the two named portraits,
+      // committed next to the volume ones (golden README → Media).
+      photoRef: expertPhotoKey(1),
       status: "published",
       firstPublishedAt: at({ days: -60 }),
       version: 1,
@@ -190,11 +218,14 @@ export function buildGoldenDataset(
       givenName: "Ольга",
       patronymic: "Викторовна",
       professionalRole: "Врач-невролог",
+      bio: "Эталонный эксперт-черновик: заполнен так же, как опубликованный, чтобы предпросмотр карточки в админке показывал настоящую карточку, а не пустой каркас.",
+      photoRef: expertPhotoKey(2),
       status: "draft",
       version: 1,
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.experts,
   ];
 
   const projects: NewProject[] = [
@@ -221,6 +252,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.projects,
   ];
 
   const events: NewEvent[] = [
@@ -300,6 +332,7 @@ export function buildGoldenDataset(
       origin: "legacy",
       liveAt: at({ days: -365 }),
     },
+    ...volume.events,
   ];
 
   const streamConfig: NewStreamConfigRow[] = [
@@ -313,6 +346,7 @@ export function buildGoldenDataset(
       provider: "rutube",
       embedRef: "golden-past-embed",
     },
+    ...volume.streamConfig,
   ];
 
   // #1943 — the seeded event carries an expert, so the event page's expert block
@@ -351,6 +385,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.eventExperts,
   ];
 
   const eventProjects: NewEventProject[] = [
@@ -372,6 +407,7 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.eventProjects,
   ];
 
   const registrations: NewRegistration[] = [
@@ -403,6 +439,7 @@ export function buildGoldenDataset(
       registeredAt: at({ days: -40 }),
       recordStatus: "active",
     },
+    ...volume.registrations,
   ];
 
   const eventRecordings: NewEventRecording[] = [
@@ -432,6 +469,7 @@ export function buildGoldenDataset(
       createdAt: at({ days: -29 }),
       updatedAt: at({ days: -29 }),
     },
+    ...volume.eventRecordings,
   ];
 
   // Golden «legal documents»: the pinned acceptances (see GOLDEN_CONSENT_PURPOSES).
@@ -441,8 +479,8 @@ export function buildGoldenDataset(
     doctors.mfaEnrolled,
     doctors.deleted,
   ];
-  const consentRecords: NewConsentRecord[] = consentBearers.flatMap(
-    (doctor, doctorIndex) =>
+  const consentRecords: NewConsentRecord[] = [
+    ...consentBearers.flatMap((doctor, doctorIndex) =>
       GOLDEN_CONSENT_PURPOSES.map((purpose, purposeIndex) => ({
         id: goldenUuid(
           GOLDEN_GROUP.consentRecords,
@@ -453,7 +491,9 @@ export function buildGoldenDataset(
         version: GOLDEN_CONSENT_VERSION,
         capturedAt: created,
       })),
-  );
+    ),
+    ...volume.consentRecords,
+  ];
 
   const doctorSpecialties: GoldenDoctorSpecialtyLink[] = [
     {
@@ -470,6 +510,125 @@ export function buildGoldenDataset(
       createdAt: created,
       updatedAt: created,
     },
+    ...volume.doctorSpecialties,
+  ];
+
+  // The taxonomy top-level rows are authored wholly in the catalogue
+  // (`taxonomy.ts`): a «named» direction beside them would be a second book the
+  // admin has to reconcile, and the curated scenarios address directions by
+  // slug through `goldenDirectionId` instead.
+  const directions: NewDirection[] = [...volume.directions];
+  const partners: NewPartner[] = [...volume.partners];
+  const directionSpecialties: GoldenDirectionSpecialtyLink[] = [
+    ...volume.directionSpecialties,
+  ];
+  const directionAdjacency: NewDirectionAdjacency[] = [
+    ...volume.directionAdjacency,
+  ];
+
+  // The curated эфиры are classified BY HAND: a scenario that asserts «the
+  // cardiologist sees the reference upcoming эфир» must not depend on where a
+  // round-robin happened to file it.
+  const namedEventDirections: readonly (readonly [string, string])[] = [
+    [golden.events.upcoming.id, "cardiology"],
+    [golden.events.upcoming.id, "general-practice"],
+    [golden.events.live.id, "cardiology"],
+    [golden.events.hidden.id, "neurology"],
+    [golden.events.pastWithRecording.id, "cardiology"],
+    [golden.events.pastWithRecording.id, "general-practice"],
+    [golden.events.archived.id, "general-practice"],
+  ];
+  const eventDirections: NewEventDirection[] = [
+    ...namedEventDirections.map(([eventId, slug], index) => ({
+      id: goldenUuid(GOLDEN_GROUP.eventDirections, index + 1),
+      eventId,
+      directionId: goldenDirectionId(slug),
+      status: "active" as const,
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    })),
+    ...volume.eventDirections,
+  ];
+
+  const projectExperts: NewProjectExpert[] = [
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 1),
+      projectId: golden.projects.publishedSchool.id,
+      expertId: golden.experts.published.id,
+      role: "curator",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 2),
+      projectId: golden.projects.publishedSchool.id,
+      expertId: golden.experts.draft.id,
+      role: "member",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    // A draft project is a project: `012-design §3.2`'s single-curator rule is
+    // not conditional on publication, and the admin's team block has to render.
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 3),
+      projectId: golden.projects.draft.id,
+      expertId: golden.experts.published.id,
+      role: "curator",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 4),
+      projectId: golden.projects.draft.id,
+      expertId: goldenUuid(GOLDEN_GROUP.experts, GOLDEN_VOLUME_ORDINAL_BASE),
+      role: "member",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    ...volume.projectExperts,
+  ];
+
+  const projectPartners: NewProjectPartner[] = [
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 1),
+      projectId: golden.projects.publishedSchool.id,
+      partnerId: goldenPartnerId(0),
+      isPrimary: true,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 2),
+      projectId: golden.projects.publishedSchool.id,
+      partnerId: goldenPartnerId(11),
+      isPrimary: false,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 3),
+      projectId: golden.projects.draft.id,
+      partnerId: goldenPartnerId(1),
+      isPrimary: true,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    ...volume.projectPartners,
   ];
 
   const specialtyIssues = goldenSpecialtyIssues(doctorSpecialties);
@@ -489,6 +648,13 @@ export function buildGoldenDataset(
     eventRecordings,
     consentRecords,
     doctorSpecialties,
+    directions,
+    partners,
+    directionSpecialties,
+    directionAdjacency,
+    eventDirections,
+    projectExperts,
+    projectPartners,
   };
 }
 

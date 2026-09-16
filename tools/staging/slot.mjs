@@ -1901,7 +1901,7 @@ async function readIdpPat() {
 }
 
 /** Which slots are live, straight from docker's own labels. */
-async function readLiveSlots() {
+export async function readLiveSlots() {
   return parseLiveSlots(
     await sshCapture(
       STAGE_1,

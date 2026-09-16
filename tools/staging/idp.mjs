@@ -175,9 +175,7 @@ export function unionUris(pinned, rendered) {
 const sameSet = (a, b) => {
   const left = [...new Set(a ?? [])].sort();
   const right = [...new Set(b ?? [])].sort();
-  return (
-    left.length === right.length && left.every((value, i) => value === right[i])
-  );
+  return left.length === right.length && left.every((value, i) => value === right[i]);
 };
 
 /**
@@ -193,10 +191,7 @@ function oidcConfigBody({ redirectUris, postLogoutRedirectUris }) {
     redirectUris,
     postLogoutRedirectUris,
     responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
-    grantTypes: [
-      "OIDC_GRANT_TYPE_AUTHORIZATION_CODE",
-      "OIDC_GRANT_TYPE_REFRESH_TOKEN",
-    ],
+    grantTypes: ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
     appType: "OIDC_APP_TYPE_WEB",
     authMethodType: "OIDC_AUTH_METHOD_TYPE_BASIC",
     version: "OIDC_VERSION_1_0",
@@ -218,19 +213,14 @@ function oidcConfigBody({ redirectUris, postLogoutRedirectUris }) {
  */
 export function planRedirectUriConverge({ current, desired }) {
   const redirectUris = [...(desired?.redirectUris ?? [])];
-  const postLogoutRedirectUris = [
-    ...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? []),
-  ];
+  const postLogoutRedirectUris = [...(desired?.postLogoutUris ?? desired?.postLogoutRedirectUris ?? [])];
   if (
     sameSet(current?.redirectUris, redirectUris) &&
     sameSet(current?.postLogoutRedirectUris, postLogoutRedirectUris)
   ) {
     return { action: "skip" };
   }
-  return {
-    action: "put",
-    body: oidcConfigBody({ redirectUris, postLogoutRedirectUris }),
-  };
+  return { action: "put", body: oidcConfigBody({ redirectUris, postLogoutRedirectUris }) };
 }
 
 /**
@@ -274,8 +264,7 @@ export function planGoldenIdentities({ accounts, existing }) {
       }
       continue;
     }
-    const mustRebuild =
-      Boolean(live) && live.emailVerified === true && !account.emailVerified;
+    const mustRebuild = Boolean(live) && live.emailVerified === true && !account.emailVerified;
     if (live?.userId && !mustRebuild) {
       subjects[account.subjectEnvVar] = live.userId;
       steps.push({
@@ -356,10 +345,7 @@ export function renderGoldenSubjectsEnv(subjects) {
   ];
   for (const name of GOLDEN_SUBJECT_ENV_VARS) {
     const value = subjects?.[name];
-    if (!value)
-      throw new IdpError(
-        `golden subject ${name} is missing — refusing to write a blank`,
-      );
+    if (!value) throw new IdpError(`golden subject ${name} is missing — refusing to write a blank`);
     lines.push(`${name}=${value}`);
   }
   lines.push("");
@@ -372,8 +358,7 @@ export function parseGoldenSubjectsEnv(text) {
   for (const line of String(text ?? "").split(/\r?\n/)) {
     const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
     if (!match) continue;
-    if (GOLDEN_SUBJECT_ENV_VARS.includes(match[1]))
-      subjects[match[1]] = match[2];
+    if (GOLDEN_SUBJECT_ENV_VARS.includes(match[1])) subjects[match[1]] = match[2];
   }
   const missing = GOLDEN_SUBJECT_ENV_VARS.filter((name) => !subjects[name]);
   if (missing.length) {
@@ -392,10 +377,7 @@ export function parseGoldenSubjectsEnv(text) {
  * with a message about environment variables nobody set — the refusal has to name
  * `ds-slot reset-identities` at the point the operator can act on it.
  */
-export function readGoldenSubjects({
-  readFile = readFileSync,
-  path = GOLDEN_SUBJECTS_PATH,
-} = {}) {
+export function readGoldenSubjects({ readFile = readFileSync, path = GOLDEN_SUBJECTS_PATH } = {}) {
   let text;
   try {
     text = readFile(path, "utf8");
@@ -421,14 +403,9 @@ export function readGoldenSubjects({
  * and the status — never the token, never a request body (which may hold a password).
  */
 export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
-  if (typeof fetchImpl !== "function")
-    throw new IdpError("createIdpClient needs a `fetch`");
-  if (!baseUrl)
-    throw new IdpError("createIdpClient needs a base URL (IDP_BASE_URL)");
-  if (!pat)
-    throw new IdpError(
-      `createIdpClient needs the bootstrap PAT (${IDP_PAT_FILE})`,
-    );
+  if (typeof fetchImpl !== "function") throw new IdpError("createIdpClient needs a `fetch`");
+  if (!baseUrl) throw new IdpError("createIdpClient needs a base URL (IDP_BASE_URL)");
+  if (!pat) throw new IdpError(`createIdpClient needs the bootstrap PAT (${IDP_PAT_FILE})`);
   const origin = String(baseUrl).replace(/\/$/, "");
   return {
     origin,
@@ -449,9 +426,7 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
         );
       }
       if (!res.ok) {
-        throw new IdpError(
-          `${method} ${path} answered ${res.status} (IdP at ${origin})`,
-        );
+        throw new IdpError(`${method} ${path} answered ${res.status} (IdP at ${origin})`);
       }
       return await res.json();
     },
@@ -469,20 +444,10 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
  * could drift.
  */
 async function resolveProjectId(client, projectName) {
-  const projects = await client.request(
-    "POST",
-    "/management/v1/projects/_search",
-    {
-      queries: [
-        {
-          nameQuery: { name: projectName, method: "TEXT_QUERY_METHOD_EQUALS" },
-        },
-      ],
-    },
-  );
-  const projectId = (projects?.result ?? []).find(
-    (item) => item.name === projectName,
-  )?.id;
+  const projects = await client.request("POST", "/management/v1/projects/_search", {
+    queries: [{ nameQuery: { name: projectName, method: "TEXT_QUERY_METHOD_EQUALS" } }],
+  });
+  const projectId = (projects?.result ?? []).find((item) => item.name === projectName)?.id;
   if (!projectId) {
     throw new IdpError(
       `the shared project "${projectName}" does not exist on this IdP — this tool CONVERGES ` +
@@ -497,11 +462,7 @@ async function resolveSharedApp(client, { projectName, appName }) {
   const apps = await client.request(
     "POST",
     `/management/v1/projects/${projectId}/apps/_search`,
-    {
-      queries: [
-        { nameQuery: { name: appName, method: "TEXT_QUERY_METHOD_EQUALS" } },
-      ],
-    },
+    { queries: [{ nameQuery: { name: appName, method: "TEXT_QUERY_METHOD_EQUALS" } }] },
   );
   const appId = (apps?.result ?? []).find((item) => item.name === appName)?.id;
   if (!appId) {
@@ -527,20 +488,12 @@ export async function convergeRedirectUris({
   appName = DEFAULT_APP_NAME,
   log = () => {},
 }) {
-  const { projectId, appId } = await resolveSharedApp(client, {
-    projectName,
-    appName,
-  });
-  const detail = await client.request(
-    "GET",
-    `/management/v1/projects/${projectId}/apps/${appId}`,
-  );
+  const { projectId, appId } = await resolveSharedApp(client, { projectName, appName });
+  const detail = await client.request("GET", `/management/v1/projects/${projectId}/apps/${appId}`);
   const current = detail?.app?.oidcConfig ?? {};
   const plan = planRedirectUriConverge({ current, desired });
   if (plan.action === "skip") {
-    log(
-      `  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`,
-    );
+    log(`  ↳ idp redirect set already holds ${current.redirectUris?.length ?? 0} URI(s)`);
     return { action: "skip", projectId, appId };
   }
   await client.request(
@@ -579,13 +532,9 @@ async function findUserByUsername(client, username) {
  * grant», otherwise the converge would PUT the wrong authorization's roles.
  */
 async function findUserGrant(client, { userId, projectId }) {
-  const data = await client.request(
-    "POST",
-    "/management/v1/users/grants/_search",
-    {
-      queries: [{ userIdQuery: { userId } }],
-    },
-  );
+  const data = await client.request("POST", "/management/v1/users/grants/_search", {
+    queries: [{ userIdQuery: { userId } }],
+  });
   const hit = (data?.result ?? []).find((item) => item.projectId === projectId);
   if (!hit?.id) return null;
   return { id: hit.id, roleKeys: [...(hit.roleKeys ?? [])] };
@@ -698,45 +647,26 @@ export async function convergeGoldenIdentities({
       // read is in apps/api/src/auth/idp/zitadel.idp.ts:441-452). `userId` stays as a
       // fallback only so an older Zitadel build cannot silently yield no subject.
       const userId = created?.id ?? created?.userId;
-      if (!userId)
-        throw new IdpError(`creating ${step.username} returned no user id`);
-      existing[step.username] = {
-        userId,
-        emailVerified: account.emailVerified,
-      };
+      if (!userId) throw new IdpError(`creating ${step.username} returned no user id`);
+      existing[step.username] = { userId, emailVerified: account.emailVerified };
       subjects[account.subjectEnvVar] = userId;
       log(`  ↳ created ${step.username} (verified: ${account.emailVerified})`);
     } else if (step.op === "set-password") {
       const userId = step.userId ?? existing[step.username]?.userId;
-      if (!userId)
-        throw new IdpError(
-          `no user id to set the password of ${step.username} on`,
-        );
+      if (!userId) throw new IdpError(`no user id to set the password of ${step.username} on`);
       await client.request("POST", `/v2/users/${userId}/password`, {
-        newPassword: {
-          password: passwords[step.passwordEnvVar],
-          changeRequired: false,
-        },
+        newPassword: { password: passwords[step.passwordEnvVar], changeRequired: false },
       });
-      log(
-        `  ↳ password set for ${step.username} (from ${step.passwordEnvVar})`,
-      );
+      log(`  ↳ password set for ${step.username} (from ${step.passwordEnvVar})`);
     } else if (step.op === "verify-email") {
       // The two-hop flip proven live in #1131: SetEmail with `isVerified` is rejected
       // for an unchanged address, so a fresh code is returned (never delivered) and
       // immediately verified. The code lives in this local only — never logged.
-      const issued = await client.request(
-        "POST",
-        `/v2/users/${step.userId}/email/resend`,
-        {
-          returnCode: {},
-        },
-      );
+      const issued = await client.request("POST", `/v2/users/${step.userId}/email/resend`, {
+        returnCode: {},
+      });
       const code = issued?.verificationCode ?? issued?.emailCode;
-      if (!code)
-        throw new IdpError(
-          `the IdP returned no verification code for ${step.username}`,
-        );
+      if (!code) throw new IdpError(`the IdP returned no verification code for ${step.username}`);
       await client.request("POST", `/v2/users/${step.userId}/email/verify`, {
         verificationCode: code,
       });
@@ -744,8 +674,7 @@ export async function convergeGoldenIdentities({
       log(`  ↳ email marked verified for ${step.username}`);
     } else if (step.op === "ensure-grant") {
       const userId = step.userId ?? existing[step.username]?.userId;
-      if (!userId)
-        throw new IdpError(`no user id to grant ${step.username} on`);
+      if (!userId) throw new IdpError(`no user id to grant ${step.username} on`);
       const roles = step.roleKeys.join(", ");
       if (step.grantId) {
         // The authorization exists and carries the wrong roles: REPLACE its role
@@ -783,8 +712,7 @@ export async function convergeGoldenIdentities({
   for (const account of accounts) {
     if (subjects[account.subjectEnvVar]) continue;
     const userId = existing[account.username]?.userId;
-    if (!userId)
-      throw new IdpError(`no subject resolved for ${account.subjectEnvVar}`);
+    if (!userId) throw new IdpError(`no subject resolved for ${account.subjectEnvVar}`);
     subjects[account.subjectEnvVar] = userId;
   }
   return subjects;

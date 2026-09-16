@@ -438,12 +438,7 @@ export const REMOTE_HEREDOC_DELIMITER = "DS_SLOT_EOF";
  * a lone delimiter line would end the heredoc early and spill the rest into the shell,
  * and contents with no trailing newline would silently gain one from the heredoc.
  */
-export function remoteWriteScript(
-  path,
-  contents,
-  mode,
-  { append = false } = {},
-) {
+export function remoteWriteScript(path, contents, mode, { append = false } = {}) {
   const text = String(contents ?? "");
   if (!text.endsWith("\n")) {
     throw new SlotError(
@@ -777,9 +772,7 @@ export function caddyIsAttached(stdout) {
         `expected a JSON object, got ${text.slice(0, 120)}`,
     );
   }
-  return Object.values(containers).some(
-    (entry) => entry?.Name === CADDY_CONTAINER,
-  );
+  return Object.values(containers).some((entry) => entry?.Name === CADDY_CONTAINER);
 }
 
 function caddyAttachmentProbe(slot) {
@@ -999,19 +992,11 @@ export function slotBucketRemoveCommand(slot) {
  * the host it was signed for (`apps/api/src/storage/storage.s3.ts`), so a browser
  * fetching the image has to reach the very host the api signed for.
  */
-export function renderSlotEnv({
-  slot,
-  sha,
-  baseDomain,
-  redisDb,
-  goldenSubjects,
-}) {
+export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }) {
   assertSlotName(slot);
   shortSha(sha);
   const hosts = slotHostnames(slot, baseDomain);
-  const missing = GOLDEN_SUBJECT_ENV_VARS.filter(
-    (name) => !goldenSubjects?.[name],
-  );
+  const missing = GOLDEN_SUBJECT_ENV_VARS.filter((name) => !goldenSubjects?.[name]);
   if (missing.length) {
     throw new SlotError(
       `cannot render the env of slot ${slot}: ${missing.join(", ")} ` +
@@ -1118,10 +1103,7 @@ export function renderIdpRedirectUris(slotNames, baseDomain) {
  */
 export function resolveDesiredRedirectSet(step, env = process.env) {
   return {
-    redirectUris: unionUris(
-      parsePinnedUris(env.IDP_REDIRECT_URIS),
-      step.desired.redirectUris,
-    ),
+    redirectUris: unionUris(parsePinnedUris(env.IDP_REDIRECT_URIS), step.desired.redirectUris),
     postLogoutUris: unionUris(
       parsePinnedUris(env.IDP_POST_LOGOUT_URIS),
       step.desired.postLogoutUris,
@@ -1201,15 +1183,7 @@ export function planPruneByFreeSpace({ freeBytes }) {
         // failure here is a real docker failure, and it fails `gc`.
         kind: "sh",
         label: `free disk below ${GC_FREE_SPACE_FLOOR} — pruning unreferenced images`,
-        command: [
-          "sudo",
-          "docker",
-          "image",
-          "prune",
-          "-af",
-          "--filter",
-          "until=24h",
-        ],
+        command: ["sudo", "docker", "image", "prune", "-af", "--filter", "until=24h"],
       },
     ],
   };
@@ -1240,13 +1214,7 @@ export function resetIdentitiesLogLine({ slot, actor, now = new Date() }) {
  * A preview that is not live is refused rather than defaulted: it owns no Redis
  * database, so «flush its database» has no honest answer.
  */
-export function planResetIdentities({
-  slot,
-  liveSlots,
-  subjects,
-  actor,
-  now = new Date(),
-}) {
+export function planResetIdentities({ slot, liveSlots, subjects, actor, now = new Date() }) {
   assertSlotName(slot);
   if (slot !== "main" && !liveSlots?.[slot]) {
     throw new SlotError(
@@ -1414,12 +1382,7 @@ export function planSlotUp({
  * every image any other live slot lists, and when nothing is left the step is absent
  * from the plan entirely rather than present and empty.
  */
-export function planSlotDown({
-  slot,
-  liveSlots,
-  baseDomain,
-  now = new Date(),
-}) {
+export function planSlotDown({ slot, liveSlots, baseDomain, now = new Date() }) {
   assertSlotName(slot);
   assertBaseDomain(baseDomain);
   void now;
@@ -1453,9 +1416,7 @@ export function planSlotDown({
         .flatMap(([, entry]) => entry?.images ?? []),
     );
     const orphaned = [
-      ...new Set(
-        (live[slot]?.images ?? []).filter((ref) => SLOT_IMAGE_RE.test(ref)),
-      ),
+      ...new Set((live[slot]?.images ?? []).filter((ref) => SLOT_IMAGE_RE.test(ref))),
     ].filter((ref) => !stillReferenced.has(ref));
     if (orphaned.length) {
       steps.push({
@@ -1673,8 +1634,7 @@ export async function runSlotPlan(
         }
         await sh(item.apply, step);
       }
-    } else if (step.kind === "write")
-      await write(step.path, step.contents, step.mode);
+    } else if (step.kind === "write") await write(step.path, step.contents, step.mode);
     else if (step.kind === "append") {
       if (!append) {
         throw new SlotError(
@@ -1833,10 +1793,7 @@ export function parseArgs(argv) {
     // `--yes` must be typed. A confirmation prompt would be worse than useless here:
     // the command is meant to be run over ssh in a non-interactive shell.
     const [slot, ...flags] = rest;
-    if (!slot)
-      throw new SlotError(
-        "`reset` requires <slot> (only `main` is resettable)",
-      );
+    if (!slot) throw new SlotError("`reset` requires <slot> (only `main` is resettable)");
     assertSlotName(slot);
     if (slot !== "main") {
       throw new SlotError(
@@ -1856,8 +1813,7 @@ export function parseArgs(argv) {
   }
   if (COMMANDS_WITH_SLOT_AND_REF.has(command)) {
     const [slot, ...flags] = rest;
-    if (!slot)
-      throw new SlotError(`\`${command}\` requires <slot> and \`--ref <sha>\``);
+    if (!slot) throw new SlotError(`\`${command}\` requires <slot> and \`--ref <sha>\``);
     assertSlotName(slot);
     // A BARE positional SHA is an error, not a second spelling: the commit a slot is
     // converged on is the one thing the preview workflow passes by hand, and two
@@ -1959,10 +1915,7 @@ async function readBoxImages() {
     STAGE_1,
     "sudo docker image ls --format '{{.Repository}}:{{.Tag}}'",
   );
-  return out
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  return out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
 async function readBoxFreeBytes() {
@@ -2309,10 +2262,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function readSlotServices(slot) {
   let text;
   try {
-    text = await sshCapture(
-      STAGE_1,
-      quoteCommand(["cat", slotComposeFile(slot)]),
-    );
+    text = await sshCapture(STAGE_1, quoteCommand(["cat", slotComposeFile(slot)]));
   } catch (e) {
     throw new SlotError(
       `cannot read ${slotComposeFile(slot)} on ${STAGE_1} (${e.message}) — without the ` +
@@ -2353,9 +2303,7 @@ function realEffects(boxEnv) {
     sshScript(STAGE_1, script, {
       label: step?.label ?? "slot",
       stallBudgetMs:
-        step?.stallBudget === "build"
-          ? STALL_BUDGET_BUILD_MS
-          : STALL_BUDGET_DEFAULT_MS,
+        step?.stallBudget === "build" ? STALL_BUDGET_BUILD_MS : STALL_BUDGET_DEFAULT_MS,
     });
   return {
     sql: (statement, step) =>
@@ -2399,19 +2347,13 @@ function realEffects(boxEnv) {
       };
     },
     write: (path, contents, mode) =>
-      sshScript(STAGE_1, remoteWriteScript(path, contents, mode), {
-        label: `write ${path}`,
-      }),
+      sshScript(STAGE_1, remoteWriteScript(path, contents, mode), { label: `write ${path}` }),
     // Separate from `write` because it must NOT truncate: the audit trail of
     // `reset main` is the whole point of the file it appends to.
     append: (path, contents, mode) =>
-      sshScript(
-        STAGE_1,
-        remoteWriteScript(path, contents, mode, { append: true }),
-        {
-          label: `append ${path}`,
-        },
-      ),
+      sshScript(STAGE_1, remoteWriteScript(path, contents, mode, { append: true }), {
+        label: `append ${path}`,
+      }),
     // The ONE effect that does not go to the box: the shared Zitadel's management API.
     // Built per step, so every command that emits no `idp` step still runs on a box
     // where the bootstrap PAT file is not readable.
@@ -2426,29 +2368,16 @@ function realEffects(boxEnv) {
       const { bootProbe } = await readSlotServices(step.slot);
       const out = await sshCapture(
         STAGE_1,
-        verifyImagesScript({
-          slot: step.slot,
-          sha: step.sha,
-          services: bootProbe,
-        }),
+        verifyImagesScript({ slot: step.slot, sha: step.sha, services: bootProbe }),
       );
-      console.log(
-        out
-          .split(/\r?\n/)
-          .map((line) => `  ${line}`)
-          .join("\n"),
-      );
+      console.log(out.split(/\r?\n/).map((line) => `  ${line}`).join("\n"));
       return assertImagesBoot(out, bootProbe);
     },
     verifyRunning: async (step) => {
       const { longRunning } = await readSlotServices(step.slot);
       const out = await sshCapture(
         STAGE_1,
-        verifyRunningScript({
-          slot: step.slot,
-          sha: step.sha,
-          services: longRunning,
-        }),
+        verifyRunningScript({ slot: step.slot, sha: step.sha, services: longRunning }),
       );
       console.log(`  ${out}`);
       return assertRunningVerdict(out, { slot: step.slot, sha: step.sha });
@@ -2464,10 +2393,7 @@ function realEffects(boxEnv) {
         );
       }
       const headers = {
-        authorization: basicAuthHeader(
-          user,
-          requiredOperatorPassword(process.env),
-        ),
+        authorization: basicAuthHeader(user, requiredOperatorPassword(process.env)),
         accept: "application/json",
       };
       const deadline = Date.now() + HEALTH_DEADLINE_MS;
@@ -2478,9 +2404,7 @@ function realEffects(boxEnv) {
         await delay(HEALTH_POLL_MS);
       }
       if (!verdict.ok) {
-        throw new SlotError(
-          `${step.url} is not serving the converged commit: ${verdict.reason}`,
-        );
+        throw new SlotError(`${step.url} is not serving the converged commit: ${verdict.reason}`);
       }
       console.log(`  ↳ ${verdict.reason}`);
       return verdict;
@@ -2488,10 +2412,7 @@ function realEffects(boxEnv) {
     prune: (step) =>
       sshScript(
         STAGE_1,
-        pruneScript({
-          retention: step.retention,
-          reservedSpace: step.reservedSpace,
-        }),
+        pruneScript({ retention: step.retention, reservedSpace: step.reservedSpace }),
         // Build-class budget: the first prune on a box that has never been GC'd walks
         // the whole snapshotter content store and can go minutes without a line.
         { label: step.label, stallBudgetMs: STALL_BUDGET_BUILD_MS },
@@ -2553,23 +2474,16 @@ async function main() {
   // coherent — refuse before any build minute is spent (#2207).
   if (COMMANDS_WITH_SLOT_AND_REF.has(options.command)) {
     const captcha = assertCaptchaCoherent(boxEnv);
-    console.log(
-      `# bot protection on ${STAGE_1}: ${captcha.enabled ? "ON (vendor pair)" : "OFF"} — coherent`,
-    );
+    console.log(`# bot protection on ${STAGE_1}: ${captcha.enabled ? "ON (vendor pair)" : "OFF"} — coherent`);
   }
 
   if (options.command === "status") {
     console.log(`# live slots on ${STAGE_1} (docker compose project labels)`);
     console.log(JSON.stringify(liveSlots, null, 2));
-    console.log(
-      "# shared IdP redirect set — `up`/`down` converge this onto the app",
-    );
+    console.log("# shared IdP redirect set — `up`/`down` converge this onto the app");
     console.log(
       JSON.stringify(
-        renderIdpRedirectUris(
-          Object.keys(liveSlots),
-          requiredBaseDomain(boxEnv),
-        ),
+        renderIdpRedirectUris(Object.keys(liveSlots), requiredBaseDomain(boxEnv)),
         null,
         2,
       ),
@@ -2583,10 +2497,7 @@ async function main() {
       liveSlots,
     });
     const prune = planPruneByFreeSpace({ freeBytes: await readBoxFreeBytes() });
-    await runSlotPlan(
-      { steps: [...images.commands, ...prune.commands] },
-      effects,
-    );
+    await runSlotPlan({ steps: [...images.commands, ...prune.commands] }, effects);
     console.log(
       `gc: ${images.remove.length} unreferenced slot image(s) removed; ` +
         `free disk floor ${GC_FREE_SPACE_FLOOR}`,

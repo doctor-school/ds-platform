@@ -21,6 +21,7 @@ uses, so nothing can reach the whole flow through one export (PR 1.1 rework D20)
 | `@ds/auth-flow/errors`       | `authErrorMessage` — the one status/code → sentence dictionary.           |
 | `@ds/auth-flow/bot-protection` | `botProtectionSiteKey`, `botProtectionMessages` read off the config.    |
 | `@ds/auth-flow/fields`       | The identifier / password / promo / code rules and the RHF projection.   |
+| `@ds/auth-flow/test-support` | Host-config fixtures for host suites — test code only, never shipped.    |
 
 The bot-protection WIDGET, its resume-one-action orchestration
 (`useBotProtectedAction`) and the error predicates stay in
@@ -73,3 +74,8 @@ URL would mint the session on the wrong host — a defect no rendered screen sho
 ## Mounted by
 
 `apps/portal/lib/auth-flow-config.ts` and `apps/doctor/lib/auth-flow-config.ts`.
+
+Both hosts also declare the dependency, list `@ds/auth-flow` in
+`transpilePackages`, and `@source "../../../packages/auth-flow/src"` in
+`app/globals.css` — a source-shipping package loses every Tailwind class in the
+production image without that third line.

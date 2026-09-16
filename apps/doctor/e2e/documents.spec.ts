@@ -150,3 +150,67 @@ test.describe("017 EARS-1 (#2228): the shared footer is pinned to the viewport b
     expect(geometry.footerBottom, "footer bottom edge").toBe(geometry.viewport);
   });
 });
+
+/**
+ * 017 EARS-1 (#2234) — the giant footer wordmark is FITTED to its box, not
+ * merely scaled by a coefficient that happens to look right on one screen: at
+ * every viewport the whole word reads and `overflow: hidden` clips nothing.
+ *
+ * The canvas (`design-source/ds-shell.dc.html`) fits it with a ResizeObserver
+ * that lands the measured glyph run at 96.5% of the footer box; the code
+ * reproduces that with a text-length-derived `cqw` coefficient. This row pins
+ * the OUTCOME — the run fits, the run still fills, the page does not scroll
+ * sideways — so a future re-fit by any mechanism stays honest.
+ */
+const GIANT_FIT_VIEWPORTS = [
+  { width: 390, height: 844 },
+  { width: 1440, height: 900 },
+] as const;
+
+test.describe("017 EARS-1 (#2234): the giant footer wordmark fits its box at every width", () => {
+  for (const viewport of GIANT_FIT_VIEWPORTS) {
+    test(`EARS-1.13: at ${viewport.width}px the Doctor wordmark reads whole — no clipped glyphs, no horizontal page scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.goto("/documents");
+      await expect(page.getByTestId("footer-giant")).toBeVisible();
+
+      const geometry = await page.evaluate(() => {
+        const giant = document.querySelector('[data-testid="footer-giant"]')!;
+        const box = giant.parentElement!;
+        const run = document.createRange();
+        run.selectNodeContents(giant);
+        return {
+          text: giant.textContent ?? "",
+          fontSize: Number.parseFloat(getComputedStyle(giant).fontSize),
+          boxWidth: box.getBoundingClientRect().width,
+          runWidth: run.getBoundingClientRect().width,
+          giantScrollWidth: giant.scrollWidth,
+          giantClientWidth: giant.clientWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          documentClientWidth: document.documentElement.clientWidth,
+        };
+      });
+
+      expect(geometry.text, "wordmark").toBe("Doctor.School");
+      // The whole glyph run lives inside the clipping box…
+      expect(geometry.runWidth, "run width vs box width").toBeLessThanOrEqual(
+        geometry.boxWidth,
+      );
+      expect(geometry.giantScrollWidth, "giant scrollWidth").toBeLessThanOrEqual(
+        geometry.giantClientWidth,
+      );
+      // …and it still FILLS it: a "fit" that shrank the wordmark to a caption
+      // would pass the clipping check and lose the approved canvas look.
+      expect(geometry.runWidth, "run width fills the box").toBeGreaterThan(
+        geometry.boxWidth * 0.9,
+      );
+      // Nothing the footer paints may push the page sideways.
+      expect(
+        geometry.documentScrollWidth,
+        "document scrollWidth",
+      ).toBeLessThanOrEqual(geometry.documentClientWidth);
+    });
+  }
+});

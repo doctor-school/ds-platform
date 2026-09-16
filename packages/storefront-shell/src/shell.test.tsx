@@ -68,7 +68,7 @@ const DOCTOR: StorefrontShellConfig = {
       note: "Закулисье платформы: проекты, эксперты, партнёры.",
     },
     note: ["Бесплатное образование для врачей.", "© Doctor.School, 2026"],
-    giant: { text: "Doctor.School", fontSize: "min(16cqw,240px)" },
+    giant: { text: "Doctor.School", fontSize: "min(15.07cqw,240px)" },
   },
 };
 
@@ -90,7 +90,7 @@ const ACADEMY: StorefrontShellConfig = {
       note: "Конечный продукт: специальности, школы, курсы, события.",
     },
     note: ["BBM: Академия смыслов", "© Doctor.School, 2026"],
-    giant: { text: "Academy.Doctor.School", fontSize: "min(9.6cqw,150px)" },
+    giant: { text: "Academy.Doctor.School", fontSize: "min(8.76cqw,150px)" },
   },
   hiddenOnPaths: [
     "/login",
@@ -451,15 +451,18 @@ describe("StorefrontFooter", () => {
     const giant = screen.getByTestId("footer-giant");
     expect(giant).toHaveTextContent("Doctor.School");
     // The canvas fits the wordmark with a ResizeObserver; in code it is pure CSS
-    // — container-query units on a container-typed box, exactly the canvas
-    // `giantSize` value.
-    expect(giant).toHaveStyle({ fontSize: "min(16cqw,240px)" });
+    // — container-query units on a container-typed box, with the coefficient
+    // DERIVED from the measured glyph run of this host's own wordmark so the run
+    // lands on the canvas's 96.5% of the box at every width (#2234). The fit
+    // itself is browser geometry, so the `/documents` Playwright rows own it;
+    // this row owns the contract that the size is config, never script.
+    expect(giant).toHaveStyle({ fontSize: "min(15.07cqw,240px)" });
     doctor.unmount();
 
     render(<StorefrontFooter config={ACADEMY} />);
     const academyGiant = screen.getByTestId("footer-giant");
     expect(academyGiant).toHaveTextContent("Academy.Doctor.School");
-    expect(academyGiant).toHaveStyle({ fontSize: "min(9.6cqw,150px)" });
+    expect(academyGiant).toHaveStyle({ fontSize: "min(8.76cqw,150px)" });
   });
 
   it("008 EARS-14 · 017 EARS-12: the SAME footer renders the academy values", () => {

@@ -112,7 +112,7 @@ export function academyShellConfig(t: ShellTranslator): StorefrontShellConfig {
         note: t("footerCrossNote"),
       },
       note: [t("footerNoteBrand"), t("footerNoteCopyright")],
-      giant: { text: t("footerGiant"), fontSize: "min(9.6cqw,150px)" },
+      giant: { text: t("footerGiant"), fontSize: "min(8.76cqw,150px)" },
 
       /**
        * The chrome-wide list PLUS the academy home. `/` mounts the shared

@@ -2,7 +2,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { fetchMessage, fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
 import { fetchSmsOtpCode } from "./support/sms-sink";
-import { provisionLoggedInDoctor } from "./support/doctor-session";
+import {
+  provisionLoggedInDoctor,
+  waitForAuthenticatedLanding,
+} from "./support/doctor-session";
 import {
   createUserWithPhone,
   deleteUser,
@@ -125,7 +128,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // No `getByTestId("verify-submit").click()` — auto-submit carries the flow.
 
     // ── Session visible (EARS-8 read side) — set by the EARS-5 login replay ──
-    await page.waitForURL(/\/account/);
+    await waitForAuthenticatedLanding(page);
+    // `profile-email` / `logout` live on the /account profile card, so step onto
+    // it deliberately — the default post-auth landing is `/webinars` (013 EARS-15).
+    await page.goto("/account");
     await expect(page.getByTestId("profile-email")).not.toBeEmpty();
     await assertNoTokenInClient(page);
 
@@ -137,7 +143,8 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   });
 
   // #675 — an ALREADY-authenticated session must not be able to re-walk the auth
-  // flow. After minting a real logged-in doctor (lands on /account), visiting each
+  // flow. After minting a real logged-in doctor (lands on the accepted post-auth
+  // landing — `/webinars` by default since 013 EARS-15), visiting each
   // of the four portal auth surfaces redirects straight back to /account with NO
   // auth form rendered. Selectors stay locale-agnostic (`data-testid`), never RU
   // text. The <AuthShell> guard (client `GET /v1/auth/session`) is the mechanism.
@@ -146,7 +153,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   }) => {
     // Mint a real logged-in doctor via the shipped 003 flow (ends on /account).
     await provisionLoggedInDoctor(page);
-    await page.waitForURL(/\/account/);
+    await waitForAuthenticatedLanding(page);
 
     // Each guarded auth surface, with the submit control that exists ONLY on
     // the unauthenticated form — its absence proves no auth form was rendered.
@@ -195,8 +202,12 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     );
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
-    // Auto-submit + auto-login (#175) — no button click, lands on /account.
-    await page.waitForURL(/\/account/);
+    // Auto-submit + auto-login (#175) — no button click; the session lands on
+    // the accepted post-auth landing (013 EARS-15: `/webinars` by default).
+    await waitForAuthenticatedLanding(page);
+    // `profile-email` / `logout` live on the /account profile card, so step onto
+    // it deliberately — the default post-auth landing is `/webinars` (013 EARS-15).
+    await page.goto("/account");
 
     // Sign out so the OTP-login challenge below starts from a clean session.
     await page.getByTestId("logout").click();
@@ -229,7 +240,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // its own (the explicit button stays for a11y but is not exercised here).
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
-    await page.waitForURL(/\/account/);
+    await waitForAuthenticatedLanding(page);
+    // `profile-email` / `logout` live on the /account profile card, so step onto
+    // it deliberately — the default post-auth landing is `/webinars` (013 EARS-15).
+    await page.goto("/account");
     await expect(page.getByTestId("profile-email")).not.toBeEmpty();
     await assertNoTokenInClient(page);
   });
@@ -296,7 +310,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
-      await page.waitForURL(/\/account/);
+      await waitForAuthenticatedLanding(page);
+      // The default post-auth landing is `/webinars` (013 EARS-15); the profile
+      // card assertions below live on /account, so step onto it deliberately.
+      await page.goto("/account");
       await expect(page.getByTestId("profile-email")).not.toBeEmpty();
       await assertNoTokenInClient(page);
     } finally {
@@ -396,7 +413,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     );
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
-    await page.waitForURL(/\/account/);
+    await waitForAuthenticatedLanding(page);
+    // `profile-email` / `logout` live on the /account profile card, so step onto
+    // it deliberately — the default post-auth landing is `/webinars` (013 EARS-15).
+    await page.goto("/account");
     await page.getByTestId("logout").click();
     await page.waitForURL(/\/login/);
 

@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
+    "@ds/events-storefront": "workspace:*",
     "@ds/schemas": "workspace:*",
     "zod": "4.4.3"
   },

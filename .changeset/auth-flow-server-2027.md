@@ -1,7 +1,6 @@
 ---
 "@ds/auth-flow": minor
 "@ds/storefront-shell": patch
-"@ds/events-storefront": patch
 "@ds/portal": patch
 "@ds/doctor": patch
 ---
@@ -14,8 +13,9 @@ and `apps/doctor/lib/{session,shell-auth}.ts` into `@ds/auth-flow/server`. Each
 host keeps only its own route values (`lib/auth-flow-routes.ts`): which paths
 are its auth screens, which of them a signed-in user may still complete, and —
 on the Academy — the cookie the middleware parks a return target in.
-`@ds/events-storefront` now re-exports the session declaration from the same
-place instead of declaring its own, so the cookie name exists once in the repo.
+`@ds/auth-flow/server` re-exports the session declaration that stays owned by
+`@ds/events-storefront/server`, so the cookie name and the fingerprint surface
+exist once in the repo and auth consumers read them from one address.
 
 Two user-visible deltas ride along. The doctor storefront's `/register` gains
 the signed-in guard it never had (#675 parity): a signed-in doctor opening it is

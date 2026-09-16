@@ -626,6 +626,9 @@ importers:
       '@ds/design-system':
         specifier: workspace:*
         version: link:../design-system
+      '@ds/events-storefront':
+        specifier: workspace:*
+        version: link:../events-storefront
       '@ds/schemas':
         specifier: workspace:*
         version: link:../schemas
@@ -812,9 +815,6 @@ importers:
 
   packages/events-storefront:
     dependencies:
-      '@ds/auth-flow':
-        specifier: workspace:*
-        version: link:../auth-flow
       '@ds/design-system':
         specifier: workspace:*
         version: link:../design-system

@@ -1,0 +1,1 @@
+M	tools/lint/scenario-coverage-lint.ts

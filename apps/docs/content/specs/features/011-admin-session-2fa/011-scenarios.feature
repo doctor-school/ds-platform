@@ -15,6 +15,7 @@
 # PRD (internal-admin security hardening — see the requirements header note), so there are no
 # US-N backlinks.
 
+@host:admin
 Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP for platform_admin
 
   Background:

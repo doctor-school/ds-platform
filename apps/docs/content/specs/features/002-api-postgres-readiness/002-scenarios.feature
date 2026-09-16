@@ -1,3 +1,4 @@
+@host:academy
 Feature: API readiness via GET /v1/ready
   As an operator or external readiness probe
   I want a public readiness endpoint that verifies Postgres + pgvector

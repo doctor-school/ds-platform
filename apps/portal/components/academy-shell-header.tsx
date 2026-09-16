@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
 import { AcademyShellHeaderClient } from "@/components/academy-shell-header-client";
+import { portalNav } from "@/lib/navigation-model";
 import { academyShellConfig } from "@/lib/shell-config";
 
 /**
@@ -22,8 +23,8 @@ export async function AcademyShellHeader() {
   return (
     <AcademyShellHeaderClient
       config={academyShellConfig(t)}
-      loginLabel={t("login")}
-      profileLabel={t("profile")}
+      loginLabel={t(portalNav.login.label)}
+      profileLabel={t(portalNav.profile.label)}
     />
   );
 }

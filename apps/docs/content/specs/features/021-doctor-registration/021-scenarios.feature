@@ -10,6 +10,7 @@
 # deferred to wave 2 by the А1 release-1 cut (#1703, tracked by #1545), so the
 # @EARS-9 scenarios below are wave-2 acceptance and release 1 promises no points.
 
+@host:doctor
 Feature: A doctor stopped by a gate registers in a short honest form and comes back to what they came for
 
   Background:

@@ -6,6 +6,7 @@
 # portal-integration + E2E child Issue, open-ears-issues step 3a), not a bare footnote.
 # Tags map scenarios to EARS handlers in 004-requirements-en.md; each EARS realizes a US-N in 004-product.md.
 
+@host:academy
 Feature: Public webinar discovery — a doctor reads an event page and scans upcoming broadcasts
 
   Background:

@@ -1,5 +1,7 @@
 import type { StorefrontShellConfig } from "@ds/storefront-shell";
 
+import { portalNav, portalTopNav } from "@/lib/navigation-model";
+
 /**
  * 008 EARS-1…5 / EARS-11…14 · 013 EARS-16 — the academy storefront's HOST VALUES
  * for the shared chrome (`@ds/storefront-shell`, #2180 / epic #2020).
@@ -15,15 +17,24 @@ import type { StorefrontShellConfig } from "@ds/storefront-shell";
  * config is a projection of the catalog rather than a second copy of it.
  */
 
+/**
+ * The chrome's DESTINATIONS are not literals here: they come from
+ * `lib/navigation-model.ts`, the one list the derived navigation walk visits
+ * (staging/regression-contour tech spec §6.3, Issue #2067). A link the shell
+ * paints is therefore a link the regression contour opens, without either side
+ * being kept in step by hand. These three re-exports are the names the host's
+ * own call sites already use.
+ */
+
 /** The discovery front-door (008 EARS-2) — the logo and «Эфиры» both point at
  *  the canonical listing rather than at `/`, which permanent-redirects there. */
-export const DISCOVERY_HREF = "/webinars";
+export const DISCOVERY_HREF = portalNav.discovery.href;
 
 /** The `/account` profile (feature 009) — the profile chip's one destination. */
-export const PROFILE_HREF = "/account";
+export const PROFILE_HREF = portalNav.profile.href;
 
 /** The login surface (008 EARS-4). */
-export const LOGIN_HREF = "/login";
+export const LOGIN_HREF = portalNav.login.href;
 
 /**
  * 017 EARS-12 — the ONE crossing out of this storefront. It is the doctor
@@ -96,7 +107,10 @@ export function academyShellConfig(t: ShellTranslator): StorefrontShellConfig {
      * single shipped destination on BOTH storefronts, the nav growing with
      * features 015 / 016 and the partner surface.
      */
-    nav: [{ label: t("navBroadcasts"), href: DISCOVERY_HREF }],
+    nav: portalTopNav.map((item) => ({
+      label: t(item.label),
+      href: item.href,
+    })),
 
     footer: {
       navTitle: t("footerSections"),

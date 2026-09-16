@@ -5,6 +5,7 @@
 # assertions run in Vitest e2e. @independent and @012-dependent mark the delivery
 # wave of each scenario.
 
+@host:academy
 Feature: The academy's front door serves a doctor and a partner on one public page
 
   Background:

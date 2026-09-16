@@ -10,6 +10,10 @@
 **/coverage
 **/test-results
 **/playwright-report
+# The contour route manifest is written INTO the image by the Dockerfile (only
+# when `CONTOUR_MANIFEST=1`); a copy left in a local working tree by `next build`
+# must never ride the context into an image that is not supposed to serve one.
+apps/*/public/__contour
 .git
 .github
 .claude

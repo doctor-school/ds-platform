@@ -114,6 +114,11 @@ services:
         # into .next/routes-manifest.json, so a runtime-only value is ignored and
         # the baked localhost fallback ECONNREFUSEDs the same-origin /v1/* proxy.
         API_PROXY_TARGET: http://api:3000
+        # Staging-contour only: exports .next/server/app-paths-manifest.json to
+        # public/__contour/ so the derived route walk can read what the IMAGE
+        # mounts. Defaults to 0 in the Dockerfile, and no production build passes
+        # it, so /__contour/* exists on slot images alone.
+        CONTOUR_MANIFEST: "1"
     image: ds-portal:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-portal
     restart: unless-stopped
@@ -151,6 +156,8 @@ services:
       args:
         NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
         API_PROXY_TARGET: http://api:3000
+        # Staging-contour only — see the portal block above.
+        CONTOUR_MANIFEST: "1"
     image: ds-doctor:${DEPLOY_SHA:-local}
     container_name: ${SLOT:?}-doctor
     restart: unless-stopped

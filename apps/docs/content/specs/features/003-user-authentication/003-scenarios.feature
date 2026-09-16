@@ -4,6 +4,7 @@
 # once that runner exists (out of scope here; authored now to satisfy the SDD triplet).
 # Tags map scenarios to EARS handlers in 003-requirements-en.md.
 
+@host:academy
 Feature: Net-new web authentication producing a doctor_guest identity
 
   Background:

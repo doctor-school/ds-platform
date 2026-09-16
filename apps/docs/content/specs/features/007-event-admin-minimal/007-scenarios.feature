@@ -8,6 +8,7 @@
 # Issue, open-ears-issues step 3a), not a bare footnote.
 # Tags map scenarios to EARS handlers in 007-requirements-en.md; each EARS realizes a US-N in 007-product.md.
 
+@host:admin
 Feature: Minimal event admin — one operator creates, publishes, streams, runs, and archives a webinar
 
   Background:

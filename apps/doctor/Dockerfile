@@ -46,6 +46,18 @@ ENV API_PROXY_TARGET=$API_PROXY_TARGET
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/doctor
+# STAGING-CONTOUR ARTIFACT, OFF BY DEFAULT. `.next/server/app-paths-manifest.json`
+# is the route list the IMAGE actually mounts (tech spec §6.3, #2012) and the
+# standalone bundle does not carry it. Only infra/deploy/compose/slot passes
+# CONTOUR_MANIFEST=1, so production images contain no `public/__contour/**` and
+# serve no `/__contour/*`. The served path is `MANIFEST_PATH` in
+# `packages/e2e/hosts.ts` — one constant, two Dockerfiles, never disagreeing.
+ARG CONTOUR_MANIFEST=0
+RUN if [ "$CONTOUR_MANIFEST" = "1" ]; then \
+      mkdir -p apps/doctor/public/__contour && \
+      cp apps/doctor/.next/server/app-paths-manifest.json \
+         apps/doctor/public/__contour/app-paths-manifest.json; \
+    fi
 
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1

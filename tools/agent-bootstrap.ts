@@ -55,6 +55,10 @@ import {
   roadmapHygiene,
   roadmapHygieneWarnings,
 } from "./gh/lib/roadmap-taxonomy.mjs";
+import {
+  probeStageSlots,
+  renderStageSlotSection,
+} from "./staging/slot-probe.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -699,6 +703,7 @@ async function main(): Promise<void> {
     conc,
     syncProbe,
     realityProbe,
+    stageSlots,
   ] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -726,7 +731,13 @@ async function main(): Promise<void> {
         changedPaths: null,
       };
     }),
+    // Live staging slots + their Stage-B request status (#2233). Never throws.
+    probeStageSlots(),
   ]);
+  // The slot probe collects its own degrade reasons (unreachable box, a failing
+  // `gh pr view`) instead of reaching into the module-level list; merge them so
+  // they reach `## Warnings` alongside every other partial-source failure.
+  for (const w of stageSlots.warnings) warnings.push(w);
   const sync = evaluateMainSync(syncProbe);
   // Surface any partial-source failures as warnings (the section itself still
   // renders — it degrades per-source rather than blanking).
@@ -954,6 +965,10 @@ async function main(): Promise<void> {
   }
   out.push("");
 
+  out.push("## Stage slots");
+  out.push(...renderStageSlotSection(stageSlots));
+  out.push("");
+
   out.push("## Active specs");
   const withSpec = activeSpecs.filter((x) => x.spec !== null);
   if (withSpec.length === 0) {
@@ -985,7 +1000,10 @@ async function main(): Promise<void> {
     out.push("");
   }
 
-  process.stdout.write(out.join("\n"));
+  // Exit explicitly once stdout has flushed. Every child this run spawned is
+  // gone by then (the ssh probe is aborted on its bound), and the SessionStart
+  // hook must never be held open by a process that outlives the output (#2233).
+  process.stdout.write(out.join("\n"), () => process.exit(0));
 }
 
 // Run only as the entry point (`tsx tools/agent-bootstrap.ts`). Guarding this

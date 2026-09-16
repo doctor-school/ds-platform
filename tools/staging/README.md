@@ -76,10 +76,20 @@ Three prerequisites the commands do NOT solve for you, in the order they bite:
 3. **`STAGE_BASIC_AUTH_PASS` must be exported** from the box file above, or the converge
    refuses at its health assertion.
 
-**Lifetime is the verdict, not a clock.** The lead raises the slot when asking for
-Stage-B, the slot stays up until the owner answers, and the closeout tail takes it down
-with `pnpm stage:slot down pr-<N>` alongside the worktree teardown. Nothing sweeps a slot
-on a timer — `gc` is an operator subcommand and reclaims disk, not live slots.
+**Lifetime is the verdict, not a clock.** A slot goes up only together with a
+**Stage-B request** — a comment on the PR, and the same message to the owner in chat,
+carrying the host URLs, the head SHA, who to sign in as and what to walk (shape:
+`apps/docs/content/skills/build-ui-from-design-system/design-approval.md`). A handoff
+prompt is never its carrier: pr-2229 stood for days because the ask lived only inside one.
+The slot then stays up until the owner answers, and the closeout tail takes it down with
+`pnpm stage:slot down pr-<N>` alongside the worktree teardown. If the owner defers
+acceptance behind a prerequisite, the slot comes down NOW and the PR records
+«re-raise after X» — a deferred verdict is not a pending one, and pr-2205 sat live on a
+stale head that way. An active findings loop keeps the slot; rework taken up in another
+session means down now and a re-raise on the new head with a NEW request. Nothing sweeps a
+slot on a timer — `gc` is an operator subcommand and reclaims disk, not live slots — so
+`pnpm bootstrap` prints a `## Stage slots` section that lists every live slot and flags
+(⚠) the ones standing with no current request comment.
 
 ## `slot.mjs` in one paragraph
 

@@ -1900,12 +1900,17 @@ async function readIdpPat() {
   return pat;
 }
 
-/** Which slots are live, straight from docker's own labels. */
-async function readLiveSlots() {
+/** Which slots are live, straight from docker's own labels.
+ *
+ * `options` is passed through to `sshCapture` untouched, so the default call is
+ * byte-identical to what `status` has always run; `pnpm bootstrap` supplies a
+ * short ConnectTimeout plus an AbortSignal (#2233). */
+export async function readLiveSlots(options = {}) {
   return parseLiveSlots(
     await sshCapture(
       STAGE_1,
       `sudo docker ps -a --format '{{.Label "com.docker.compose.project"}}\\t{{.Image}}'`,
+      options,
     ),
   );
 }

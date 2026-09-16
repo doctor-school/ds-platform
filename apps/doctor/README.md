@@ -38,9 +38,9 @@ apps/doctor/
       layout.tsx     # 017 EARS-1 — mounts @ds/storefront-shell (header / main / footer) once
       page.tsx       # storefront root page (content only; the shell is the layout)
   lib/
-    session.ts       # server-side BFF session read (host-only cookie, ADR-0001 §6 fingerprint)
-    session.test.ts  # vitest units for the above
-    shell-auth.ts    # server-resolved guest/doctor branch → the shell's `auth` DATA prop
+    auth-flow-routes.ts # this host's auth ROUTE VALUES + the server-resolved
+                     #   guest/doctor branch → the shell's `auth` DATA prop
+                     #   (the session read itself is `@ds/auth-flow/server`, #2027)
     shell-config.ts  # DOCTOR_SHELL — the host-config VALUES the shared shell renders
     theme.ts         # the inline pre-paint FOUC guard (the toggle itself is in the package)
     auth-client.ts   # client-side same-origin session probe

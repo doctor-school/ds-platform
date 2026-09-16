@@ -7,8 +7,8 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  * The sibling of `apps/portal/lib/navigation-model.ts`. Since #2180 the chrome
  * itself is `@ds/storefront-shell` and this host supplies only VALUES; this
  * module is where the DESTINATIONS among those values live. `lib/shell-config.ts`
- * derives the wordmark's target and the nav from it, `lib/shell-auth.ts` derives
- * the auth cluster's `loginHref` / `profileHref` and their copy from it, and the
+ * derives the wordmark's target and the nav from it, `lib/auth-flow-routes.ts`
+ * derives the auth cluster's `loginHref` / `profileHref` and their copy from it, and the
  * derived navigation walk reads the same array — so the links the bar paints and
  * the links the regression contour visits are ONE list by construction.
  *

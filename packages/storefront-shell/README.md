@@ -124,10 +124,10 @@ value sets is what proves the host neutrality the package exists for.
 
 ## Who mounts it
 
-| Host                    | Header mount                                                                      | Footer mount                 | Config values                                               | `auth` state mapping                                                                             |
-| ----------------------- | --------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Doctor showcase         | `apps/doctor/app/(storefront)/layout.tsx`                                         | same layout                  | `apps/doctor/lib/shell-config.ts` (`DOCTOR_SHELL`)          | `apps/doctor/lib/shell-auth.ts` (`shellAuthState`, server)                                       |
-| Academy (`apps/portal`) | `apps/portal/app/@chrome/*` via `apps/portal/components/academy-shell-header.tsx` | `apps/portal/app/layout.tsx` | `apps/portal/lib/shell-config.ts` (`academyShellConfig(t)`) | `apps/portal/components/academy-shell-header-client.tsx` (thin client leaf over `useHeaderAuth`) |
+| Host                    | Header mount                                                                      | Footer mount                 | Config values                                               | `auth` state mapping                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Doctor showcase         | `apps/doctor/app/(storefront)/layout.tsx`                                         | same layout                  | `apps/doctor/lib/shell-config.ts` (`DOCTOR_SHELL`)          | `apps/doctor/lib/auth-flow-routes.ts` (`doctorShellAuthState`, server)                          |
+| Academy (`apps/portal`) | `apps/portal/app/@chrome/*` via `apps/portal/components/academy-shell-header.tsx` | `apps/portal/app/layout.tsx` | `apps/portal/lib/shell-config.ts` (`academyShellConfig(t)`) | `apps/portal/components/academy-shell-header-client.tsx` (thin client leaf over `useShellAuth`) |
 
 Route visibility differs by mechanism, not by code: the Doctor showcase scopes
 the chrome with its `(storefront)` route group and passes no `hiddenOnPaths`,

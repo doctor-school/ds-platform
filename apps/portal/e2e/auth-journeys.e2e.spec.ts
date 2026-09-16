@@ -382,7 +382,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   //     existence).
   //   EARS-23 (backend): re-registering the SAME (already-registered) email
   //     returns the IDENTICAL pending_verification AND privately sends an
-  //     account-exists notice email — a sign-in / reset prompt carrying NO code.
+  //     account-exists notice email — a single sign-in prompt carrying NO code.
   // Live-gated (manual): asserts against REAL Mailpit on the dev-stand. Requires
   // MAILER_SMTP_* configured at the api so the notice actually sends.
   test("EARS-23/24: duplicate register → existence-agnostic screen + account-exists notice (no code)", async ({
@@ -433,14 +433,15 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.waitForURL(/\/verify/);
     await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
 
-    // EARS-23: an account-exists notice lands privately in the inbox, and it
-    // carries NO verification/login code (it is a product notice, not a credential
-    // email — the existing owner is told to sign in / reset, never given a code).
+    // EARS-23: an account-exists notice lands privately in the inbox carrying a
+    // SINGLE «Войти» action to the portal /login route and NO password-reset link
+    // (design §4), and NO verification/login code — it is a product notice, not a
+    // credential email.
     const notice = await fetchMessage(email, dupAt, "уже есть аккаунт");
     expect(notice, "account-exists notice should reach Mailpit").toBeTruthy();
     const body = `${notice!.Text}\n${notice!.HTML}`;
     expect(body).toMatch(/\/login/);
-    expect(body).toMatch(/\/reset/);
+    expect(body).not.toMatch(/\/reset/);
     // No 6-8 digit / alphanumeric code anywhere in the notice.
     expect(body).not.toMatch(/\bCode\s+[A-Z0-9]{4,12}\b/);
     expect(body).not.toMatch(/\b[0-9]{6,8}\b/);

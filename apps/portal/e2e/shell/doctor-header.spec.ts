@@ -55,22 +55,41 @@ test.describe("008 EARS-5/6 doctor header avatar icon → /account, no dropdown,
     await expect(page).toHaveURL(/\/account$/);
   });
 
-  test("008 EARS-5: the signed-in cluster carries «Мои события» → /account/events on the desktop bar", async ({
+  test("008 EARS-5: the desktop bar carries «Мои события» → /account/events, in canvas order", async ({
     page,
   }) => {
-    // #2243 — the canvas draws this link inside the auth cluster
+    // #2243 — the canvas draws this link inside the NAV GROUP
     // (`design-source/ds-shell.dc.html`, `user.links` line 209, rendered at
-    // line 33). It vanished when this storefront moved onto the shared chrome.
+    // line 33), after the nav items and before the theme control (line 35) and
+    // the chip (line 36). It vanished when this storefront moved onto the
+    // shared chrome, and came back one slot too far right.
     await provisionLoggedInDoctor(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    const cluster = page.getByTestId("shell-auth-cluster");
-    await expect(cluster).toHaveAttribute("data-cluster", "doctor");
-    const link = cluster.getByTestId("shell-auth-link");
+    await expect(page.getByTestId("shell-auth-cluster")).toHaveAttribute(
+      "data-cluster",
+      "doctor",
+    );
+    const link = page
+      .getByTestId("shell-nav-desktop")
+      .getByTestId("shell-auth-link");
     await expect(link).toBeVisible();
     await expect(link).toHaveText(MY_EVENTS_LABEL);
     await expect(link).toHaveAttribute("href", MY_EVENTS_HREF);
+
+    // The canvas order is GEOMETRY, so assert it on the painted bar:
+    // «Эфиры · Мои события · ☾ · Личный кабинет», left to right.
+    const x = async (locator) => (await locator.boundingBox()).x;
+    const navItem = page
+      .getByTestId("shell-nav-desktop")
+      .getByRole("link")
+      .first();
+    expect(await x(navItem)).toBeLessThan(await x(link));
+    expect(await x(link)).toBeLessThan(await x(page.getByTestId("theme-toggle")));
+    expect(await x(page.getByTestId("theme-toggle"))).toBeLessThan(
+      await x(page.getByTestId("shell-avatar")),
+    );
 
     // It really navigates, and the page it lands on is the right one — the h1,
     // not just the URL.

@@ -1196,11 +1196,12 @@ function buildDirectionAdjacency(at: At): NewDirectionAdjacency[] {
  * 017 EARS-8 resolves a doctor's feed as specialty → `direction_specialties` →
  * `directions` → `event_directions`, so an unclassified эфир is invisible to
  * every targeted surface no matter how published it is. Two counters, not one:
- * the second slot walks the published directions CONTIGUOUSLY over the
- * future-published suffix of the season, which is what proves every direction
- * carries an upcoming эфир. A single `index % N` walk over all plans would
- * leave holes wherever the monthly draft and hidden cells fall, and a hole is
- * one specialty's permanently empty feed.
+ * the walking slots sweep the published directions CONTIGUOUSLY over the
+ * future-published suffix of the season, two directions per эфир, which is
+ * what proves every direction carries an upcoming эфир inside EVERY 14-day
+ * feed horizon. A single `index % N` walk over all plans would leave holes
+ * wherever the monthly draft and hidden cells fall, and a hole is one
+ * specialty's permanently empty feed.
  *
  * The ordinal is positional (`index * 4 + position`), never a running counter:
  * how many slots an эфир dedupes to depends on the pin, so a running counter
@@ -1223,15 +1224,23 @@ function buildEventDirections(
     const i = plan.index;
     const upcoming =
       plan.state === "published" && plan.startsAt.getTime() > nowMs;
-    const walk = upcoming ? upcomingCounter++ : otherCounter++;
+    // TWO contiguous walking slots per эфир, not one. The doctor feed reads a
+    // 14-day horizon that carries ~27 published эфиров, and one slot per эфир
+    // closes the 38-direction cycle only every ~19 days — so a third of the
+    // specialties opened an empty feed on the stand. Two slots close it every
+    // 19 эфиров (~10 days), inside every horizon the doctor can open; the
+    // `#2213: … every 14-day feed window` test replays that over the season.
+    // The pair also gives the admin's «направления эфира» block its second
+    // and third chip, which the former one-in-seven cross-file used to do.
+    const walk = upcoming ? upcomingCounter : otherCounter;
+    if (upcoming) upcomingCounter += 2;
+    else otherCounter += 2;
 
     const slots = [
       publishedDirectionIndexOfSpecialty(volumeEventTitle(i).specialty),
       walk % published,
+      (walk + 1) % published,
     ];
-    // One эфир in seven is cross-filed under a third direction — the admin's
-    // «направления эфира» block has to render more than a single chip.
-    if (i % 7 === 3) slots.push((i * 17 + 11) % published);
     const unique = [...new Set(slots)];
 
     const eventId = goldenUuid(

@@ -1414,6 +1414,70 @@ describe("#2213 golden taxonomy and targeting", () => {
     }
   });
 
+  it("#2213: shows every specialty a published эфир in every 14-day feed window", () => {
+    // The doctor feed reads exactly one horizon: today (МСК) to today + 14
+    // days (`DOCTOR_EVENTS_FEED_HORIZON_DAYS`). «Every direction has SOME
+    // upcoming эфир» is not enough — a direction whose next эфир is five weeks
+    // out renders the same empty feed the owner rejected. So the invariant is
+    // replayed over every window a doctor could open between the pin and the
+    // end of the season, on the specialty's OWN directions only: adjacency is a
+    // widening the product may or may not apply, never what keeps a feed alive.
+    const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const MS_DAY = 24 * 60 * 60 * 1000;
+    const HORIZON_DAYS = 14;
+    const SEASON_AHEAD_DAYS = 18 * 7;
+    for (const pin of ["2026-01-15T12:00:00.000Z", "2026-12-31T23:30:00.000Z"]) {
+      const pinned = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: pin });
+      const built = buildGoldenDataset(pinned, subjects);
+      const publishedById = new Set(
+        built.directions
+          .filter((d) => d.status === "published")
+          .map((d) => d.id as string),
+      );
+      const startById = new Map(
+        built.events
+          .filter(
+            (e) =>
+              e.state === "published" &&
+              (e.startsAt as Date).getTime() > pinned.getTime(),
+          )
+          .map((e) => [e.id as string, (e.startsAt as Date).getTime()]),
+      );
+      const startsByDirection = new Map<string, number[]>();
+      for (const link of built.eventDirections) {
+        const start = startById.get(link.eventId as string);
+        if (link.status !== "active" || start === undefined) continue;
+        const list = startsByDirection.get(link.directionId as string) ?? [];
+        list.push(start);
+        startsByDirection.set(link.directionId as string, list);
+      }
+      const mskToday =
+        Math.floor((pinned.getTime() + MSK_OFFSET_MS) / MS_DAY) * MS_DAY -
+        MSK_OFFSET_MS;
+      const starved: string[] = [];
+      for (const name of RAZDEL_I_NAMES) {
+        const specialtyId = specialtyIdByName.get(name) as string;
+        const starts = built.directionSpecialties
+          .filter(
+            (link) =>
+              specialtyIdByName.get(link.specialtyName) === specialtyId &&
+              link.status === "active" &&
+              publishedById.has(link.directionId),
+          )
+          .flatMap((link) => startsByDirection.get(link.directionId) ?? []);
+        for (let day = 0; day + HORIZON_DAYS <= SEASON_AHEAD_DAYS; day += 1) {
+          const from = mskToday + day * MS_DAY;
+          const to = from + HORIZON_DAYS * MS_DAY;
+          if (!starts.some((start) => start >= from && start < to)) {
+            starved.push(`${name} @ +${day}d`);
+            break;
+          }
+        }
+      }
+      expect(starved, pin).toEqual([]);
+    }
+  });
+
   it("#2213: keeps the adjacency graph directed, loop-free and singly authored", () => {
     const pairs = new Set<string>();
     for (const edge of dataset.directionAdjacency) {

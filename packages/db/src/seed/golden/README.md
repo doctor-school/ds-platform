@@ -195,7 +195,7 @@ two as the week boundary moves.
 | `partners`              | 14                | 11 `published` · 2 `draft` · 1 `retired`; two of them deliberately carry no `website_url` — «партнёр без сайта» is a rendered state of its own — and every one carries a `logo_ref` («Media» below)                                                                                                                                                                                                                                                                                                                                                                           |
 | `direction_specialties` | 130               | 126 `active` · 4 `retired`; a partition of the whole Минздрав book over the published directions, plus additive extras, so every specialty a doctor can pick resolves to a direction                                                                                                                                                                                                                                                                                                                                                                                          |
 | `direction_adjacency`   | 77                | 75 `active` · 2 `retired`; 37 `related` · 34 `interdisciplinary` · 6 `subdiscipline`, weights 38–90. Directed and loop-free, one authored edge per ordered pair — «Targeting» below                                                                                                                                                                                                                                                                                                                                                                                           |
-| `event_directions`      | 1 433             | 1 404 `active` · 29 `retired`; 2–3 directions per эфир, walked so that every published direction leads to an upcoming published эфир at any pin                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `event_directions`      | 1 984             | 1 955 `active` · 29 `retired`; 1–3 directions per эфир, walked two per эфир so that every published direction leads to an upcoming published эфир inside every 14-day feed window at any pin                                                                                                                                                                                                                                                                                                                                                                                  |
 | `project_experts`       | 51                | 48 `active` · 3 `retired`; 14 `curator` (exactly one active curator per project) · 37 `member`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `project_partners`      | 30                | 28 `active` · 2 `retired`; 14 `is_primary` — at most one per project — and 16 secondary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
@@ -260,11 +260,16 @@ line up, and a `#2213:` test in `golden.spec.ts` locks each step:
    `taxonomy.ts` (each name in exactly one direction), and the extras add to
    that partition instead of replacing part of it. A specialty the partition
    missed would be a doctor whose own profile leads nowhere.
-2. **Every published direction leads to an UPCOMING published эфир.** The
-   `event_directions` walk is a contiguous `upcomingCounter % 38` sweep over the
-   published directions, so the 38-direction cycle closes inside the upcoming
-   window at any pin, not only at the authored one. This is the invariant that
-   makes «pick any specialty ⇒ a non-empty feed» true rather than likely.
+2. **Every published direction leads to an upcoming published эфир INSIDE
+   EVERY 14-DAY FEED HORIZON.** The `event_directions` walk is a contiguous
+   `upcomingCounter % 38` sweep over the published directions, TWO directions
+   per эфир, so the 38-direction cycle closes every 19 эфиров (about ten days)
+   — inside any horizon the doctor feed can open (`DOCTOR_EVENTS_FEED_HORIZON_DAYS`
+   = 14), at any pin, not only at the authored one. One direction per эфир
+   closed the cycle only every ~19 days and left a third of the specialties
+   with an empty first window. This is the invariant that makes «pick any
+   specialty ⇒ a non-empty feed» true rather than likely; the test replays it
+   over every window of the season.
 3. **Adjacency is a directed, loop-free graph with one authored edge per ordered
    pair.** 77 edges, `related` / `interdisciplinary` / `subdiscipline`, weighted
    38–90, and every published direction is touched by at least one — so the

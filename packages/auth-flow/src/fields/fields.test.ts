@@ -8,6 +8,7 @@ import {
 import {
   identifierFieldSchema,
   loginIdentifierFormSchema,
+  otpIdentifierFormSchema,
   registerFieldRules,
   resolveVerificationCode,
 } from "./index";
@@ -82,5 +83,30 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
         password: "Sup3r$ecretPw!9",
       }).success,
     ).toBe(false);
+  });
+
+  it("003 EARS-7: the OTP request shape is refused for a channel the host does not serve", () => {
+    // Row 21 switches the validator by `config.channels`, and the OTP shape is
+    // part of it: an email-only storefront must not be able to build the SMS
+    // request at all. Without the config the caller could hand the package a
+    // channel its own host never offers and buy a round trip that can only fail.
+    expect(
+      otpIdentifierFormSchema(ACADEMY_FIXTURE, "sms").safeParse({
+        identifier: "+79991234567",
+        channel: "sms",
+      }).success,
+    ).toBe(true);
+    expect(
+      otpIdentifierFormSchema(DOCTOR_FIXTURE, "sms").safeParse({
+        identifier: "+79991234567",
+        channel: "sms",
+      }).success,
+    ).toBe(false);
+    expect(
+      otpIdentifierFormSchema(DOCTOR_FIXTURE, "email").safeParse({
+        identifier: "doctor@clinic.ru",
+        channel: "email",
+      }).success,
+    ).toBe(true);
   });
 });

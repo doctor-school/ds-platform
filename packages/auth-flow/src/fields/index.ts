@@ -94,14 +94,18 @@ export function resetIdentifierFormSchema(
  * {@link identifierFieldSchema} on purpose — here the channel is already chosen.
  */
 export function otpIdentifierFormSchema(
-  _config: AuthFlowHostConfig,
+  config: AuthFlowHostConfig,
   channel: OtpChannel,
 ): z.ZodType<OtpRequest, OtpRequest> {
   const identifier =
     channel === "email" ? EmailIdentifierSchema : PhoneIdentifierSchema;
   return z.object({
     identifier,
-    channel: z.enum(["email", "sms"]),
+    // Row 21, enforced once: the served channels are the host's, so a channel
+    // this storefront does not offer cannot be built here at all — an email-only
+    // door would otherwise accept an SMS request and buy a round trip that can
+    // only fail, with the generic outcome copy as its answer.
+    channel: z.enum(config.channels as [OtpChannel, ...OtpChannel[]]),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<OtpRequest, OtpRequest>;
 }

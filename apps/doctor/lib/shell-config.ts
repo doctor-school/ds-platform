@@ -1,5 +1,6 @@
 import type { StorefrontShellConfig } from "@ds/storefront-shell";
 import { academyHref } from "@/lib/academy";
+import { doctorNav, doctorTopNav } from "@/lib/navigation-model";
 
 /**
  * 017 EARS-1 / EARS-12 · 008 EARS-13 — the doctor storefront's HOST VALUES for
@@ -13,6 +14,11 @@ import { academyHref } from "@/lib/academy";
  * value in {@link StorefrontShellConfig} is a missing config field, never an
  * `if (host === "doctor")` in the package.
  *
+ * The DESTINATIONS are not literals here either: the wordmark's target and the
+ * nav come from `lib/navigation-model.ts`, the one list the derived navigation
+ * walk visits (§6.3, Issue #2067). A link the chrome paints is therefore a link
+ * the regression contour opens, without either side being kept in step by hand.
+ *
  * `hiddenOnPaths` is deliberately ABSENT: the storefront chrome is scoped by the
  * `app/(storefront)/` route group, so the auth screens and the room — which own
  * their own chrome — never render this layout at all. Omitting it also keeps the
@@ -21,7 +27,7 @@ import { academyHref } from "@/lib/academy";
 export const DOCTOR_SHELL: StorefrontShellConfig = {
   host: "doctor",
 
-  logo: { alt: "Doctor.School — на главную", href: "/" },
+  logo: { alt: doctorNav.home.label, href: doctorNav.home.href },
 
   /** The BBM announcement micro-band — the same brand line on both storefronts
    *  (owner decision 2026-09-10); a value, not a package constant. */
@@ -32,11 +38,12 @@ export const DOCTOR_SHELL: StorefrontShellConfig = {
    * storefront has that answers a query today. The dedicated results surface is
    * #1492; until it ships, the input's target is a real, shipped route rather
    * than an invented `/search` that would 404 (AGENTS.md §6 — no stub
-   * affordance). The form submits `q` by GET.
+   * affordance). The form submits `q` by GET, at the listing the nav already
+   * names — the same model row, so the two cannot point at different routes.
    */
   search: {
     placeholder: "Поиск по эфирам",
-    action: "/events",
+    action: doctorNav.events.href,
   },
 
   /**
@@ -47,7 +54,7 @@ export const DOCTOR_SHELL: StorefrontShellConfig = {
    * surface. A nav item pointing at an unbuilt route is the placeholder
    * affordance §6 forbids.
    */
-  nav: [{ label: "Эфиры", href: "/events" }],
+  nav: doctorTopNav.map((item) => ({ label: item.label, href: item.href })),
 
   footer: {
     navTitle: "Разделы",

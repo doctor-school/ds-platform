@@ -4,16 +4,19 @@
  * §6.3, first bullet (Issue #2067).
  *
  * Each storefront exports its navigation as DATA from a React-free module next to
- * the header that renders it (`apps/portal/lib/navigation-model.ts`,
- * `apps/doctor/lib/navigation-model.ts`), and the header renders FROM that array
- * instead of from inline `href` constants. Two things follow, and both are the
- * point:
+ * its shell configuration (`apps/portal/lib/navigation-model.ts`,
+ * `apps/doctor/lib/navigation-model.ts`). The chrome is the shared
+ * `@ds/storefront-shell` (#2180) and each host supplies only VALUES, so the
+ * host's `lib/shell-config.ts` DERIVES the wordmark's target and the nav from
+ * that array, and the host's auth-cluster mapping derives `loginHref` /
+ * `profileHref` from it, instead of carrying inline `href` constants. Two things
+ * follow, and both are the point:
  *
  *   • The model and the rendered bar cannot diverge — there is one list, not a
  *     list plus a render.
  *   • The derived navigation walk (`derived/`, deliverable 4) visits every item
  *     as a guest and as the golden signed-in doctor with ZERO edits to any list:
- *     a new header link enters the walk the moment it enters the model.
+ *     a new chrome link enters the walk the moment it enters the model.
  *
  * This module carries the TYPES and the PURE projections only. It deliberately
  * imports nothing: `packages/**` may not reach into `apps/**`

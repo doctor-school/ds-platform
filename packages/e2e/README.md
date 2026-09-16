@@ -3,7 +3,8 @@
 The end-to-end regression contract of the staging/regression-contour tech spec
 ([`2026-09-08-staging-previews-and-regression-contour-en.md`](../../apps/docs/content/specs/tech/2026-09-08-staging-previews-and-regression-contour-en.md)
 §6, Issue #2067): **one** step package shared by both storefronts, the spec's own
-feature files as the suite, and the navigation model both headers render from.
+feature files as the suite, and the navigation model both storefronts' chrome
+is configured from.
 
 ## What is in here
 
@@ -88,16 +89,24 @@ slow pass.
 ## The navigation-model contract
 
 Each storefront exports its navigation as DATA from a React-free module next to
-the header that renders it:
+its shell configuration:
 
 - `apps/portal/lib/navigation-model.ts` → `portalNavigationModel`
 - `apps/doctor/lib/navigation-model.ts` → `doctorNavigationModel`
 
-The header renders **from** that array — `apps/portal` resolves `label` as a
-`shell` message key, `apps/doctor` renders it as the Russian literal it already
-carried — and the derived navigation walk reads the same array. A new header link
+The chrome itself is the shared `@ds/storefront-shell` (#2180) and each host
+supplies only VALUES, so the host's `lib/shell-config.ts` **derives** the
+wordmark's target and the nav from that array and the host's auth-cluster mapping
+derives `loginHref` / `profileHref` from it — `apps/portal` resolving `label` as a
+`shell` message key, `apps/doctor` rendering it as the Russian literal it already
+carried. The derived navigation walk reads the same array. A new chrome link
 therefore enters the regression suite with zero edits to any list, and the model
 cannot drift from what the bar paints.
+
+A destination the chrome does not paint has **no row**: the model is what the
+shell offers, not a catalogue of routes. `/register` on the doctor storefront and
+`/account/events` on the academy are reached from inside a page, not from the
+chrome, so the walk does not assert them as chrome destinations.
 
 Each item carries the §6.2 landing evidence: the `h1` the destination actually
 renders, or a `data-surface` marker for a page that owns none. Asserting the

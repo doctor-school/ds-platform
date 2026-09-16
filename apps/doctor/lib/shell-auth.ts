@@ -1,5 +1,7 @@
 import type { ShellAuthState } from "@ds/storefront-shell";
 
+import { doctorNav } from "@/lib/navigation-model";
+
 import { fetchSessionClaims, forwardedSessionFrom } from "@/lib/session";
 
 /**
@@ -53,11 +55,11 @@ export async function resolveShellAuth(
 /** The ONE guest control of the canvas (`ds-shell.dc.html` line 220) — a single
  *  combined label on both hosts (017 US-7), opening the shipped `/login`
  *  surface, which carries the way on to `/register`. */
-const GUEST_LABEL = "Войти / Регистрация";
+const GUEST_LABEL = doctorNav.login.label;
 /** The signed-in affordance the doctor storefront ships — a LABELLED chip
  *  (canvas lines 192/209), not the academy's initials square: this host has no
  *  display-name read in the header and 017 EARS-1 asserts the words. */
-const DOCTOR_LABEL = "Личный кабинет";
+const DOCTOR_LABEL = doctorNav.account.label;
 
 /**
  * 017 EARS-1 — project the server-resolved {@link ShellAuth} onto the shared
@@ -71,6 +73,14 @@ const DOCTOR_LABEL = "Личный кабинет";
  */
 export function shellAuthState(auth: ShellAuth): ShellAuthState {
   return auth.status === "doctor"
-    ? { status: "doctor", profileHref: "/account", label: DOCTOR_LABEL }
-    : { status: "guest", loginHref: "/login", label: GUEST_LABEL };
+    ? {
+        status: "doctor",
+        profileHref: doctorNav.account.href,
+        label: DOCTOR_LABEL,
+      }
+    : {
+        status: "guest",
+        loginHref: doctorNav.login.href,
+        label: GUEST_LABEL,
+      };
 }

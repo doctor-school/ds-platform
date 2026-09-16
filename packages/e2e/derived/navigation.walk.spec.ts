@@ -16,17 +16,17 @@ import { signInGoldenDoctor } from "../lib/sign-in.js";
  * The DERIVED NAVIGATION WALK — staging/regression-contour tech spec §6.3, first
  * bullet (Issue #2067).
  *
- * It contains NO list of destinations. Each host's header renders from its own
- * `lib/navigation-model.ts`, and this walk loads that same array
+ * It contains NO list of destinations. Each host configures its shared chrome
+ * from its own `lib/navigation-model.ts`, and this walk loads that same array
  * (`loadNavigationModel`, the sanctioned package→app path in `hosts.ts`) and
  * visits every item it finds: once as a guest, once as the golden signed-in
- * doctor. A new header link therefore enters the regression suite the moment it
+ * doctor. A new chrome link therefore enters the regression suite the moment it
  * enters the model — «ten new links in a release enter both walks with zero edits
  * to any list».
  *
  * Per item the walk asserts the three things a 200 alone does not prove:
  *   • the response status is 200 — the page was served, not 404/500;
- *   • the pathname is the href the header links to — no silent redirect;
+ *   • the pathname is the href the chrome links to — no silent redirect;
  *   • the landing evidence the model declares (`h1` text, or `data-surface` for a
  *     page that owns no `h1`) — this is the §6.2 rule, and it is what turns
  *     «200 but the WRONG page» (the #2012 class) into a red check.
@@ -60,7 +60,11 @@ async function assertLanding(
   const evidence = landingEvidence(item);
   if (evidence.kind === "h1") {
     await expect(
-      page.getByRole("heading", { level: 1, name: evidence.value, exact: true }),
+      page.getByRole("heading", {
+        level: 1,
+        name: evidence.value,
+        exact: true,
+      }),
       `the h1 of ${where}`,
     ).toBeVisible();
   } else {
@@ -124,9 +128,12 @@ for (const hostId of HOST_IDS) {
 
         for (const item of doctorItems) {
           test(`${hostId} as doctor → ${item.href}`, async ({ page }) => {
-            const response = await page.goto(`${baseUrlFor(host)}${item.href}`, {
-              waitUntil: "domcontentloaded",
-            });
+            const response = await page.goto(
+              `${baseUrlFor(host)}${item.href}`,
+              {
+                waitUntil: "domcontentloaded",
+              },
+            );
             expect(response, `no response for ${item.href}`).not.toBeNull();
             expect(response!.status(), `status of ${item.href}`).toBe(200);
             expect(

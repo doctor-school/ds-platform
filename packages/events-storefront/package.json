@@ -16,6 +16,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@ds/auth-flow": "workspace:*",
     "@ds/design-system": "workspace:*",
     "@ds/schemas": "workspace:*"
   },

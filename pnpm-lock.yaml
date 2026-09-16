@@ -812,6 +812,9 @@ importers:
 
   packages/events-storefront:
     dependencies:
+      '@ds/auth-flow':
+        specifier: workspace:*
+        version: link:../auth-flow
       '@ds/design-system':
         specifier: workspace:*
         version: link:../design-system

@@ -36,6 +36,23 @@ import { defineBddConfig } from "playwright-bdd";
  * (set `API_PROXY_TARGET` when starting that portal). We do NOT start the portal
  * here (no `webServer`): the dev-stand topology is the operator's.
  */
+/**
+ * Staging slots sit behind ONE basic-auth pair (`tools/staging/README.md`), so a
+ * run pointed at `https://academy-pr-<N>.stage.doctor.school` needs credentials on
+ * EVERY request, not only the first navigation: the app's own same-origin `/v1/*`
+ * fetches are challenged too, and URL-embedded credentials in `E2E_PORTAL_URL` do
+ * not reach them. The pair arrives as `E2E_HTTP_USER` / `E2E_HTTP_PASS` — the same
+ * names `packages/e2e` reads — and becomes Playwright `httpCredentials`. Absent
+ * (the local dev stand), it stays `undefined` and nothing changes.
+ */
+const httpCredentials =
+  process.env.E2E_HTTP_USER && process.env.E2E_HTTP_PASS
+    ? {
+        username: process.env.E2E_HTTP_USER,
+        password: process.env.E2E_HTTP_PASS,
+      }
+    : undefined;
+
 const bddTestDir = defineBddConfig({
   features: "e2e/features/*.feature",
   // The custom `test` instance (base.extend for the journey World) lives in the
@@ -56,6 +73,7 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   use: {
     baseURL: process.env.E2E_PORTAL_URL ?? "http://localhost:3001",
+    httpCredentials,
     trace: "retain-on-failure",
   },
   projects: [

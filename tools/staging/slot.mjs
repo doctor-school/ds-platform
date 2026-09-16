@@ -1018,6 +1018,15 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     // Sink partitioning is by sender local part, not by a Mailpit per slot
     // (spec §3 «Sink partitioning across slots»).
     `MAILER_SMTP_FROM=no-reply+${slot}@${baseDomain}`,
+    // ... and the transport that carries it. The slot compose selects the intercept
+    // transport (`EMAIL_DELIVERY_MODE=mailpit`), which `apps/api/src/mailer/
+    // mailer.module.ts` builds from host + port + from and fails CLOSED when the
+    // host is missing — the from-address alone left every verification-code email
+    // dying as `mailer_relay_failure … "code":"configuration"`. `mailpit` is the
+    // ONE shared service on the `stg-infra` network every slot api is attached to,
+    // the same one `IDP_SMTP_HOST` points Zitadel at.
+    "MAILER_SMTP_HOST=mailpit",
+    "MAILER_SMTP_PORT=1025",
     // Object storage: addressing only. `S3_SECRET_KEY` is deliberately ABSENT — the
     // slot compose interpolates it from `MINIO_ROOT_PASSWORD` in stage.env, so the
     // box keeps exactly one copy of that secret.

@@ -518,6 +518,26 @@ test("the per-slot env file carries no secret and no short-SHA tag", () => {
   }
 });
 
+test("the slot env points the BFF mailer at the shared Mailpit, not only at a from-address", () => {
+  const text = renderSlotEnv({
+    slot: "pr-7",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+    goldenSubjects: SUBJECTS,
+  });
+  // `EMAIL_DELIVERY_MODE=mailpit` (the slot compose default) selects the intercept
+  // transport, and `apps/api/src/mailer/mailer.module.ts` builds it from host + port
+  // + from. With only `MAILER_SMTP_FROM` the transport fails CLOSED and every
+  // verification-code email dies as `mailer_relay_failure … "code":"configuration"` —
+  // observed on slots `pr-2239` and `main` on 2026-09-16. The host is the shared
+  // `mailpit` service on the `stg-infra` network (the same one `IDP_SMTP_HOST` uses);
+  // the per-slot partitioning stays the sender local part, per spec §3.
+  assert.match(text, /^MAILER_SMTP_HOST=mailpit$/m);
+  assert.match(text, /^MAILER_SMTP_PORT=1025$/m);
+  assert.match(text, /^MAILER_SMTP_FROM=no-reply\+pr-7@/m);
+});
+
 test("a slot env asked for before the golden identities converged refuses and names it", () => {
   assert.throws(
     () =>

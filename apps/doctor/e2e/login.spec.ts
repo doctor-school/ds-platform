@@ -21,7 +21,7 @@ import { test, expect, type Page } from "@playwright/test";
  * outcome from the one under test.
  */
 
-/** The RU generic the host maps a rejected credential to (`lib/auth-error-message.ts`). */
+/** The RU generic the host maps a rejected credential to (`@ds/auth-flow/errors`). */
 const WRONG_PASSWORD_COPY =
   "Не удалось войти. Проверьте почту или телефон и пароль.";
 

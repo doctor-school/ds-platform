@@ -16,7 +16,7 @@ import { test, expect, type Page, type Request } from "@playwright/test";
  * the dev-stand default. That is the honest browser assertion: the challenge
  * MECHANISM is mounted and the command flows through it. Where the token lands
  * when there IS one (`x-smartcaptcha-token`, header not body) is pinned one tier
- * down in `apps/doctor/lib/storefront-auth-client.test.ts`, and the guard
+ * down in `packages/auth-flow/src/client/auth-client.test.ts`, and the guard
  * refusing a submission without it in
  * `apps/api/test/storefront/doctor-register-bot-protection.e2e-spec.ts`. A
  * third-party challenge iframe is not something this tier can drive at all, so

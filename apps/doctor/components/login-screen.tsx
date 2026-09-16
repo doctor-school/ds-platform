@@ -63,7 +63,7 @@ import { doctorReturnHost } from "@/lib/return-completion";
  * Ordinary sign-in is unburdened — `POST /v1/auth/login` is `@LoginChallenged()`,
  * captcha-after-N-failures — so the password journey works today; the challenged
  * path and the `@BotProtected("otp-request")` OTP request surface an honest RU
- * message through `lib/auth-error-message.ts` rather than a dead slot.
+ * message through `@ds/auth-flow/errors` rather than a dead slot.
  */
 
 export type LoginScreenProps = {

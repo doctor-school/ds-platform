@@ -62,6 +62,7 @@ const config: NextConfig = {
   // parts are pulled into the SSR graph and the render dies with
   // «useState is not a function».
   transpilePackages: [
+    "@ds/auth-flow",
     "@ds/design-system",
     "@ds/events-storefront",
     "@ds/room",

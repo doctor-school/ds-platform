@@ -23,7 +23,7 @@ describe("rendered UI source classification", () => {
     "packages/design-system/src/primitives/interactive-base.ts",
     "apps/portal/lib/theme.ts",
     "apps/portal/theme.ts",
-    "apps/portal/lib/auth-error-message.ts",
+    "apps/portal/lib/auth-flow-config.ts",
   ])("green: %s is rendered UI source", (path) => {
     expect(isUiSourcePath(path)).toBe(true);
   });

@@ -10,6 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthError } from "@ds/auth-flow/client";
 import type { ConsentTier } from "@ds/schemas";
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
@@ -62,22 +63,22 @@ const h = vi.hoisted(() => ({
   calls: [] as string[],
 }));
 
-vi.mock("@/lib/storefront-auth-client", () => ({
-  registerDoctor: (...args: unknown[]) => {
-    h.calls.push("register");
-    return h.registerDoctor(...args);
-  },
-  confirmDoctorEmail: (...args: unknown[]) => {
-    h.calls.push("confirm");
-    return h.confirmDoctorEmail(...args);
-  },
-  resendVerification: (...args: unknown[]) => h.resendVerification(...args),
-}));
-
-vi.mock("@/lib/auth-client", () => ({
-  login: (...args: unknown[]) => {
-    h.calls.push("login");
-    return h.login(...args);
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+  authClient: {
+    register: (...args: unknown[]) => {
+      h.calls.push("register");
+      return h.registerDoctor(...args);
+    },
+    confirm: (...args: unknown[]) => {
+      h.calls.push("confirm");
+      return h.confirmDoctorEmail(...args);
+    },
+    resendVerification: (...args: unknown[]) => h.resendVerification(...args),
+    login: (...args: unknown[]) => {
+      h.calls.push("login");
+      return h.login(...args);
+    },
   },
 }));
 
@@ -423,5 +424,28 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     // The clear runs BEFORE the command, so the failure cannot preserve the
     // stale password — the same top-of-submit invariant the Academy runs.
     expect(takePendingRegistration(EMAIL)).toBeNull();
+  });
+});
+
+describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a wrong code", () => {
+  it("017 #1933.10: a 429 on the confirm command reads as the rate-limit sentence, never «Код не подошёл»", async () => {
+    // The api rate-limits `/v1/auth/verify` (@RateLimited, 10 per user per 15
+    // min), so the eleventh wrong code inside the window comes back 429 — not a
+    // verdict on the code. Before #2001 this host printed the wrong-code line
+    // for it and sent the doctor back to retyping a code that could not pass.
+    h.confirmDoctorEmail.mockRejectedValue(
+      new AuthError(429, "Too Many Requests"),
+    );
+    const user = setupUser();
+    renderScreen();
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await screen.findByText(
+      "Слишком много попыток. Подождите пару минут и попробуйте снова.",
+    );
+    expect(
+      screen.queryByText("Код не подошёл. Попробуйте ещё раз."),
+    ).toBeNull();
   });
 });

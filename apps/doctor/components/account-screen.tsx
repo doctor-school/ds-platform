@@ -28,7 +28,8 @@ import { authClient } from "@/lib/auth-flow-config";
  *   • RU LITERAL copy, because `apps/doctor` carries no `next-intl` (the
  *     `login-screen.tsx` precedent); the strings are the Academy `ru.json`
  *     `account` block verbatim, so the two hosts read identically;
- *   • the doctor-origin transport (`lib/storefront-auth-client.ts`): the shipped
+ *   • the doctor-origin transport (`@ds/auth-flow/client`, mounted by
+ *     `lib/auth-flow-config.ts`): the shipped
  *     003/006 routes reached through THIS origin's rewrite, so the origin-locked
  *     `__Host-ds_session` cookie of `doctor.school` rides them (ADR-0015 §4);
  *   • the EARS-9 dance — one silent refresh and one retry before the door;

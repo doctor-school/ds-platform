@@ -67,7 +67,7 @@ import { makeResolver } from "@/lib/make-resolver";
  * always advances to the code step and nothing here may read existence out of
  * the response. `POST /v1/auth/password/reset` is `@BotProtected("password-reset")`,
  * so the initiate and the resend both run behind the shared invisible challenge
- * (021 EARS-19 glue in `lib/bot-protection.ts`) — nothing renders without a site
+ * (021 EARS-19 glue in `@ds/auth-flow/bot-protection`) — nothing renders without a site
  * key, and the pending action resumes tokenless exactly as the backend guard
  * no-ops when the provider is disabled.
  *

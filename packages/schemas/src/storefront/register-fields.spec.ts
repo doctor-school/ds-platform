@@ -17,7 +17,7 @@ import {
  * §7), so the screen composes its react-hook-form rules out of this table
  * instead of re-typing a bound per call site. The RENDERED behaviour is proven
  * in `apps/doctor/e2e/register-validation.spec.ts`; the RHF projection in
- * `apps/doctor/lib/register-fields.test.ts`.
+ * `packages/auth-flow/src/fields/fields.test.ts`.
  */
 const accepts = (spec: FieldSpec, value: string): boolean =>
   spec.rule.safeParse(value).success;

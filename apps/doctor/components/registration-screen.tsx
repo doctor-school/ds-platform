@@ -8,7 +8,10 @@ import type {
   ConsentAcceptance,
   ConsentItem,
   ConsentTier,
+  DoctorConfirmRequest,
   DoctorConfirmResponse,
+  DoctorRegisterRequest,
+  DoctorRegisterResponse,
 } from "@ds/schemas";
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,

@@ -9,7 +9,7 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../auth/index.js";
  * This is the read model 021 requirements L201 declares —
  * `FieldSpec { name, rule, mask, hint, errorSlot }` — filled in from the design
  * §7 field table. The screen composes its react-hook-form rules out of this
- * table (`apps/doctor/lib/register-fields.ts`) rather than re-typing a bound
+ * table (`packages/auth-flow/src/fields`) rather than re-typing a bound
  * per call site, so «not less than 8 characters» exists once and the hint the
  * doctor reads cannot drift from the rule that rejects them.
  *

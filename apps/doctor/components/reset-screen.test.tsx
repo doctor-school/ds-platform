@@ -20,18 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const h = vi.hoisted(() => {
-  class AuthError extends Error {
-    constructor(
-      readonly status: number,
-      message: string,
-      readonly code?: string,
-    ) {
-      super(message);
-      this.name = "AuthError";
-    }
-  }
   return {
-    AuthError,
     requestPasswordReset: vi.fn(),
     completePasswordReset: vi.fn(),
     push: vi.fn(),
@@ -56,17 +45,19 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/auth-client", () => ({
-  AuthError: h.AuthError,
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
     requestPasswordReset: h.requestPasswordReset,
     completePasswordReset: h.completePasswordReset,
   },
 }));
 
-// `lib/auth-error-message.ts` is NOT mocked: the RU sentence a doctor reads is
-// part of what this screen owns, so it is asserted through the real mapping —
-// which branches on the same `AuthError` class mocked above.
+// The `@ds/auth-flow/errors` dictionary is NOT mocked: the RU sentence a doctor
+// reads is this host's own copy, so it is asserted through the real mapping —
+// which branches on the real `AuthError` thrown below.
+
+import { AuthError } from "@ds/auth-flow/client";
 
 import { ResetScreen } from "@/components/reset-screen";
 
@@ -108,9 +99,12 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     await requestCode("doctor@clinic.ru");
 
     await waitFor(() =>
-      expect(h.requestPasswordReset).toHaveBeenCalledWith({
-        identifier: "doctor@clinic.ru",
-      }),
+      // Row 18: the captcha token is the client's SECOND argument now, never a
+      // body field; with no site key configured in jsdom it is absent.
+      expect(h.requestPasswordReset).toHaveBeenCalledWith(
+        { identifier: "doctor@clinic.ru" },
+        undefined,
+      ),
     );
   });
 
@@ -157,7 +151,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
 
   it("003 EARS-16: a REFUSED completion shows this host RU sentence and keeps the doctor on the code step", async () => {
     h.completePasswordReset.mockRejectedValue(
-      new h.AuthError(400, "invalid code"),
+      new AuthError(400, "invalid code"),
     );
     render(<ResetScreen />);
     const user = await requestCode();
@@ -181,7 +175,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
 
   it("003 EARS-11: a refused INITIATE keeps the doctor on the request step with the host RU sentence", async () => {
     h.requestPasswordReset.mockRejectedValue(
-      new h.AuthError(500, "upstream is down"),
+      new AuthError(500, "upstream is down"),
     );
     render(<ResetScreen />);
 
@@ -221,9 +215,10 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
       await waitFor(() =>
         expect(h.requestPasswordReset).toHaveBeenCalledTimes(2),
       );
-      expect(h.requestPasswordReset).toHaveBeenLastCalledWith({
-        identifier: "doctor@clinic.ru",
-      });
+      expect(h.requestPasswordReset).toHaveBeenLastCalledWith(
+        { identifier: "doctor@clinic.ru" },
+        undefined,
+      );
       // Neutral, identical for every visitor, and masked — never "we found you".
       await waitFor(() =>
         expect(

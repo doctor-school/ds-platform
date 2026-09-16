@@ -272,7 +272,57 @@ test("an account verified when the fixture says it must not be is rebuilt", () =
     .map((step) => step.op);
   // Zitadel has no un-verify verb, so the only converge back to an UNverified
   // fixture is a rebuild — delete first, then create with the flag off.
-  assert.deepEqual(ops, ["delete", "create", "set-password"]);
+  assert.deepEqual(ops, ["delete", "create", "set-password", "ensure-grant"]);
+});
+
+test("a created account is always granted its catalogue role", () => {
+  const { steps } = planGoldenIdentities({ accounts: GOLDEN_IDP_ACCOUNTS, existing: {} });
+  const grants = steps.filter((step) => step.op === "ensure-grant");
+  // One per expected account, never for the soft-deleted doctor, and always as an
+  // ADD (`grantId: null`) because a freshly minted user holds no authorization.
+  assert.equal(grants.length, 4);
+  assert.ok(grants.every((step) => step.grantId === null));
+  assert.deepEqual(
+    grants.find((step) => step.username.includes("admin")).roleKeys,
+    ["platform_admin"],
+  );
+});
+
+test("a live account holding the wrong role is re-granted, not re-created", () => {
+  const { steps } = planGoldenIdentities({
+    accounts: GOLDEN_IDP_ACCOUNTS,
+    existing: {
+      "golden.admin@example.test": {
+        userId: "id-a",
+        emailVerified: true,
+        grant: { id: "g-1", roleKeys: ["doctor_guest"] },
+      },
+    },
+  });
+  const admin = steps.filter((step) => step.username.includes("admin"));
+  assert.deepEqual(
+    admin.map((step) => step.op),
+    ["set-password", "ensure-grant"],
+  );
+  const grant = admin.find((step) => step.op === "ensure-grant");
+  assert.equal(grant.grantId, "g-1");
+  assert.equal(grant.userId, "id-a");
+  assert.deepEqual(grant.roleKeys, ["platform_admin"]);
+});
+
+test("a live account already holding its role plans no grant step", () => {
+  const existing = Object.fromEntries(
+    GOLDEN_IDP_ACCOUNTS.filter((account) => account.idpAccountExpected).map((account) => [
+      account.username,
+      {
+        userId: `id-${account.key}`,
+        emailVerified: account.emailVerified,
+        grant: { id: `g-${account.key}`, roleKeys: [account.role] },
+      },
+    ]),
+  );
+  const { steps } = planGoldenIdentities({ accounts: GOLDEN_IDP_ACCOUNTS, existing });
+  assert.equal(steps.filter((step) => step.op === "ensure-grant").length, 0);
 });
 
 test("the deleted doctor is removed when a live account carries its username", () => {
@@ -344,6 +394,8 @@ test("a converge creates the absent accounts and collects every subject", async 
         // The REAL CreateUser response: `{ id, creationDate, emailCode }` (#203).
         "POST /v2/users/new": { body: { id: "new-id", creationDate: "2026-09-11T00:00:00Z" } },
         "POST /v2/users/new-id/password": { body: {} },
+        ...APP_ROUTES,
+        "POST /management/v1/users/new-id/grants": { body: { userGrantId: "g-new" } },
       },
       calls,
     ),
@@ -360,8 +412,119 @@ test("a converge creates the absent accounts and collects every subject", async 
   assert.equal(subjects.DS_GOLDEN_SUB_ADMIN, "new-id");
   assert.match(subjects.DS_GOLDEN_SUB_DOCTOR_DELETED, /^golden-deleted-/);
   assert.equal(calls.filter((call) => call.key === "POST /v2/users/new").length, 4);
+  // Every created account is granted, and the admin's grant carries its own role.
+  const grants = calls.filter((call) => call.key === "POST /management/v1/users/new-id/grants");
+  assert.equal(grants.length, 4);
+  assert.ok(grants.some((call) => call.body.roleKeys[0] === "platform_admin"));
+  assert.ok(grants.every((call) => call.body.projectId === "p1"));
   // Neither the PAT nor any password may reach the log.
   assert.doesNotMatch(lines.join("\n"), /pat-value|Secret-123!/);
+});
+
+test("a converge re-grants a live account whose role drifted, and says so", async () => {
+  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /v2/users": {
+          body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
+        },
+        "POST /management/v1/users/grants/_search": {
+          body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["doctor_guest"] }] },
+        },
+        "POST /v2/users/id-a/password": { body: {} },
+        "PUT /management/v1/users/id-a/grants/g-1": { body: {} },
+        ...APP_ROUTES,
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const lines = [];
+  await convergeGoldenIdentities({
+    client,
+    accounts: [admin],
+    passwords: PASSWORDS,
+    log: (line) => lines.push(line),
+  });
+  const put = calls.find((call) => call.key === "PUT /management/v1/users/id-a/grants/g-1");
+  assert.deepEqual(put.body, { roleKeys: ["platform_admin"] });
+  // An ADD alongside the existing authorization would be a second grant, not a fix.
+  assert.equal(
+    calls.filter((call) => call.key === "POST /management/v1/users/id-a/grants").length,
+    0,
+  );
+  assert.match(lines.join("\n"), /re-granted platform_admin/);
+});
+
+test("a converge leaves a correct grant alone and logs that it already holds it", async () => {
+  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /v2/users": {
+          body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
+        },
+        "POST /management/v1/users/grants/_search": {
+          body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["platform_admin"] }] },
+        },
+        "POST /v2/users/id-a/password": { body: {} },
+        ...APP_ROUTES,
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const lines = [];
+  await convergeGoldenIdentities({
+    client,
+    accounts: [admin],
+    passwords: PASSWORDS,
+    log: (line) => lines.push(line),
+  });
+  assert.equal(
+    calls.filter((call) => call.key.includes("/grants/g-1")).length,
+    0,
+    "an equal role set must not be written back",
+  );
+  assert.match(lines.join("\n"), /golden\.admin@example\.test already holds platform_admin/);
+});
+
+test("a grant on some other project does not pass for the shared one", async () => {
+  const admin = GOLDEN_IDP_ACCOUNTS.find((account) => account.role === "platform_admin");
+  const calls = [];
+  const client = createIdpClient({
+    fetch: stubFetch(
+      {
+        "POST /v2/users": {
+          body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
+        },
+        // Right roles, WRONG project — reading it as a match would leave the shared
+        // project ungranted while the converge reported success.
+        "POST /management/v1/users/grants/_search": {
+          body: { result: [{ id: "g-x", projectId: "other", roleKeys: ["platform_admin"] }] },
+        },
+        "POST /v2/users/id-a/password": { body: {} },
+        "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
+        "POST /management/v1/users/id-a/grants": { body: { userGrantId: "g-new" } },
+        ...APP_ROUTES,
+      },
+      calls,
+    ),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  await convergeGoldenIdentities({ client, accounts: [admin], passwords: PASSWORDS });
+  const added = calls.find((call) => call.key === "POST /management/v1/users/id-a/grants");
+  assert.deepEqual(added.body, {
+    projectId: "p1",
+    organizationId: "org-1",
+    roleKeys: ["platform_admin"],
+  });
 });
 
 test("the subject of a created account comes from the CreateUser `id` field", async () => {
@@ -377,6 +540,8 @@ test("the subject of a created account comes from the CreateUser `id` field", as
         "GET /auth/v1/users/me": { body: { user: { details: { resourceOwner: "org-1" } } } },
         "POST /v2/users/new": { body: { id: "created-id", emailCode: "123456" } },
         "POST /v2/users/created-id/password": { body: {} },
+        ...APP_ROUTES,
+        "POST /management/v1/users/created-id/grants": { body: { userGrantId: "g-new" } },
       },
       calls,
     ),

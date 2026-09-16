@@ -226,8 +226,9 @@ export function planRedirectUriConverge({ current, desired }) {
 /**
  * The ordered converge steps for the golden fixture, plus the subject map.
  *
- * `existing` maps username → `{ userId, emailVerified }` for the accounts the IdP
- * currently holds (absent ⇒ no entry). Membership decides the verb:
+ * `existing` maps username → `{ userId, emailVerified, grant }` for the accounts the
+ * IdP currently holds (absent ⇒ no entry); `grant` is that user's authorization on
+ * the shared project, `{ id, roleKeys }` or `null`. Membership decides the verb:
  *
  * - `idpAccountExpected: true` — ensure-PRESENT. Created when absent; the password is
  *   set on EVERY run (the fixture's password is an input of the scenario runner, and a
@@ -239,6 +240,12 @@ export function planRedirectUriConverge({ current, desired }) {
  * The one asymmetry: Zitadel has no «un-verify» verb, so an account that is verified
  * while the fixture demands an UNverified one is rebuilt (delete, then create with the
  * flag off) rather than left in a state the fixture does not describe.
+ *
+ * The project GRANT is converged the same way, and for the same reason the password
+ * is: an account that exists and signs in but carries no `platform_admin` grant is
+ * indistinguishable, from the walkthrough's side, from a broken admin. A created
+ * account always gets one; a live one gets a step only when its role keys differ
+ * from the catalogue's, so a converged box plans nothing here.
  */
 export function planGoldenIdentities({ accounts, existing }) {
   const steps = [];
@@ -275,6 +282,16 @@ export function planGoldenIdentities({ accounts, existing }) {
           key: account.key,
         });
       }
+      if (!sameSet(live.grant?.roleKeys, [account.role])) {
+        steps.push({
+          op: "ensure-grant",
+          username: account.username,
+          userId: live.userId,
+          key: account.key,
+          grantId: live.grant?.id ?? null,
+          roleKeys: [account.role],
+        });
+      }
       continue;
     }
     if (mustRebuild) {
@@ -302,6 +319,16 @@ export function planGoldenIdentities({ accounts, existing }) {
       userId: null,
       key: account.key,
       passwordEnvVar: account.passwordEnvVar,
+    });
+    // Always on the create path: a user Zitadel has just minted carries no
+    // authorization at all, so there is nothing to compare against.
+    steps.push({
+      op: "ensure-grant",
+      username: account.username,
+      userId: null,
+      key: account.key,
+      grantId: null,
+      roleKeys: [account.role],
     });
   }
   return { steps, subjects };
@@ -408,7 +435,15 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
 
 // --- redirect-URI converge ---------------------------------------------------
 
-async function resolveSharedApp(client, { projectName, appName }) {
+/**
+ * The shared project's id.
+ *
+ * Its own function because BOTH the redirect converge (which wants the app inside
+ * the project) and the grant converge (which wants only the project) need it, and a
+ * second copy of this lookup is a second place the «run provision.sh first» refusal
+ * could drift.
+ */
+async function resolveProjectId(client, projectName) {
   const projects = await client.request("POST", "/management/v1/projects/_search", {
     queries: [{ nameQuery: { name: projectName, method: "TEXT_QUERY_METHOD_EQUALS" } }],
   });
@@ -419,6 +454,11 @@ async function resolveSharedApp(client, { projectName, appName }) {
         "the stand's app, it never bootstraps it; run infra/dev-stand/idp/provision.sh first",
     );
   }
+  return projectId;
+}
+
+async function resolveSharedApp(client, { projectName, appName }) {
+  const projectId = await resolveProjectId(client, projectName);
   const apps = await client.request(
     "POST",
     `/management/v1/projects/${projectId}/apps/_search`,
@@ -484,6 +524,23 @@ async function findUserByUsername(client, username) {
 }
 
 /**
+ * The user's authorization on the shared project, or `null`.
+ *
+ * The search is by user, not by project — Zitadel's grant search takes one query
+ * shape per field and a user has at most a handful of grants — so the project
+ * filter happens here. A user granted on some OTHER project must read as «no
+ * grant», otherwise the converge would PUT the wrong authorization's roles.
+ */
+async function findUserGrant(client, { userId, projectId }) {
+  const data = await client.request("POST", "/management/v1/users/grants/_search", {
+    queries: [{ userIdQuery: { userId } }],
+  });
+  const hit = (data?.result ?? []).find((item) => item.projectId === projectId);
+  if (!hit?.id) return null;
+  return { id: hit.id, roleKeys: [...(hit.roleKeys ?? [])] };
+}
+
+/**
  * The organisation a created user lands in.
  *
  * `POST /v2/users/new` requires `organizationId` explicitly — it does not infer the
@@ -507,7 +564,7 @@ async function resolveOrgId(client, env) {
 /**
  * Converge the golden fixture at the IdP and return the resolved subject map.
  *
- * Hard-failure everywhere: every create, password write, verification and delete that
+ * Hard-failure everywhere: every create, password write, verification, grant and delete that
  * actually runs must succeed. The only «nothing to do» outcomes are membership facts
  * (already present / already absent), never a swallowed error.
  *
@@ -519,6 +576,7 @@ export async function convergeGoldenIdentities({
   accounts = GOLDEN_IDP_ACCOUNTS,
   passwords = {},
   env = {},
+  projectName = DEFAULT_PROJECT_NAME,
   log = () => {},
 }) {
   // Fail BEFORE the first write: a converge that creates two accounts and then dies
@@ -534,14 +592,33 @@ export async function convergeGoldenIdentities({
     );
   }
 
+  // Resolved on first use only: a box whose every golden account is absent never
+  // needs the project until the first grant is written, and a fixture of purely
+  // ensure-ABSENT accounts never needs it at all.
+  let projectId;
+  const projectIdOnce = async () => {
+    projectId ??= await resolveProjectId(client, projectName);
+    return projectId;
+  };
+
   const existing = {};
   for (const account of accounts) {
     const live = await findUserByUsername(client, account.username);
-    if (live) existing[account.username] = live;
+    if (!live) continue;
+    existing[account.username] = account.idpAccountExpected
+      ? {
+          ...live,
+          grant: await findUserGrant(client, {
+            userId: live.userId,
+            projectId: await projectIdOnce(),
+          }),
+        }
+      : live;
   }
 
   const { steps, subjects } = planGoldenIdentities({ accounts, existing });
   const byKey = new Map(accounts.map((account) => [account.key, account]));
+  const granted = new Set();
   let orgId;
   for (const step of steps) {
     const account = byKey.get(step.key);
@@ -593,9 +670,41 @@ export async function convergeGoldenIdentities({
       });
       existing[step.username].emailVerified = true;
       log(`  ↳ email marked verified for ${step.username}`);
+    } else if (step.op === "ensure-grant") {
+      const userId = step.userId ?? existing[step.username]?.userId;
+      if (!userId) throw new IdpError(`no user id to grant ${step.username} on`);
+      const roles = step.roleKeys.join(", ");
+      if (step.grantId) {
+        // The authorization exists and carries the wrong roles: REPLACE its role
+        // set rather than adding a second grant, which Zitadel would refuse and
+        // which would leave the user holding the stale role either way.
+        await client.request(
+          "PUT",
+          `/management/v1/users/${userId}/grants/${step.grantId}`,
+          { roleKeys: step.roleKeys },
+        );
+        log(`  ↳ ${step.username} re-granted ${roles}`);
+      } else {
+        orgId ??= await resolveOrgId(client, env);
+        await client.request("POST", `/management/v1/users/${userId}/grants`, {
+          projectId: await projectIdOnce(),
+          organizationId: orgId,
+          roleKeys: step.roleKeys,
+        });
+        log(`  ↳ ${step.username} granted ${roles}`);
+      }
+      granted.add(account.key);
     } else {
       throw new IdpError(`unknown golden identity step: ${step.op}`);
     }
+  }
+
+  // Say so out loud when a grant was already right. «Nothing in the log» and «the
+  // grant step was silently skipped» read identically on a box the walkthrough
+  // then fails on, and this converge is the only place that knows the difference.
+  for (const account of accounts) {
+    if (!account.idpAccountExpected || granted.has(account.key)) continue;
+    log(`  ↳ ${account.username} already holds ${account.role}`);
   }
 
   for (const account of accounts) {

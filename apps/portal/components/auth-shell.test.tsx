@@ -39,7 +39,8 @@ vi.mock("next-intl", () => ({
 }));
 
 const session = vi.fn();
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
     session: () => session(),
   },

@@ -7,8 +7,9 @@ import { useTranslations } from "next-intl";
 
 import type { MyProfile } from "@ds/schemas";
 
-import { authClient, AuthError } from "@/lib/auth-client";
-import { authErrorMessage } from "@/lib/auth-error-message";
+import { AuthError } from "@ds/auth-flow/client";
+import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import { refreshHeaderAuth } from "@/lib/header-auth";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";
@@ -49,6 +50,7 @@ export default function AccountPage() {
   const router = useRouter();
   const t = useTranslations("account");
   const te = useTranslations("errors");
+  const authFlow = useAcademyAuthFlow();
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -113,7 +115,7 @@ export default function AccountPage() {
       err instanceof DisplayNameError
         ? new AuthError(err.status, err.message)
         : err;
-    return authErrorMessage(mapped, te, t("nameError"));
+    return authErrorMessage(mapped, authFlow.copy.errors, t("nameError"));
   }
 
   if (state.kind === "loading") {

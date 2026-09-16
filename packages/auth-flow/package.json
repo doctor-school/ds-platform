@@ -9,7 +9,8 @@
     "./client": "./src/client/index.ts",
     "./errors": "./src/errors/index.ts",
     "./bot-protection": "./src/bot-protection/index.ts",
-    "./fields": "./src/fields/index.ts"
+    "./fields": "./src/fields/index.ts",
+    "./test-support": "./src/test-support/host-config-fixtures.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

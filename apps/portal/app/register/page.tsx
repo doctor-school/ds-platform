@@ -6,16 +6,18 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { UserPlus } from "lucide-react";
 
+import type { RegisterRequest, RegisterResponse } from "@ds/schemas";
+
 import { AuthShell } from "@/components/auth-shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
-} from "@/lib/bot-protection";
-import { authClient } from "@/lib/auth-client";
-import { authErrorMessage } from "@/lib/auth-error-message";
+} from "@ds/auth-flow/bot-protection";
+import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import { REQUIRED_CONSENT } from "@/lib/consent";
 import { withReturnTarget } from "@/lib/registration-handoff";
-import { registerCardFormSchema } from "@/lib/identifier-validation";
+import { registerCardFormSchema } from "@ds/auth-flow/fields";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Link as DsLink } from "@ds/design-system/link";
@@ -85,6 +87,7 @@ function RegisterProjection() {
   const t = useTranslations("register");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
+  const authFlow = useAcademyAuthFlow();
   // 005 EARS-2: the carried registration-intent (validated at every consumption
   // point by `parseReturnTarget` inside `withReturnTarget` — this page only
   // forwards it, never navigates to it).
@@ -95,7 +98,7 @@ function RegisterProjection() {
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
       setCaptchaError(
-        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+        botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -106,7 +109,7 @@ function RegisterProjection() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setError(authErrorMessage(err, te, te("registerFailed")));
+      setError(authErrorMessage(err, authFlow.copy.errors, te("registerFailed")));
     },
   });
 
@@ -118,7 +121,7 @@ function RegisterProjection() {
   // `authClient.register(...)` and the API still enforces the full
   // `RegisterRequestSchema` (email required + consent).
   const resolver = useLocalizedResolver<RegisterCardValues, RegisterCardValues>(
-    registerCardFormSchema(),
+    registerCardFormSchema(authFlow),
   );
 
   function onSubmit(values: RegisterCardValues) {
@@ -128,12 +131,17 @@ function RegisterProjection() {
     // credential into this attempt (#175 — explicit single-slot replace).
     clearPendingRegistration();
     captcha.request(async (captchaToken) => {
-      await authClient.register({
-        email: values.email,
-        password: values.password,
-        consent: REQUIRED_CONSENT.slice(),
-        ...(captchaToken ? { captchaToken } : {}),
-      });
+      // Row 18: the token rides the `x-smartcaptcha-token` header the package
+      // sets, not a body field. The type arguments name the Academy's own
+      // registration contract on the shared, host-routed command.
+      await authClient.register<RegisterRequest, RegisterResponse>(
+        {
+          email: values.email,
+          password: values.password,
+          consent: REQUIRED_CONSENT.slice(),
+        },
+        captchaToken,
+      );
       // Hand the entered credential to the verify step IN MEMORY ONLY (#175):
       // module-scoped state survives this SPA `router.push` so `/verify` can
       // replay the EARS-5 password login on success and land the user signed-in
@@ -193,7 +201,7 @@ function RegisterProjection() {
       }
       captchaSlot={
         <BotProtectionField
-          sitekey={botProtectionSiteKey()}
+          sitekey={botProtectionSiteKey(authFlow)}
           {...captcha.fieldProps}
         />
       }

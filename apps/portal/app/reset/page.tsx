@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -10,14 +10,14 @@ import { AuthShell } from "@/components/auth-shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
-} from "@/lib/bot-protection";
-import { authClient } from "@/lib/auth-client";
-import { authErrorMessage } from "@/lib/auth-error-message";
+} from "@ds/auth-flow/bot-protection";
+import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import { refreshHeaderAuth } from "@/lib/header-auth";
 import {
   ResetCompleteFormSchema,
-  ResetIdentifierFormSchema,
-} from "@/lib/identifier-validation";
+  resetIdentifierFormSchema,
+} from "@ds/auth-flow/fields";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import {
@@ -60,6 +60,7 @@ export default function ResetPage() {
   const t = useTranslations("reset");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
+  const authFlow = useAcademyAuthFlow();
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export default function ResetPage() {
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
       setCaptchaError(
-        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+        botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -79,7 +80,7 @@ export default function ResetPage() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setError(authErrorMessage(err, te, te("resetRequestFailed")));
+      setError(authErrorMessage(err, authFlow.copy.errors, te("resetRequestFailed")));
     },
   });
 
@@ -100,10 +101,10 @@ export default function ResetPage() {
     onVerified: () => setResendCaptchaError(null),
     onChallengeError: (failure) =>
       setResendCaptchaError(
-        botProtectionFailureMessage(failure, botProtectionMessages(te)),
+        botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) =>
-      setResendError(authErrorMessage(err, te, te("resetResendFailed"))),
+      setResendError(authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed"))),
   });
 
   // #267 resend: re-request a reset code for the SAME held identifier via the
@@ -112,10 +113,7 @@ export default function ResetPage() {
   // restarts the block's cooldown timer + clears the now-stale typed code.
   const { resendNonce, onResend, resetNonce } = useResendCooldown({
     resend: async (captchaToken) => {
-      await authClient.requestPasswordReset({
-        identifier,
-        ...(captchaToken ? { captchaToken } : {}),
-      });
+      await authClient.requestPasswordReset({ identifier }, captchaToken);
     },
     onError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -126,7 +124,7 @@ export default function ResetPage() {
         setResendCaptchaError(te("captchaRequired"));
         return;
       }
-      setResendError(authErrorMessage(err, te, te("resetResendFailed")));
+      setResendError(authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed")));
     },
     // Clear only resend-owned state; reset-completion feedback is unrelated.
     onBeforeResend: () => {
@@ -142,7 +140,11 @@ export default function ResetPage() {
       ),
   });
 
-  const requestResolver = useLocalizedResolver(ResetIdentifierFormSchema);
+  const requestSchema = useMemo(
+    () => resetIdentifierFormSchema(authFlow),
+    [authFlow],
+  );
+  const requestResolver = useLocalizedResolver(requestSchema);
   // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
   // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
   // `newPassword` is the message-carrying `NewPasswordSchema`, whose baked-in English
@@ -155,10 +157,8 @@ export default function ResetPage() {
   function onRequest(values: PasswordRecoveryRequestValues) {
     setError(null);
     captcha.request(async (captchaToken) => {
-      await authClient.requestPasswordReset({
-        ...values,
-        ...(captchaToken ? { captchaToken } : {}),
-      });
+      // Row 18: the header carries the token; the body is the command only.
+      await authClient.requestPasswordReset(values, captchaToken);
       // EARS-16: the ack is identical whether or not the identifier exists; we
       // always advance to the code step. Carry the identifier into completion — the
       // block mounts a FRESH complete form for the stage, so its `code` Controller is
@@ -180,7 +180,7 @@ export default function ResetPage() {
       refreshHeaderAuth();
       router.push("/account");
     } catch (err) {
-      setCompleteError(authErrorMessage(err, te, te("resetCompleteFailed")));
+      setCompleteError(authErrorMessage(err, authFlow.copy.errors, te("resetCompleteFailed")));
     }
   }
 
@@ -250,7 +250,7 @@ export default function ResetPage() {
           pending: captcha.pending,
           captchaSlot: (
             <BotProtectionField
-              sitekey={botProtectionSiteKey()}
+              sitekey={botProtectionSiteKey(authFlow)}
               {...captcha.fieldProps}
             />
           ),
@@ -267,7 +267,7 @@ export default function ResetPage() {
           notice,
           captchaSlot: (
             <BotProtectionField
-              sitekey={botProtectionSiteKey()}
+              sitekey={botProtectionSiteKey(authFlow)}
               {...resendCaptcha.fieldProps}
             />
           ),

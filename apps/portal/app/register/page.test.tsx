@@ -2,6 +2,8 @@ import { act, render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthError } from "@ds/auth-flow/client";
+
 import RegisterPage from "./page";
 
 /**
@@ -55,23 +57,10 @@ vi.mock("@ds/design-system/blocks", async () => {
   };
 });
 
-const MockAuthError = vi.hoisted(
-  () =>
-    class MockAuthError extends Error {
-      constructor(
-        readonly status: number,
-        message: string,
-        readonly code?: string,
-      ) {
-        super(message);
-      }
-    },
-);
-
 // Deferred so the submit stays in-flight while we assert the pending affordance.
 let resolveRegister: (() => void) | undefined;
 const register = vi.fn(
-  (_body: unknown) =>
+  (_body: unknown, _captchaToken?: string) =>
     new Promise<void>((resolve) => {
       resolveRegister = resolve;
     }),
@@ -80,12 +69,13 @@ const register = vi.fn(
 // `authClient.session()` on mount — default it to the unauthenticated path so the
 // form renders as before (the authed branch lives in components/auth-shell.test.tsx).
 const session = vi.fn().mockResolvedValue(null);
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
   authClient: {
-    register: (body: unknown) => register(body),
+    register: (body: unknown, captchaToken?: string) =>
+      register(body, captchaToken),
     session: () => session(),
   },
-  AuthError: MockAuthError,
 }));
 
 const EMAIL = "doc@example.com";
@@ -126,8 +116,10 @@ describe("003 EARS-17 on-demand registration protection", () => {
 
     act(() => captchaProps?.onToken("fresh-register-token"));
     await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    // Row 18: body without the token, token as the header-bound second argument.
     expect(register).toHaveBeenCalledWith(
-      expect.objectContaining({ captchaToken: "fresh-register-token" }),
+      expect.objectContaining({ email: EMAIL }),
+      "fresh-register-token",
     );
 
     act(() => captchaProps?.onToken("fresh-register-token"));
@@ -137,7 +129,7 @@ describe("003 EARS-17 on-demand registration protection", () => {
   it("EARS-17: a rejected token gets truthful CAPTCHA feedback and a fresh retry without losing form data", async () => {
     captchaMode = "manual";
     register.mockRejectedValueOnce(
-      new MockAuthError(
+      new AuthError(
         403,
         "bot protection failed",
         "BOT_PROTECTION_REJECTED",

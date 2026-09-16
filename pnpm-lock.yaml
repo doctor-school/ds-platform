@@ -451,6 +451,9 @@ importers:
 
   apps/portal:
     dependencies:
+      '@ds/auth-flow':
+        specifier: workspace:*
+        version: link:../../packages/auth-flow
       '@ds/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system

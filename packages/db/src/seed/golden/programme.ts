@@ -42,6 +42,24 @@ export function ordinalFromExpertPhotoKey(key: string): number | null {
   return match ? Number.parseInt(match[1] as string, 10) : null;
 }
 
+/**
+ * Object-storage key of a partner's logo.
+ *
+ * SVG, not WebP, because the bytes behind it are GENERATED from the partner's
+ * own title rather than committed (`media.ts`): a wordmark is text on a
+ * coloured field, which is exactly what a vector format states directly and
+ * what a raster format would need a rendering toolchain to produce.
+ */
+export function partnerLogoKey(ordinal: number): string {
+  return `golden/partners/${ordinal}.svg`;
+}
+
+/** The ordinal a golden partner-logo key addresses, or `null` for a foreign key. */
+export function ordinalFromPartnerLogoKey(key: string): number | null {
+  const match = /^golden\/partners\/(\d+)\.svg$/.exec(key);
+  return match ? Number.parseInt(match[1] as string, 10) : null;
+}
+
 /** Minutes of the closing «Вопросы и ответы» block. */
 export const PROGRAMME_QA_MINUTES = 15;
 

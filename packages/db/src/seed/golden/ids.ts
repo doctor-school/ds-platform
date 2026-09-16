@@ -66,6 +66,16 @@ export const GOLDEN_GROUP = Object.freeze({
   eventExperts: 0x0008,
   eventProjects: 0x0009,
   doctorSpecialties: 0x000a,
+  // #2213 part D — the taxonomy families the admin lists and the doctor feed
+  // resolve through. Appended, never interleaved: every group above keeps the
+  // number it was minted with.
+  directions: 0x000b,
+  partners: 0x000c,
+  directionSpecialties: 0x000d,
+  directionAdjacency: 0x000e,
+  eventDirections: 0x000f,
+  projectExperts: 0x0010,
+  projectPartners: 0x0011,
 });
 
 /**

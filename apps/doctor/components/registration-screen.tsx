@@ -37,24 +37,23 @@ import {
 
 import { completeReturnTarget } from "@ds/events-storefront";
 
-import { login } from "@/lib/auth-client";
 import { withReturnContext } from "@/lib/return-context";
 import { doctorReturnHost } from "@/lib/return-completion";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import {
-  BOT_PROTECTION_MESSAGES,
+  botProtectionMessages,
   botProtectionSiteKey,
-} from "@/lib/bot-protection";
+} from "@ds/auth-flow/bot-protection";
 import {
-  REGISTER_FIELD_MESSAGES,
   registerFieldHint,
   registerFieldRules,
   resolveVerificationCode,
-} from "@/lib/register-fields";
-import {
-  confirmDoctorEmail,
-  registerDoctor,
-  resendVerification,
-} from "@/lib/storefront-auth-client";
+} from "@ds/auth-flow/fields";
+
+import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
+
+/** This host's challenge copy, projected once out of its config. */
+const BOT_PROTECTION_MESSAGES = botProtectionMessages(DOCTOR_AUTH_FLOW);
 import {
   resolveRegistrationSuccess,
   type RegistrationSuccessView,
@@ -276,9 +275,9 @@ const REGISTER_COPY = {
  * to this door too.
  */
 const FIELD_RULES = {
-  email: registerFieldRules("email"),
-  password: registerFieldRules("password"),
-  promoCode: registerFieldRules("promoCode"),
+  email: registerFieldRules(DOCTOR_AUTH_FLOW, "email"),
+  password: registerFieldRules(DOCTOR_AUTH_FLOW, "password"),
+  promoCode: registerFieldRules(DOCTOR_AUTH_FLOW, "promoCode"),
 } as const;
 
 /** The item of a tier carrying this purpose, or `undefined` when unsupplied. */
@@ -329,7 +328,7 @@ const CONFIRM_COPY: EmailConfirmCardCopy = {
  * 021 EARS-11 — the code field's message, taken from the FieldSpec projection
  * so the rule that rejects and the copy that explains cannot drift apart.
  */
-const CONFIRM_CODE_INVALID = REGISTER_FIELD_MESSAGES.code.invalid;
+const CONFIRM_CODE_INVALID = DOCTOR_AUTH_FLOW.copy.fields.code.invalid;
 const CONFIRM_FAILED = "Код не подошёл. Попробуйте ещё раз.";
 const CONFIRM_RESEND_FAILED =
   "Не удалось отправить код повторно. Попробуйте ещё раз.";
@@ -427,7 +426,7 @@ export function RegistrationScreen({
             version: CONSENT_WORDING_VERSION,
           });
         }
-        await registerDoctor(
+        await authClient.register<DoctorRegisterRequest, DoctorRegisterResponse>(
           {
             email,
             password: values.password,
@@ -531,7 +530,7 @@ export function RegistrationScreen({
         // CI default, where the pending action resumes tokenless and the guard
         // no-ops in the same way.
         <BotProtectionField
-          sitekey={botProtectionSiteKey()}
+          sitekey={botProtectionSiteKey(DOCTOR_AUTH_FLOW)}
           {...captcha.fieldProps}
         />
       }
@@ -604,7 +603,7 @@ export function RegistrationScreen({
  * only.
  */
 const confirmResolver: Resolver<EmailConfirmValues> = (values) => {
-  const message = resolveVerificationCode(values.code);
+  const message = resolveVerificationCode(DOCTOR_AUTH_FLOW, values.code);
   const result: ResolverResult<EmailConfirmValues> =
     message === null
       ? { values, errors: {} }
@@ -676,7 +675,7 @@ function RegistrationConfirmation({
 
   const { resendNonce, onResend } = useResendCooldown({
     resend: async (captchaToken) => {
-      await resendVerification({ identifier: email }, captchaToken);
+      await authClient.resendVerification({ identifier: email }, captchaToken);
     },
     onError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -707,18 +706,26 @@ function RegistrationConfirmation({
       // `returnTo` rides the SAME command as the code, so the server decides the
       // destination with the verification it just performed — there is no second
       // hop in which the target could go stale unobserved.
-      confirmed = await confirmDoctorEmail({
+      confirmed = await authClient.confirm<
+        DoctorConfirmRequest,
+        DoctorConfirmResponse
+      >({
         email: values.email,
         code: values.code,
         ...(returnTarget ? { returnTo: returnTarget } : {}),
       });
-    } catch {
+    } catch (err) {
       // Only the CODE failing keeps the doctor on this screen: it is the one
       // failure they can act on from here, by typing the code again. Everything
       // below has already accepted the code, so it can no longer produce this
       // state (003 EARS-16 — the message stays generic either way).
+      //
+      // #2001 (gate row 13): the outcome is still the generic sentence, but the
+      // status now decides — a 429 from the confirm route says «слишком много
+      // попыток» instead of blaming a code the doctor typed correctly, and a 5xx
+      // says the service is down. Before this the catch swallowed every status.
       setSuccess(null);
-      setError(CONFIRM_FAILED);
+      setError(authErrorMessage(err, DOCTOR_AUTH_FLOW.copy.errors, CONFIRM_FAILED));
       return;
     }
 
@@ -743,7 +750,10 @@ function RegistrationConfirmation({
     const held = takePendingRegistration(email);
     if (held) {
       try {
-        await login({ identifier: held.identifier, password: held.password });
+        await authClient.login({
+          identifier: held.identifier,
+          password: held.password,
+        });
         // 005 EARS-2 (#2005) — the session exists now, so the эфир the doctor
         // came from is COMPLETED before the outcome is painted: they pressed
         // «Участвовать» on a gated эфир and were sent here to make an account,
@@ -812,7 +822,7 @@ function RegistrationConfirmation({
         notice,
         captchaSlot: (
           <BotProtectionField
-            sitekey={botProtectionSiteKey()}
+            sitekey={botProtectionSiteKey(DOCTOR_AUTH_FLOW)}
             {...captcha.fieldProps}
           />
         ),

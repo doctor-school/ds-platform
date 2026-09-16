@@ -23,12 +23,16 @@ import {
   type PasswordRecoveryRequestValues,
 } from "@ds/design-system/blocks";
 
-import { authClient } from "@/lib/auth-client";
-import { authErrorMessage } from "@/lib/auth-error-message";
+import { authErrorMessage } from "@ds/auth-flow/errors";
 import {
-  BOT_PROTECTION_MESSAGES,
+  botProtectionMessages,
   botProtectionSiteKey,
-} from "@/lib/bot-protection";
+} from "@ds/auth-flow/bot-protection";
+
+import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
+
+/** This host's challenge copy, projected once out of its config. */
+const BOT_PROTECTION_MESSAGES = botProtectionMessages(DOCTOR_AUTH_FLOW);
 import { makeResolver } from "@/lib/make-resolver";
 
 /**
@@ -193,7 +197,7 @@ export function ResetScreen() {
         );
         return;
       }
-      setRequestError(authErrorMessage(error, REQUEST_FAILED));
+      setRequestError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, REQUEST_FAILED));
     },
   });
 
@@ -204,7 +208,7 @@ export function ResetScreen() {
         botProtectionFailureMessage(failure, BOT_PROTECTION_MESSAGES),
       ),
     onActionError: (error) =>
-      setResendError(authErrorMessage(error, RESEND_FAILED)),
+      setResendError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED)),
   });
 
   // #267 resend: re-request a code for the SAME held identifier through the
@@ -213,10 +217,7 @@ export function ResetScreen() {
   // block's cooldown and clears the now-stale typed code.
   const { resendNonce, onResend, resetNonce } = useResendCooldown({
     resend: async (captchaToken) => {
-      await authClient.requestPasswordReset({
-        identifier,
-        ...(captchaToken ? { captchaToken } : {}),
-      });
+      await authClient.requestPasswordReset({ identifier }, captchaToken);
     },
     onError: (error) => {
       if (isBotProtectionRejected(error) || isBotProtectionRequired(error)) {
@@ -227,7 +228,7 @@ export function ResetScreen() {
         );
         return;
       }
-      setResendError(authErrorMessage(error, RESEND_FAILED));
+      setResendError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED));
     },
     // Clear only resend-owned state; completion feedback answers another question.
     onBeforeResend: () => {
@@ -242,10 +243,8 @@ export function ResetScreen() {
     setRequestError(null);
     const value = values.identifier.trim();
     captcha.request(async (captchaToken) => {
-      await authClient.requestPasswordReset({
-        identifier: value,
-        ...(captchaToken ? { captchaToken } : {}),
-      });
+      // Row 18: the token becomes the `x-smartcaptcha-token` header.
+      await authClient.requestPasswordReset({ identifier: value }, captchaToken);
       // EARS-16: the acknowledgement is identical whether or not the identifier
       // exists, so the screen ALWAYS advances. Carry the identifier into the
       // complete step — the block mounts a FRESH form for the stage, so its code
@@ -265,7 +264,7 @@ export function ResetScreen() {
       router.push("/account");
       router.refresh();
     } catch (error) {
-      setCompleteError(authErrorMessage(error, COMPLETE_FAILED));
+      setCompleteError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, COMPLETE_FAILED));
     }
   }
 
@@ -306,7 +305,7 @@ export function ResetScreen() {
           pending: captcha.pending,
           captchaSlot: (
             <BotProtectionField
-              sitekey={botProtectionSiteKey()}
+              sitekey={botProtectionSiteKey(DOCTOR_AUTH_FLOW)}
               {...captcha.fieldProps}
             />
           ),
@@ -323,7 +322,7 @@ export function ResetScreen() {
           notice,
           captchaSlot: (
             <BotProtectionField
-              sitekey={botProtectionSiteKey()}
+              sitekey={botProtectionSiteKey(DOCTOR_AUTH_FLOW)}
               {...resendCaptcha.fieldProps}
             />
           ),

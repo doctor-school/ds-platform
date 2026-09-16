@@ -19,11 +19,9 @@ import {
 
 import { completeReturnTarget } from "@ds/events-storefront";
 
-import { authClient } from "@/lib/auth-client";
-import {
-  AUTH_GENERIC_MESSAGES,
-  authErrorMessage,
-} from "@/lib/auth-error-message";
+import { authErrorMessage } from "@ds/auth-flow/errors";
+
+import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
 import { makeResolver } from "@/lib/make-resolver";
 import { doctorReturnHost } from "@/lib/return-completion";
 
@@ -236,7 +234,11 @@ export function LoginScreen({
       });
       await finishLogin();
     } catch (err) {
-      setPasswordError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.login));
+      setPasswordError(authErrorMessage(
+          err,
+          DOCTOR_AUTH_FLOW.copy.errors,
+          "Не удалось войти. Проверьте почту или телефон и пароль.",
+        ));
     }
   }
 
@@ -259,7 +261,11 @@ export function LoginScreen({
         setResendNonce(0);
       }
     } catch (err) {
-      setOtpRequestError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.otpSend));
+      setOtpRequestError(authErrorMessage(
+          err,
+          DOCTOR_AUTH_FLOW.copy.errors,
+          "Не удалось отправить код. Проверьте адрес или номер и повторите.",
+        ));
     } finally {
       setOtpPending(false);
     }
@@ -278,7 +284,11 @@ export function LoginScreen({
       });
       await finishLogin();
     } catch (err) {
-      setOtpVerifyError(authErrorMessage(err, AUTH_GENERIC_MESSAGES.otpVerify));
+      setOtpVerifyError(authErrorMessage(
+          err,
+          DOCTOR_AUTH_FLOW.copy.errors,
+          "Код не подошёл. Проверьте цифры или запросите новый.",
+        ));
     }
   }
 

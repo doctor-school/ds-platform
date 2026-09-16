@@ -11,13 +11,9 @@ import { initialsFromDisplayName } from "@ds/room/display-name";
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
-import {
-  StorefrontAuthError,
-  getMyProfile,
-  logoutStorefront,
-  refreshStorefrontSession,
-  setDoctorDisplayName,
-} from "@/lib/storefront-auth-client";
+import { AuthError } from "@ds/auth-flow/client";
+
+import { authClient } from "@/lib/auth-flow-config";
 
 /**
  * #1958 — the doctor storefront's `/account` projection.
@@ -96,7 +92,7 @@ type State =
  * have, so the same three outcomes are expressed in RU literals here.
  */
 function resolveSaveError(err: unknown): string {
-  if (err instanceof StorefrontAuthError) {
+  if (err instanceof AuthError) {
     if (err.status === 429) return COPY.saveTooMany;
     if (err.status >= 500) return COPY.saveUnavailable;
     return COPY.saveGeneric;
@@ -113,11 +109,11 @@ export function AccountScreen() {
     // EARS-9: one silent refresh + one retry before the doctor is sent to /login.
     let profile: MyProfile | null = null;
     try {
-      profile = await getMyProfile();
+      profile = await authClient.profile();
       if (!profile) {
         try {
-          await refreshStorefrontSession();
-          profile = await getMyProfile();
+          await authClient.refresh();
+          profile = await authClient.profile();
         } catch {
           // refresh 401 (no/expired/reused session) — fall through to the door.
         }
@@ -138,7 +134,7 @@ export function AccountScreen() {
   }, [load]);
 
   async function onSaveDisplayName(displayName: string) {
-    await setDoctorDisplayName({ displayName });
+    await authClient.setDisplayName({ displayName });
     setState((prev) =>
       prev.kind === "ready"
         ? { kind: "ready", profile: { ...prev.profile, displayName } }
@@ -148,7 +144,7 @@ export function AccountScreen() {
 
   async function onSignOut() {
     try {
-      await logoutStorefront();
+      await authClient.logout();
     } catch {
       // A refused or unreachable revoke is swallowed HERE rather than escaping as
       // an unhandled rejection: the block fires this handler as `void onSignOut()`,

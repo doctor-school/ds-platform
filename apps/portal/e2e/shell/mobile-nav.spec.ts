@@ -13,7 +13,8 @@ import {
  *
  * Since #2180 that shared list is «Эфиры» alone (owner decision 2026-09-10), so
  * the dropdown's contract is «exactly what the host config declares», not a
- * hardcoded pair. The doctor-side collapse is owned by the shell journey.
+ * hardcoded pair. The signed-in doctor additionally gets the auth link «Мои
+ * события» as a ≡ row (#2243) — driven by `shell/doctor-header.spec.ts`. The doctor-side collapse is owned by the shell journey.
  *
  * Public-surface tier: only a running portal is needed (`E2E_PORTAL_URL`). The
  * guest drive proves target resolution end-to-end. `test.skip`s cleanly on a bare
@@ -37,13 +38,14 @@ test.describe("008 EARS-11 mobile nav collapses into a ≡ dropdown (e2e)", () =
     const menu = shellHeader(page).getByTestId("shell-mobile-menu");
     await expect(menu).toBeVisible();
 
-    // Open the ≡ dropdown and confirm it carries the same two nav items + targets.
+    // Open the ≡ dropdown and confirm it carries the same nav items + targets.
     await menu.locator("summary").click();
     const mobileNav = page.getByTestId("shell-nav-mobile");
     await expect(mobileNav).toBeVisible();
     // The SAME configured targets as the desktop nav — one host config value
     // feeds both, so the two lists cannot drift apart. Since #2180 that list is
-    // «Эфиры» alone (owner decision 2026-09-10).
+    // «Эфиры» alone (owner decision 2026-09-10); this drive is a GUEST, so the
+    // signed-in auth link «Мои события» (#2243) is absent by design.
     await expect(mobileNav.getByRole("link")).toHaveCount(1);
     const broadcasts = mobileNav.getByRole("link", { name: NAV_BROADCASTS });
     await expect(broadcasts).toHaveAttribute("href", DISCOVERY_HREF);

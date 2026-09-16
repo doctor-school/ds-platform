@@ -22,6 +22,7 @@ import { completeReturnTarget } from "@ds/events-storefront";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 
 import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
+import { DOCTOR_LOGIN_FALLBACK_COPY } from "@/lib/auth-flow-copy";
 import { makeResolver } from "@/lib/make-resolver";
 import { doctorReturnHost } from "@/lib/return-completion";
 
@@ -58,8 +59,9 @@ import { doctorReturnHost } from "@/lib/return-completion";
  * sentence shown to the doctor is doctor-owned.
  *
  * NO BOT-PROTECTION SLOT. The `<LoginCard>` `captchaSlot` is optional and stays
- * unsupplied: the widget is portal-local and the doctor host copy of it is
- * tracked at #1558 (the same dependency keeping `/register` submit inert).
+ * unsupplied: this screen is the LAST doctor auth surface without a challenge —
+ * `/register` and `/reset` mount the shared block and render the widget today —
+ * and wave-1 PR 1.6 of the OPEN #2027 owns filling this one.
  * Ordinary sign-in is unburdened — `POST /v1/auth/login` is `@LoginChallenged()`,
  * captcha-after-N-failures — so the password journey works today; the challenged
  * path and the `@BotProtected("otp-request")` OTP request surface an honest RU
@@ -237,7 +239,7 @@ export function LoginScreen({
       setPasswordError(authErrorMessage(
           err,
           DOCTOR_AUTH_FLOW.copy.errors,
-          "Не удалось войти. Проверьте почту или телефон и пароль.",
+          DOCTOR_LOGIN_FALLBACK_COPY.password,
         ));
     }
   }
@@ -264,7 +266,7 @@ export function LoginScreen({
       setOtpRequestError(authErrorMessage(
           err,
           DOCTOR_AUTH_FLOW.copy.errors,
-          "Не удалось отправить код. Проверьте адрес или номер и повторите.",
+          DOCTOR_LOGIN_FALLBACK_COPY.otpRequest,
         ));
     } finally {
       setOtpPending(false);
@@ -287,7 +289,7 @@ export function LoginScreen({
       setOtpVerifyError(authErrorMessage(
           err,
           DOCTOR_AUTH_FLOW.copy.errors,
-          "Код не подошёл. Проверьте цифры или запросите новый.",
+          DOCTOR_LOGIN_FALLBACK_COPY.otpVerify,
         ));
     }
   }

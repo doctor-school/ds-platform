@@ -1687,13 +1687,17 @@ describe("#2213 golden volume content and media", () => {
       ...dataset.events
         .map((e) => e.programPdfRef)
         .filter((key): key is string => Boolean(key)),
+      ...dataset.partners
+        .map((p) => p.logoRef)
+        .filter((key): key is string => Boolean(key)),
     ]);
     expect(new Set(keys)).toEqual(promised);
     for (const object of plan) {
       expect(object.bytes.byteLength).toBeGreaterThan(512);
       expect(
         object.contentType === "image/webp" ||
-          object.contentType === "application/pdf",
+          object.contentType === "application/pdf" ||
+          object.contentType === "image/svg+xml",
       ).toBe(true);
     }
   });

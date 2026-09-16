@@ -372,11 +372,12 @@ describe("StorefrontHeader", () => {
     expect(mobileLinks[0]).toHaveAttribute("href", "/events");
   });
 
-  it("008 EARS-5: the signed-in cluster carries the configured auth links beside the chip", () => {
-    // #2243: the academy's «Мои события» link (canvas `user.links` line 209,
-    // rendered at line 33 of `ds-shell.dc.html`) is a VALUE on the resolved
-    // sign-in state, not a host-assembled node — so it lives inside the one
-    // `data-cluster="doctor"` cluster the package renders.
+  it("008 EARS-5: the desktop bar draws the auth links in canvas order — after the nav items, BEFORE the theme control", () => {
+    // #2243: the academy's «Мои события» link (canvas `user.links` line 209) is
+    // a VALUE on the resolved sign-in state, not a host-assembled node. The
+    // canvas draws it INSIDE the nav group (`ds-shell.dc.html` line 33), so the
+    // desktop bar reads «Эфиры · Мои события · ☾ · Личный кабинет» — the theme
+    // control is line 35 and the chip line 36, both AFTER the link.
     render(
       <StorefrontHeader
         config={ACADEMY}
@@ -390,14 +391,28 @@ describe("StorefrontHeader", () => {
       />,
     );
 
-    const cluster = screen.getByTestId("shell-auth-cluster");
-    const link = within(cluster).getByTestId("shell-auth-link");
-    expect(link).toHaveTextContent("Мои события");
+    // It is the LAST entry of the one desktop nav group — nav items come first.
+    const nav = screen.getByTestId("shell-nav-desktop");
+    const desktop = within(nav).getAllByRole("link");
+    expect(desktop.map((a) => a.textContent)).toEqual(["Эфиры", "Мои события"]);
+
+    const link = within(nav).getByTestId("shell-auth-link");
     expect(link).toHaveAttribute("href", "/account/events");
-    // The desktop copy is hidden below the `layout` breakpoint — the mobile
-    // rendering is the `≡` row asserted below, never a second visible copy.
-    expect(link.parentElement!.className).toContain("hidden");
-    expect(link.parentElement!.className).toContain("layout:flex");
+
+    // …and the link precedes the theme control, which precedes the chip.
+    const toggle = screen.getByTestId("theme-toggle");
+    const chip = screen.getByTestId("shell-avatar");
+    expect(
+      link.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      toggle.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // The desktop copy is still hidden below the `layout` breakpoint — the
+    // mobile rendering is the `≡` row asserted below, never a second copy.
+    expect(nav.className).toContain("hidden");
+    expect(nav.className).toContain("layout:flex");
   });
 
   it("008 EARS-11: the mobile disclosure carries the auth links after the nav rows", () => {

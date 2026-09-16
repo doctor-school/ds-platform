@@ -13,6 +13,9 @@
 // `deployment_status` (or a manual `workflow_dispatch`) into the
 // `<prev-sha>..<new-sha>` range and delegates the render+POST to
 // `tools/deploy/release-notes.mjs` — the ONE digest seam (#847), never duplicated.
+// This script resolves only the ANCHORS; `release-notes.mjs` then narrows the range
+// by PATCH ID (`git cherry -v`, #2241), so commits a `--ref` hotfix already shipped
+// and `main` merely replays as cherry-picks are not announced a second time.
 //
 // Inputs (from the workflow `env:`, sourced from the event payload / dispatch):
 //   - STATE        `github.event.deployment_status.state`   (guard: only `success`)

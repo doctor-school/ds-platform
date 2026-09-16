@@ -16,13 +16,24 @@ import { events, streamConfig } from "../../schema/events.js";
 import { consentRecords } from "../../schema/consent-records.js";
 import { registrations } from "../../schema/registrations.js";
 import {
+  directionAdjacency,
+  directions,
+  directionSpecialties,
+  eventDirections,
   eventExperts,
   eventProjects,
   experts,
+  partners,
+  projectExperts,
+  projectPartners,
   projects,
 } from "../../schema/taxonomy.js";
 import { users } from "../../schema/users.js";
-import type { GoldenDataset, GoldenDoctorSpecialtyLink } from "./dataset.js";
+import type {
+  GoldenDataset,
+  GoldenDirectionSpecialtyLink,
+  GoldenDoctorSpecialtyLink,
+} from "./dataset.js";
 
 /** Raised when the plan cannot be built — a missing dependency, never a warning. */
 export class GoldenPlanError extends Error {
@@ -58,14 +69,22 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "users",
   "experts",
   "projects",
+  // #2213 — the taxonomy books, before anything that classifies through them.
+  "directions",
+  "partners",
   "events",
   "stream_config",
   "event_experts",
   "event_projects",
+  "event_directions",
   "registrations",
   "event_recordings",
   "consent_records",
   "doctor_specialties",
+  "direction_specialties",
+  "direction_adjacency",
+  "project_experts",
+  "project_partners",
 ]);
 
 /**
@@ -104,6 +123,42 @@ export function resolveDoctorSpecialtyRows(
   }));
 }
 
+/**
+ * Resolves the direction↔specialty links against the seeded Минздрав book.
+ *
+ * The twin of {@link resolveDoctorSpecialtyRows}, and for the same reason: the
+ * book's ids belong to the book seed, so the golden dataset holds names. A name
+ * the book does not carry is a hard failure — dropping the link silently would
+ * produce a template in which a whole specialty resolves to no direction, and
+ * the doctor feed would render empty far from the cause (017 EARS-8).
+ */
+export function resolveDirectionSpecialtyRows(
+  links: readonly GoldenDirectionSpecialtyLink[],
+  specialtyIdByName: ReadonlyMap<string, string>,
+): Record<string, unknown>[] {
+  const missing = links
+    .map((link) => link.specialtyName)
+    .filter((name) => !specialtyIdByName.has(name));
+  if (missing.length > 0) {
+    throw new GoldenPlanError(
+      `the Минздрав specialty book does not carry: ${[...new Set(missing)].join(", ")} — run the book seed before the golden seed`,
+    );
+  }
+  return links.map((link) => {
+    const row: Record<string, unknown> = {
+      id: link.id,
+      directionId: link.directionId,
+      specialtyMinzdravId: specialtyIdByName.get(link.specialtyName) as string,
+      status: link.status,
+      version: 1,
+      createdAt: link.createdAt,
+      updatedAt: link.updatedAt,
+    };
+    if (link.deletedAt) row.deletedAt = link.deletedAt;
+    return row;
+  });
+}
+
 /** Builds the ordered, idempotent write plan for a dataset. */
 export function buildGoldenSeedPlan(
   dataset: GoldenDataset,
@@ -113,11 +168,14 @@ export function buildGoldenSeedPlan(
     step("users", users, dataset.users, ["id"]),
     step("experts", experts, dataset.experts, ["id"]),
     step("projects", projects, dataset.projects, ["id"]),
+    step("directions", directions, dataset.directions, ["id"]),
+    step("partners", partners, dataset.partners, ["id"]),
     step("events", events, dataset.events, ["id"]),
     // `stream_config` is keyed by its event, not by a surrogate id.
     step("stream_config", streamConfig, dataset.streamConfig, ["eventId"]),
     step("event_experts", eventExperts, dataset.eventExperts, ["id"]),
     step("event_projects", eventProjects, dataset.eventProjects, ["id"]),
+    step("event_directions", eventDirections, dataset.eventDirections, ["id"]),
     step("registrations", registrations, dataset.registrations, ["id"]),
     step("event_recordings", eventRecordings, dataset.eventRecordings, ["id"]),
     step("consent_records", consentRecords, dataset.consentRecords, ["id"]),
@@ -127,6 +185,23 @@ export function buildGoldenSeedPlan(
       resolveDoctorSpecialtyRows(dataset.doctorSpecialties, specialtyIdByName),
       ["id"],
     ),
+    step(
+      "direction_specialties",
+      directionSpecialties,
+      resolveDirectionSpecialtyRows(
+        dataset.directionSpecialties,
+        specialtyIdByName,
+      ),
+      ["id"],
+    ),
+    step(
+      "direction_adjacency",
+      directionAdjacency,
+      dataset.directionAdjacency,
+      ["id"],
+    ),
+    step("project_experts", projectExperts, dataset.projectExperts, ["id"]),
+    step("project_partners", projectPartners, dataset.projectPartners, ["id"]),
   ];
 
   const planned = steps.map((s) => s.name);
@@ -217,6 +292,39 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   check("event_projects", dataset.eventProjects, "eventId", eventIds);
   check("event_projects", dataset.eventProjects, "projectId", projectIds);
   check("doctor_specialties", dataset.doctorSpecialties, "doctorId", userIds);
+
+  // #2213 — the taxonomy link tables.
+  const directionIds = idSet(dataset.directions);
+  const partnerIds = idSet(dataset.partners);
+  check(
+    "direction_specialties",
+    dataset.directionSpecialties,
+    "directionId",
+    directionIds,
+  );
+  check(
+    "direction_adjacency",
+    dataset.directionAdjacency,
+    "directionId",
+    directionIds,
+  );
+  check(
+    "direction_adjacency",
+    dataset.directionAdjacency,
+    "adjacentDirectionId",
+    directionIds,
+  );
+  check("event_directions", dataset.eventDirections, "eventId", eventIds);
+  check(
+    "event_directions",
+    dataset.eventDirections,
+    "directionId",
+    directionIds,
+  );
+  check("project_experts", dataset.projectExperts, "projectId", projectIds);
+  check("project_experts", dataset.projectExperts, "expertId", expertIds);
+  check("project_partners", dataset.projectPartners, "projectId", projectIds);
+  check("project_partners", dataset.projectPartners, "partnerId", partnerIds);
 
   return issues;
 }

@@ -16,10 +16,16 @@ import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
 import type {
+  NewDirection,
+  NewDirectionAdjacency,
+  NewEventDirection,
   NewEventExpert,
   NewEventProject,
   NewExpert,
+  NewPartner,
   NewProject,
+  NewProjectExpert,
+  NewProjectPartner,
 } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
@@ -29,7 +35,12 @@ import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
 import { expertPhotoKey } from "./programme.js";
-import { buildGoldenVolume } from "./volume.js";
+import {
+  buildGoldenVolume,
+  goldenDirectionId,
+  goldenPartnerId,
+  GOLDEN_VOLUME_ORDINAL_BASE,
+} from "./volume.js";
 
 // The pinned legal acceptances live in `consent.ts` so the volume half can write
 // them without importing this module back (a runtime cycle). Re-exported here so
@@ -55,6 +66,24 @@ export interface GoldenDoctorSpecialtyLink {
   updatedAt: Date;
 }
 
+/**
+ * A direction↔specialty link BEFORE resolution.
+ *
+ * Carries the specialty's NAME for the same reason {@link GoldenDoctorSpecialtyLink}
+ * does: `specialties_minzdrav.id` belongs to the book seed, and the planner
+ * resolves the name against whatever the target database actually carries
+ * (`resolveDirectionSpecialtyRows`).
+ */
+export interface GoldenDirectionSpecialtyLink {
+  id: string;
+  directionId: string;
+  specialtyName: string;
+  status: "active" | "retired";
+  deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GoldenDataset {
   users: NewUser[];
   experts: NewExpert[];
@@ -67,6 +96,13 @@ export interface GoldenDataset {
   eventRecordings: NewEventRecording[];
   consentRecords: NewConsentRecord[];
   doctorSpecialties: GoldenDoctorSpecialtyLink[];
+  directions: NewDirection[];
+  partners: NewPartner[];
+  directionSpecialties: GoldenDirectionSpecialtyLink[];
+  directionAdjacency: NewDirectionAdjacency[];
+  eventDirections: NewEventDirection[];
+  projectExperts: NewProjectExpert[];
+  projectPartners: NewProjectPartner[];
 }
 
 /** Raised when the dataset itself is inconsistent — a fixture defect, not a run defect. */
@@ -477,6 +513,124 @@ export function buildGoldenDataset(
     ...volume.doctorSpecialties,
   ];
 
+  // The taxonomy top-level rows are authored wholly in the catalogue
+  // (`taxonomy.ts`): a «named» direction beside them would be a second book the
+  // admin has to reconcile, and the curated scenarios address directions by
+  // slug through `goldenDirectionId` instead.
+  const directions: NewDirection[] = [...volume.directions];
+  const partners: NewPartner[] = [...volume.partners];
+  const directionSpecialties: GoldenDirectionSpecialtyLink[] = [
+    ...volume.directionSpecialties,
+  ];
+  const directionAdjacency: NewDirectionAdjacency[] = [
+    ...volume.directionAdjacency,
+  ];
+
+  // The curated эфиры are classified BY HAND: a scenario that asserts «the
+  // cardiologist sees the reference upcoming эфир» must not depend on where a
+  // round-robin happened to file it.
+  const namedEventDirections: readonly (readonly [string, string])[] = [
+    [golden.events.upcoming.id, "cardiology"],
+    [golden.events.upcoming.id, "general-practice"],
+    [golden.events.live.id, "cardiology"],
+    [golden.events.hidden.id, "neurology"],
+    [golden.events.pastWithRecording.id, "cardiology"],
+    [golden.events.pastWithRecording.id, "general-practice"],
+    [golden.events.archived.id, "general-practice"],
+  ];
+  const eventDirections: NewEventDirection[] = [
+    ...namedEventDirections.map(([eventId, slug], index) => ({
+      id: goldenUuid(GOLDEN_GROUP.eventDirections, index + 1),
+      eventId,
+      directionId: goldenDirectionId(slug),
+      status: "active" as const,
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    })),
+    ...volume.eventDirections,
+  ];
+
+  const projectExperts: NewProjectExpert[] = [
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 1),
+      projectId: golden.projects.publishedSchool.id,
+      expertId: golden.experts.published.id,
+      role: "curator",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 2),
+      projectId: golden.projects.publishedSchool.id,
+      expertId: golden.experts.draft.id,
+      role: "member",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    // A draft project is a project: `012-design §3.2`'s single-curator rule is
+    // not conditional on publication, and the admin's team block has to render.
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 3),
+      projectId: golden.projects.draft.id,
+      expertId: golden.experts.published.id,
+      role: "curator",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectExperts, 4),
+      projectId: golden.projects.draft.id,
+      expertId: goldenUuid(GOLDEN_GROUP.experts, GOLDEN_VOLUME_ORDINAL_BASE),
+      role: "member",
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    ...volume.projectExperts,
+  ];
+
+  const projectPartners: NewProjectPartner[] = [
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 1),
+      projectId: golden.projects.publishedSchool.id,
+      partnerId: goldenPartnerId(0),
+      isPrimary: true,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 2),
+      projectId: golden.projects.publishedSchool.id,
+      partnerId: goldenPartnerId(11),
+      isPrimary: false,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
+      id: goldenUuid(GOLDEN_GROUP.projectPartners, 3),
+      projectId: golden.projects.draft.id,
+      partnerId: goldenPartnerId(1),
+      isPrimary: true,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    ...volume.projectPartners,
+  ];
+
   const specialtyIssues = goldenSpecialtyIssues(doctorSpecialties);
   if (specialtyIssues.length > 0) {
     throw new GoldenDatasetError(specialtyIssues.join("; "));
@@ -494,6 +648,13 @@ export function buildGoldenDataset(
     eventRecordings,
     consentRecords,
     doctorSpecialties,
+    directions,
+    partners,
+    directionSpecialties,
+    directionAdjacency,
+    eventDirections,
+    projectExperts,
+    projectPartners,
   };
 }
 

@@ -40,10 +40,16 @@ import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
 import type {
+  NewDirection,
+  NewDirectionAdjacency,
+  NewEventDirection,
   NewEventExpert,
   NewEventProject,
   NewExpert,
+  NewPartner,
   NewProject,
+  NewProjectExpert,
+  NewProjectPartner,
 } from "../../schema/taxonomy.js";
 import type { NewUser } from "../../schema/users.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
@@ -54,15 +60,30 @@ import {
   VOLUME_PROGRAMME,
   VOLUME_PROJECTS,
 } from "./content.js";
-import type { GoldenDoctorSpecialtyLink } from "./dataset.js";
+import type {
+  GoldenDirectionSpecialtyLink,
+  GoldenDoctorSpecialtyLink,
+} from "./dataset.js";
 import { golden, GOLDEN_GROUP, goldenUuid, isGoldenUuid } from "./ids.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
 import {
   eventProgrammeKey,
   expertPhotoKey,
   hasProgramme,
+  partnerLogoKey,
   programmeTotalMinutes,
 } from "./programme.js";
+import {
+  directionIndexOf,
+  GOLDEN_ADJACENCY,
+  GOLDEN_ADJACENCY_RETIRED,
+  GOLDEN_DIRECTION_EXTRA_LINKS,
+  GOLDEN_DIRECTION_RETIRED_LINKS,
+  GOLDEN_DIRECTIONS,
+  GOLDEN_PARTNERS,
+  GOLDEN_PUBLISHED_DIRECTIONS,
+  publishedDirectionIndexOfSpecialty,
+} from "./taxonomy.js";
 
 /**
  * First ordinal the volume half may use, in every group.
@@ -101,6 +122,13 @@ export interface GoldenVolume {
   eventRecordings: NewEventRecording[];
   consentRecords: NewConsentRecord[];
   doctorSpecialties: GoldenDoctorSpecialtyLink[];
+  directions: NewDirection[];
+  partners: NewPartner[];
+  directionSpecialties: GoldenDirectionSpecialtyLink[];
+  directionAdjacency: NewDirectionAdjacency[];
+  eventDirections: NewEventDirection[];
+  projectExperts: NewProjectExpert[];
+  projectPartners: NewProjectPartner[];
 }
 
 const MS_MINUTE = 60_000;
@@ -240,6 +268,13 @@ export function buildGoldenVolume(now: Date): GoldenVolume {
   const eventRecordings = buildRecordings(plans, now);
   const consentRecords = buildConsents(at);
   const doctorSpecialties = buildDoctorSpecialties(at);
+  const directions = buildDirections(at);
+  const partners = buildPartners(at);
+  const directionSpecialties = buildDirectionSpecialties(at);
+  const directionAdjacency = buildDirectionAdjacency(at);
+  const eventDirections = buildEventDirections(plans, now);
+  const projectExperts = buildProjectExperts(at);
+  const projectPartners = buildProjectPartners(at);
 
   return {
     users,
@@ -253,6 +288,13 @@ export function buildGoldenVolume(now: Date): GoldenVolume {
     eventRecordings,
     consentRecords,
     doctorSpecialties,
+    directions,
+    partners,
+    directionSpecialties,
+    directionAdjacency,
+    eventDirections,
+    projectExperts,
+    projectPartners,
   };
 }
 
@@ -1006,4 +1048,333 @@ function buildDoctorSpecialties(at: At): GoldenDoctorSpecialtyLink[] {
     createdAt: at({ days: -398 - d * 3 }),
     updatedAt: at({ days: -398 - d * 3 }),
   }));
+}
+
+// ── #2213 part D — the taxonomy families ────────────────────────────────────
+//
+// The catalogue itself lives in `taxonomy.ts` (pure editorial data). This half
+// stamps it with the golden identities and with instants derived from the one
+// resolved «now», exactly as every other family above does. A direction is
+// editorial content, so it is published EARLIER than anything that classifies
+// through it — an эфир filed under a direction that did not exist yet is a
+// shape the admin cannot produce.
+
+/** The id of a direction, by its index in `GOLDEN_DIRECTIONS`. */
+function directionIdAt(index: number): string {
+  return goldenUuid(
+    GOLDEN_GROUP.directions,
+    GOLDEN_VOLUME_ORDINAL_BASE + index,
+  );
+}
+
+/** The id of a golden direction, by slug — the addressable handle for `dataset.ts`. */
+export function goldenDirectionId(slug: string): string {
+  return directionIdAt(directionIndexOf(slug));
+}
+
+/** The id of a golden partner, by its index in `GOLDEN_PARTNERS`. */
+export function goldenPartnerId(index: number): string {
+  return goldenUuid(GOLDEN_GROUP.partners, GOLDEN_VOLUME_ORDINAL_BASE + index);
+}
+
+function buildDirections(at: At): NewDirection[] {
+  return GOLDEN_DIRECTIONS.map((spec, i) => {
+    const row: NewDirection = {
+      id: directionIdAt(i),
+      slug: spec.slug,
+      title: spec.title,
+      status: spec.status,
+      version: 1,
+      createdAt: at({ days: -360 - i }),
+      updatedAt: at({ days: -350 - i }),
+    };
+    // A draft direction has never been published; a retired one HAS been, and
+    // the `taxonomy_first_published_at_set_once` trigger keeps that instant.
+    if (spec.status !== "draft") {
+      row.firstPublishedAt = at({ days: -350 - i });
+    }
+    if (spec.status === "retired") row.deletedAt = at({ days: -40 });
+    return row;
+  });
+}
+
+function buildPartners(at: At): NewPartner[] {
+  return GOLDEN_PARTNERS.map((spec, i) => {
+    const row: NewPartner = {
+      id: goldenPartnerId(i),
+      slug: spec.slug,
+      title: spec.title,
+      // The logo object itself is planned by `media.ts` under this key.
+      logoRef: partnerLogoKey(GOLDEN_VOLUME_ORDINAL_BASE + i),
+      websiteUrl: spec.website,
+      status: spec.status,
+      version: 1,
+      createdAt: at({ days: -345 - i * 2 }),
+      updatedAt: at({ days: -335 - i * 2 }),
+    };
+    if (spec.status !== "draft") {
+      row.firstPublishedAt = at({ days: -335 - i * 2 });
+    }
+    if (spec.status === "retired") row.deletedAt = at({ days: -35 });
+    return row;
+  });
+}
+
+/**
+ * The direction↔specialty links: the partition, the additive extras, the retired.
+ *
+ * Ordered so that the partition comes first and every later group only ADDS to
+ * it — which is what keeps «every specialty of the book resolves to a published
+ * direction» a property of `taxonomy.ts` rather than of this walk.
+ */
+function buildDirectionSpecialties(at: At): GoldenDirectionSpecialtyLink[] {
+  const rows: GoldenDirectionSpecialtyLink[] = [];
+  let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
+
+  const push = (
+    directionIndex: number,
+    specialtyName: string,
+    retired: boolean,
+  ) => {
+    const createdAt = at({ days: -340 + (ordinal % 120) });
+    const row: GoldenDirectionSpecialtyLink = {
+      id: goldenUuid(GOLDEN_GROUP.directionSpecialties, ordinal),
+      directionId: directionIdAt(directionIndex),
+      specialtyName,
+      status: retired ? "retired" : "active",
+      createdAt,
+      updatedAt: retired ? at({ days: -45 }) : createdAt,
+    };
+    if (retired) row.deletedAt = at({ days: -45 });
+    rows.push(row);
+    ordinal += 1;
+  };
+
+  GOLDEN_DIRECTIONS.forEach((spec, i) => {
+    for (const name of spec.specialties) push(i, name, false);
+  });
+  for (const [slug, name] of GOLDEN_DIRECTION_EXTRA_LINKS) {
+    push(directionIndexOf(slug), name, false);
+  }
+  for (const [slug, name] of GOLDEN_DIRECTION_RETIRED_LINKS) {
+    push(directionIndexOf(slug), name, true);
+  }
+  return rows;
+}
+
+function buildDirectionAdjacency(at: At): NewDirectionAdjacency[] {
+  const rows: NewDirectionAdjacency[] = [];
+  let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
+  const push = (
+    edge: (typeof GOLDEN_ADJACENCY)[number],
+    retired: boolean,
+  ) => {
+    const createdAt = at({ days: -330 + (ordinal % 90) });
+    const row: NewDirectionAdjacency = {
+      id: goldenUuid(GOLDEN_GROUP.directionAdjacency, ordinal),
+      directionId: goldenDirectionId(edge.from),
+      adjacentDirectionId: goldenDirectionId(edge.to),
+      kind: edge.kind,
+      weight: edge.weight,
+      status: retired ? "retired" : "active",
+      version: 1,
+      createdAt,
+      updatedAt: retired ? at({ days: -50 }) : createdAt,
+    };
+    if (retired) row.deletedAt = at({ days: -50 });
+    rows.push(row);
+    ordinal += 1;
+  };
+  for (const edge of GOLDEN_ADJACENCY) push(edge, false);
+  for (const edge of GOLDEN_ADJACENCY_RETIRED) push(edge, true);
+  return rows;
+}
+
+/**
+ * The classification of the season — the join the doctor feed actually walks.
+ *
+ * 017 EARS-8 resolves a doctor's feed as specialty → `direction_specialties` →
+ * `directions` → `event_directions`, so an unclassified эфир is invisible to
+ * every targeted surface no matter how published it is. Two counters, not one:
+ * the second slot walks the published directions CONTIGUOUSLY over the
+ * future-published suffix of the season, which is what proves every direction
+ * carries an upcoming эфир. A single `index % N` walk over all plans would
+ * leave holes wherever the monthly draft and hidden cells fall, and a hole is
+ * one specialty's permanently empty feed.
+ *
+ * The ordinal is positional (`index * 4 + position`), never a running counter:
+ * how many slots an эфир dedupes to depends on the pin, so a running counter
+ * would re-identify rows when the season moves.
+ */
+function buildEventDirections(
+  plans: VolumeEventPlan[],
+  now: Date,
+): NewEventDirection[] {
+  const rows: NewEventDirection[] = [];
+  const nowMs = now.getTime();
+  const published = GOLDEN_PUBLISHED_DIRECTIONS.length;
+  let upcomingCounter = 0;
+  let otherCounter = 0;
+
+  for (const plan of plans) {
+    // A draft эфир is not reachable at all, so classifying it would only add
+    // rows the product can never read.
+    if (plan.state === "draft") continue;
+    const i = plan.index;
+    const upcoming =
+      plan.state === "published" && plan.startsAt.getTime() > nowMs;
+    const walk = upcoming ? upcomingCounter++ : otherCounter++;
+
+    const slots = [
+      publishedDirectionIndexOfSpecialty(volumeEventTitle(i).specialty),
+      walk % published,
+    ];
+    // One эфир in seven is cross-filed under a third direction — the admin's
+    // «направления эфира» block has to render more than a single chip.
+    if (i % 7 === 3) slots.push((i * 17 + 11) % published);
+    const unique = [...new Set(slots)];
+
+    const eventId = goldenUuid(
+      GOLDEN_GROUP.events,
+      GOLDEN_VOLUME_ORDINAL_BASE + i,
+    );
+    const createdAt = linkCreatedAt(plan, nowMs);
+    const idAt = (position: number) =>
+      goldenUuid(
+        GOLDEN_GROUP.eventDirections,
+        GOLDEN_VOLUME_ORDINAL_BASE + i * 4 + position,
+      );
+
+    for (const [position, slot] of unique.entries()) {
+      rows.push({
+        id: idAt(position),
+        eventId,
+        directionId: directionIdAt(slot),
+        status: "active",
+        version: 1,
+        createdAt,
+        updatedAt: createdAt,
+      });
+    }
+
+    // A withdrawn classification, on a FOURTH direction: the pair key spans
+    // retained rows, and the active count per эфир has to stay within the
+    // one-to-three the product renders.
+    if (i % 23 === 7) {
+      let candidate = (i * 23 + 7) % published;
+      while (unique.includes(candidate)) {
+        candidate = (candidate + 1) % published;
+      }
+      const retiredAt = new Date(createdAt.getTime() + 21 * MS_DAY);
+      rows.push({
+        id: idAt(3),
+        eventId,
+        directionId: directionIdAt(candidate),
+        status: "retired",
+        deletedAt: retiredAt,
+        version: 1,
+        createdAt,
+        updatedAt: retiredAt,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * The project team: exactly one ACTIVE curator and a handful of members.
+ *
+ * `project_experts_project_curator_active_uniq` is a partial unique index, so a
+ * second active curator does not fail a test — it aborts the whole seed
+ * transaction. The curator is therefore minted first and never repeated, and
+ * the member strides are deduped against it.
+ */
+function buildProjectExperts(at: At): NewProjectExpert[] {
+  const rows: NewProjectExpert[] = [];
+  const experts = VOLUME_EXPERTS.length;
+  let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
+
+  VOLUME_PROJECTS.forEach((_, j) => {
+    const projectId = goldenUuid(
+      GOLDEN_GROUP.projects,
+      GOLDEN_VOLUME_ORDINAL_BASE + j,
+    );
+    const slots = [(j * 3) % experts];
+    for (let k = 0; k < 2 + (j % 3); k += 1) {
+      const slot = (j * 5 + 7 + k) % experts;
+      if (!slots.includes(slot)) slots.push(slot);
+    }
+    // «Куратор ушёл из проекта» is a state the admin shows; it is authored on
+    // the LAST member so the curator slot is never the retired one.
+    const retiredAt = j % 4 === 1 ? slots.length - 1 : -1;
+
+    for (const [position, slot] of slots.entries()) {
+      const retired = position === retiredAt;
+      const createdAt = at({ days: -290 - j * 3 - position });
+      const row: NewProjectExpert = {
+        id: goldenUuid(GOLDEN_GROUP.projectExperts, ordinal),
+        projectId,
+        expertId: goldenUuid(
+          GOLDEN_GROUP.experts,
+          GOLDEN_VOLUME_ORDINAL_BASE + slot,
+        ),
+        role: position === 0 ? "curator" : "member",
+        status: retired ? "retired" : "active",
+        version: 1,
+        createdAt,
+        updatedAt: retired ? at({ days: -55 - j }) : createdAt,
+      };
+      if (retired) row.deletedAt = at({ days: -55 - j });
+      rows.push(row);
+      ordinal += 1;
+    }
+  });
+  return rows;
+}
+
+/**
+ * The project sponsors: one primary, up to two more.
+ *
+ * `project_partners_project_primary_active_uniq` is the twin partial index —
+ * only the first row of a project is ever primary, and a retired row is never
+ * the primary one.
+ */
+function buildProjectPartners(at: At): NewProjectPartner[] {
+  const rows: NewProjectPartner[] = [];
+  const partners = GOLDEN_PARTNERS.length;
+  let ordinal = GOLDEN_VOLUME_ORDINAL_BASE;
+
+  VOLUME_PROJECTS.forEach((_, j) => {
+    const projectId = goldenUuid(
+      GOLDEN_GROUP.projects,
+      GOLDEN_VOLUME_ORDINAL_BASE + j,
+    );
+    const slots = [j % partners];
+    const second = (j * 5 + 3) % partners;
+    if (!slots.includes(second)) slots.push(second);
+    if (j % 3 === 0) {
+      const third = (j * 9 + 7) % partners;
+      if (!slots.includes(third)) slots.push(third);
+    }
+    const retiredAt = j % 5 === 2 && slots.length > 1 ? slots.length - 1 : -1;
+
+    for (const [position, slot] of slots.entries()) {
+      const retired = position === retiredAt;
+      const createdAt = at({ days: -285 - j * 3 - position });
+      const row: NewProjectPartner = {
+        id: goldenUuid(GOLDEN_GROUP.projectPartners, ordinal),
+        projectId,
+        partnerId: goldenPartnerId(slot),
+        isPrimary: position === 0,
+        status: retired ? "retired" : "active",
+        version: 1,
+        createdAt,
+        updatedAt: retired ? at({ days: -60 - j }) : createdAt,
+      };
+      if (retired) row.deletedAt = at({ days: -60 - j });
+      rows.push(row);
+      ordinal += 1;
+    }
+  });
+  return rows;
 }

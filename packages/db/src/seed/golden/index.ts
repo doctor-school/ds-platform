@@ -35,14 +35,34 @@ export {
   buildGoldenDataset,
   goldenSpecialtyIssues,
   type GoldenDataset,
+  type GoldenDirectionSpecialtyLink,
   type GoldenDoctorSpecialtyLink,
 } from "./dataset.js";
 export {
   GOLDEN_VOLUME_ORDINAL_BASE,
   buildGoldenVolume,
+  goldenDirectionId,
+  goldenPartnerId,
   isGoldenVolumeUuid,
   type GoldenVolume,
 } from "./volume.js";
+export {
+  GOLDEN_ADJACENCY,
+  GOLDEN_ADJACENCY_RETIRED,
+  GOLDEN_DIRECTION_EXTRA_LINKS,
+  GOLDEN_DIRECTION_RETIRED_LINKS,
+  GOLDEN_DIRECTIONS,
+  GOLDEN_PARTNERS,
+  GOLDEN_PUBLISHED_DIRECTIONS,
+  GOLDEN_UNPUBLISHED_DIRECTIONS,
+  GoldenTaxonomyError,
+  directionIndexOf,
+  publishedDirectionIndexOf,
+  publishedDirectionIndexOfSpecialty,
+  type GoldenAdjacencyEdge,
+  type GoldenDirectionSpec,
+  type GoldenPartnerSpec,
+} from "./taxonomy.js";
 export {
   eventProgrammeKey,
   expertPhotoKey,
@@ -51,6 +71,8 @@ export {
   hasProgramme,
   isDatedProgrammeLine,
   ordinalFromExpertPhotoKey,
+  ordinalFromPartnerLogoKey,
+  partnerLogoKey,
   programmeLines,
   programmeSessionCount,
   programmeSessionMinutes,
@@ -92,6 +114,7 @@ export {
   GoldenPlanError,
   buildGoldenSeedPlan,
   goldenReferentialIssues,
+  resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
   type GoldenSeedStep,
 } from "./plan.js";

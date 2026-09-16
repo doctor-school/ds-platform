@@ -1,0 +1,146 @@
+{
+  "academy-desktop-light": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "text": "Academy.Doctor.School",
+    "fontSize": "126.144px",
+    "boxWidth": 1440,
+    "runWidth": 1389.09,
+    "runRightEdge": 1414.55,
+    "giantScrollWidth": 1440,
+    "giantClientWidth": 1440,
+    "documentScrollWidth": 1440,
+    "documentClientWidth": 1440,
+    "rendersDark": false
+  },
+  "academy-desktop-dark": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "text": "Academy.Doctor.School",
+    "fontSize": "126.144px",
+    "boxWidth": 1440,
+    "runWidth": 1389.09,
+    "runRightEdge": 1414.55,
+    "giantScrollWidth": 1440,
+    "giantClientWidth": 1440,
+    "documentScrollWidth": 1440,
+    "documentClientWidth": 1440,
+    "rendersDark": true
+  },
+  "academy-mobile-light": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "text": "Academy.Doctor.School",
+    "fontSize": "34.164px",
+    "boxWidth": 390,
+    "runWidth": 376.19,
+    "runRightEdge": 383.09,
+    "giantScrollWidth": 390,
+    "giantClientWidth": 390,
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390,
+    "rendersDark": false
+  },
+  "academy-mobile-dark": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "text": "Academy.Doctor.School",
+    "fontSize": "34.164px",
+    "boxWidth": 390,
+    "runWidth": 376.19,
+    "runRightEdge": 383.09,
+    "giantScrollWidth": 390,
+    "giantClientWidth": 390,
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390,
+    "rendersDark": true
+  },
+  "doctor-desktop-light": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "text": "Doctor.School",
+    "fontSize": "217.008px",
+    "boxWidth": 1440,
+    "runWidth": 1388.86,
+    "runRightEdge": 1414.42,
+    "giantScrollWidth": 1440,
+    "giantClientWidth": 1440,
+    "documentScrollWidth": 1440,
+    "documentClientWidth": 1440,
+    "rendersDark": false
+  },
+  "doctor-desktop-dark": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "text": "Doctor.School",
+    "fontSize": "217.008px",
+    "boxWidth": 1440,
+    "runWidth": 1388.86,
+    "runRightEdge": 1414.42,
+    "giantScrollWidth": 1440,
+    "giantClientWidth": 1440,
+    "documentScrollWidth": 1440,
+    "documentClientWidth": 1440,
+    "rendersDark": true
+  },
+  "doctor-mobile-light": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "text": "Doctor.School",
+    "fontSize": "58.773px",
+    "boxWidth": 390,
+    "runWidth": 376.16,
+    "runRightEdge": 383.08,
+    "giantScrollWidth": 390,
+    "giantClientWidth": 390,
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390,
+    "rendersDark": false
+  },
+  "doctor-mobile-dark": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "text": "Doctor.School",
+    "fontSize": "58.773px",
+    "boxWidth": 390,
+    "runWidth": 376.16,
+    "runRightEdge": 383.08,
+    "giantScrollWidth": 390,
+    "giantClientWidth": 390,
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390,
+    "rendersDark": true
+  },
+  "interactions-doctor-mobile-theme-toggle": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "text": "Doctor.School",
+    "fontSize": "58.773px",
+    "boxWidth": 390,
+    "runWidth": 376.16,
+    "runRightEdge": 383.08,
+    "giantScrollWidth": 390,
+    "giantClientWidth": 390,
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390,
+    "rendersDark": true
+  }
+}

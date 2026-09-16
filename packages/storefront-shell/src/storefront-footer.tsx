@@ -123,8 +123,9 @@ function FooterChrome({ config }: { config: StorefrontShellConfig }) {
 
       {/* The giant wordmark: decorative, hidden from assistive technology, and
           bled to the page edges by negating the footer's own padding. Its size
-          is a container-query length carried in the config, so the two hosts
-          fit their different wordmark lengths with no script (008 EARS-14). */}
+          is a container-query length carried in the config, its coefficient
+          measured from that host's own wordmark, so the two hosts fit their
+          different wordmark lengths with no script (008 EARS-14, #2234). */}
       <div
         aria-hidden="true"
         className={`${styles.giantBox} -mx-4 -mb-9 mt-8 layout:-mx-12 layout:-mb-14 layout:mt-12`}

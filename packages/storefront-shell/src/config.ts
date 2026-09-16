@@ -81,9 +81,24 @@ export interface StorefrontShellConfig {
     /** The brand foot-note, one rendered line per entry. */
     note: readonly string[];
     /**
-     * The giant decorative wordmark. `fontSize` is a CSS length carrying
-     * container-query units (the canvas `giantSize`, e.g. `min(16cqw,240px)`) —
-     * the canvas fits it with a ResizeObserver, the code fits it with CSS.
+     * The giant decorative wordmark. `fontSize` is a CSS length in
+     * container-query units against the footer's own width (the canvas
+     * `giantSize`, e.g. `min(15.07cqw,240px)`).
+     *
+     * The canvas (`design-source/ds-shell.dc.html`) fits the wordmark with a
+     * ResizeObserver: it rescales until the MEASURED glyph run is 96.5% of the
+     * box, clamped to 26..240px. The code reproduces that with no script,
+     * because for one fixed string in one fixed face the run width is linear in
+     * the font size — so the coefficient is simply
+     * `96.5 / (run width per 1px of font size)`, measured in the running UI for
+     * Inter 800 at the `.giant` tracking: 6.4003 for «Doctor.School» (=> 15.07)
+     * and 11.0123 for «Academy.Doctor.School» (=> 8.76). The `min()` arm is the
+     * canvas clamp.
+     *
+     * CHANGING THE TEXT OR THE TYPEFACE INVALIDATES THE COEFFICIENT — re-measure
+     * it, or the box clips the word again the way #2234 found it clipped. The
+     * per-host `/documents` Playwright rows (008 EARS-14.5, 017 EARS-1.13)
+     * are what hold that honest.
      */
     giant: { text: string; fontSize: string };
     /**

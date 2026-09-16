@@ -76,6 +76,6 @@ export const DOCTOR_SHELL: StorefrontShellConfig = {
     /** Education is free FOR THE DOCTOR, and the interface never names who
      *  finances it (owner hard rule) — no sponsor or funding wording here. */
     note: ["Бесплатное образование для врачей.", "© Doctor.School, 2026"],
-    giant: { text: "Doctor.School", fontSize: "min(16cqw,240px)" },
+    giant: { text: "Doctor.School", fontSize: "min(15.07cqw,240px)" },
   },
 };

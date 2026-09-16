@@ -13,9 +13,15 @@
  *    Both marks are painted and CSS picks one, so the swap needs no client
  *    component and cannot flash the wrong mark before hydration.
  *
- * 2. The giant decorative wordmark. The canvas fits it with a ResizeObserver;
- *    here it is pure CSS — a container-typed box plus the container-query
- *    `font-size` the host config carries (`giantSize`). The optical values
+ * 2. The giant decorative wordmark. The canvas fits it with a ResizeObserver
+ *    that lands the measured glyph run at 96.5% of the box; here it is pure
+ *    CSS — a container-typed box plus the container-query `font-size` the host
+ *    config carries (`giantSize`), whose coefficient is DERIVED from the
+ *    measured run of that host's own wordmark, so the run lands on the same
+ *    96.5% at every width instead of overflowing a fixed fraction of it
+ *    (#2234; the derivation lives on `StorefrontShellConfig.footer.giant`).
+ *    `overflow: hidden` stays the belt: a wordmark that ever outgrew its box
+ *    is clipped here rather than pushing the page sideways. The optical values
  *    (tight tracking, sub-unit leading, the baseline nudge that bleeds the
  *    glyphs into the page edge) have no token or utility-scale equivalent and
  *    arbitrary Tailwind values are lint-blocked, so they live here as one named

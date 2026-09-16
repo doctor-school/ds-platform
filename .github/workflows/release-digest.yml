@@ -30,7 +30,7 @@ on:
         type: string
 
 # `gh api …/deployments` (read) + the checked-out tree for `git tag --merged` /
-# `git log <prev>..<new>`; `pull-requests: read` for release-notes.mjs' per-range
+# `git cherry <prev> <new>`; `pull-requests: read` for release-notes.mjs' per-range
 # `gh pr view <N>` (the Issue-#10 auth pattern).
 permissions:
   contents: read
@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # release-notes.mjs runs `git log <prevSha>..<newSha>` over the range and
+          # release-notes.mjs runs `git cherry -v <prevSha> <newSha>` over the range and
           # post-release-digest.mjs runs `git tag --merged` / `git rev-list`, so the
           # full history + tags must be present (a shallow clone fails the range).
           fetch-depth: 0

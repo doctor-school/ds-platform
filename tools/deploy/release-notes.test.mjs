@@ -1,6 +1,11 @@
 // tools/deploy/release-notes.test.mjs — unit + integration tests for the
 // aggregated PROD release digest seams (Issue #2241: patch-id range + note-driven
 // inclusion). `node --test` (pnpm test:tools).
+//
+// There is NO feature-spec behind these ids: #2241 is an engineering-task
+// (AGENTS.md §3.8), so the `EARS-N` titles follow the tools/** house convention
+// (ADR-0006 §4 numbering style) and reference no spec clause. `node --test` rather
+// than Vitest because tools/** ships as plain .mjs and runs under `pnpm test:tools`.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -115,8 +120,25 @@ test("EARS-2.1: a failing `git cherry` is a green skip (null), never a throw", a
 
 // ── composeDigest: integration over a real temp git repo ────────────────────
 
+// Every git call is isolated from the developer's global config: a global
+// `commit.gpgsign=true` (or an identity-less machine) would otherwise fail these
+// temp-repo commits locally while CI stayed green.
+const GIT_ISOLATION = [
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  "tag.gpgsign=false",
+  "-c",
+  "user.name=t",
+  "-c",
+  "user.email=t@t",
+];
+
 function git(cwd, ...args) {
-  const r = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const r = spawnSync("git", [...GIT_ISOLATION, ...args], {
+    cwd,
+    encoding: "utf8",
+  });
   assert.equal(r.status, 0, `git ${args.join(" ")} → ${r.stderr}`);
   return (r.stdout || "").trim();
 }

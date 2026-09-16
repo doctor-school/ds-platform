@@ -188,6 +188,9 @@ export async function composeDigest({
     );
   }
 
+  // `git cherry` reports no MERGE commit (a merge has no patch-id); harmless here
+  // because `main` is squash-only (the linear-history ruleset), so every release
+  // commit is a single-parent squash.
   // The range, BY PATCH ID (#2241). `git cherry -v <prev> <new>` marks with `-`
   // every commit of the range that already has a patch-equivalent upstream in
   // `<prev>` — exactly the commits a `pnpm deploy:prod --ref <sha>` hotfix already

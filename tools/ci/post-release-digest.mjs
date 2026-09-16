@@ -13,6 +13,9 @@
 // `deployment_status` (or a manual `workflow_dispatch`) into the
 // `<prev-sha>..<new-sha>` range and delegates the render+POST to
 // `tools/deploy/release-notes.mjs` — the ONE digest seam (#847), never duplicated.
+// This script resolves only the ANCHORS; `release-notes.mjs` then narrows the range
+// by PATCH ID (`git cherry -v`, #2241), so commits a `--ref` hotfix already shipped
+// and `main` merely replays as cherry-picks are not announced a second time.
 //
 // Inputs (from the workflow `env:`, sourced from the event payload / dispatch):
 //   - STATE        `github.event.deployment_status.state`   (guard: only `success`)
@@ -21,10 +24,19 @@
 //   - DELIVERY_ENV `prod` (mandatory footer marker, passed straight through)
 //   - MATTERMOST_WEBHOOK_URL / GH_TOKEN / GH_REPO           (release-notes.mjs + gh)
 //
-// The prev-sha is the commit of the latest `release-*` tag that is a STRICT
-// ANCESTOR of `new-sha` (a tag AT `new-sha` is excluded), ordered by the tag's
+// The prev-sha is the commit of the LATEST `release-*` tag by
 // `release-YYYY.MM.DD-<n>` date + same-day ordinal (`parseReleaseTag`, reused from
-// cut-release.mjs). This makes the digest describe exactly the RELEASE it announces
+// cut-release.mjs), REGARDLESS OF ANCESTRY (a tag AT `new-sha` is still excluded).
+// Ancestry is deliberately not required: a `deploy:prod --ref <sha>` hotfix release
+// is tagged on a SIDE BRANCH, so its tag is never an ancestor of `main`, and the
+// old `git tag --merged <new-sha>` filter silently skipped every hotfix release and
+// anchored on the last plain main release instead — which is exactly how the
+// 2026-09-16 digest repeated nine already-live notes (#2241). A non-ancestor anchor
+// is safe because `release-notes.mjs` ranges by PATCH ID (`git cherry`), which
+// handles divergent histories and de-duplicates whatever the hotfix already shipped.
+// A tag that is a DESCENDANT of `new-sha` is still dropped (a rollback or a
+// dispatch backfill of an older release must not anchor on a FUTURE release).
+// This makes the digest describe exactly the RELEASE it announces
 // — the same range the GitHub Release notes (auto-generated "since the previous
 // release") cover. When NO prior release tag exists, the baseline is the repo-root
 // first commit (`git rev-list --max-parents=0`), so the range is the full history —
@@ -58,14 +70,15 @@ export function shouldPost({ state, environment } = {}) {
 }
 
 /**
- * Resolve the previous-release prev-sha from the candidate `release-*` tags that
- * are ancestors-or-equal of `newSha` and an injected repo-root sha. PURE — no I/O
- * (the git gathering lives in `fetchPrevShaInputs`, the same pure/seam split the
- * old deployment-list resolver used, and `nextReleaseTag` in cut-release.mjs).
+ * Resolve the previous-release prev-sha from the candidate `release-*` tags and an
+ * injected repo-root sha. PURE — no I/O (the git gathering lives in
+ * `fetchPrevShaInputs`, the same pure/seam split the old deployment-list resolver
+ * used, and `nextReleaseTag` in cut-release.mjs).
  *
- * The winner is the STRICT-ANCESTOR release tag with the latest
- * `release-YYYY.MM.DD-<n>` date, then the highest same-day ordinal — a tag AT
- * `newSha` is excluded (its sha equals `newSha`), so re-running the digest for an
+ * The winner is the release tag with the latest `release-YYYY.MM.DD-<n>` date, then
+ * the highest same-day ordinal, WITHOUT any ancestry requirement (#2241 — hotfix
+ * releases are tagged on side branches, so requiring ancestry skipped them). A tag
+ * AT `newSha` is excluded (its sha equals `newSha`), so re-running the digest for an
  * already-tagged release still ranges from the PRIOR release. With no qualifying
  * tag, the repo-root sha is the baseline (full-history range); with neither
  * (git unavailable), `null` → release-notes.mjs green-skips the `none` range.
@@ -82,7 +95,8 @@ export function resolvePrevSha(candidateTags, newSha, repoRootSha = null) {
     if (!c || typeof c !== "object") continue;
     const { tag, sha } = c;
     if (typeof sha !== "string" || !sha) continue;
-    if (sha === newSha) continue; // strict ancestor — exclude a tag AT new-sha
+    // A tag AT the deployed sha describes THIS release, not the previous one.
+    if (sha === newSha) continue;
     const parsed = parseReleaseTag(tag);
     if (!parsed) continue;
     if (
@@ -115,22 +129,27 @@ function log(msg) {
 }
 
 /**
- * Gather the pure resolver's inputs from git: the `release-*` tags that are
- * ancestors-or-equal of `newSha` (each peeled to its commit sha), plus the
- * repo-root first commit for the no-prior-tag baseline. Returns
- * `{ candidateTags, repoRootSha }` or throws (caught by the non-fatal main). I/O
- * seam. `--merged <newSha>` keeps only tags reachable from the deployed sha, so a
- * tag on an unrelated branch never anchors the range.
+ * Gather the pure resolver's inputs from git: EVERY `release-*` tag (each peeled to
+ * its commit sha), plus the repo-root first commit for the no-prior-tag baseline.
+ * Returns `{ candidateTags, repoRootSha }` or throws (caught by the non-fatal main).
+ * I/O seam. The list is deliberately NOT filtered by `--merged <newSha>`: a
+ * `--ref` hotfix release is tagged on a side branch and is therefore not an
+ * ancestor of the deployed main sha, so `--merged` dropped exactly the releases the
+ * digest must anchor on (#2241). Ordering, not reachability, picks the winner in
+ * `resolvePrevSha`, and the patch-id range in release-notes.mjs tolerates the
+ * divergence. What IS still filtered out here is a tag that is a descendant of
+ * `newSha` (`git merge-base --is-ancestor <newSha> <tagSha>`): on a rollback or a
+ * `workflow_dispatch` backfill of an older release a FUTURE release tag would
+ * otherwise win and reverse the range.
  */
-function fetchPrevShaInputs(cwd, newSha) {
-  const tagList = spawnSync(
-    "git",
-    ["tag", "--list", "release-*", "--merged", newSha],
-    { encoding: "utf8", cwd },
-  );
+export function fetchPrevShaInputs(cwd, newSha) {
+  const tagList = spawnSync("git", ["tag", "--list", "release-*"], {
+    encoding: "utf8",
+    cwd,
+  });
   if (tagList.status !== 0) {
     throw new Error(
-      `git tag --merged exited ${tagList.status}: ${(tagList.stderr || "")
+      `git tag --list exited ${tagList.status}: ${(tagList.stderr || "")
         .trim()
         .slice(0, 200)}`,
     );
@@ -146,10 +165,23 @@ function fetchPrevShaInputs(cwd, newSha) {
       encoding: "utf8",
       cwd,
     });
-    if (r.status === 0) {
-      const sha = (r.stdout || "").trim();
-      if (sha) candidateTags.push({ tag, sha });
-    }
+    if (r.status !== 0) continue;
+    const sha = (r.stdout || "").trim();
+    if (!sha) continue;
+    // Drop a tag that is a DESCENDANT of the deployed sha. Dropping `--merged`
+    // makes side-branch hotfix tags eligible, but it also makes a tag from the
+    // FUTURE of `newSha` eligible - which happens on a rollback
+    // (`deploy:prod --ref <older sha>`) or a `workflow_dispatch` backfill of an
+    // older release. Such an anchor reverses the range and the digest would
+    // announce an empty/bogus release. A tag AT `newSha` is not caught here
+    // (`--is-ancestor` is reflexive) - `resolvePrevSha` still excludes it by sha.
+    const desc = spawnSync(
+      "git",
+      ["merge-base", "--is-ancestor", newSha, sha],
+      { encoding: "utf8", cwd },
+    );
+    if (desc.status === 0 && sha !== newSha) continue;
+    candidateTags.push({ tag, sha });
   }
 
   let repoRootSha = null;

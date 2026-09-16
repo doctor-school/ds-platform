@@ -423,9 +423,10 @@ node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> [--dry
 
 Posts ONE aggregated **Russian, product-language** release note to the **same**
 `MATTERMOST_WEBHOOK_URL` the per-PR notes use (`tools/ci/post-product-note.mjs`,
-#654) — reusing its `extractNote` / `noteIsReal` / `labelsAreProductKind` /
-`envFooter` seams so the guard, the per-PR note, and this digest read one source of
-truth.
+#654) — reusing its `extractNote` / `noteIsReal` / `envFooter` seams so the guard,
+the per-PR note, and this digest read one source of truth. The digest deliberately
+does NOT reuse `labelsAreProductKind`: inclusion here is note-driven (#2241 — see
+"Note-driven inclusion" below), while the kind-label gate stays a per-PR-post rule.
 
 **Fired from CI, not from `deploy:prod` (#968).** The digest is a DEPLOY event, and
 `deploy:prod` ships off-CI (ADR-0012) where `secrets.MATTERMOST_WEBHOOK_URL` does
@@ -450,11 +451,28 @@ release's range tooling-only (the prior deploy already carried all the product
 work), so the digest wrongly said "no user-facing changes" while the Release notes
 listed the full history. The digest a release announces must describe that release.
 
-The message lists the `## Product note (RU)` section of every **product-kind**
-(`feature` | `bug`) PR merged in the `<prev-sha>..<new-sha>` range, carrying the
-same **PROD** environment footer (#657); a valid range with no product PR posts a
-one-line «технический релиз». The range is deterministic from git + PR data:
-commit subjects → the **LAST** `(#N)` per subject (the squash-merge number) →
+The message lists the `## Product note (RU)` section of every PR in the
+`<prev-sha>..<new-sha>` range that carries a **REAL** note, carrying the same
+**PROD** environment footer (#657); a valid range with no noted PR posts a one-line
+«технический релиз».
+
+**Inclusion is note-driven, not label-driven (#2241).** The digest keeps a PR when
+`noteIsReal(extractNote(body))` — whatever its kind label. A `refactor` / `tooling`
+PR whose author wrote a real Product note IS product-visible by that author's own
+declaration (PR #2198 and #2229 shipped the shared header/footer and the unified
+login and were silently dropped by the old `feature|bug` gate); a `feature`/`bug`
+PR whose note is `none` still stays out. The per-PR poster
+(`tools/ci/post-product-note.mjs`) keeps its own `labelsAreProductKind` gate — only
+the DIGEST is note-driven.
+
+**The range is computed by PATCH ID, not by ancestry (#2241).**
+`git cherry -v <prev-sha> <new-sha>` marks every commit that already has a
+patch-equivalent commit in `<prev-sha>` with `-`; only the `+` subjects feed the PR
+extraction. This is what keeps a `pnpm deploy:prod --ref <sha>` **hotfix** from
+being announced twice: the hotfix branch ships cherry-picks of commits that also
+live on `main`, so a plain `prev..new` commit walk re-listed all of them (the
+2026-09-16 post repeated nine already-live notes). From the surviving subjects the
+rule is unchanged: the **LAST** `(#N)` per subject (the squash-merge number) →
 `gh pr view`. Notes are embedded **verbatim** via `JSON.stringify({ text })` — no
 shell, no interpolation — so a `$(...)`/backtick in a note cannot execute.
 
@@ -467,7 +485,7 @@ shell, no interpolation — so a `$(...)`/backtick in a note cannot execute.
 - **`--dry-run`** — compose and print the `{ text }` to stdout; never POST, no
   webhook required.
 - First deploy (`--prev-sha none`) / redeploy (`prev == new`) / a bad anchor
-  (`git log` non-zero) → log + **skip green** — never a fabricated all-history
+  (`git cherry` non-zero) → log + **skip green** — never a fabricated all-history
   range, never a broken deploy.
 
 ## IdP prod-parity obligation — MFA login policy (011 EARS-8)

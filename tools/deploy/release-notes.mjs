@@ -3,8 +3,12 @@
 // the Mattermost incoming webhook (Issue #868).
 //
 // This posts ONE Russian, product-language digest listing the "Product note (RU)"
-// sections of every product-kind (feature|bug) PR merged between the
-// previously-deployed prod SHA and the newly-deployed SHA. The digest is a DEPLOY
+// sections of every PR that carries a REAL note and entered the range between the
+// previously-deployed prod SHA and the newly-deployed SHA. Inclusion is driven by
+// the note alone, NOT by the kind label (#2241): a `refactor`/`tooling` PR whose
+// author wrote a real Product note IS product-visible and belongs in the post;
+// a `feature`/`bug` PR whose note is `none` stays out. The per-PR poster keeps its
+// own `feature|bug` gate — only the DIGEST is note-driven. The digest is a DEPLOY
 // event, so it is fired from CI by `.github/workflows/release-digest.yml` on
 // `deployment_status: success` for the `production` environment (#968) — where
 // `secrets.MATTERMOST_WEBHOOK_URL` already lives — via the thin resolver
@@ -16,12 +20,15 @@
 // reuses the per-PR delivery's pure seams (Issue #654/#657/#847) so the guard, the
 // per-PR note, and this digest read the SAME source of truth:
 //   - extractNote / noteIsReal  — the `## Product note (RU)` section extraction.
-//   - labelsAreProductKind      — the feature|bug product-kind gate (#847).
 //   - envFooter                 — the mandatory DEV/PROD environment footer (#657).
 //
-// The range is derived deterministically from git + PR data: commit subjects of
-// `<prevSha>..<newSha>` → the LAST `(#N)` per subject (squash-merge appends the
-// merged PR number) → `gh pr view` per PR. Notes go into the payload verbatim via
+// The range is derived deterministically from git + PR data by PATCH ID, not by
+// commit ancestry (#2241): `git cherry -v <prevSha> <newSha>` marks every commit
+// that already has a patch-equivalent upstream with `-`, so the commits a `--ref`
+// hotfix already shipped to prod (and main later carries as cherry-picks) are
+// dropped instead of being announced a second time. Only `+` subjects survive →
+// the LAST `(#N)` per subject (squash-merge appends the merged PR number) →
+// `gh pr view` per PR. Notes go into the payload verbatim via
 // `JSON.stringify({ text })` — no shell, no interpolation — so a `$(...)` or a
 // backtick in a note body cannot be executed (the injection-safe path #654 set).
 //
@@ -31,8 +38,8 @@
 //                                                    deploy path passes `prod`.
 //   - prev-sha missing/`none`/not 7–40 hex         → log + skip (first deploy? exit 0).
 //   - prev-sha == new-sha                          → log + skip (redeploy, exit 0).
-//   - `git log <range>` non-zero (bad anchor)      → warn + skip (exit 0, non-fatal).
-//   - zero product PRs in the range                → post the "технический релиз" line.
+//   - `git cherry <range>` non-zero (bad anchor)   → warn + skip (exit 0, non-fatal).
+//   - zero noted PRs in the range                  → post the "технический релиз" line.
 //   - otherwise                                    → post the aggregated digest.
 
 import { spawnSync } from "node:child_process";
@@ -42,7 +49,6 @@ import { fileURLToPath } from "node:url";
 import {
   envFooter,
   extractNote,
-  labelsAreProductKind,
   noteIsReal,
 } from "../ci/post-product-note.mjs";
 
@@ -71,6 +77,31 @@ export function extractPrNumbers(subjects) {
     out.push(last);
   }
   return out;
+}
+
+/**
+ * Parse `git cherry -v <upstream> <head>` output. Each line is
+ * `<+|-> <sha> <subject>`: `+` means the commit has NO patch-equivalent upstream
+ * (genuinely new in this range), `-` means an equivalent patch already exists
+ * upstream — i.e. it was already shipped (a `--ref` hotfix) and main merely
+ * replays it. Pure; malformed lines are ignored. A subject may legitimately be
+ * empty (`git cherry` without `-v` output mixed in).
+ *
+ * @param {string} stdout
+ * @returns {{ unmatched: {sha: string, subject: string}[], matched: {sha: string, subject: string}[] }}
+ */
+export function parseCherryVerbose(stdout) {
+  const unmatched = [];
+  const matched = [];
+  for (const raw of String(stdout ?? "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = /^([+-])\s+([0-9a-f]{7,40})(?:\s+(.*))?$/i.exec(line);
+    if (!m) continue;
+    const entry = { sha: m[2].toLowerCase(), subject: (m[3] ?? "").trim() };
+    (m[1] === "+" ? unmatched : matched).push(entry);
+  }
+  return { unmatched, matched };
 }
 
 /**
@@ -115,11 +146,13 @@ function log(msg) {
  * Compose the aggregated release-notes digest text for a `prevSha..newSha` range —
  * the ONE source of truth reused by both the Mattermost post (this script's
  * `main`) and the GitHub Deployment record (`deployment-record.mjs`, #942/#847):
- * derive the range's merged PR numbers → `gh pr view` each → keep the product-kind
- * PRs with a REAL note → `buildDigest` (or `buildTechnicalReleaseLine` when zero).
+ * derive the range's merged PR numbers BY PATCH ID (`git cherry -v`, so the commits
+ * a `--ref` hotfix already shipped are not announced a second time) → `gh pr view`
+ * each → keep every PR carrying a REAL `## Product note (RU)`, whatever its kind
+ * label (#2241) → `buildDigest` (or `buildTechnicalReleaseLine` when zero).
  *
  * Returns `{ text, productCount }`, or `null` on the legitimate green-skip case
- * (a bad/expired anchor whose `git log <range>` fails — never break a deploy). The
+ * (a bad/expired anchor whose `git cherry <range>` fails — never break a deploy). The
  * caller owns the earlier green skips (no anchor / redeploy) and the webhook check;
  * `footer` MUST be non-null here (the caller validates DELIVERY_ENV first). Callers
  * that pass a range with a potentially-unvalidated env get a loud throw.
@@ -129,6 +162,8 @@ function log(msg) {
  * @param {string}      args.newSha   newly-deployed SHA.
  * @param {string|null} args.footer   the mandatory DEV/PROD environment footer.
  * @param {string}     [args.cwd]     working dir for git/gh (defaults to cwd).
+ * @param {Function}   [args.runCherry] test seam: `(prevSha, newSha) => { status, stdout, stderr }`.
+ * @param {Function}   [args.runGh]     test seam: `(prNumber) => { status, stdout }`.
  * @returns {Promise<{ text: string, productCount: number } | null>}
  */
 export async function composeDigest({
@@ -136,6 +171,14 @@ export async function composeDigest({
   newSha,
   footer,
   cwd = process.cwd(),
+  runCherry = (prev, next) =>
+    spawnSync("git", ["cherry", "-v", prev, next], { encoding: "utf8", cwd }),
+  runGh = (n) =>
+    spawnSync(
+      "gh",
+      ["pr", "view", String(n), "--json", "number,title,url,body"],
+      { encoding: "utf8", cwd },
+    ),
 }) {
   if (footer === null || footer === undefined) {
     throw new Error(
@@ -145,34 +188,36 @@ export async function composeDigest({
     );
   }
 
-  // Commit subjects of prevSha..newSha. A non-zero exit means prevSha is not in
-  // the local history (a bad/expired anchor) — warn and skip (green), never break.
-  const logRes = spawnSync(
-    "git",
-    ["log", "--format=%s", `${prevSha}..${newSha}`],
-    {
-      encoding: "utf8",
-      cwd,
-    },
-  );
-  if (logRes.status !== 0) {
+  // `git cherry` reports no MERGE commit (a merge has no patch-id); harmless here
+  // because `main` is squash-only (the linear-history ruleset), so every release
+  // commit is a single-parent squash.
+  // The range, BY PATCH ID (#2241). `git cherry -v <prev> <new>` marks with `-`
+  // every commit of the range that already has a patch-equivalent upstream in
+  // `<prev>` — exactly the commits a `pnpm deploy:prod --ref <sha>` hotfix already
+  // shipped and that main merely replays as cherry-picks. Announcing those again
+  // is what made the 2026-09-16 post repeat nine already-live notes. Only the `+`
+  // subjects are genuinely new in this release. A non-zero exit means prevSha is
+  // not in the local history (a bad/expired anchor) — warn and skip (green).
+  const cherryRes = runCherry(prevSha, newSha);
+  if (cherryRes.status !== 0) {
     log(
-      `⚠ \`git log ${prevSha.slice(0, SHORT)}..${newSha.slice(0, SHORT)}\` failed ` +
-        `(anchor not in local history?) — skipping (green): ${(logRes.stderr || "").trim()}`,
+      `⚠ \`git cherry -v ${prevSha.slice(0, SHORT)} ${newSha.slice(0, SHORT)}\` failed ` +
+        `(anchor not in local history?) — skipping (green): ${(cherryRes.stderr || "").trim()}`,
     );
     return null;
   }
-  const subjects = (logRes.stdout || "").split(/\r?\n/).filter(Boolean);
-  const prNums = extractPrNumbers(subjects);
+  const { unmatched } = parseCherryVerbose(cherryRes.stdout || "");
+  const prNums = extractPrNumbers(unmatched.map((e) => e.subject));
 
-  // Fetch each PR; keep only product-kind PRs (feature|bug) with a REAL note.
+  // Fetch each PR; keep every PR whose author wrote a REAL `## Product note (RU)`.
+  // The NOTE is the gate here, not the kind label (#2241): a `refactor`/`tooling`
+  // PR with a real note is product-visible by the author's own declaration and
+  // belongs in the digest, while a `feature`/`bug` PR whose note is `none` stays
+  // out. (The per-PR poster keeps its own feature|bug gate — only this digest is
+  // note-driven.)
   const notes = [];
   for (const n of prNums) {
-    const r = spawnSync(
-      "gh",
-      ["pr", "view", String(n), "--json", "number,title,url,body,labels"],
-      { encoding: "utf8", cwd },
-    );
+    const r = runGh(n);
     // Non-zero: the number is an issue ref (not a PR) or a 404 — skip it.
     if (r.status !== 0) continue;
     let pr;
@@ -181,10 +226,6 @@ export async function composeDigest({
     } catch {
       continue;
     }
-    const labelNames = Array.isArray(pr.labels)
-      ? pr.labels.map((l) => (l && typeof l === "object" ? l.name : l))
-      : [];
-    if (!labelsAreProductKind(labelNames)) continue;
     const note = extractNote(pr.body ?? "");
     if (!noteIsReal(note)) continue;
     notes.push({ note, title: pr.title ?? "", url: pr.url ?? "" });

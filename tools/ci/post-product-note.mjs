@@ -112,7 +112,11 @@ export function noteIsReal(note) {
 
 /** PR kinds that represent a product-facing change; only these deliver to the
  *  product channel. Process PRs (docs/tooling/chore/refactor/dependencies) are
- *  suppressed entirely (Issue #847 — owner decision 2026-07-13: full suppression). */
+ *  suppressed entirely (Issue #847 — owner decision 2026-07-13: full suppression).
+ *  This gate is PER-PR-POST ONLY: the aggregated release digest
+ *  (tools/deploy/release-notes.mjs) is note-driven since #2241 — it includes any PR
+ *  whose author wrote a real `## Product note (RU)`, whatever its kind label. Do not
+ *  "restore" the label gate there. */
 const PRODUCT_KIND_LABELS = ["feature", "bug"];
 
 /** True when the PR's label set marks a product-facing change (feature|bug).

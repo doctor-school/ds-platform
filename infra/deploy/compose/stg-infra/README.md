@@ -350,6 +350,34 @@ sudo bash -c 'set -a; . /etc/ds-platform/stage.env; set +a; \
   ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
 ```
 
+**Then hand the api its credentials (#2226).** The converge registers the OIDC app, but
+nothing writes the API-side keys: a slot's `api` binds the real Zitadel adapter only when
+`IDP_ISSUER` (rendered per slot by `slot.mjs`) AND `IDP_SERVICE_TOKEN` are both set
+(`apps/api/src/auth/idp/idp.module.ts`); otherwise it boots the in-memory
+`FakeIdpClient` with no error — registration and login "work", the accounts live in
+that container's memory and vanish on the next `sync`, and the golden accounts
+`reset-identities` writes into Zitadel answer 401 on `POST /v1/auth/login`. That is how
+the stand ran from its bring-up until 2026-09-15. Fill the four keys in
+`/etc/ds-platform/stage.env` exactly as `api.env` on prod (`stage.env.example` → «API-side
+IdP credentials»: the bootstrap PAT as the service token, client id / project id from
+the `IDP_CLIENT_ID=` / `IDP_PROJECT_ID=` lines provision.sh prints on stdout — never
+the `reused app <id>` stderr line, that is the app id — the client secret from the
+`IDP_CLIENT_SECRET=` line on creation or from `_generate_client_secret`), then recreate
+the api of every live slot. `/etc/ds-platform` is `0700 root`, so the slot list MUST be
+read under `sudo` — a bare `ls` from the `deploy` shell expands to nothing and the loop
+silently recreates zero containers (the 2026-09-15 fix named the slots explicitly:
+`for S in main pr-2205 pr-2216`):
+
+```bash
+for S in $(sudo ls /etc/ds-platform/slots | sed 's/\.env$//'); do
+  sudo docker compose --env-file /etc/ds-platform/stage.env --env-file /etc/ds-platform/slots/$S.env \
+    -p slot-$S -f /home/deploy/ds-platform.slots/$S/infra/deploy/compose/slot/compose.yml \
+    up -d --no-deps --force-recreate api
+done
+# proof: golden.doctor.verified@example.test + DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED →
+# POST https://api-<slot>.<base>/v1/auth/login → 200 {"status":"authenticated"}
+```
+
 Two standing rules come with the shared instance (spec §3 «Identity»):
 
 - A PR that changes `provision.sh` or `idp-policy.mjs` is **serialized repo-wide like
@@ -597,8 +625,10 @@ sudo bash -c "grep -nE '^(RESEND_API_KEY|SMSAERO_EMAIL|SMSAERO_API_KEY|SMSAERO_S
 # expected: NO output and exit=1 — grep matching nothing IS the pass here.
 
 # HALF B — this box's own values: set, and never still a template placeholder.
-sudo grep -nE '^(POSTGRES_PASSWORD|MINIO_ROOT_PASSWORD|IDP_SECRET_KEY|IDP_BOOTSTRAP_ADMIN_PASSWORD|AUDIT_IDENTIFIER_PEPPER|LIFECYCLE_IMPACT_TOKEN_SECRET|IDP_WEBHOOK_SECRET|CENTRIFUGO_API_KEY|CENTRIFUGO_TOKEN_HMAC_SECRET|STAGE_BASIC_AUTH_HASH)=(CHANGE_ME|$)' /etc/ds-platform/stage.env
-# expected: NO output — each is set and none is still a `CHANGE_ME_` placeholder.
+sudo grep -nE '^(POSTGRES_PASSWORD|MINIO_ROOT_PASSWORD|IDP_SECRET_KEY|IDP_BOOTSTRAP_ADMIN_PASSWORD|AUDIT_IDENTIFIER_PEPPER|LIFECYCLE_IMPACT_TOKEN_SECRET|IDP_WEBHOOK_SECRET|CENTRIFUGO_API_KEY|CENTRIFUGO_TOKEN_HMAC_SECRET|STAGE_BASIC_AUTH_HASH|IDP_SERVICE_TOKEN|IDP_CLIENT_ID|IDP_CLIENT_SECRET|IDP_PROJECT_ID)=(CHANGE_ME|$)' /etc/ds-platform/stage.env
+# expected: NO output — each is set and none is still a `CHANGE_ME_` placeholder. The
+# four IDP_* API-side keys are the #2226 class: empty, they do not fail anything — every
+# slot's api just boots the in-memory FakeIdpClient.
 
 # HALF B — the sinks are what is actually selected.
 sudo grep -E '^(EMAIL_DELIVERY_MODE|SMS_DELIVERY_MODE|IDP_SMTP_HOST|IDP_SMS_SINK_ENDPOINT)=' /etc/ds-platform/stage.env

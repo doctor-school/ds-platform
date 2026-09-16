@@ -188,7 +188,12 @@ The sign-in adds no auth primitive: it drives the host's real login surface the
 way the shipped 008 shell journey does (`apps/portal/e2e/steps/shell.steps.ts`).
 It lives in `lib/sign-in.ts` and is the package's ONE login path — the Gherkin
 step and the navigation walk's doctor pass both call it, so they cannot drift
-into two different notions of «signed in».
+into two different notions of «signed in». It waits for the login route to
+finish loading AND for the network to go idle before touching a field, because
+the login card is server-rendered as a real `<form>`: clicked before its client
+chunks execute, the browser submits it natively and `/v1/auth/login` is never
+called. That case now throws a named error naming the walk as the defect rather
+than timing out on a URL that will never change.
 
 ## Running this suite against a staging slot
 

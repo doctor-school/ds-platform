@@ -55,11 +55,10 @@ import {
   roadmapHygiene,
   roadmapHygieneWarnings,
 } from "./gh/lib/roadmap-taxonomy.mjs";
-import { readLiveSlots } from "./staging/slot.mjs";
 import {
-  classifySlotRequests,
-  parseRequestComment,
-} from "./staging/slot-requests.mjs";
+  probeStageSlots,
+  renderStageSlotSection,
+} from "./staging/slot-probe.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -693,133 +692,6 @@ function ts(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
-/** How long the box may stay silent before the section degrades. */
-const STAGE_SLOT_PROBE_MS = 8000;
-
-/**
- * Live staging slots, each classified against its PR's Stage-B request (#2233).
- *
- * A slot's lifetime is the owner's acceptance verdict, and the ask that starts it
- * is a `Stage-B request` comment on the PR — never a handoff prompt, never chat
- * alone. A slot standing with no request, or with a request pinning a head the PR
- * has moved past, is the exact failure this section exists to surface, so it is
- * reported here on EVERY SessionStart rather than remembered by a session.
- *
- * Never throws. The ssh probe is the only network hop that can hang, so it is
- * bounded: a failure degrades to `stage-1: unavailable (<reason>)` plus a
- * `## Warnings` row — the one thing it must never print is a confident "0 slots".
- */
-type StageSlotProbe = {
-  rows: ReturnType<typeof classifySlotRequests>;
-  states: Map<number, string>;
-  error: string | null;
-};
-
-async function probeStageSlots(): Promise<StageSlotProbe> {
-  let names: string[];
-  try {
-    const live = await Promise.race([
-      readLiveSlots(),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                `ssh probe of the staging box timed out after ${STAGE_SLOT_PROBE_MS / 1000}s`,
-              ),
-            ),
-          STAGE_SLOT_PROBE_MS,
-        ).unref(),
-      ),
-    ]);
-    names = Object.keys(live as Record<string, unknown>);
-  } catch (e) {
-    const message = (e instanceof Error ? e.message : String(e)).split(
-      /\r?\n/,
-    )[0]!;
-    note("stage-1 live slots", message);
-    return { rows: [], states: new Map(), error: message };
-  }
-
-  const prs = new Map<
-    number,
-    {
-      headSha: string;
-      headPushedAt: string;
-      requestComments: Array<{ createdAt: string; head: string | null }>;
-    }
-  >();
-  const states = new Map<number, string>();
-  // Bounded by the number of live slots (three, in practice) and run in parallel
-  // so the section costs one `gh` round-trip, not one per slot in series.
-  await Promise.all(
-    names
-      .map((n) => Number(n.match(/^pr-(\d+)$/)?.[1] ?? NaN))
-      .filter((n) => !Number.isNaN(n))
-      .map(async (number) => {
-        try {
-          const { stdout } = await execa(
-            "gh",
-            [
-              "pr",
-              "view",
-              String(number),
-              "--json",
-              "state,headRefOid,commits,comments",
-            ],
-            { cwd: REPO_ROOT },
-          );
-          const pr = JSON.parse(stdout) as {
-            state?: string;
-            headRefOid?: string;
-            commits?: Array<{ committedDate?: string }>;
-            comments?: Array<{ createdAt?: string; body?: string }>;
-          };
-          states.set(number, pr.state ?? "?");
-          if (pr.state !== "OPEN") return;
-          const requestComments = (pr.comments ?? [])
-            .map((c) => {
-              const req = parseRequestComment(c.body);
-              return req
-                ? { createdAt: c.createdAt ?? "", head: req.head }
-                : null;
-            })
-            .filter((c): c is { createdAt: string; head: string | null } =>
-              Boolean(c),
-            );
-          prs.set(number, {
-            headSha: pr.headRefOid ?? "",
-            headPushedAt: pr.commits?.at(-1)?.committedDate ?? "",
-            requestComments,
-          });
-        } catch (e) {
-          note(`gh pr view ${number} (stage slot)`, e);
-        }
-      }),
-  );
-
-  return {
-    rows: classifySlotRequests({ liveSlots: names, prs }),
-    states,
-    error: null,
-  };
-}
-
-/** `⚠ pr-2229  no-request  head 162341f4  PR #2229 OPEN` — aligned columns. */
-function stageSlotLine(
-  row: ReturnType<typeof classifySlotRequests>[number],
-  states: Map<number, string>,
-): string {
-  const flag =
-    row.status === "stale-request" || row.status === "no-request" ? "⚠" : " ";
-  const head = row.head ? `head ${row.head.slice(0, 8)}` : "head —";
-  const pr =
-    row.pr === null
-      ? "persistent slot (never flagged)"
-      : `PR #${row.pr} ${states.get(row.pr) ?? "no open PR"}`;
-  return `${flag} ${row.slot.padEnd(10)} ${row.status.padEnd(14)} ${head.padEnd(13)} ${pr}`;
-}
-
 async function main(): Promise<void> {
   const [
     git,
@@ -862,6 +734,10 @@ async function main(): Promise<void> {
     // Live staging slots + their Stage-B request status (#2233). Never throws.
     probeStageSlots(),
   ]);
+  // The slot probe collects its own degrade reasons (unreachable box, a failing
+  // `gh pr view`) instead of reaching into the module-level list; merge them so
+  // they reach `## Warnings` alongside every other partial-source failure.
+  for (const w of stageSlots.warnings) warnings.push(w);
   const sync = evaluateMainSync(syncProbe);
   // Surface any partial-source failures as warnings (the section itself still
   // renders — it degrades per-source rather than blanking).
@@ -1090,18 +966,7 @@ async function main(): Promise<void> {
   out.push("");
 
   out.push("## Stage slots");
-  if (stageSlots.error) {
-    out.push(`stage-1: unavailable (${stageSlots.error})`);
-  } else if (stageSlots.rows.length === 0) {
-    out.push("(no live slots)");
-  } else {
-    for (const row of stageSlots.rows) {
-      out.push(stageSlotLine(row, stageSlots.states));
-    }
-    out.push(
-      "(a slot's lifetime is the owner's verdict; ⚠ = standing with no current Stage-B request — `tools/staging/README.md`)",
-    );
-  }
+  out.push(...renderStageSlotSection(stageSlots));
   out.push("");
 
   out.push("## Active specs");
@@ -1135,7 +1000,10 @@ async function main(): Promise<void> {
     out.push("");
   }
 
-  process.stdout.write(out.join("\n"));
+  // Exit explicitly once stdout has flushed. Every child this run spawned is
+  // gone by then (the ssh probe is aborted on its bound), and the SessionStart
+  // hook must never be held open by a process that outlives the output (#2233).
+  process.stdout.write(out.join("\n"), () => process.exit(0));
 }
 
 // Run only as the entry point (`tsx tools/agent-bootstrap.ts`). Guarding this

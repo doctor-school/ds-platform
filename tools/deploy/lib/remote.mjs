@@ -31,8 +31,17 @@ export const PROD_HEALTH_URL = "https://api.doctor.school/v1/health";
 // socket nobody will ever write to. With them the client probes the server
 // every 15s and gives up after 4 missed probes (~60s): the channel dies LOUDLY
 // (non-zero ssh exit → the existing die() path) instead of hanging half-open.
-export function sshBaseArgs(host) {
-  return ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", host];
+// `extraOptions` are per-call `-o` flags (a read-only probe wants a short
+// ConnectTimeout and BatchMode; a deploy deliberately does not).
+export function sshBaseArgs(host, extraOptions = []) {
+  return [
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=4",
+    ...extraOptions,
+    host,
+  ];
 }
 
 // Per-step no-output budgets for the sshScript inactivity watchdog (#905).
@@ -183,19 +192,57 @@ export function sshScript(
 // only, no inactivity watchdog: verifyRunningSha's on-box poll is legitimately
 // silent for up to ~4 min (it prints once, at the end) — a dead channel is
 // caught by ServerAlive (~60s), a quiet-but-alive one is normal here.
-export function sshCapture(host, script) {
+//
+// `options` is opt-in and defaults to the historical behaviour:
+//   `sshOptions` - extra `-o` flags for this call only;
+//   `signal`     - an AbortSignal that KILLS the child (a caller-side timeout
+//                  that only stops waiting leaves a live ssh holding the event
+//                  loop open, which is what hung the SessionStart hook, #2233);
+//   `stderr`     - "inherit" (default) or "pipe", which folds ssh's own
+//                  diagnostics into the rejection instead of the caller's tty.
+export function sshCapture(host, script, options = {}) {
+  const { sshOptions = [], signal, stderr = "inherit" } = options;
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [...sshBaseArgs(host), REMOTE_BASH], {
-      stdio: ["pipe", "pipe", "inherit"],
-    });
-    let out = "";
-    child.stdout.on("data", (d) => (out += d.toString("utf8")));
-    child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0
-        ? resolve(out.trim())
-        : reject(new Error(`ssh capture on ${host} exited ${code}`)),
+    const child = spawn(
+      "ssh",
+      [...sshBaseArgs(host, sshOptions), REMOTE_BASH],
+      { stdio: ["pipe", "pipe", stderr] },
     );
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d.toString("utf8")));
+    child.stderr?.on("data", (d) => (err += d.toString("utf8")));
+
+    let killed = false;
+    const onAbort = () => {
+      killed = true;
+      child.kill();
+      // SIGTERM can be ignored by a child stuck in connect(); escalate.
+      const hard = setTimeout(() => child.kill("SIGKILL"), 2000);
+      hard.unref?.();
+      reject(new Error(`ssh capture on ${host} aborted`));
+    };
+    if (signal) {
+      if (signal.aborted) return onAbort();
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    const done = () => signal?.removeEventListener("abort", onAbort);
+    child.on("error", (e) => {
+      done();
+      reject(e);
+    });
+    child.on("close", (code) => {
+      done();
+      if (killed) return;
+      if (code === 0) return resolve(out.trim());
+      const detail = err.trim().split(/\r?\n/)[0];
+      reject(
+        new Error(
+          `ssh capture on ${host} exited ${code}${detail ? `: ${detail}` : ""}`,
+        ),
+      );
+    });
     child.stdin.write(script);
     child.stdin.end();
   });

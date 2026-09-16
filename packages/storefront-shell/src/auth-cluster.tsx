@@ -2,7 +2,6 @@ import NextLink from "next/link";
 import { Button } from "@ds/design-system/button";
 
 import type { ShellAuthState } from "./config";
-import { HeaderNavLink } from "./nav-link";
 import { HeaderProfileChip } from "./user-cluster";
 
 /**
@@ -64,28 +63,18 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
     );
   }
 
-  const links = auth.links ?? [];
-
   return (
     <div
       data-testid="shell-auth-cluster"
       data-cluster="doctor"
       className="flex items-center gap-3"
     >
-      {/* The signed-in destinations the canvas draws beside the chip
-          (`user.links` line 209, rendered at line 33) — the academy's
-          «Мои события», nothing on the doctor storefront. DESKTOP only: below
-          the `layout` breakpoint the same links render as `≡` rows
-          (`storefront-header.tsx`, canvas line 50), so a second visible copy
-          never exists — and they are the header nav's own link shape, not a
-          second on-navy text tier. */}
-      {links.length > 0 ? (
-        <div className="hidden items-center gap-7 text-sm layout:flex">
-          {links.map((item) => (
-            <HeaderNavLink key={item.href} item={item} testId="shell-auth-link" />
-          ))}
-        </div>
-      ) : null}
+      {/* The signed-in destinations (`user.links` line 209) are NOT part of this
+          cluster: the canvas draws them INSIDE the nav group, before the theme
+          control (line 33, toggle line 35, chip line 36), so
+          `storefront-header.tsx` renders them at the tail of the desktop nav and
+          as `≡` rows below the `layout` breakpoint. The cluster stays what 017
+          EARS-1 names — exactly one chip element, at every width. */}
 
       {auth.initials === undefined ? (
         // The labelled profile chip — the doctor storefront's «Личный кабинет»

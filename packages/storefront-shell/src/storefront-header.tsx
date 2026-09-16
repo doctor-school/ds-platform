@@ -67,9 +67,11 @@ function HeaderChrome({
   auth: ShellAuthState;
 }) {
   const { logo, topbar, search, nav } = config;
-  // 008 EARS-5/11 — the signed-in cluster's own destinations (canvas
-  // `user.links`). The `≡` menu lists them after the nav, exactly as the canvas
-  // draws them at line 50; the desktop copy lives inside the cluster itself.
+  // 008 EARS-5/11 — the signed-in session's own destinations (canvas
+  // `user.links`, line 209). The canvas draws them INSIDE the nav group at both
+  // widths: desktop after the nav items and BEFORE the theme control (line 33,
+  // toggle line 35, chip line 36), mobile after the nav rows in the `≡` menu
+  // (line 50). They are never a second cluster (017 EARS-1).
   const authLinks = auth.status === "doctor" ? (auth.links ?? []) : [];
   return (
     <div data-host={config.host}>
@@ -128,6 +130,18 @@ function HeaderChrome({
         >
           {nav.map((item) => (
             <HeaderNavLink key={item.href} item={item} />
+          ))}
+          {/* …followed by the signed-in destinations, in the SAME nav group
+              and the same link shape the canvas draws them in (line 33) — so
+              the bar reads «Эфиры · Мои события · ☾ · Личный кабинет». The
+              host with no `user.links` (the doctor storefront, canvas line 192)
+              renders nothing here and its bar is unchanged. */}
+          {authLinks.map((item) => (
+            <HeaderNavLink
+              key={item.href}
+              item={item}
+              testId="shell-auth-link"
+            />
           ))}
         </nav>
 

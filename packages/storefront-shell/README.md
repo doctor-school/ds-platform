@@ -79,9 +79,13 @@ The canvas points plate lands inside the same cluster and is Issue #1559.
 
 `links` is the same branch's optional `ShellLink[]` — the canvas `user.links`
 (`ds-shell.dc.html` line 209 for the Academy, line 192 for the Doctor showcase,
-which is empty). The package renders them beside the chip on desktop (canvas
-line 33, testid `shell-auth-link`) and as rows of the `≡` disclosure after the
-nav rows (canvas line 50, testid `shell-auth-link-mobile`); absent and empty are
+which is empty). The package renders them inside the NAV GROUP at both
+widths, exactly as the canvas draws them: on desktop at the tail of
+`shell-nav-desktop`, after the nav items and before the theme control (canvas
+line 33, toggle line 35, chip line 36; testid `shell-auth-link`), and as rows of
+the `≡` disclosure after the nav rows (canvas line 50, testid
+`shell-auth-link-mobile`). They are not part of the auth cluster element, which
+stays the single chip 017 EARS-1 requires; absent and empty are
 the same thing, and a host that passes none gets exactly the cluster #2180
 shipped. They are NOT top-nav items — the nav stays «Эфиры» alone on both hosts
 (owner decision 2026-09-10, #2180) — which is why they travel on the auth state

@@ -49,7 +49,8 @@ type State =
 export default function AccountPage() {
   const router = useRouter();
   const t = useTranslations("account");
-  const te = useTranslations("errors");
+  // The «errors» namespace is read inside the host config, which projects it
+  // into the copy object the shared dictionary consumes.
   const authFlow = useAcademyAuthFlow();
   const [state, setState] = useState<State>({ kind: "loading" });
 

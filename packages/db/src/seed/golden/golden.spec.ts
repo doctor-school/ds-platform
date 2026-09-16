@@ -54,6 +54,7 @@ import {
   programmeLines,
   programmeTotalMinutes,
   renderProgrammePdf,
+  resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
   specialtiesWithoutParagraphBank,
   VOLUME_EXPERTS,
@@ -1248,6 +1249,368 @@ describe("#2213 golden dataset at volume", () => {
       expect(step.updateKeys).not.toContain("firstPublishedAt");
       expect(step.updateKeys).toContain("updatedAt");
     }
+  });
+});
+
+// #2213 part D — the taxonomy families and the TARGETING they exist for.
+//
+// PR #2216 filled the calendar and the owner still found the stand «кусочно»:
+// «Направления», «Связи специальностей», «Смежность» and «Партнёры» were empty
+// admin lists, and — because the doctor feed is resolved through
+// `direction_specialties` → `directions` → `event_directions` — a doctor who had
+// chosen a specialty saw NOTHING. An empty taxonomy is not a missing nicety, it
+// is a feed that returns `totalCount: 0` for every specialty in the book.
+describe("#2213 golden taxonomy and targeting", () => {
+  const dataset = buildGoldenDataset(now, subjects);
+
+  const publishedDirections = dataset.directions.filter(
+    (d) => d.status === "published",
+  );
+  const directionById = new Map(
+    dataset.directions.map((d) => [d.id as string, d]),
+  );
+
+  /** Exactly the join the API walks: `targeting.repository.ts` `findOwnDirections`. */
+  const ownDirectionIds = (specialtyId: string): string[] =>
+    dataset.directionSpecialties
+      .filter(
+        (link) =>
+          link.specialtyName !== undefined &&
+          specialtyIdByName.get(link.specialtyName) === specialtyId &&
+          link.status === "active",
+      )
+      .map((link) => link.directionId)
+      .filter((id) => directionById.get(id)?.status === "published");
+
+  it("#2213: carries every admin family at volume, not a subset of them", () => {
+    // One row per family proves the page renders; the owner walks LISTS. Every
+    // floor below is the admin table's own page size or the count the walk has
+    // to be able to sort, filter and paginate.
+    expect(dataset.directions.length).toBeGreaterThanOrEqual(38);
+    expect(dataset.partners.length).toBeGreaterThanOrEqual(14);
+    expect(dataset.directionSpecialties.length).toBeGreaterThanOrEqual(118);
+    expect(dataset.directionAdjacency.length).toBeGreaterThanOrEqual(40);
+    expect(dataset.eventDirections.length).toBeGreaterThan(400);
+    expect(dataset.projectExperts.length).toBeGreaterThanOrEqual(28);
+    expect(dataset.projectPartners.length).toBeGreaterThanOrEqual(14);
+  });
+
+  it("#2213: carries every lifecycle status of every new family", () => {
+    const statuses = (rows: readonly { status?: unknown }[]) =>
+      new Set(rows.map((row) => row.status as string));
+
+    expect(statuses(dataset.directions)).toEqual(
+      new Set(["draft", "published", "retired"]),
+    );
+    expect(statuses(dataset.partners)).toEqual(
+      new Set(["draft", "published", "retired"]),
+    );
+    for (const [family, rows] of [
+      ["direction_specialties", dataset.directionSpecialties],
+      ["direction_adjacency", dataset.directionAdjacency],
+      ["event_directions", dataset.eventDirections],
+      ["project_experts", dataset.projectExperts],
+      ["project_partners", dataset.projectPartners],
+    ] as const) {
+      expect(statuses(rows), family).toEqual(new Set(["active", "retired"]));
+    }
+  });
+
+  it("#2213: satisfies the retired-iff-deleted check on every new row", () => {
+    const families = [
+      ["directions", dataset.directions],
+      ["partners", dataset.partners],
+      ["direction_specialties", dataset.directionSpecialties],
+      ["direction_adjacency", dataset.directionAdjacency],
+      ["event_directions", dataset.eventDirections],
+      ["project_experts", dataset.projectExperts],
+      ["project_partners", dataset.projectPartners],
+    ] as const;
+    for (const [family, rows] of families) {
+      for (const row of rows) {
+        const retired = row.status === "retired";
+        expect(row.deletedAt instanceof Date, `${family} ${String(row.id)}`).toBe(
+          retired,
+        );
+      }
+    }
+    // `directions_published_has_first_published_at` / the partners twin.
+    for (const row of [...dataset.directions, ...dataset.partners]) {
+      if (row.status === "published") {
+        expect(row.firstPublishedAt instanceof Date).toBe(true);
+      }
+    }
+  });
+
+  it("#2213: gives every partner a title, a logo key and an HTTPS site or none", () => {
+    // `partners_website_url_https` is a DATABASE check: a relative path or a
+    // plaintext origin aborts the whole seed transaction.
+    for (const partner of dataset.partners) {
+      expect(partner.title, String(partner.slug)).toBeTruthy();
+      expect(String(partner.logoRef)).toMatch(/^golden\/partners\/\d+\.svg$/);
+      if (partner.websiteUrl != null) {
+        expect(String(partner.websiteUrl)).toMatch(
+          /^https:\/\/[^\s/?#]+[^\s]*$/,
+        );
+      }
+    }
+    // Both sides of the nullable column — «партнёр без сайта» is a rendered state.
+    expect(dataset.partners.some((p) => p.websiteUrl == null)).toBe(true);
+    expect(dataset.partners.some((p) => p.websiteUrl != null)).toBe(true);
+  });
+
+  it("#2213: links every specialty of the Минздрав book to a published direction", () => {
+    // The invariant the owner's walk is: ANY specialty a doctor can choose
+    // resolves to at least one published direction. `Другое` is deliberately
+    // excluded — `TargetingService.resolve` answers `mode: 'general'` for it and
+    // never reads a direction at all.
+    const uncovered = RAZDEL_I_NAMES.filter(
+      (name) => ownDirectionIds(specialtyIdByName.get(name) as string).length === 0,
+    );
+    expect(uncovered).toEqual([]);
+  });
+
+  it("#2213: leads every specialty of the book to an upcoming published эфир", () => {
+    // The whole chain the doctor feed walks, asserted end to end and replayed
+    // at the month boundaries: a specialty that resolves to a direction nothing
+    // upcoming is classified under renders the same empty feed as no direction
+    // at all.
+    for (const pin of ["2026-01-15T12:00:00.000Z", "2026-12-31T23:30:00.000Z"]) {
+      const pinned = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: pin });
+      const built = buildGoldenDataset(pinned, subjects);
+      const publishedById = new Map(
+        built.directions
+          .filter((d) => d.status === "published")
+          .map((d) => [d.id as string, d]),
+      );
+      const upcoming = new Set(
+        built.events
+          .filter(
+            (e) =>
+              e.state === "published" &&
+              (e.startsAt as Date).getTime() > pinned.getTime(),
+          )
+          .map((e) => e.id as string),
+      );
+      const liveDirections = new Set(
+        built.eventDirections
+          .filter(
+            (link) =>
+              link.status === "active" && upcoming.has(link.eventId as string),
+          )
+          .map((link) => link.directionId as string),
+      );
+      const starved = RAZDEL_I_NAMES.filter((name) => {
+        const specialtyId = specialtyIdByName.get(name) as string;
+        const own = built.directionSpecialties.filter(
+          (link) =>
+            specialtyIdByName.get(link.specialtyName) === specialtyId &&
+            link.status === "active" &&
+            publishedById.has(link.directionId),
+        );
+        return !own.some((link) => liveDirections.has(link.directionId));
+      });
+      expect(starved, pin).toEqual([]);
+    }
+  });
+
+  it("#2213: keeps the adjacency graph directed, loop-free and singly authored", () => {
+    const pairs = new Set<string>();
+    for (const edge of dataset.directionAdjacency) {
+      expect(edge.directionId).not.toBe(edge.adjacentDirectionId);
+      const pair = `${String(edge.directionId)}|${String(edge.adjacentDirectionId)}`;
+      expect(pairs.has(pair), pair).toBe(false);
+      pairs.add(pair);
+      expect(edge.weight as number).toBeGreaterThanOrEqual(1);
+      expect(edge.weight as number).toBeLessThanOrEqual(100);
+    }
+    // All three members of the closed vocabulary — an operator opening «вид
+    // связи» on the stand has to see each one already used.
+    expect(new Set(dataset.directionAdjacency.map((e) => e.kind))).toEqual(
+      new Set(["related", "subdiscipline", "interdisciplinary"]),
+    );
+    // The edge is DIRECTED, so a mutual relation is two authored rows: at least
+    // one pair exists in both orientations, and at least one does not.
+    const mutual = [...pairs].filter((pair) => {
+      const [from, to] = pair.split("|");
+      return pairs.has(`${to}|${from}`);
+    });
+    expect(mutual.length).toBeGreaterThan(0);
+    expect(mutual.length).toBeLessThan(pairs.size);
+    // Every published direction is reachable in the «смежные» block.
+    const touched = new Set(
+      dataset.directionAdjacency.flatMap((e) => [
+        e.directionId as string,
+        e.adjacentDirectionId as string,
+      ]),
+    );
+    for (const direction of publishedDirections) {
+      expect(touched.has(direction.id as string), String(direction.slug)).toBe(
+        true,
+      );
+    }
+  });
+
+  it("#2213: classifies every эфир the doctor can reach, curated ones included", () => {
+    const classified = new Map<string, number>();
+    for (const link of dataset.eventDirections) {
+      if (link.status !== "active") continue;
+      const id = link.eventId as string;
+      classified.set(id, (classified.get(id) ?? 0) + 1);
+    }
+    const reachable = dataset.events.filter(
+      (e) => e.state !== "draft" && e.recordStatus !== "retired",
+    );
+    for (const event of reachable) {
+      const count = classified.get(event.id as string) ?? 0;
+      expect(count, String(event.slug)).toBeGreaterThanOrEqual(1);
+      expect(count, String(event.slug)).toBeLessThanOrEqual(3);
+    }
+    // The curated six are hand-picked, not left to the round-robin.
+    for (const key of ["upcoming", "live", "pastWithRecording", "archived"] as const) {
+      expect(classified.get(golden.events[key].id) ?? 0).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("#2213: gives every project one active curator and at most one primary partner", () => {
+    // Both bounds are PARTIAL UNIQUE INDEXES: a second active curator or a
+    // second active primary partner aborts the seed transaction outright.
+    const projectIds = dataset.projects
+      .filter((p) => p.status !== "retired")
+      .map((p) => p.id as string);
+    const expertById = new Map(dataset.experts.map((e) => [e.id as string, e]));
+
+    for (const projectId of projectIds) {
+      const links = dataset.projectExperts.filter(
+        (l) => l.projectId === projectId,
+      );
+      const curators = links.filter(
+        (l) => l.status === "active" && l.role === "curator",
+      );
+      expect(curators.length, projectId).toBe(1);
+      // 012-design §3.2: the curator of a published project is a published,
+      // non-retired expert.
+      const curator = expertById.get(curators[0]!.expertId as string);
+      expect(curator?.status, projectId).toBe("published");
+      expect(links.length, projectId).toBeGreaterThanOrEqual(2);
+      expect(links.length, projectId).toBeLessThanOrEqual(5);
+
+      const partners = dataset.projectPartners.filter(
+        (l) => l.projectId === projectId,
+      );
+      expect(partners.length, projectId).toBeGreaterThanOrEqual(1);
+      expect(partners.length, projectId).toBeLessThanOrEqual(3);
+      expect(
+        partners.filter((l) => l.status === "active" && l.isPrimary === true)
+          .length,
+        projectId,
+      ).toBe(1);
+    }
+    // Each pair is unique across active AND retained rows (`*_pair_key`).
+    for (const rows of [dataset.projectExperts, dataset.projectPartners]) {
+      const keys = rows.map((row) =>
+        [row.projectId, (row as { expertId?: unknown }).expertId, (row as { partnerId?: unknown }).partnerId]
+          .filter((part) => part != null)
+          .join("|"),
+      );
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+    // A partner that only ever appears on one project is not a partner list.
+    const perPartner = new Map<string, number>();
+    for (const link of dataset.projectPartners) {
+      const id = link.partnerId as string;
+      perPartner.set(id, (perPartner.get(id) ?? 0) + 1);
+    }
+    expect([...perPartner.values()].filter((n) => n > 1).length)
+      .toBeGreaterThanOrEqual(4);
+  });
+
+  it("#2213: is referentially sound over the taxonomy link tables too", () => {
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+    const directionIds = new Set(dataset.directions.map((d) => d.id as string));
+    const partnerIds = new Set(dataset.partners.map((p) => p.id as string));
+    const eventIds = new Set(dataset.events.map((e) => e.id as string));
+    const expertIds = new Set(dataset.experts.map((e) => e.id as string));
+    const projectIds = new Set(dataset.projects.map((p) => p.id as string));
+
+    for (const row of dataset.directionSpecialties) {
+      expect(directionIds).toContain(row.directionId);
+    }
+    for (const row of dataset.directionAdjacency) {
+      expect(directionIds).toContain(row.directionId as string);
+      expect(directionIds).toContain(row.adjacentDirectionId as string);
+    }
+    for (const row of dataset.eventDirections) {
+      expect(eventIds).toContain(row.eventId as string);
+      expect(directionIds).toContain(row.directionId as string);
+    }
+    for (const row of dataset.projectExperts) {
+      expect(projectIds).toContain(row.projectId as string);
+      expect(expertIds).toContain(row.expertId as string);
+    }
+    for (const row of dataset.projectPartners) {
+      expect(projectIds).toContain(row.projectId as string);
+      expect(partnerIds).toContain(row.partnerId as string);
+    }
+    // Slugs are unique across EVERY retained row (`*_slug_key` is not partial).
+    for (const rows of [dataset.directions, dataset.partners]) {
+      const slugs = rows.map((row) => row.slug as string);
+      expect(new Set(slugs).size).toBe(slugs.length);
+      for (const slug of slugs) expect(slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+    }
+  });
+
+  it("#2213: writes the taxonomy parents before the links that reference them", () => {
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const order = plan.map((step) => step.name);
+    const at = (name: string) => {
+      const index = order.indexOf(name);
+      expect(index, name).toBeGreaterThanOrEqual(0);
+      return index;
+    };
+    expect(at("directions")).toBeLessThan(at("direction_specialties"));
+    expect(at("directions")).toBeLessThan(at("direction_adjacency"));
+    expect(at("directions")).toBeLessThan(at("event_directions"));
+    expect(at("events")).toBeLessThan(at("event_directions"));
+    expect(at("partners")).toBeLessThan(at("project_partners"));
+    expect(at("projects")).toBeLessThan(at("project_partners"));
+    expect(at("experts")).toBeLessThan(at("project_experts"));
+    expect(order).toEqual([...GOLDEN_SEED_ORDER]);
+    for (const name of ["directions", "partners"]) {
+      const step = plan.find((s) => s.name === name)!;
+      expect(step.updateKeys).not.toContain("firstPublishedAt");
+      expect(step.updateKeys).toContain("updatedAt");
+    }
+  });
+
+  it("#2213: resolves direction specialties through the seeded book", () => {
+    const rows = resolveDirectionSpecialtyRows(
+      dataset.directionSpecialties,
+      specialtyIdByName,
+    );
+    expect(rows.length).toBe(dataset.directionSpecialties.length);
+    for (const row of rows) {
+      expect(typeof row.specialtyMinzdravId).toBe("string");
+      expect(row).not.toHaveProperty("specialtyName");
+    }
+  });
+
+  it("#2213: fails loudly when the book does not carry a linked specialty", () => {
+    expect(() =>
+      resolveDirectionSpecialtyRows(
+        [
+          {
+            id: goldenUuid(0x00fe, 1),
+            directionId: goldenUuid(0x00fe, 2),
+            specialtyName: "Спортивная гомеопатия",
+            status: "active",
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        specialtyIdByName,
+      ),
+    ).toThrow(GoldenPlanError);
   });
 });
 

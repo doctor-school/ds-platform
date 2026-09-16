@@ -779,6 +779,9 @@ importers:
       '@ds/db':
         specifier: workspace:*
         version: link:../db
+      '@ds/legal-content':
+        specifier: workspace:*
+        version: link:../legal-content
     devDependencies:
       '@playwright/test':
         specifier: ^1.62.1

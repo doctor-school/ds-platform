@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { listDocuments } from "@ds/legal-content";
+
 import { resolveRoute, routeParams } from "./route-params.js";
 
 describe("resolveRoute", () => {
@@ -21,12 +23,26 @@ describe("resolveRoute", () => {
     );
   });
 
-  it("returns undefined for a route no golden entity renders", () => {
-    // §6.3: the walk turns this into a FAILING test naming the route. The golden
-    // catalogue seeds no document row, so `/documents/[slug]` — the very route
-    // #2012 broke — is the live example of the gap the contract makes visible.
-    expect(resolveRoute("academy", "/documents/[slug]")).toBeUndefined();
-    expect(resolveRoute("doctor", "/documents/[slug]")).toBeUndefined();
+  it("resolves /documents/[slug] from the legal-content catalogue the pages enumerate", () => {
+    // The documents are FILES, not DB rows: both hosts' `generateStaticParams`
+    // enumerate `listDocuments()`, so the walk must address the same catalogue.
+    // The first slug in the catalogue's slug-sorted order is the deterministic
+    // choice — same address on every run and on both hosts.
+    const [first] = listDocuments();
+    expect(first).toBeDefined();
+    expect(resolveRoute("academy", "/documents/[slug]")).toBe(
+      `/documents/${first!.slug}`,
+    );
+    expect(resolveRoute("doctor", "/documents/[slug]")).toBe(
+      `/documents/${first!.slug}`,
+    );
+  });
+
+  it("returns undefined for a route no entity renders", () => {
+    // §6.3: the walk turns this into a FAILING test naming the route rather than
+    // skipping it, so a new dynamic route cannot enter the build unanswered.
+    expect(resolveRoute("academy", "/nothing/[slug]")).toBeUndefined();
+    expect(resolveRoute("doctor", "/nothing/[slug]")).toBeUndefined();
   });
 
   it("keys the map per host so one host's entry cannot satisfy the other", () => {

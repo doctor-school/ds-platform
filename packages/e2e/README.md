@@ -143,10 +143,14 @@ FAILING tests rather than skips, each titled with what is missing: an
 unconfigured base URL, a manifest the slot does not serve, and a dynamic route
 with no `route-params.ts` entry.
 
-`/documents/[slug]` is that last case today on both hosts: the golden catalogue
-seeds no document row, so the walk fails naming the route — deliberately, because
-`/documents/[slug]` is the exact route whose runtime files went missing from the
-standalone image in #2012, and a silent skip would hide it again.
+Dynamic segments come from the catalogue the ROUTE'S OWN PAGE reads, not from one
+global source. `/webinars/[slug]` and `/events/[slug]` render DB rows and resolve
+from the golden seed; `/documents/[slug]` renders a FILE, so it resolves from
+`@ds/legal-content` — the very package both hosts' `generateStaticParams`
+enumerate. The first slug in that catalogue's slug-sorted order is the
+deterministic pick, which is why `/documents/[slug]` — the exact route whose
+runtime files went missing from the standalone image in #2012 — walks green on
+both hosts instead of standing permanently red.
 
 ### The route manifest is published by the image
 

@@ -139,6 +139,36 @@ test("EARS-3: fetchPrevShaInputs lists a release tag that lives on a side branch
   }
 });
 
+test("EARS-3.1: a release tag AHEAD of the deployed sha is not an anchor candidate", () => {
+  // Rollback (`deploy:prod --ref <older sha>`) or a `workflow_dispatch` backfill:
+  // the deployed sha is BEHIND the newest release tag. That newer tag must not
+  // anchor the range, or the digest would run backwards over an empty range.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ds-reldigest-back-"));
+  try {
+    git(dir, "init", "-q", "-b", "main");
+    fs.writeFileSync(path.join(dir, "a.txt"), "a\n");
+    git(dir, "add", "a.txt");
+    git(dir, "commit", "-q", "-m", "chore: one (#1)");
+    git(dir, "tag", "release-2026.09.09-3"); // T1, behind the deployed sha
+
+    fs.writeFileSync(path.join(dir, "b.txt"), "b\n");
+    git(dir, "add", "b.txt");
+    git(dir, "commit", "-q", "-m", "feat: two (#2)");
+    const newSha = git(dir, "rev-parse", "HEAD"); // the sha being re-deployed
+
+    fs.writeFileSync(path.join(dir, "c.txt"), "c\n");
+    git(dir, "add", "c.txt");
+    git(dir, "commit", "-q", "-m", "feat: three (#3)");
+    git(dir, "tag", "release-2026.09.15-1"); // T2, AHEAD of the deployed sha
+
+    const { candidateTags } = fetchPrevShaInputs(dir, newSha);
+    const tags = candidateTags.map((c) => c.tag);
+    assert.deepEqual(tags, ["release-2026.09.09-3"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("EARS-4: the deployment guard only fires on a successful production deploy", () => {
   assert.equal(
     shouldPost({ state: "success", environment: "production" }),

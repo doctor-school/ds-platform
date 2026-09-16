@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "DS Platform shared auth-flow unit — one BFF auth client, one error dictionary, one bot-protection composition and one field-rule set, hosted by both storefronts (ADR-0013 A1, epic #2020 wave 1).",
+  "description": "DS Platform shared auth-flow unit — one BFF auth client, one error dictionary, one bot-protection composition, one field-rule set, and the server half (one session read, one signed-in guard, one returnTo parking rule), hosted by both storefronts (ADR-0013 A1, epic #2020 wave 1).",
   "exports": {
     "./host-config": "./src/host-config.ts",
     "./client": "./src/client/index.ts",
+    "./server": "./src/server/index.ts",
     "./errors": "./src/errors/index.ts",
     "./bot-protection": "./src/bot-protection/index.ts",
     "./fields": "./src/fields/index.ts",
@@ -22,8 +23,13 @@
     "@ds/schemas": "workspace:*",
     "zod": "4.4.3"
   },
+  "peerDependencies": {
+    "next": "^16.0.0"
+  },
   "devDependencies": {
     "@types/node": "^26.5.0",
+    "jsdom": "^30.0.1",
+    "next": "16.3.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

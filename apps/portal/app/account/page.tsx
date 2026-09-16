@@ -14,6 +14,8 @@ import { refreshShellAuth } from "@ds/storefront-shell";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";
 import { initialsFromDisplayName } from "@/lib/display-name";
+import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { withReturnTarget } from "@/lib/registration-handoff";
 
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
@@ -74,7 +76,16 @@ export default function AccountPage() {
     if (profile) {
       setState({ kind: "ready", profile });
     } else {
-      router.replace("/login");
+      // 014 EARS-6 — the guest bounce CARRIES this page, so signing in returns
+      // the doctor to the cabinet they asked for. Same shared carry, same
+      // account family, as the sibling `/account/events` surface. Logout below
+      // stays bare on purpose: leaving is not a bounce.
+      router.replace(
+        withReturnTarget(
+          ACADEMY_AUTH_ROUTES.login,
+          ACADEMY_AUTH_ROUTES.account,
+        ),
+      );
     }
   }, [router]);
 

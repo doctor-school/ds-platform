@@ -268,4 +268,29 @@ describe("#1987: /account is a landing target", () => {
       expect(resolveReturnLandingPath(value)).toBeNull();
     },
   );
+
+  /**
+   * 014 EARS-6 / live C6 walk (PR #2205) — the shape is the FAMILY, not just its
+   * root. This host declares one `routes.account`, and the shared codec derives
+   * the family from that single value, so a doctor bounced off ANY page of the
+   * cabinet comes back to the page they were on rather than to its index. The
+   * doctor storefront serves no cabinet child yet (022 / #1791 adds them); the
+   * rule arrives with the codec so this host does not need a second one later.
+   */
+  it("014 EARS-6.5: a page BELOW this host's account route lands on ITSELF, not on the cabinet index", () => {
+    expect(resolveReturnLandingPath("/account/events")).toBe("/account/events");
+    // …and it is still no эфир: nothing registers on the way back.
+    expect(resolveReturnTargetPath("/account/events")).toBeNull();
+  });
+
+  it.each([
+    ["a plural prefix collision", "/accounts"],
+    ["a hyphen prefix collision", "/account-evil"],
+    ["a plural collision with a child", "/accounts/events"],
+  ])(
+    "014 EARS-6.6: %s shares the characters and not the segment — not the family",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(value)).toBeNull();
+    },
+  );
 });

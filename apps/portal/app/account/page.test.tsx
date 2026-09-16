@@ -166,10 +166,19 @@ describe("003 EARS-28 /account profile surface", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it("redirects to /login when the profile read stays 401 after the silent refresh", async () => {
+  /**
+   * 014 EARS-6 / #1987 — the cabinet door carries the cabinet as its return
+   * target, so a guest who opened `/account` and signed in comes BACK to it
+   * instead of being dropped on the discovery listing. The same carry the
+   * sibling `/account/events` surface makes, through the same shared helper —
+   * the account FAMILY is one legal landing shape, not two route-local rules.
+   */
+  it("014 EARS-6.7: a guest whose profile read stays 401 is sent to /login carrying /account as the returnTo", async () => {
     getMyProfile.mockResolvedValue(null);
     render(<AccountPage />);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/login?returnTo=%2Faccount"),
+    );
   });
 
   it("logout revokes server-side then routes to /login (EARS-10, stable data-testid)", async () => {
@@ -179,6 +188,9 @@ describe("003 EARS-28 /account profile surface", () => {
 
     await user.click(screen.getByTestId("logout"));
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    // Bare: a doctor who signed OUT asked to leave the cabinet, so the door
+    // carries no return target back into it (014 EARS-6 is the guest bounce,
+    // not the deliberate exit).
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
   });
 });

@@ -72,6 +72,12 @@ export default [
       // playwright-bdd's own codegen style as repository findings and makes a
       // local `pnpm lint` red purely because a suite was generated.
       "**/.features-gen/**",
+      // Playwright's own HTML reporter output (`playwright-report/**`,
+      // gitignored at the root): a bundled CodeMirror/React viewer written by
+      // every `pnpm e2e:stage` run. Linting a vendored minified bundle reports
+      // thousands of `no-undef` findings against Playwright's own code and makes
+      // a local `pnpm lint` red purely because a suite was driven once.
+      "**/playwright-report/**",
       // Next.js generated triple-slash reference files
       "**/next-env.d.ts",
       // #286 — lint-guard-test fixtures are deliberately-broken file trees fed to

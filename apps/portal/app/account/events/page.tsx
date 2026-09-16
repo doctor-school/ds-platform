@@ -91,7 +91,7 @@ export default async function MyEventsPage({
   });
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="bg-background text-foreground">
       <header className="bg-header text-header-foreground">
         <Container className="py-10 layout:py-16">
           <div className="flex items-end justify-between gap-8">

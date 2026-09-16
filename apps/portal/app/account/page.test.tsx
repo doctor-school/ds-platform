@@ -182,3 +182,11 @@ describe("003 EARS-28 /account profile surface", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
   });
 });
+
+describe("008 EARS-14 (#2228): the cabinet does not push the shared footer below the fold", () => {
+  it("EARS-14.3: no state wrapper claims min-h-screen — the root layout owns the fill", async () => {
+    const { container } = render(<AccountPage />);
+    await screen.findByTestId("profile-email");
+    expect(container.innerHTML).not.toContain("min-h-screen");
+  });
+});

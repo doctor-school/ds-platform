@@ -99,3 +99,26 @@ test.describe("028 Academy documents surface (V-4)", () => {
     await expect(page).toHaveURL(/\/documents$/);
   });
 });
+
+test.describe("008 EARS-14 (#2228): the shared footer is pinned to the viewport bottom", () => {
+  test("EARS-14.4: on a short page the footer's bottom edge meets the viewport bottom — no bare background under it", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 1400 });
+    await page.goto("/documents");
+    await expect(page.getByTestId("storefront-footer")).toBeVisible();
+
+    const geometry = await page.evaluate(() => {
+      const footer = document.querySelector('[data-testid="storefront-footer"]');
+      const rect = footer!.getBoundingClientRect();
+      return {
+        footerBottom: Math.round(rect.bottom + window.scrollY),
+        documentHeight: document.documentElement.scrollHeight,
+        viewport: window.innerHeight,
+      };
+    });
+    // The document is exactly one viewport tall and the footer closes it.
+    expect(geometry.documentHeight, "document height").toBe(geometry.viewport);
+    expect(geometry.footerBottom, "footer bottom edge").toBe(geometry.viewport);
+  });
+});

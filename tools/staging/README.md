@@ -103,6 +103,10 @@ have to hold the stand's credentials to reach the slot at all.
 
 ```bash
 export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
+export DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
+export DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
+export DS_GOLDEN_PASSWORD_DOCTOR_MFA="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_DOCTOR_MFA=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
+export DS_GOLDEN_PASSWORD_ADMIN="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_ADMIN=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
 pnpm e2e:stage pr-123                     # both storefronts
 pnpm e2e:stage main --project academy --grep "витрина"
 pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
@@ -120,6 +124,29 @@ over SSH, the password from `STAGE_BASIC_AUTH_PASS` on THIS machine. An operator
 SSH to the box can export `STAGE_BASE_DOMAIN`, `E2E_HTTP_USER` and `E2E_HTTP_PASS` instead
 and the box is never contacted. The password is passed to Playwright as `httpCredentials`
 and never printed.
+
+**The signed-in leg needs the golden passwords too**, and they are NOT covered by
+`STAGE_BASIC_AUTH_PASS`. A scenario that signs a golden doctor in reads that
+account's password from a `DS_GOLDEN_PASSWORD_*` variable on THIS machine: the registry
+(`packages/e2e/lib/golden.ts`) turns the feature file's seed name into the env var
+`packages/db/src/seed/golden/idp.ts` declares for that account, and an unset one is a named
+failure, never a silent sign-in attempt with `undefined`. The seed declares five names —
+`DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED`, `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`,
+`DS_GOLDEN_PASSWORD_DOCTOR_MFA`, `DS_GOLDEN_PASSWORD_DOCTOR_DELETED` and
+`DS_GOLDEN_PASSWORD_ADMIN` — but only FOUR are exportable. The box deliberately carries no
+`DS_GOLDEN_PASSWORD_DOCTOR_DELETED`: the soft-deleted doctor is ensure-**absent** on the
+shared IdP by contract (see `reset-identities` below), so it has no live account to sign in
+as, and a scenario asking for that seed name to sign in is a scenario defect rather than a
+missing secret. `DS_GOLDEN_PASSWORD_ADMIN` is read only by the admin suite: the `admin` host
+tag is deliberately selected by NO storefront project (`packages/e2e/lib/host-tags.ts`), so a
+`--project academy`/`doctor` run never reaches for it. The four are the same owner-placed
+values `reset-identities` converges from, so they come out of `/etc/ds-platform/stage.env`
+over SSH in exactly the shape the basic-auth recipe above uses — one quoted `export` per
+variable. Read them one at a time like that, never by `eval`-ing the matching lines of
+`stage.env` in bulk: a password containing a space or a quote is truncated or dies on an
+unbalanced quote, and the box's file content would be executing on your machine. An operator
+without SSH to the box exports the four by hand; they are secrets, and like the basic-auth
+password the suite never prints them.
 
 The **a11y leg** (§6.6) joins the run only once #1692 — the contrast fix — is on `main`;
 while it is open the command prints

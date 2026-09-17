@@ -55,7 +55,7 @@ machine**:
 
 ## Reading OTP mails
 
-Open <https://mailpit.stage.doctor.school> with the same stage gate credentials as
+Open `https://mailpit.stage.doctor.school` with the same stage gate credentials as
 the slot hosts. The shared `ds_stage_gate` cookie also admits Mailpit, so a browser
 already admitted on a slot needs no second prompt. One Mailpit holds mail for all
 slots: use the slot-tagged sender and test recipient to find the right message.

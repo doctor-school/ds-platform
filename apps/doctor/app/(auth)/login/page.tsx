@@ -15,6 +15,7 @@ import {
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
+  withReturnContext,
 } from "@/lib/return-context";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
 
@@ -166,9 +167,18 @@ export default async function DoctorLoginPage({
   // Sign-up is a co-equal auth path, so the arrival context survives the hop
   // into it — built from the GUARD output, so a hostile param can never be
   // propagated onward.
-  const registerHref = safeTarget
-    ? `/register?${RETURN_CONTEXT_PARAM}=${encodeURIComponent(safeTarget)}`
-    : "/register";
+  //
+  // #2258 / rule S3 — through the shared CARRY helper, not from `safeTarget`.
+  // That value is the 021 EARS-3 return-context target and эфир-only by
+  // contract, so building the hop from it silently dropped every account
+  // arrival: a doctor sent here by the closed cabinet who pressed
+  // «Зарегистрироваться» signed up into the LD-4 default instead of the page
+  // they asked for. `withReturnContext` answers both shapes and still re-appends
+  // only what the shared guards reconstructed.
+  const registerHref = withReturnContext(
+    DOCTOR_AUTH_ROUTES.register,
+    returnTo,
+  );
 
   return (
     <AuthShell

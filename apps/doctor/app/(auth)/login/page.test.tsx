@@ -95,10 +95,19 @@ async function landingOf(
 async function guestLandingOf(
   params: Record<string, string | string[] | undefined>,
 ): Promise<string> {
+  return (await screenPropsOf(params)).landing;
+}
+
+/** Every prop the guest door hands `<LoginScreen />`. */
+async function screenPropsOf(
+  params: Record<string, string | string[] | undefined>,
+): Promise<{ landing: string; registerHref: string }> {
   const shell = (await DoctorLoginPage({
     searchParams: Promise.resolve(params),
-  })) as ReactElement<{ children: ReactElement<{ landing: string }> }>;
-  return shell.props.children.props.landing;
+  })) as ReactElement<{
+    children: ReactElement<{ landing: string; registerHref: string }>;
+  }>;
+  return shell.props.children.props;
 }
 
 beforeEach(() => {
@@ -192,5 +201,43 @@ describe("#1987: an /account arrival comes back to /account", () => {
     expect(await landingOf({ returnTo: "https://evil.example/account" })).toBe(
       "/",
     );
+  });
+});
+
+/**
+ * #2258 / rule S3 — the hop into `/register` does not drop the target.
+ *
+ * `/register` is a co-equal auth path, so a doctor who pressed
+ * «Зарегистрироваться» from `/login?returnTo=/account` must arrive there still
+ * carrying the cabinet. The route built that link from the 021 EARS-3
+ * return-context target, which is эфир-only by contract, so every non-эфир
+ * arrival lost its target at the hop and signed up into the LD-4 default.
+ */
+describe("#2258: the /login → /register hop carries the arrival target", () => {
+  it("#2258: an account arrival is carried into /register", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect((await screenPropsOf({ returnTo: "/account" })).registerHref).toBe(
+      "/register?returnTo=%2Faccount",
+    );
+  });
+
+  it("#2258: the эфир arrival is still carried, unchanged", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    resolveReturnContext.mockResolvedValue(EVENT);
+
+    expect(
+      (await screenPropsOf({ returnTo: "/webinars/prp-pri-gonartroze" }))
+        .registerHref,
+    ).toBe("/register?returnTo=%2Fwebinars%2Fprp-pri-gonartroze");
+  });
+
+  it("#2258: a hostile target is dropped at the hop, never propagated", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      (await screenPropsOf({ returnTo: "https://evil.example/account" }))
+        .registerHref,
+    ).toBe("/register");
   });
 });

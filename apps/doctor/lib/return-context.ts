@@ -142,22 +142,52 @@ export function resolveReturnTargetPath(
 }
 
 /**
+ * #2258 / rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) —
+ * the value that rides ONWARD across an auth hop on this host, in ONE carry
+ * vocabulary covering BOTH shapes a visitor may legitimately be coming back to.
+ *
+ * WHY THIS IS NOT `resolveReturnTargetPath`. That function is the 021 EARS-3
+ * RETURN-CONTEXT target: it names the эфир the surface reads, shows beside the
+ * form and registers the doctor for, so it is эфир-only by contract and must
+ * stay so (#1987 pinned it). The carry is a different question — «where does
+ * this visitor want to end up» — and its answer includes the account family
+ * `resolveReturnLandingPath` already honours. Reusing the EARS-3 target as the
+ * carry meant a doctor at `/login?returnTo=/account` kept the target through
+ * sign-in and lost it the moment they hopped to `/register`.
+ *
+ * ONE PARSER PER SHAPE, STILL. Nothing is pattern-matched here: the account
+ * family is answered by the shared `parseAccountReturnTarget` against THIS
+ * host's own `routes.account` (segment boundary and all), and the эфир family by
+ * `parseReturnTarget`, exactly as the landing rule below resolves them. A
+ * cross-origin, traversal or otherwise hostile value is refused by both and is
+ * therefore refused here.
+ */
+export function resolveCarriedReturnTarget(
+  returnTo: string | undefined,
+): string | null {
+  const account = parseAccountReturnTarget(returnTo, DOCTOR_AUTH_ROUTES.account);
+  if (account) return account;
+
+  return parseReturnTarget(returnTo)?.returnTo ?? null;
+}
+
+/**
  * 021 EARS-15 / 003 EARS-39 (#1996) — carry the return context ONWARD across an
  * intermediate auth hop on THIS host, the doctor projection of the Academy's
  * `withReturnTarget` (`apps/portal/lib/registration-handoff.ts`).
  *
  * The invariant is the one that lives in the Academy helper rather than at its
- * call sites: the value re-appended is never the raw input, it is what
- * `parseReturnTarget` reconstructed from the parts it accepted, so a
- * cross-origin, traversal or otherwise hostile target can never be propagated
- * across the hop, and an absent or rejected one is simply dropped — the doctor
- * still reaches the door, just without a context to come back to.
+ * call sites: the value re-appended is never the raw input, it is what the
+ * shared guards reconstructed from the parts they accepted, so a cross-origin,
+ * traversal or otherwise hostile target can never be propagated across the hop,
+ * and an absent or rejected one is simply dropped — the doctor still reaches the
+ * door, just without a context to come back to.
  */
 export function withReturnContext(
   path: string,
   returnTo: string | undefined,
 ): string {
-  const safe = resolveReturnTargetPath(returnTo);
+  const safe = resolveCarriedReturnTarget(returnTo);
   if (!safe) return path;
   const sep = path.includes("?") ? "&" : "?";
   return `${path}${sep}${RETURN_CONTEXT_PARAM}=${encodeURIComponent(safe)}`;

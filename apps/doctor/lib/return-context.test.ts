@@ -4,6 +4,7 @@ import {
   RETURN_CONTEXT_PARAM,
   formatMskDateLabel,
   formatMskTime,
+  resolveCarriedReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
@@ -303,32 +304,54 @@ describe("#1987: /account is a landing target", () => {
  * `resolveReturnLandingPath` learned the account family in #1987, so a doctor
  * sent to `/login?returnTo=/account` lands back on the cabinet. But the value
  * that rides ONWARD across an intermediate auth hop — into `/register`, and back
- * out of the confirmation screen — goes through `resolveReturnTargetPath`, which
- * still knew only the эфир shapes. The target therefore survived sign-in and was
- * lost the moment the doctor pressed «Зарегистрироваться» instead, landing them
- * on the LD-4 default. One carry rule, both shapes.
+ * out of the confirmation screen — was built from `resolveReturnTargetPath`,
+ * which is the 021 EARS-3 RETURN-CONTEXT target and эфир-only by contract: it
+ * exists to name the эфир the surface reads and registers the doctor for, and
+ * the last test below pins that it stays эфир-only. Reusing it as the carry rule
+ * meant a doctor at `/login?returnTo=/account` kept the target through sign-in
+ * and lost it the moment they pressed «Зарегистрироваться», landing on the LD-4
+ * default instead. `resolveCarriedReturnTarget` is the carry rule in its own
+ * right — one function, both shapes, the same shared guards.
  */
 describe("#2258: the carried target admits the account family", () => {
-  it("#2258: resolveReturnTargetPath rebuilds an account arrival instead of dropping it", () => {
-    expect(resolveReturnTargetPath("/account")).toBe("/account");
+  it("#2258: resolveCarriedReturnTarget rebuilds an account arrival instead of dropping it", () => {
+    expect(resolveCarriedReturnTarget("/account")).toBe("/account");
   });
 
-  it("#2258: a page BELOW the account route carries ITSELF, with the segment boundary enforced", () => {
-    expect(resolveReturnTargetPath("/account/events")).toBe("/account/events");
-    expect(resolveReturnTargetPath("/accounts")).toBeNull();
-    expect(resolveReturnTargetPath("/account-evil")).toBeNull();
+  it("#2258: a page BELOW the account route is carried as ITSELF, with the segment boundary enforced", () => {
+    expect(resolveCarriedReturnTarget("/account/events")).toBe(
+      "/account/events",
+    );
+    expect(resolveCarriedReturnTarget("/accounts")).toBeNull();
+    expect(resolveCarriedReturnTarget("/account-evil")).toBeNull();
+  });
+
+  it("#2258: the эфир vocabulary is carried unchanged beside it", () => {
+    expect(resolveCarriedReturnTarget("/webinars/kardio-2026")).toBe(
+      "/webinars/kardio-2026",
+    );
   });
 
   it("#2258: withReturnContext carries the account arrival across the /login → /register hop", () => {
     expect(withReturnContext("/register", "/account")).toBe(
       "/register?returnTo=%2Faccount",
     );
+    expect(withReturnContext("/register", "/account/events")).toBe(
+      "/register?returnTo=%2Faccount%2Fevents",
+    );
   });
 
   it("#2258: a cross-origin or traversal target is still dropped at the hop", () => {
-    expect(resolveReturnTargetPath("//evil.example/account")).toBeNull();
+    expect(resolveCarriedReturnTarget("//evil.example/account")).toBeNull();
+    expect(resolveCarriedReturnTarget("/../account")).toBeNull();
     expect(withReturnContext("/register", "https://evil.example/account")).toBe(
       "/register",
     );
+  });
+
+  it("#2258: the эфир-only EARS-3 context target is NOT widened by the carry rule", () => {
+    // 021 EARS-3 keeps its own contract: an account arrival resolves no эфир, so
+    // the registration surface still renders no return-context card for it.
+    expect(resolveReturnTargetPath("/account")).toBeNull();
   });
 });

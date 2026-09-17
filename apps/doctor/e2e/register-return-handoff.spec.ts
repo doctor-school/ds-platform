@@ -84,7 +84,10 @@ async function completeRegistrationFromHere(page: Page) {
   // The slotted OTP field auto-submits on completion (#175), so filling it IS
   // the submit; the code itself is never checked here.
   await page.locator("input[autocomplete=\"one-time-code\"]").fill("ABC123");
-  await expect(page.getByTestId("registration-success")).toBeVisible();
+  // 021 EARS-10 (amended 2026-09-17) — the accepted code NAVIGATES; there is no
+  // outcome card to wait for, so the confirmation surface leaving the DOM is
+  // what says the journey completed.
+  await expect(page.getByTestId("verify-submit")).toHaveCount(0);
 }
 
 test.describe("020 EARS-5: the guest hand-off into 021 and the exact return", () => {
@@ -128,11 +131,10 @@ test.describe("020 EARS-5: the guest hand-off into 021 and the exact return", ()
 
     await completeRegistrationFromHere(page);
 
-    // EXACTLY that URL: the primary action of the success state is the page the
-    // journey started on, not the storefront home and not the cabinet.
-    const primary = page.getByTestId("registration-success-primary");
-    await expect(primary).toHaveAttribute("href", `/events/${LIVE}`);
-    await primary.click();
+    // EXACTLY that URL: the confirmation lands the doctor on the page the
+    // journey started on, not the storefront home and not the cabinet — and it
+    // lands them there itself, with no tap in between (021 EARS-10, amended
+    // 2026-09-17).
     await expect(page).toHaveURL(new RegExp(`/events/${LIVE}$`));
 
     // 021 EARS-15 parity: the doctor lands SIGNED IN, so the page they came

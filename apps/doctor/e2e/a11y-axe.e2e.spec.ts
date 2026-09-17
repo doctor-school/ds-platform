@@ -200,63 +200,6 @@ for (const [state, drive] of [
       await expect(page.getByTestId("verify-submit")).toBeVisible();
     },
   ],
-  [
-    // 021 EARS-10 (#1546) — the POST-CONFIRMATION success state, a THIRD
-    // composition on this route: the confirm command replaces the code card
-    // with the shared success block, whose own a11y risk is the ranked pair of
-    // link-buttons and the `role="status"` line that explains a degraded
-    // landing. The degraded branch is the one scanned because it renders every
-    // part of the composition at once.
-    "post-confirmation success",
-    async (page: import("@playwright/test").Page) => {
-      await page.route("**/v1/storefront/doctor/register", (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ status: "pending_verification" }),
-        }),
-      );
-      await page.route("**/v1/storefront/doctor/confirm", (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            status: "verified",
-            credited: null,
-            profileCompletion: null,
-            primaryAction: {
-              kind: "landing",
-              href: "/events/ended-vedenie-hronicheskoy-boli",
-              reason: "ended",
-            },
-            secondaryAction: { kind: "cabinet", href: "/account" },
-          }),
-        }),
-      );
-      // 021 EARS-15 (#1996) — the success state exists ONLY for a doctor who
-      // is signed in: the screen replays the real 003 EARS-5 login with the
-      // password it held, and a replay that fails routes to `/login?returnTo=…`
-      // instead of rendering the card. This tier is backend-free, so the replay
-      // is fulfilled at the same network boundary as the two commands above.
-      await page.route("**/v1/auth/login", (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ status: "authenticated" }),
-        }),
-      );
-      await page.getByTestId("register-email").fill("doctor@clinic.ru");
-      await page.getByTestId("register-password").fill("correct horse battery");
-      for (const id of ["register-medworker", "register-partner-data"]) {
-        await page.getByTestId(id).locator("xpath=ancestor::label[1]").click();
-        await expect(page.getByTestId(id)).toBeChecked();
-      }
-      await page.getByTestId("register-submit").click();
-      await expect(page.getByTestId("verify-submit")).toBeVisible();
-      await page.locator('input[autocomplete="one-time-code"]').fill("ABC123");
-      await expect(page.getByTestId("registration-success")).toBeVisible();
-    },
-  ],
 ] as const) {
   test(`021 EARS-1 /register passes WCAG 2 A/AA + one-h1 check (${state})`, async ({
     page,

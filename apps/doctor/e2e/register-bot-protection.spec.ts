@@ -274,6 +274,11 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
     ]);
     expect(body(request)).toEqual({ email: EMAIL, code: "ABC123" });
 
-    await expect(page.getByTestId("registration-success")).toBeVisible();
+    // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates away from
+    // this surface instead of replacing it with an outcome card, so the
+    // confirmation screen leaving the DOM is what says the command succeeded.
+    // The destination itself belongs to `register-return.spec.ts`, which runs
+    // against the upstream double that can answer for it.
+    await expect(page.getByTestId("verify-submit")).toHaveCount(0);
   });
 });

@@ -15,6 +15,12 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
+import {
+  InMemoryRegisterNoticeThrottle,
+  REGISTER_NOTICE_THROTTLE,
+} from "../../src/mailer/register-notice-throttle.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -57,6 +63,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
+    let mailer: FakeMailer;
     const runId = Date.now();
     const createdEmails: string[] = [];
     const PASSWORD = "Aa1!ufficiently-long-pw";
@@ -77,11 +84,25 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
+      // The mailer is INSPECTABLE here, not merely satisfied: 003 EARS-23 is a
+      // clause whose entire observable is an out-of-band email, so a suite that
+      // does not hold the mailer cannot tell a dispatched notice from a
+      // swallowed one.
+      mailer = new FakeMailer();
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],
       })
         .overrideProvider(IDP_CLIENT)
-        .useValue(new FakeIdpClient())
+        .useValue(new FakeIdpClient(mailer))
+        .overrideProvider(MAILER)
+        .useValue(mailer)
+        // The throttle is bound to the in-memory adapter the module itself
+        // falls back to without a `REDIS_URL`, so this suite's outcome does not
+        // depend on a Redis being reachable from the database job. The throttle
+        // WINDOW is 003's own subject (`auth.service.spec.ts`); what is proven
+        // here is only that the doctor door reaches the EARS-23 branch at all.
+        .overrideProvider(REGISTER_NOTICE_THROTTLE)
+        .useValue(new InMemoryRegisterNoticeThrottle(`doctor-register-${runId}`))
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .compile();
@@ -194,6 +215,52 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       expect(rows).toHaveLength(1);
       expect(rows[0].role).toBe("doctor_guest");
+    });
+
+    it("003 EARS-23: a repeat registration through the DOCTOR door dispatches the account-exists notice, with the response unchanged", async () => {
+      // The gap this closes, found while driving the Stage-B slot: a doctor who
+      // registers twice on doctor.school gets the identical EARS-16 response,
+      // and the only thing that tells the legitimate owner what happened is the
+      // EARS-23 notice. `AuthService.register` dispatches it for BOTH doors —
+      // but nothing here proved the storefront door reaches that branch, so a
+      // future storefront-local short-circuit of the duplicate case would have
+      // left the owner silently stranded with a green suite.
+      const email = uniqueEmail("duplicate");
+      const payload = {
+        email,
+        password: PASSWORD,
+        medicalWorkerDeclaration: true,
+        consent: PARTNER_CONSENT,
+      };
+
+      const first = await app.inject({ method: "POST", url: URL, payload });
+      expect(first.statusCode).toBe(200);
+      const noticesBefore = mailer.accountExistsNotices.length;
+
+      const second = await app.inject({ method: "POST", url: URL, payload });
+
+      // EARS-16 — the response is byte-identical to the never-registered case;
+      // the door is no existence oracle.
+      expect(second.statusCode).toBe(first.statusCode);
+      expect(second.json()).toEqual({ status: "pending_verification" });
+
+      // EARS-23 — the dispatch is fire-and-forget (deliberately off the
+      // response path, so SMTP latency cannot become a timing oracle), so the
+      // assertion polls instead of reading once: a single read would be a race
+      // that passes on a fast machine and flakes on CI.
+      await expect
+        .poll(() => mailer.accountExistsNotices.slice(noticesBefore), {
+          timeout: 5_000,
+        })
+        .toEqual([email.toLowerCase()]);
+
+      // The duplicate registers NOTHING: still exactly the one account the
+      // first command created.
+      const { rows } = await pool.query(
+        "SELECT role FROM users WHERE email = $1",
+        [email],
+      );
+      expect(rows).toHaveLength(1);
     });
   },
 );

@@ -43,28 +43,29 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And one versioned dated consent record exists for partner-data-sharing
     And no consent record exists for marketing-communications
     When the doctor confirms the email with the code from the letter
-    Then the success state states no points amount, promised or credited
-    And the primary action returns to «Артроскопия коленного сустава»
-    And «в личный кабинет» is offered only as a secondary action
+    # Amended 2026-09-17 (see 021-requirements-en.md → Amendment — 2026-09-17): a confirmation that
+    # yields a session navigates straight to the honoured destination; there is no success state
+    Then the doctor lands on the page of «Артроскопия коленного сустава» with no screen in between
+    And no success card, no «в личный кабинет» action and no points line is rendered after confirmation
+    And the confirmation screen is gone from the document
 
+  # Amended 2026-09-17: the SUCCESS-STATE half of EARS-9 is withdrawn with the success card — this host
+  # renders no post-confirmation surface, so the credited-as-fact statement needs a surface named by
+  # feature 025 rather than by 021. Nothing shipped it (025 has no spec). The form promise stands below.
   @EARS-9 @happy
-  Scenario: Wave 2 — the form promises the registration points and the success state credits them
+  Scenario: Wave 2 — the form promises the registration points before submission
     Given the wave-2 points surface of #1545 is in place
     And a guest doctor pressed «Участвовать» on «Артроскопия коленного сустава»
     When the registration screen opens
     Then the form promises «+20 Pul за регистрацию»
-    When the doctor registers and confirms the email with the code from the letter
-    And feature 025 emits PointsCredited for that account
-    Then the success state states the credited «+20 Pul» as the amount carried by that event
-    And it names «+30 Pul» for completing the profile and what completing it unlocks
+    And that promised value is read from the one points configuration source
 
   @EARS-9 @failure
-  Scenario: With no ledger event the success state promises rather than claims a credit
+  Scenario: No ledger fact is ever derived from the points configuration
     Given the wave-2 points surface of #1545 is in place
     And feature 025 has emitted no PointsCredited for the account
-    When a doctor confirms their email and reaches the success state
-    Then the success state names the accrual as a pending promise
-    And no credited amount is stated as a fact
+    When a doctor registers and confirms their email
+    Then no credited amount is stated as a fact anywhere in the flow
     And no credited amount is derived from the points configuration
 
   @EARS-19 @failure
@@ -138,7 +139,8 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Given a doctor registered from an эфир and confirms their email after the эфир was unpublished
     When the code from the letter is entered on the code-entry screen that carries the return target
     Then the doctor lands on the nearest honest destination
-    And a plain Russian line states what happened to the content they came for
+    # Amended 2026-09-17: the plain statement had the withdrawn success card as its only carrier on this
+    # host; the destination stays honest, the stated reason is decision debt (DEBT.md, 2026-09-17)
     And no dead link and no silent redirect occurs
 
   @EARS-15 @EARS-16 @happy

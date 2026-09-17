@@ -27,7 +27,6 @@ import {
   isBotProtectionRequired,
   maskDestination,
   RegisterCard,
-  RegistrationSuccessCard,
   setPendingRegistration,
   takePendingRegistration,
   useBotProtectedAction,
@@ -58,10 +57,7 @@ import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
 
 /** This host's challenge copy, projected once out of its config. */
 const BOT_PROTECTION_MESSAGES = botProtectionMessages(DOCTOR_AUTH_FLOW);
-import {
-  resolveRegistrationSuccess,
-  type RegistrationSuccessView,
-} from "@/lib/registration-success";
+import { resolveConfirmLanding } from "@/lib/confirm-landing";
 
 /**
  * 021 EARS-1 — the doctor registration screen (`design-source/auth.dc.html`,
@@ -123,12 +119,13 @@ export type RegistrationScreenProps = {
    * reconstruction — one vocabulary, LD-3), a direct arrival carries the LD-4
    * decision (`lib/registration-landing.ts`).
    *
-   * REQUIRED, and CONSUMED: the post-confirmation success state of EARS-10
-   * (#1546) renders this value as its primary action whenever the confirmation
-   * response carries no honoured target of its own, instead of recomputing the
-   * decision on the far side of the hop — so the landing the doctor is promised
-   * on the door is the landing they get. It is not optional precisely so that no
-   * future caller can render the door without having decided.
+   * REQUIRED, and CONSUMED: the post-confirmation navigation of EARS-10
+   * (#1546, amended 2026-09-17) sends the doctor to this value whenever the
+   * confirmation response carries no honoured target of its own, instead of
+   * recomputing the decision on the far side of the hop — so the landing the
+   * doctor is promised on the door is the landing they get. It is not optional
+   * precisely so that no future caller can render the door without having
+   * decided.
    */
   landing: string;
   /**
@@ -319,11 +316,11 @@ function findConsentItem(
  * ONE line is deliberately NOT the portal's: the portal's «Код принят —
  * входим…» narrates the replay while the registrant waits on the `/verify`
  * route. This host runs the SAME replay (021 EARS-15, #1996 — the shared
- * `takePendingRegistration` slot), but its confirmation card is REPLACED by the
- * success card in the same tick, so a «входим…» line would be copy for a state
+ * `takePendingRegistration` slot), but it navigates away in the same tick (021
+ * EARS-10, amended 2026-09-17), so a «входим…» line would be copy for a state
  * nobody sees. «Код принят — почта подтверждена.» states the fact the doctor
  * can act on; the sign-in shows up where it is observable — the header of the
- * page the success card sends them to reads «Личный кабинет».
+ * page they land on reads «Личный кабинет».
  */
 const CONFIRM_COPY: EmailConfirmCardCopy = {
   title: "Проверьте почту",
@@ -663,11 +660,13 @@ const confirmResolver: Resolver<EmailConfirmValues> = (values) => {
  * 021 success state, so ONE round trip both accepts the code and names the
  * destination — a client that called both routes would verify the code twice.
  *
- * On success this surface is REPLACED by `<RegistrationSuccessCard>` rather than
- * annotated: the canvas «Успех» artboard is its own screen, so the confirmation
- * card and the success state never stand on the page together. A rejected code
- * stays on the EARS-16 generic failure — the confirm command is no more of an
- * oracle than the 003 route it delegates to.
+ * On success this surface NAVIGATES (021 EARS-10, amended 2026-09-17): the
+ * confirmed doctor is replaced onto the honoured target itself, with no
+ * interstitial to acknowledge — the same rule the Academy `/verify` runs
+ * (`apps/portal/app/verify/page.tsx`), so the two doors no longer differ in the
+ * number of taps they charge for one confirmation. A rejected code stays on the
+ * EARS-16 generic failure — the confirm command is no more of an oracle than
+ * the 003 route it delegates to.
  */
 function RegistrationConfirmation({
   email,
@@ -683,7 +682,6 @@ function RegistrationConfirmation({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<RegistrationSuccessView | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -750,7 +748,6 @@ function RegistrationConfirmation({
       // status now decides — a 429 from the confirm route says «слишком много
       // попыток» instead of blaming a code the doctor typed correctly, and a 5xx
       // says the service is down. Before this the catch swallowed every status.
-      setSuccess(null);
       setError(authErrorMessage(err, DOCTOR_AUTH_FLOW.copy.errors, CONFIRM_FAILED));
       return;
     }
@@ -762,17 +759,17 @@ function RegistrationConfirmation({
     // re-invented (`apps/portal/app/verify/page.tsx`, 003 EARS-39): replay the
     // REAL 003 EARS-5 password login with the held credential — the session
     // still comes from the login route, never from confirm — and let the
-    // SUCCESS STATE EXIST ONLY FOR A DOCTOR WHO IS SIGNED IN.
+    // ONWARD NAVIGATION EXIST ONLY FOR A DOCTOR WHO IS SIGNED IN.
     //
     // No held credential (a reload, a restored tab, an expired hold) or a replay
     // the login refuses (the classic case: the doctor re-registered the same
     // email with a SECOND password, so the slot holds a credential the IdP never
     // took — 003 EARS-16 answers a repeat registration identically) both mean the
     // same thing: the email is verified and there is no session. That doctor goes
-    // to the sign-in door carrying their return context, NOT to a success card
-    // that would walk them onto the эфир as a guest and back through the
-    // registration loop this Issue exists to close. The slot is wiped by the take
-    // whether the replay then succeeds or throws.
+    // to the sign-in door carrying their return context, NOT onward to the эфир,
+    // which would walk them in as a guest and back through the registration loop
+    // this Issue exists to close. The slot is wiped by the take whether the
+    // replay then succeeds or throws.
     const held = takePendingRegistration(email);
     if (held) {
       try {
@@ -781,22 +778,27 @@ function RegistrationConfirmation({
           password: held.password,
         });
         // 005 EARS-2 (#2005) — the session exists now, so the эфир the doctor
-        // came from is COMPLETED before the outcome is painted: they pressed
+        // came from is COMPLETED before they are sent anywhere: they pressed
         // «Участвовать» on a gated эфир and were sent here to make an account,
         // and an account without the registration is not what they asked for.
         // The decision is the ONE shared rule (`@ds/events-storefront`
         // `completeReturnTarget`, the Academy's rule verbatim) under this host's
-        // projection of it (`lib/return-completion.ts`); the landing it returns
-        // is DISCARDED here, because this door does not navigate — the EARS-10
-        // success card owns where the doctor goes next, and it already holds the
-        // server's own honoured target. Best-effort by that rule's contract: a
-        // refusal still shows the success state, and the эфир page's per-viewer
-        // participation read (005 EARS-4) tells the truth there.
+        // projection of it (`lib/return-completion.ts`). The landing it returns
+        // is not the one used: it is computed from the carried target alone,
+        // while the confirm response was produced by the round trip that just
+        // re-validated that target and therefore knows whether it went stale.
+        // Best-effort by that rule's contract: a refusal still lands the doctor,
+        // and the эфир page's per-viewer participation read (005 EARS-4) tells
+        // the truth there.
         await completeReturnTarget(
           returnTarget ?? null,
           doctorReturnHost(landing),
         );
-        setSuccess(resolveRegistrationSuccess(confirmed, landing));
+        // 021 EARS-10 (amended 2026-09-17) — direct navigation, no success
+        // card. `replace`, not `push`: the confirmation screen is spent, and a
+        // back gesture from the эфир must not return the doctor to a code form
+        // whose code has already been consumed.
+        router.replace(resolveConfirmLanding(confirmed, landing));
         return;
       } catch {
         // Fall through to the sign-in door below — the same exit as no hold at
@@ -808,26 +810,6 @@ function RegistrationConfirmation({
     // arrived here from a closed page has no `returnTarget` at all, and building
     // this hop from it sent them to a bare door.
     router.push(withReturnContext(DOCTOR_AUTH_ROUTES.login, carriedTarget));
-  }
-
-  // EARS-10 — the success state REPLACES the code screen rather than annotating
-  // it: the code has been accepted, so the surface the doctor is looking at is
-  // no longer «введите код», and leaving the code form behind the outcome would
-  // offer an action that can only fail from here.
-  if (success) {
-    return (
-      <RegistrationSuccessCard
-        icon={<SuccessGlyph />}
-        title={success.title}
-        accrual={success.accrual}
-        {...(success.profileCompletion
-          ? { profileCompletion: success.profileCompletion }
-          : {})}
-        {...(success.reason ? { reason: success.reason } : {})}
-        primary={success.primary}
-        secondary={success.secondary}
-      />
-    );
   }
 
   return (
@@ -885,26 +867,6 @@ function ConfirmationGlyph() {
         strokeWidth="2"
         strokeLinecap="square"
       />
-    </svg>
-  );
-}
-
-/**
- * The success state's glyph — a check mark, drawn inline for the same reason the
- * envelope above is. Decorative only: «Почта подтверждена» carries the meaning,
- * and the outcome is also announced by the card's own copy rather than by a
- * mark a screen reader never sees.
- */
-function SuccessGlyph() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      aria-hidden
-      focusable="false"
-    >
-      <path d="M4 12l6 6L20 6" strokeWidth="2" strokeLinecap="square" />
     </svg>
   );
 }

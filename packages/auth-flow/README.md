@@ -94,9 +94,9 @@ Three rules live there, each stated once for both storefronts:
   target in the host's own cookie from middleware; `@ds/auth-flow/client` reads
   and clears the same cookie in the browser.
 
-## The four rules of the auth flow (S1–S4)
+## The five rules of the auth flow (S1–S5)
 
-One flow means one set of rules. These four are the STANDARD both storefronts are
+One flow means one set of rules. These five are the STANDARD both storefronts are
 held to (#2027, owner verdict on the PR 1.4 Stage-B round 1: «цель весь флоу
 привести к единообразию и согласованности … Это вообще должно стать стандартом и
 входить в тесты»). They are stated here because they span the hosts: no single
@@ -149,10 +149,27 @@ intent); on the doctor storefront it is `resolveReturnLandingPath`. `/reset` kee
 `/account` as its own no-target default (#221), which is why the raw value is
 screened before the shared rule is asked.
 
+**S5 — a confirmation that yields a session NAVIGATES; it does not paint a screen.**
+When an email confirmation (or any verify step) completes and the visitor holds a
+session, the host goes straight to the honoured destination with a REPLACING
+navigation — no «Почта подтверждена» interstitial, no «вернуться к…» button the
+visitor has to press to finish arriving, no secondary «в личный кабинет». The
+destination is the one the CONFIRM ROUND TRIP honoured, because only the server
+re-validated the carried target and therefore only the server knows it went stale;
+the host's S4 default applies when the arrival carried nothing. `replace`, not
+`push`: a spent code form must not be reachable by Back. The Academy `/verify` route
+has always worked this way; the doctor storefront was brought to it on 2026-09-17
+by the owner's verdict on PR #2239 («в Академии такого нет, сразу идёт редирект в
+конечную точку. Бед доп. шагов и нажатий кнопок.»), amending 021 EARS-10. The
+no-session branch is unchanged: the visitor goes to this host's sign-in door
+carrying the target, per S3.
+
 **Tested, not asserted.** Each rule is pinned per route: S1/S2 by a page-level test
 that a guest (or a signed-in visitor) request REDIRECTS rather than returning a
 screen, S3 by the rendered `href` of every inter-screen link, S4 by the path the
-surface navigates to. The ids carry `#2027 S3` / `#2027 S4` so a later route cannot
+surface navigates to, S5 by the confirm case asserting a `replace` to the honoured
+destination and the ABSENCE of any post-confirm surface. The ids carry `#2027 S3` /
+`#2027 S4` so a later route cannot
 quietly opt out of the standard.
 
 ## Paths are relative, always

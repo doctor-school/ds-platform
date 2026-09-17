@@ -173,22 +173,6 @@ const STATES: readonly StateSpec[] = [
     submitEnabled: null,
     formOnScreen: false,
   },
-  {
-    name: "confirmed",
-    drive: async (page) => {
-      await fillValid(page);
-      await page.getByTestId("register-submit").click();
-      await expect(page.getByTestId("verify-submit")).toBeVisible();
-      // The slotted field auto-submits on completion (#175); the code itself is
-      // checked by the 003 engine, which the double delegates to exactly as the
-      // real command does.
-      await page.locator('input[autocomplete="one-time-code"]').fill("ABC123");
-      await expect(page.getByTestId("registration-success")).toBeVisible();
-    },
-    primary: "success",
-    submitEnabled: null,
-    formOnScreen: false,
-  },
 ];
 
 const VIEWPORTS = [
@@ -316,15 +300,6 @@ for (const viewport of VIEWPORTS) {
               await expectFocusable(
                 page.locator('input[autocomplete="one-time-code"]').first(),
                 "the code field",
-              );
-            } else {
-              await expect(
-                page.getByTestId("registration-success"),
-                "the success screen is visible",
-              ).toBeVisible();
-              await expectFocusable(
-                page.getByTestId("registration-success-primary"),
-                "the success primary action",
               );
             }
 

@@ -18,7 +18,7 @@ import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { ACADEMY_AUTH_FLOW, authClient } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnTarget } from "@/lib/registration-handoff";
@@ -95,7 +95,7 @@ function PortalEmailConfirmCard() {
   const router = useRouter();
   const t = useTranslations("verify");
   const te = useTranslations("errors");
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   const params = useSearchParams();
   const queryEmail = params.get("email") ?? undefined;
   // #904: the branded verification email's CTA points at `/verify#email=<addr>` —

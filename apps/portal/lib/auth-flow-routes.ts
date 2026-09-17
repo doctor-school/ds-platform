@@ -3,6 +3,7 @@ import type {
   AuthFlowRoutes,
 } from "@ds/auth-flow/host-config";
 
+import { ACADEMY_ROOM_ROUTES } from "@/lib/room-config";
 import { LOGIN_HREF, PROFILE_HREF } from "@/lib/shell-config";
 
 /**
@@ -28,6 +29,11 @@ export const ACADEMY_AUTH_ROUTES = {
   // 003 EARS-28 pins the `/account` change-password action as a handoff to the
   // reset flow, so a signed-in doctor must still be able to complete `/reset`.
   allowAuthenticated: ["/reset"],
+  // 005 EARS-2 — the event page a carried registration intent lands on.
+  eventPathTemplate: "/webinars/:slug",
+  // 006 EARS-6 — the room a bounced visitor returns to; the same value
+  // `@ds/room` reads, stated once in `lib/room-config.ts`.
+  room: ACADEMY_ROOM_ROUTES.room,
 } satisfies AuthFlowRoutes;
 
 /**

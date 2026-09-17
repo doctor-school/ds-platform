@@ -23,6 +23,7 @@ const routes: AuthFlowRoutes = {
   reset: "/reset",
   account: "/account",
   allowAuthenticated: ["/reset"],
+  eventPathTemplate: "/webinars/:slug",
 };
 
 describe("003 EARS-28 shared signed-in auth-route guard", () => {

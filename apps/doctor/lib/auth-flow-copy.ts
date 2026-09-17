@@ -56,6 +56,65 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
       invalid: `Промокод длиннее ${PROMO_CODE_MAX_LENGTH} символов — проверьте, что скопировали только код.`,
     },
     code: { invalid: "Введите код из письма." },
+    identifier: {
+      required: "Введите почту или телефон.",
+      invalid:
+        "Проверьте: почта вида doctor@clinic.ru или телефон в формате +79991234567.",
+    },
+    phone: {
+      required: "Введите почту или телефон.",
+      invalid: "Проверьте номер: он должен быть в формате +79991234567.",
+    },
+  },
+  login: {
+    title: "Вход",
+    description: "Войдите, чтобы участвовать в эфирах и получать баллы НМО.",
+    createAccount: "Создать аккаунт",
+    forgotPassword: "Забыли пароль?",
+    methodSwitcherLabel: "Способ входа",
+    methodPassword: "По паролю",
+    methodOtp: "По коду",
+    password: {
+      formLabel: "Вход по паролю",
+      identifierLabel: "Почта или телефон",
+      identifierPlaceholder: "doctor@clinic.ru",
+      passwordLabel: "Пароль",
+      passwordRequired: "Введите пароль.",
+      submit: "Войти",
+    },
+    otp: {
+      formLabel: "Вход по одноразовому коду",
+      heading: "Вход без пароля",
+      description: "Пришлём одноразовый код — пароль вводить не нужно.",
+      channelGroupLabel: "Куда прислать код",
+      channelEmail: "На почту",
+      channelSms: "В СМС",
+      emailLabel: "Рабочая почта",
+      emailPlaceholder: "doctor@clinic.ru",
+      phoneLabel: "Телефон",
+      phonePlaceholder: "+7 999 123-45-67",
+      sendCode: "Прислать код",
+      verifyTitle: "Введите код",
+      sentTo: "Код отправлен на {destination}",
+      codeLabel: "Код из сообщения",
+      codeInvalid: "Код состоит из 8 цифр — проверьте, что ввели все.",
+      verifySubmit: "Войти",
+      resend: "Прислать код ещё раз",
+      resendCountdown: "Отправить снова можно через {seconds} с",
+      changeMethod: "Другой способ входа",
+    },
+    // The per-ACTION generic each login call passes to the dictionary (row 11).
+    failed: {
+      password: "Не удалось войти. Проверьте почту или телефон и пароль.",
+      otpRequest: "Не удалось отправить код. Проверьте адрес или номер и повторите.",
+      otpVerify: "Код не подошёл. Проверьте цифры или запросите новый.",
+    },
+  },
+  // Row 46 — one eyebrow; the door forks only the line (#1955).
+  returnContext: {
+    eyebrow: "Вы вернётесь к этому событию",
+    login: "После входа вы вернётесь сюда же — место за вами.",
+    register: "После подтверждения почты вы вернётесь сюда же — место за вами.",
   },
 };
 

@@ -108,3 +108,11 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
     ).toBeUndefined();
   });
 });
+
+describe("#2027 PR 1.5 returnTo without parking", () => {
+  it("014 EARS-6.4: a host whose returnTo only publishes the card parks nothing", async () => {
+    const { NextRequest } = await import("next/server");
+    const request = new NextRequest("https://doctor.test/login?returnTo=%2Fevents%2Fslug");
+    expect(parkReturnTarget(request, { card: true })).toBeUndefined();
+  });
+});

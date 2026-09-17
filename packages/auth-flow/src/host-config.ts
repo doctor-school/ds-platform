@@ -14,9 +14,12 @@ import type { OtpChannel } from "@ds/schemas";
  * declared the transport, the copy, the bot-protection value, the channels and
  * the promo box; PR 1.4 adds the route table and the `returnTo` parking, which
  * are what the server session read, the signed-in guard and the return-target
- * codec consume. The consent tiers, the brand assets and the landing table of
- * gate §4.2 arrive with PRs 1.5–1.8; a field nothing reads yet would be a claim,
- * not a contract.
+ * codec consume. PR 1.5 adds what the sign-in door reads: the landing table
+ * (with the remembered-specialty reads named as paths), the event and room route
+ * templates, the return-context card flag and the door's copy as plain string
+ * templates (the copy crosses the server-mount → client boundary, so it can hold
+ * no function). The consent tiers and the brand assets arrive with PRs 1.6–1.8;
+ * a field nothing reads yet would be a claim, not a contract.
  */
 
 /** The fields the shared registration/confirmation rules know about (row 9). */
@@ -65,7 +68,91 @@ export type AuthFlowCopy = {
     readonly password: AuthFlowFieldCopy;
     readonly code: AuthFlowFieldCopy;
     readonly promoCode?: AuthFlowFieldCopy;
+    /** The sign-in identifier box — email, or email-or-phone where SMS is served. */
+    readonly identifier: AuthFlowFieldCopy;
+    /** The phone box of the SMS sign-in-code request. */
+    readonly phone: AuthFlowFieldCopy;
   };
+  /** The sign-in door (rows 33–46). */
+  readonly login: AuthFlowLoginCopy;
+  /** The return-context card beside a door (row 46) — present exactly where `returnTo.card`. */
+  readonly returnContext?: AuthFlowReturnContextCopy;
+};
+
+/**
+ * Everything the sign-in door says (rows 33–46).
+ *
+ * Strings only. A sentence that depends on a value is a TEMPLATE with a named
+ * `{placeholder}` (`{destination}`, `{seconds}`) the package fills on the client —
+ * the config is handed from a server route mount to a client composition, and a
+ * function cannot cross that boundary.
+ */
+export type AuthFlowLoginCopy = {
+  readonly title: string;
+  readonly description: string;
+  readonly createAccount: string;
+  readonly forgotPassword: string;
+  readonly methodSwitcherLabel: string;
+  readonly methodPassword: string;
+  readonly methodOtp: string;
+  readonly password: {
+    readonly formLabel: string;
+    readonly identifierLabel: string;
+    readonly identifierPlaceholder: string;
+    readonly passwordLabel: string;
+    /** The empty password box on the sign-in form (the registration sentence differs). */
+    readonly passwordRequired: string;
+    /** The password-reveal toggle (003 EARS-38); absent = the design-system default. */
+    readonly reveal?: {
+      readonly show: string;
+      readonly hide: string;
+      readonly showAria: string;
+      readonly hideAria: string;
+    };
+    readonly submit: string;
+  };
+  readonly otp: {
+    readonly formLabel: string;
+    readonly heading: string;
+    readonly description: string;
+    readonly channelGroupLabel: string;
+    readonly channelEmail: string;
+    readonly channelSms: string;
+    readonly emailLabel: string;
+    readonly emailPlaceholder: string;
+    readonly phoneLabel: string;
+    readonly phonePlaceholder: string;
+    readonly sendCode: string;
+    readonly verifyTitle: string;
+    /** Template with `{destination}` — the block masks the destination. */
+    readonly sentTo: string;
+    readonly codeLabel: string;
+    /** The malformed sign-in code (the registration confirmation sentence differs). */
+    readonly codeInvalid: string;
+    readonly verifySubmit: string;
+    readonly resend: string;
+    /** Template with `{seconds}`. */
+    readonly resendCountdown: string;
+    readonly changeMethod: string;
+  };
+  /**
+   * The per-ACTION generic each call passes to the error dictionary (row 11) —
+   * the dictionary carries none, so a failed code never says «войти».
+   */
+  readonly failed: {
+    readonly password: string;
+    readonly otpRequest: string;
+    readonly otpVerify: string;
+  };
+};
+
+/** The return-context card's words (row 46): one eyebrow, the door forks only the line. */
+export type AuthFlowReturnContextCopy = {
+  readonly eyebrow: string;
+  /** The sign-in door: the return happens on sign-in. */
+  readonly login: string;
+  /** The registration door: the return happens after the confirmation. */
+  readonly register: string;
 };
 
 /**
@@ -110,7 +197,47 @@ export type AuthFlowRoutes = {
    * off this list is closed to a visitor who already holds a session.
    */
   readonly allowAuthenticated: readonly string[];
+  /**
+   * This host's event page (rows 39, 42). A closed set rather than any string:
+   * each template names the ONE strict `@ds/schemas` return-target parser for
+   * that shape, so a carried target from the other storefront is never an intent
+   * here (019 EARS-12).
+   */
+  readonly eventPathTemplate: AuthFlowEventPathTemplate;
+  /**
+   * 006 EARS-6 — this host's room route template (`/webinars/:slug/room`), the
+   * same plain value `@ds/room` reads; absent on a host that serves no room.
+   */
+  readonly room?: string;
 };
+
+/** The event-page shapes a host can serve — Academy `/webinars/<slug>`, doctor `/events/<slug>`. */
+export type AuthFlowEventPathTemplate = "/webinars/:slug" | "/events/:slug";
+
+/**
+ * Where a signed-in visitor lands with no carried target (rows 37, 38, 41).
+ *
+ * `afterLogin` is the default. A `specialtyAware` host names, as PATHS, the two
+ * reads its remembered specialty lives behind and the feed a remembered one
+ * lands on; the package server helper does the reading, because a mounted route
+ * file may read nothing itself.
+ */
+export type AuthFlowLandingConfig =
+  | { readonly afterLogin: string; readonly specialtyAware: false }
+  | {
+      readonly afterLogin: string;
+      readonly specialtyAware: true;
+      /** The feed a remembered specialty lands on (021 EARS-3). */
+      readonly specialtyFeed: string;
+      readonly specialtyEndpoints: {
+        /** The profile read, sent with the session (`/v1/me/specialty`). */
+        readonly signedIn: string;
+        /** The anonymous-store read (`/v1/public/specialty-choice`). */
+        readonly guest: string;
+        /** The request header that marks the guest store's consumption as deferred. */
+        readonly consumptionDeferredHeader: string;
+      };
+    };
 
 /**
  * `returnTo` parking (rows 29–31). `undefined` on a host that parks nothing —
@@ -118,7 +245,8 @@ export type AuthFlowRoutes = {
  * no cookie at all, which is a host fact and not a missing feature.
  */
 export type AuthFlowReturnToConfig = {
-  readonly parkingCookie: {
+  /** Absent = this host parks nothing and carries the target on the query param alone. */
+  readonly parkingCookie?: {
     readonly name: string;
     /**
      * Long enough to open a verification mail and come back, short enough that
@@ -126,11 +254,14 @@ export type AuthFlowReturnToConfig = {
      */
     readonly maxAgeSeconds: number;
   };
+  /** Row 46 — the door publishes the return context as a card beside the form. */
+  readonly card?: boolean;
 };
 
 export type AuthFlowHostConfig = {
   readonly api: AuthFlowApiConfig;
   readonly routes: AuthFlowRoutes;
+  readonly landing: AuthFlowLandingConfig;
   readonly copy: AuthFlowCopy;
   /**
    * The SmartCaptcha site key VALUE, not the env name.
@@ -150,6 +281,6 @@ export type AuthFlowHostConfig = {
     /** Whether the registration form carries the optional promo-code box (row 9). */
     readonly promoField: boolean;
   };
-  /** Absent = this host parks nothing (row 29). */
+  /** Absent = no parking and no return-context card (rows 29, 46). */
   readonly returnTo?: AuthFlowReturnToConfig;
 };

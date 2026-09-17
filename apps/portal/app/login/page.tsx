@@ -17,7 +17,7 @@ import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { ACADEMY_AUTH_FLOW, authClient } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import {
   loginIdentifierFormSchema,
@@ -87,7 +87,7 @@ function PortalLoginCard() {
   const t = useTranslations("login");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   // 005 EARS-2: the carried registration-intent (guard-validated at every
   // consumption point; this surface only forwards or completes it).
   const returnTo = useSearchParams().get("returnTo");

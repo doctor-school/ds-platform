@@ -13,7 +13,7 @@ import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { ACADEMY_AUTH_FLOW, authClient } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { REQUIRED_CONSENT } from "@/lib/consent";
 import { withReturnTarget } from "@/lib/registration-handoff";
@@ -87,7 +87,7 @@ function RegisterProjection() {
   const t = useTranslations("register");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   // 005 EARS-2: the carried registration-intent (validated at every consumption
   // point by `parseReturnTarget` inside `withReturnTarget` — this page only
   // forwards it, never navigates to it).

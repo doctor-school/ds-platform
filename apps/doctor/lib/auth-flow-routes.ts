@@ -25,6 +25,9 @@ export const DOCTOR_AUTH_ROUTES = {
   // 003 EARS-28 — the `/account` change-password action hands off to the reset
   // flow, so a signed-in doctor must still be able to complete `/reset`.
   allowAuthenticated: ["/reset"],
+  // 020 — the storefront event page a carried intent lands on. No `room`: this
+  // storefront serves no room route.
+  eventPathTemplate: "/events/:slug",
 } satisfies AuthFlowRoutes;
 
 /** The ONE guest control of the canvas (`ds-shell.dc.html` line 220) — a single

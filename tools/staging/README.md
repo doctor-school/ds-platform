@@ -64,7 +64,7 @@ registration recipient used on your slot.
 
 ## The box must stay logged into Docker Hub (#2240)
 
-Every `up`/`sync` builds the slot's service set **on stage-1**, and each build pulls its
+`up`/`sync` builds missing images **on stage-1**, and each build pulls its
 base images from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source
 IP**, and Timeweb gives every tenant on the host the same shared IPv6 /64
 (`2a03:6f00:a::`) — so a converge can die on `429 Too Many Requests` without this stand
@@ -208,8 +208,8 @@ A slot is `main` or `pr-<N>`, and every name it touches — compose project, net
 database, hostnames, container aliases, tree directory under `$HOME/ds-platform.slots` —
 is DERIVED from it, so a slot can never be addressed two ways. `docker ps` on the box is
 the single authority on which slots are live; there is no registry file and nothing is
-cached. `up`/`sync` ship the tree at `--ref <sha>`, build the service set on the box
-(image tag = the full commit SHA, global per commit), clone the slot database from
+cached. `up`/`sync` ship the tree at `--ref <sha>`, reuse existing SHA-tagged images
+and build only missing services (including the migration image) on the box, clone the slot database from
 `ds_golden` (never for `main`, which is persistent), run migrate and the golden seed
 through the containerized `migrate` one-shot, start
 `infra/deploy/compose/slot/compose.yml`, converge the shared IdP and assert
@@ -219,6 +219,16 @@ the branch seed can write objects) and a preview's `down` drops it with
 `mc rb --force`; `main` keeps its bucket, and `reset main` re-clones rows without
 touching a single object. `reset-identities` is folded into every `up`/`sync` and
 is idempotent, so a converge needs no second operator command.
+
+Image tags are immutable per full commit SHA and shared between slots. A second
+slot at the same ref does not rebuild or retag existing images. `down`, `gc` and
+retention preserve other containers' original requested tags (`Config.Image`), even
+when `docker ps` displays an image ID after a tag was moved.
+
+**Build inputs must stay constant for a shared SHA.** The SHA tag does not encode
+box build arguments, such as `SMARTCAPTCHA_SITE_KEY`. Changing those inputs requires
+a fresh commit ref/image set; reusing the old ref intentionally reuses its old images.
+The tool does not detect build-argument drift or rewrite an image used by another slot.
 
 `reset main --yes --ref <sha>` drops `ds_main` and re-clones it from `ds_golden`, then
 re-runs the ordinary converge on that SHA — the escape hatch for a staging database

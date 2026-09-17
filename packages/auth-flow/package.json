@@ -11,7 +11,8 @@
     "./errors": "./src/errors/index.ts",
     "./bot-protection": "./src/bot-protection/index.ts",
     "./fields": "./src/fields/index.ts",
-    "./test-support": "./src/test-support/host-config-fixtures.ts"
+    "./test-support": "./src/test-support/host-config-fixtures.ts",
+    "./shell": "./src/shell/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -26,12 +27,19 @@
     "zod": "4.4.3"
   },
   "peerDependencies": {
-    "next": "^16.0.0"
+    "next": "^16.0.0",
+    "react": "^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^30.0.1",
     "next": "16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

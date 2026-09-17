@@ -147,6 +147,24 @@ export const ACADEMY_AUTH_FLOW = {
         otpVerify: m.errors.otpVerifyFailed,
       },
     },
+    brand: {
+      eyebrow: m.brand.eyebrow,
+      headline: m.brand.headline,
+      subcopy: m.brand.subcopy,
+      footer: m.brand.footer,
+    },
+    botProtectionDisclosure: {
+      notice: m.brand.captchaDisclosure,
+      link: m.brand.captchaDisclosureLink,
+      linkLabel: m.brand.captchaDisclosureLinkLabel,
+    },
+  },
+  // The Doctor School wordmark (`public/brand/`, viewBox 500×164): the colour
+  // lockup on the white form column, the clean white one on the blue panel. The
+  // Academy page has no dark wordmark swap, so no `darkSrc`.
+  brand: {
+    wordmark: { src: "/brand/logo.svg", alt: m.brand.logoAlt, width: 500, height: 164 },
+    panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
   },
   botProtection: {
     siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,

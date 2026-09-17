@@ -116,6 +116,23 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
     login: "После входа вы вернётесь сюда же — место за вами.",
     register: "После подтверждения почты вы вернётесь сюда же — место за вами.",
   },
+  // Row 47 — the brand panel, verbatim from `design-source/auth.dc.html`. The
+  // canvas's «… врачей 38 школ.» count has no source in the read model and is
+  // dropped, not zeroed (the 017 precedent).
+  brand: {
+    eyebrow: "Врачи учат врачей",
+    headline: "Учитесь у практикующих врачей",
+    subcopy: "Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.",
+    footer: "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
+  },
+  // 003 EARS-17 — the SmartCaptcha processing notice; the same sentences the
+  // Academy shows, because it is the same vendor notice. Rendered wherever the
+  // challenge can run (gate Q-C: the doctor door converges onto the challenge).
+  botProtectionDisclosure: {
+    notice: "Форма защищена Yandex SmartCaptcha.",
+    link: "Условия обработки данных.",
+    linkLabel: "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
+  },
 };
 
 /**

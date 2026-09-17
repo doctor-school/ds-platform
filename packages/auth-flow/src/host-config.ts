@@ -18,8 +18,9 @@ import type { OtpChannel } from "@ds/schemas";
  * (with the remembered-specialty reads named as paths), the event and room route
  * templates, the return-context card flag and the door's copy as plain string
  * templates (the copy crosses the server-mount → client boundary, so it can hold
- * no function). The consent tiers and the brand assets arrive with PRs 1.6–1.8;
- * a field nothing reads yet would be a claim, not a contract.
+ * no function), and the shared auth frame's brand assets and panel copy. The
+ * consent tiers arrive with PRs 1.6–1.8; a field nothing reads yet would be a
+ * claim, not a contract.
  */
 
 /** The fields the shared registration/confirmation rules know about (row 9). */
@@ -75,8 +76,57 @@ export type AuthFlowCopy = {
   };
   /** The sign-in door (rows 33–46). */
   readonly login: AuthFlowLoginCopy;
+  /** The brand panel's value prop and closing line in the shared auth frame (row 47). */
+  readonly brand: AuthFlowBrandCopy;
+  /**
+   * 003 EARS-17 — the SmartCaptcha processing notice under the auth card. The
+   * frame renders it exactly where `botProtection.siteKey` is set, i.e. wherever
+   * the challenge can run, so every host that challenges also discloses.
+   */
+  readonly botProtectionDisclosure: AuthFlowBotProtectionDisclosureCopy;
   /** The return-context card beside a door (row 46) — present exactly where `returnTo.card`. */
   readonly returnContext?: AuthFlowReturnContextCopy;
+};
+
+/** The brand panel's four lines (row 47) — the canvas value prop and the panel footer. */
+export type AuthFlowBrandCopy = {
+  readonly eyebrow: string;
+  readonly headline: string;
+  readonly subcopy: string;
+  readonly footer: string;
+};
+
+/** 003 EARS-17 — the notice sentence, its link text and the link's accessible name. */
+export type AuthFlowBotProtectionDisclosureCopy = {
+  readonly notice: string;
+  readonly link: string;
+  readonly linkLabel: string;
+};
+
+/**
+ * A static vector the host serves from its own `public/` (ADR-0013 §8). The
+ * intrinsic size feeds `next/image`; the frame scales the display height.
+ */
+export type AuthFlowBrandAsset = {
+  readonly src: string;
+  readonly width: number;
+  readonly height: number;
+};
+
+/** The brand assets of the shared auth frame (gate §4.2 `brand`, row 47). */
+export type AuthFlowBrand = {
+  /** The form-column lockup, the one mark below the `layout:` breakpoint. */
+  readonly wordmark: AuthFlowBrandAsset & {
+    readonly alt: string;
+    /**
+     * The white lockup for a host whose dark theme paints the page near-black
+     * (the doctor storefront, #1955): both render and the class-based `dark:`
+     * variant picks one. Absent = this host shows one lockup in every theme.
+     */
+    readonly darkSrc?: string;
+  };
+  /** The decorative panel mark on the blue brand panel. */
+  readonly panel: AuthFlowBrandAsset;
 };
 
 /**
@@ -263,6 +313,7 @@ export type AuthFlowHostConfig = {
   readonly routes: AuthFlowRoutes;
   readonly landing: AuthFlowLandingConfig;
   readonly copy: AuthFlowCopy;
+  readonly brand: AuthFlowBrand;
   /**
    * The SmartCaptcha site key VALUE, not the env name.
    *

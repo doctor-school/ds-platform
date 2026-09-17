@@ -56,6 +56,18 @@ export const DOCTOR_AUTH_FLOW = {
       consumptionDeferredHeader: "x-ds-specialty-consumption-deferred",
     },
   },
+  // The wordmark (`public/brand/`, viewBox 500×164). The form-column lockup
+  // follows the class-based dark theme (#1955), so the white variant is stated.
+  brand: {
+    wordmark: {
+      src: "/brand/logo.svg",
+      darkSrc: "/brand/logo-white.svg",
+      alt: "Doctor.School",
+      width: 500,
+      height: 164,
+    },
+    panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
+  },
   botProtection: {
     // The prod key is the `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` build arg
     // (`apps/doctor/Dockerfile`); `new.doctor.school` must be an allowed domain

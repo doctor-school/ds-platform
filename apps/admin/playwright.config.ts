@@ -7,8 +7,9 @@ import { defineBddConfig } from "playwright-bdd";
  * to the Refine admin surface via playwright-bdd. Like the portal e2e config
  * (#131), this is the dev-stand-gated tier: it drives a real browser against a
  * RUNNING admin app that proxies `/v1/*` to a running api + Postgres + Zitadel +
- * MinIO. It is a MANUAL gate — NOT part of CI and NOT in the default turbo `test`
- * pipeline; the session bootstrap `throw`s if the stand env (`IDP_*`) is absent,
+ * MinIO. The legacy `chromium` project is a manual gate; the spec-owned 012
+ * `taxonomy` journey also runs in the Admin CI job. Neither is in the default
+ * turbo `test` pipeline; the session bootstrap `throw`s if the stand env (`IDP_*`) is absent,
  * so a stray invocation fails fast rather than pretending to pass.
  *
  * Run it against a provisioned dev-stand with, e.g.:
@@ -38,7 +39,18 @@ const testDir = defineBddConfig({
   // The custom `test` instance (base.extend for the AdminWorld) lives in the
   // fixtures file, so it must be in the steps set for bddgen to bind it.
   steps: ["e2e/steps/*.ts", "e2e/support/fixtures.ts"],
-  outputDir: ".features-gen",
+  outputDir: ".features-gen/legacy",
+});
+
+const taxonomyTestDir = defineBddConfig({
+  features:
+    "../docs/content/specs/features/012-content-taxonomy/012-scenarios.feature",
+  featuresRoot: "../docs/content/specs/features",
+  steps: ["e2e/steps/*.ts", "e2e/support/fixtures.ts"],
+  outputDir: ".features-gen/taxonomy",
+  tags: "@host:admin",
+  // Only the unbound 012 prose is skipped; existing 007/011 generation stays strict.
+  missingSteps: "skip-scenario",
 });
 
 export default defineConfig({
@@ -57,5 +69,12 @@ export default defineConfig({
     // A deliberately non-МСК timezone: the МСК labels must not drift here (EARS-10).
     timezoneId: "America/New_York",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "taxonomy",
+      testDir: taxonomyTestDir,
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
 });

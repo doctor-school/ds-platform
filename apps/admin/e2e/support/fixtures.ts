@@ -22,6 +22,13 @@ export interface AdminWorld {
   mfa?: MfaWorld;
   /** The last raw admin-route probe made from the page (011 EARS-2). */
   probe?: { status: number; body: string };
+  /** Names and address authored by the standalone Expert journey (012). */
+  expert?: {
+    familyName: string;
+    givenName: string;
+    patronymic: string;
+    publicUrl?: string;
+  };
 }
 
 /** Scenario state for the 011 admin MFA journey. */

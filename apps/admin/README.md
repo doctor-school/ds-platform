@@ -57,3 +57,15 @@ pnpm --filter @ds/admin test:e2e     # bddgen && playwright test
 ```
 
 The suite pins a **non-Moscow** `timezoneId` for every scenario, so the МСК assertions (EARS-10) prove no operator-local drift.
+
+The `taxonomy` project reads the spec-owned
+`../docs/content/specs/features/012-content-taxonomy/012-scenarios.feature`
+directly. Its bound EARS-2/19/20 journey creates an Expert without a User,
+reloads the saved draft with its structured names and initials, and copies the
+server-generated public link into the real clipboard. Run that slice with
+`pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains"`.
+The selected taxonomy journey also runs in the `admin-e2e` CI job against its
+real Admin/API/database stack. Unbound 012 contracts remain visible as skipped; the existing `chromium`
+project keeps strict generation for its 007/011 scenarios. Validation, editing,
+media, User linking, list filtering and publication checks remain in
+`e2e/taxonomy-experts.spec.ts` until their own scenarios replace them.

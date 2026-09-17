@@ -138,6 +138,9 @@ pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no a
 pnpm e2e:stage pr-123 --no-axe            # skip the a11y leg explicitly
 ```
 
+The runner builds `@ds/e2e`'s workspace dependencies before BDD generation, so a clean
+worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist` artifact.
+
 **It never raises a slot.** A converged slot is the PRECONDITION: the command makes one
 `/v1/health` read of `api-<slot>.<base domain>` and **exits 2** naming that URL when it
 does not answer — a suite pointed at a half-raised slot reports topology as product

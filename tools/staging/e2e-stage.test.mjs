@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 
@@ -323,6 +324,16 @@ describe("assertShellInert", () => {
 });
 
 describe("runE2eStage", () => {
+  it("builds the e2e workspace dependencies before the browser suite", () => {
+    const packageJson = JSON.parse(
+      readFileSync(new URL("../../packages/e2e/package.json", import.meta.url)),
+    );
+    assert.equal(
+      packageJson.scripts["pretest:e2e"],
+      "pnpm exec turbo run build --filter=@ds/e2e...",
+    );
+  });
+
   it("supplies only the four live golden passwords from the box, with local overrides", async () => {
     const { calls, effects } = harness();
     await runE2eStage(["main"], {

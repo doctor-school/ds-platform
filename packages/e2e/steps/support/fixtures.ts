@@ -28,6 +28,8 @@ export interface StepWorld {
   legalEntity?: string;
   /** Actual slot date of the named golden upcoming event (seed time is relative). */
   upcomingStartsAt?: string;
+  /** Actual slot date of the named golden recorded event. */
+  recordedStartsAt?: string;
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

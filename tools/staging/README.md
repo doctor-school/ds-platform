@@ -223,7 +223,9 @@ is idempotent, so a converge needs no second operator command.
 Image tags are immutable per full commit SHA and shared between slots. A second
 slot at the same ref does not rebuild or retag existing images. `down`, `gc` and
 retention preserve other containers' original requested tags (`Config.Image`), even
-when `docker ps` displays an image ID after a tag was moved.
+when `docker ps` displays an image ID after a tag was moved. Retention also keeps
+the full image bundle for each live commit, including the one-shot migration image
+whose container is removed after use; cached build timestamps do not evict it.
 
 **Build inputs must stay constant for a shared SHA.** The SHA tag does not encode
 box build arguments, such as `SMARTCAPTCHA_SITE_KEY`. Changing those inputs requires

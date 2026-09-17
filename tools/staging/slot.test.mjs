@@ -1449,8 +1449,8 @@ sudo() {
   case "$1 $2" in
     "ps -aq") echo container-id ;;
     "inspect --format") echo ds-api:${SHA} ;;
-    "images --format") echo ds-api ;;
-    "images ds-api") printf '2026-09-17\\tnewest\\n2026-09-16\\t${SHA}\\n2026-09-15\\t${SHA2}\\n' ;;
+    "images --format") printf 'ds-api\\nds-api-migrate\\n' ;;
+    "images ds-api"|"images ds-api-migrate") printf '2026-09-17\\tnewest\\n2026-09-16\\t${SHA}\\n2026-09-15\\t${SHA2}\\n' ;;
     "rmi "*) echo "$2" >> "$REMOVED" ;;
     "buildx prune"|"system df") : ;;
     *) echo "unexpected docker command: $*" >&2; return 1 ;;
@@ -1459,7 +1459,7 @@ sudo() {
 ${script}` },
     );
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(readFileSync(removed, "utf8").trim().split("\n"), [`ds-api:${SHA2}`]);
+    assert.deepEqual(readFileSync(removed, "utf8").trim().split("\n"), [`ds-api:${SHA2}`, `ds-api-migrate:${SHA2}`]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

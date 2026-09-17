@@ -2124,6 +2124,9 @@ in_use=""
 if [ -n "$ids" ]; then
   in_use=$(sudo docker inspect --format '{{.Config.Image}}' $ids)
 fi
+# One-shot migrate has no container after --rm, but belongs to the same bundle.
+# Cached images retain their old CreatedAt; age alone must not evict that bundle.
+in_use_shas=$(printf '%s\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ && length($2)==40 {print $2}')
 prune_repo() {
   repo="$1"; keep="$2"
   # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (only
@@ -2134,6 +2137,7 @@ prune_repo() {
     | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
     | while IFS= read -r tag; do
         if printf '%s\n' "$in_use" | grep -Fxq "$repo:$tag"; then continue; fi
+        if printf '%s\n' "$in_use_shas" | grep -Fxq "$tag"; then continue; fi
         [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
       done
 }

@@ -12,6 +12,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
 import {
@@ -1429,13 +1433,34 @@ test("EARS-2: a missing image builds only its service, preserving existing sibli
   assert.deepEqual(commands[0].slice(-2), ["build", "migrate"]);
 });
 
-test("EARS-3: retention protects requested image tags before attempting docker rmi", () => {
-  const script = pruneScript({
-    retention: IMAGE_RETENTION,
-    reservedSpace: BUILD_CACHE_RESERVED_SPACE,
-  });
-  assert.match(script, /Config\.Image/);
-  assert.match(script, /grep -Fxq/);
+test("EARS-3: retention preserves a shared requested tag and removes an unused old tag", () => {
+  const dir = mkdtempSync(join(tmpdir(), "slot-retention-"));
+  const removed = join(dir, "removed").replaceAll("\\", "/");
+  const script = pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE });
+  try {
+    const result = spawnSync(
+      process.platform === "win32" ? "C:/Program Files/Git/bin/bash.exe" : "bash",
+      ["--noprofile", "--norc", "-s"],
+      { encoding: "utf8", env: { ...process.env, REMOVED: removed }, input: `
+set -euo pipefail
+: > "$REMOVED"
+sudo() {
+  shift
+  case "$1 $2" in
+    "ps -aq") echo container-id ;;
+    "inspect --format") echo ds-api:${SHA} ;;
+    "images --format") echo ds-api ;;
+    "images ds-api") printf '2026-09-17\\tnewest\\n2026-09-16\\t${SHA}\\n2026-09-15\\t${SHA2}\\n' ;;
+    "rmi "*) echo "$2" >> "$REMOVED" ;;
+    "buildx prune"|"system df") : ;;
+    *) echo "unexpected docker command: $*" >&2; return 1 ;;
+  esac
+}
+${script}` },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readFileSync(removed, "utf8").trim().split("\n"), [`ds-api:${SHA2}`]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("EARS-4: inventory uses original requested tags when docker ps shows image IDs", () => {

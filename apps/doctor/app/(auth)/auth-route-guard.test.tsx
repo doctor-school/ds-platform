@@ -86,14 +86,14 @@ describe("#675 doctor auth routes, server-side signed-in guard", () => {
     // flow, so a signed-in doctor must be able to complete it.
     incoming.headers = SIGNED_IN;
 
-    await DoctorResetPage();
+    await DoctorResetPage({ searchParams: Promise.resolve({}) });
     expect(redirect).not.toHaveBeenCalled();
   });
 
   it("003 EARS-28: a guest on /reset is served the surface with NO upstream read at all", async () => {
     incoming.headers = GUEST;
 
-    await DoctorResetPage();
+    await DoctorResetPage({ searchParams: Promise.resolve({}) });
     expect(redirect).not.toHaveBeenCalled();
     // Row 24 — no session cookie means guest without an upstream session read.
     expect(fetchMock).not.toHaveBeenCalled();

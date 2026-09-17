@@ -23,6 +23,7 @@ import {
   RETURN_CONTEXT_PARAM,
   resolveReturnContext,
   resolveReturnLandingPath,
+  resolveCarriedReturnTarget,
   resolveReturnTargetPath,
 } from "@/lib/return-context";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
@@ -178,6 +179,11 @@ export default async function DoctorRegisterPage({
   // resolved before the read so the guard output — never the raw param — is
   // what both the context read and the landing below are derived from.
   const safeTarget = resolveReturnTargetPath(returnTo);
+  // Rule S3 / #2258 — the value that rides ONWARD out of this door. A different
+  // question from `safeTarget`, which is the эфир-only EARS-3 context target:
+  // this one also admits the account family, so a doctor who arrived from a
+  // closed page keeps it across the confirmation screen's sideways hops.
+  const carriedTarget = resolveCarriedReturnTarget(returnTo) ?? undefined;
   // WHERE this host takes them afterwards. Not the canonical target verbatim:
   // the academy serves the эфир at `/webinars/<slug>` and this storefront serves
   // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
@@ -187,12 +193,22 @@ export default async function DoctorRegisterPage({
     ? await resolveReturnContext(safeTarget)
     : null;
 
+  // #1987 / rule S4 — an account arrival resolves NO эфир, so the gate branch
+  // below would refuse it and drop the doctor on the LD-4 default, which is
+  // precisely the destination they declined by asking for «Личный кабинет». The
+  // sign-in door has answered it since #1987; the sign-up door had not, so a
+  // doctor who arrived from a closed page and chose to REGISTER instead of
+  // signing in still lost the page. The codec already reconstructed the value
+  // from this host's own `routes.account`, so the comparison is against a
+  // constant, not a param.
+  const accountLanding = landingTarget === DOCTOR_AUTH_ROUTES.account;
+
   // EARS-3 / LD-4 — where this arrival lands after confirmation. A gate arrival
   // lands back on the эфир it came from; a direct arrival lands where 017's
   // remembered specialty says, which is the only per-visitor fact on the route
   // and the only reason it reads `headers()` (see the module header).
   const landing =
-    landingTarget && returnEvent
+    landingTarget && (returnEvent || accountLanding)
       ? landingTarget
       : resolveDirectArrivalLanding(
           await resolveRememberedSpecialty(requestHeaders),
@@ -227,6 +243,10 @@ export default async function DoctorRegisterPage({
       <RegistrationScreen
         landing={landing}
         {...(returnTarget ? { returnTarget } : {})}
+        // Rule S3 — what the confirmation screen's «Войти» / «Забыли пароль»
+        // hops carry onward. The CARRY vocabulary, not the эфир-only confirm
+        // intent above: an account arrival has no `returnTarget` at all.
+        {...(carriedTarget ? { carriedTarget } : {})}
         consentTiers={CONSENT_TIERS}
         returnContext={
           returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined

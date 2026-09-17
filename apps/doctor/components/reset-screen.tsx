@@ -158,7 +158,35 @@ const COPY: PasswordRecoveryCardCopy = {
   },
 };
 
-export function ResetScreen() {
+/**
+ * Rules S3 + S4 of the auth-flow standard (`packages/auth-flow/README.md`) — the
+ * two ends of the recovery journey are DECIDED BY THE ROUTE, never assembled
+ * here.
+ *
+ * Both were bare literals: «Вспомнили пароль» pointed at `/login` and completion
+ * always pushed `/account`, so a doctor who reached recovery from a gated эфир
+ * restarted that journey from scratch and one who reached it from a page below
+ * the cabinet lost it. They are required props rather than optional ones because
+ * a caller that has not decided where recovery starts and ends has not finished
+ * wiring the route, and the compiler is the only place that can say so.
+ */
+export type ResetScreenProps = {
+  /**
+   * Where «Вспомнили пароль» goes — this host's own `/login`, built by the route
+   * through `withReturnContext` so the arrival target survives recovery
+   * (rule S3). Never a bare literal: the value is a guard reconstruction.
+   */
+  loginHref: string;
+  /**
+   * Where a COMPLETED recovery lands (rule S4). `/account` remains the default
+   * when the arrival carried no target — #221's decision is unchanged — but the
+   * route resolves that, through `resolveReturnLandingPath`, so the screen
+   * navigates only to values the shared guard rebuilt.
+   */
+  landing: string;
+};
+
+export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
   const router = useRouter();
 
   const [stage, setStage] = useState<"request" | "complete">("request");
@@ -261,7 +289,11 @@ export function ResetScreen() {
       // #221: the response auto-logged us in ON THIS ORIGIN, so go straight to
       // the authenticated area; `refresh()` re-renders the server tree so the
       // 017 header shows the signed-in cluster (`@ds/auth-flow/server`).
-      router.push("/account");
+      //
+      // Rule S4 — the LANDING the route resolved, which is `/account` exactly
+      // when the arrival carried no target, and the page the doctor was on when
+      // it did.
+      router.push(landing);
       router.refresh();
     } catch (error) {
       setCompleteError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, COMPLETE_FAILED));
@@ -294,8 +326,10 @@ export function ResetScreen() {
         stage={stage}
         identifier={identifier}
         // Recovery ends at the door it came from — this host's own `/login`,
-        // never the Academy's: the crossing is what this slice removes.
-        links={{ login: "/login" }}
+        // never the Academy's: the crossing is what this slice removes. Rule S3:
+        // the route builds it through `withReturnContext`, so a doctor who was
+        // on their way somewhere still is when they come back out.
+        links={{ login: loginHref }}
         // Next.js `<Link>` keeps the footer link on client-side navigation.
         renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
         request={{

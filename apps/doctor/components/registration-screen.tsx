@@ -40,6 +40,7 @@ import {
 
 import { completeReturnTarget } from "@ds/events-storefront";
 
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnContext } from "@/lib/return-context";
 import { doctorReturnHost } from "@/lib/return-completion";
 import { authErrorMessage } from "@ds/auth-flow/errors";
@@ -146,6 +147,23 @@ export type RegistrationScreenProps = {
    * server tell «still live» from «went stale» and name WHICH.
    */
   returnTarget?: string;
+  /**
+   * Rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) — the
+   * arrival target to CARRY across a hop OUT of registration, in the canonical
+   * vocabulary the sibling doors read back.
+   *
+   * Not {@link returnTarget}: that one is эфир-only by contract — it is the
+   * confirm command's INTENT, re-validated server-side against a live эфир, and
+   * absent for every arrival that resolved none. The carry is the different
+   * question «where did this visitor mean to end up», and its answer includes
+   * the account family (#2258). Building the confirmation screen's «Войти» and
+   * «Забыли пароль» links from `returnTarget` therefore dropped the target for
+   * every doctor who arrived from a closed page rather than from a gated эфир.
+   *
+   * Supplied by the route as `resolveCarriedReturnTarget(returnTo)`, so it is a
+   * shared-guard reconstruction and never the raw param.
+   */
+  carriedTarget?: string;
   /** The resolved representative/organisation line (EARS-8, #1544). */
   attribution?: ReactNode;
   /** The pre-submission points promise read from configuration (EARS-9, #1545). */
@@ -342,6 +360,7 @@ export function RegistrationScreen({
   returnContext,
   landing,
   returnTarget,
+  carriedTarget,
   attribution,
   pointsPromise,
   consentTiers,
@@ -564,6 +583,7 @@ export function RegistrationScreen({
             email={pendingEmail}
             landing={landing}
             returnTarget={returnTarget}
+            carriedTarget={carriedTarget}
           />
         ) : null
       }
@@ -653,10 +673,13 @@ function RegistrationConfirmation({
   email,
   landing,
   returnTarget,
+  carriedTarget,
 }: {
   email: string;
   landing: string;
   returnTarget?: string;
+  /** Rule S3 — see `RegistrationScreenProps.carriedTarget`. */
+  carriedTarget?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -781,7 +804,10 @@ function RegistrationConfirmation({
         // in, and holding a password only they can now supply.
       }
     }
-    router.push(withReturnContext("/login", returnTarget));
+    // Rule S3 — the CARRY value, not the эфир-only confirm intent: a doctor who
+    // arrived here from a closed page has no `returnTarget` at all, and building
+    // this hop from it sent them to a bare door.
+    router.push(withReturnContext(DOCTOR_AUTH_ROUTES.login, carriedTarget));
   }
 
   // EARS-10 — the success state REPLACES the code screen rather than annotating
@@ -815,8 +841,14 @@ function RegistrationConfirmation({
       onInvalid={() => setError(CONFIRM_CODE_INVALID)}
       error={error}
       // Same-site, relative: the doctor storefront is its own site and hands a
-      // visitor off to no other one.
-      links={{ login: "/login", reset: "/reset" }}
+      // visitor off to no other one — and rule S3: both hops carry the arrival
+      // target onward, through the shared helper, so a doctor who lands on the
+      // confirmation screen and steps sideways into sign-in or recovery is still
+      // on their way to the page they asked for.
+      links={{
+        login: withReturnContext(DOCTOR_AUTH_ROUTES.login, carriedTarget),
+        reset: withReturnContext(DOCTOR_AUTH_ROUTES.reset, carriedTarget),
+      }}
       resend={{
         nonce: resendNonce,
         onResend: () => captcha.request(onResend),

@@ -82,7 +82,7 @@ async function requestCode(identifier = "doctor@clinic.ru") {
 
 describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
   it("003 EARS-11: the first paint is the SHARED PasswordRecoveryCard in this host RU copy, back to THIS host sign-in", () => {
-    const html = renderToStaticMarkup(<ResetScreen />);
+    const html = renderToStaticMarkup(<ResetScreen loginHref="/login" landing="/account" />);
 
     // The block's own testid — proof the card is projected, not re-built here.
     expect(html).toContain('data-testid="reset-request-submit"');
@@ -94,7 +94,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
   });
 
   it("003 EARS-11: the initiate step POSTs the typed identifier through the host BFF client", async () => {
-    render(<ResetScreen />);
+    render(<ResetScreen loginHref="/login" landing="/account" />);
 
     await requestCode("doctor@clinic.ru");
 
@@ -111,7 +111,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
   it("003 EARS-16: an UNKNOWN identifier reaches the very same code step — the screen discloses no existence", async () => {
     // The BFF answers identically for an unknown subject, so the host has
     // nothing to branch on and must advance regardless.
-    render(<ResetScreen />);
+    render(<ResetScreen loginHref="/login" landing="/account" />);
 
     await requestCode("nobody@nowhere.example");
 
@@ -125,7 +125,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
   });
 
   it("003 EARS-12: completing sends the code with the HELD identifier and lands on this host /account, signed in", async () => {
-    render(<ResetScreen />);
+    render(<ResetScreen loginHref="/login" landing="/account" />);
     const user = await requestCode("doctor@clinic.ru");
     await waitFor(() =>
       expect(screen.getByLabelText("Код из сообщения")).toBeTruthy(),
@@ -153,7 +153,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     h.completePasswordReset.mockRejectedValue(
       new AuthError(400, "invalid code"),
     );
-    render(<ResetScreen />);
+    render(<ResetScreen loginHref="/login" landing="/account" />);
     const user = await requestCode();
     await waitFor(() =>
       expect(screen.getByLabelText("Код из сообщения")).toBeTruthy(),
@@ -177,7 +177,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     h.requestPasswordReset.mockRejectedValue(
       new AuthError(500, "upstream is down"),
     );
-    render(<ResetScreen />);
+    render(<ResetScreen loginHref="/login" landing="/account" />);
 
     await requestCode();
 
@@ -195,7 +195,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     // internal delays working while it is installed.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      render(<ResetScreen />);
+      render(<ResetScreen loginHref="/login" landing="/account" />);
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       await user.type(
         screen.getByLabelText("Почта или телефон"),
@@ -231,7 +231,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
   });
 
   it("«Начать заново» returns to the request step with an empty box, dropping the held identifier", async () => {
-    render(<ResetScreen />);
+    render(<ResetScreen loginHref="/login" landing="/account" />);
     const user = await requestCode("doctor@clinic.ru");
     await waitFor(() =>
       expect(screen.getByTestId("reset-restart")).toBeTruthy(),
@@ -245,5 +245,52 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     expect(
       (screen.getByLabelText("Почта или телефон") as HTMLInputElement).value,
     ).toBe("");
+  });
+});
+
+/**
+ * Rules S3 + S4 of the auth-flow standard (`packages/auth-flow/README.md`) —
+ * recovery is a door like the others, so it CARRIES.
+ *
+ * The screen hard-coded both ends of the journey: «Вспомнили пароль» went to a
+ * bare `/login`, and completion always pushed the fixed `/account`. A doctor who
+ * reached recovery from a gated эфир therefore restarted that journey from
+ * scratch, and one who reached it from the cabinet lost the page below it. Both
+ * ends are now props the route resolves through the shared helpers, so the value
+ * this screen navigates to is always a guard reconstruction and never a string
+ * it assembled itself.
+ */
+describe("#2027 S3/S4: /reset carries the arrival target through recovery", () => {
+  it("003 EARS-11: «Вспомнили пароль» goes back to the door STILL carrying the target", () => {
+    const html = renderToStaticMarkup(
+      <ResetScreen loginHref="/login?returnTo=%2Faccount" landing="/account" />,
+    );
+
+    expect(html).toContain('href="/login?returnTo=%2Faccount"');
+    // Not the bare literal it used to render beside it.
+    expect(html).not.toContain('href="/login"');
+  });
+
+  it("003 EARS-12: completion lands on the CARRIED target, not the fixed cabinet", async () => {
+    render(
+      <ResetScreen
+        loginHref="/login?returnTo=%2Fevents%2Fprp-pri-gonartroze"
+        landing="/events/prp-pri-gonartroze"
+      />,
+    );
+    const user = await requestCode("doctor@clinic.ru");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Код из сообщения")).toBeTruthy(),
+    );
+
+    await user.type(screen.getByLabelText("Код из сообщения"), CODE);
+    await user.type(screen.getByLabelText("Новый пароль"), NEW_PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Сменить пароль" }));
+
+    await waitFor(() =>
+      expect(h.push).toHaveBeenCalledWith("/events/prp-pri-gonartroze"),
+    );
+    // The server tree is still re-read — #221's auto-login is unchanged.
+    expect(h.refresh).toHaveBeenCalled();
   });
 });

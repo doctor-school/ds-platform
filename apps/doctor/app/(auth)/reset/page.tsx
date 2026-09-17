@@ -5,6 +5,11 @@ import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { AuthShell } from "@/components/auth-shell";
 import { ResetScreen } from "@/components/reset-screen";
+import {
+  RETURN_CONTEXT_PARAM,
+  resolveReturnLandingPath,
+  withReturnContext,
+} from "@/lib/return-context";
 
 /**
  * #1989 — `doctor.school/reset`, the doctor storefront password-recovery route.
@@ -30,11 +35,18 @@ import { ResetScreen } from "@/components/reset-screen";
  * data both storefronts state for themselves. An exemption that is the absence of
  * a call cannot be read, tested or kept in step with the Academy's; this one can.
  *
- * NO OTHER PER-VISITOR READ. Nothing this surface RENDERS depends on who is
- * asking: the identifier is typed, not resolved, and the post-completion landing
- * is the fixed `/account`. So there is no return-context plumbing — recovery is
- * not a gate arrival, and a doctor who was on their way to an эфир restarts that
- * journey signed in.
+ * IT CARRIES, like every other door (rules S3 + S4 of the auth-flow standard,
+ * `packages/auth-flow/README.md`). Recovery is an INTERRUPTION of wherever the
+ * doctor was going, not a journey of its own: `/login` and `/account` both send
+ * visitors here, and this route used to drop whatever they were carrying — the
+ * «Вспомнили пароль» link went to a bare `/login` and completion always landed
+ * on the fixed `/account`. It now reads the same `returnTo` param its siblings
+ * read, hands the screen the door built through `withReturnContext` and the
+ * landing resolved through `resolveReturnLandingPath`, and falls back to
+ * `/account` only when the arrival carried nothing (#221's default, unchanged).
+ * Nothing this surface RENDERS depends on who is asking — the identifier is
+ * typed, not resolved, and no эфир is read — so there is no return-CONTEXT card
+ * here, only the return TARGET.
  *
  * The route is registered `deferred` in `tools/lint/prod-surface-manifest.yaml`
  * alongside `/login` and `/register`: the journey is real and wired, but the
@@ -46,7 +58,17 @@ export const metadata: Metadata = {
     "Восстановление пароля для врача на Doctor.School: пришлём код на почту или в СМС и поможем задать новый пароль.",
 };
 
-export default async function DoctorResetPage() {
+export default async function DoctorResetPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const raw = params[RETURN_CONTEXT_PARAM];
+  // A repeated param arrives as an array; the FIRST value wins rather than the
+  // request being rejected — the same degradation rule the sibling doors apply.
+  const returnTo = Array.isArray(raw) ? raw[0] : raw;
+
   const auth = await resolveServerAuth(await headers());
   guardAuthRoute({
     authenticated: auth.status === "doctor",
@@ -56,7 +78,16 @@ export default async function DoctorResetPage() {
 
   return (
     <AuthShell>
-      <ResetScreen />
+      <ResetScreen
+        // Rule S3 — back out of recovery through the door they came in by, still
+        // carrying it. A rejected or absent target simply drops off.
+        loginHref={withReturnContext(DOCTOR_AUTH_ROUTES.login, returnTo)}
+        // Rule S4 — the host projection of the carried target (#1945), or the
+        // #221 default when the arrival carried none.
+        landing={
+          resolveReturnLandingPath(returnTo) ?? DOCTOR_AUTH_ROUTES.account
+        }
+      />
     </AuthShell>
   );
 }

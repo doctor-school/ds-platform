@@ -179,6 +179,11 @@ export default async function DoctorLoginPage({
     DOCTOR_AUTH_ROUTES.register,
     returnTo,
   );
+  // Rule S3 — recovery is an INTERRUPTION of wherever this visitor was going,
+  // not a journey of its own, so «Забыли пароль» carries the same value. The
+  // `/reset` route reads it back and hands both its own exit and its landing to
+  // the screen (`app/(auth)/reset/page.tsx`).
+  const resetHref = withReturnContext(DOCTOR_AUTH_ROUTES.reset, returnTo);
 
   return (
     <AuthShell
@@ -190,6 +195,7 @@ export default async function DoctorLoginPage({
     >
       <LoginScreen
         registerHref={registerHref}
+        resetHref={resetHref}
         landing={landing}
         // 005 EARS-2 — the эфир intent to COMPLETE after sign-in, in this host's
         // vocabulary. Supplied only when the target actually resolved to a live

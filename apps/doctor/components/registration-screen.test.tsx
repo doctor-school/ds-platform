@@ -116,6 +116,13 @@ const CODE = "PVDC3R";
  * sign-in hop has to carry onward for the round-trip to close.
  */
 const RETURN_TARGET = "/events/kardio";
+/**
+ * Rule S3 — what the ROUTE carries onward, in the canonical vocabulary the
+ * sibling doors read back (`resolveCarriedReturnTarget`), as distinct from the
+ * doctor-host confirm INTENT above. For a gate arrival the two are the same эфир
+ * in two vocabularies; for an account arrival there is no intent at all.
+ */
+const CARRIED_TARGET = "/webinars/kardio";
 
 const CONSENT_TIERS: readonly ConsentTier[] = [
   {
@@ -188,6 +195,7 @@ function renderScreen() {
     <RegistrationScreen
       landing="/events"
       returnTarget={RETURN_TARGET}
+      carriedTarget={CARRIED_TARGET}
       consentTiers={CONSENT_TIERS}
     />,
   );
@@ -355,9 +363,10 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     // The Academy rule, whole: no held credential means no session, and a
     // doctor with no session is sent to sign in CARRYING the return context —
     // never handed a success card that would walk them onto the эфир as a guest.
+    // Rule S3: the CARRY vocabulary, which the door re-parses on the far side.
     await waitFor(() =>
       expect(h.push).toHaveBeenCalledWith(
-        `/login?returnTo=${encodeURIComponent(RETURN_TARGET)}`,
+        `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
       ),
     );
     expect(h.login).not.toHaveBeenCalled();
@@ -381,7 +390,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(h.push).toHaveBeenCalledWith(
-        `/login?returnTo=${encodeURIComponent(RETURN_TARGET)}`,
+        `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
       ),
     );
     // Not a failed CONFIRMATION — the code was accepted, so the doctor is never

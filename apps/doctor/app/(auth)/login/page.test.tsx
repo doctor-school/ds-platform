@@ -101,11 +101,15 @@ async function guestLandingOf(
 /** Every prop the guest door hands `<LoginScreen />`. */
 async function screenPropsOf(
   params: Record<string, string | string[] | undefined>,
-): Promise<{ landing: string; registerHref: string }> {
+): Promise<{ landing: string; registerHref: string; resetHref: string }> {
   const shell = (await DoctorLoginPage({
     searchParams: Promise.resolve(params),
   })) as ReactElement<{
-    children: ReactElement<{ landing: string; registerHref: string }>;
+    children: ReactElement<{
+      landing: string;
+      registerHref: string;
+      resetHref: string;
+    }>;
   }>;
   return shell.props.children.props;
 }
@@ -239,5 +243,18 @@ describe("#2258: the /login → /register hop carries the arrival target", () =>
       (await screenPropsOf({ returnTo: "https://evil.example/account" }))
         .registerHref,
     ).toBe("/register");
+  });
+
+  it("#2027 S3: «Забыли пароль» carries it too — recovery is an interruption, not a new journey", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect((await screenPropsOf({ returnTo: "/account" })).resetHref).toBe(
+      "/reset?returnTo=%2Faccount",
+    );
+    expect((await screenPropsOf({})).resetHref).toBe("/reset");
+    expect(
+      (await screenPropsOf({ returnTo: "https://evil.example/account" }))
+        .resetHref,
+    ).toBe("/reset");
   });
 });

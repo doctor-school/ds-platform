@@ -76,6 +76,14 @@ export type LoginScreenProps = {
    */
   registerHref: string;
   /**
+   * Rule S3 — `/reset` carrying the same validated target, built on the server
+   * exactly like {@link registerHref}. Password recovery is an INTERRUPTION of
+   * wherever the doctor was going, not a journey of its own, so a visitor who
+   * steps out of the door to recover a password comes back into it still
+   * carrying where they meant to end up.
+   */
+  resetHref: string;
+  /**
    * WHERE A SUCCESSFUL SIGN-IN LANDS, decided on the server: the guard own
    * reconstruction of a gate arrival return target, else the LD-4 decision
    * (`lib/registration-landing.ts` — the 019 events feed when 017 remembers a
@@ -186,6 +194,7 @@ const COPY: LoginCardCopy = {
 
 export function LoginScreen({
   registerHref,
+  resetHref,
   landing,
   returnTarget,
   returnContext,
@@ -346,7 +355,9 @@ export function LoginScreen({
           // on the storefront and comes back signed in here, on the origin the
           // `__Host-` session belongs to. The #1933 interim that pointed at the
           // Academy `/reset` is gone with the route that made it necessary.
-          reset: "/reset",
+          //
+          // Rule S3 — and it carries, for the same reason sign-up does.
+          reset: resetHref,
         }}
         // Next.js `<Link>` keeps the footer links on client-side navigation.
         renderLink={({ href, children }) => <Link href={href}>{children}</Link>}

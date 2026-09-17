@@ -626,6 +626,9 @@ importers:
       '@ds/design-system':
         specifier: workspace:*
         version: link:../design-system
+      '@ds/events-storefront':
+        specifier: workspace:*
+        version: link:../events-storefront
       '@ds/schemas':
         specifier: workspace:*
         version: link:../schemas
@@ -636,6 +639,12 @@ importers:
       '@types/node':
         specifier: ^26.5.0
         version: 26.5.0
+      jsdom:
+        specifier: ^30.0.1
+        version: 30.0.1(@noble/hashes@1.8.0)
+      next:
+        specifier: 16.3.4
+        version: 16.3.4(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

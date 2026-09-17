@@ -384,4 +384,25 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
       "/register?returnTo=%2Fwebinars%2Fahilles-042",
     );
   });
+
+  // #2027 rule S3: recovery is an INTERRUPTION of wherever the visitor was going,
+  // not a journey of its own — «Забыли пароль» was the last bare literal on this
+  // card, so a doctor sent here from a closed page lost it by choosing to recover.
+  it("#2027 S3: the «Забыли пароль» link carries the arrival target onward into /reset", async () => {
+    searchParams = new URLSearchParams({ returnTo: "/account/events" });
+    await renderLogin();
+
+    expect(
+      screen.getByRole("link", { name: "forgotPassword" }),
+    ).toHaveAttribute("href", "/reset?returnTo=%2Faccount%2Fevents");
+  });
+
+  it("#2027 S3: a hostile target is dropped from the recovery link, never propagated", async () => {
+    searchParams = new URLSearchParams({ returnTo: "//evil.example" });
+    await renderLogin();
+
+    expect(
+      screen.getByRole("link", { name: "forgotPassword" }),
+    ).toHaveAttribute("href", "/reset");
+  });
 });

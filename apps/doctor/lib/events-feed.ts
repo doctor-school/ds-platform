@@ -5,7 +5,7 @@ import {
   encodeDoctorEventsFeedQueryEntries,
   type RawQueryValue,
 } from "@ds/schemas";
-import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
+import { serverApiBase, forwardedHeaders, forwardedSessionFrom } from "@ds/auth-flow/server";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
 
 /**
@@ -18,7 +18,7 @@ import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
  * query model, no local paging state and no second listing engine: «показать
  * ещё» is a LINK that widens `to=` in the address bar (EARS-15).
  *
- * The read is server-side and absolute against `API_BASE`, forwarding ONLY
+ * The read is server-side and absolute against the shared `serverApiBase()`, forwarding ONLY
  * 017's remembered-specialty cookie (`__Host-ds_specialty`) so the targeting
  * resolver has what it needs and nothing else travels with a public read. A guest with no remembered choice gets the
  * untargeted feed — the surface is fully readable with no account (EARS-12).
@@ -65,7 +65,7 @@ export async function fetchDoctorEventsFeed(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DoctorEventsFeedResult> {
   const params = encodeDoctorEventsFeedQuery(raw);
-  const url = `${API_BASE}${DOCTOR_EVENTS_FEED_PATH}?${params.toString()}`;
+  const url = `${serverApiBase()}${DOCTOR_EVENTS_FEED_PATH}?${params.toString()}`;
 
   try {
     const res = await fetchImpl(url, {

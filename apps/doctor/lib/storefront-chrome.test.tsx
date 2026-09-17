@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { StorefrontHeader } from "@ds/storefront-shell";
-import { shellAuthState } from "@/lib/shell-auth";
+import type { ServerAuth } from "@ds/auth-flow/server";
+import { doctorShellAuthState } from "@/lib/auth-flow-routes";
 import { DOCTOR_SHELL } from "@/lib/shell-config";
 
 /**
@@ -19,7 +20,7 @@ import { DOCTOR_SHELL } from "@/lib/shell-config";
  *
  * This tier exists because the Playwright tier cannot reach the signed-in
  * branch: the state is resolved on the SERVER from the session cookie
- * (`lib/shell-auth.ts`), so no browser-side mock can flip it, and the CI
+ * (`@ds/auth-flow/server`), so no browser-side mock can flip it, and the CI
  * Playwright config is backend-free by design.
  *
  * Static server markup (not jsdom) is deliberate: these are structural
@@ -29,11 +30,18 @@ import { DOCTOR_SHELL } from "@/lib/shell-config";
 const GUEST_ONLY = ["Войти / Регистрация"];
 const DOCTOR_ONLY = ["Личный кабинет"];
 
+/** The two branches of `ServerAuth`; the signed-in one carries its claims. */
+function authOf(status: "guest" | "doctor"): ServerAuth {
+  return status === "doctor"
+    ? { status, claims: { sub: "doctor-1", roles: ["doctor"], mfa: false } }
+    : { status };
+}
+
 function headerHtml(status: "guest" | "doctor"): string {
   return renderToStaticMarkup(
     <StorefrontHeader
       config={DOCTOR_SHELL}
-      auth={shellAuthState({ status })}
+      auth={doctorShellAuthState(authOf(status))}
     />,
   );
 }
@@ -83,7 +91,7 @@ describe("017 EARS-1: exactly one action cluster", () => {
     // The host owns its copy and the fact that it ships no header display-name
     // read; it does NOT own the chip's look. Omitting `initials` is the whole
     // of that choice (#2180).
-    const state = shellAuthState({ status: "doctor" });
+    const state = doctorShellAuthState(authOf("doctor"));
     expect(state).toEqual({
       status: "doctor",
       profileHref: "/account",

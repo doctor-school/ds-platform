@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
 
 import { AuthShell } from "@/components/auth-shell";
 import { LoginScreen } from "@/components/login-screen";
@@ -8,14 +8,16 @@ import {
   ReturnContextPanel,
   ReturnContextPlate,
 } from "@/components/return-context-card";
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
+  isAccountReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
+  withReturnContext,
 } from "@/lib/return-context";
-import { resolveShellAuth } from "@/lib/shell-auth";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
 
 /**
@@ -65,20 +67,25 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * CHROMELESS screen with no way back onto the storefront. So the session is
  * resolved before the render and a signed-in doctor is sent straight to the
  * landing this route had already computed: the эфир they came from on a gate
- * arrival, the LD-4 destination otherwise. The redirect target is the SAME
- * value the screen would have published — one landing vocabulary, decided once
- * — so the door and the guard can never disagree about where sign-in leads.
+ * arrival, «Личный кабинет» on an account arrival (#1987), the LD-4
+ * destination otherwise. The redirect target is the SAME value the screen would
+ * have published — one landing vocabulary, decided once — so the door and the
+ * guard can never disagree about where sign-in leads.
  *
- * The status comes from `lib/shell-auth.ts`, the app's ONE server-side session
- * read (ADR-0015 §4): no second auth path, and its fail-safe answer is `guest`,
- * so a flaky api shows the sign-in form rather than bouncing a doctor off it.
- * `/register` deliberately keeps no such guard — the Issue names `/login`, and
- * a sign-up door answers a different question for someone with an account.
+ * WHO decides is no longer this route: the status comes from
+ * `@ds/auth-flow/server` `resolveServerAuth` and the decision from its
+ * `guardAuthRoute`, the ONE signed-in rule both storefronts now run (#2027 PR
+ * 1.4, #675). This route contributes only the `landing` — its own host fact.
+ * The read is still the app's single server-side session read (ADR-0015 §4), and
+ * its fail-safe answer is still `guest`, so a flaky api shows the sign-in form
+ * rather than bouncing a doctor off it. `/register` and `/reset` run the same
+ * guard now; `/reset` is exempt through `routes.allowAuthenticated` (003
+ * EARS-28), so a signed-in doctor can still finish a password change.
  *
  * ONE `headers()` READ FOR THE WHOLE RENDER, exactly as `/register` does it:
  * the rendered screen is not per-visitor, but the LD-4 landing and the session
  * status BOTH are, so the request headers are read once and forwarded through
- * the shared resolvers (`lib/specialty-choice.ts`, `lib/shell-auth.ts`) rather
+ * the shared resolvers (`lib/specialty-choice.ts`, `@ds/auth-flow/server`) rather
  * than inspected here or read twice.
  *
  * The route is registered `deferred` in `tools/lint/prod-surface-manifest.yaml`
@@ -120,34 +127,64 @@ export default async function DoctorLoginPage({
   // event read, because a direct arrival's landing is decided by the remembered
   // specialty alone, so that round-trip would answer a question nobody asks. A
   // gate arrival genuinely needs both facts and pays for both.
-  const auth = await resolveShellAuth(requestHeaders);
-  if (auth.status === "doctor" && !landingTarget) {
-    redirect(
-      resolveDirectArrivalLanding(
+  const auth = await resolveServerAuth(requestHeaders);
+  const authenticated = auth.status === "doctor";
+  if (authenticated && !landingTarget) {
+    guardAuthRoute({
+      authenticated,
+      pathname: DOCTOR_AUTH_ROUTES.login,
+      routes: DOCTOR_AUTH_ROUTES,
+      landing: resolveDirectArrivalLanding(
         await resolveRememberedSpecialty(requestHeaders),
       ),
-    );
+    });
   }
 
   const returnEvent = safeTarget
     ? await resolveReturnContext(safeTarget)
     : null;
 
+  // #1987 — an account arrival resolves NO эфир, so the gate branch below would
+  // refuse it and drop the doctor on the LD-4 default, which is precisely the
+  // destination they declined by asking for «Личный кабинет». It is a landing
+  // in its own right — asked of the codec, which admits the whole family under
+  // this host's own `routes.account`, not just the cabinet index (014 EARS-6.5).
+  const accountLanding = isAccountReturnTarget(returnTo);
+
   const landing =
-    landingTarget && returnEvent
+    landingTarget && (returnEvent || accountLanding)
       ? landingTarget
       : resolveDirectArrivalLanding(
           await resolveRememberedSpecialty(requestHeaders),
         );
 
-  if (auth.status === "doctor") redirect(landing);
+  guardAuthRoute({
+    authenticated,
+    pathname: DOCTOR_AUTH_ROUTES.login,
+    routes: DOCTOR_AUTH_ROUTES,
+    landing,
+  });
 
   // Sign-up is a co-equal auth path, so the arrival context survives the hop
   // into it — built from the GUARD output, so a hostile param can never be
   // propagated onward.
-  const registerHref = safeTarget
-    ? `/register?${RETURN_CONTEXT_PARAM}=${encodeURIComponent(safeTarget)}`
-    : "/register";
+  //
+  // #2258 / rule S3 — through the shared CARRY helper, not from `safeTarget`.
+  // That value is the 021 EARS-3 return-context target and эфир-only by
+  // contract, so building the hop from it silently dropped every account
+  // arrival: a doctor sent here by the closed cabinet who pressed
+  // «Зарегистрироваться» signed up into the LD-4 default instead of the page
+  // they asked for. `withReturnContext` answers both shapes and still re-appends
+  // only what the shared guards reconstructed.
+  const registerHref = withReturnContext(
+    DOCTOR_AUTH_ROUTES.register,
+    returnTo,
+  );
+  // Rule S3 — recovery is an INTERRUPTION of wherever this visitor was going,
+  // not a journey of its own, so «Забыли пароль» carries the same value. The
+  // `/reset` route reads it back and hands both its own exit and its landing to
+  // the screen (`app/(auth)/reset/page.tsx`).
+  const resetHref = withReturnContext(DOCTOR_AUTH_ROUTES.reset, returnTo);
 
   return (
     <AuthShell
@@ -159,6 +196,7 @@ export default async function DoctorLoginPage({
     >
       <LoginScreen
         registerHref={registerHref}
+        resetHref={resetHref}
         landing={landing}
         // 005 EARS-2 — the эфир intent to COMPLETE after sign-in, in this host's
         // vocabulary. Supplied only when the target actually resolved to a live

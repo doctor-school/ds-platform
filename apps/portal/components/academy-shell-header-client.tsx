@@ -1,27 +1,38 @@
 "use client";
 
-import { StorefrontHeader } from "@ds/storefront-shell";
+import { StorefrontHeader, useShellAuth } from "@ds/storefront-shell";
 import type { ShellAuthState, StorefrontShellConfig } from "@ds/storefront-shell";
 
-import { useHeaderAuth } from "@/lib/header-auth";
+import { initialsFromDisplayName } from "@/lib/display-name";
+import { getMyProfile } from "@/lib/profile-client";
 import { LOGIN_HREF, MY_EVENTS_HREF, PROFILE_HREF } from "@/lib/shell-config";
 
 /**
- * 008 EARS-4/5/6 — the academy host's session read, and nothing else.
+ * 008 EARS-4/5/6 — the academy host's session READ, and nothing else.
  *
- * This host resolves the sign-in state on the CLIENT ({@link useHeaderAuth} →
- * the shipped self-profile read), so the read needs a client boundary. It is
- * drawn as tightly as possible around that one fact: the config — every string,
- * link and dimension of the chrome — is still resolved on the SERVER, in
- * `academy-shell-header.tsx`, and arrives here as plain serializable data; this
- * leaf adds only the `auth` value.
+ * This host resolves the sign-in state on the CLIENT, so the read needs a client
+ * boundary. It is drawn as tightly as possible around that one fact: the config
+ * — every string, link and dimension of the chrome — is still resolved on the
+ * SERVER, in `academy-shell-header.tsx`, and arrives here as plain serializable
+ * data; this leaf adds only the `auth` value.
  *
- * Since #2180 the chip itself is NOT assembled here. The host names the copy and
- * the destinations; `@ds/storefront-shell` owns the look, which is what stopped
- * this storefront's chip (194×44) drifting from the doctor storefront's
- * (191×48). `initials` is always passed — `null` included, for a doctor with no
- * saved display name (#997) — which is what selects the initials chip over the
- * doctor host's labelled one.
+ * Since #2180 the chip itself is NOT assembled here, and since #2027 PR 1.4 the
+ * SUBSCRIPTION is not either: `useShellAuth` (`@ds/storefront-shell`) owns the
+ * re-read signal, the latest-read-wins ordering, the no-flash refresh and the
+ * unmount guard, so the two storefronts cannot drift on when the cluster
+ * refreshes. What stays here is the part that is genuinely this host's: WHICH
+ * read answers the question, and what this host's guest and signed-in clusters
+ * say.
+ *
+ * Source note (008 design §3): the design names `GET /v1/auth/session` as the
+ * AuthState source, but that endpoint returns only `{ sub, roles, mfa }` — no
+ * display name, so it cannot yield the EARS-5 avatar initials. The self-profile
+ * read is the single shipped surface returning BOTH the authenticated signal
+ * (200 vs 401) and the display name. No new endpoint either way.
+ *
+ * `initials` is always passed — `null` included, for a doctor with no saved
+ * display name (#997) — which is what selects the initials chip over the doctor
+ * host's labelled one.
  */
 export function AcademyShellHeaderClient({
   config,
@@ -37,23 +48,35 @@ export function AcademyShellHeaderClient({
   /** «Мои события» — the cluster's link beside the chip (canvas `user.links`). */
   myEventsLabel: string;
 }) {
-  const auth = useHeaderAuth();
+  const auth = useShellAuth(async (): Promise<ShellAuthState> => {
+    const guest: ShellAuthState = {
+      status: "guest",
+      loginHref: LOGIN_HREF,
+      label: loginLabel,
+    };
+    try {
+      const profile = await getMyProfile();
+      if (profile === null) return guest;
+      return {
+        status: "doctor",
+        profileHref: PROFILE_HREF,
+        label: profileLabel,
+        initials: profile.displayName
+          ? initialsFromDisplayName(profile.displayName)
+          : null,
+        // Canvas `user.links` line 209 — the academy cluster's «Мои события»
+        // beside the avatar. The package decides where it is drawn at each
+        // width; the host names only the copy and the destination (#2243).
+        links: [{ label: myEventsLabel, href: MY_EVENTS_HREF }],
+      };
+    } catch {
+      // A non-401 transient error degrades to the guest affordance — this host's
+      // own rule, and the reason the package leaves the degrade to the read: the
+      // worst case is a guest control the doctor can still use to get back in,
+      // never a shell taken down over a flaky profile read.
+      return guest;
+    }
+  });
 
-  const state: ShellAuthState =
-    auth.status === "loading"
-      ? { status: "loading" }
-      : auth.status === "guest"
-        ? { status: "guest", loginHref: LOGIN_HREF, label: loginLabel }
-        : {
-            status: "doctor",
-            profileHref: PROFILE_HREF,
-            label: profileLabel,
-            initials: auth.initials,
-            // Canvas `user.links` line 209 — the academy cluster's «Мои события»
-            // beside the avatar. The package decides where it is drawn at each
-            // width; the host names only the copy and the destination (#2243).
-            links: [{ label: myEventsLabel, href: MY_EVENTS_HREF }],
-          };
-
-  return <StorefrontHeader config={config} auth={state} />;
+  return <StorefrontHeader config={config} auth={auth} />;
 }

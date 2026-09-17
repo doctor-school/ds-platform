@@ -4,7 +4,7 @@ import {
   parseDoctorEventsMonthQuery,
   type RawQueryValue,
 } from "@ds/schemas";
-import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
+import { serverApiBase, forwardedHeaders, forwardedSessionFrom } from "@ds/auth-flow/server";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
 
 /**
@@ -89,7 +89,7 @@ export async function fetchDoctorEventsMonthGrid(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DoctorEventsMonthResult> {
   const params = encodeDoctorEventsMonthQuery(raw);
-  const url = `${API_BASE}${DOCTOR_EVENTS_MONTH_PATH}?${params.toString()}`;
+  const url = `${serverApiBase()}${DOCTOR_EVENTS_MONTH_PATH}?${params.toString()}`;
 
   try {
     const res = await fetchImpl(url, {

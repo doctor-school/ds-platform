@@ -4,3 +4,8 @@ export {
   createAuthClient,
   type AuthClient,
 } from "./auth-client";
+export {
+  clearStoredReturnTarget,
+  readStoredReturnTarget,
+  resolveReturnTarget,
+} from "./return-target-store";

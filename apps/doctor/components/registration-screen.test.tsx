@@ -116,6 +116,13 @@ const CODE = "PVDC3R";
  * sign-in hop has to carry onward for the round-trip to close.
  */
 const RETURN_TARGET = "/events/kardio";
+/**
+ * Rule S3 — what the ROUTE carries onward, in the canonical vocabulary the
+ * sibling doors read back (`resolveCarriedReturnTarget`), as distinct from the
+ * doctor-host confirm INTENT above. For a gate arrival the two are the same эфир
+ * in two vocabularies; for an account arrival there is no intent at all.
+ */
+const CARRIED_TARGET = "/webinars/kardio";
 
 const CONSENT_TIERS: readonly ConsentTier[] = [
   {
@@ -145,8 +152,8 @@ const CONSENT_TIERS: readonly ConsentTier[] = [
 beforeEach(() => {
   h.calls.length = 0;
   h.registerDoctor.mockReset().mockResolvedValue(undefined);
-  // The shipped EARS-9/EARS-10 body, verbatim in shape: the success card is
-  // built from it, so a loose stub would let the card silently not render.
+  // The shipped EARS-10 body, verbatim in shape: the landing is read off it,
+  // so a loose stub would let the navigation silently pick the wrong branch.
   h.confirmDoctorEmail.mockReset().mockResolvedValue({
     status: "verified",
     credited: null,
@@ -188,6 +195,7 @@ function renderScreen() {
     <RegistrationScreen
       landing="/events"
       returnTarget={RETURN_TARGET}
+      carriedTarget={CARRIED_TARGET}
       consentTiers={CONSENT_TIERS}
     />,
   );
@@ -256,23 +264,23 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
     );
     // Order is the contract, and it is the SAME order the Academy ships: the
     // session must exist before the command (the api answers a guest with a
-    // 401), and the success card must not paint before the doctor is actually
-    // on the roster — its «вернуться к эфиру» action would otherwise land them
-    // on a card still asking them to register.
+    // 401), and the doctor must not be navigated before they are actually on
+    // the roster — the эфир page would otherwise open still asking them to
+    // register.
     expect(h.calls).toEqual([
       "register",
       "confirm",
       "login",
       "register-for-event",
     ]);
-    expect(screen.queryByTestId("registration-success-primary")).toBeNull();
+    expect(h.replace).not.toHaveBeenCalled();
     await act(async () => completeRegistration());
     await waitFor(() =>
-      expect(screen.getByTestId("registration-success-primary")).toBeTruthy(),
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
   });
 
-  it("005 EARS-2: a direct arrival carries no эфир — the success state stands and NO registration fires", async () => {
+  it("005 EARS-2: a direct arrival carries no эфир — the doctor is landed and NO registration fires", async () => {
     const user = setupUser();
     render(
       <RegistrationScreen landing="/events" consentTiers={CONSENT_TIERS} />,
@@ -286,7 +294,7 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
     expect(h.calls).toEqual(["register", "confirm", "login"]);
   });
 
-  it("005 EARS-2: a refused registration never strands the doctor — the success state still stands", async () => {
+  it("005 EARS-2: a refused registration never strands the doctor — they are landed anyway", async () => {
     // Best-effort by the shared rule's contract: a transient failure or a gating
     // refusal is not a reason to withhold the outcome of the confirmation the
     // doctor DID complete. The truth about the roster is re-read per viewer on
@@ -299,7 +307,7 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
     await submitCode(user);
 
     await waitFor(() =>
-      expect(screen.getByTestId("registration-success-primary")).toBeTruthy(),
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
   });
 });
@@ -320,8 +328,8 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
       password: PASSWORD,
     });
     // Order is the contract: confirm first (the code is the thing being
-    // proven), login second, and only then the success state — a success card
-    // rendered before the replay would send a guest to the event page. The
+    // proven), login second, and only then the navigation — a hop fired before
+    // the replay would land a guest on the event page. The
     // carried эфир is completed on the far side of the replay (005 EARS-2,
     // #2005); it is asserted in its own describe below, and named here so this
     // sequence stays the whole sequence.
@@ -331,16 +339,18 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
       "login",
       "register-for-event",
     ]);
-    // EARS-10 — the success state REPLACES the code screen.
+    // EARS-10 (amended 2026-09-17) — the code screen is left by NAVIGATION,
+    // with no interstitial in between.
     await waitFor(() =>
-      expect(screen.queryByLabelText(/Код из письма/)).toBeNull(),
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
+    expect(h.replace).toHaveBeenCalledTimes(1);
     // The take is single-shot: the credential is gone the moment it is
     // replayed, so nothing survives the journey to be replayed a second time.
     expect(takePendingRegistration(EMAIL)).toBeNull();
   });
 
-  it("021 EARS-15.2: with no held password, system shall route to the sign-in door with the return context instead of a success card", async () => {
+  it("021 EARS-15.2: with no held password, system shall route to the sign-in door with the return context instead of the honoured target", async () => {
     const user = setupUser();
     renderScreen();
 
@@ -354,19 +364,20 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     await waitFor(() => expect(h.confirmDoctorEmail).toHaveBeenCalledTimes(1));
     // The Academy rule, whole: no held credential means no session, and a
     // doctor with no session is sent to sign in CARRYING the return context —
-    // never handed a success card that would walk them onto the эфир as a guest.
+    // never walked onto the эфир as a guest. Rule S3: the CARRY vocabulary,
+    // which the door re-parses on the far side.
     await waitFor(() =>
       expect(h.push).toHaveBeenCalledWith(
-        `/login?returnTo=${encodeURIComponent(RETURN_TARGET)}`,
+        `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
       ),
     );
     expect(h.login).not.toHaveBeenCalled();
     expect(h.calls).toEqual(["register", "confirm"]);
-    // The success state exists ONLY for a doctor who is signed in.
-    expect(screen.queryByTestId("registration-success-primary")).toBeNull();
+    // The onward hop exists ONLY for a doctor who is signed in.
+    expect(h.replace).not.toHaveBeenCalled();
   });
 
-  it("021 EARS-15.3: a replay the login refuses routes to the same sign-in door, with the slot wiped and no success card", async () => {
+  it("021 EARS-15.3: a replay the login refuses routes to the same sign-in door, with the slot wiped and no onward hop", async () => {
     // The concrete journey: the doctor re-registered the same email with a
     // SECOND password, 003 EARS-16 answered identically, and the IdP still holds
     // the first one — so the replay is refused with the generic 401 and there is
@@ -381,7 +392,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(h.push).toHaveBeenCalledWith(
-        `/login?returnTo=${encodeURIComponent(RETURN_TARGET)}`,
+        `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
       ),
     );
     // Not a failed CONFIRMATION — the code was accepted, so the doctor is never
@@ -389,7 +400,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     expect(
       screen.queryByText("Код не подошёл. Попробуйте ещё раз."),
     ).toBeNull();
-    expect(screen.queryByTestId("registration-success-primary")).toBeNull();
+    expect(h.replace).not.toHaveBeenCalled();
     // The take consumes; it does not roll back on error.
     expect(takePendingRegistration(EMAIL)).toBeNull();
   });
@@ -424,6 +435,91 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     // The clear runs BEFORE the command, so the failure cannot preserve the
     // stale password — the same top-of-submit invariant the Academy runs.
     expect(takePendingRegistration(EMAIL)).toBeNull();
+  });
+});
+
+/**
+ * 021 EARS-10 (#1546, amended 2026-09-17) — the confirmed doctor is NAVIGATED,
+ * and the owner's objection is exactly the failure this tier pins: an
+ * interstitial asking for one more tap after the code has already been
+ * accepted. The Academy `/verify` never had one (`apps/portal/app/verify/page.tsx`
+ * — `router.replace(await completeReturnTarget(returnTo))`), and after wave 1
+ * the two doors run the same rule.
+ *
+ * The three branches are the three href sources of the clause, asserted here
+ * through the whole screen because the unit tier
+ * (`lib/confirm-landing.test.ts`) can only prove the choice, not that the
+ * choice reaches the router.
+ */
+describe("021 EARS-10 (amended 2026-09-17): the confirmed doctor lands directly, with no success card", () => {
+  it("021 EARS-10: a live carried target replaces the confirmation screen with the эфир itself", async () => {
+    const user = setupUser();
+    renderScreen();
+
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
+    );
+    // Nothing stands between the accepted code and the эфир: no outcome card,
+    // and no «в личный кабинет» second action to read past.
+    expect(screen.queryByTestId("registration-success")).toBeNull();
+    expect(screen.queryByText("Почта подтверждена")).toBeNull();
+  });
+
+  it("021 EARS-10: a cold arrival lands on the DOOR's LD-4 decision, not the API's default", async () => {
+    // Nothing was carried, so the confirm route answers with its own default
+    // `/events`; the door decided with 017's remembered specialty, which the
+    // confirmation API does not have.
+    h.confirmDoctorEmail.mockResolvedValue({
+      status: "verified",
+      credited: null,
+      profileCompletion: null,
+      primaryAction: { kind: "landing", href: "/events" },
+      secondaryAction: { href: "/account" },
+    });
+    const user = setupUser();
+    render(
+      <RegistrationScreen
+        landing="/events?specialty=kardiologiya"
+        consentTiers={CONSENT_TIERS}
+      />,
+    );
+
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(h.replace).toHaveBeenCalledWith("/events?specialty=kardiologiya"),
+    );
+  });
+
+  it("021 EARS-10: a target that went stale lands on the honest destination the server picked (LD-8)", async () => {
+    // The эфир ended between the arrival and the code. The server re-validated
+    // the target with the verification it had just performed and named the
+    // nearest honest destination; the client has no better answer, so the
+    // doctor is taken there instead of being shown a card explaining it.
+    h.confirmDoctorEmail.mockResolvedValue({
+      status: "verified",
+      credited: null,
+      profileCompletion: null,
+      primaryAction: {
+        kind: "landing",
+        href: "/events/kardio",
+        reason: "ended",
+      },
+      secondaryAction: { href: "/account" },
+    });
+    const user = setupUser();
+    renderScreen();
+
+    await submitRegistration(user);
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
+    );
   });
 });
 

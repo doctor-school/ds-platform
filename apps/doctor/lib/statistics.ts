@@ -5,7 +5,7 @@ import { ScaleStatisticsSchema, type ScaleStatistics } from "@ds/schemas";
  *
  * `GET /v1/public/statistics` is public and identical for a guest and a
  * signed-in doctor, so this read carries no session and no fingerprint surface
- * (unlike `lib/session.ts`, whose BFF read is per-caller). The path is written
+ * (unlike the `@ds/auth-flow/server` session read, which is per-caller). The path is written
  * RELATIVE on purpose: the hero fetches it from the browser through the app's
  * own origin, which `next.config.ts` rewrites onto the api. That is what makes
  * the four `dataState` renders of 017-design §6 row 1 reachable at all — a

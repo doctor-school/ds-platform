@@ -149,7 +149,9 @@ async function registerAndConfirm(page) {
   await page.getByTestId("register-submit").click();
   await page.getByTestId("verify-submit").waitFor();
   await page.locator('input[autocomplete="one-time-code"]').fill("ABC123");
-  await page.getByTestId("registration-success").waitFor();
+  // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates straight to
+  // the эфир; there is no outcome card in between any more.
+  await page.waitForURL(new RegExp(`/events/${LIVE}$`));
 }
 
 /** The render delta: the landed эфир page, header in the signed-in state. */
@@ -160,21 +162,8 @@ async function shootSignedInLanding(browser, { name, viewport, theme }) {
     mobileDevice: viewport === "mobile",
   });
   await registerAndConfirm(page);
-  await page.getByTestId("registration-success-primary").click();
-  await page.waitForURL(new RegExp(`/events/${LIVE}$`));
   const header = page.getByTestId("storefront-header");
   await header.getByRole("link", { name: "Личный кабинет" }).waitFor();
-  await assertTheme(page, name, theme);
-  await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
-  await ctx.close();
-  console.log(`captured ${name}.png`);
-}
-
-/** The interaction frame: the success card the replayed login sits behind. */
-async function shootSuccessCard(browser, { name, theme }) {
-  const { ctx, page } = await open(browser, { viewport: "desktop", theme });
-  await registerAndConfirm(page);
-  await page.getByTestId("registration-success-primary").waitFor();
   await assertTheme(page, name, theme);
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
   await ctx.close();
@@ -192,10 +181,5 @@ for (const viewport of ["desktop", "mobile"]) {
     });
   }
 }
-
-await shootSuccessCard(browser, {
-  name: "interactions-success-card-light",
-  theme: "light",
-});
 
 await browser.close();

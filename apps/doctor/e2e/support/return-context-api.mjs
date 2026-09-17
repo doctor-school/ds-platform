@@ -18,7 +18,7 @@ import { createServer } from "node:http";
  *
  * The session read (`GET /v1/auth/session`, #1955) is here for the third time
  * for the same reason: `/login` decides whether the visitor already holds a
- * session on the SERVER, through `lib/shell-auth.ts`, and answers a signed-in
+ * session on the SERVER, through `@ds/auth-flow/server`, and answers a signed-in
  * doctor with a redirect instead of the door. The double answers it the way the
  * api does — the forwarded `__Host-ds_session` cookie names a live session or it
  * does not — so the tier drives the real server read rather than a switch in
@@ -383,7 +383,7 @@ const server = createServer((request, response) => {
   if (url.pathname === "/v1/auth/session") {
     // The one live session this tier knows. Any other cookie value is an
     // expired or forged session and gets the api's own 401, which
-    // `lib/shell-auth.ts` reads as `guest`.
+    // `@ds/auth-flow/server` reads as `guest`.
     const session = /(?:^|;\s*)__Host-ds_session=([^;]*)/.exec(
       request.headers.cookie ?? "",
     );

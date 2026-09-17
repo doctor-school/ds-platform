@@ -16,6 +16,16 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     registerPath: "/v1/auth/register",
     confirmPath: "/v1/auth/verify",
   },
+  routes: {
+    login: "/login",
+    register: "/register",
+    verify: "/verify",
+    reset: "/reset",
+    account: "/account",
+    // 003 EARS-28 - the /account change-password action hands off here, so a
+    // signed-in visitor must be able to finish a reset.
+    allowAuthenticated: ["/reset"],
+  },
   copy: {
     errors: {
       tooManyAttempts: "Слишком много попыток — повторите через несколько минут.",
@@ -37,6 +47,10 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   botProtection: { siteKey: undefined },
   channels: ["email", "sms"],
   register: { promoField: false },
+  // 014 EARS-6 - this host parks the carried target for the trip through the
+  // verification mail. The doctor fixture below states none: row 29, that host
+  // carries the target on the query param alone.
+  returnTo: { parkingCookie: { name: "ds_return_to", maxAgeSeconds: 900 } },
 };
 
 /** The doctor storefront: email-only sign-in codes, promo box on the form. */
@@ -45,6 +59,15 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     basePath: "/v1/auth",
     registerPath: "/v1/storefront/doctor/register",
     confirmPath: "/v1/storefront/doctor/confirm",
+  },
+  routes: {
+    login: "/login",
+    register: "/register",
+    // Confirmation is an inline step of this host registration screen, not a
+    // route of its own - `undefined` is that fact, not a missing value.
+    reset: "/reset",
+    account: "/account",
+    allowAuthenticated: ["/reset"],
   },
   copy: {
     errors: {

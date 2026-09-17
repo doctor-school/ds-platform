@@ -156,7 +156,10 @@ export function OtpFocusScreen<T extends FieldValues>({
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {/* Same pre-hydration rule as `<LoginCard>`: a native submit before the
+          bundle loads must POST, never GET the one-time code into the URL and
+          the access logs. */}
+      <form method="post" onSubmit={onSubmit} className="space-y-4" noValidate>
         <OtpField
           field={field}
           length={length}

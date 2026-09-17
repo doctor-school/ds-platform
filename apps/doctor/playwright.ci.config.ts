@@ -11,7 +11,7 @@ import { defineConfig, devices } from "@playwright/test";
  * rather than throw when there is nothing to read from.
  *
  * Unlike the portal's, the readiness probe IS `/`. The root now does server-side
- * reads (`lib/shell-auth.ts` for the header, `lib/specialty-choice.ts` for the
+ * reads (`@ds/auth-flow/server` for the header, `lib/specialty-choice.ts` for the
  * remembered specialty, #1482), but both resolve «unknown» on an unreachable api
  * instead of failing the render, so the route still answers 200 with no backend
  * and the storefront falls back to its client-side read. A future route that

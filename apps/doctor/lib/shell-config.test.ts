@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { doctorNav, doctorNavigationModel } from "@/lib/navigation-model";
+import { doctorShellAuthState } from "@/lib/auth-flow-routes";
 import { DOCTOR_SHELL } from "@/lib/shell-config";
-import { shellAuthState } from "@/lib/shell-auth";
 
 /**
  * The §6.3 invariant of the staging/regression-contour tech spec (Issue #2067),
@@ -15,12 +15,15 @@ import { shellAuthState } from "@/lib/shell-auth";
  * the visitor cannot reach. The first is the blindness #2067 exists to remove,
  * the second is how a stale model quietly turns green.
  */
-const guest = shellAuthState({ status: "guest" });
-const signedIn = shellAuthState({ status: "doctor" });
+const guest = doctorShellAuthState({ status: "guest" });
+const signedIn = doctorShellAuthState({
+  status: "doctor",
+  claims: { sub: "doctor-1", roles: ["doctor"], mfa: false },
+});
 
 if (guest.status !== "guest" || signedIn.status !== "doctor") {
   throw new Error(
-    "shellAuthState no longer returns the two branches asserted here.",
+    "doctorShellAuthState no longer returns the two branches asserted here.",
   );
 }
 

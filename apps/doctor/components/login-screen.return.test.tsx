@@ -60,7 +60,12 @@ afterEach(cleanup);
 async function signIn(props?: Partial<Parameters<typeof LoginScreen>[0]>) {
   const user = userEvent.setup();
   render(
-    <LoginScreen registerHref="/register" landing="/events" {...props} />,
+    <LoginScreen
+      registerHref="/register"
+      resetHref="/reset"
+      landing="/events"
+      {...props}
+    />,
   );
   await user.type(screen.getByLabelText("Почта или телефон"), "doc@clinic.ru");
   await user.type(screen.getByLabelText("Пароль"), "correct-horse-battery");

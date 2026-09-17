@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { resolveServerAuth } from "@ds/auth-flow/server";
+
 import { AccountScreen } from "@/components/account-screen";
-import { resolveShellAuth } from "@/lib/shell-auth";
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { withReturnContext } from "@/lib/return-context";
 
 /**
  * #1958 — `doctor.school/account`, the doctor storefront's «Личный кабинет».
@@ -23,7 +26,7 @@ import { resolveShellAuth } from "@/lib/shell-auth";
  * page is a destination a signed-in doctor navigates away from, so the header,
  * navigation and footer of `app/(storefront)/layout.tsx` belong on it.
  *
- * THE GUEST BRANCH IS DECIDED ON THE SERVER, through the same `resolveShellAuth`
+ * THE GUEST BRANCH IS DECIDED ON THE SERVER, through the same `resolveServerAuth`
  * read the 017 header branches on (ADR-0015 §4) — one session mechanism, not a
  * second. A visitor with no valid session never sees a frame of the cabinet: they
  * are redirected to the door carrying the canonical `?returnTo=/account`, the 005
@@ -42,9 +45,17 @@ export const metadata: Metadata = {
 };
 
 export default async function DoctorAccountPage() {
-  const auth = await resolveShellAuth(await headers());
+  const auth = await resolveServerAuth(await headers());
   if (auth.status === "guest") {
-    redirect("/login?returnTo=%2Faccount");
+    // Rule S3 of the auth-flow standard (`packages/auth-flow/README.md`): the
+    // bounce is BUILT by the shared carry helper out of this host's own route
+    // values, never spelled as a literal beside them. The emitted string is the
+    // same canonical `/login?returnTo=%2Faccount` this route has always sent —
+    // what changes is that a later edit to either route value cannot leave the
+    // bounce behind.
+    redirect(
+      withReturnContext(DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+    );
   }
 
   return <AccountScreen />;

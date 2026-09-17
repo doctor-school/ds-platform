@@ -3,7 +3,7 @@ import {
   fetchRoomConfig,
   type RoomAccess,
 } from "@ds/room/server";
-import { API_BASE, type ForwardedSession } from "@/lib/session";
+import { serverApiBase, type ForwardedSession } from "@ds/auth-flow/server";
 
 /**
  * 006 EARS-1 / EARS-14 (#1722, slice 3) — the doctor storefront's binding of the
@@ -13,8 +13,8 @@ import { API_BASE, type ForwardedSession } from "@/lib/session";
  * ambient environment (`packages/room/src/purity.test.ts` bans the read), because
  * it is hosted by two storefront processes with their own configuration. This
  * module is the doctor half of that injection and it owns exactly one fact: the
- * upstream is `lib/session.ts`'s {@link API_BASE} — the single exported base
- * every server-side read of this app addresses, never a second copy of that
+ * upstream is `@ds/auth-flow/server`'s `serverApiBase()` — the single base every
+ * server-side read of both storefronts addresses, never a second copy of that
  * expression.
  *
  * {@link ForwardedSession} structurally satisfies the package's `RoomSession`
@@ -38,7 +38,7 @@ export function fetchDoctorRoomConfig(
   session: ForwardedSession,
   fetchImpl?: typeof fetch,
 ): Promise<RoomAccess> {
-  return fetchRoomConfig(slug, session, { apiBase: API_BASE, fetchImpl });
+  return fetchRoomConfig(slug, session, { apiBase: serverApiBase(), fetchImpl });
 }
 
 /**
@@ -52,5 +52,5 @@ export function fetchDoctorDisplayName(
   session: ForwardedSession,
   fetchImpl?: typeof fetch,
 ): Promise<string | null> {
-  return fetchMyDisplayName(session, { apiBase: API_BASE, fetchImpl });
+  return fetchMyDisplayName(session, { apiBase: serverApiBase(), fetchImpl });
 }

@@ -1,8 +1,9 @@
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { StorefrontFooter, StorefrontHeader } from "@ds/storefront-shell";
+import { resolveServerAuth } from "@ds/auth-flow/server";
 import { DOCTOR_SHELL } from "@/lib/shell-config";
-import { resolveShellAuth, shellAuthState } from "@/lib/shell-auth";
+import { doctorShellAuthState } from "@/lib/auth-flow-routes";
 
 /**
  * 017 EARS-1 — THE storefront shell layout.
@@ -20,7 +21,7 @@ import { resolveShellAuth, shellAuthState } from "@/lib/shell-auth";
  * stops the two storefronts drifting apart every time either side ships.
  *
  * The sign-in branch is resolved HERE, on the server, from the request headers
- * (`lib/shell-auth.ts` → the `__Host-ds_session` cookie, ADR-0015 §4) and handed
+ * (`@ds/auth-flow/server` → the `__Host-ds_session` cookie, ADR-0015 §4) and handed
  * to the shared chrome as data. That is what makes "exactly one action cluster, never
  * a transitional state" true of the first byte of HTML rather than of a settled
  * client effect.
@@ -34,14 +35,14 @@ export default async function StorefrontLayout({
 }: {
   children: ReactNode;
 }) {
-  const auth = await resolveShellAuth(await headers());
+  const auth = await resolveServerAuth(await headers());
 
   return (
     <div
       data-testid="storefront-shell"
       className="flex min-h-screen flex-col bg-background text-foreground"
     >
-      <StorefrontHeader config={DOCTOR_SHELL} auth={shellAuthState(auth)} />
+      <StorefrontHeader config={DOCTOR_SHELL} auth={doctorShellAuthState(auth)} />
       <main className="flex-1">{children}</main>
       <StorefrontFooter config={DOCTOR_SHELL} />
     </div>

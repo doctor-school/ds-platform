@@ -425,9 +425,13 @@ export function RegisterCard({
         footer={footer}
       >
         <Form {...form}>
+          {/* Same pre-hydration rule as `<LoginCard>`: a native submit before
+              the bundle loads must POST, never GET the chosen password into the
+              URL and the access logs. */}
           <form
             {...testIdProps(testIds?.form)}
             {...formDataAttributes}
+            method="post"
             className={SPACING_CLASS[spacing]}
             noValidate
             onSubmit={form.handleSubmit(onSubmit, onInvalid)}

@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  API_BASE,
+  serverApiBase,
   SESSION_COOKIE_NAME,
   forwardedHeaders,
   forwardedSessionFrom,
-} from "@/lib/session";
+} from "@ds/auth-flow/server";
 import {
   SPECIALTY_CHOICE_COOKIE_NAME,
   SPECIALTY_CHOICE_ME_PATH,
@@ -30,7 +30,7 @@ export async function consumeGuestSpecialtyBeforeRender(
   }
 
   try {
-    const upstream = await fetchImpl(`${API_BASE}${SPECIALTY_CHOICE_ME_PATH}`, {
+    const upstream = await fetchImpl(`${serverApiBase()}${SPECIALTY_CHOICE_ME_PATH}`, {
       // The adoption read runs on the doctor's own session, so it carries the
       // full fingerprint surface — client chain included, or the api re-derives a
       // different fingerprint and 401s a valid session (#2054).

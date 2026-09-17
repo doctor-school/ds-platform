@@ -5,6 +5,8 @@ import type { MyEventsTab } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
 import { buildMyEventListItems, fetchMyEvents } from "../../../lib/my-events";
 import { forwardedSessionFrom } from "../../../lib/registration-state";
+import { ACADEMY_AUTH_ROUTES } from "../../../lib/auth-flow-routes";
+import { withReturnTarget } from "../../../lib/registration-handoff";
 import { EventListRouter } from "../../../components/event-list-router";
 
 /**
@@ -54,6 +56,10 @@ import { EventListRouter } from "../../../components/event-list-router";
  */
 export const dynamic = "force-dynamic";
 
+/** This route's own path — the `returnTo` the guest bounce carries, and the base
+ *  path the tab links are built on. */
+const MY_EVENTS_HREF = "/account/events";
+
 /** `?tab=recordings` selects «Записи»; anything else is the default «Предстоящие». */
 function resolveTab(raw: string | string[] | undefined): MyEventsTab {
   return raw === "recordings" ? "recordings" : "upcoming";
@@ -76,8 +82,15 @@ export default async function MyEventsPage({
   // included, so the authed read is not 401'd (#2054).
   const result = await fetchMyEvents(forwardedSessionFrom(h), tab);
   // Authenticated surface: a guest / expired session goes to login (never a blank
-  // or public render, unlike the 004 public pages).
-  if (!result.authenticated) redirect("/login");
+  // or public render, unlike the 004 public pages) — CARRYING this page as the
+  // return target (014 EARS-6), so signing in brings the doctor back to their own
+  // events instead of dropping them on the discovery listing. The carry rides the
+  // shared `withReturnTarget` and the target is THIS route's own constant, never
+  // anything read off the request; the account FAMILY is a legal landing shape in
+  // `@ds/auth-flow`, which is what lets it survive the whole round-trip.
+  if (!result.authenticated) {
+    redirect(withReturnTarget(ACADEMY_AUTH_ROUTES.login, MY_EVENTS_HREF));
+  }
 
   const { data, counts } = result.events;
   const recordings = tab === "recordings";
@@ -128,7 +141,7 @@ export default async function MyEventsPage({
         {/* `MyEvents` returns a whole tab at once — no paging; `pageCount = 1`
             makes the shared `Pagination` block render nothing at all. */}
         <EventListRouter
-          basePath="/account/events"
+          basePath={MY_EVENTS_HREF}
           pastTabParam="recordings"
           items={items}
           selectedTab={recordings ? "past" : "upcoming"}

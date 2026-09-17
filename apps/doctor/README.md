@@ -38,9 +38,9 @@ apps/doctor/
       layout.tsx     # 017 EARS-1 — mounts @ds/storefront-shell (header / main / footer) once
       page.tsx       # storefront root page (content only; the shell is the layout)
   lib/
-    session.ts       # server-side BFF session read (host-only cookie, ADR-0001 §6 fingerprint)
-    session.test.ts  # vitest units for the above
-    shell-auth.ts    # server-resolved guest/doctor branch → the shell's `auth` DATA prop
+    auth-flow-routes.ts # this host's auth ROUTE VALUES + the server-resolved
+                     #   guest/doctor branch → the shell's `auth` DATA prop
+                     #   (the session read itself is `@ds/auth-flow/server`, #2027)
     shell-config.ts  # DOCTOR_SHELL — the host-config VALUES the shared shell renders
     theme.ts         # the inline pre-paint FOUC guard (the toggle itself is in the package)
     auth-client.ts   # client-side same-origin session probe
@@ -52,24 +52,27 @@ apps/doctor/
   playwright.ci.config.ts  # backend-free tier, DOCTOR_CI_PORT (default 3211)
 ```
 
-## Registration success state (021 EARS-10)
+## Post-confirmation landing (021 EARS-10, amended 2026-09-17)
 
 After the doctor submits the emailed code, `components/registration-screen.tsx`
 calls the single storefront command `POST /v1/storefront/doctor/confirm` (it
-verifies the code and decides the landing in one round trip) and replaces the
-confirm card with the shared `RegistrationSuccessCard`
-(`@ds/design-system` — see the capability registry). The card's PRIMARY action is
-the landing: the server's `primaryAction.href` when the carried return target is
-still live, or when the server degraded it to the nearest honest destination
-(`reason: ended | full | unpublished | missing`, stated in RU above the actions);
-with nothing carried it is the `landing` prop the register page computed from the
-specialty read (LD-4 — `/events`, else `/`). The personal cabinet (`/account`) is
-always the SECONDARY action, never the default destination. Points are shown as a
-pending promise, not an accrued fact, while the API returns `credited: null`, and
-the profile-motivation line is absent until `profileCompletion` carries a string.
-The RU copy map and the pure landing composition live in
-`lib/registration-success.ts`; every href reaching a navigation comes from the
-server response or that `landing` prop — never assembled on the client.
+verifies the code and decides the landing in one round trip) and then NAVIGATES
+there — `router.replace`, no screen in between. There is no success card: the
+owner removed that step on 2026-09-17 (PR #2239) so this host matches the Academy
+`/verify` route, and the rule is pinned for both hosts as standard **S5** in
+`packages/auth-flow/README.md`. The spec side is the «Amendment — 2026-09-17»
+block of `apps/docs/content/specs/features/021-doctor-registration/`.
+
+The destination comes from the CONFIRM RESPONSE, not from the client-side
+completion of the return target: the round trip is the only participant that
+re-validated the carried target, so it is the only one that knows the target went
+stale (`reason: ended | full | unpublished | missing`) and where the honest
+destination is. `lib/confirm-landing.ts` holds the whole rule and nothing else —
+the server's `primaryAction.href` when it honoured or degraded a target, else the
+`landing` prop the register page computed from the specialty read (LD-4 —
+`/events`, else `/`). Every href reaching a navigation comes from the server
+response or that prop, never assembled on the client. `replace`, not `push`: a
+spent code form must not be reachable by Back.
 
 The doctor is also SIGNED IN by then (021 EARS-15, #1996): the confirm route
 mints no session, so the screen holds the just-entered password in the shared
@@ -77,7 +80,8 @@ mints no session, so the screen holds the just-entered password in the shared
 Academy `/register → /verify` pair uses) and replays the real 003 EARS-5
 `POST /v1/auth/login` once the confirm succeeds, which is what sets
 `__Host-ds_session`. A replay that fails does not fail the confirmation — the
-email is verified either way and the success card still renders.
+email is verified either way, and that branch keeps the sign-in door with the
+carried target (standard S3) instead of navigating.
 
 ## Sessions on two hosts (ADR-0015 §4)
 
@@ -86,8 +90,9 @@ One Zitadel identity, but the BFF session cookie is `__Host-ds_session` — the
 origin that set it. `doctor.school` and `academy.doctor.school` therefore hold
 **separate** session cookies of the same name; continuity between them is OIDC
 silent re-auth, never a shared cookie. The host is not an authorization boundary
-either way: the api re-checks roles on every request. This is why `lib/session.ts`
-lives here rather than being imported from the portal.
+either way: the api re-checks roles on every request. This is why the session read is
+shared as `@ds/auth-flow/server` (#2027) rather than copied per host: the
+hosts differ in which COOKIE they hold, never in how it is read.
 
 ## How to run
 
@@ -172,7 +177,7 @@ pnpm --filter @ds/doctor exec playwright test --config=playwright.ci.config.ts e
 ```
 
 The backend-free tier assumes NOTHING answers on the server-side `API_PROXY_TARGET`
-(default `http://localhost:3000`, read at runtime by `lib/session.ts`): the
+(default `http://localhost:3000`, read at runtime by `@ds/auth-flow/server`): the
 server resolve then fails, the client re-issues the read and the spec's
 `page.route` mock answers it. A live local api on `:3000` (a dev stand, a
 Stage-B stand) breaks that chain — the server resolves «nothing chosen» for

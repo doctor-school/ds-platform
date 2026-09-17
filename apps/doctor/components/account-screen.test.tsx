@@ -112,7 +112,13 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
     expect(link).not.toBeNull();
     // Host-relative since the doctor storefront serves recovery itself; the
     // Academy crossing was the #1933/#1958 interim and is gone.
-    expect(link?.getAttribute("href")).toBe("/reset");
+    //
+    // Rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) — and
+    // it CARRIES the cabinet: a doctor who changes a password from here comes
+    // back here, not to wherever the recovery route defaults to. The value is
+    // the shared helper's, built from this host's own route constants, so the
+    // cabinet never assembles a return target by hand.
+    expect(link?.getAttribute("href")).toBe("/reset?returnTo=%2Faccount");
   });
 
   it("017 EARS-1.2: «Мои события» is ABSENT on this host — the row is hidden, not linked at a 404", async () => {

@@ -1,6 +1,7 @@
 import { createAuthClient } from "@ds/auth-flow/client";
 import type { AuthFlowApiConfig, AuthFlowHostConfig } from "@ds/auth-flow/host-config";
 
+import { DOCTOR_AUTH_ROUTES } from "./auth-flow-routes";
 import { DOCTOR_AUTH_FLOW_COPY } from "./auth-flow-copy";
 
 /**
@@ -33,6 +34,12 @@ export const authClient = createAuthClient(DOCTOR_AUTH_FLOW_API);
 export const DOCTOR_AUTH_FLOW = {
   api: DOCTOR_AUTH_FLOW_API,
   copy: DOCTOR_AUTH_FLOW_COPY,
+  // The route table lives in `lib/auth-flow-routes.ts`, not inline here: the
+  // auth pages' server-side guard reads it too, and this module binds the
+  // browser auth client at module scope, so a server route must not import it.
+  // No `returnTo`: this storefront carries the target on the canonical
+  // `returnTo` param and parks nothing in a cookie (wave-1 gate row 29).
+  routes: DOCTOR_AUTH_ROUTES,
   botProtection: {
     // The prod key is the `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` build arg
     // (`apps/doctor/Dockerfile`); `new.doctor.school` must be an allowed domain

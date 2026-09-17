@@ -6,7 +6,12 @@ import {
   type PublicEventPage,
 } from "@ds/schemas";
 
-import { API_BASE } from "./session";
+import {
+  parseAccountReturnTarget,
+  serverApiBase,
+} from "@ds/auth-flow/server";
+
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 
 /**
  * 021 EARS-2 (#1538) — resolving the RETURN CONTEXT the doctor arrived with.
@@ -137,22 +142,52 @@ export function resolveReturnTargetPath(
 }
 
 /**
+ * #2258 / rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) —
+ * the value that rides ONWARD across an auth hop on this host, in ONE carry
+ * vocabulary covering BOTH shapes a visitor may legitimately be coming back to.
+ *
+ * WHY THIS IS NOT `resolveReturnTargetPath`. That function is the 021 EARS-3
+ * RETURN-CONTEXT target: it names the эфир the surface reads, shows beside the
+ * form and registers the doctor for, so it is эфир-only by contract and must
+ * stay so (#1987 pinned it). The carry is a different question — «where does
+ * this visitor want to end up» — and its answer includes the account family
+ * `resolveReturnLandingPath` already honours. Reusing the EARS-3 target as the
+ * carry meant a doctor at `/login?returnTo=/account` kept the target through
+ * sign-in and lost it the moment they hopped to `/register`.
+ *
+ * ONE PARSER PER SHAPE, STILL. Nothing is pattern-matched here: the account
+ * family is answered by the shared `parseAccountReturnTarget` against THIS
+ * host's own `routes.account` (segment boundary and all), and the эфир family by
+ * `parseReturnTarget`, exactly as the landing rule below resolves them. A
+ * cross-origin, traversal or otherwise hostile value is refused by both and is
+ * therefore refused here.
+ */
+export function resolveCarriedReturnTarget(
+  returnTo: string | undefined,
+): string | null {
+  const account = parseAccountReturnTarget(returnTo, DOCTOR_AUTH_ROUTES.account);
+  if (account) return account;
+
+  return parseReturnTarget(returnTo)?.returnTo ?? null;
+}
+
+/**
  * 021 EARS-15 / 003 EARS-39 (#1996) — carry the return context ONWARD across an
  * intermediate auth hop on THIS host, the doctor projection of the Academy's
  * `withReturnTarget` (`apps/portal/lib/registration-handoff.ts`).
  *
  * The invariant is the one that lives in the Academy helper rather than at its
- * call sites: the value re-appended is never the raw input, it is what
- * `parseReturnTarget` reconstructed from the parts it accepted, so a
- * cross-origin, traversal or otherwise hostile target can never be propagated
- * across the hop, and an absent or rejected one is simply dropped — the doctor
- * still reaches the door, just without a context to come back to.
+ * call sites: the value re-appended is never the raw input, it is what the
+ * shared guards reconstructed from the parts they accepted, so a cross-origin,
+ * traversal or otherwise hostile target can never be propagated across the hop,
+ * and an absent or rejected one is simply dropped — the doctor still reaches the
+ * door, just without a context to come back to.
  */
 export function withReturnContext(
   path: string,
   returnTo: string | undefined,
 ): string {
-  const safe = resolveReturnTargetPath(returnTo);
+  const safe = resolveCarriedReturnTarget(returnTo);
   if (!safe) return path;
   const sep = path.includes("?") ? "&" : "?";
   return `${path}${sep}${RETURN_CONTEXT_PARAM}=${encodeURIComponent(safe)}`;
@@ -175,7 +210,7 @@ export async function resolveReturnContext(
 
   try {
     const res = await fetchImpl(
-      `${API_BASE}/v1/public/events/${encodeURIComponent(key)}`,
+      `${serverApiBase()}/v1/public/events/${encodeURIComponent(key)}`,
       { headers: { accept: "application/json" }, cache: "no-store" },
     );
     if (!res.ok) return null;
@@ -210,14 +245,37 @@ export async function resolveReturnContext(
  * `parseReturnTarget` stays the single entry point, so a hostile, cross-origin
  * or traversal value is `null` here for exactly the reasons it is `null` there.
  *
+ * `/account` is the one NON-эфир shape a landing may carry (#1987, wave-1 gate
+ * row 32), and it is answered FIRST: it resolves no эфир at all, so every branch
+ * below would refuse it and a doctor who asked to come back to «Личный
+ * кабинет» would be dropped on the LD-4 default instead. The shared codec owns
+ * the rule and compares against THIS host's own `routes.account`, so the value
+ * that lands is the configured constant and never the visitor's string.
+ *
  * A target that is ALREADY a doctor-host path — 020's `/events/<slug>` or 019's
  * `/events?<feed query>&resume=<slug>` — is served by this app as it stands and
  * passes through verbatim; only the academy shape is re-homed, by rebuilding the
  * path from the slug the guard validated rather than by rewriting the string.
  */
+/**
+ * Rule S4 — does this arrival name a page of THIS host's account family?
+ *
+ * Asked of the codec, never by comparing the target with the cabinet INDEX: the
+ * family rule admits every path under `routes.account` with a segment boundary
+ * (`parseAccountReturnTarget`), so an exact comparison would drop «Мои события»
+ * and every future cabinet page on the LD-4 default while the bounce that sent
+ * the doctor here carried them faithfully.
+ */
+export function isAccountReturnTarget(returnTo: string | undefined): boolean {
+  return parseAccountReturnTarget(returnTo, DOCTOR_AUTH_ROUTES.account) !== null;
+}
+
 export function resolveReturnLandingPath(
   returnTo: string | undefined,
 ): string | null {
+  const account = parseAccountReturnTarget(returnTo, DOCTOR_AUTH_ROUTES.account);
+  if (account) return account;
+
   const intent = parseReturnTarget(returnTo);
   if (!intent) return null;
   return intent.returnTo.startsWith(RETURN_TARGET_PREFIX)

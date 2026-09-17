@@ -2,7 +2,7 @@ import {
   type DoctorEventsLiveRead,
   DoctorEventsLiveReadSchema,
 } from "@ds/schemas";
-import { API_BASE, forwardedHeaders, forwardedSessionFrom } from "@/lib/session";
+import { serverApiBase, forwardedHeaders, forwardedSessionFrom } from "@ds/auth-flow/server";
 
 /**
  * 019 EARS-6 (#1521) — the doctor storefront's half of the «Идёт сейчас» read.
@@ -37,7 +37,7 @@ export async function fetchDoctorEventsLive(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DoctorEventsLiveRead> {
   try {
-    const res = await fetchImpl(`${API_BASE}${DOCTOR_EVENTS_LIVE_PATH}`, {
+    const res = await fetchImpl(`${serverApiBase()}${DOCTOR_EVENTS_LIVE_PATH}`, {
       // The WHOLE cookie header rides on (the documented contract above), plus
       // the client chain: since #1655 the api reads `request.ip` from
       // `x-forwarded-for`, so an SSR hop that drops it presents the container

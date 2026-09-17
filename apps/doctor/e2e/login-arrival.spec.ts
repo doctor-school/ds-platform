@@ -6,7 +6,7 @@ import { test, expect, type BrowserContext } from "@playwright/test";
  *
  * Both need an api: the return context is resolved before the first byte of
  * HTML (021 EARS-2), and so is the session status the door now branches on
- * (`lib/shell-auth.ts`). Neither read passes through the browser, so neither can
+ * (`@ds/auth-flow/server`). Neither read passes through the browser, so neither can
  * be intercepted with `page.route` — the spec rides the register-arrival tier,
  * which boots the app against `e2e/support/return-context-api.mjs` with
  * `API_PROXY_TARGET` pointing at it, exactly the way production addresses the

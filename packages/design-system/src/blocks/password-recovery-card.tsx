@@ -266,6 +266,15 @@ function RecoveryRequestForm({
   return (
     <Form {...form}>
       <form
+        // Pre-hydration safety net: a visitor who presses submit before the
+        // bundle loads submits NATIVELY, and a `<form>` with no `method` is a
+        // GET — which would put the password (or the one-time code) in the URL,
+        // in the browser history and in every access log along the way. `post`
+        // makes that native submit carry the fields in the BODY instead. `action`
+        // is deliberately left off: the HTML default is the current document URL,
+        // which is exactly the current path the fix calls for, and a path prop
+        // would put a host route inside the design system.
+        method="post"
         onSubmit={form.handleSubmit(onSubmit)}
         className="space-y-4"
         noValidate
@@ -361,6 +370,15 @@ function RecoveryCompleteForm({
   return (
     <Form {...form}>
       <form
+        // Pre-hydration safety net: a visitor who presses submit before the
+        // bundle loads submits NATIVELY, and a `<form>` with no `method` is a
+        // GET — which would put the password (or the one-time code) in the URL,
+        // in the browser history and in every access log along the way. `post`
+        // makes that native submit carry the fields in the BODY instead. `action`
+        // is deliberately left off: the HTML default is the current document URL,
+        // which is exactly the current path the fix calls for, and a path prop
+        // would put a host route inside the design system.
+        method="post"
         onSubmit={form.handleSubmit((values) =>
           onSubmit({ ...values, identifier }),
         )}

@@ -5,8 +5,9 @@ import react from "@vitejs/plugin-react";
 
 /**
  * Unit-test config for the doctor storefront. Node environment, not jsdom: the
- * tested seams are the server-side session helpers (`lib/session.ts`,
- * `lib/shell-auth.ts`), which touch `Headers`/`fetch` and no DOM, plus the 017
+ * tested seams are the server-side route resolvers that wire this host onto
+ * the shared `@ds/auth-flow/server` session read, which touch `Headers`/`fetch`
+ * and no DOM, plus the 017
  * shell components rendered to STATIC SERVER MARKUP (`react-dom/server`) — the
  * level EARS-1 actually constrains (what reaches the HTML), which needs no DOM
  * either. The DEFAULT stays node for that reason; the app gained its first test

@@ -88,7 +88,7 @@ export function clearSpecialtyChoiceCookie(): string {
 /**
  * Read the anonymous-session choice out of a raw `Cookie` header.
  *
- * Name-boundary aware for the same reason `apps/doctor/lib/session.ts` is: a
+ * Name-boundary aware for the same reason `@ds/auth-flow/server` `session.ts` is: a
  * bare substring test would match a different cookie whose name merely ends with
  * ours, and hand its value to the cascade as if a guest had chosen it.
  */

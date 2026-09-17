@@ -6,7 +6,7 @@ import {
 
 /**
  * 017 EARS-2 / LD-3 — the single scale-statistics read, with the injected
- * `fetchImpl` seam `lib/session.test.ts` established for this app.
+ * `fetchImpl` seam the shared `@ds/auth-flow/server` session read established.
  */
 const COMPUTED_AT = "2026-08-26T09:00:00.000Z";
 

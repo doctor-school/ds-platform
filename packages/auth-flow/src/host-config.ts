@@ -10,10 +10,13 @@ import type { OtpChannel } from "@ds/schemas";
  * nor a recorded owner decision is a question for the owner, never a host-local
  * variant of a rule the package owns.
  *
- * Wave 1 PR 1.3 declares only the fields this PR's four units consume. The route
- * table, the consent tiers, the brand assets, the landing table and the
- * `returnTo` parking of gate §4.2 arrive with the PRs that move their surfaces
- * (1.4–1.8); a field nothing reads yet would be a claim, not a contract.
+ * The type grows ONE PR at a time, with the surfaces that consume it. PR 1.3
+ * declared the transport, the copy, the bot-protection value, the channels and
+ * the promo box; PR 1.4 adds the route table and the `returnTo` parking, which
+ * are what the server session read, the signed-in guard and the return-target
+ * codec consume. The consent tiers, the brand assets and the landing table of
+ * gate §4.2 arrive with PRs 1.5–1.8; a field nothing reads yet would be a claim,
+ * not a contract.
  */
 
 /** The fields the shared registration/confirmation rules know about (row 9). */
@@ -82,8 +85,52 @@ export type AuthFlowApiConfig = {
   readonly confirmPath: string;
 };
 
+
+/**
+ * The route table this host serves (gate §4.2).
+ *
+ * Data, never a resolver: every entry is a path this host states about itself,
+ * so the package's server-side guard can decide where a visitor belongs without
+ * ever calling back into the app (gate §4.3 — the wave-1 adapter list is empty).
+ */
+export type AuthFlowRoutes = {
+  readonly login: string;
+  readonly register: string;
+  /** `undefined` = the confirmation is an inline step on this host (rows 51, 76). */
+  readonly verify?: string;
+  readonly reset: string;
+  /** #1987 — the account path the return-target codec admits as a shape (row 32). */
+  readonly account: string;
+  /**
+   * Q3 (rows 26–28) — the auth paths an AUTHENTICATED visitor may still be shown.
+   *
+   * Read SERVER-side by the one guard. `/reset` is on it because 003 EARS-28
+   * pins the `/account` change-password action as a handoff to the existing
+   * reset flow, so a signed-in doctor must be able to complete it; everything
+   * off this list is closed to a visitor who already holds a session.
+   */
+  readonly allowAuthenticated: readonly string[];
+};
+
+/**
+ * `returnTo` parking (rows 29–31). `undefined` on a host that parks nothing —
+ * the doctor storefront carries the target on the canonical query param and has
+ * no cookie at all, which is a host fact and not a missing feature.
+ */
+export type AuthFlowReturnToConfig = {
+  readonly parkingCookie: {
+    readonly name: string;
+    /**
+     * Long enough to open a verification mail and come back, short enough that
+     * an abandoned flow does not resurface days later on an unrelated sign-in.
+     */
+    readonly maxAgeSeconds: number;
+  };
+};
+
 export type AuthFlowHostConfig = {
   readonly api: AuthFlowApiConfig;
+  readonly routes: AuthFlowRoutes;
   readonly copy: AuthFlowCopy;
   /**
    * The SmartCaptcha site key VALUE, not the env name.
@@ -103,4 +150,6 @@ export type AuthFlowHostConfig = {
     /** Whether the registration form carries the optional promo-code box (row 9). */
     readonly promoField: boolean;
   };
+  /** Absent = this host parks nothing (row 29). */
+  readonly returnTo?: AuthFlowReturnToConfig;
 };

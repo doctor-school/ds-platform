@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
@@ -13,12 +13,15 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshHeaderAuth } from "@/lib/header-auth";
+import { refreshShellAuth } from "@ds/storefront-shell";
 import {
   ResetCompleteFormSchema,
   resetIdentifierFormSchema,
 } from "@ds/auth-flow/fields";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { safeReturnTarget, withReturnTarget } from "@/lib/registration-handoff";
+import { completeReturnTarget } from "@/lib/registration-resume";
 
 import {
   botProtectionFailureMessage,
@@ -44,6 +47,19 @@ import {
  * resolvers, the live BFF via {@link authClient}, the EARS-16 outcome mapping, the
  * bot-protection element and the post-completion routing.
  *
+ * IT CARRIES, like every other door (#2027 rules S3 + S4, `packages/auth-flow/README.md`).
+ * Recovery is an INTERRUPTION of wherever the visitor was going, not a journey of its
+ * own: `/login` and `/verify` both hand off here, and this surface used to drop
+ * whatever they were carrying — «Вернуться ко входу» went to a bare `/login` and
+ * completion always pushed the fixed `/account`, so a guest bounced off
+ * `/account/events` recovered their password and landed on the profile page instead.
+ * It now reads the same `returnTo` its siblings read, builds its exit through
+ * `withReturnTarget` and resolves its landing through the SAME shared
+ * `completeReturnTarget` rule `/login` and `/verify` land by; `/account` remains the
+ * destination exactly when the arrival carried nothing (#221's default, unchanged).
+ * `useSearchParams` requires a Suspense boundary in the App Router, so the card is
+ * split out and wrapped, as on `/login` and `/verify`.
+ *
  * Two steps on one page: request a reset code for an identifier (email or phone —
  * Zitadel resolves it), then submit the code plus a new policy-conforming password.
  * Both forms validate with the portal field schemas (#196/#200) and submit
@@ -56,7 +72,25 @@ import {
  */
 
 export default function ResetPage() {
+  return (
+    // /reset is exempt from the #675 signed-in guard — the exemption is stated
+    // on `ACADEMY_AUTH_ROUTES.allowAuthenticated` and applied server-side in
+    // `app/reset/layout.tsx`, because the /account «Сменить пароль» action hands
+    // off HERE for logged-in doctors (003 EARS-28), and completing the reset
+    // revokes all sessions + auto-logs-in with the new password (EARS-12).
+    <AuthShell>
+      <Suspense fallback={null}>
+        <PortalRecoveryCard />
+      </Suspense>
+    </AuthShell>
+  );
+}
+
+/** The portal projection of the shared `<PasswordRecoveryCard>` block. */
+function PortalRecoveryCard() {
   const router = useRouter();
+  // #2027 rule S3: whatever the visitor was carrying when they were sent here.
+  const returnTo = useSearchParams().get("returnTo");
   const t = useTranslations("reset");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
@@ -80,7 +114,9 @@ export default function ResetPage() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setError(authErrorMessage(err, authFlow.copy.errors, te("resetRequestFailed")));
+      setError(
+        authErrorMessage(err, authFlow.copy.errors, te("resetRequestFailed")),
+      );
     },
   });
 
@@ -104,7 +140,9 @@ export default function ResetPage() {
         botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) =>
-      setResendError(authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed"))),
+      setResendError(
+        authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed")),
+      ),
   });
 
   // #267 resend: re-request a reset code for the SAME held identifier via the
@@ -124,7 +162,9 @@ export default function ResetPage() {
         setResendCaptchaError(te("captchaRequired"));
         return;
       }
-      setResendError(authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed")));
+      setResendError(
+        authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed")),
+      );
     },
     // Clear only resend-owned state; reset-completion feedback is unrelated.
     onBeforeResend: () => {
@@ -177,10 +217,24 @@ export default function ResetPage() {
       // cookie), so go straight to the authenticated area instead of /login.
       // #1004: soft landing → signal the persistent header to re-read the
       // profile so the avatar appears without a hard reload.
-      refreshHeaderAuth();
-      router.push("/account");
+      refreshShellAuth();
+      // #2027 rule S4: an arrival that carried a target lands on it through the
+      // SAME shared rule `/login` and `/verify` land by — so a reset that started
+      // from an эфир still completes that registration, and one that started from
+      // any other closed page comes back to it. Only an arrival carrying nothing
+      // (or a value the guards refuse) falls through to the #221 `/account` default;
+      // `completeReturnTarget` alone would send it to the `/webinars` discovery
+      // landing instead, which is not this surface's default.
+      const carried = safeReturnTarget(returnTo);
+      router.push(
+        carried
+          ? await completeReturnTarget(carried)
+          : ACADEMY_AUTH_ROUTES.account,
+      );
     } catch (err) {
-      setCompleteError(authErrorMessage(err, authFlow.copy.errors, te("resetCompleteFailed")));
+      setCompleteError(
+        authErrorMessage(err, authFlow.copy.errors, te("resetCompleteFailed")),
+      );
     }
   }
 
@@ -230,49 +284,46 @@ export default function ResetPage() {
   };
 
   return (
-    // `allowAuthenticated` (#770 rework): /reset is exempt from the #675
-    // authenticated-redirect — the /account «Сменить пароль» action hands off
-    // HERE for logged-in doctors (003 EARS-28), and completing the reset
-    // revokes all sessions + auto-logs-in with the new password (EARS-12).
-    <AuthShell allowAuthenticated>
-      <PasswordRecoveryCard
-        icon={<KeyRound className="text-primary" aria-hidden />}
-        copy={copy}
-        stage={stage}
-        identifier={identifier}
-        links={{ login: "/login" }}
-        // Next.js `<Link>` keeps the footer link on client-side navigation.
-        renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
-        request={{
-          resolver: requestResolver,
-          onSubmit: onRequest,
-          error: captchaError ?? error,
-          pending: captcha.pending,
-          captchaSlot: (
-            <BotProtectionField
-              sitekey={botProtectionSiteKey(authFlow)}
-              {...captcha.fieldProps}
-            />
-          ),
-        }}
-        complete={{
-          resolver: completeResolver,
-          onSubmit: onComplete,
-          error: completeError,
-          resendError: resendCaptchaError ?? resendError,
-          resendPending: resendCaptcha.pending,
-          resendNonce,
-          onResend: () => resendCaptcha.request(onResend),
-          onRestart,
-          notice,
-          captchaSlot: (
-            <BotProtectionField
-              sitekey={botProtectionSiteKey(authFlow)}
-              {...resendCaptcha.fieldProps}
-            />
-          ),
-        }}
-      />
-    </AuthShell>
+    <PasswordRecoveryCard
+      icon={<KeyRound className="text-primary" aria-hidden />}
+      copy={copy}
+      stage={stage}
+      identifier={identifier}
+      // Rule S3: the way back out carries what the visitor arrived with.
+      links={{
+        login: withReturnTarget(ACADEMY_AUTH_ROUTES.login, returnTo),
+      }}
+      // Next.js `<Link>` keeps the footer link on client-side navigation.
+      renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
+      request={{
+        resolver: requestResolver,
+        onSubmit: onRequest,
+        error: captchaError ?? error,
+        pending: captcha.pending,
+        captchaSlot: (
+          <BotProtectionField
+            sitekey={botProtectionSiteKey(authFlow)}
+            {...captcha.fieldProps}
+          />
+        ),
+      }}
+      complete={{
+        resolver: completeResolver,
+        onSubmit: onComplete,
+        error: completeError,
+        resendError: resendCaptchaError ?? resendError,
+        resendPending: resendCaptcha.pending,
+        resendNonce,
+        onResend: () => resendCaptcha.request(onResend),
+        onRestart,
+        notice,
+        captchaSlot: (
+          <BotProtectionField
+            sitekey={botProtectionSiteKey(authFlow)}
+            {...resendCaptcha.fieldProps}
+          />
+        ),
+      }}
+    />
   );
 }

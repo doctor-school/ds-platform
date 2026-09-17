@@ -4,9 +4,11 @@ import {
   RETURN_CONTEXT_PARAM,
   formatMskDateLabel,
   formatMskTime,
+  resolveCarriedReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
+  withReturnContext,
 } from "@/lib/return-context";
 
 /**
@@ -223,7 +225,7 @@ describe("021 #1945: resolveReturnLandingPath", () => {
     ["a backslash bypass", String.raw`/webinars/\evil`],
     ["traversal", "/webinars/../account"],
     ["a multi-segment slug", "/webinars/a/b"],
-    ["not anchored under a declared shape", "/account"],
+    ["not anchored under a declared shape", "/settings"],
   ])(
     "021 #1945: %s is no landing at all — the same guard, the same refusal",
     (_label, value) => {
@@ -232,4 +234,124 @@ describe("021 #1945: resolveReturnLandingPath", () => {
       expect(resolveReturnTargetPath(value)).toBeNull();
     },
   );
+});
+
+/**
+ * #1987 — `/account` is a landing target of its own.
+ *
+ * A guest who presses the 017 signed-in affordance, or opens `/account`
+ * directly, is sent to the door carrying `?returnTo=/account`. Until now the
+ * landing codec knew only эфир shapes, so that arrival resolved NO landing and
+ * the doctor was dropped on the LD-4 default after a successful sign-in — the
+ * one place they had just asked not to go.
+ *
+ * The shape is declared on the LANDING codec, not in the 005
+ * `RETURN_TARGET_SHAPES` whitelist: every member of that list yields a
+ * `RegistrationIntent` whose `eventSlug` a consumer fires `RegisterForEvent`
+ * for, and `/account` names no эфир (wave-1 gate row 32). So the two functions
+ * deliberately DISAGREE here, and that disagreement is the assertion.
+ */
+describe("#1987: /account is a landing target", () => {
+  it("#1987: an account arrival lands on this host's own account route", () => {
+    expect(resolveReturnLandingPath("/account")).toBe("/account");
+    // ...while the canonical return target refuses it, because it resolves no
+    // эфир to register anyone for.
+    expect(resolveReturnTargetPath("/account")).toBeNull();
+  });
+
+  it.each([
+    ["cross-origin", "https://evil.example/account"],
+    ["protocol-relative", "//evil.example/account"],
+    ["a prefix collision", "/accounts-payable"],
+    ["a traversal that ends in the word", "/webinars/../account"],
+  ])(
+    "#1987: %s is not the account shape — the same-origin guard still rules",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(value)).toBeNull();
+    },
+  );
+
+  /**
+   * 014 EARS-6 / live C6 walk (PR #2205) — the shape is the FAMILY, not just its
+   * root. This host declares one `routes.account`, and the shared codec derives
+   * the family from that single value, so a doctor bounced off ANY page of the
+   * cabinet comes back to the page they were on rather than to its index. The
+   * doctor storefront serves no cabinet child yet (022 / #1791 adds them); the
+   * rule arrives with the codec so this host does not need a second one later.
+   */
+  it("014 EARS-6.5: a page BELOW this host's account route lands on ITSELF, not on the cabinet index", () => {
+    expect(resolveReturnLandingPath("/account/events")).toBe("/account/events");
+    // …and it is still no эфир: nothing registers on the way back.
+    expect(resolveReturnTargetPath("/account/events")).toBeNull();
+  });
+
+  it.each([
+    ["a plural prefix collision", "/accounts"],
+    ["a hyphen prefix collision", "/account-evil"],
+    ["a plural collision with a child", "/accounts/events"],
+  ])(
+    "014 EARS-6.6: %s shares the characters and not the segment — not the family",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(value)).toBeNull();
+    },
+  );
+});
+
+/**
+ * #2258 / rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) —
+ * the CARRY vocabulary admits the account family too.
+ *
+ * `resolveReturnLandingPath` learned the account family in #1987, so a doctor
+ * sent to `/login?returnTo=/account` lands back on the cabinet. But the value
+ * that rides ONWARD across an intermediate auth hop — into `/register`, and back
+ * out of the confirmation screen — was built from `resolveReturnTargetPath`,
+ * which is the 021 EARS-3 RETURN-CONTEXT target and эфир-only by contract: it
+ * exists to name the эфир the surface reads and registers the doctor for, and
+ * the last test below pins that it stays эфир-only. Reusing it as the carry rule
+ * meant a doctor at `/login?returnTo=/account` kept the target through sign-in
+ * and lost it the moment they pressed «Зарегистрироваться», landing on the LD-4
+ * default instead. `resolveCarriedReturnTarget` is the carry rule in its own
+ * right — one function, both shapes, the same shared guards.
+ */
+describe("#2258: the carried target admits the account family", () => {
+  it("#2258: resolveCarriedReturnTarget rebuilds an account arrival instead of dropping it", () => {
+    expect(resolveCarriedReturnTarget("/account")).toBe("/account");
+  });
+
+  it("#2258: a page BELOW the account route is carried as ITSELF, with the segment boundary enforced", () => {
+    expect(resolveCarriedReturnTarget("/account/events")).toBe(
+      "/account/events",
+    );
+    expect(resolveCarriedReturnTarget("/accounts")).toBeNull();
+    expect(resolveCarriedReturnTarget("/account-evil")).toBeNull();
+  });
+
+  it("#2258: the эфир vocabulary is carried unchanged beside it", () => {
+    expect(resolveCarriedReturnTarget("/webinars/kardio-2026")).toBe(
+      "/webinars/kardio-2026",
+    );
+  });
+
+  it("#2258: withReturnContext carries the account arrival across the /login → /register hop", () => {
+    expect(withReturnContext("/register", "/account")).toBe(
+      "/register?returnTo=%2Faccount",
+    );
+    expect(withReturnContext("/register", "/account/events")).toBe(
+      "/register?returnTo=%2Faccount%2Fevents",
+    );
+  });
+
+  it("#2258: a cross-origin or traversal target is still dropped at the hop", () => {
+    expect(resolveCarriedReturnTarget("//evil.example/account")).toBeNull();
+    expect(resolveCarriedReturnTarget("/../account")).toBeNull();
+    expect(withReturnContext("/register", "https://evil.example/account")).toBe(
+      "/register",
+    );
+  });
+
+  it("#2258: the эфир-only EARS-3 context target is NOT widened by the carry rule", () => {
+    // 021 EARS-3 keeps its own contract: an account arrival resolves no эфир, so
+    // the registration surface still renders no return-context card for it.
+    expect(resolveReturnTargetPath("/account")).toBeNull();
+  });
 });

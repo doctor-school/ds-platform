@@ -1,30 +1,18 @@
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthShell } from "./auth-shell";
 
 /**
- * #675 — the auth-surface guard. `<AuthShell>` wraps all four portal auth surfaces
- * (`/login`, `/register`, `/reset`, `/verify`), so guarding it once redirects an
- * ALREADY-authenticated visitor away from every one of them with no auth form
- * rendered. This CI-runnable unit test pins the branches of that guard:
- *   • authenticated (`session()` resolves to claims) → `router.replace("/account")`
- *     AND the wrapped child never appears;
- *   • anonymous (`session()` resolves to `null`) → the child renders, `replace` is
- *     never called;
- *   • `allowAuthenticated` (the /reset exemption, #770 rework / 003 EARS-28: the
- *     /account change-password action hands off to the EXISTING /reset flow, so
- *     a logged-in doctor must reach it) → the child renders with NO session read
- *     and NO redirect.
- * The live end-to-end proof runs in the dev-stand-gated Playwright suite; this tier
- * proves the client guard logic without a stand, so it runs in the `@ds/portal`
- * vitest lane.
+ * 003 EARS-17 — the SmartCaptcha processing disclosure `<AuthShell>` renders
+ * under the card on all four portal auth surfaces.
+ *
+ * The #675 signed-in guard used to be tested here too. It is no longer part of
+ * this component: since #2027 PR 1.4 the decision is made SERVER-side, before
+ * paint, in each route`s layout — proved by `app/auth-route-guard.test.tsx`
+ * (wiring) and `packages/auth-flow/src/server/auth-route-guard.test.ts` (the
+ * rule). What is left here is the disclosure and nothing else.
  */
-
-const replace = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace }),
-}));
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => {
@@ -38,17 +26,7 @@ vi.mock("next-intl", () => ({
   },
 }));
 
-const session = vi.fn();
-vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
-  authClient: {
-    session: () => session(),
-  },
-}));
-
 beforeEach(() => {
-  replace.mockClear();
-  session.mockReset();
   vi.stubEnv("NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY", "");
 });
 afterEach(() => {
@@ -56,67 +34,11 @@ afterEach(() => {
   cleanup();
 });
 
-describe("#675 AuthShell auth-surface guard", () => {
-  it("redirects an authenticated visitor to /account and renders no auth form", async () => {
-    session.mockResolvedValue({
-      sub: "u1",
-      roles: ["doctor_guest"],
-      mfa: false,
-    });
-
-    render(
-      <AuthShell>
-        <div data-testid="auth-form">form</div>
-      </AuthShell>,
-    );
-
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
-    // The AC: NO auth form is ever rendered for the authed visitor.
-    expect(screen.queryByTestId("auth-form")).not.toBeInTheDocument();
-  });
-
-  it("renders the shell + child for an anonymous visitor and never redirects", async () => {
-    session.mockResolvedValue(null);
-
-    render(
-      <AuthShell>
-        <div data-testid="auth-form">form</div>
-      </AuthShell>,
-    );
-
-    // The guarded child appears only once the session check resolves to null.
-    expect(await screen.findByTestId("auth-form")).toBeInTheDocument();
-    expect(replace).not.toHaveBeenCalled();
-  });
-
-  it("EARS-28: allowAuthenticated (the /reset exemption) renders the form for an AUTHENTICATED visitor and never redirects", async () => {
-    // Even with a live session, the exempted surface renders immediately — the
-    // /account «Сменить пароль» handoff must not dead-end back to /account.
-    session.mockResolvedValue({
-      sub: "u1",
-      roles: ["doctor_guest"],
-      mfa: false,
-    });
-
-    render(
-      <AuthShell allowAuthenticated>
-        <div data-testid="auth-form">form</div>
-      </AuthShell>,
-    );
-
-    expect(await screen.findByTestId("auth-form")).toBeInTheDocument();
-    expect(replace).not.toHaveBeenCalled();
-    // Guard disabled ⇒ no session read is even issued for the exempted surface.
-    expect(session).not.toHaveBeenCalled();
-  });
-});
-
 describe("EARS-17: AuthShell SmartCaptcha processing disclosure", () => {
   it.each(["login", "register", "verify", "reset"])(
     "renders one localized notice below the %s AuthCard when SmartCaptcha is configured",
     async (surface) => {
       vi.stubEnv("NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY", "configured-client-key");
-      session.mockResolvedValue(null);
 
       render(
         <AuthShell>
@@ -147,8 +69,6 @@ describe("EARS-17: AuthShell SmartCaptcha processing disclosure", () => {
   );
 
   it("renders no processing notice when SmartCaptcha is not configured", async () => {
-    session.mockResolvedValue(null);
-
     render(
       <AuthShell>
         <div data-testid="auth-form">form</div>

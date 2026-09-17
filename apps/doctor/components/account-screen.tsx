@@ -14,6 +14,8 @@ import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 import { AuthError } from "@ds/auth-flow/client";
 
 import { authClient } from "@/lib/auth-flow-config";
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { withReturnContext } from "@/lib/return-context";
 
 /**
  * #1958 — the doctor storefront's `/account` projection.
@@ -126,7 +128,12 @@ export function AccountScreen() {
     if (profile) {
       setState({ kind: "ready", profile });
     } else {
-      router.replace("/login?returnTo=%2Faccount");
+      // Rule S3 — the EARS-9 session-expiry bounce is a bounce, so it carries
+      // this page back, built by the shared helper out of the host's own route
+      // values rather than spelled beside them.
+      router.replace(
+        withReturnContext(DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+      );
     }
   }, [router]);
 
@@ -201,7 +208,16 @@ export function AccountScreen() {
       // on the storefront: a signed-in doctor changes a password and lands back
       // here, on the origin their session belongs to, instead of crossing to the
       // Academy and returning signed in somewhere else.
-      passwordHref="/reset"
+      //
+      // Rule S3 — «lands back here» is a promise this row has to CARRY: the
+      // `/reset` route resolves its own landing from the target it was handed,
+      // so without it the doctor lands on the route's default rather than on the
+      // page they left. Built from the host route constants through the shared
+      // helper, never assembled as a literal.
+      passwordHref={withReturnContext(
+        DOCTOR_AUTH_ROUTES.reset,
+        DOCTOR_AUTH_ROUTES.account,
+      )}
       eventsHref={null}
       renderLink={({ href, children }) => (
         <NextLink href={href}>{children}</NextLink>

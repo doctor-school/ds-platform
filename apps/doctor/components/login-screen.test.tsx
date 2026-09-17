@@ -21,7 +21,12 @@ import { LoginScreen } from "@/components/login-screen";
  */
 function render(props?: Partial<Parameters<typeof LoginScreen>[0]>) {
   return renderToStaticMarkup(
-    <LoginScreen registerHref="/register" landing="/" {...props} />,
+    <LoginScreen
+      registerHref="/register"
+      resetHref="/reset"
+      landing="/"
+      {...props}
+    />,
   );
 }
 

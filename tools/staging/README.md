@@ -41,7 +41,11 @@ node --test tools/staging/slot.test.mjs
 
 The box's own configuration lives in `/etc/ds-platform/stage.env` (template:
 [`infra/deploy/stage.env.example`](../../infra/deploy/stage.env.example)) and the scripts
-read it over SSH. Two variables are the exception and belong to the **operator machine**:
+read it over SSH. Bot protection on this box has been **ON since 2026-09-17** with the
+stand's own dedicated staging captcha (both halves in `stage.env`, never the production
+pair) — see `infra/deploy/stage.env.example` → «Bot protection»; `up`/`sync` refuse an
+incoherent trio by name. Two variables are the exception and belong to the **operator
+machine**:
 
 | variable                                                      | why it is not a box variable                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

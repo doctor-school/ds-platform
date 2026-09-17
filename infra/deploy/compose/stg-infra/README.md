@@ -658,7 +658,8 @@ systemctl list-units --all --no-legend | grep -i runner ; echo "exit=$?"   # sam
 **AC4 — no production credential on the box.** Two halves, defined in
 `infra/deploy/stage.env.example` → «C1 ACCEPTANCE»: names that may only ever be
 asserted POSITIVELY — a single must-be-empty grep red-lights on a correctly
-provisioned box (staging legitimately sets its own secrets, and a captcha pair when the owner turns it on),
+provisioned box (staging legitimately sets its own secrets, and since 2026-09-17 its own dedicated
+captcha pair — bot protection is ON on this box),
 and blanking those to make it pass would silently stop exercising what they protect.
 
 ```bash

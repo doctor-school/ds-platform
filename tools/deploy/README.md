@@ -236,8 +236,9 @@ step dies on 429: `ssh <box> 'sudo docker pull node:24-slim'` must succeed, and 
 registry token request with the box's credentials reads `ratelimit-limit: 200;w=3600` /
 `docker-ratelimit-source: bbmacademy` instead of the anonymous `100;w=3600`. A recreated
 box starts anonymous again — see `infra/deploy/README.md` → «Docker Hub login on every
-box». The login changes nothing about step 2: our images are still built on-box from the
-shipped tree, with no registry in the deploy path.
+box». The login puts no registry in the deploy path: step 2 still ships the tree itself and
+step 5 still builds our own images on the box — only their base-image pulls are now
+authenticated.
 
 ## PostgreSQL deployment guard (#2141)
 

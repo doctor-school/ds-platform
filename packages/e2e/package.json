@@ -15,6 +15,7 @@
     "bddgen": "pnpm run check:host-tags && bddgen",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "pretest:e2e": "pnpm exec turbo run build --filter=@ds/e2e...",
     "test:e2e": "pnpm run bddgen && playwright test",
     "lint": "eslint ."
   },

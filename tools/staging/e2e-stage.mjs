@@ -16,10 +16,11 @@
  * regressions that are really topology. Raising belongs to `pnpm stage:slot up`.
  *
  * ── Where the topology comes from ────────────────────────────────────────────
- * Every hostname, the base domain and the basic-auth pair come from `slot.mjs` and
- * `/etc/ds-platform/stage.env` — the same source the converge reads. This file owns
- * no hostname literal of its own, so a slot naming change cannot leave the
- * regression run pointed at hosts that no longer exist.
+ * Every hostname, the base domain, the basic-auth pair and the allowlisted golden
+ * passwords come from `slot.mjs` / `idp.mjs` and `/etc/ds-platform/stage.env` — the
+ * same sources the converge reads. This file owns no hostname or credential-name
+ * literal of its own, so topology and identity changes cannot silently leave the
+ * regression run on a stale contract.
  *
  * ── Testability ──────────────────────────────────────────────────────────────
  * ssh, the network, `pnpm` and `gh` are injected effects (`runE2eStage`), so
@@ -45,6 +46,7 @@ import {
   shortSha,
   slotHostnames,
 } from "./slot.mjs";
+import { GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -132,6 +134,23 @@ export function slotE2eEnv({ slot, baseDomain, user, password }) {
     E2E_HTTP_USER: user,
     E2E_HTTP_PASS: password,
   };
+}
+
+/**
+ * The only box secrets the browser suite may receive. An explicit operator value
+ * wins so the documented no-SSH mode remains usable; otherwise the already-read
+ * stage env supplies the credential reset-identities converged. The deleted doctor
+ * is absent from GOLDEN_PASSWORD_ENV_VARS because no live IdP account may exist.
+ */
+export function goldenPasswordEnv(operatorEnv, boxEnv) {
+  return Object.fromEntries(
+    GOLDEN_PASSWORD_ENV_VARS.flatMap((name) => {
+      const operatorValue = operatorEnv?.[name];
+      const boxValue = boxEnv?.[name];
+      const value = operatorValue || boxValue;
+      return value ? [[name, value]] : [];
+    }),
+  );
 }
 
 export function slotHealthUrl(slot, baseDomain) {
@@ -397,6 +416,7 @@ export async function runE2eStage(
   // ran» over a suite that ran in full. The relative form stays for display only.
   const suiteEnv = {
     ...slotE2eEnv({ slot, baseDomain, user, password }),
+    ...goldenPasswordEnv(env, boxEnv),
     E2E_REPORT_DIR: path.resolve(REPO_ROOT, reportDir),
   };
   if (options.grep) suiteEnv.E2E_GREP = options.grep;

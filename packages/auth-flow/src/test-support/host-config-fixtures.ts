@@ -109,6 +109,7 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   brand: {
     wordmark: { src: "/brand/logo.svg", alt: "Doctor.School", width: 500, height: 164 },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
+    loginIcon: "shield-check",
   },
   botProtection: { siteKey: undefined },
   channels: ["email", "sms"],
@@ -247,6 +248,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
       height: 164,
     },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
+    loginIcon: "shield-check-square",
   },
   botProtection: { siteKey: undefined },
   channels: ["email"],

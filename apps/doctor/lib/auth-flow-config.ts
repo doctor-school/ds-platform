@@ -67,6 +67,7 @@ export const DOCTOR_AUTH_FLOW = {
       height: 164,
     },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
+    loginIcon: "shield-check-square",
   },
   botProtection: {
     // The prod key is the `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` build arg

@@ -25,6 +25,7 @@
     "@ds/events-storefront": "workspace:*",
     "@ds/room": "workspace:*",
     "@ds/schemas": "workspace:*",
+    "lucide-react": "^1.43.0",
     "zod": "4.4.3"
   },
   "peerDependencies": {

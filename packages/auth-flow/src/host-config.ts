@@ -113,6 +113,16 @@ export type AuthFlowBrandAsset = {
   readonly height: number;
 };
 
+/**
+ * The sign-in card's glyph — a CLOSED set of package-owned drawings, named as data
+ * (no ReactNode crosses the server-mount → client boundary). The design system
+ * carries no icon set, and the two hosts' marks are different drawings, so each
+ * is kept verbatim: `shield-check` = lucide `ShieldCheck` (round caps, primary
+ * tint, the Academy); `shield-check-square` = the square-capped currentColor
+ * shield (the doctor storefront).
+ */
+export type AuthFlowLoginIcon = "shield-check" | "shield-check-square";
+
 /** The brand assets of the shared auth frame (gate §4.2 `brand`, row 47). */
 export type AuthFlowBrand = {
   /** The form-column lockup, the one mark below the `layout:` breakpoint. */
@@ -127,6 +137,8 @@ export type AuthFlowBrand = {
   };
   /** The decorative panel mark on the blue brand panel. */
   readonly panel: AuthFlowBrandAsset;
+  /** The sign-in card's glyph. */
+  readonly loginIcon: AuthFlowLoginIcon;
 };
 
 /**

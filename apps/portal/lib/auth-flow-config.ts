@@ -165,6 +165,7 @@ export const ACADEMY_AUTH_FLOW = {
   brand: {
     wordmark: { src: "/brand/logo.svg", alt: m.brand.logoAlt, width: 500, height: 164 },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
+    loginIcon: "shield-check",
   },
   botProtection: {
     siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,

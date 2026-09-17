@@ -635,6 +635,9 @@ importers:
       '@ds/schemas':
         specifier: workspace:*
         version: link:../schemas
+      lucide-react:
+        specifier: ^1.43.0
+        version: 1.43.0(react@19.2.8)
       zod:
         specifier: 4.4.3
         version: 4.4.3

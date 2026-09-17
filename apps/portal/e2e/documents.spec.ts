@@ -1,10 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * 028 V-4 (EARS-2, EARS-3, EARS-4, EARS-5) — the Academy's own route projection
- * of the shared legal set, driven in the running UI: index → open «Политика
- * персональных данных и согласия» → the document body renders → the back link
- * returns to the index.
+ * Residual Academy legal-surface checks after the shared 028 V-4 journey moved
+ * to `packages/e2e` in #2255.
  *
  * Backend-free by construction: both routes read `@ds/legal-content` from disk at
  * build time and issue no api call, so this belongs in the hermetic
@@ -12,9 +10,9 @@ import { test, expect } from "@playwright/test";
  * makes it a real regression pin — nothing here can go green because a mock
  * answered.
  *
- * The assertions ride the design-system testids and the EXACT contact/requisites
- * strings, because those strings ARE the requirement (EARS-4, EARS-5); canvas
- * fidelity (spacing, poster, type scale) is the Stage-B live drive, not this tier.
+ * The exact contact/requisites assertions remain because they cover EARS-3/4/5,
+ * beyond the selected shared EARS-1/2 path. The unknown-slug and footer geometry
+ * regressions are likewise not duplicates of the backfilled journey.
  */
 
 const POLICY_TITLE = "Политика персональных данных и согласия";
@@ -62,29 +60,6 @@ test.describe("028 Academy documents surface (V-4)", () => {
     );
   });
 
-  test("028 EARS-2: opening the policy from the index renders the document body, and the back link returns to the index", async ({
-    page,
-  }) => {
-    await page.goto("/documents");
-    await page.getByTestId("documents-list").getByRole("link").first().click();
-
-    await expect(page).toHaveURL(/\/documents\/privacy-policy$/);
-    const block = page.getByTestId("legal-document");
-    await expect(block).toHaveAttribute("data-state", "normal");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      POLICY_TITLE,
-    );
-    await expect(page.getByTestId("legal-document-edition")).toContainText(
-      "редакция от",
-    );
-    // A real body, not an empty shell: the block parses the published Markdown.
-    await expect(page.getByTestId("legal-document-body")).not.toBeEmpty();
-
-    await page.getByTestId("legal-document-back-bottom").click();
-    await expect(page).toHaveURL(/\/documents$/);
-    await expect(page.getByTestId("documents-list")).toBeVisible();
-  });
-
   test("028 EARS-12: an unresolved slug answers 404 and renders the not-found state inside the shared shell", async ({
     page,
   }) => {
@@ -109,7 +84,9 @@ test.describe("008 EARS-14 (#2228): the shared footer is pinned to the viewport 
     await expect(page.getByTestId("storefront-footer")).toBeVisible();
 
     const geometry = await page.evaluate(() => {
-      const footer = document.querySelector('[data-testid="storefront-footer"]');
+      const footer = document.querySelector(
+        '[data-testid="storefront-footer"]',
+      );
       const rect = footer!.getBoundingClientRect();
       return {
         footerBottom: Math.round(rect.bottom + window.scrollY),
@@ -170,9 +147,10 @@ test.describe("008 EARS-14 (#2234): the giant footer wordmark fits its box at ev
       expect(geometry.runWidth, "run width vs box width").toBeLessThanOrEqual(
         geometry.boxWidth,
       );
-      expect(geometry.giantScrollWidth, "giant scrollWidth").toBeLessThanOrEqual(
-        geometry.giantClientWidth,
-      );
+      expect(
+        geometry.giantScrollWidth,
+        "giant scrollWidth",
+      ).toBeLessThanOrEqual(geometry.giantClientWidth);
       // …and it still FILLS it: a "fit" that shrank the wordmark to a caption
       // would pass the clipping check and lose the approved canvas look.
       expect(geometry.runWidth, "run width fills the box").toBeGreaterThan(

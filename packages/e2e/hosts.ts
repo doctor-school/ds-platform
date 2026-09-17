@@ -42,6 +42,15 @@ export interface HostConfig {
   readonly loginPath: string;
   /** The `h1` the host's login surface renders (the §6.2 redirect assertion). */
   readonly loginHeading: string;
+  /** Host-owned evidence for the shared legal-documents journey (028). */
+  readonly legalDocuments: {
+    /** The host wordmark rendered by its shared storefront shell projection. */
+    readonly shellWordmark: string;
+    /** The host-specific contacts block on `/documents`. */
+    readonly contactsTestId: string;
+    /** The mailbox link expected in that contacts block. */
+    readonly supportMailto: string;
+  };
 }
 
 export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
@@ -52,6 +61,11 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
     navigationModelExport: "portalNavigationModel",
     loginPath: "/login",
     loginHeading: "Вход",
+    legalDocuments: Object.freeze({
+      shellWordmark: "Academy.Doctor.School",
+      contactsTestId: "documents-contacts",
+      supportMailto: "mailto:academy@doctor.school",
+    }),
   }),
   doctor: Object.freeze({
     id: "doctor",
@@ -60,6 +74,11 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
     navigationModelExport: "doctorNavigationModel",
     loginPath: "/login",
     loginHeading: "Вход",
+    legalDocuments: Object.freeze({
+      shellWordmark: "Doctor.School",
+      contactsTestId: "documents-support",
+      supportMailto: "mailto:support@doctor.school",
+    }),
   }),
 });
 
@@ -131,7 +150,10 @@ export async function loadNavigationModel(
   host: HostConfig,
 ): Promise<NavigationModel> {
   const file = resolve(repoRoot(), host.navigationModelModule);
-  const mod = (await import(pathToFileURL(file).href)) as Record<string, unknown>;
+  const mod = (await import(pathToFileURL(file).href)) as Record<
+    string,
+    unknown
+  >;
   const model = mod[host.navigationModelExport];
   if (!Array.isArray(model)) {
     throw new HostConfigError(

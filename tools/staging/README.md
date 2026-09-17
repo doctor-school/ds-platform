@@ -49,6 +49,31 @@ read it over SSH. Two variables are the exception and belong to the **operator m
 | ')"`. Absent ⇒ a named refusal, never a skipped verification. |
 | `DS_STAGE_SSH`                                                | the SSH destination, default `ds-stage-1` — an alias in your own `~/.ssh/config`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
+## The box must stay logged into Docker Hub (#2240)
+
+Every `up`/`sync` builds the slot's service set **on stage-1**, and each build pulls its
+base images from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source
+IP**, and Timeweb gives every tenant on the host the same shared IPv6 /64
+(`2a03:6f00:a::`) — so a converge can die on `429 Too Many Requests` without this stand
+having pulled anything (observed 2026-09-15/16/17; the same hour killed a production
+deploy). A 429 mid-build is this, not a broken slot: nothing in `slot.mjs` retries it.
+
+stage-1 is logged in as the project Docker Hub account, which re-keys the quota to the
+account (200/h):
+
+```bash
+ssh -t ds-stage-1 'sudo docker login -u bbmacademy'   # Read-only PAT, typed at the prompt
+```
+
+The token is a Read-only Docker Hub Personal Access Token with no expiry, typed at the
+prompt by the owner; it lives only in `/root/.docker/config.json` on the box (the slot
+scripts run docker through `sudo`, so the login must belong to root) and never in this
+repo, in `stage.env` or in chat. Check it with `ssh ds-stage-1 'sudo docker pull
+node:24-slim'` — it must succeed, and a registry token request with the box's
+credentials reads `ratelimit-limit: 200;w=3600` / `docker-ratelimit-source: bbmacademy`
+rather than the anonymous `100;w=3600`. Recreating the box loses the login; repeat it
+before the first converge (`infra/deploy/README.md` → «Docker Hub login on every box»).
+
 ## Stage-B: the owner-facing stand
 
 **A per-PR slot is the stand the owner judges at Stage-B** (AGENTS.md §6; canonical

@@ -22,7 +22,7 @@ Everything here is Phase B: nothing in this file runs on a developer machine.
 | pgbackrest / WAL archive  | The box holds no unique state. `terraform apply` recreates it; `stg-infra` and `ds_golden` rebuild from the repo (spec §9 «Box down»). |
 | Centrifugo                | It is part of the `api-prod` service set and runs inside every slot (spec §3).                                                         |
 | Unleash                   | A second stateful admin service is a §2 non-goal; staging reads flags from env, as production does today.                              |
-| Any production credential | `stage.env` carries sinks, vendor TEST keys and secrets generated on this box — see AC4 below.                                         |
+| Any production credential | `stage.env` carries sinks, the stand's own captcha keys and secrets generated on this box — see AC4 below.                             |
 
 ## Prerequisites (owner, once)
 
@@ -683,7 +683,8 @@ sudo grep -E '^(EMAIL_DELIVERY_MODE|SMS_DELIVERY_MODE|IDP_SMTP_HOST|IDP_SMS_SINK
 # accept are `mailpit` and `real`; `EMAIL_DELIVERY_MODE=sink` aborts the converge.)
 
 # HALF B — the captcha trio is COHERENT (#2207): OFF with an empty site key, or ON with
-# BOTH vendor TEST halves. Half a pair is the one state that passes every other check
+# BOTH halves of the stand's own captcha (Yandex Cloud console, never the production
+# pair). Half a pair is the one state that passes every other check
 # and still fails every sign-in with 403. `pnpm stage:slot up|sync` refuse it by name
 # (`assertCaptchaCoherent` in tools/staging/slot.mjs); this is the same rule by hand.
 sudo grep -E '^(BOT_PROTECTION_ENABLED|SMARTCAPTCHA_SERVER_KEY|SMARTCAPTCHA_SITE_KEY)=' /etc/ds-platform/stage.env

@@ -666,7 +666,15 @@ test.describe("Feature 013 — static public Academy home", () => {
     await expect(mobileNav.getByRole("link")).toHaveText(["Эфиры"]);
 
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/account");
+    // The non-root probe is `/documents`, not `/account`. Since #2027 PR 1.4 the
+    // cabinet takes the guest decision on the SERVER (rule S1) and a guest never
+    // reaches it — `/account` answers 307 to `/login?returnTo=%2Faccount`, and the
+    // auth doors deliberately carry no storefront chrome, so the old probe would
+    // now assert the shell on a page that is designed not to have one. That
+    // bounce is pinned by `apps/portal/app/account/page.test.tsx`; what #1877
+    // asserts here is the PARALLEL-ROUTE property, so the probe moves to a
+    // non-root route a guest can actually open.
+    await page.goto("/documents");
 
     await expect(page.getByTestId("storefront-logo")).toBeVisible();
     await expect(page.locator("header")).toHaveCount(1);

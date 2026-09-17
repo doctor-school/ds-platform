@@ -94,6 +94,67 @@ Three rules live there, each stated once for both storefronts:
   target in the host's own cookie from middleware; `@ds/auth-flow/client` reads
   and clears the same cookie in the browser.
 
+## The four rules of the auth flow (S1–S4)
+
+One flow means one set of rules. These four are the STANDARD both storefronts are
+held to (#2027, owner verdict on the PR 1.4 Stage-B round 1: «цель весь флоу
+привести к единообразию и согласованности … Это вообще должно стать стандартом и
+входить в тесты»). They are stated here because they span the hosts: no single
+route owns them, and every one of them was broken on at least one route before the
+sweep that wrote them down.
+
+**S1 — a guest on a closed page is turned around on the SERVER, carrying where
+they were.** The decision is a `redirect()` in a Server Component or layout, before
+any paint, to THIS host's login route with `returnTo=<the visitor's own path>`
+built by the shared carry helper. Never a client «Загружаем…» frame followed by a
+`router.replace` — that flash is the visitor watching the app change its mind.
+Applies to `/account`, `/account/events`, `/webinars/[slug]/room` on the Academy
+and `/account` on the doctor storefront.
+
+_The one declared exception_ is the doctor room `/events/[slug]/room`, whose `auth`
+refusal lands on the EVENT page rather than a login (020 §6.1, ADR-0015 §4 REQ-24).
+That is a spec-owned product decision, not a route that forgot the rule; it is
+declared in `apps/doctor/app/(room)/events/[slug]/room/room-routes.ts`. Its
+original premise — that this host had no login of its own — stopped being true with
+#1933, so whether it should still hold is tracked in
+[#2265](https://github.com/doctor-school/ds-platform/issues/2265) rather than
+decided here.
+
+**S2 — a signed-in visitor on an auth FORM is turned around on the server too.**
+`guardAuthRoute` runs on `/login`, `/register` and `/verify` on both hosts, so a
+doctor who still has a session never sees a sign-in form paint and then vanish. A
+host names its own exceptions in `routes.allowAuthenticated`, and `/reset` is one
+on both hosts — 003 EARS-28 hands a signed-in doctor here from «Сменить пароль».
+An exemption that is the ABSENCE of a call cannot be read or tested; every route
+calls the guard and the data decides.
+
+**S3 — every transition BETWEEN auth screens carries the target forward.** The
+«Войти» / «Зарегистрироваться» / «Забыли пароль» / «Вернуться ко входу» links, the
+post-registration confirmation screen's two co-equal actions, and every
+`router.push` between these surfaces go through the host's carry helper
+(`withReturnTarget` on the Academy, `withReturnContext` on the doctor storefront),
+never a bare `"/login"` literal. Recovery and sign-up are INTERRUPTIONS of wherever
+the visitor was going, not journeys of their own: a visitor who loses the target by
+choosing the right-hand button instead of the left one has been dropped by the app,
+not by their own choice. The helper re-appends only what the shared guards
+reconstructed, so a hostile value is dropped rather than propagated.
+
+**S4 — every landing honours the carried target through the shared landing rule.**
+After login, registration, verification or a password reset, the destination comes
+from the host's one landing resolver — the account family AND the event shapes,
+not one of the two. The host's default landing applies exactly when the arrival
+carried nothing, or carried something the guards refuse. On the Academy that
+resolver is `completeReturnTarget` (it also completes a carried 005 registration
+intent); on the doctor storefront it is `resolveReturnLandingPath`. `/reset` keeps
+`/account` as its own no-target default (#221), which is why the raw value is
+screened before the shared rule is asked.
+
+**Tested, not asserted.** Each rule is pinned per route: S1/S2 by a page-level test
+that a guest (or a signed-in visitor) request REDIRECTS rather than returning a
+screen, S3 by the rendered `href` of every inter-screen link, S4 by the path the
+surface navigates to. The ids carry `#2027 S3` / `#2027 S4` so a later route cannot
+quietly opt out of the standard.
+
 ## Paths are relative, always
 
 Every call rides the CALLING host's origin through that host's `/v1/:path*`

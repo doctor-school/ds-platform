@@ -11,14 +11,23 @@ import type { RoomRoutes } from "@ds/room";
  * into `packages/room`.
  *
  * The one branch that differs from the academy's table is `auth`, and it is the
- * reason the table is parameterised at all: doctor.school has NO login route
- * (ADR-0015 §4 REQ-24 — this host holds exactly one link into the Academy), and a
- * cross-origin `returnTo` would be refused by the Academy's same-origin guard
- * anyway. So an unauthenticated visitor is sent to THIS host's own event page,
- * where the participation card is the truthful next step — never to an academy
- * login. All three refusals therefore land on the event page; they differ in
- * what the event page then shows (the api resolves the participation answer
- * per-viewer), not in where the visitor arrives.
+ * reason the table is parameterised at all. When 020 §6.1 decided it, the reason
+ * was that doctor.school had no login route of its own and an ACADEMY bounce would
+ * be a second Academy trace (ADR-0015 §4 REQ-24 — this host holds exactly one link
+ * into the Academy), with a cross-origin `returnTo` refused by the Academy's
+ * same-origin guard anyway. Since #1933 this host DOES serve `/login`, so only the
+ * product half of that reasoning still stands: an unauthenticated visitor who opens
+ * a room URL is sent to THIS host's own event page, where the participation card is
+ * the truthful next step — signing in is not what they are missing, a registration
+ * is. All three refusals therefore land on the event page; they differ in what the
+ * event page then shows (the api resolves the participation answer per-viewer), not
+ * in where the visitor arrives.
+ *
+ * This is the ONE declared exception to rule S1 of the auth-flow standard
+ * (`packages/auth-flow/README.md`), which otherwise sends a guest on a closed page
+ * to this host's login carrying `returnTo`. Whether the room should now bounce to
+ * `/login?returnTo=/events/:slug/room` instead is a 020 §6.1 product decision whose
+ * original premise has changed; it is tracked in #2265 and not settled here.
  *
  * The `register` refusal additionally carries `?from=room` (020 §6.1 table),
  * exactly as the academy's table does: a doctor who reached the room URL and was
@@ -39,7 +48,8 @@ export const DOCTOR_ROOM_ROUTES = (slug: string): DoctorRoomRoutes => {
   const eventPage = `/events/${encodeURIComponent(slug)}`;
   return {
     entry: {
-      // No login route on this host (D10) — the event page is the honest door.
+      // Rule-S1 exception, declared above: the event page is the honest door for a
+      // room URL on this host, not `/login` (020 §6.1).
       auth: eventPage,
       // Authenticated but not on the roster: the same page, whose participation
       // card is the one-tap registration control — carrying the `from=room`

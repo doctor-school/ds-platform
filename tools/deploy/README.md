@@ -213,6 +213,33 @@ then survives as a compose orphan while the shipped older Caddyfile stops routin
 it, and the derived smoke no longer probes it. The deploy goes green with a public
 vhost dark. Ship a service removal on `origin/main`, never as a hotfix.
 
+## Docker Hub login on the boxes (#2240)
+
+Step 5 builds the images **on `api-prod` itself**, so every deploy pulls base images
+from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source IP**, and
+Timeweb hands every tenant the same shared IPv6 /64 (`2a03:6f00:a::`) — the budget is
+spent by strangers. `release-2026.09.16-1` died mid-`build` on `429 Too Many Requests`
+(also seen on stage-1, 2026-09-15/16/17). `deploy:prod` has no retry for it and should
+not have one: the box is simply expected to be logged in.
+
+Both boxes are logged in as the project Docker Hub account, which re-keys the quota to
+the account (200/h):
+
+```bash
+ssh -t <box> 'sudo docker login -u bbmacademy'   # Read-only PAT, typed at the prompt
+```
+
+The token is a Read-only Docker Hub Personal Access Token with no expiry; it lives only
+in `/root/.docker/config.json` on each box (docker runs via `sudo`, so the login belongs
+to root) and never in this repo, an env file or a chat. Pre-flight check when a build
+step dies on 429: `ssh <box> 'sudo docker pull node:24-slim'` must succeed, and a
+registry token request with the box's credentials reads `ratelimit-limit: 200;w=3600` /
+`docker-ratelimit-source: bbmacademy` instead of the anonymous `100;w=3600`. A recreated
+box starts anonymous again — see `infra/deploy/README.md` → «Docker Hub login on every
+box». The login puts no registry in the deploy path: step 2 still ships the tree itself and
+step 5 still builds our own images on the box — only their base-image pulls are now
+authenticated.
+
 ## PostgreSQL deployment guard (#2141)
 
 Ordinary releases retain the initialized same-major cluster. Before the first

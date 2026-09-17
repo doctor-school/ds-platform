@@ -13,6 +13,11 @@ const SPEAKER = "Ветров Дмитрий Аркадьевич";
 const RECORDED_TITLE = "Прошедший эфир с записью (эталон)";
 
 async function findCard(page: Page, link: Locator) {
+  // Generic navigation stops at DOMContentLoaded. The server-rendered pager is
+  // already enabled then, before its client handler exists (archive trace #2253).
+  // Match the shared sign-in helper's initial client-readiness wait before clicks.
+  await page.waitForLoadState("load");
+  await page.waitForLoadState("networkidle");
   // Reach the named event through real pagination on either listing.
   const seenPages = new Set<string>();
   while ((await link.count()) === 0) {

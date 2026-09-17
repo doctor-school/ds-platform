@@ -26,6 +26,8 @@ export interface StepWorld {
   legalDocumentTitle?: string;
   /** Legal entity named by the active 028 scenario background. */
   legalEntity?: string;
+  /** Actual slot date of the named golden upcoming event (seed time is relative). */
+  upcomingStartsAt?: string;
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

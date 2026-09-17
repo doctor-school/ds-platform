@@ -1439,7 +1439,7 @@ test("EARS-3: retention preserves a shared requested tag and removes an unused o
   const script = pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE });
   try {
     const result = spawnSync(
-      process.platform === "win32" ? "C:/Program Files/Git/bin/bash.exe" : "bash",
+      process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash",
       ["--noprofile", "--norc", "-s"],
       { encoding: "utf8", env: { ...process.env, REMOVED: removed }, input: `
 set -euo pipefail

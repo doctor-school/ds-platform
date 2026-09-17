@@ -9,7 +9,12 @@ const { redirect, resolveServerAuth } = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
-vi.mock("@ds/auth-flow/server", () => ({ resolveServerAuth }));
+// Only the session read is doubled: the shared carry helper the bounce is now
+// built with keeps the REAL codec it imports from this same module.
+vi.mock("@ds/auth-flow/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/auth-flow/server")>()),
+  resolveServerAuth,
+}));
 vi.mock("@/components/account-screen", () => ({
   AccountScreen: () => null,
 }));

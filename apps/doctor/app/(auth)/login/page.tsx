@@ -12,6 +12,7 @@ import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
+  isAccountReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
@@ -146,9 +147,9 @@ export default async function DoctorLoginPage({
   // #1987 — an account arrival resolves NO эфир, so the gate branch below would
   // refuse it and drop the doctor on the LD-4 default, which is precisely the
   // destination they declined by asking for «Личный кабинет». It is a landing
-  // in its own right — the codec already reconstructed it from this host's own
-  // `routes.account`, so the comparison is against a constant, not a param.
-  const accountLanding = landingTarget === DOCTOR_AUTH_ROUTES.account;
+  // in its own right — asked of the codec, which admits the whole family under
+  // this host's own `routes.account`, not just the cabinet index (014 EARS-6.5).
+  const accountLanding = isAccountReturnTarget(returnTo);
 
   const landing =
     landingTarget && (returnEvent || accountLanding)

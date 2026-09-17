@@ -21,6 +21,7 @@ import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
   RETURN_CONTEXT_PARAM,
+  isAccountReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveCarriedReturnTarget,
@@ -198,10 +199,10 @@ export default async function DoctorRegisterPage({
   // precisely the destination they declined by asking for «Личный кабинет». The
   // sign-in door has answered it since #1987; the sign-up door had not, so a
   // doctor who arrived from a closed page and chose to REGISTER instead of
-  // signing in still lost the page. The codec already reconstructed the value
-  // from this host's own `routes.account`, so the comparison is against a
-  // constant, not a param.
-  const accountLanding = landingTarget === DOCTOR_AUTH_ROUTES.account;
+  // signing in still lost the page. The question is asked of the codec, which
+  // admits the whole family under this host's own `routes.account` and not only
+  // the cabinet index (014 EARS-6.5).
+  const accountLanding = isAccountReturnTarget(returnTo);
 
   // EARS-3 / LD-4 — where this arrival lands after confirmation. A gate arrival
   // lands back on the эфир it came from; a direct arrival lands where 017's

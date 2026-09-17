@@ -199,6 +199,18 @@ describe("#1987: an /account arrival comes back to /account", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("014 EARS-6.5: a page BELOW the cabinet is a landing in its own right", async () => {
+    resolveServerAuth.mockResolvedValue(DOCTOR);
+
+    // The family rule of `parseAccountReturnTarget` admits every path under the
+    // host's own cabinet route, so the landing must ask the codec rather than
+    // compare the target with the cabinet INDEX — otherwise «Мои события»
+    // silently degrades to the LD-4 default.
+    expect(await landingOf({ returnTo: "/account/events" })).toBe(
+      "/account/events",
+    );
+  });
+
   it("#1987: a hostile look-alike is still the LD-4 landing, never a redirect vector", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);
 

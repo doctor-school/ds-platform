@@ -219,8 +219,14 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     // would send them back through the door: the #1996 loop, one attempt later.
     await registerAndConfirm(page, arrival(LIVE), REFUSED_PASSWORD);
 
+    // Rule S3 (#2027) — the door is handed the CANONICAL `/webinars/<slug>`
+    // vocabulary every arrival on this host carries (line 49 above), because the
+    // seam now builds the hop with the shared carry helper instead of spelling
+    // the doctor-host projection into a `returnTo`. The projection is the
+    // LANDING's job, and the assertion below proves the door still resolves the
+    // carried value into the same эфир.
     await expect(page).toHaveURL(
-      `/login?returnTo=${encodeURIComponent(`/events/${LIVE}`)}`,
+      `/login?returnTo=${encodeURIComponent(`/webinars/${LIVE}`)}`,
     );
     // Not a dead end: the door they land on still shows them what they are
     // coming back to (#1939's return-context card).

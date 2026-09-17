@@ -257,6 +257,19 @@ export async function resolveReturnContext(
  * passes through verbatim; only the academy shape is re-homed, by rebuilding the
  * path from the slug the guard validated rather than by rewriting the string.
  */
+/**
+ * Rule S4 — does this arrival name a page of THIS host's account family?
+ *
+ * Asked of the codec, never by comparing the target with the cabinet INDEX: the
+ * family rule admits every path under `routes.account` with a segment boundary
+ * (`parseAccountReturnTarget`), so an exact comparison would drop «Мои события»
+ * and every future cabinet page on the LD-4 default while the bounce that sent
+ * the doctor here carried them faithfully.
+ */
+export function isAccountReturnTarget(returnTo: string | undefined): boolean {
+  return parseAccountReturnTarget(returnTo, DOCTOR_AUTH_ROUTES.account) !== null;
+}
+
 export function resolveReturnLandingPath(
   returnTo: string | undefined,
 ): string | null {

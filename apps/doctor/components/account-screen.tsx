@@ -128,7 +128,12 @@ export function AccountScreen() {
     if (profile) {
       setState({ kind: "ready", profile });
     } else {
-      router.replace("/login?returnTo=%2Faccount");
+      // Rule S3 — the EARS-9 session-expiry bounce is a bounce, so it carries
+      // this page back, built by the shared helper out of the host's own route
+      // values rather than spelled beside them.
+      router.replace(
+        withReturnContext(DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+      );
     }
   }, [router]);
 

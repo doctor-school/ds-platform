@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { resolveServerAuth } from "@ds/auth-flow/server";
 
 import { AccountScreen } from "@/components/account-screen";
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { withReturnContext } from "@/lib/return-context";
 
 /**
  * #1958 — `doctor.school/account`, the doctor storefront's «Личный кабинет».
@@ -45,7 +47,15 @@ export const metadata: Metadata = {
 export default async function DoctorAccountPage() {
   const auth = await resolveServerAuth(await headers());
   if (auth.status === "guest") {
-    redirect("/login?returnTo=%2Faccount");
+    // Rule S3 of the auth-flow standard (`packages/auth-flow/README.md`): the
+    // bounce is BUILT by the shared carry helper out of this host's own route
+    // values, never spelled as a literal beside them. The emitted string is the
+    // same canonical `/login?returnTo=%2Faccount` this route has always sent —
+    // what changes is that a later edit to either route value cannot leave the
+    // bounce behind.
+    redirect(
+      withReturnContext(DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+    );
   }
 
   return <AccountScreen />;

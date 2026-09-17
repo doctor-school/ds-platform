@@ -62,6 +62,33 @@ slots: use the slot-tagged sender and test recipient to find the right message.
 Shared Zitadel OTP mail has no sender slot tag; find the newest mail for the
 registration recipient used on your slot.
 
+## API mail transport and safe configuration recovery (#2274)
+
+`renderSlotEnv` always emits `MAILER_SMTP_HOST=mailpit`,
+`MAILER_SMTP_PORT=1025` and the slot-tagged `MAILER_SMTP_FROM`. These are
+non-secret topology, regenerated on every `up`/`sync`; the shared `stage.env`
+provides `EMAIL_DELIVERY_MODE=mailpit`. The API joins `stg-infra`, where Mailpit
+accepts unauthenticated SMTP on 1025 (the API enables implicit TLS only on 465).
+`IDP_SMTP_HOST=mailpit:1025` configures Zitadel and does **not** configure the API.
+
+The environment renderer comes from the **operator's checkout**, not the shipped
+`--ref`. Use a checkout containing this fix; an older renderer can remove these
+keys even when deploying an image built from a branch that already has the fix.
+
+For an existing slot needing only this configuration repair, coordinate with its
+owner and preserve the running image ID/SHA, slot database, Redis allocation and
+golden subjects. Back up its generated env, regenerate with `renderSlotEnv` using
+those existing inputs, and require that the only delta is the two SMTP keys.
+Check that the image tag still resolves to the running image ID and that neither
+the container nor env changed since the snapshot. Then use the slot's existing
+Compose file and both env files (the invocation in
+`infra/deploy/compose/slot/compose.yml`) with `up -d --no-deps --no-build api`.
+Do not run a full preview `sync` for this repair: it re-clones the preview database.
+Verify health, the unchanged image/database and other container IDs. Request a
+real API auth email through the normal CAPTCHA-protected flow and find the new
+slot-tagged message in Mailpit; repeat after API recreation. Opening Mailpit or
+reading an old message alone does not prove delivery.
+
 ## The box must stay logged into Docker Hub (#2240)
 
 `up`/`sync` builds missing images **on stage-1**, and each build pulls its

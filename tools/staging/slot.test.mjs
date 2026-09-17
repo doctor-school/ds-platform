@@ -537,7 +537,7 @@ test("the slot env points the BFF mailer at the shared Mailpit, not only at a fr
     redisDb: 4,
     goldenSubjects: SUBJECTS,
   });
-  // `EMAIL_DELIVERY_MODE=mailpit` (the slot compose default) selects the intercept
+  // `EMAIL_DELIVERY_MODE=mailpit` (from the shared stage.env) selects the intercept
   // transport, and `apps/api/src/mailer/mailer.module.ts` builds it from host + port
   // + from. With only `MAILER_SMTP_FROM` the transport fails CLOSED and every
   // verification-code email dies as `mailer_relay_failure … "code":"configuration"` —
@@ -566,6 +566,9 @@ test("main's Redis database is 0 in the env file it gets", () => {
     goldenSubjects: SUBJECTS,
   });
   assert.match(text, /^REDIS_URL=redis:\/\/redis:6379\/0$/m);
+  assert.match(text, /^MAILER_SMTP_HOST=mailpit$/m);
+  assert.match(text, /^MAILER_SMTP_PORT=1025$/m);
+  assert.match(text, /^MAILER_SMTP_FROM=no-reply\+main@/m);
 });
 
 test("a teardown renders only what compose needs to ADDRESS the project", () => {

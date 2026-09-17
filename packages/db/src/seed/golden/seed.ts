@@ -4,8 +4,11 @@
 // referential soundness) lives in `plan.ts` and is unit-tested without a
 // database; what remains here is the part that genuinely needs Postgres.
 
-import { getTableColumns, sql } from "drizzle-orm";
+import { and, getTableColumns, gte, lte, sql } from "drizzle-orm";
 
+import { registrations } from "../../schema/registrations.js";
+import { GOLDEN_GROUP, goldenUuid } from "./ids.js";
+import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 import { specialtiesMinzdrav } from "../../schema/specialties.js";
 import { seedSpecialtiesMinzdrav } from "../specialties-minzdrav.js";
 import { buildGoldenDataset, GoldenDatasetError } from "./dataset.js";
@@ -165,6 +168,29 @@ export async function seedGolden(
     const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
     const steps: { name: string; rows: number }[] = [];
     for (const step of plan) {
+      if (step.name === "registrations") {
+        // A later pin reshuffles the volume (user,event) pairs among ordinal
+        // ids. Updating them one by one can collide with another old ordinal.
+        // Replace only our volume namespace, inside this same transaction;
+        // named registrations and product-created UUIDs keep their identities.
+        await tx
+          .delete(registrations)
+          .where(
+            and(
+              gte(
+                registrations.id,
+                goldenUuid(
+                  GOLDEN_GROUP.registrations,
+                  GOLDEN_VOLUME_ORDINAL_BASE,
+                ),
+              ),
+              lte(
+                registrations.id,
+                goldenUuid(GOLDEN_GROUP.registrations, 0xffff_ffff_ffff),
+              ),
+            ),
+          );
+      }
       steps.push({ name: step.name, rows: await applyGoldenStep(tx, step) });
     }
     return {

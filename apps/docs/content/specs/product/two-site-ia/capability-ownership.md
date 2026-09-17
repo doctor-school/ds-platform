@@ -60,7 +60,7 @@ Thin host projections are intentional: Academy and Doctor have different targeti
 
 ## Host-file allowlist
 
-This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have. Rows are grouped by directory and sorted by path; 93 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
+This table is the checked-in answer key for every `apps/portal` / `apps/doctor` `.ts`/`.tsx` file the allowlist guard scans: everything except Next.js route files (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`, `middleware`, `proxy`), tests (`*.test.*`, `*.spec.*`, `__tests__/`), `e2e/`, ambient `*.d.ts` and each app's own root-level config. **A new file anywhere in that scope needs a row here in the same PR** — the allowlist guard ([#2002](https://github.com/doctor-school/ds-platform/issues/2002), tech spec §3 rule 3) reads this table as the tree check and fails a file it cannot find (WARN until wave 1 lands, BLOCK after). Rows are exact repo-relative paths, never globs, and a row naming a file that no longer exists fails too — the dead-glob self-test keeps the answer key honest. `until` names the extraction wave that deletes the row; `permanent` means the file is genuinely host-only — brand, config, or a surface the other host does not have. Rows are grouped by directory and sorted by path; 92 files today. Route files are excluded from this table on purpose — they answer to «Route-file registry» below, which records the package each `page.tsx` / `layout.tsx` mounts or will mount.
 
 ### `apps/doctor/app`
 
@@ -125,17 +125,18 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 
 ### `apps/portal/app`
 
-| path                                                   | reason                                           | until          |
-| ------------------------------------------------------ | ------------------------------------------------ | -------------- |
-| `apps/portal/app/academy-home-view.tsx`                | host-only surface (Academy home)                 | permanent      |
-| `apps/portal/app/academy-partnership-action.ts`        | host-only surface (academy partnership form)     | permanent      |
-| `apps/portal/app/fixtures.ts`                          | host-only surface (Academy home demo fixtures)   | permanent      |
-| `apps/portal/app/lead-demo-fields.tsx`                 | host-only surface (academy partnership form)     | permanent      |
-| `apps/portal/app/webinars/[slug]/recording-gate.tsx`   | host-only surface (Academy recordings)           | permanent      |
-| `apps/portal/app/webinars/[slug]/recording-player.tsx` | host-only surface (Academy recordings)           | permanent      |
-| `apps/portal/app/webinars/[slug]/room/copy.ts`         | wave 4 source (#2073) — moves to `packages/room` | wave 4 (#2073) |
-| `apps/portal/app/webinars/[slug]/room/room-client.tsx` | wave 4 source (#2073) — moves to `packages/room` | wave 4 (#2073) |
-| `apps/portal/app/webinars/[slug]/room/room-routes.ts`  | wave 4 source (#2073) — moves to `packages/room` | wave 4 (#2073) |
+| path                                                   | reason                                                                                                               | until          |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `apps/portal/app/academy-home-view.tsx`                | host-only surface (Academy home)                                                                                     | permanent      |
+| `apps/portal/app/academy-partnership-action.ts`        | host-only surface (academy partnership form)                                                                         | permanent      |
+| `apps/portal/app/account/account-profile.tsx`          | the signed-in cabinet body, split out as a client child when the route became a guest-deciding Server Component (S1) | wave 4 (#2073) |
+| `apps/portal/app/fixtures.ts`                          | host-only surface (Academy home demo fixtures)                                                                       | permanent      |
+| `apps/portal/app/lead-demo-fields.tsx`                 | host-only surface (academy partnership form)                                                                         | permanent      |
+| `apps/portal/app/webinars/[slug]/recording-gate.tsx`   | host-only surface (Academy recordings)                                                                               | permanent      |
+| `apps/portal/app/webinars/[slug]/recording-player.tsx` | host-only surface (Academy recordings)                                                                               | permanent      |
+| `apps/portal/app/webinars/[slug]/room/copy.ts`         | wave 4 source (#2073) — moves to `packages/room`                                                                     | wave 4 (#2073) |
+| `apps/portal/app/webinars/[slug]/room/room-client.tsx` | wave 4 source (#2073) — moves to `packages/room`                                                                     | wave 4 (#2073) |
+| `apps/portal/app/webinars/[slug]/room/room-routes.ts`  | wave 4 source (#2073) — moves to `packages/room`                                                                     | wave 4 (#2073) |
 
 ### `apps/portal/components`
 

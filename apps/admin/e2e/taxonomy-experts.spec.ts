@@ -50,9 +50,8 @@ async function fillRequiredNames(
 test.describe.configure({ mode: "serial" });
 
 test.describe("012 EARS-19/20 — Expert authoring", () => {
-  test("EARS-20: structured names reject and accept, slug stays server-owned, and the generated public link copies", async ({
+  test("EARS-20: name validation, Latin edits and photo rejection remain enforced", async ({
     page,
-    context,
   }) => {
     await signInAsAdmin(page);
     await openExpertCreate(page);
@@ -76,32 +75,8 @@ test.describe("012 EARS-19/20 — Expert authoring", () => {
     // Expert: the closed User selector remains deliberately empty.
     const familyName = `Петров-${Date.now()}`;
     await fillRequiredNames(page, familyName, "Иван", "Сергеевич");
-    await expect(page.getByTestId("expert-slug")).toHaveCount(0);
-    await expect(page.getByTestId("expert-public-link-note")).toContainText(
-      "Адрес сгенерирует сервер",
-    );
     await page.getByTestId("submit-expert").click();
     await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-
-    await expect(page.getByTestId("expert-heading")).toContainText(familyName);
-    await expect(page.getByTestId("expert-status")).toHaveText("Черновик");
-    await expect(page.getByTestId("expert-initials")).toHaveText("ПИ");
-    await expect(page.getByTestId("expert-slug")).toHaveCount(0);
-    const publicUrl = await page.getByTestId("expert-public-link").innerText();
-    expect(publicUrl).toMatch(
-      /^https:\/\/academy\.doctor\.school\/experts\/petrov-/,
-    );
-
-    await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-      origin: ADMIN_ORIGIN,
-    });
-    await page.getByTestId("expert-copy-public-link").click();
-    await expect(page.getByTestId("expert-copy-public-link")).toHaveText(
-      "Ссылка скопирована",
-    );
-    await expect
-      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-      .toBe(publicUrl);
 
     // Latin is equally valid free name text, and the retained MediaDropzone still
     // rejects a non-image in the browser.

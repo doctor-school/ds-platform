@@ -21,6 +21,7 @@ import {
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { refreshShellAuth } from "@ds/storefront-shell";
+import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -144,7 +145,9 @@ function PortalEmailConfirmCard() {
         botProtectionFailureMessage(failure, botProtectionMessages(authFlow)),
       ),
     onActionError: (err) =>
-      setResendError(authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed"))),
+      setResendError(
+        authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed")),
+      ),
   });
 
   const resolver = useLocalizedResolver(VerifyRequestSchema);
@@ -178,7 +181,9 @@ function PortalEmailConfirmCard() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setResendError(authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed")));
+      setResendError(
+        authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed")),
+      );
     },
     // Clear only resend-owned state; code-verification feedback is unrelated.
     onBeforeResend: () => {
@@ -295,7 +300,13 @@ function PortalEmailConfirmCard() {
       // 005 EARS-2: the already-registered owner's sign-in path — the event
       // context rides onward into /login so completing auth there still finishes
       // the carried registration.
-      links={{ login: withReturnTarget("/login", returnTo), reset: "/reset" }}
+      // Rule S3 (#2027): BOTH co-equal actions carry alike — «Сбросить пароль» was
+      // still a bare literal, so a visitor kept their context only if they picked
+      // the left button.
+      links={{
+        login: withReturnTarget(ACADEMY_AUTH_ROUTES.login, returnTo),
+        reset: withReturnTarget(ACADEMY_AUTH_ROUTES.reset, returnTo),
+      }}
       // Next.js `<Link>` keeps the two actions on client-side navigation.
       renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
       // Only meaningful when an email destination is known (it is seeded from the

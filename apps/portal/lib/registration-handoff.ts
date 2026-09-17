@@ -36,17 +36,33 @@ export function withReturnTarget(
   path: string,
   rawReturnTo: string | null,
 ): string {
-  // Three guards, narrowest first, because the narrower two also decide what
-  // happens on ARRIVAL: the 005 registration-intent (`/webinars/<slug>`) additionally
-  // fires `RegisterForEvent`, and the 006 room-return (`/webinars/<slug>/room`)
-  // additionally re-runs the room gate. 014 EARS-6 then generalizes the carry to
-  // ANY same-origin page, so a visitor sent to auth from any other login-gated
-  // surface keeps their origin across the hop instead of silently losing it here.
-  const safe =
-    parseRoomReturnTarget(rawReturnTo, ACADEMY_ROOM_ROUTES)?.returnTo ??
-    parseAcademyEventReturnTarget(rawReturnTo)?.returnTo ??
-    parseSameOriginReturnTarget(rawReturnTo);
+  const safe = safeReturnTarget(rawReturnTo);
   if (!safe) return path;
   const sep = path.includes("?") ? "&" : "?";
   return `${path}${sep}returnTo=${encodeURIComponent(safe)}`;
+}
+
+/**
+ * The guard chain itself, named once (#2027 rule S3/S4). The CARRY above and any
+ * surface that must decide «did this visitor arrive carrying anything at all?»
+ * — `/reset`, whose landing is the #221 `/account` default exactly when they did
+ * not — answer that question through THIS function, so a hostile value is refused
+ * by the same three guards in the same order at every consumption point instead of
+ * each caller re-assembling them.
+ *
+ * Three guards, narrowest first, because the narrower two also decide what happens
+ * on ARRIVAL: the 005 registration-intent (`/webinars/<slug>`) additionally fires
+ * `RegisterForEvent`, and the 006 room-return (`/webinars/<slug>/room`) additionally
+ * re-runs the room gate. 014 EARS-6 then generalizes the carry to ANY same-origin
+ * page, so a visitor sent to auth from any other login-gated surface keeps their
+ * origin across the hop instead of silently losing it here. Returns the CANONICAL
+ * form the guard reconstructs, never the raw input.
+ */
+export function safeReturnTarget(rawReturnTo: string | null): string | null {
+  return (
+    parseRoomReturnTarget(rawReturnTo, ACADEMY_ROOM_ROUTES)?.returnTo ??
+    parseAcademyEventReturnTarget(rawReturnTo)?.returnTo ??
+    parseSameOriginReturnTarget(rawReturnTo) ??
+    null
+  );
 }

@@ -399,6 +399,22 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
       "/login?returnTo=%2Fwebinars%2Fahilles-042",
     );
   });
+
+  // #2027 rule S3: the confirmation screen's two co-equal actions must carry the
+  // target ALIKE — «Войти» did since 005 EARS-2, «Сбросить пароль» was still bare,
+  // so the visitor kept their context only if they picked the left button.
+  it("#2027 S3: the co-equal «Сбросить пароль» action carries the arrival target onward into /reset", async () => {
+    searchParams = new URLSearchParams({
+      email: EMAIL,
+      returnTo: "/webinars/ahilles-042",
+    });
+    await renderVerify();
+
+    expect(screen.getByTestId("verify-go-to-reset")).toHaveAttribute(
+      "href",
+      "/reset?returnTo=%2Fwebinars%2Fahilles-042",
+    );
+  });
 });
 
 /**

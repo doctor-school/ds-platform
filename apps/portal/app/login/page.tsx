@@ -24,6 +24,7 @@ import {
   loginIdentifierFormSchema,
   otpIdentifierFormSchema,
 } from "@ds/auth-flow/fields";
+import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
@@ -112,7 +113,9 @@ function PortalLoginCard() {
         setPasswordCaptchaError(te("captchaRequired"));
         return;
       }
-      setPasswordError(authErrorMessage(err, authFlow.copy.errors, te("loginFailed")));
+      setPasswordError(
+        authErrorMessage(err, authFlow.copy.errors, te("loginFailed")),
+      );
     },
   });
 
@@ -150,7 +153,9 @@ function PortalLoginCard() {
       // generic message so the UI never leaks an existence/error oracle. Only the
       // non-oracle statuses get a specific message: 429 → too-many-attempts,
       // 5xx/network → temporarily-unavailable.
-      setPasswordError(authErrorMessage(err, authFlow.copy.errors, te("loginFailed")));
+      setPasswordError(
+        authErrorMessage(err, authFlow.copy.errors, te("loginFailed")),
+      );
     }
   }
 
@@ -180,7 +185,9 @@ function PortalLoginCard() {
         setOtpCaptchaError(te("captchaRequired"));
         return;
       }
-      setOtpRequestError(authErrorMessage(err, authFlow.copy.errors, te("otpSendFailed")));
+      setOtpRequestError(
+        authErrorMessage(err, authFlow.copy.errors, te("otpSendFailed")),
+      );
     },
   });
 
@@ -231,7 +238,9 @@ function PortalLoginCard() {
       refreshShellAuth();
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
-      setOtpVerifyError(authErrorMessage(err, authFlow.copy.errors, te("otpVerifyFailed")));
+      setOtpVerifyError(
+        authErrorMessage(err, authFlow.copy.errors, te("otpVerifyFailed")),
+      );
     }
   }
 
@@ -327,9 +336,12 @@ function PortalLoginCard() {
       copy={copy}
       // 005 EARS-2: signup is a co-equal auth path — the event context rides
       // onward into /register so it survives this hop too.
+      // Rule S3 (#2027): «Забыли пароль» carries the same context — recovery is an
+      // INTERRUPTION of wherever this visitor was going, not a journey of its own,
+      // and `/reset` reads the param back for both its own exit and its landing.
       links={{
-        register: withReturnTarget("/register", returnTo),
-        reset: "/reset",
+        register: withReturnTarget(ACADEMY_AUTH_ROUTES.register, returnTo),
+        reset: withReturnTarget(ACADEMY_AUTH_ROUTES.reset, returnTo),
       }}
       // Next.js `<Link>` keeps the footer links on client-side navigation.
       renderLink={({ href, children }) => <Link href={href}>{children}</Link>}

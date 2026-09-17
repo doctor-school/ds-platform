@@ -30,8 +30,10 @@ import ResetPage from "./page";
 
 const push = vi.fn();
 const replace = vi.fn();
+let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace }),
+  useSearchParams: () => searchParams,
 }));
 
 // Passthrough i18n: return the key (the test asserts on stable testids / roles, not
@@ -87,6 +89,7 @@ beforeEach(() => {
   replace.mockClear();
   requestPasswordReset.mockClear();
   completePasswordReset.mockClear();
+  searchParams = new URLSearchParams();
   captchaMode = "bypass";
   captchaProps = undefined;
 });
@@ -169,6 +172,16 @@ async function advanceToCompleteStage(
   await waitFor(() => expect(requestPasswordReset).toHaveBeenCalledTimes(1));
   // The complete step's <ResetCompleteForm/> mounts only now (late-mount path).
   await screen.findByRole("textbox");
+}
+
+/** Fill and submit the complete step (code + new password) of the mounted form. */
+async function completeReset(user: ReturnType<typeof userEvent.setup>) {
+  const codeInput = screen.getByRole("textbox");
+  await user.click(codeInput);
+  await user.keyboard(RESET_CODE);
+  await waitFor(() => expect(codeInput).toHaveValue(RESET_CODE));
+  await user.type(screen.getByLabelText("newPasswordLabel"), NEW_PASSWORD);
+  await user.click(screen.getByRole("button", { name: "setNewPassword" }));
 }
 
 describe("/reset complete step — resend with cooldown (#267)", () => {
@@ -335,6 +348,59 @@ describe("/reset complete step (late-mounted slotted code field)", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
     expect(push).not.toHaveBeenCalledWith("/login");
+  });
+});
+
+/**
+ * #2027 rules S3 + S4 — recovery is an INTERRUPTION of wherever the visitor was
+ * going, not a journey of its own. `/login` and `/verify` both hand off here, and
+ * this surface used to drop whatever they were carrying: «Вернуться ко входу» went
+ * to a bare `/login`, and completion always pushed the fixed `/account`. A guest
+ * bounced off `/account/events` who recovered their password therefore landed on the
+ * profile page instead of the events list they asked for. The route now reads the
+ * same `returnTo` its siblings read; `/account` stays the landing exactly when the
+ * arrival carried nothing (#221's default, unchanged).
+ */
+describe("#2027 S3/S4: /reset carries the arrival target", () => {
+  it("#2027 S3: the «Вернуться ко входу» link carries the arrival target onward into /login", async () => {
+    searchParams = new URLSearchParams({ returnTo: "/account/events" });
+    render(<ResetPage />);
+    await screen.findByTestId("reset-request-submit");
+
+    expect(screen.getByRole("link", { name: "backToSignIn" })).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Faccount%2Fevents",
+    );
+  });
+
+  it("#2027 S4: a completed reset lands on the carried page through the shared rule, not the fixed cabinet", async () => {
+    searchParams = new URLSearchParams({ returnTo: "/account/events" });
+    const user = userEvent.setup();
+    render(<ResetPage />);
+
+    await advanceToCompleteStage(user);
+    await completeReset(user);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/account/events"));
+    expect(push).not.toHaveBeenCalledWith("/account");
+  });
+
+  it("#2027 S3/S4: a hostile target is refused at BOTH ends — the exit stays bare and the landing is the #221 cabinet default", async () => {
+    searchParams = new URLSearchParams({ returnTo: "//evil.example" });
+    const user = userEvent.setup();
+    render(<ResetPage />);
+    await screen.findByTestId("reset-request-submit");
+
+    expect(screen.getByRole("link", { name: "backToSignIn" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+
+    await advanceToCompleteStage(user);
+    await completeReset(user);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
+    expect(push).not.toHaveBeenCalledWith("//evil.example");
   });
 });
 

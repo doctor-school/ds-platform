@@ -629,6 +629,9 @@ importers:
       '@ds/events-storefront':
         specifier: workspace:*
         version: link:../events-storefront
+      '@ds/room':
+        specifier: workspace:*
+        version: link:../room
       '@ds/schemas':
         specifier: workspace:*
         version: link:../schemas

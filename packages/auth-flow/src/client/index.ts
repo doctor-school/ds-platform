@@ -9,3 +9,4 @@ export {
   readStoredReturnTarget,
   resolveReturnTarget,
 } from "./return-target-store";
+export { completeReturnTarget } from "./return-completion";

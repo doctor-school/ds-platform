@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 
@@ -269,6 +270,12 @@ describe("renderVerdictBlock", () => {
 const BOX_ENV = {
   STAGE_BASE_DOMAIN: "stage.doctor.school",
   STAGE_BASIC_AUTH_USER: "stage",
+  DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED: "box-unverified",
+  DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "box-verified",
+  DS_GOLDEN_PASSWORD_DOCTOR_MFA: "box-mfa",
+  DS_GOLDEN_PASSWORD_ADMIN: "box-admin",
+  DS_GOLDEN_PASSWORD_DOCTOR_DELETED: "must-not-leak",
+  POSTGRES_PASSWORD: "must-not-leak",
 };
 const SHA = "c".repeat(40);
 
@@ -317,6 +324,40 @@ describe("assertShellInert", () => {
 });
 
 describe("runE2eStage", () => {
+  it("builds the e2e workspace dependencies before the browser suite", () => {
+    const packageJson = JSON.parse(
+      readFileSync(new URL("../../packages/e2e/package.json", import.meta.url)),
+    );
+    assert.equal(
+      packageJson.scripts["pretest:e2e"],
+      "pnpm exec turbo run build --filter=@ds/e2e...",
+    );
+  });
+
+  it("supplies only the four live golden passwords from the box, with local overrides", async () => {
+    const { calls, effects } = harness();
+    await runE2eStage(["main"], {
+      env: {
+        STAGE_BASIC_AUTH_PASS: "s3cret",
+        DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "operator-verified",
+      },
+      effects,
+    });
+    const suiteEnv = calls[0].env;
+    assert.equal(
+      suiteEnv.DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED,
+      "box-unverified",
+    );
+    assert.equal(
+      suiteEnv.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED,
+      "operator-verified",
+    );
+    assert.equal(suiteEnv.DS_GOLDEN_PASSWORD_DOCTOR_MFA, "box-mfa");
+    assert.equal(suiteEnv.DS_GOLDEN_PASSWORD_ADMIN, "box-admin");
+    assert.equal(suiteEnv.DS_GOLDEN_PASSWORD_DOCTOR_DELETED, undefined);
+    assert.equal(suiteEnv.POSTGRES_PASSWORD, undefined);
+  });
+
   it("passes the derived URLs and the basic-auth pair to the suite run", async () => {
     const { calls, effects } = harness();
     await runE2eStage(["main"], {
@@ -378,11 +419,16 @@ describe("runE2eStage", () => {
         E2E_HTTP_USER: "stage",
         E2E_HTTP_PASS: "s3cret",
         STAGE_BASE_DOMAIN: "stage.doctor.school",
+        DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED: "operator-verified",
       },
       effects,
     });
     assert.equal(code, 0);
     assert.equal(calls[0].env.E2E_HTTP_PASS, "s3cret");
+    assert.equal(
+      calls[0].env.DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED,
+      "operator-verified",
+    );
   });
 
   it("refuses with exit 2 and names the URL when the slot does not answer", async () => {

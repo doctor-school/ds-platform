@@ -152,9 +152,8 @@ services:
   # «Identity»); that serialization is the control there, and the suite reads the
   # newest message for the recipient.
   #
-  # The UI is not published: it is reachable through the shared Caddy in step 2
-  # (mailpit.stage.doctor.school, basic-auth like every staging host). Slots reach
-  # SMTP in-network as `mailpit:1025`.
+  # UI: https://mailpit.stage.doctor.school through Caddy's shared stage gate;
+  # no host port is published, and slots reach SMTP in-network as `mailpit:1025`.
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped

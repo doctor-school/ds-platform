@@ -25,6 +25,7 @@ export async function AcademyShellHeader() {
       config={academyShellConfig(t)}
       loginLabel={t(portalNav.login.label)}
       profileLabel={t(portalNav.profile.label)}
+      myEventsLabel={t(portalNav.myEvents.label)}
     />
   );
 }

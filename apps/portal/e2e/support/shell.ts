@@ -31,6 +31,10 @@ export const DISCOVERY_HREF = "/webinars";
 /** The single nav item both storefronts ship (owner decision 2026-09-10). */
 export const NAV_BROADCASTS = "Эфиры";
 
+/** The signed-in auth cluster's own link — canvas `user.links` line 209 (#2243). */
+export const MY_EVENTS_LABEL = "Мои события";
+export const MY_EVENTS_HREF = "/account/events";
+
 /**
  * The persistent chrome header region — scoped by the package's own test-id so
  * it is never confused with the feature-004 discovery poster `<header>` inside

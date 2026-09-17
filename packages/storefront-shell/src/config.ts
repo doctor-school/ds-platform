@@ -40,6 +40,18 @@ export type ShellAuthState =
       profileHref: string;
       label: string;
       initials?: string | null;
+      /**
+       * 008 EARS-5/11 — the extra destinations a signed-in session carries:
+       * the canvas `user.links` (`ds-shell.dc.html` line 209 for the academy,
+       * line 192 — empty — for the doctor storefront). The package renders
+       * them inside the NAV GROUP, as the canvas draws them — on desktop after
+       * the nav items and BEFORE the theme control (line 33, toggle line 35,
+       * chip line 36), and as `≡` rows after the nav rows (line 50). A VALUE like every other host difference: the academy passes
+       * «Мои события» → `/account/events`, the doctor storefront passes none
+       * and its cluster stays exactly what #2180 shipped. Absent and empty are
+       * the same thing — nothing is rendered (#2243).
+       */
+      links?: readonly ShellLink[];
     };
 
 /** The two storefronts that mount this chrome. */

@@ -7,6 +7,8 @@ import {
 import {
   DISCOVERY_HEADING,
   DISCOVERY_HREF,
+  MY_EVENTS_HREF,
+  MY_EVENTS_LABEL,
   NAV_BROADCASTS,
   setMyDisplayName,
   shellHeader,
@@ -68,12 +70,24 @@ Then(
     // auto-waits for the signaled re-read to resolve.
     const header = shellHeader(page);
     await expect(shellLogo(page)).toBeVisible();
-    // Since #2180 the nav is «Эфиры» ALONE on both storefronts (owner decision
-    // 2026-09-10, merged 008/017 deltas); «Мои события» is reached from the
-    // profile, and its destination stays driven by the feature-005 specs.
+    // The CONFIGURED nav is «Эфиры» alone on both storefronts (owner decision
+    // 2026-09-10, #2180). For a SIGNED-IN academy doctor the canvas draws the
+    // auth cluster's own «Мои события» → `/account/events` at the tail of that
+    // same nav group (`design-source/ds-shell.dc.html` `user.links` line 209,
+    // rendered line 33 — 008 EARS-5/EARS-11, restored by #2243). So assert the
+    // names and hrefs the signed-in bar really carries, not a bare count.
     const nav = header.getByTestId("shell-nav-desktop");
-    await expect(nav.getByRole("link", { name: NAV_BROADCASTS })).toBeVisible();
-    await expect(nav.getByRole("link")).toHaveCount(1);
+    const broadcasts = nav.getByRole("link", { name: NAV_BROADCASTS });
+    await expect(broadcasts).toBeVisible();
+    await expect(broadcasts).toHaveAttribute("href", DISCOVERY_HREF);
+    const myEvents = nav.getByRole("link", { name: MY_EVENTS_LABEL });
+    await expect(myEvents).toBeVisible();
+    await expect(myEvents).toHaveAttribute("href", MY_EVENTS_HREF);
+    // …and exactly those two, in the canvas order «Эфиры · Мои события».
+    await expect(nav.getByRole("link")).toHaveText([
+      NAV_BROADCASTS,
+      MY_EVENTS_LABEL,
+    ]);
     await expect(themeToggle(page)).toBeVisible();
     // EARS-5/6: the avatar is an icon showing the doctor's real initials.
     await expect(page.getByTestId("shell-avatar")).toHaveText(DOCTOR_INITIALS);
@@ -151,14 +165,22 @@ When("the doctor opens the header ≡ navigation", async ({ page }) => {
 });
 
 Then("the ≡ dropdown carries the same nav items as the desktop bar", async ({ page }) => {
-  // ONE host config value feeds both lists, so they cannot drift apart. Since
-  // #2180 that list is «Эфиры» alone (owner decision 2026-09-10).
+  // ONE host config value feeds both lists, so they cannot drift apart: the
+  // configured «Эфиры» (owner decision 2026-09-10, #2180) plus the signed-in
+  // auth link «Мои события» the canvas draws as a ≡ row (canvas line 50, 008
+  // EARS-11/#2243) — the same pair the desktop bar shows to this doctor.
   const mobileNav = page.getByTestId("shell-nav-mobile");
   await expect(mobileNav).toBeVisible();
-  await expect(mobileNav.getByRole("link")).toHaveCount(1);
   const broadcasts = mobileNav.getByRole("link", { name: NAV_BROADCASTS });
   await expect(broadcasts).toBeVisible();
   await expect(broadcasts).toHaveAttribute("href", DISCOVERY_HREF);
+  const myEvents = mobileNav.getByRole("link", { name: MY_EVENTS_LABEL });
+  await expect(myEvents).toBeVisible();
+  await expect(myEvents).toHaveAttribute("href", MY_EVENTS_HREF);
+  await expect(mobileNav.getByRole("link")).toHaveText([
+    NAV_BROADCASTS,
+    MY_EVENTS_LABEL,
+  ]);
 });
 
 Then(

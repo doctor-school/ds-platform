@@ -42,9 +42,10 @@ test.describe("008 EARS-1 persistent app-shell header presence (e2e)", () => {
       await expect(header, `header present on ${route}`).toBeVisible();
       // Logo → the discovery front-door.
       await expect(shellLogo(page)).toBeVisible();
-      // Top-nav — «Эфиры» alone since the owner's 2026-09-10 decision (the nav
-      // grows with features 015/016 and the partner surface; «Мои события» is
-      // reached from the profile, not from the chrome).
+      // Top-nav — the configured list is «Эфиры» alone since the owner's
+      // 2026-09-10 decision (it grows with features 015/016 and the partner
+      // surface); for this signed-in doctor the auth link «Мои события» joins
+      // the same nav group (#2243, owned by `shell/doctor-header.spec.ts`).
       const nav = page.getByTestId("shell-nav-desktop");
       await expect(nav, `top-nav present on ${route}`).toBeVisible();
       await expect(

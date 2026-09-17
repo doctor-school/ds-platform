@@ -4,6 +4,7 @@ import { portalNav, portalNavigationModel } from "@/lib/navigation-model";
 import {
   academyShellConfig,
   LOGIN_HREF,
+  MY_EVENTS_HREF,
   PROFILE_HREF,
   type ShellConfigKey,
 } from "@/lib/shell-config";
@@ -33,6 +34,10 @@ const paintedHrefs: readonly string[] = [
   ...config.nav.map((item) => item.href),
   LOGIN_HREF,
   PROFILE_HREF,
+  // The signed-in cluster's own link — canvas `user.links` line 209, painted by
+  // the package beside the chip and in the `≡` menu (#2243). It is a chrome
+  // destination like any other, which is exactly why the walk must visit it.
+  MY_EVENTS_HREF,
 ];
 
 describe("§6.3: the academy chrome and the navigation model are one list", () => {
@@ -57,6 +62,10 @@ describe("§6.3: the academy chrome and the navigation model are one list", () =
     ]);
     expect(LOGIN_HREF).toBe(portalNav.login.href);
     expect(PROFILE_HREF).toBe(portalNav.profile.href);
+    expect(MY_EVENTS_HREF).toBe(portalNav.myEvents.href);
+    // …and it stays OUT of the top nav: the owner decision of 2026-09-10
+    // (#2180) ships «Эфиры» alone there.
+    expect(config.nav.map((item) => item.href)).not.toContain(MY_EVENTS_HREF);
   });
 
   it("has no header search: this host owns no results surface", () => {

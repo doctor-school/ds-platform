@@ -4,7 +4,7 @@ import { StorefrontHeader } from "@ds/storefront-shell";
 import type { ShellAuthState, StorefrontShellConfig } from "@ds/storefront-shell";
 
 import { useHeaderAuth } from "@/lib/header-auth";
-import { LOGIN_HREF, PROFILE_HREF } from "@/lib/shell-config";
+import { LOGIN_HREF, MY_EVENTS_HREF, PROFILE_HREF } from "@/lib/shell-config";
 
 /**
  * 008 EARS-4/5/6 — the academy host's session read, and nothing else.
@@ -27,12 +27,15 @@ export function AcademyShellHeaderClient({
   config,
   loginLabel,
   profileLabel,
+  myEventsLabel,
 }: {
   config: StorefrontShellConfig;
   /** «Войти / Регистрация» — the ONE guest control (canvas line 220). */
   loginLabel: string;
   /** The accessible name of the initials chip (catalog `shell.profile`). */
   profileLabel: string;
+  /** «Мои события» — the cluster's link beside the chip (canvas `user.links`). */
+  myEventsLabel: string;
 }) {
   const auth = useHeaderAuth();
 
@@ -46,6 +49,10 @@ export function AcademyShellHeaderClient({
             profileHref: PROFILE_HREF,
             label: profileLabel,
             initials: auth.initials,
+            // Canvas `user.links` line 209 — the academy cluster's «Мои события»
+            // beside the avatar. The package decides where it is drawn at each
+            // width; the host names only the copy and the destination (#2243).
+            links: [{ label: myEventsLabel, href: MY_EVENTS_HREF }],
           };
 
   return <StorefrontHeader config={config} auth={state} />;

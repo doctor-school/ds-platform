@@ -312,7 +312,7 @@ export function slotEnvPath(slot) {
  * claiming a slot that is not there (or hiding one that is). Docker's own labels
  * cannot drift from docker's own state.
  *
- * Input is one `<project>\t<image>` line per container. Projects that are not slots
+ * Input is one `<project>\t<Config.Image>` line per container. Projects that are not slots
  * (`stg-infra`, anything hand-run) and dangling containers with no project label are
  * dropped rather than guessed at.
  */
@@ -648,12 +648,16 @@ export function composeBase(slot) {
  * manifests make every image a multi-platform index, which `docker image inspect`
  * then cannot resolve to a single id.
  */
-export function buildCommandPlan(slot) {
+export function buildCommandPlan(slot, sha, services) {
+  shortSha(sha);
   return {
-    kind: "sh",
-    label: "build images",
+    kind: "ensure-present",
+    label: "build missing images",
     stallBudget: "build",
-    command: ["sudo", NO_ATTEST, ...composeBase(slot).slice(1), "build"],
+    items: services.map(({ name, image }) => ({
+      probe: ["sudo", "docker", "image", "inspect", `${image}:${sha}`],
+      apply: ["sudo", NO_ATTEST, ...composeBase(slot).slice(1), "build", name],
+    })),
   };
 }
 
@@ -661,7 +665,13 @@ export function upCommandPlan(slot) {
   return {
     kind: "sh",
     label: "up -d",
-    command: [...composeBase(slot), "up", "-d", "--remove-orphans"],
+    command: [
+      ...composeBase(slot),
+      "up",
+      "-d",
+      "--no-build",
+      "--remove-orphans",
+    ],
   };
 }
 
@@ -1319,7 +1329,7 @@ export function planSlotUp({
       }),
       mode: 0o640,
     },
-    buildCommandPlan(slot),
+    { kind: "build-images", label: "build images", sha, slot },
     { kind: "verify-images", label: "verify images boot", sha, slot },
   ];
 
@@ -1541,6 +1551,7 @@ export function planSlotReset({
 /** The remote-only step kinds, each naming the effect that must supply it. */
 const REMOTE_ONLY_KINDS = Object.freeze({
   ship: "ship",
+  "build-images": "buildImages",
   "verify-images": "verifyImages",
   "verify-running": "verifyRunning",
   health: "health",
@@ -1578,6 +1589,7 @@ export async function runSlotPlan(
     probe,
     idp,
     ship,
+    buildImages,
     verifyImages,
     verifyRunning,
     health,
@@ -1587,6 +1599,7 @@ export async function runSlotPlan(
 ) {
   const remoteEffects = {
     ship,
+    buildImages,
     verifyImages,
     verifyRunning,
     health,
@@ -1902,17 +1915,19 @@ async function readIdpPat() {
 
 /** Which slots are live, straight from docker's own labels.
  *
- * `options` is passed through to `sshCapture` untouched, so the default call is
- * byte-identical to what `status` has always run; `pnpm bootstrap` supplies a
+ * `options` is passed through to `sshCapture` untouched; `pnpm bootstrap` supplies a
  * short ConnectTimeout plus an AbortSignal (#2233). */
+export function liveSlotsScript() {
+  // ps .Image may become an ID after a tag moves. Config.Image is the original
+  // requested reference: retaining it also preserves a stopped slot's restart.
+  return `ids=$(sudo docker ps -aq --filter label=com.docker.compose.project)
+if [ -n "$ids" ]; then
+  sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}\t{{.Config.Image}}' $ids
+fi`;
+}
+
 export async function readLiveSlots(options = {}) {
-  return parseLiveSlots(
-    await sshCapture(
-      STAGE_1,
-      `sudo docker ps -a --format '{{.Label "com.docker.compose.project"}}\\t{{.Image}}'`,
-      options,
-    ),
-  );
+  return parseLiveSlots(await sshCapture(STAGE_1, liveSlotsScript(), options));
 }
 
 async function readBoxImages() {
@@ -2099,12 +2114,20 @@ export function assertRunningVerdict(stdout, { slot, sha }) {
  * service would otherwise leak every tag of that repo forever. `ds-` scoping keeps
  * the shared-infra images (caddy, postgres, zitadel) structurally out of reach.
  *
- * `docker rmi` REFUSES an image a container still uses, which is what keeps retention
- * from pulling an older commit's images out from under another live slot; that
- * refusal is the swallowed `|| true`, exactly as in production.
+ * Preserve requested tags explicitly: Docker can untag a referenced image when
+ * it has another tag, and a moved tag is no longer the container's image ID.
+ * Docker's refusal remains a final race safety net, not the retention authority.
  */
 export function pruneScript({ retention, reservedSpace }) {
-  return `prune_repo() {
+  return `ids=$(sudo docker ps -aq)
+in_use=""
+if [ -n "$ids" ]; then
+  in_use=$(sudo docker inspect --format '{{.Config.Image}}' $ids)
+fi
+# One-shot migrate has no container after --rm, but belongs to the same bundle.
+# Cached images retain their old CreatedAt; age alone must not evict that bundle.
+in_use_shas=$(printf '%s\n' "$in_use" | awk -F: '/^ds-/ && $2 ~ /^[0-9a-f]+$/ && length($2)==40 {print $2}')
+prune_repo() {
   repo="$1"; keep="$2"
   # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (only
   # \`:local\` tags exist yet) exits 1. "Nothing to prune" is success, not failure.
@@ -2113,6 +2136,8 @@ export function pruneScript({ retention, reservedSpace }) {
     | sort -r \\
     | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
     | while IFS= read -r tag; do
+        if printf '%s\n' "$in_use" | grep -Fxq "$repo:$tag"; then continue; fi
+        if printf '%s\n' "$in_use_shas" | grep -Fxq "$tag"; then continue; fi
         [ -n "$tag" ] && sudo docker rmi "$repo:$tag" >/dev/null 2>&1 || true
       done
 }
@@ -2391,6 +2416,13 @@ function realEffects(boxEnv) {
         preserved: step.preserved,
         tmpPrefix: step.tmpPrefix,
       }),
+    buildImages: async (step) => {
+      const { services } = await readSlotServices(step.slot);
+      return runSlotPlan(
+        { steps: [buildCommandPlan(step.slot, step.sha, services)] },
+        realEffects(boxEnv),
+      );
+    },
     verifyImages: async (step) => {
       const { bootProbe } = await readSlotServices(step.slot);
       const out = await sshCapture(

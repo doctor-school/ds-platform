@@ -12,6 +12,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
 import {
@@ -48,6 +52,7 @@ import {
   parseAvailBytes,
   parseEnvFile,
   parseLiveSlots,
+  liveSlotsScript,
   planPruneByFreeSpace,
   planResetIdentities,
   planSlotDown,
@@ -343,10 +348,16 @@ test("every compose invocation is `sudo`, pinned to the slot's own shipped tree"
 });
 
 test("images are BUILT on the box from the shipped tree, never pulled from a registry", () => {
-  const build = buildCommandPlan("pr-7");
-  assert.equal(build.kind, "sh");
-  assert.deepEqual(build.command.slice(0, 2), ["sudo", "BUILDX_NO_DEFAULT_ATTESTATIONS=1"]);
-  assert.equal(build.command.at(-1), "build");
+  const build = buildCommandPlan("pr-7", SHA, [
+    { name: "api", image: "ds-api" },
+  ]);
+  assert.equal(build.kind, "ensure-present");
+  build.command = build.items[0].apply;
+  assert.deepEqual(build.command.slice(0, 2), [
+    "sudo",
+    "BUILDX_NO_DEFAULT_ATTESTATIONS=1",
+  ]);
+  assert.deepEqual(build.command.slice(-2), ["build", "api"]);
   assert.equal(build.stallBudget, "build");
   const rendered = quoteCommand(build.command);
   assert.ok(!/ pull/.test(rendered));
@@ -1136,6 +1147,7 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
       return step.op === "golden-identities" ? SUBJECTS : undefined;
     },
     ship: async () => {},
+    buildImages: async () => {},
     verifyImages: async () => {},
     verifyRunning: async () => {},
     health: async () => {},
@@ -1300,9 +1312,13 @@ test("the prune derives the `ds-*` repos from the box and caps the BuildKit cach
 test("the health verdict reads the version the slot's api actually serves", () => {
   assert.deepEqual(healthVerdict({ status: 200, body: `{"version":"${SHA}"}`, sha: SHA }).ok, true);
   // Caddy's stand-wide basic auth answers 401 when the operator password is wrong.
-  assert.match(healthVerdict({ status: 401, body: "", sha: SHA }).reason, /401/);
   assert.match(
-    healthVerdict({ status: 200, body: `{"version":"${SHA2}"}`, sha: SHA }).reason,
+    healthVerdict({ status: 401, body: "", sha: SHA }).reason,
+    /401/,
+  );
+  assert.match(
+    healthVerdict({ status: 200, body: `{"version":"${SHA2}"}`, sha: SHA })
+      .reason,
     new RegExp(SHA2.slice(0, 12)),
   );
   assert.match(healthVerdict({ status: 200, body: "not json", sha: SHA }).reason, /JSON/);
@@ -1375,5 +1391,97 @@ test("up|sync fail closed on an incoherent box captcha trio (#2207)", () => {
   assert.throws(
     () => assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "yes" }),
     (err) => err instanceof SlotError && /BOT_PROTECTION_ENABLED="yes"/.test(err.message),
+  );
+});
+
+test("EARS-1: a second slot reuses existing images without rebuilding their shared tags", async () => {
+  const commands = [];
+  await runSlotPlan(
+    {
+      steps: [
+        buildCommandPlan("pr-7", SHA, [
+          { name: "api", image: "ds-api" },
+          { name: "migrate", image: "ds-api-migrate" },
+        ]),
+      ],
+    },
+    {
+      probe: async () => ({ ok: true }),
+      sh: async (command) => commands.push(command),
+    },
+  );
+  assert.deepEqual(commands, []);
+});
+
+test("EARS-2: a missing image builds only its service, preserving existing siblings", async () => {
+  const commands = [];
+  await runSlotPlan(
+    {
+      steps: [
+        buildCommandPlan("pr-7", SHA, [
+          { name: "api", image: "ds-api" },
+          { name: "migrate", image: "ds-api-migrate" },
+        ]),
+      ],
+    },
+    {
+      probe: async (command) => ({ ok: command.at(-1) === `ds-api:${SHA}` }),
+      sh: async (command) => commands.push(command),
+    },
+  );
+  assert.equal(commands.length, 1);
+  assert.deepEqual(commands[0].slice(-2), ["build", "migrate"]);
+});
+
+test("EARS-3: retention preserves a shared requested tag and removes an unused old tag", () => {
+  const dir = mkdtempSync(join(tmpdir(), "slot-retention-"));
+  const removed = join(dir, "removed").replaceAll("\\", "/");
+  const script = pruneScript({ retention: 1, reservedSpace: BUILD_CACHE_RESERVED_SPACE });
+  try {
+    const result = spawnSync(
+      process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash",
+      ["--noprofile", "--norc", "-s"],
+      { encoding: "utf8", env: { ...process.env, REMOVED: removed }, input: `
+set -euo pipefail
+: > "$REMOVED"
+sudo() {
+  shift
+  case "$1 $2" in
+    "ps -aq") echo container-id ;;
+    "inspect --format") echo ds-api:${SHA} ;;
+    "images --format") printf 'ds-api\\nds-api-migrate\\n' ;;
+    "images ds-api"|"images ds-api-migrate") printf '2026-09-17\\tnewest\\n2026-09-16\\t${SHA}\\n2026-09-15\\t${SHA2}\\n' ;;
+    "rmi "*) echo "$2" >> "$REMOVED" ;;
+    "buildx prune"|"system df") : ;;
+    *) echo "unexpected docker command: $*" >&2; return 1 ;;
+  esac
+}
+${script}` },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readFileSync(removed, "utf8").trim().split("\n"), [`ds-api:${SHA2}`, `ds-api-migrate:${SHA2}`]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("EARS-4: inventory uses original requested tags when docker ps shows image IDs", () => {
+  const script = liveSlotsScript();
+  assert.match(script, /docker inspect/);
+  assert.match(script, /Config\.Image/);
+  assert.doesNotMatch(script, /\{\{\.Image\}\}/);
+  const slots = parseLiveSlots(
+    `slot-main\tds-api:${SHA}\nslot-pr-7\tds-api:${SHA}\n`,
+  );
+  assert.equal(
+    planSlotDown({
+      slot: "pr-7",
+      liveSlots: slots,
+      baseDomain: BASE,
+    }).steps.some((step) => step.label === "remove slot images"),
+    false,
+  );
+  assert.deepEqual(
+    planUnreferencedImageGc({ images: [`ds-api:${SHA}`], liveSlots: slots })
+      .remove,
+    [],
   );
 });

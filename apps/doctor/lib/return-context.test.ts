@@ -7,6 +7,7 @@ import {
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
+  withReturnContext,
 } from "@/lib/return-context";
 
 /**
@@ -293,4 +294,41 @@ describe("#1987: /account is a landing target", () => {
       expect(resolveReturnLandingPath(value)).toBeNull();
     },
   );
+});
+
+/**
+ * #2258 / rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) —
+ * the CARRY vocabulary admits the account family too.
+ *
+ * `resolveReturnLandingPath` learned the account family in #1987, so a doctor
+ * sent to `/login?returnTo=/account` lands back on the cabinet. But the value
+ * that rides ONWARD across an intermediate auth hop — into `/register`, and back
+ * out of the confirmation screen — goes through `resolveReturnTargetPath`, which
+ * still knew only the эфир shapes. The target therefore survived sign-in and was
+ * lost the moment the doctor pressed «Зарегистрироваться» instead, landing them
+ * on the LD-4 default. One carry rule, both shapes.
+ */
+describe("#2258: the carried target admits the account family", () => {
+  it("#2258: resolveReturnTargetPath rebuilds an account arrival instead of dropping it", () => {
+    expect(resolveReturnTargetPath("/account")).toBe("/account");
+  });
+
+  it("#2258: a page BELOW the account route carries ITSELF, with the segment boundary enforced", () => {
+    expect(resolveReturnTargetPath("/account/events")).toBe("/account/events");
+    expect(resolveReturnTargetPath("/accounts")).toBeNull();
+    expect(resolveReturnTargetPath("/account-evil")).toBeNull();
+  });
+
+  it("#2258: withReturnContext carries the account arrival across the /login → /register hop", () => {
+    expect(withReturnContext("/register", "/account")).toBe(
+      "/register?returnTo=%2Faccount",
+    );
+  });
+
+  it("#2258: a cross-origin or traversal target is still dropped at the hop", () => {
+    expect(resolveReturnTargetPath("//evil.example/account")).toBeNull();
+    expect(withReturnContext("/register", "https://evil.example/account")).toBe(
+      "/register",
+    );
+  });
 });

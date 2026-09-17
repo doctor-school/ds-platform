@@ -422,8 +422,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-9.3: the challenge arc appends exactly one auth.mfa.used + one auth.session.created, and logout exactly one auth.session.terminated", async () => {
       const admin = await enrol("challenge");
 
-      // Log the enrollment session out first, so the window below contains only
-      // the challenge arc's rows and the counts are unambiguous.
+      // Log the enrollment session out first. The later assertion scopes the
+      // terminal row by the challenge session id: PostgreSQL timestamps retain
+      // microseconds, while the `pg` driver's JavaScript Date fence retains only
+      // milliseconds, so a preceding row from the same millisecond can still be
+      // returned by `created_at >= since`.
       const loggedOut = await app.inject({
         method: "POST",
         url: LOGOUT_URL,
@@ -466,13 +469,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(only(rows, "auth.mfa.used")).toHaveLength(1);
       expect(only(rows, "auth.mfa.enrolled")).toHaveLength(0);
       expect(only(rows, "auth.session.created")).toHaveLength(1);
-      expect(only(rows, "auth.session.terminated")).toHaveLength(1);
+      const terminatedForChallenge = only(
+        rows,
+        "auth.session.terminated",
+      ).filter((row) => row.sid === sid);
+      expect(terminatedForChallenge).toHaveLength(1);
 
       expect(only(rows, "auth.mfa.used")[0]!.metadata).toMatchObject({
         method: "totp",
         tier: "admin",
       });
-      const terminated = only(rows, "auth.session.terminated")[0]!;
+      const terminated = terminatedForChallenge[0]!;
       expect(terminated.reason).toBe("logout");
       expect(terminated.metadata).toMatchObject({ tier: "admin" });
       expect(terminated.sid).toBe(sid);

@@ -187,6 +187,13 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
 
     # --- Cross-cutting (US-1, US-2) ---
 
+    @EARS-13 @happy
+    Scenario: Webinar surfaces use Russian copy from the typed message catalogue
+      Given the portal uses its Russian message catalogue
+      When a visitor reads the event page, listing, month calendar and their empty states
+      Then labels, status badges, participation text, notices and calendar copy are rendered in Russian
+      And that interface copy comes from the typed message catalogue without hardcoded component strings
+
     @EARS-10 @failure
     Scenario: The public endpoints never expose non-public events or PII
       Given the public event read endpoints

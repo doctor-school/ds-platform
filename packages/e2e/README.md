@@ -178,6 +178,16 @@ and each test title names the host it walked.
 
 ## Golden entities by seed name
 
+The 004 public-discovery journey (`steps/webinar-discovery.steps.ts`) follows
+`golden.events.upcoming` from the Academy listing to its public page. It asserts
+the cookie-free server-rendered listing, the card's fixed golden title, school,
+specialties and speaker, its actual slot date/time in Moscow, and the destination
+pathname **and** matching heading. The date comes from the public read because
+each slot's seed is relative to its own golden-now pin. Pagination uses the visible
+listing controls when the named card is not on the first page. The separate 004
+empty-state test remains app-local; this journey does not claim the broader
+listing ordering/filtering or authentication scenarios.
+
 `Given the golden doctor "verified-cardiologist" is signed in` (§6.1). A feature
 file never carries an email or a password. `lib/golden.ts` is the one place a
 seed name becomes a real `@ds/db` golden account plus the env var holding its IdP

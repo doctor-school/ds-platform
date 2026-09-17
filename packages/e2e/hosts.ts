@@ -42,6 +42,8 @@ export interface HostConfig {
   readonly loginPath: string;
   /** The `h1` the host's login surface renders (the §6.2 redirect assertion). */
   readonly loginHeading: string;
+  /** Public event listing and the prefix of its event-detail URLs. */
+  readonly eventsPath: string;
   /** Host-owned evidence for the shared legal-documents journey (028). */
   readonly legalDocuments: {
     /** The host wordmark rendered by its shared storefront shell projection. */
@@ -61,6 +63,7 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
     navigationModelExport: "portalNavigationModel",
     loginPath: "/login",
     loginHeading: "Вход",
+    eventsPath: "/webinars",
     legalDocuments: Object.freeze({
       shellWordmark: "Academy.Doctor.School",
       contactsTestId: "documents-contacts",
@@ -74,6 +77,7 @@ export const HOSTS: Readonly<Record<HostId, HostConfig>> = Object.freeze({
     navigationModelExport: "doctorNavigationModel",
     loginPath: "/login",
     loginHeading: "Вход",
+    eventsPath: "/events",
     legalDocuments: Object.freeze({
       shellWordmark: "Doctor.School",
       contactsTestId: "documents-support",

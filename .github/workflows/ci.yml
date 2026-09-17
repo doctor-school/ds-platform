@@ -1567,9 +1567,9 @@ jobs:
         run: pnpm --filter @ds/admin exec playwright install --with-deps chromium
       - name: Admin flows tier
         run: pnpm --filter @ds/admin test:flows
-      - name: Admin spec-owned Expert journey
+      - name: Admin spec-owned taxonomy journeys
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
-        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains'
+        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator'
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe

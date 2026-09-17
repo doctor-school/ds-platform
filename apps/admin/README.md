@@ -60,12 +60,13 @@ The suite pins a **non-Moscow** `timezoneId` for every scenario, so the МСК a
 
 The `taxonomy` project reads the spec-owned
 `../docs/content/specs/features/012-content-taxonomy/012-scenarios.feature`
-directly. Its bound EARS-2/19/20 journey creates an Expert without a User,
-reloads the saved draft with its structured names and initials, and copies the
-server-generated public link into the real clipboard. Run that slice with
-`pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains"`.
-The selected taxonomy journey also runs in the `admin-e2e` CI job against its
-real Admin/API/database stack. Unbound 012 contracts remain visible as skipped; the existing `chromium`
+directly. Its bound journeys cover the EARS-2/19/20 standalone Expert path and
+the EARS-9/17 project roster path: create a project and two Experts, assign one
+curator, refuse a second curator, then atomically replace the curator while
+retaining the former curator as a member. Run both slices with
+`pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator"`.
+The selected taxonomy journeys also run in the `admin-e2e` CI job against its
+real Admin/API/database/MFA stack. Unbound 012 contracts remain visible as skipped; the existing `chromium`
 project keeps strict generation for its 007/011 scenarios. Validation, editing,
 media, User linking, list filtering and publication checks remain in
 `e2e/taxonomy-experts.spec.ts` until their own scenarios replace them.

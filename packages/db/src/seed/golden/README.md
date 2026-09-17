@@ -396,14 +396,30 @@ with no rows referring to a missing object.
 
 ## Idempotency and the build
 
-`seed:golden` upserts every row on its fixed UUID inside **one** transaction,
-refreshing every column it wrote except the set-once publication instants. A
-second run under the same `GOLDEN_NOW` therefore changes nothing observable; a
-second run without a pin rewrites exactly the time-derived columns it is allowed
-to move and leaves every id, slug, relation and `first_published_at` alone —
-that is how the slot's schedule stays in the future. All-or-nothing, because a
-half-written template that still looks buildable would be inherited by every slot
-cloned from it.
+`seed:golden` writes the dataset inside **one** transaction, refreshing the
+columns it owns except the set-once publication instants. Most rows upsert on
+their fixed UUID. Volume **registrations** are re-pinned in place by replacing
+only the seed-owned registration UUID namespace (group `0005`, ordinals ≥1000)
+before inserting the new plan. At a later pin the eligible event pool changes,
+so the same ordinal can acquire a different `(user_id, event_id)` pair; ordinary
+id-keyed updates could collide with a pair still held by another old ordinal.
+The replacement removes those old assignments atomically, including obsolete
+ordinals. Named catalogue registration ids and all non-golden registrations
+(including product-created rows for golden doctors) remain outside that delete.
+A conflicting non-golden pair fails the transaction rather than overwriting it.
+
+A second run under the same `GOLDEN_NOW` changes no dataset values. A later run
+re-dates events and replaces the volume registration plan, while preserving
+set-once publication instants. No reset is needed for persistent `main`.
+All-or-nothing: a later failure rolls the registration replacement back with the
+rest of the seed. Production never invokes this staging-only seed.
+
+The database regression runs in the API's PostgreSQL-backed CI job:
+`pnpm --filter @ds/api test test/scripts/golden-seed.e2e-spec.ts`. It executes the
+source entry point, like `seed:golden`, so committed media assets resolve beside
+the source. It seeds one database at pins one day apart, compares registrations
+with a fresh later-pin seed, repeats the same pin, and checks that ordinary user
+and registration rows survive. All test fixtures roll back.
 
 `tools/staging/golden-db.mjs` never migrates in place. It builds
 `ds_golden_next` beside the live template, and only after the migrate and the

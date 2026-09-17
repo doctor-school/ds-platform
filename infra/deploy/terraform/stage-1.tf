@@ -29,7 +29,8 @@
 # — breaks the isolation this whole stand rests on.
 #
 # WHAT IS NOT HERE: the box holds no production credential of any kind (its env set is
-# infra/deploy/stage.env.example, sinks + test keys — spec §3 «Secrets and side
+# infra/deploy/stage.env.example, sinks plus the stand's own dedicated staging captcha
+# pair in /etc/ds-platform/stage.env, never the production one — spec §3 «Secrets and side
 # effects»), no pgbackrest (the box carries no unique state; it is recreated by
 # `apply` and rebuilt from the repo — spec §9 «Box down»), and no S3 bucket.
 #

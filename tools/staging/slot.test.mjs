@@ -1368,7 +1368,7 @@ test("up|sync fail closed on an incoherent box captcha trio (#2207)", () => {
     () =>
       assertCaptchaCoherent({
         BOT_PROTECTION_ENABLED: "true",
-        SMARTCAPTCHA_SERVER_KEY: "CHANGE_ME_ysc2_vendor_test_server_key",
+        SMARTCAPTCHA_SERVER_KEY: "CHANGE_ME_ysc2_staging_server_key",
         SMARTCAPTCHA_SITE_KEY: "ysc1_abcdefghijklmnopqrst0123456789",
       }),
     (err) => err instanceof SlotError && /SMARTCAPTCHA_SERVER_KEY/.test(err.message) && /403/.test(err.message),

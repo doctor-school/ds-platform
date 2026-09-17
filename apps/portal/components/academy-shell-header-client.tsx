@@ -5,7 +5,7 @@ import type { ShellAuthState, StorefrontShellConfig } from "@ds/storefront-shell
 
 import { initialsFromDisplayName } from "@/lib/display-name";
 import { getMyProfile } from "@/lib/profile-client";
-import { LOGIN_HREF, PROFILE_HREF } from "@/lib/shell-config";
+import { LOGIN_HREF, MY_EVENTS_HREF, PROFILE_HREF } from "@/lib/shell-config";
 
 /**
  * 008 EARS-4/5/6 — the academy host's session READ, and nothing else.
@@ -38,12 +38,15 @@ export function AcademyShellHeaderClient({
   config,
   loginLabel,
   profileLabel,
+  myEventsLabel,
 }: {
   config: StorefrontShellConfig;
   /** «Войти / Регистрация» — the ONE guest control (canvas line 220). */
   loginLabel: string;
   /** The accessible name of the initials chip (catalog `shell.profile`). */
   profileLabel: string;
+  /** «Мои события» — the cluster's link beside the chip (canvas `user.links`). */
+  myEventsLabel: string;
 }) {
   const auth = useShellAuth(async (): Promise<ShellAuthState> => {
     const guest: ShellAuthState = {
@@ -61,6 +64,10 @@ export function AcademyShellHeaderClient({
         initials: profile.displayName
           ? initialsFromDisplayName(profile.displayName)
           : null,
+        // Canvas `user.links` line 209 — the academy cluster's «Мои события»
+        // beside the avatar. The package decides where it is drawn at each
+        // width; the host names only the copy and the destination (#2243).
+        links: [{ label: myEventsLabel, href: MY_EVENTS_HREF }],
       };
     } catch {
       // A non-401 transient error degrades to the guest affordance — this host's

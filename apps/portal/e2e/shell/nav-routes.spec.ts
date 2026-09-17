@@ -12,12 +12,13 @@ import {
  * logo and «Эфиры» both reach `/webinars`, the discovery front-door. No inert or
  * deferred target («Школы» is Retired, EARS-10).
  *
- * Since #2180 the nav is «Эфиры» ALONE on both storefronts (owner decision
- * 2026-09-10, merged 008/017 deltas): the nav grows with features 015/016 and
- * the partner surface, and «Мои события» is reached from the profile rather than
- * from the chrome. The former nav item's destination `/account/events` is still
- * driven end-to-end by the feature-005 specs — this file no longer asserts a nav
- * entry that the product deliberately does not ship.
+ * The CONFIGURED nav is «Эфиры» ALONE on both storefronts (owner decision
+ * 2026-09-10, #2180): it grows with features 015/016 and the partner surface.
+ * The signed-in doctor's «Мои события» → `/account/events` is NOT a config nav
+ * item — it is the auth cluster's own link, drawn at the tail of the same nav
+ * group (canvas `user.links` line 209, #2243) and owned by
+ * `e2e/shell/doctor-header.spec.ts`; the guest assertions below therefore see
+ * «Эфиры» alone.
  *
  * Two tiers: the href RESOLUTION is guest-checkable (only a running portal
  * needed); the driven navigation runs on the LIVE_STAND tier. Each `test.skip`s
@@ -42,7 +43,8 @@ test.describe("008 EARS-2 header nav targets resolve to shipped surfaces (e2e)",
       "href",
       DISCOVERY_HREF,
     );
-    // The nav ships exactly what the host config declares — no inert extras.
+    // For a GUEST the nav ships exactly what the host config declares — no
+    // inert extras and no signed-in auth link (#2243).
     await expect(nav.getByRole("link")).toHaveCount(1);
   });
 });

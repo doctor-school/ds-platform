@@ -69,6 +69,13 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
       data-cluster="doctor"
       className="flex items-center gap-3"
     >
+      {/* The signed-in destinations (`user.links` line 209) are NOT part of this
+          cluster: the canvas draws them INSIDE the nav group, before the theme
+          control (line 33, toggle line 35, chip line 36), so
+          `storefront-header.tsx` renders them at the tail of the desktop nav and
+          as `≡` rows below the `layout` breakpoint. The cluster stays what 017
+          EARS-1 names — exactly one chip element, at every width. */}
+
       {auth.initials === undefined ? (
         // The labelled profile chip — the doctor storefront's «Личный кабинет»
         // (017 EARS-1, canvas lines 192/209). Same primitive and size as the

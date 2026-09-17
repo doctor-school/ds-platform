@@ -22,6 +22,10 @@ export interface StepWorld {
   hostBaseUrl: string;
   /** The seed name of the golden doctor the scenario signed in, if it did. */
   signedInAs?: string;
+  /** Slice-1 legal document named by the active 028 scenario background. */
+  legalDocumentTitle?: string;
+  /** Legal entity named by the active 028 scenario background. */
+  legalEntity?: string;
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

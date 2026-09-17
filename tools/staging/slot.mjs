@@ -2207,7 +2207,10 @@ export function requiredOperatorPassword(env) {
  * `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`). Half a pair therefore has ONE observable
  * outcome — every slot login answers 403 (seen live on 2026-09-14, all three slots) —
  * and nothing in the converge noticed. So `up|sync` refuse by name:
- *   ON  ⇒ a real `ysc2_` server key AND a real `ysc1_` site key (the vendor TEST pair);
+ *   ON  ⇒ a real `ysc2_` server key AND a real `ysc1_` site key — the two halves of the
+ *         DEDICATED STAGING captcha the owner created in the Yandex Cloud console
+ *         (SmartCaptcha has no vendor test pair: keys are always per-captcha and bound
+ *         to a host list), never the production pair;
  *   OFF ⇒ an EMPTY site key (a placeholder site key breaks the login form client-side).
  * Truthiness mirrors the api env schema exactly (`apps/api/src/config/env.schema.ts` →
  * `z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })`, which lower-cases
@@ -2225,7 +2228,7 @@ export function assertCaptchaCoherent(boxEnv) {
     throw new SlotError(
       `BOT_PROTECTION_ENABLED=${JSON.stringify(rawEnabled)} in ${STAGE_ENV_FILE} on ${STAGE_1} is ` +
         "neither true/1 nor false/0 (the api env schema accepts nothing else, case-insensitively, " +
-        "and the api container fails to boot on it). Set it to true with BOTH vendor TEST halves " +
+        "and the api container fails to boot on it). Set it to true with BOTH staging-captcha halves " +
         "or to false with an empty SMARTCAPTCHA_SITE_KEY (infra/deploy/stage.env.example → Bot protection).",
     );
   }
@@ -2237,7 +2240,7 @@ export function assertCaptchaCoherent(boxEnv) {
         `SMARTCAPTCHA_SITE_KEY is set in ${STAGE_ENV_FILE} on ${STAGE_1} while ` +
           "BOT_PROTECTION_ENABLED is off — the storefront would mount a captcha widget the " +
           "api never validates. Empty the site key, or turn bot protection ON with the full " +
-          "vendor TEST pair (infra/deploy/stage.env.example → Bot protection).",
+          "staging-captcha pair (infra/deploy/stage.env.example → Bot protection).",
       );
     }
     return { enabled: false };
@@ -2250,9 +2253,10 @@ export function assertCaptchaCoherent(boxEnv) {
     if (!value.startsWith(prefix)) {
       throw new SlotError(
         `${name} in ${STAGE_ENV_FILE} on ${STAGE_1} is ${value === "" ? "empty" : "not a real key"} ` +
-          `(expected the \`${prefix}\` vendor TEST half) while BOT_PROTECTION_ENABLED is on — ` +
+          `(expected the \`${prefix}\` staging-captcha half) while BOT_PROTECTION_ENABLED is on — ` +
           "with half a pair every slot login answers 403 (api guard `missing-token`). Either " +
-          "place BOTH halves of the vendor TEST pair or set BOT_PROTECTION_ENABLED=false with " +
+          "place BOTH halves of the dedicated staging captcha (Yandex Cloud console, never the " +
+          "production pair) or set BOT_PROTECTION_ENABLED=false with " +
           "an empty SMARTCAPTCHA_SITE_KEY (infra/deploy/stage.env.example → Bot protection).",
       );
     }

@@ -41,13 +41,42 @@ node --test tools/staging/slot.test.mjs
 
 The box's own configuration lives in `/etc/ds-platform/stage.env` (template:
 [`infra/deploy/stage.env.example`](../../infra/deploy/stage.env.example)) and the scripts
-read it over SSH. Two variables are the exception and belong to the **operator machine**:
+read it over SSH. Bot protection on this box has been **ON since 2026-09-17** with the
+stand's own dedicated staging captcha (both halves in `stage.env`, never the production
+pair) — see `infra/deploy/stage.env.example` → «Bot protection»; `up`/`sync` refuse an
+incoherent trio by name. Two variables are the exception and belong to the **operator
+machine**:
 
 | variable                                                      | why it is not a box variable                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `STAGE_BASIC_AUTH_PASS`                                       | the stand sits behind one basic-auth pair and the box stores only the bcrypt hash (`STAGE_BASIC_AUTH_HASH`). The post-converge health assertion has to authenticate, so the plaintext must be exported here. The box keeps the plaintext for the operator at `/etc/ds-platform/stage-basic-auth.txt` (`user=stage`) — read it, never invent one: `export STAGE_BASIC_AUTH_PASS="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^password=//p" /etc/ds-platform/stage-basic-auth.txt' \| tr -d ' |
 | ')"`. Absent ⇒ a named refusal, never a skipped verification. |
 | `DS_STAGE_SSH`                                                | the SSH destination, default `ds-stage-1` — an alias in your own `~/.ssh/config`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+
+## The box must stay logged into Docker Hub (#2240)
+
+Every `up`/`sync` builds the slot's service set **on stage-1**, and each build pulls its
+base images from Docker Hub. Anonymous pulls are capped at **100/h keyed on the source
+IP**, and Timeweb gives every tenant on the host the same shared IPv6 /64
+(`2a03:6f00:a::`) — so a converge can die on `429 Too Many Requests` without this stand
+having pulled anything (observed 2026-09-15/16/17; the same hour killed a production
+deploy). A 429 mid-build is this, not a broken slot: nothing in `slot.mjs` retries it.
+
+stage-1 is logged in as the project Docker Hub account, which re-keys the quota to the
+account (200/h):
+
+```bash
+ssh -t ds-stage-1 'sudo docker login -u bbmacademy'   # Read-only PAT, typed at the prompt
+```
+
+The token is a Read-only Docker Hub Personal Access Token with no expiry, typed at the
+prompt by the owner; it lives only in `/root/.docker/config.json` on the box (the slot
+scripts run docker through `sudo`, so the login must belong to root) and never in this
+repo, in `stage.env` or in chat. Check it with `ssh ds-stage-1 'sudo docker pull
+node:24-slim'` — it must succeed, and a registry token request with the box's
+credentials reads `ratelimit-limit: 200;w=3600` / `docker-ratelimit-source: bbmacademy`
+rather than the anonymous `100;w=3600`. Recreating the box loses the login; repeat it
+before the first converge (`infra/deploy/README.md` → «Docker Hub login on every box»).
 
 ## Stage-B: the owner-facing stand
 
@@ -103,6 +132,10 @@ have to hold the stand's credentials to reach the slot at all.
 
 ```bash
 export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
+export DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
+export DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
+export DS_GOLDEN_PASSWORD_DOCTOR_MFA="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_DOCTOR_MFA=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
+export DS_GOLDEN_PASSWORD_ADMIN="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^DS_GOLDEN_PASSWORD_ADMIN=//p" /etc/ds-platform/stage.env' | tr -d '\r')"
 pnpm e2e:stage pr-123                     # both storefronts
 pnpm e2e:stage main --project academy --grep "витрина"
 pnpm e2e:stage main --project walks       # only the derived walks (§6.3), no axe leg
@@ -120,6 +153,29 @@ over SSH, the password from `STAGE_BASIC_AUTH_PASS` on THIS machine. An operator
 SSH to the box can export `STAGE_BASE_DOMAIN`, `E2E_HTTP_USER` and `E2E_HTTP_PASS` instead
 and the box is never contacted. The password is passed to Playwright as `httpCredentials`
 and never printed.
+
+**The signed-in leg needs the golden passwords too**, and they are NOT covered by
+`STAGE_BASIC_AUTH_PASS`. A scenario that signs a golden doctor in reads that
+account's password from a `DS_GOLDEN_PASSWORD_*` variable on THIS machine: the registry
+(`packages/e2e/lib/golden.ts`) turns the feature file's seed name into the env var
+`packages/db/src/seed/golden/idp.ts` declares for that account, and an unset one is a named
+failure, never a silent sign-in attempt with `undefined`. The seed declares five names —
+`DS_GOLDEN_PASSWORD_DOCTOR_UNVERIFIED`, `DS_GOLDEN_PASSWORD_DOCTOR_VERIFIED`,
+`DS_GOLDEN_PASSWORD_DOCTOR_MFA`, `DS_GOLDEN_PASSWORD_DOCTOR_DELETED` and
+`DS_GOLDEN_PASSWORD_ADMIN` — but only FOUR are exportable. The box deliberately carries no
+`DS_GOLDEN_PASSWORD_DOCTOR_DELETED`: the soft-deleted doctor is ensure-**absent** on the
+shared IdP by contract (see `reset-identities` below), so it has no live account to sign in
+as, and a scenario asking for that seed name to sign in is a scenario defect rather than a
+missing secret. `DS_GOLDEN_PASSWORD_ADMIN` is read only by the admin suite: the `admin` host
+tag is deliberately selected by NO storefront project (`packages/e2e/lib/host-tags.ts`), so a
+`--project academy`/`doctor` run never reaches for it. The four are the same owner-placed
+values `reset-identities` converges from, so they come out of `/etc/ds-platform/stage.env`
+over SSH in exactly the shape the basic-auth recipe above uses — one quoted `export` per
+variable. Read them one at a time like that, never by `eval`-ing the matching lines of
+`stage.env` in bulk: a password containing a space or a quote is truncated or dies on an
+unbalanced quote, and the box's file content would be executing on your machine. An operator
+without SSH to the box exports the four by hand; they are secrets, and like the basic-auth
+password the suite never prints them.
 
 The **a11y leg** (§6.6) joins the run only once #1692 — the contrast fix — is on `main`;
 while it is open the command prints

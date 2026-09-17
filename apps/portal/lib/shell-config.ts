@@ -36,6 +36,9 @@ export const PROFILE_HREF = portalNav.profile.href;
 /** The login surface (008 EARS-4). */
 export const LOGIN_HREF = portalNav.login.href;
 
+/** The signed-in cluster's «Мои события» destination (008 EARS-5/11, #2243). */
+export const MY_EVENTS_HREF = portalNav.myEvents.href;
+
 /**
  * 017 EARS-12 — the ONE crossing out of this storefront. It is the doctor
  * storefront's origin, a separate deployable on a separate host (ADR-0015 §2),

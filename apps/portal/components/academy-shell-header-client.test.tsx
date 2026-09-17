@@ -49,6 +49,7 @@ function renderHeader() {
       config={config}
       loginLabel={catalog.shell.login}
       profileLabel={catalog.shell.profile}
+      myEventsLabel={catalog.shell.myEvents}
     />,
   );
 }
@@ -94,6 +95,26 @@ describe("008 EARS-4/5/6: the academy auth cluster", () => {
     expect(avatar).toHaveAccessibleName(catalog.shell.profile);
     expect(screen.queryByTestId("shell-login")).toBeNull();
     expect(screen.queryByRole("button", { name: /Выйти/ })).toBeNull();
+  });
+
+  it("008 EARS-5: the signed-in cluster carries «Мои события» → /account/events", async () => {
+    // #2243 — the canvas `user.links` line 209. Lost when the academy moved onto
+    // the shared chrome (#2198), because the 2026-09-10 top-nav decision was
+    // read as if it covered the auth cluster too.
+    getMyProfile.mockResolvedValue(DOCTOR);
+    renderHeader();
+
+    const link = await screen.findByTestId("shell-auth-link");
+    expect(link).toHaveAttribute("href", "/account/events");
+    expect(link).toHaveTextContent(catalog.shell.myEvents);
+  });
+
+  it("008 EARS-5: a guest gets no «Мои события» link", async () => {
+    renderHeader();
+
+    await screen.findByTestId("shell-login");
+    expect(screen.queryByTestId("shell-auth-link")).toBeNull();
+    expect(screen.queryByTestId("shell-auth-link-mobile")).toBeNull();
   });
 
   it("#1004: the cluster swaps «Войти» → avatar on the post-login refresh signal, with no reload", async () => {

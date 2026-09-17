@@ -53,8 +53,8 @@ infra/deploy/
                       postgres/  (Dockerfile pgvector+partman+pgbackrest, postgresql.conf, init.sql)
                       pgbackrest/(Dockerfile, pgbackrest.conf, crontab, entrypoint.sh, backup.sh)
     stg-infra/        STAGE stand shared services — see «Staging box» below
-  stage.env.example   /etc/ds-platform/stage.env template (STAGE box; sinks and
-                      vendor test keys only, never a production credential)
+  stage.env.example   /etc/ds-platform/stage.env template (STAGE box; sinks and the
+                      stand's own captcha keys only, never a production credential)
 ```
 
 ## Staging box (`stage-1`)
@@ -117,6 +117,42 @@ https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
   is dynamic): `184.22.76.93` → `27.130.223.208` (2026-07-12, #729 wave-1 apply)
   → `27.130.220.41` (2026-07-18, `release-2026.07.18-1` deploy). Runbook
   failure-mode: `run-prod-deploy` SKILL → Failure modes.
+
+## Docker Hub login on every box (#2240)
+
+Every box builds its images **on-box**, and every one of those builds pulls its base
+images (`node:*`, `postgres:*`, `caddy:*`, …) from Docker Hub. Anonymous pulls are
+rate-limited to **100 per hour keyed on the source IP** — and on Timeweb that key is
+the hoster's **shared IPv6 /64** (`2a03:6f00:a::`), so the budget is spent by other
+tenants, not by us. Observed 2026-09-15/16/17 as `429 Too Many Requests` mid-build on
+both stage-1 and api-prod; the prod `release-2026.09.16-1` deploy failed closed on it.
+
+The fix is a Docker Hub **account** login on the box, which moves the quota key from
+the shared IP to the account (200/h):
+
+```bash
+ssh -t <box> 'sudo docker login -u bbmacademy'   # paste the PAT at the prompt
+```
+
+- The secret is a Docker Hub **Personal Access Token** of the project account
+  `bbmacademy`, scope **Read-only**, no expiry. It is typed at the prompt by the owner
+  and lives **only** in `/root/.docker/config.json` (0600 root:root) — never in this
+  repo, never in an env file, never in chat. Docker runs through `sudo` on both boxes,
+  so the login must belong to **root**; a login as the deploy user is not seen by the
+  build.
+- `-t` is required: `docker login` reads the token from a TTY.
+- **Verify** — a base-image pull must succeed rather than answer 429:
+  `ssh <box> 'sudo docker pull node:24-slim'`. On a registry token request made with
+  the box's credentials the headers then read `ratelimit-limit: 200;w=3600` and
+  `docker-ratelimit-source: bbmacademy`; anonymously they read `100;w=3600` with the
+  shared IPv6 prefix as the source.
+- **A box recreate loses it.** `terraform apply -replace`, a rebuild from
+  `cloud-init/*.yaml` or any fresh box starts anonymous — repeat the login as part of
+  provisioning, before the first `compose build`.
+
+This does **not** make the deploy path use a registry: our own images are still built
+on the box from a shipped tree and never pushed or pulled. The login authenticates
+base-image pulls only.
 
 ## Deploy — one command (`pnpm deploy:prod`)
 

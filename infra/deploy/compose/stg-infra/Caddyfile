@@ -68,7 +68,7 @@
 
 	# On-demand issuance is gated by the `ask` endpoint served by this same Caddy on
 	# a loopback-only port (the 127.0.0.1:2020 site below): 200 for any WELL-FORMED
-	# slot host plus the shared IdP host, 404 for everything else.
+	# slot host plus the shared IdP, S3 and Mailpit hosts, 404 for everything else.
 	on_demand_tls {
 		ask http://127.0.0.1:2020/ask
 	}
@@ -90,8 +90,32 @@
 	}
 }
 
-# The stand-wide gate cookie (#2210) is matched and issued inline in the slot
-# handler below — the matcher and the `Set-Cookie` line are the whole mechanism.
+# Shared cookie/basic-auth gate for slot hosts and Mailpit.
+(staging_gate) {
+	# Gate (#2210): the stand-wide cookie skips the challenge; anything else is
+	# challenged, and a success issues the cookie for every slot host at once.
+	#
+	# The regexp anchors the cookie name and the FULL token between cookie
+	# separators, so a prefix or another cookie with the same value never
+	# matches. `STAGE_GATE_TOKEN` is `openssl rand -hex 32` — hex only, so the
+	# substituted value is regexp-inert.
+	@gated header_regexp gate Cookie "(^|;[ ]*)ds_stage_gate={$STAGE_GATE_TOKEN}(;|$)"
+	handle @gated {
+		reverse_proxy {args[0]}
+	}
+	handle {
+		# `route` pins the order: `basic_auth` FIRST, the cookie only on its
+		# success. Outside a `route`, Caddy's default directive order puts
+		# `header` before `basic_auth` and applies it immediately, so the token
+		# would ride the 401 challenge out to an unauthenticated client. `+`
+		# appends, so an upstream `Set-Cookie` (the app session) survives.
+		route {
+			import staging_basic_auth
+			header +Set-Cookie "ds_stage_gate={$STAGE_GATE_TOKEN}; Domain={$STAGE_BASE_DOMAIN}; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
+			reverse_proxy {args[0]}
+		}
+	}
+}
 
 # --- ask endpoint (on-demand TLS gate) -----------------------------------------
 #
@@ -126,7 +150,7 @@ http://127.0.0.1:2020 {
 	# `path_regexp` can judge it.
 	rewrite * /ask/{query.domain}
 
-	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})|id|s3)[.]{$STAGE_BASE_DOMAIN}$"
+	@stage_ask path_regexp ask "^/ask/((academy|doctor|admin|api)-(main|pr-[1-9][0-9]{0,9})|id|s3|mailpit)[.]{$STAGE_BASE_DOMAIN}$"
 	handle @stage_ask {
 		respond 200
 	}
@@ -179,6 +203,12 @@ http://127.0.0.1:2020 {
 		reverse_proxy minio:9000
 	}
 
+	# Shared mail sink UI uses the same stand-wide gate as every slot.
+	@mailpit host mailpit.{$STAGE_BASE_DOMAIN}
+	handle @mailpit {
+		import staging_gate mailpit:8025
+	}
+
 	# Centrifugo path families on `api-<slot>` — the ONE basic-auth exemption on a
 	# slot (spec §3): browser websocket + the api's key-gated publish path. The
 	# capture name `slot` is shared with `@stage_slot` below, so `{re.slot.2}` names
@@ -205,34 +235,12 @@ http://127.0.0.1:2020 {
 		# to give a `default` row to.
 		map {re.slot.1} {slot_service} {slot_port} {
 			academy portal 3001
-			doctor  doctor 3004
-			admin   admin  3002
-			api     api    3000
+			doctor doctor 3004
+			admin admin 3002
+			api api 3000
 		}
 
-		# Gate (#2210): the stand-wide cookie skips the challenge; anything else is
-		# challenged, and a success issues the cookie for every slot host at once.
-		#
-		# The regexp anchors the cookie name and the FULL token between cookie
-		# separators, so a prefix or another cookie with the same value never
-		# matches. `STAGE_GATE_TOKEN` is `openssl rand -hex 32` — hex only, so the
-		# substituted value is regexp-inert.
-		@gated header_regexp gate Cookie "(^|;[ ]*)ds_stage_gate={$STAGE_GATE_TOKEN}(;|$)"
-		handle @gated {
-			reverse_proxy {re.slot.2}-{slot_service}:{slot_port}
-		}
-		handle {
-			# `route` pins the order: `basic_auth` FIRST, the cookie only on its
-			# success. Outside a `route`, Caddy's default directive order puts
-			# `header` before `basic_auth` and applies it immediately, so the token
-			# would ride the 401 challenge out to an unauthenticated client. `+`
-			# appends, so an upstream `Set-Cookie` (the app session) survives.
-			route {
-				import staging_basic_auth
-				header +Set-Cookie "ds_stage_gate={$STAGE_GATE_TOKEN}; Domain={$STAGE_BASE_DOMAIN}; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
-				reverse_proxy {re.slot.2}-{slot_service}:{slot_port}
-			}
-		}
+		import staging_gate {re.slot.2}-{slot_service}:{slot_port}
 	}
 
 	# A host under the wildcard that is not a well-formed slot host: still guarded,

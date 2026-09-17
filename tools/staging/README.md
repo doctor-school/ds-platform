@@ -53,6 +53,15 @@ machine**:
 | ')"`. Absent ⇒ a named refusal, never a skipped verification. |
 | `DS_STAGE_SSH`                                                | the SSH destination, default `ds-stage-1` — an alias in your own `~/.ssh/config`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
+## Reading OTP mails
+
+Open `https://mailpit.stage.doctor.school` with the same stage gate credentials as
+the slot hosts. The shared `ds_stage_gate` cookie also admits Mailpit, so a browser
+already admitted on a slot needs no second prompt. One Mailpit holds mail for all
+slots: use the slot-tagged sender and test recipient to find the right message.
+Shared Zitadel OTP mail has no sender slot tag; find the newest mail for the
+registration recipient used on your slot.
+
 ## The box must stay logged into Docker Hub (#2240)
 
 Every `up`/`sync` builds the slot's service set **on stage-1**, and each build pulls its

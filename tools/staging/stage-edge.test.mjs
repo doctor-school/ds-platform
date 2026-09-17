@@ -98,6 +98,17 @@ test("the ask responder answers for the shared IdP host too", () => {
   assert.match(matcherRegexp("stage_ask"), /\|id\|/);
 });
 
+test("Mailpit is a shared gated host, never a slot", () => {
+  const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
+  assert.ok(ask.test("/ask/mailpit.stage.test"));
+  assert.ok(!ask.test("/ask/mailpit-pr-1.stage.test"));
+  assert.ok(!new RegExp(matcherRegexp("stage_slot")).test("mailpit.stage.test"));
+  assert.ok(!SLOT_NAME_RE.test("mailpit"));
+  assert.match(text, /@mailpit host mailpit\.\{\$STAGE_BASE_DOMAIN\}/);
+  assert.match(text, /handle @mailpit\s*\{\s*import staging_gate mailpit:8025\s*\}/);
+  assert.match(text, /import staging_gate \{re\.slot\.2\}-\{slot_service\}:\{slot_port\}/);
+});
+
 test("the ask responder admits the shared object-storage host, and only that label", () => {
   const ask = new RegExp(matcherRegexp("stage_ask").replace("{$STAGE_BASE_DOMAIN}", "stage\\.test"));
   assert.ok(ask.test("/ask/s3.stage.test"), "s3 must be admitted");

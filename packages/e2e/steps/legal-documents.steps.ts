@@ -135,7 +135,7 @@ Then(
       page.getByRole("heading", { level: 1, name: POLICY_TITLE, exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("legal-document-edition")).toHaveText(
-      /^редакция от \d{2}\.\d{2}\.\d{4}$/,
+      /^редакция от \d{1,2} [а-яё]+ \d{4}$/iu,
     );
     await expect(page.getByTestId("legal-document-body")).toContainText(
       POLICY_BODY_SENTINEL,

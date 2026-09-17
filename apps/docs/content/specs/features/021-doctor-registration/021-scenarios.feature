@@ -140,7 +140,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When the code from the letter is entered on the code-entry screen that carries the return target
     Then the doctor lands on the nearest honest destination
     # Amended 2026-09-17: the plain statement had the withdrawn success card as its only carrier on this
-    # host; the destination stays honest, the stated reason is decision debt (DEBT.md, 2026-09-17)
+    # host; the destination stays honest, the stated reason is tracked by Issue #2272
     And no dead link and no silent redirect occurs
 
   @EARS-15 @EARS-16 @happy
@@ -170,3 +170,15 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     When any state of the registration surface is scanned
     Then no withdrawal toggle or «отозвать согласие» control exists
     And the interface states that a change or withdrawal is a request handled by a platform manager
+
+  @EARS-18 @process
+  Scenario: The surface is composed from the auth canvas and the design system, never hand-assembled
+    Given the vendored «design-source/auth.dc.html» canvas is the composition source of truth for this surface
+    And the return context reuses «unit-event-card.dc.html» and the design system's field, checkbox and button primitives
+    When every state of the screen is rendered — each formState × fromGate × partnerLink combination, plus «письмо отправлено» and the confirmed-code state — at 390 and at 1440 in both themes
+    Then every element on screen comes from a design-system primitive or the canonical event-card unit
+    And every value styling it is a design-system token, with no arbitrary Tailwind value anywhere
+    And each interactive element carries its full state set rather than a hand-written approximation
+    And the canvas's composition switcher is not built
+    And the Stage-A picks F-021-1 Б, F-021-2 Б without a back-navigation control and F-021-3 promise-on-the-form stand as decisions rather than re-opened questions
+    And the rendered result is re-confirmed with the product owner on the live stand before merge

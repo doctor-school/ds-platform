@@ -30,9 +30,10 @@ import ResetPage from "./page";
 
 const push = vi.fn();
 const replace = vi.fn();
+const refresh = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace }),
+  useRouter: () => ({ push, replace, refresh }),
   useSearchParams: () => searchParams,
 }));
 
@@ -87,6 +88,7 @@ vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
 beforeEach(() => {
   push.mockClear();
   replace.mockClear();
+  refresh.mockClear();
   requestPasswordReset.mockClear();
   completePasswordReset.mockClear();
   searchParams = new URLSearchParams();
@@ -348,6 +350,24 @@ describe("/reset complete step (late-mounted slotted code field)", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
     expect(push).not.toHaveBeenCalledWith("/login");
+  });
+  it("008 EARS-5 (#2281): the auto-login refreshes the router after the landing push, so Back re-reads the header", async () => {
+    const user = userEvent.setup();
+    render(<ResetPage />);
+
+    await advanceToCompleteStage(user);
+
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(RESET_CODE);
+    await waitFor(() => expect(codeInput).toHaveValue(RESET_CODE));
+    await user.type(screen.getByLabelText("newPasswordLabel"), NEW_PASSWORD);
+    await user.click(screen.getByRole("button", { name: "setNewPassword" }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(push.mock.invocationCallOrder[0]!).toBeLessThan(
+      refresh.mock.invocationCallOrder[0]!,
+    );
   });
 });
 

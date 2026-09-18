@@ -25,9 +25,10 @@ import LoginPage from "./page";
 
 const push = vi.fn();
 const replace = vi.fn();
+const refresh = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace }),
+  useRouter: () => ({ push, replace, refresh }),
   useSearchParams: () => searchParams,
 }));
 
@@ -119,6 +120,7 @@ async function flushAuthGuard() {
 beforeEach(() => {
   push.mockClear();
   replace.mockClear();
+  refresh.mockClear();
   login.mockClear();
   requestOtp.mockClear();
   loginWithOtp.mockClear();
@@ -404,5 +406,51 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     expect(
       screen.getByRole("link", { name: "forgotPassword" }),
     ).toHaveAttribute("href", "/reset");
+  });
+});
+
+/**
+ * 008 EARS-5 (#2281): the header is server-rendered in the persistent `@chrome`
+ * slot, so every page the guest saw before signing in sits in the client Router
+ * Cache with the GUEST cluster. Browser Back replays that cached payload, so a
+ * signed-in doctor would see «Войти / Регистрация» again. The sign-in drops the
+ * cache after it navigates, and Back re-reads the header from the server.
+ */
+describe("008 EARS-5 sign-in drops the client Router Cache (#2281)", () => {
+  it("EARS-5: password-login success refreshes the router after the landing push", async () => {
+    const user = userEvent.setup();
+    await renderLogin();
+
+    await user.type(screen.getByLabelText("emailOrPhone"), EMAIL);
+    await user.type(screen.getByLabelText("password"), PASSWORD);
+    await user.click(screen.getByTestId("password-login-submit"));
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    resolveLogin?.();
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(push.mock.invocationCallOrder[0]!).toBeLessThan(
+      refresh.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("EARS-5: OTP-login success refreshes the router after the landing push", async () => {
+    const user = userEvent.setup();
+    await renderLogin();
+
+    await user.click(screen.getByTestId("login-method-otp"));
+    await user.type(screen.getByLabelText("email"), EMAIL);
+    await user.click(screen.getByTestId("otp-send"));
+    await waitFor(() => expect(requestOtp).toHaveBeenCalledTimes(1));
+    resolveRequestOtp?.();
+
+    await screen.findByTestId("otp-verify");
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("12345678");
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(loginWithOtp).toHaveBeenCalledTimes(1);
+    expect(push.mock.invocationCallOrder[0]!).toBeLessThan(
+      refresh.mock.invocationCallOrder[0]!,
+    );
   });
 });

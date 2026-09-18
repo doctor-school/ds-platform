@@ -10,7 +10,6 @@ import type { MyProfile } from "@ds/schemas";
 import { AuthError } from "@ds/auth-flow/client";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshShellAuth } from "@ds/storefront-shell";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";
 import { initialsFromDisplayName } from "@/lib/display-name";
@@ -107,11 +106,15 @@ export function AccountProfile() {
       await authClient.logout();
     } finally {
       // Whether or not the revoke round-trip succeeded, the user intends to leave.
-      // #1004: signal the persistent header to re-read the auth state so the
-      // avatar flips back to the guest affordance on this soft navigation —
-      // mirroring the login-side call sites.
-      refreshShellAuth();
+      // #1004: the navigation renders the persistent header on the server again,
+      // which finds no session — the avatar is gone without a hard reload.
       router.replace("/login");
+      // 008 EARS-5 (#2281): the header is server-rendered in the persistent
+      // `@chrome` slot, so every page visited while signed in sits in the client
+      // Router Cache with the signed-in chip. Browser Back is a soft navigation
+      // that replays that cached payload; dropping the cache makes Back re-read
+      // the header from the server, which now finds no session.
+      router.refresh();
     }
   }
 
@@ -125,6 +128,10 @@ export function AccountProfile() {
         ? { kind: "ready", profile: { ...prev.profile, displayName } }
         : prev,
     );
+    // 008 EARS-5 (#2281): the header chip's initials are read on the SERVER, and
+    // this screen stays mounted — re-render the server tree so the persistent
+    // header picks the new name up. Client state here is preserved.
+    router.refresh();
   }
 
   function resolveSaveError(err: unknown) {
@@ -176,7 +183,10 @@ export function AccountProfile() {
       // Rule S3 — the «Сменить пароль» handoff into the recovery flow carries
       // the cabinet forward, so completing the reset brings the doctor back
       // here instead of dropping them on the recovery flow's own default.
-      passwordHref={withReturnTarget(ACADEMY_AUTH_ROUTES.reset, ACADEMY_AUTH_ROUTES.account)}
+      passwordHref={withReturnTarget(
+        ACADEMY_AUTH_ROUTES.reset,
+        ACADEMY_AUTH_ROUTES.account,
+      )}
       eventsHref="/account/events"
       renderLink={({ href, children }) => (
         <NextLink href={href}>{children}</NextLink>

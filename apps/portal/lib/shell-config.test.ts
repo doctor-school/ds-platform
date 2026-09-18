@@ -8,6 +8,7 @@ import {
   PROFILE_HREF,
   type ShellConfigKey,
 } from "@/lib/shell-config";
+import catalog from "../messages/ru.json";
 
 /**
  * The §6.3 invariant of the staging/regression-contour tech spec (Issue #2067),
@@ -28,7 +29,7 @@ const echoKey = (key: ShellConfigKey) => key;
 const config = academyShellConfig(echoKey);
 
 /** Every destination the shared chrome links to for this host: the wordmark, the
- *  nav, and both branches of the auth cluster (`academy-shell-header-client`). */
+ *  nav, and both branches of the auth cluster (`lib/shell-auth.ts`). */
 const paintedHrefs: readonly string[] = [
   config.logo.href,
   ...config.nav.map((item) => item.href),
@@ -70,5 +71,44 @@ describe("§6.3: the academy chrome and the navigation model are one list", () =
 
   it("has no header search: this host owns no results surface", () => {
     expect(config.search).toBeNull();
+  });
+});
+
+/**
+ * 008 EARS-2/12/13/14 — the academy host VALUES the package renders, projected
+ * from the real `ru` catalog (the chrome composition itself is proven once in
+ * `packages/storefront-shell/src/shell.test.tsx`, driven by BOTH host configs).
+ */
+describe("008 EARS-2/12/13/14: the academy host config", () => {
+  const ru = academyShellConfig(
+    (key: ShellConfigKey) => (catalog.shell as Record<string, string>)[key]!,
+  );
+
+  it("008 EARS-13: every string is read from the catalog, none hardcoded", () => {
+    expect(ru.logo.alt).toBe(catalog.shell.logoAlt);
+    expect(ru.nav[0]!.label).toBe(catalog.shell.navBroadcasts);
+    expect(ru.footer.giant.text).toBe(catalog.shell.footerGiant);
+  });
+
+  it("008 EARS-2: the nav is «Эфиры» alone, pointing at the canonical listing", () => {
+    expect(ru.nav).toHaveLength(1);
+    expect(ru.nav[0]!.href).toBe("/webinars");
+    expect(ru.logo.href).toBe("/webinars");
+  });
+
+  it("008 EARS-12: the chrome hides on the auth surfaces and in the room, and nowhere else", () => {
+    expect(ru.hiddenOnPaths).toEqual([
+      "/login",
+      "/register",
+      "/verify",
+      "/reset",
+      "/webinars/*/room",
+    ]);
+  });
+
+  it("017 EARS-12: exactly one crossing out, and it is the doctor storefront", () => {
+    const crossings = JSON.stringify(ru).match(/doctor\.school/g) ?? [];
+    expect(crossings).toHaveLength(1);
+    expect(ru.footer.cross.href).toBe("https://doctor.school/");
   });
 });

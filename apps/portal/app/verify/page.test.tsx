@@ -26,9 +26,10 @@ import VerifyPage from "./page";
 
 const replace = vi.fn();
 const push = vi.fn();
+const refresh = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace, push }),
+  useRouter: () => ({ replace, push, refresh }),
   useSearchParams: () => searchParams,
 }));
 
@@ -109,6 +110,7 @@ const VERIFY_CODE = "PVDC3R";
 beforeEach(() => {
   replace.mockClear();
   push.mockClear();
+  refresh.mockClear();
   verify.mockClear();
   login.mockClear();
   resendVerification.mockClear();
@@ -356,6 +358,18 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
       // …and the doctor lands back on the originally chosen event page.
       expect(replace).toHaveBeenCalledWith("/webinars/ahilles-042");
     });
+  });
+
+  it("008 EARS-5 (#2281): the auto-login refreshes the router after the landing replace, so Back re-reads the header", async () => {
+    searchParams = new URLSearchParams({ email: EMAIL });
+    heldRegistration = { identifier: EMAIL, password: "Sup3r$ecretPw!9" };
+    await enterCode();
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(replace.mock.invocationCallOrder[0]!).toBeLessThan(
+      refresh.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("EARS-2: with no held credential, the /login fallback carries the event context onward", async () => {

@@ -22,7 +22,6 @@ export { StorefrontFooter } from "./storefront-footer";
 export { ThemeToggle, type ThemeToggleLabels } from "./theme-toggle";
 export { isHiddenPath, matchesPathPattern } from "./config";
 export { ShellAuthCluster } from "./auth-cluster";
-export { refreshShellAuth, useShellAuth } from "./shell-auth-refresh";
 export type {
   ShellAuthState,
   ShellLink,

@@ -1,9 +1,4 @@
-import {
-  render,
-  screen,
-  cleanup,
-  waitFor,
-} from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +19,8 @@ const replace = vi.fn();
 // STABLE router object — the page's load callback depends on `router` (the real
 // next/navigation router is a stable instance); a fresh object per render would
 // refire the load effect in a loop and overwrite the inline-edit save.
-const router = { push, replace };
+const routerRefresh = vi.fn();
+const router = { push, replace, refresh: routerRefresh };
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
 }));
@@ -70,6 +66,7 @@ const PROFILE = {
 beforeEach(() => {
   push.mockClear();
   replace.mockClear();
+  routerRefresh.mockClear();
   logout.mockClear();
   refresh.mockClear();
   setDisplayName.mockClear();
@@ -157,6 +154,23 @@ describe("003 EARS-28 /account profile surface", () => {
     );
   });
 
+  it("008 EARS-5: a saved display name re-renders the server header, so the chip's initials follow the edit (#2281)", async () => {
+    const user = userEvent.setup();
+    render(<AccountProfile />);
+    await user.click(await screen.findByTestId("profile-name-edit"));
+    await user.clear(screen.getByTestId("profile-name-input"));
+    await user.type(
+      screen.getByTestId("profile-name-input"),
+      "Пётр Иванов{Enter}",
+    );
+
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    // The refresh follows the write, never races ahead of it.
+    expect(setDisplayName.mock.invocationCallOrder[0]!).toBeLessThan(
+      routerRefresh.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it("EARS-9: a 401 profile read gets one silent refresh + retry before redirecting to /login (behavior unchanged)", async () => {
     getMyProfile.mockResolvedValueOnce(null).mockResolvedValueOnce(PROFILE);
     render(<AccountProfile />);
@@ -192,6 +206,22 @@ describe("003 EARS-28 /account profile surface", () => {
     // carries no return target back into it (014 EARS-6 is the guest bounce,
     // not the deliberate exit).
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+  });
+
+  it("008 EARS-5: logout drops the client Router Cache, so browser Back re-reads the server header as guest (#2281)", async () => {
+    const user = userEvent.setup();
+    render(<AccountProfile />);
+    await user.click(await screen.findByTestId("logout"));
+
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    // Order: revoke → leave → invalidate. The refresh after the replace is what
+    // stops Back from replaying the pre-logout `@chrome` payload (signed-in chip).
+    expect(logout.mock.invocationCallOrder[0]!).toBeLessThan(
+      replace.mock.invocationCallOrder[0]!,
+    );
+    expect(replace.mock.invocationCallOrder[0]!).toBeLessThan(
+      routerRefresh.mock.invocationCallOrder[0]!,
+    );
   });
 });
 

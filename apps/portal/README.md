@@ -32,10 +32,10 @@ app/
 └── login/page.tsx               # sign-in surface
 
 components/
-├── academy-shell-header.tsx     # server component: `shell` catalogue → StorefrontHeader
-└── academy-shell-header-client.tsx # client leaf: `useHeaderAuth` → the shell's `auth` DATA prop
+└── academy-shell-header.tsx     # server component: `shell` catalogue + request auth → StorefrontHeader
 
 lib/
+├── shell-auth.ts                # server read: @ds/auth-flow/server + self-profile → the shell's `auth` DATA prop
 └── shell-config.ts              # the host-config VALUES the shared shell renders
 ```
 

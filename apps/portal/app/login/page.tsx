@@ -19,7 +19,6 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshShellAuth } from "@ds/storefront-shell";
 import {
   loginIdentifierFormSchema,
   otpIdentifierFormSchema,
@@ -127,9 +126,8 @@ function PortalLoginCard() {
     // 005 EARS-2: with a carried event context the session now exists, so the
     // registration completes and the doctor lands back on that event page;
     // without one this is the 008 EARS-7 discovery front-door landing.
-    // #1004: signal the persistent header to re-read the profile so the avatar
-    // appears on this SOFT landing, without a hard reload.
-    refreshShellAuth();
+    // #1004: the navigation renders the persistent header on the server again,
+    // which reads the new session — the avatar appears without a hard reload.
     router.push(await completeReturnTarget(returnTo));
   }
 
@@ -234,8 +232,7 @@ function PortalLoginCard() {
       });
       // 005 EARS-2: complete the carried registration (if any) now the session
       // exists, landing on the event page — else the 008 EARS-7 front-door.
-      // #1004: soft landing → signal the header's auth re-read (see above).
-      refreshShellAuth();
+      // #1004: the navigation re-renders the header server-side (see above).
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       setOtpVerifyError(

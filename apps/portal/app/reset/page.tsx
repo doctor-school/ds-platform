@@ -13,7 +13,6 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshShellAuth } from "@ds/storefront-shell";
 import {
   ResetCompleteFormSchema,
   resetIdentifierFormSchema,
@@ -215,9 +214,8 @@ function PortalRecoveryCard() {
       await authClient.completePasswordReset({ ...values, identifier });
       // #221: the reset response auto-logged us in (the BFF set the __Host- session
       // cookie), so go straight to the authenticated area instead of /login.
-      // #1004: soft landing → signal the persistent header to re-read the
-      // profile so the avatar appears without a hard reload.
-      refreshShellAuth();
+      // #1004: the navigation below renders the persistent header on the server
+      // again, which reads the new session — no hard reload.
       // #2027 rule S4: an arrival that carried a target lands on it through the
       // SAME shared rule `/login` and `/verify` land by — so a reset that started
       // from an эфир still completes that registration, and one that started from

@@ -20,7 +20,6 @@ import {
 } from "@ds/auth-flow/bot-protection";
 import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
-import { refreshShellAuth } from "@ds/storefront-shell";
 import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
@@ -230,9 +229,8 @@ function PortalEmailConfirmCard() {
         // now exists, so the SAME RegisterForEvent (EARS-1) fires for that event
         // and the doctor lands back on its page registered; without one this is
         // the shipped `/account` landing.
-        // #1004: soft landing → signal the persistent header to re-read the
-        // profile so the avatar appears without a hard reload.
-        refreshShellAuth();
+        // #1004: the navigation renders the persistent header on the server
+        // again, which reads the new session — no hard reload.
         router.replace(await completeReturnTarget(returnTo));
         return;
       }

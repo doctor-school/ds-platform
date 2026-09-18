@@ -42,10 +42,11 @@ import {
  * обучение, по каким договорам мы работаем», and slice 1 publishes none of those
  * documents. Copy is added back when the documents behind it exist.
  *
- * `force-static` is deliberate — the documents are files in a workspace package,
- * fixed at build time, so there is nothing per-request to read.
+ * No `force-static`: the documents themselves are build-time files, but the
+ * persistent header in the `@chrome` slot reads the visitor's session from the
+ * request (#2281), and a `force-static` route would blank `headers()` for the
+ * whole render — a signed-in doctor would see the guest cluster here.
  */
-export const dynamic = "force-static";
 
 export const metadata: Metadata = {
   title: "Документы и контакты — Академия Doctor.School",

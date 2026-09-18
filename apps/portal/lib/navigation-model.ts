@@ -7,7 +7,7 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  * Since #2180 the chrome is `@ds/storefront-shell` and this host supplies only
  * VALUES; this module is where the DESTINATIONS among those values live.
  * `lib/shell-config.ts` derives the wordmark's target and the nav from it,
- * `components/academy-shell-header-client.tsx` derives the auth cluster's
+ * `lib/shell-auth.ts` derives the auth cluster's
  * `loginHref` / `profileHref` from it, and the derived navigation walk reads the
  * SAME array. There is one list, not a list plus a render: a new shell link
  * enters the regression suite the moment it enters the model, and the model

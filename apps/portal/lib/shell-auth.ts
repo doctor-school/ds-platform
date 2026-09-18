@@ -62,16 +62,14 @@ export async function resolveAcademyShellAuth(
   const auth = await resolveServerAuth(requestHeaders, fetchImpl);
   if (auth.status === "guest") return guest;
 
-  const profile = await readProfile(requestHeaders, fetchImpl);
-  if (profile === null) return guest;
+  const chip = await readChipInitials(requestHeaders, fetchImpl);
+  if (chip === null) return guest;
 
   return {
     status: "doctor",
     profileHref: PROFILE_HREF,
     label: labels.profile,
-    initials: profile.displayName
-      ? initialsFromDisplayName(profile.displayName)
-      : null,
+    initials: chip.initials,
     // Canvas `user.links` line 209 — the academy cluster's «Мои события» beside
     // the avatar. The package decides where it is drawn at each width; the host
     // names only the copy and the destination (#2243).
@@ -79,18 +77,28 @@ export async function resolveAcademyShellAuth(
   };
 }
 
-/** The self-profile on the doctor's behalf; `null` for a 401 or any failure. */
-async function readProfile(
+/**
+ * The chip's initials from the self-profile read on the doctor's behalf;
+ * `null` for a 401 or any failure. The derivation sits inside the same guard as
+ * the read: a malformed profile body is a failed read, so it degrades to the
+ * guest cluster rather than throwing into the chrome.
+ */
+async function readChipInitials(
   requestHeaders: Headers,
   fetchImpl: typeof fetch,
-): Promise<MyProfile | null> {
+): Promise<{ initials: string | null } | null> {
   try {
     const res = await fetchImpl(`${serverApiBase()}/v1/me/profile`, {
       headers: forwardedHeaders(forwardedSessionFrom(requestHeaders)),
       cache: "no-store",
     });
     if (!res.ok) return null;
-    return (await res.json()) as MyProfile;
+    const profile = (await res.json()) as MyProfile;
+    return {
+      initials: profile.displayName
+        ? initialsFromDisplayName(profile.displayName)
+        : null,
+    };
   } catch {
     return null;
   }

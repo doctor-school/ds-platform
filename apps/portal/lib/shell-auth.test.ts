@@ -205,4 +205,28 @@ describe("008 EARS-4/5/6: the academy header auth, read on the server", () => {
 
     expect(auth).toEqual(GUEST);
   });
+
+  // A malformed profile body is a failed read under the shared degrade rule —
+  // the guest cluster, never an exception thrown into the chrome.
+  it.each([
+    ["a non-string display name", { ...DOCTOR, displayName: 42 }],
+    ["an object display name", { ...DOCTOR, displayName: { first: "Виктор" } }],
+    ["a null body", null],
+  ])(
+    "008 EARS-4: a malformed profile (%s) degrades to the guest cluster, never a thrown page",
+    async (_case, body) => {
+      const fetchImpl = upstream(
+        () => json(200, CLAIMS),
+        () => json(200, body),
+      );
+
+      const auth = await resolveAcademyShellAuth(
+        signedInRequest(),
+        LABELS,
+        fetchImpl,
+      );
+
+      expect(auth).toEqual(GUEST);
+    },
+  );
 });

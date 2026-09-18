@@ -23,8 +23,11 @@ import { listDocuments, loadDocument } from "@ds/legal-content";
  * same block with `state="not-found"`. Rendering the state without the status
  * would hand crawlers a 200 for a document that does not exist.
  *
- * `generateStaticParams` enumerates the published set: the documents are files in
- * a workspace package, so every published page is prerendered at build time.
+ * The page renders per request: the persistent header in the `@chrome` slot reads
+ * the visitor's session from the request (#2281), which opts the route out of
+ * build-time prerendering. `generateStaticParams` still enumerates the published
+ * set (the documents are files in a workspace package) as the route's declared
+ * list of known slugs.
  * `dynamicParams` deliberately stays at its permissive default — with it off, Next
  * answers an unknown slug from the ROOT `not-found` before this segment ever runs,
  * and the visitor gets a bare host 404 instead of the on-brand shell 028-design

@@ -232,6 +232,9 @@ function PortalEmailConfirmCard() {
         // #1004: the navigation renders the persistent header on the server
         // again, which reads the new session — no hard reload.
         router.replace(await completeReturnTarget(returnTo));
+        // 008 EARS-5 (#2281): drop the guest-era client Router Cache, so browser
+        // Back re-reads the persistent `@chrome` header from the server.
+        router.refresh();
         return;
       }
       // No held credential (deep-link / reload / abandoned) — fall back to the

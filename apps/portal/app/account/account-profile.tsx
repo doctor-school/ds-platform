@@ -109,6 +109,12 @@ export function AccountProfile() {
       // #1004: the navigation renders the persistent header on the server again,
       // which finds no session — the avatar is gone without a hard reload.
       router.replace("/login");
+      // 008 EARS-5 (#2281): the header is server-rendered in the persistent
+      // `@chrome` slot, so every page visited while signed in sits in the client
+      // Router Cache with the signed-in chip. Browser Back is a soft navigation
+      // that replays that cached payload; dropping the cache makes Back re-read
+      // the header from the server, which now finds no session.
+      router.refresh();
     }
   }
 

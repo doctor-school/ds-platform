@@ -207,6 +207,22 @@ describe("003 EARS-28 /account profile surface", () => {
     // not the deliberate exit).
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
   });
+
+  it("008 EARS-5: logout drops the client Router Cache, so browser Back re-reads the server header as guest (#2281)", async () => {
+    const user = userEvent.setup();
+    render(<AccountProfile />);
+    await user.click(await screen.findByTestId("logout"));
+
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    // Order: revoke → leave → invalidate. The refresh after the replace is what
+    // stops Back from replaying the pre-logout `@chrome` payload (signed-in chip).
+    expect(logout.mock.invocationCallOrder[0]!).toBeLessThan(
+      replace.mock.invocationCallOrder[0]!,
+    );
+    expect(replace.mock.invocationCallOrder[0]!).toBeLessThan(
+      routerRefresh.mock.invocationCallOrder[0]!,
+    );
+  });
 });
 
 describe("008 EARS-14 (#2228): the cabinet does not push the shared footer below the fold", () => {

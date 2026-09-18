@@ -229,6 +229,9 @@ function PortalRecoveryCard() {
           ? await completeReturnTarget(carried)
           : ACADEMY_AUTH_ROUTES.account,
       );
+      // 008 EARS-5 (#2281): drop the guest-era client Router Cache, so browser
+      // Back re-reads the persistent `@chrome` header from the server.
+      router.refresh();
     } catch (err) {
       setCompleteError(
         authErrorMessage(err, authFlow.copy.errors, te("resetCompleteFailed")),

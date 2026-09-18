@@ -19,6 +19,22 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       When the operator copies the Expert public link
       Then the clipboard contains that exact generated public link
 
+  Rule: An operator assigns and replaces a project curator
+
+    @EARS-9 @EARS-17 @happy
+    Scenario: A project roster keeps exactly one curator through an atomic replacement
+      Given a platform_admin operator in the admin app
+      When the operator creates a draft project and two draft Experts for its roster
+      Then the project's Expert roster is empty and explains that links are retained
+      When the operator assigns the first Expert as curator
+      Then that Expert appears as the project's curator
+      When the operator selects the second Expert while the curator seat is occupied
+      Then a second curator role is unavailable and the Admin directs the operator to replace the curator
+      When the operator adds the second Expert as a member
+      Then direct promotion of that member to curator is unavailable
+      When the operator replaces the curator with that member
+      Then the replacement Expert is the only curator and the former curator remains a member
+
   Rule: Remaining taxonomy contract scenarios
 
     Background:

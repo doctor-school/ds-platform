@@ -29,6 +29,12 @@ export interface AdminWorld {
     patronymic: string;
     publicUrl?: string;
   };
+  /** Project and Experts authored by the executable 012 curator journey. */
+  projectRoster?: {
+    projectUrl: string;
+    curatorName: string;
+    memberName: string;
+  };
 }
 
 /** Scenario state for the 011 admin MFA journey. */

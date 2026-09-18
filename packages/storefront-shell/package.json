@@ -1,6 +1,6 @@
 {
   "name": "@ds/storefront-shell",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "DS Platform shared storefront chrome — the BBM topbar, the header (logo / search / nav / theme toggle / auth slot), the footer and the moved header user cluster, hosted by BOTH storefronts off one values-only host config (ADR-0013 A1, epic #2020, features 008 / 017).",

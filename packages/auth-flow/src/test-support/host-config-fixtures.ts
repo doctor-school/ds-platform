@@ -1,3 +1,11 @@
+import {
+  MARKETING_COMMUNICATIONS_PURPOSE,
+  PARTNER_DATA_COMPOSITION,
+  PARTNER_DATA_EXCLUDED,
+  PARTNER_DATA_SHARING_PURPOSE,
+  formatPartnerDataStatement,
+} from "@ds/schemas";
+
 import type { AuthFlowHostConfig } from "../host-config";
 
 /**
@@ -105,6 +113,25 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
         otpVerify: "Код не подошёл. Запросите новый.",
       },
     },
+    register: {
+      title: "Создание аккаунта",
+      description: "Бесплатно, за две минуты — нужны только e-mail и пароль.",
+      emailLabel: "Электронная почта",
+      emailPlaceholder: "doctor@example.com",
+      passwordLabel: "Пароль",
+      reveal: {
+        show: "Показать",
+        hide: "Скрыть",
+        showAria: "Показать пароль",
+        hideAria: "Скрыть пароль",
+      },
+      submit: "Создать аккаунт",
+      haveAccount: "Уже есть аккаунт? Войти",
+      failed: "Не удалось завершить регистрацию. Проверьте введённые данные.",
+      // No `confirm`: this host confirms the address on its own `/verify` route
+      // (`routes.verify` above), so the inline step's copy would be a claim.
+      // No `promo`: `register.promoField` is false here.
+    },
     brand: {
       eyebrow: "Врачи учат врачей",
       headline: "Медицинское образование для врачей",
@@ -132,6 +159,27 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   botProtection: { siteKey: undefined },
   channels: ["email", "sms"],
   register: { promoField: false },
+  // One required consent, read as ONE read-only sentence rather than a control
+  // (this host's shipped render): the statement is what the visitor reads, the
+  // tier item is what gets recorded, and both name the same purpose.
+  consents: {
+    tiers: [
+      {
+        tier: "access-conditions",
+        items: [
+          {
+            purpose: "tos",
+            required: true,
+            statement:
+              "Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.",
+          },
+        ],
+      },
+    ],
+    wordingVersion: "2026-01",
+    statement:
+      "Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.",
+  },
   // 014 EARS-6 - this host parks the carried target for the trip through the
   // verification mail. The doctor fixture below states none: row 29, that host
   // carries the target on the query param alone.
@@ -249,6 +297,46 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
         otpVerify: "Код не подошёл. Проверьте цифры или запросите новый.",
       },
     },
+    register: {
+      title: "Регистрация",
+      description: "Почта и пароль — этого достаточно. Документы на входе не нужны.",
+      emailLabel: "Рабочая почта",
+      emailPlaceholder: "doctor@clinic.ru",
+      passwordLabel: "Пароль",
+      reveal: {
+        show: "Показать",
+        hide: "Скрыть",
+        showAria: "Показать пароль",
+        hideAria: "Скрыть пароль",
+      },
+      submit: "Зарегистрироваться",
+      promo: { label: "Промокод — если есть", placeholder: "DS-2026" },
+      haveAccount: "Уже есть аккаунт? Войти",
+      failed: "Не удалось завершить регистрацию. Попробуйте ещё раз.",
+      // This host has no `/verify` route, so the confirmation is a step of the
+      // door itself and states its words here (rows 51, 76).
+      confirm: {
+        title: "Проверьте почту",
+        description:
+          "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
+        newAccountHeading: "Новый аккаунт — введите код",
+        codeLabel: "Код из письма",
+        submit: "Подтвердить",
+        codeAccepted: "Код принят — почта подтверждена.",
+        resend: "Отправить снова",
+        resendCountdown: "Отправить снова · {seconds} с",
+        existingAccountHeading: "Уже регистрировались?",
+        existingAccountHint:
+          "Войдите в существующий аккаунт или сбросьте пароль.",
+        goToSignIn: "Войти",
+        goToReset: "Сбросить пароль",
+        failed: "Код не подошёл. Попробуйте ещё раз.",
+        resendFailed:
+          "Не удалось отправить код повторно. Попробуйте ещё раз.",
+        resendAcknowledged:
+          "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
+      },
+    },
     returnContext: {
       eyebrow: "Вы вернётесь к этому событию",
       login: "После входа вы вернётесь сюда же — место за вами.",
@@ -283,6 +371,55 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   botProtection: { siteKey: undefined },
   channels: ["email"],
   register: { promoField: true },
+  // The two shipped tiers with the rows drawn around them: the declaration and
+  // the partner-data access condition above the submit, the marketing opt-in
+  // below it. The statements come from the `@ds/schemas` SSOT, so the sentence
+  // and the recorded composition cannot drift apart.
+  consents: {
+    tiers: [
+      {
+        tier: "access-conditions",
+        items: [
+          {
+            purpose: PARTNER_DATA_SHARING_PURPOSE,
+            required: true,
+            statement: formatPartnerDataStatement(),
+            dataComposition: [...PARTNER_DATA_COMPOSITION],
+            excluded: [...PARTNER_DATA_EXCLUDED],
+          },
+        ],
+      },
+      {
+        tier: "marketing",
+        items: [
+          {
+            purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+            required: false,
+            statement: "Хочу получать письма о новых школах и событиях",
+          },
+        ],
+      },
+    ],
+    medicalWorkerDeclaration: {
+      label: "Я являюсь медицинским работником",
+      help: "Требование закона: часть материалов доступна только медицинским работникам.",
+      unmet:
+        "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
+    },
+    partnerDataItem: {
+      help: "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.",
+      unmet:
+        "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.",
+    },
+    marketingOptIn: {
+      help: "Необязательно. Письма отправляет внешний сервис рассылок.",
+      optionalTag: "необязательно",
+    },
+    wordingVersion: "2026-09",
+    managerNote:
+      "Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.",
+    accessGroupHeading: "Условия доступа",
+  },
   // Row 46 - the doctor door publishes the return context beside the form; it
   // parks nothing (row 29), so there is no cookie here.
   returnTo: { card: true },

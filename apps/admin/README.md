@@ -65,8 +65,11 @@ the EARS-9/17 project roster path: create a project and two Experts, assign one
 curator, refuse a second curator, then atomically replace the curator while
 retaining the former curator as a member. The EARS-9/14 relationship-restore path
 links an Expert as a member, retires and reveals that link, restores the same
-retained row, then reads the project from the Expert side. Run all three slices
-with `pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator|retired project Expert relationship returns"`.
+retained row, then reads the project from the Expert side. The EARS-9/14/16
+occupied-curator path retires the first curator relationship, assigns a second
+curator, then proves from the first Expert side that the retained row cannot be
+restored into the occupied seat and directs the operator to curator replacement.
+Run all four slices with `pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator|retired project Expert relationship returns|retired curator relationship stays retired"`.
 The selected taxonomy journeys also run in the `admin-e2e` CI job against its
 real Admin/API/database/MFA stack. Unbound 012 contracts remain visible as skipped; the existing `chromium`
 project keeps strict generation for its 007/011 scenarios. Validation, editing,

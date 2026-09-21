@@ -52,6 +52,22 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       When the operator opens the Expert's projects
       Then the restored project appears as a member relationship with Expert-side authoring available
 
+  Rule: An operator cannot restore a retired curator relationship into an occupied seat
+
+    @EARS-9 @EARS-14 @EARS-16 @failure
+    Scenario: A retired curator relationship stays retired while another Expert holds the curator seat
+      Given a platform_admin operator in the admin app
+      When the operator creates a draft project and two draft Experts for an occupied curator restoration
+      And the operator links the first Expert as curator and records that relationship identity
+      When the operator retires that curator relationship
+      And the operator assigns the second Expert as curator
+      Then the project roster shows only the second Expert as active curator
+      When the operator opens the first Expert's projects
+      And the operator reveals retired project Expert relationships
+      Then the retired curator relationship keeps the recorded identity
+      And restoring that curator relationship is unavailable while the seat is occupied
+      And the Admin directs the operator to replace the current curator
+
   Rule: Remaining taxonomy contract scenarios
 
     Background:

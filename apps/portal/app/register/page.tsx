@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { RegisterRoute } from "@ds/auth-flow/register/route";
 
-import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
+import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
 
 /**
  * 003 EARS-1 / #131 — `academy.doctor.school/register`, the Academy sign-up door.

@@ -76,13 +76,56 @@ export class IdpUnavailableError extends Error {
   }
 }
 
-/** Input to create a Zitadel user with a single primary identifier. */
-export interface CreateUserInput {
+/** The identifiers every create carries, whatever its credential mode. */
+interface CreateUserIdentity {
   email?: string | undefined;
   phone?: string | undefined;
+}
+
+/**
+ * 044 EARS-4 — the real name the submitter typed, sent to the IdP in place of
+ * the 003 registration placeholders.
+ *
+ * Required on the passwordless path and only there: 003 self-service
+ * registration collects no name at all (hence `givenName` = the email local-part
+ * and `familyName` = `"guest"`), while a surface that DID ask for a name must
+ * not throw it away and let the IdP display "participant guest".
+ */
+export interface CreateUserProfile {
+  givenName: string;
+  familyName: string;
+}
+
+/** 003 — create a user who chose a password on the registration form. */
+export interface CreateUserWithPasswordInput extends CreateUserIdentity {
+  credential?: "password" | undefined;
   /** The BFF forwards this to Zitadel; it never stores or hashes it (design §2). */
   password: string;
 }
+
+/**
+ * 044 EARS-4 — create a user who has NO credential and never chose one.
+ *
+ * `credential: "none"` is an explicit, mandatory discriminator rather than an
+ * optional `password`: with a merely optional field, a caller that simply forgot
+ * to pass the password would silently create a credential-less account, which is
+ * the one mistake this port must make impossible. Stating the intent also makes
+ * the adapter's contract unambiguous — OMIT `human.password` from the wire body
+ * entirely (an empty-string password is still a credential).
+ *
+ * Such an account signs in through the platform's code-based flows only; it is
+ * the shape the public congress intake creates.
+ */
+export interface CreateUserPasswordlessInput extends CreateUserIdentity {
+  credential: "none";
+  /** Mandatory here — the surface asked for a name, so the IdP gets the real one. */
+  profile: CreateUserProfile;
+}
+
+/** Input to create a Zitadel user with a single primary identifier. */
+export type CreateUserInput =
+  | CreateUserWithPasswordInput
+  | CreateUserPasswordlessInput;
 
 /**
  * Result of a create attempt. `alreadyExisted` is the enumeration-safety hinge

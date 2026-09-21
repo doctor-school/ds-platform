@@ -26,7 +26,10 @@ import type {
 } from "@ds/schemas";
 import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
-import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import {
+  withRequestAuditContext,
+  type AuditedTransaction,
+} from "../audit/audit-context.tx.js";
 import {
   DOCTOR_GUEST_ROLE,
   IDP_CLIENT,
@@ -85,6 +88,33 @@ const GENERIC_UNAVAILABLE = "the service is temporarily unavailable";
 
 /** Postgres unique-constraint violation SQLSTATE (`unique_violation`). */
 const PG_UNIQUE_VIOLATION = "23505";
+
+/**
+ * 044 EARS-4 — what the congress intake hands
+ * {@link AuthService.createPasswordlessAccount}.
+ *
+ * The names are the SUBMITTED ones (they reach the IdP profile and the `users`
+ * display name), and `consent` is what the caller is about to write inside the
+ * account transaction — passed in so the terminal ledger row can name it without
+ * this method knowing which surface's purposes exist.
+ */
+export interface PasswordlessAccountInput {
+  email: string;
+  surname: string;
+  firstName: string;
+  consent: readonly { purpose: string; version: string }[];
+}
+
+/**
+ * The outcome of a passwordless create. `userId` is `null` exactly when
+ * `alreadyExisted` is true — no mirror row was written, so there is no id to
+ * hand back and the caller cannot accidentally treat one as present.
+ */
+export interface PasswordlessAccountCreation {
+  sub: string;
+  userId: string | null;
+  alreadyExisted: boolean;
+}
 
 /**
  * True when the error is a Postgres unique-constraint violation. node-postgres
@@ -581,6 +611,138 @@ export class AuthService {
     }
 
     return { status: "pending_verification" };
+  }
+
+  /**
+   * 044 EARS-4 — create a CREDENTIAL-LESS account for a surface that collected a
+   * name and a consent but never a password: the public congress sign-up.
+   *
+   * A sibling of {@link register}, not a flag on it. The two share four
+   * mechanisms (the IdP create with its error mapping, the audited mirror
+   * transaction, the project-role grant, the terminal ledger row) but differ in
+   * three ways that are each a product decision rather than a branch condition:
+   *
+   *  • **no credential** — the participant never chose one, so the IdP user is
+   *    created with `credential: "none"` and the account signs in through the
+   *    code-based flows only. Generating a password nobody knows would be a
+   *    credential in the ledger's eyes and a support burden in the user's.
+   *  • **no verification mail** — the congress surface owns its own
+   *    confirmation (slice 4, #2304–#2306); sending 003's «verify your email»
+   *    code to someone who registered for a congress is a message about a
+   *    platform they did not knowingly join.
+   *  • **no platform consents** — the medical-worker declaration is neither
+   *    recorded nor demanded here (EARS-10). The ONLY consent is the one the
+   *    caller passes, and the caller writes it itself, inside this method's
+   *    transaction.
+   *
+   * `writeWithinAccountTransaction` is the seam that keeps 044's cascade atomic:
+   * the caller's registration and consent rows are written against the SAME
+   * transaction as the `users` mirror, so a mid-write failure leaves no account
+   * without its registration and no registration without its consent. A caller
+   * that wrote them afterwards would have two transactions and a window in which
+   * a PD-bearing row exists with no consent beside it.
+   *
+   * Returns `alreadyExisted: true` WITHOUT running the callback when the IdP
+   * already knows the address; deciding what that means is the caller's — for
+   * the congress intake of this slice it is a refusal that writes nothing, and
+   * the real found-account behaviour lands with #2299 / #2300 / #2301.
+   */
+  async createPasswordlessAccount(
+    input: PasswordlessAccountInput,
+    writeWithinAccountTransaction: (
+      tx: AuditedTransaction,
+      userId: string,
+    ) => Promise<void>,
+  ): Promise<PasswordlessAccountCreation> {
+    let created;
+    try {
+      created = await this.idp.createUser({
+        email: input.email,
+        credential: "none",
+        profile: {
+          givenName: input.firstName,
+          familyName: input.surname,
+        },
+      });
+    } catch (err) {
+      // Same mapping as `register` (#202): a deterministic IdP 4xx is a generic
+      // 4xx, never a bare 500 and never an existence oracle; a 5xx/network fault
+      // is an honest 503. `IdpPasswordPolicyError` is unreachable on this path —
+      // there is no password to reject — so it is deliberately not mapped here.
+      if (err instanceof IdpInvalidArgumentError) {
+        throw new BadRequestException(GENERIC_FAILURE);
+      }
+      if (err instanceof IdpUnavailableError) {
+        throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+      }
+      throw err;
+    }
+
+    if (created.alreadyExisted) {
+      return { sub: created.sub, userId: null, alreadyExisted: true };
+    }
+
+    let userId: string;
+    try {
+      userId = await withRequestAuditContext(this.db, async (tx) => {
+        const [row] = await tx
+          .insert(users)
+          .values({
+            zitadelSub: created.sub,
+            email: input.email,
+            // The default platform role, exactly as `register` writes it: a
+            // congress participant is a guest until a doctor flow says otherwise.
+            role: "doctor_guest",
+            // 044 EARS-4 — the display name from the SUBMITTED surname and first
+            // name, which is the only truthful display value this surface holds.
+            // `users.phone` is deliberately NOT written: the contact phone is an
+            // answer to the congress form, not a platform identifier, and writing
+            // it would claim a verified secondary identifier nobody verified.
+            displayName: `${input.surname} ${input.firstName}`.trim(),
+          })
+          .onConflictDoUpdate({
+            target: users.zitadelSub,
+            set: { updatedAt: new Date() },
+          })
+          .returning({ id: users.id });
+
+        if (!row) throw new Error("mirror upsert returned no row");
+
+        await writeWithinAccountTransaction(tx, row.id);
+        return row.id;
+      });
+    } catch (err) {
+      // Mirror↔IdP divergence, mapped exactly as `register` maps it: the
+      // conflict target is `zitadel_sub`, so an email collision under a
+      // different sub is not absorbed and must not surface as a distinguishable
+      // 500. The EARS-19 reconciliation sweep heals the divergence.
+      if (isUniqueViolation(err)) {
+        throw new BadRequestException(GENERIC_FAILURE);
+      }
+      throw err;
+    }
+
+    // #157, as `register`: the OIDC project-roles claim is the authz authority,
+    // and the `users.role` mirror above is only its projection. Awaited and not
+    // swallowed — without the grant the account is 403 on every protected route.
+    await this.idp.grantProjectRole(created.sub, DOCTOR_GUEST_ROLE);
+
+    // One terminal ledger row for the created account, reusing 003's `Registered`
+    // event rather than minting a 044-specific type: what happened IS a
+    // registration of an account, and a parallel event type would split the
+    // "accounts created" ledger question in two. The consent versions the caller
+    // captured ride in the metadata, the same way `register` carries its own.
+    await this.audit.record({
+      type: "Registered",
+      sub: created.sub,
+      channel: "email",
+      consent: input.consent.map((c) => ({
+        purpose: c.purpose,
+        version: c.version,
+      })),
+    });
+
+    return { sub: created.sub, userId, alreadyExisted: false };
   }
 
   /**

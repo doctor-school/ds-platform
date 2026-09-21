@@ -206,7 +206,13 @@ export class FakeIdpClient implements IdpClient {
       emailVerified: false,
       phoneVerified: false,
       active: true,
-      password: input.password,
+      // 044 EARS-4 fake/real parity: a `credential: "none"` create stores NO
+      // credential, exactly as the real adapter omits `human.password` from the
+      // wire body. The record therefore cannot satisfy `passwordLogin` (which
+      // compares against `record.password`), which is the observable the
+      // passwordless tests assert — a credential-less account is not
+      // password-signable even with an empty string.
+      password: input.credential === "none" ? undefined : input.password,
     };
     this.bySub.set(sub, record);
     if (email) this.byEmail.set(email, record);
@@ -945,6 +951,17 @@ export class FakeIdpClient implements IdpClient {
   /** Test accessor: how many failed password checks the fake recorded for `identifier`. */
   failedAttempts(identifier: string): number {
     return this.failed.get(identifier) ?? 0;
+  }
+
+  /**
+   * Test accessor (044 EARS-4): does this sub hold a credential at all?
+   *
+   * The real Zitadel equivalent is "does the user have a password auth factor",
+   * which is not readable through the create response — so the fake exposes it
+   * directly and the passwordless path is asserted here rather than live.
+   */
+  hasCredential(sub: string): boolean {
+    return this.bySub.get(sub)?.password != null;
   }
 
   listUsers(): Promise<IdpUser[]> {

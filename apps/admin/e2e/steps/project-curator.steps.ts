@@ -62,6 +62,27 @@ function roster(world: {
   return world.projectRoster;
 }
 
+function relationshipRestore(world: {
+  projectRelationshipRestore?: {
+    projectTitle: string;
+    projectUrl: string;
+    expertName: string;
+    expertUrl: string;
+    rowId?: string;
+  };
+}) {
+  if (!world.projectRelationshipRestore) {
+    throw new Error("Project relationship restore journey was not authored");
+  }
+  return world.projectRelationshipRestore;
+}
+
+function restoredRowId(world: Parameters<typeof relationshipRestore>[0]): string {
+  const rowId = relationshipRestore(world).rowId;
+  if (!rowId) throw new Error("Project relationship identity was not recorded");
+  return rowId;
+}
+
 When(
   "the operator creates a draft project and two draft Experts for its roster",
   async ({ page, world }) => {
@@ -189,5 +210,139 @@ Then(
       "Участник",
     );
     await expect(rows.filter({ hasText: memberName })).toContainText("Куратор");
+  },
+);
+
+When(
+  "the operator creates a draft project and draft Expert for relationship restoration",
+  async ({ page, world }) => {
+    const stamp = Date.now();
+    const projectTitle = `Возврат проект ${stamp}`;
+    const projectUrl = await createProject(page, projectTitle);
+    const expertName = await createExpert(
+      page,
+      `Сидоров-${stamp}`,
+      "Возврат",
+      "Ильич",
+    );
+    const expertUrl = page.url();
+    world.projectRelationshipRestore = {
+      projectTitle,
+      projectUrl,
+      expertName,
+      expertUrl,
+    };
+    await openExpertsTab(page, projectUrl);
+  },
+);
+
+When(
+  "the operator links that Expert to the project as a member",
+  async ({ page, world }) => {
+    await linkSelectedExpert(
+      page,
+      relationshipRestore(world).expertName,
+      "member",
+    );
+  },
+);
+
+Then(
+  "the project roster shows that member and records the relationship identity",
+  async ({ page, world }) => {
+    const state = relationshipRestore(world);
+    const row = page
+      .getByTestId(/^project-expert-row-[0-9a-f-]{36}$/)
+      .filter({ hasText: state.expertName });
+    await expect(row).toContainText("Участник");
+    const testId = await row.getAttribute("data-testid");
+    if (!testId) throw new Error("Project relationship row has no test id");
+    state.rowId = testId.replace("project-expert-row-", "");
+  },
+);
+
+When(
+  "the operator retires that project Expert relationship",
+  async ({ page, world }) => {
+    await page
+      .getByTestId(`project-expert-retire-${restoredRowId(world)}`)
+      .click();
+  },
+);
+
+Then(
+  "the active project roster is empty and the retired relationship is hidden",
+  async ({ page }) => {
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Связь снята.",
+    );
+    await expect(page.getByTestId("project-experts-empty")).toBeVisible();
+    await expect(page.getByTestId("project-experts-retired")).toHaveCount(0);
+  },
+);
+
+When(
+  "the operator reveals retired project Expert relationships",
+  async ({ page }) => {
+    await page
+      .getByTestId("project-experts-show-retired")
+      .locator("xpath=ancestor::label[1]")
+      .click();
+  },
+);
+
+Then(
+  "that retired relationship appears with the same identity",
+  async ({ page, world }) => {
+    const state = relationshipRestore(world);
+    await expect(page.getByTestId("project-experts-retired")).toContainText(
+      state.expertName,
+    );
+    await expect(
+      page.getByTestId(`project-expert-row-${restoredRowId(world)}`),
+    ).toBeVisible();
+  },
+);
+
+When(
+  "the operator restores that project Expert relationship",
+  async ({ page, world }) => {
+    await page
+      .getByTestId(`project-expert-restore-${restoredRowId(world)}`)
+      .click();
+  },
+);
+
+Then(
+  "the active relationship returns with the same identity",
+  async ({ page, world }) => {
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Связь возвращена.",
+    );
+    await expect(
+      page.getByTestId(`project-expert-row-${restoredRowId(world)}`),
+    ).toBeVisible();
+  },
+);
+
+When("the operator opens the Expert's projects", async ({ page, world }) => {
+  await page.goto(relationshipRestore(world).expertUrl);
+  await page.getByTestId("tab-projects").click();
+  await page.getByTestId("project-experts-panel").waitFor({ state: "visible" });
+});
+
+Then(
+  "the restored project appears as a member relationship with Expert-side authoring available",
+  async ({ page, world }) => {
+    const state = relationshipRestore(world);
+    const row = page.getByTestId(
+      `project-expert-row-${restoredRowId(world)}`,
+    );
+    await expect(row).toContainText(state.projectTitle);
+    await expect(row).toContainText("Участник");
+    await expect(page.getByTestId("project-expert-link-form")).toBeVisible();
+    await expect(page.getByTestId("project-curator-replace-form")).toHaveCount(
+      0,
+    );
   },
 );

@@ -63,8 +63,10 @@ The `taxonomy` project reads the spec-owned
 directly. Its bound journeys cover the EARS-2/19/20 standalone Expert path and
 the EARS-9/17 project roster path: create a project and two Experts, assign one
 curator, refuse a second curator, then atomically replace the curator while
-retaining the former curator as a member. Run both slices with
-`pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator"`.
+retaining the former curator as a member. The EARS-9/14 relationship-restore path
+links an Expert as a member, retires and reveals that link, restores the same
+retained row, then reads the project from the Expert side. Run all three slices
+with `pnpm --filter @ds/admin test:e2e --project taxonomy --grep "standalone Expert retains|project roster keeps exactly one curator|retired project Expert relationship returns"`.
 The selected taxonomy journeys also run in the `admin-e2e` CI job against its
 real Admin/API/database/MFA stack. Unbound 012 contracts remain visible as skipped; the existing `chromium`
 project keeps strict generation for its 007/011 scenarios. Validation, editing,

@@ -1284,6 +1284,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/congress/sign-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CongressSignUpController_signUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events/{idOrSlug}/chat": {
         parameters: {
             query?: never;
@@ -1878,6 +1894,22 @@ export interface components {
             embedRef: string;
             /** @enum {string} */
             provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+        };
+        CongressSignUpRequestDto: {
+            captchaToken?: string;
+            city: string;
+            contactPhone: string;
+            /** Format: email */
+            email: string;
+            firstName: string;
+            patronymic?: string;
+            /** @constant */
+            personalDataConsent: true;
+            region: string;
+            /** Format: uuid */
+            specialtyId: string;
+            surname: string;
+            workplace: string;
         };
         CreateExpertRequestDto: {
             affiliation?: string | null;
@@ -4217,6 +4249,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ZitadelWebhookDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CongressSignUpController_signUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CongressSignUpRequestDto"];
             };
         };
         responses: {

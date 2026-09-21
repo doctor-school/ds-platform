@@ -88,6 +88,15 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "audit-ledger.e2e: EARS-18 register appends one auth.register row (emitted by the delegated 003 command site)",
     },
+    // 044 EARS-1 (#2294) — the public congress intake. Like the 021 command
+    // above it is a host projection: account creation is delegated to
+    // `AuthService.createPasswordlessAccount`, which appends the one
+    // `Registered` row. A 044-local event would double-count one account.
+    "POST /v1/congress/sign-up": {
+      emits: ["Registered"],
+      coveredBy:
+        "congress/sign-up.e2e: EARS-1 when a new email submits inside the window, system shall accept it and create account, registration and consent in one cascade (the row is emitted by the delegated 003 command site)",
+    },
     "POST /v1/storefront/doctor/confirm": {
       // 021 EARS-10 (#1546): the doctor-host confirm command delegates the
       // verification itself to the 003 `AuthService.verify` command site
@@ -111,7 +120,8 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
     },
     "POST /v1/auth/login/otp/request": {
       emits: ["OtpSent"],
-      coveredBy: "login-otp.e2e (EARS-6/7); an actual send records auth.otp.sent",
+      coveredBy:
+        "login-otp.e2e (EARS-6/7); an actual send records auth.otp.sent",
     },
     "POST /v1/auth/logout": {
       emits: ["SessionRevoked"],

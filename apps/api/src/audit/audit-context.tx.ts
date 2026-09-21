@@ -13,7 +13,18 @@ import { getAuditContext } from "./audit-context.js";
 // (an interceptor alone can't own the tx), which is exactly what this does.
 
 type Db = DrizzleHandle["db"];
-type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+/**
+ * The transaction handle {@link withRequestAuditContext} hands its callback.
+ *
+ * Exported because a write path may need to let a COLLABORATOR contribute rows
+ * to the same transaction (044: account mirror, registration and consent commit
+ * together or not at all), and that collaborator has to be able to name the
+ * handle's type without re-deriving it and drifting.
+ */
+export type AuditedTransaction = Parameters<
+  Parameters<Db["transaction"]>[0]
+>[0];
+type Transaction = AuditedTransaction;
 
 /**
  * Run `fn` in a transaction attributed to the current request's audit context.

@@ -66,6 +66,7 @@ describe("resolveRateLimitThresholds (EARS-13 env overrides, #1076)", () => {
       RATE_LIMIT_PER_ASN_1H: "3",
     });
     expect(result).toEqual({
+      ...DEFAULT_RATE_LIMIT_THRESHOLDS,
       perUserPer15Min: 1,
       perIpPer15Min: 2,
       perAsnPerHour: 3,
@@ -107,7 +108,11 @@ describe("resolveRateLimitThresholds (EARS-13 env overrides, #1076)", () => {
       RATE_LIMIT_PER_IP_15MIN: "-1",
       RATE_LIMIT_PER_ASN_1H: "NaN",
     });
-    for (const v of Object.values(result)) {
+    const { scopedPerIpPer15Min, ...platformCeilings } = result;
+    for (const v of [
+      ...Object.values(platformCeilings),
+      ...Object.values(scopedPerIpPer15Min),
+    ]) {
       expect(Number.isInteger(v)).toBe(true);
       expect(v).toBeGreaterThan(0);
     }

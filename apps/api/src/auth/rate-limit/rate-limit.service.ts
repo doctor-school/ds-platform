@@ -88,7 +88,7 @@ export class RateLimitService {
         map: this.byIp,
         key: scoped(ctx.scope, ctx.ip),
         windowMs: FIFTEEN_MIN_MS,
-        limit: this.thresholds.perIpPer15Min,
+        limit: this.perIpLimit(ctx.scope),
       },
     ];
     if (ctx.identifier !== undefined) {
@@ -163,6 +163,19 @@ export class RateLimitService {
   reset(ctx: RateLimitContext): void {
     if (ctx.identifier === undefined) return;
     this.byUser.delete(ctx.identifier.toLowerCase());
+  }
+
+  /**
+   * The per-address ceiling this bucket is held to (#2294): the scope's own
+   * number when it declares one, the platform ceiling otherwise — so an
+   * unscoped auth request and a scope with no entry are both unchanged.
+   */
+  private perIpLimit(scope: string | undefined): number {
+    if (scope === undefined) return this.thresholds.perIpPer15Min;
+    return (
+      this.thresholds.scopedPerIpPer15Min[scope] ??
+      this.thresholds.perIpPer15Min
+    );
   }
 
   /** Current count in the dimension's live window (0 if absent or rolled over). */

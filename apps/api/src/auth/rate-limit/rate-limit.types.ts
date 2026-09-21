@@ -14,11 +14,56 @@
  * is hourly. Injected (not hard-coded) so a deployment can tighten them and the
  * e2e can drive the boundary without 20 real requests.
  */
-export interface RateLimitThresholds {
+/**
+ * The three PLATFORM ceilings — the ones ops may override per environment
+ * ({@link RATE_LIMIT_ENV_VARS}). Split out from {@link RateLimitThresholds} so
+ * that "a ceiling an env var can move" stays exactly these three, whatever else
+ * the thresholds object grows.
+ */
+export interface RateLimitCeilings {
   perUserPer15Min: number;
   perIpPer15Min: number;
   perAsnPerHour: number;
 }
+
+export interface RateLimitThresholds extends RateLimitCeilings {
+  /**
+   * Per-SCOPE replacement of {@link RateLimitCeilings.perIpPer15Min} (#2294).
+   *
+   * {@link RateLimitContext.scope} already partitions the source-address KEYS
+   * into disjoint buckets; this is the one thing it did not carry — a bucket's
+   * own CEILING. A surface whose legitimate traffic differs by an order of
+   * magnitude from an auth door's (the public congress intake: one corporate
+   * NAT submitting a whole department's sign-ups, 044 EARS-1) needs its own
+   * number, and expressing that as a raised PLATFORM default would raise it for
+   * register, login and reset too — the opposite of what the scope exists for.
+   *
+   * A scope with no entry here falls back to the platform ceiling, so adding a
+   * scope is never silently unlimited, and an unscoped request never reads this
+   * map at all.
+   */
+  scopedPerIpPer15Min: Readonly<Record<string, number>>;
+}
+
+/**
+ * 044 EARS-1 (#2294) — the scope tag the public congress intake keys its
+ * source-address windows under, so its traffic can neither exhaust the budget
+ * the 003 auth doors share nor be exhausted by them.
+ */
+export const CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE = "congress:sign-up";
+
+/**
+ * 044 EARS-1 / V-22 — the congress intake's own per-client-address ceiling:
+ * 60 submissions per 15 minutes, three times the platform default.
+ *
+ * The number is sized for the legitimate shape of this surface rather than for
+ * an auth door's: a congress landing page is shared inside hospitals and
+ * departments, so many genuine participants submit from ONE public address
+ * within minutes, while a single participant submits once. The platform default
+ * of 20 stays exactly where it is (it bounds credential spraying, which this
+ * surface cannot do — it holds no password).
+ */
+export const CONGRESS_SIGN_UP_PER_IP_15MIN = 60;
 
 /**
  * EARS-13 defaults (ADR-0001 §7): per-user 10/15 min, per-IP 20/15 min, per-ASN
@@ -33,6 +78,9 @@ export const DEFAULT_RATE_LIMIT_THRESHOLDS: RateLimitThresholds = {
   perUserPer15Min: 10,
   perIpPer15Min: 20,
   perAsnPerHour: 100,
+  scopedPerIpPer15Min: {
+    [CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE]: CONGRESS_SIGN_UP_PER_IP_15MIN,
+  },
 };
 
 /** Monotonic-enough wall clock (ms). Injected so window resets are testable. */
@@ -97,13 +145,12 @@ export const RATE_LIMIT_ENV_VARS = {
   perUserPer15Min: "RATE_LIMIT_PER_USER_15MIN",
   perIpPer15Min: "RATE_LIMIT_PER_IP_15MIN",
   perAsnPerHour: "RATE_LIMIT_PER_ASN_1H",
-} as const satisfies Record<keyof RateLimitThresholds, string>;
+} as const satisfies Record<keyof RateLimitCeilings, string>;
 
 /** The three raw env values the {@link resolveRateLimitThresholds} factory reads. */
 export type RateLimitEnv = {
   [K in (typeof RATE_LIMIT_ENV_VARS)[keyof typeof RATE_LIMIT_ENV_VARS]]?:
-    | string
-    | undefined;
+    string | undefined;
 };
 
 /** A rejected override: which env var, and the raw value that failed validation. */
@@ -135,7 +182,7 @@ export function resolveRateLimitThresholds(
   const resolved: RateLimitThresholds = { ...DEFAULT_RATE_LIMIT_THRESHOLDS };
   for (const field of Object.keys(
     RATE_LIMIT_ENV_VARS,
-  ) as (keyof RateLimitThresholds)[]) {
+  ) as (keyof RateLimitCeilings)[]) {
     const envVar = RATE_LIMIT_ENV_VARS[field];
     const rawValue = env[envVar];
     if (rawValue === undefined || rawValue.trim() === "") continue; // unset ⇒ default

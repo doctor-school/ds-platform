@@ -23,6 +23,7 @@ import { RateLimitService } from "../../src/auth/rate-limit/rate-limit.service.j
 import {
   RATE_LIMIT_CLOCK,
   SPECIALTY_CHOICE_RATE_LIMIT_SCOPE,
+  type RateLimitThresholds,
 } from "../../src/auth/rate-limit/rate-limit.types.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -442,7 +443,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
           perUserPer15Min: 1_000_000,
           perIpPer15Min: PER_IP_CEILING,
           perAsnPerHour: 1_000_000,
-        })
+          // No scoped entry (#2294): this suite's scope is held to the
+          // platform ceiling above, which is the dimension under test.
+          scopedPerIpPer15Min: {},
+        } satisfies RateLimitThresholds)
         .overrideProvider(RATE_LIMIT_CLOCK)
         .useValue(() => now)
         .compile();

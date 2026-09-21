@@ -335,18 +335,35 @@ export class ZitadelIdpClient implements IdpClient {
     // truthful display value we hold at creation. The product-side display
     // name stays a separate, JIT-collected mirror value (006 EARS-14) and is
     // never pushed to Zitadel.
-    const givenName = input.email
-      ? (input.email.split("@")[0] ?? "doctor")
-      : "doctor";
-    const displayName = input.email ?? input.phone;
+    //
+    // 044 EARS-4 — the passwordless variant. A surface that DID collect a name
+    // (the public congress intake) sends it in `profile` and the placeholders
+    // above do not apply: `givenName`/`familyName` are the submitted first name
+    // and surname, and `displayName` is the person's name rather than their
+    // email. Its `credential: "none"` also means the body carries NO
+    // `human.password` member at all — omitted, not empty, because
+    // `{ password: "" }` is still a credential Zitadel would store. Proven live
+    // against the dev-stand (2026-09-21): CreateUser answers 200 with
+    // `USER_STATE_ACTIVE` for a credential-less human.
+    const submittedProfile =
+      input.credential === "none" ? input.profile : undefined;
+    const givenName =
+      submittedProfile?.givenName ??
+      (input.email ? (input.email.split("@")[0] ?? "doctor") : "doctor");
+    const familyName = submittedProfile?.familyName ?? "guest";
+    const displayName = submittedProfile
+      ? `${submittedProfile.givenName} ${submittedProfile.familyName}`
+      : (input.email ?? input.phone);
     const human: Record<string, unknown> = {
       profile: {
         givenName,
-        familyName: "guest",
+        familyName,
         ...(displayName ? { displayName } : {}),
       },
-      password: { password: input.password },
     };
+    if (input.credential !== "none") {
+      human["password"] = { password: input.password };
+    }
     // Live wire-shape (#153, carried onto CreateUser): a bare `email: { email }`
     // (no verification directive) makes Zitadel AUTO-SEND a verification code on
     // creation. The BFF then sends its OWN code via `requestEmailVerification`
@@ -1308,8 +1325,7 @@ export class ZitadelIdpClient implements IdpClient {
       await this.ensureOtpFactor(userId, challenge);
       // Return the native login code to the existing mailer; Zitadel sends no
       // duplicate. SMS retains its native notifier and unchanged challenge.
-      const challengeBody =
-        challenge === "otpEmail" ? { returnCode: {} } : {};
+      const challengeBody = challenge === "otpEmail" ? { returnCode: {} } : {};
       const res = await this.fetchImpl(this.url("/v2/sessions"), {
         method: "POST",
         headers: this.headers(),

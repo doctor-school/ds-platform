@@ -234,6 +234,30 @@ export const ApiEnvSchema = z.looseObject({
   // without provisioning one. A prod/stand deploy MUST set it.
   LIFECYCLE_IMPACT_TOKEN_SECRET: z.string().optional(),
 
+  // 044 EARS-5 — the event the public congress intake registers every submitter
+  // for. The congress is ONE event whose uuid differs per environment (dev-stand
+  // seed vs stage vs prod), and the public request deliberately carries no event
+  // identifier: a caller able to name the event could register strangers for any
+  // event in the catalogue. So the intake reads it from server configuration,
+  // never from the submission.
+  CONGRESS_SIGNUP_EVENT_ID: z.uuid().optional(),
+
+  // 044 EARS-9 / ADR-0009 §2.1 — the version string stamped on the congress
+  // personal-data `consent_records` row: the publication date of the consent
+  // text plus the sha256 of the published text
+  // (`YYYY-MM-DD.sha256-<64 lowercase hex>`). It is configuration and not a code
+  // literal because the text is published on the congress site (a different
+  // repository) and changing it must not require an API release; it is never
+  // taken from the caller, who would otherwise choose which version they are
+  // recorded as having accepted.
+  //
+  // Both keys are optional at the schema level only, exactly like
+  // AUDIT_IDENTIFIER_PEPPER above, so every runtime that does not host the
+  // congress intake still boots. The intake itself fails CLOSED: unset or
+  // malformed ⇒ the submission is refused before any side effect, with the same
+  // generic refusal every submitter gets.
+  CONGRESS_SIGNUP_CONSENT_VERSION: z.string().optional(),
+
   // 006 webinar-room heartbeat cadence N (seconds) — the server-side config the
   // `RoomConfig` grant carries to the client (design §5: "cadence N is server
   // config, default 60 s"). The presence-minute derivation is parameterized over

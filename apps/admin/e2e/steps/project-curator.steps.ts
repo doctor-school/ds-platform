@@ -77,9 +77,36 @@ function relationshipRestore(world: {
   return world.projectRelationshipRestore;
 }
 
-function restoredRowId(world: Parameters<typeof relationshipRestore>[0]): string {
+function restoredRowId(
+  world: Parameters<typeof relationshipRestore>[0],
+): string {
   const rowId = relationshipRestore(world).rowId;
   if (!rowId) throw new Error("Project relationship identity was not recorded");
+  return rowId;
+}
+
+function curatorRestoreConflict(world: {
+  projectCuratorRestoreConflict?: {
+    projectTitle: string;
+    projectUrl: string;
+    retiredExpertName: string;
+    retiredExpertUrl: string;
+    incumbentExpertName: string;
+    retiredRowId?: string;
+  };
+}) {
+  if (!world.projectCuratorRestoreConflict) {
+    throw new Error("Occupied curator restoration journey was not authored");
+  }
+  return world.projectCuratorRestoreConflict;
+}
+
+function retiredCuratorRowId(
+  world: Parameters<typeof curatorRestoreConflict>[0],
+): string {
+  const rowId = curatorRestoreConflict(world).retiredRowId;
+  if (!rowId)
+    throw new Error("Retired curator relationship identity was not recorded");
   return rowId;
 }
 
@@ -335,14 +362,138 @@ Then(
   "the restored project appears as a member relationship with Expert-side authoring available",
   async ({ page, world }) => {
     const state = relationshipRestore(world);
-    const row = page.getByTestId(
-      `project-expert-row-${restoredRowId(world)}`,
-    );
+    const row = page.getByTestId(`project-expert-row-${restoredRowId(world)}`);
     await expect(row).toContainText(state.projectTitle);
     await expect(row).toContainText("Участник");
     await expect(page.getByTestId("project-expert-link-form")).toBeVisible();
     await expect(page.getByTestId("project-curator-replace-form")).toHaveCount(
       0,
     );
+  },
+);
+
+When(
+  "the operator creates a draft project and two draft Experts for an occupied curator restoration",
+  async ({ page, world }) => {
+    const stamp = Date.now();
+    const projectTitle = `Возврат куратора ${stamp}`;
+    const projectUrl = await createProject(page, projectTitle);
+    const retiredExpertName = await createExpert(
+      page,
+      `Старый-${stamp}`,
+      "Куратор",
+      "Ильич",
+    );
+    const retiredExpertUrl = page.url();
+    const incumbentExpertName = await createExpert(
+      page,
+      `Новый-${stamp}`,
+      "Куратор",
+      "Ильич",
+    );
+    world.projectCuratorRestoreConflict = {
+      projectTitle,
+      projectUrl,
+      retiredExpertName,
+      retiredExpertUrl,
+      incumbentExpertName,
+    };
+    await openExpertsTab(page, projectUrl);
+  },
+);
+
+When(
+  "the operator links the first Expert as curator and records that relationship identity",
+  async ({ page, world }) => {
+    const state = curatorRestoreConflict(world);
+    await linkSelectedExpert(page, state.retiredExpertName, "curator");
+    const row = page
+      .getByTestId(/^project-expert-row-[0-9a-f-]{36}$/)
+      .filter({ hasText: state.retiredExpertName });
+    await expect(row).toContainText("Куратор");
+    const testId = await row.getAttribute("data-testid");
+    if (!testId) throw new Error("Curator relationship row has no test id");
+    state.retiredRowId = testId.replace("project-expert-row-", "");
+  },
+);
+
+When(
+  "the operator retires that curator relationship",
+  async ({ page, world }) => {
+    await page
+      .getByTestId(`project-expert-retire-${retiredCuratorRowId(world)}`)
+      .click();
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Связь снята.",
+    );
+  },
+);
+
+When(
+  "the operator assigns the second Expert as curator",
+  async ({ page, world }) => {
+    await linkSelectedExpert(
+      page,
+      curatorRestoreConflict(world).incumbentExpertName,
+      "curator",
+    );
+  },
+);
+
+Then(
+  "the project roster shows only the second Expert as active curator",
+  async ({ page, world }) => {
+    const state = curatorRestoreConflict(world);
+    const rows = page.getByTestId(/^project-expert-row-[0-9a-f-]{36}$/);
+    await expect(rows).toHaveCount(1);
+    await expect(
+      rows.filter({ hasText: state.incumbentExpertName }),
+    ).toContainText("Куратор");
+    await expect(rows.filter({ hasText: state.retiredExpertName })).toHaveCount(
+      0,
+    );
+  },
+);
+
+When(
+  "the operator opens the first Expert's projects",
+  async ({ page, world }) => {
+    await page.goto(curatorRestoreConflict(world).retiredExpertUrl);
+    await page.getByTestId("tab-projects").click();
+    await page
+      .getByTestId("project-experts-panel")
+      .waitFor({ state: "visible" });
+  },
+);
+
+Then(
+  "the retired curator relationship keeps the recorded identity",
+  async ({ page, world }) => {
+    const state = curatorRestoreConflict(world);
+    const row = page.getByTestId(
+      `project-expert-row-${retiredCuratorRowId(world)}`,
+    );
+    await expect(row).toContainText(state.projectTitle);
+    await expect(row).toContainText("Куратор");
+  },
+);
+
+Then(
+  "restoring that curator relationship is unavailable while the seat is occupied",
+  async ({ page, world }) => {
+    await expect(
+      page.getByTestId(`project-expert-restore-${retiredCuratorRowId(world)}`),
+    ).toBeDisabled();
+  },
+);
+
+Then(
+  "the Admin directs the operator to replace the current curator",
+  async ({ page, world }) => {
+    await expect(
+      page.getByTestId(
+        `project-expert-row-seat-taken-${retiredCuratorRowId(world)}`,
+      ),
+    ).toContainText("Заменить куратора");
   },
 );

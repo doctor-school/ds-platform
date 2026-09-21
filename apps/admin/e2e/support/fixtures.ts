@@ -43,6 +43,15 @@ export interface AdminWorld {
     expertUrl: string;
     rowId?: string;
   };
+  /** Retired curator row refused while another Expert holds the seat (012). */
+  projectCuratorRestoreConflict?: {
+    projectTitle: string;
+    projectUrl: string;
+    retiredExpertName: string;
+    retiredExpertUrl: string;
+    incumbentExpertName: string;
+    retiredRowId?: string;
+  };
 }
 
 /** Scenario state for the 011 admin MFA journey. */

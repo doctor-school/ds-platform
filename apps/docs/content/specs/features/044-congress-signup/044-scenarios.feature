@@ -8,7 +8,8 @@ Feature: 044 — Congress sign-up
     Given the congress event is published with participationFormat "offline"
     And the congress site proxies "/api" to the platform API same-origin
     And the site's nginx egress address is listed in TRUSTED_PROXIES
-    And the intake endpoint is public, carries the bot-protection decorator and is rate limited
+    And the intake endpoint is public, carries the bot-protection decorator and is rate limited at 60 submissions per 15 minutes per client address
+    And the current time is inside the congress registration window
     And the personal-data consent page is published, its version being its publication date plus the sha256 of its text
 
   @EARS-1 @EARS-3 @EARS-4 @EARS-5 @EARS-9 @EARS-10 @EARS-11 @EARS-13
@@ -22,7 +23,7 @@ Feature: 044 — Congress sign-up
     And the submitted contact phone is not written into the account's phone column
     And exactly one consent record is written under the congress personal-data purpose with the server-stamped version
     And no medical-worker-declaration consent record is written
-    And the participant receives the generic success response
+    And the participant receives the generic success response, which confirms the registration was accepted, states that a confirmation email has been sent to the address given, and states that nothing further is required
     And a confirmation email is dispatched naming the event, the created Doctor.School account and code-based sign-in
     And the registration's confirmation-mail outcome is recorded as sent with its timestamp
 
@@ -66,6 +67,60 @@ Feature: 044 — Congress sign-up
     When the same participant submits the same form again
     Then no duplicate registration is created
     And the confirmation email is dispatched again
+
+  @EARS-28
+  Scenario: Failure branch — the submission arrives before registration opens
+    Given the current time is before the registration opening instant
+    When a participant submits the sign-up form
+    Then the submission is refused with a machine-readable not-yet-open state carrying the opening instant
+    And no account, registration or consent record is created
+    And no email is dispatched
+    And the refusal is the same for an email that already has an account and one that does not
+
+  @EARS-28
+  Scenario: Failure branch — the submission arrives after registration closes
+    Given the current time is after the registration closing instant
+    When a participant submits the sign-up form
+    Then the submission is refused with a machine-readable closed state
+    And no account, registration or consent record is created
+    And no email is dispatched
+
+  @EARS-8
+  Scenario: The published consent version changed since the recorded acceptance
+    Given "known@example.org" is already registered for the congress event
+    And the published personal-data consent version differs from the one recorded for that registration
+    When the same form is submitted again with the same email
+    Then the same generic success response is returned
+    And no second registration row exists for that account and event
+    And exactly one further consent record is written, carrying the newly published version
+
+  @EARS-29 @EARS-30
+  Scenario: Two registrations sharing a phone are accepted and marked
+    Given a participant has registered with the contact phone "+7 (999) 123-45-67"
+    When another participant submits the sign-up form for the same event with a different email and the contact phone "8 999 1234567"
+    Then both submissions receive the identical generic success response
+    And both phones are stored on their registrations as typed and in the same normalised form
+    And neither phone is written into any account's phone column
+    And both registrations are marked "возможный дубль" in the roster read model
+    When one of those two registrations is removed at the team's manual request
+    Then the remaining registration is no longer marked "возможный дубль"
+
+  @EARS-30
+  Scenario: A registration with no answers payload is never marked
+    Given a signed-in doctor has registered for the congress event from the platform feed
+    When the registrar opens the roster
+    Then that registration carries no contact phone and is not marked "возможный дубль"
+
+  @EARS-31 @EARS-32
+  Scenario: The registrar filters the duplicates and prints them
+    Given a principal holds the event-registrar role
+    And the roster holds registrations of which some share a normalised contact phone
+    When they open the roster
+    Then the rows sharing a phone show the "возможный дубль" indicator, in the unchanged column order
+    When they apply the "возможный дубль" filter together with a text-column filter and a sort
+    Then the server returns only the marked rows matching that filter, sorted as requested
+    When they print from that view
+    Then the printed sheet contains exactly those rows and shows the "возможный дубль" marker on them
 
   @EARS-1
   Scenario: Failure branch — the captcha challenge is not satisfied

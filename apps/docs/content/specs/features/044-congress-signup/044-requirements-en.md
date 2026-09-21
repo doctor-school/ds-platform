@@ -32,6 +32,11 @@ issues:
     2319,
     2320,
     2321,
+    2325,
+    2326,
+    2327,
+    2328,
+    2329,
   ]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/19
@@ -48,7 +53,7 @@ lang: en
 
 > **EN (this)** · **RU:** [`044-requirements-ru.md`](./044-requirements-ru.md)
 >
-> PRD source: [`044-product.md`](./044-product.md) (US-1…US-13). The intake form itself is hosted on the congress site, but this feature's own screens — the admin roster and the printable attendance sheet — live in `apps/admin`, so `surface: user-facing`, matching the functional-map registry row's classification for 044.
+> PRD source: [`044-product.md`](./044-product.md) (US-1…US-15). The intake form itself is hosted on the congress site, but this feature's own screens — the admin roster and the printable attendance sheet — live in `apps/admin`, so `surface: user-facing`, matching the functional-map registry row's classification for 044.
 
 # 044 — Congress sign-up (Requirements)
 
@@ -62,6 +67,8 @@ lang: en
 ## Scope
 
 - A public, unauthenticated intake endpoint in `apps/api`, bot-protected and throttled, reached same-origin through the congress site's own nginx `/api` proxy.
+- The congress registration window — opening and closing instants held as constants in the API's own code or configuration and evaluated on that endpoint before any side effect.
+- Normalisation of the submitted contact phone and the read-time «возможный дубль» derivation over it, surfaced on the roster and on the printed sheet.
 - A passwordless account-creation variant of the shared 003 account engine (`AuthService.register`, `apps/api/src/auth/auth.service.ts:434`), including the credential-less human-user creation in the IdP port (`apps/api/src/auth/idp/idp.types.ts:279`, `:84`).
 - A new answers column on `registrations` (`packages/db/src/schema/registrations.ts:42-93`) plus its Zod shape in `packages/schemas`, and a new mail-outcome record on the same row.
 - One `consent_records` row per acceptance (`packages/db/src/schema/consent-records.ts:26-36`) under a new congress personal-data purpose.
@@ -78,6 +85,9 @@ lang: en
 - **Admin edit and delete** — owner, verbatim: «Пока только просмотр. Удаление по запросу будем делать вручную.»
 - **A second answers form on the platform** for the signed-in-doctor path in v1 (EARS-16 states what the roster shows instead).
 - **A retry queue or outbox for the confirmation email** — EARS-11 names the recovery path instead.
+- **An admin-editable registration window** — the opening and closing instants are constants for this congress; changing them is a deploy, not a setting.
+- **A capacity cap, seat count or waiting list** — the window is the only bound on intake (EARS-28).
+- **Automatic merging or refusal of registrations sharing a phone** — the platform only marks them; resolving a real duplicate is the team's manual deletion-on-request (EARS-30).
 - The congress microsite (feature **026**), the event constructor (feature **041**) and the historical-base migration (feature **043**).
 - An email-confirmation step before the sign-up counts — owner, verbatim: «Если ты хочешь прийти на мероприятие, ты укажешь свою почту. Укажешь чужую - не попадёшь.»
 
@@ -108,7 +118,7 @@ lang: en
 
 **Events** — `CongressAccountCreated` (passwordless), `CongressRegistrationRecorded`, `CongressConsentCaptured`, `ConfirmationEmailDispatched` / `ConfirmationEmailFailed`.
 
-**Read models** — the event roster (registration answers joined to the registration fact), the public specialties list, the printable sheet (a projection of the currently filtered roster).
+**Read models** — the event roster (registration answers joined to the registration fact, carrying the read-time «возможный дубль» marker), the public specialties list, the printable sheet (a projection of the currently filtered roster).
 
 **Policies** — «a mail failure never rolls back a registration»; «an existing email never rewrites a profile»; «a repeat submission is a no-op that looks like the first success».
 
@@ -116,7 +126,7 @@ lang: en
 
 ### Work package #2288 — public intake
 
-- **EARS-1** (`realizes: US-1, US-12`) — THE SYSTEM SHALL expose the congress sign-up intake as a public, unauthenticated endpoint carrying the `@BotProtected` decorator (Yandex SmartCaptcha) and the bespoke fixed-window rate limiter under its own scope, and SHALL NOT add CORS headers to the API: the only browser path is same-origin through the congress site's nginx `/api` proxy.
+- **EARS-1** (`realizes: US-1, US-12`) — THE SYSTEM SHALL expose the congress sign-up intake as a public, unauthenticated endpoint carrying the `@BotProtected` decorator (Yandex SmartCaptcha) and the bespoke fixed-window rate limiter under its own scope with a per-client-address ceiling of 60 submissions per 15 minutes — above the platform default of 20 per 15 minutes (`apps/api/src/auth/rate-limit/rate-limit.types.ts:34`), because congress participants register in bursts from shared clinic and venue NAT addresses while every submission still passes the captcha — and SHALL NOT add CORS headers to the API: the only browser path is same-origin through the congress site's nginx `/api` proxy.
 - **EARS-2** (`realizes: US-12`) — WHERE the congress site's nginx egress address is configured in `TRUSTED_PROXIES`, THE SYSTEM SHALL resolve the throttling key from the forwarded client address rather than the proxy address, so that one participant's retries never throttle every other participant.
 - **EARS-3** (`realizes: US-10, US-11`) — THE SYSTEM SHALL validate the submission against a Zod schema in `packages/schemas` requiring surname, first name, contact phone, email, specialty, workplace, city, region and the personal-data consent, with patronymic OPTIONAL, and SHALL accept specialty only as a `specialties_minzdrav` identifier or the explicit «Другое / не медицинский работник» option — never as free text.
 - **EARS-4** (`realizes: US-1`) — WHEN the submitted email has no account, THE SYSTEM SHALL create the human user in the IdP WITHOUT a credential through a new passwordless variant beside `AuthService.register`, and SHALL upsert the local `users` row with the default guest role, prefilled from the submitted answers (display name from surname/first name).
@@ -149,6 +159,9 @@ lang: en
 - **EARS-14** (`realizes: US-5`) — WHEN a congress-origin account's holder first enters the platform, THE SYSTEM SHALL take them through the existing email verification-code path, which is what flips `email_verified`, after which the existing email-OTP login succeeds; THE SYSTEM SHALL NOT set a credential on this account and SHALL NOT gate the sign-up itself on any confirmation step.
 - **EARS-15** (`realizes: US-11`) — THE SYSTEM SHALL expose a public, read-only, cacheable specialties-list endpoint over `specialties_minzdrav` reachable through the same same-origin proxy, including the reserved «other» row; no build-time snapshot of the list is produced.
 - **EARS-16** (`realizes: US-6`) — WHEN a signed-in doctor registers for the congress event through the existing platform registration path on a published event with `participationFormat: offline`, THE SYSTEM SHALL create the registration with no answers column value, and the roster SHALL render that row from the account's own profile values, leaving a cell empty where the profile has no value; no second answers form is added to the platform in v1.
+- **EARS-28** (`realizes: US-14`) — THE SYSTEM SHALL accept a congress intake submission only between the registration opening instant and the registration closing instant, both constants in the API's own code or configuration for this congress — no admin-editable setting and no database row; the opening instant is 2026-10-01 00:00 Europe/Moscow and the closing instant is provisionally 2027-01-01 00:00 Europe/Moscow — a placeholder the product owner replaces with the real closing date-time before the launch work package. The window binds the public congress-site intake endpoint only: the signed-in platform path (EARS-16) is not bound by it and keeps the event's own registration rules. WHEN a submission arrives before the opening instant, THE SYSTEM SHALL refuse it with a machine-readable `not-yet-open` state carrying the opening instant; WHEN it arrives after the closing instant, THE SYSTEM SHALL refuse it with a machine-readable `closed` state; the window SHALL be evaluated before any account, registration, consent or email side effect, and the refusal SHALL be identical for every submitter, disclosing nothing about the submitted email. There is no capacity cap: the window is the only intake bound.
+- **EARS-29** (`realizes: US-10, US-15`) — THE SYSTEM SHALL normalise the submitted contact phone before storing it for comparison — a leading `+7` or `8` unified to one form, spaces, brackets and dashes stripped — and SHALL keep that normalised value on the registration's answers alongside the phone exactly as the participant typed it; THE SYSTEM SHALL NOT write either value into `users.phone`.
+- **EARS-30** (`realizes: US-2, US-15`) — WHEN two or more registrations of the same event carry the same normalised contact phone, THE SYSTEM SHALL accept every such submission exactly like any other — the same identical success response of EARS-7, no refusal and no signal that another registration shares the phone — and SHALL mark each of those registrations «возможный дубль» in the roster read model. The marker SHALL be derived at read time from the normalised phone rather than stored as a flag, so that after a registration is removed by the team's manual deletion-on-request the surviving registration's marker disappears by itself. A registration with no answers payload (EARS-16) carries no contact phone and SHALL never be marked.
 
 ### Work package #2289 — event-registrar role
 
@@ -164,11 +177,13 @@ lang: en
 - **EARS-23** (`realizes: US-8`) — THE SYSTEM SHALL offer server-side roster filters on every roster column except №, matched to its kind: contains-search on the text columns (ФИО, место работы, город, область, телефон, email), a select on специальность and on статус письма, and a range on дата регистрации; every filter is composable with search, sort and page (owner-approved scope, #2287 issuecomment-5756369423).
 - **EARS-24** (`realizes: US-8`) — THE SYSTEM SHALL render the roster view-only: no create, edit or delete affordance appears on the surface for any role, and the API exposes no mutation of a registration through this feature.
 - **EARS-25** (`realizes: US-8`) — THE SYSTEM SHALL render the roster's columns in this order: №, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма; № is a row counter, sorted and filtered by nothing (owner-approved, #2287 issuecomment-5756369423).
+- **EARS-31** (`realizes: US-15`) — THE SYSTEM SHALL show the «возможный дубль» marker of EARS-30 as an indicator on each affected roster row, and SHALL offer a server-side «возможный дубль» yes/no filter composable with the search, the column filters of EARS-23, the sort and the page. The marker's visual placement on the row is settled at implementation through the admin Stage-A design gate; it is an indicator on the row, not an additional roster column, and the column order of EARS-25 is unchanged.
 
 ### Work package #2291 — printable attendance sheet
 
 - **EARS-26** (`realizes: US-9`) — WHEN a registrar prints from the roster, THE SYSTEM SHALL produce a printable view containing exactly the rows of the roster as currently searched, filtered and sorted, through the browser's own print path and a print stylesheet; no file export is produced.
 - **EARS-27** (`realizes: US-9`) — THE SYSTEM SHALL render the printed sheet as a full copy of the currently filtered and sorted roster with every roster column except статус письма, no signature column, and a header carrying the event's name and date, built from `@ds/design-system` primitives with tokens-only styling (ADR-0013; owner-approved variant «Б, без подписи и статуса письма», #2287 issuecomment-5756369423).
+- **EARS-32** (`realizes: US-9, US-15`) — THE SYSTEM SHALL show the «возможный дубль» marker of EARS-30 on the affected rows of the printed attendance sheet, so that the sheet carries the same duplicate information the registrar reads on screen.
 
 ## Invariants
 
@@ -178,6 +193,10 @@ lang: en
 - A confirmation-email failure is never visible as a lost registration; the registration is committed first and the outcome is a recorded fact on it (EARS-11, EARS-12).
 - `event-registrar` is deny-by-default: the roster route is the allowance, everything else is refused server-side (EARS-19).
 - A congress-origin account carries no `medical-worker-declaration` row, and no surface treats that absence as an error (boundary line, Prior decisions).
+- The registration window is evaluated before any side effect: a submission outside it leaves no account, no registration, no consent row and no email behind, and its refusal carries no enumeration signal (EARS-28).
+- Intake capacity is bounded by the window alone — there is no seat limit, no waiting list and no capacity refusal (EARS-28).
+- The «возможный дубль» marker is a read-time derivation over the normalised contact phone, never a stored flag: removing one of the sharing registrations clears the survivor's marker with no write (EARS-29, EARS-30).
+- A shared phone never changes what the participant observes: the intake response is the same identical success on every path (EARS-7, EARS-30).
 
 ## Verification
 
@@ -198,12 +217,18 @@ lang: en
 | V-13 | Playwright / E2E — admin   | The roster surface exposes no create/edit/delete control for any role (EARS-24).                                                                                                                                                                                                                                                                                 |
 | V-14 | axe                        | `playwright-axe` clean run on the roster screen and the print view (ADR-0013, EARS-21, EARS-27).                                                                                                                                                                                                                                                                 |
 | V-15 | Vitest e2e — `apps/api`    | Roster list endpoint sorts and filters by every column class — contains-search on the text columns, a select on specialty and on mail status, a range on registration date — each composable with the others and with search and page (EARS-22, EARS-23).                                                                                                        |
+| V-16 | Vitest e2e — `apps/api`    | Submission before the opening instant → `not-yet-open` refusal carrying that instant; inside the window → accepted; after the closing instant → `closed` refusal; both refusals leave no account, registration, consent row or email behind and are identical for a known and an unknown email (EARS-28).                                                        |
+| V-17 | Vitest e2e — `apps/api`    | Phones typed as `+7 (999) 123-45-67`, `8 999 1234567` and `+79991234567` normalise to one value stored on the registration answers beside the typed form; `users.phone` is untouched on both the new-account and the existing-account path (EARS-29).                                                                                                            |
+| V-18 | Vitest e2e — `apps/api`    | Two registrations of the same event with differently typed but equal phones → both accepted with the identical success response and both marked «возможный дубль» in the roster read model; deleting one clears the survivor's marker with no write; a platform-origin row with no answers payload is never marked (EARS-30, EARS-16).                           |
+| V-19 | Vitest e2e — `apps/api`    | Roster list endpoint filters by «возможный дубль» yes and no server-side, composable with search, the column filters, sort and page (EARS-31).                                                                                                                                                                                                                   |
+| V-20 | Playwright / E2E — admin   | The registrar reads the «возможный дубль» indicator on the affected roster rows, filters the roster down to them, and the printed sheet carries the same marker on the same rows (EARS-31, EARS-32).                                                                                                                                                             |
+| V-21 | Vitest e2e — `apps/api`    | Repeat submission for an already-registered pair while the published consent version differs from the recorded one → the same identical success response, still no second registration row, and exactly one fresh `consent_records` acceptance row carrying the new version (EARS-8).                                                                            |
 
 ## Work-package map
 
-| EARS            | Work package                                                                                                         |
-| --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| EARS-1…EARS-16  | **#2288** — Public congress sign-up intake: passwordless account + consent + event registration + confirmation email |
-| EARS-17…EARS-20 | **#2289** — Event-registrar role: refused everywhere else in the API, role-aware admin nav                           |
-| EARS-21…EARS-25 | **#2290** — Admin roster of event registrations: search, filters, pagination, server-side sort (view-only)           |
-| EARS-26…EARS-27 | **#2291** — Printable attendance sheet from the filtered roster                                                      |
+| EARS                            | Work package                                                                                                                                                                                         |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EARS-1…EARS-16, EARS-28…EARS-30 | **#2288** — Public congress sign-up intake: registration window, passwordless account + consent + event registration + confirmation email, phone normalisation and the possible-duplicate derivation |
+| EARS-17…EARS-20                 | **#2289** — Event-registrar role: refused everywhere else in the API, role-aware admin nav                                                                                                           |
+| EARS-21…EARS-25, EARS-31        | **#2290** — Admin roster of event registrations: search, filters, pagination, server-side sort, possible-duplicate indicator and filter (view-only)                                                  |
+| EARS-26…EARS-27, EARS-32        | **#2291** — Printable attendance sheet from the filtered roster, carrying the possible-duplicate marker                                                                                              |

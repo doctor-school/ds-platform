@@ -367,10 +367,21 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
     loginIcon: "shield-check-square",
+    registerIcon: "user-plus-square",
   },
   botProtection: { siteKey: undefined },
   channels: ["email"],
-  register: { promoField: true },
+  register: {
+    promoField: true,
+    // This host's Stage-B-evidenced registration form: the submit and its
+    // EARS-12 reason first, then the statements, at the wider step of the
+    // spacing scale. The Academy states none and keeps the block's defaults.
+    form: {
+      submitBlock: "submit-first",
+      spacing: "md",
+      pendingAffordance: "inert",
+    },
+  },
   // The two shipped tiers with the rows drawn around them: the declaration and
   // the partner-data access condition above the submit, the marketing opt-in
   // below it. The statements come from the `@ds/schemas` SSOT, so the sentence

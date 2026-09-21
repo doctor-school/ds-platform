@@ -149,7 +149,21 @@ export type AuthFlowBrand = {
   readonly panel: AuthFlowBrandAsset;
   /** The sign-in card's glyph. */
   readonly loginIcon: AuthFlowLoginIcon;
+  /**
+   * The registration card's glyph. Absent = `user-plus`, the Academy's shipped
+   * mark — a host that never states one keeps rendering exactly what it renders
+   * today, which is what makes the lift invisible.
+   */
+  readonly registerIcon?: AuthFlowRegisterIcon;
 };
+
+/**
+ * The registration card's glyph, named rather than passed as a node: the config
+ * crosses a server/client boundary and a component cannot travel over it.
+ * `user-plus` = lucide `UserPlus` in the primary tint (the Academy);
+ * `user-plus-square` = the square-capped currentColor mark (the doctor host).
+ */
+export type AuthFlowRegisterIcon = "user-plus" | "user-plus-square";
 
 /**
  * Everything the sign-in door says (rows 33–46).
@@ -488,6 +502,19 @@ export type AuthFlowHostConfig = {
     readonly attribution?: string;
     /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */
     readonly pointsPromise?: string;
+    /**
+     * The two hosts' shipped registration forms differ in their submit-group
+     * ORDER and their vertical rhythm, and neither may move without a Stage-B
+     * re-confirmation — so each is stated here rather than derived from some
+     * other fact (a host that later states a consent sentence must not silently
+     * flip its submit order). Absent = the `<RegisterCard>` own defaults, which
+     * ARE the Academy's shipped render.
+     */
+    readonly form?: {
+      readonly submitBlock: "error-first" | "submit-first";
+      readonly spacing: "sm" | "md";
+      readonly pendingAffordance: "spinner" | "inert";
+    };
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;

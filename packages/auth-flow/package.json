@@ -13,7 +13,8 @@
     "./fields": "./src/fields/index.ts",
     "./test-support": "./src/test-support/host-config-fixtures.ts",
     "./shell": "./src/shell/index.ts",
-    "./login": "./src/login/index.ts"
+    "./login": "./src/login/index.ts",
+    "./login/route": "./src/login/login-route.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

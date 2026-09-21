@@ -89,7 +89,9 @@ function remembersSpecialty(): void {
     ok: true,
     json: async () => ({
       specialty: {
-        id: "s1",
+        // A real specialty id: the shared `SpecialtyRefSchema` is what the
+        // landing read parses, and it admits only the uuid shape.
+        id: "11111111-1111-4111-8111-111111111111",
         code: "kardiologiya",
         name: "Кардиология",
         isOther: false,

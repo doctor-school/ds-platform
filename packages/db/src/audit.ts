@@ -7,16 +7,25 @@
 /**
  * PD-column registry (EARS-7, ADR-0009 §2.4): per PD-bearing table, the columns
  * whose values are masked out of audit diffs (`{masked: true}`, no old/new).
- * As-built PD-bearing tables: `users`, `consent_records`; a future table the
- * ADR-0009 retention matrix classifies as PD-bearing is added here AND in a
- * migration regenerating `audit_pd_columns()`.
+ * As-built PD-bearing tables: `users`, `consent_records`, `registrations`; a
+ * future table the ADR-0009 retention matrix classifies as PD-bearing is added
+ * here AND in a migration regenerating `audit_pd_columns()`.
  *
  * `users.zitadel_sub` is deliberately NOT listed — the opaque Zitadel `sub` is
  * not PD per the as-built ledger contract (010-requirements → Constraints).
+ *
+ * `registrations` joined the registry with the 044 `answers` column (#2296):
+ * the congress answer sheet carries a participant's surname, patronymic, phone
+ * (twice) and email inside one jsonb value, so the table crossed from
+ * «FK-only, no denormalized PII» to PD-bearing the moment the column landed.
+ * Only `answers` is masked — the row's own `user_id` / `event_id` / timestamps
+ * are the structural facts the ledger exists to answer, and masking them would
+ * erase the diff without protecting anything (the 012-design §6 reasoning).
  */
 export const AUDIT_PD_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   users: ["email", "phone", "display_name"],
   consent_records: ["user_id"],
+  registrations: ["answers"],
 };
 
 /**

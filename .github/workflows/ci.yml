@@ -1569,7 +1569,7 @@ jobs:
         run: pnpm --filter @ds/admin test:flows
       - name: Admin spec-owned taxonomy journeys
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
-        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator'
+        run: pnpm --filter @ds/admin test:e2e --project taxonomy --grep 'standalone Expert retains|project roster keeps exactly one curator|retired project Expert relationship returns'
       - name: Admin axe sweep
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
         run: pnpm --filter @ds/admin test:axe

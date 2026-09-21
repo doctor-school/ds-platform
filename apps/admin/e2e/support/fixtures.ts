@@ -35,6 +35,14 @@ export interface AdminWorld {
     curatorName: string;
     memberName: string;
   };
+  /** Retained row carried across the executable 012 relationship-restore journey. */
+  projectRelationshipRestore?: {
+    projectTitle: string;
+    projectUrl: string;
+    expertName: string;
+    expertUrl: string;
+    rowId?: string;
+  };
 }
 
 /** Scenario state for the 011 admin MFA journey. */

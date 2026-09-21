@@ -52,7 +52,10 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
    pre-migrate state. Pairs with the **expand/contract** prod migration rule
    (README) so an app rollback never needs a DB rollback.
-5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → **IdP convergence/readback (#2149)** → `migrate --build`
+5. **api-prod** — `build` (one `docker compose build <service>` per service, in
+   compose order — a bare `docker compose build` would let BuildKit run three
+   `next build` processes at once beside live production on the swapless 8 GB
+   box, which stalled the site for ~17 min on 2026-09-18, #2283) → **pre-swap boot verify (#1410)** → **IdP convergence/readback (#2149)** → `migrate --build`
    (the migrate image is rebuilt from the freshly shipped tree — a reused stale
    image would apply old migrations) → `up -d`; images SHA-tagged
    **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>` / `ds-doctor:<sha>`**

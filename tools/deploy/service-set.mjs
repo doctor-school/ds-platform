@@ -239,3 +239,61 @@ export function formatServiceNames(services) {
 export function formatServiceImages(services, sep = " + ") {
   return (services ?? []).map((s) => s.image).join(sep);
 }
+
+/**
+ * `sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build <name>` — the
+ * attestation-free build invocation (#486: reproducible image IDs, so a
+ * same-SHA re-run is a true no-op). Kept here as the default so the rendered
+ * script can never lose the flag on one service.
+ */
+export const BUILD_ENV_PREFIX = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
+
+/**
+ * The on-box build commands for a deploy's service set — ONE image at a time
+ * (#2283).
+ *
+ * Why. A bare `docker compose build` lets BuildKit start every service
+ * concurrently, i.e. three simultaneous `next build` runs (portal, admin,
+ * doctor) plus the api on the live api-prod box: 4 vCPU, 8 GB, no swap. On
+ * 2026-09-18 that saturated the box and the production site was unreachable for
+ * ~17 min DURING the build, before anything was even swapped. Building one
+ * service at a time keeps at most one `next build` beside live production.
+ *
+ * Fail-closed like the rest of this module: an empty set, or a name the
+ * generated shell cannot carry, throws rather than rendering a script that
+ * builds nothing (and would then "succeed" into a swap of stale images).
+ *
+ * Stopping at the FIRST failing build is not this string's job and is not left
+ * to chance: every remote script runs under `bash --norc -euo pipefail`
+ * (`REMOTE_BASH`, `lib/remote.mjs`), so a non-zero build aborts the script there
+ * and `sshScript` surfaces the non-zero exit.
+ *
+ * @param {{ name: string }[]} services in compose/set order
+ * @param {{ noAttest?: string }} [opts] attestation-suppressing env prefix
+ * @returns {string} newline-joined banner+build lines, no trailing newline
+ */
+export function serviceBuildScript(services, { noAttest } = {}) {
+  const names = (services ?? []).map((s) => s?.name);
+  if (names.length === 0) {
+    throw new ServiceSetError(
+      `refusing to render an EMPTY api-prod build script — a deploy that` +
+        ` builds nothing would swap stale images (#2283).`,
+    );
+  }
+  const illegal = names.filter((n) => !SERVICE_NAME_RE.test(String(n ?? "")));
+  if (illegal.length > 0) {
+    throw new ServiceSetError(
+      `service name(s) unusable in the generated build script:` +
+        ` ${illegal.join(", ")} — expected \`[a-z][a-z0-9-]*\`.`,
+    );
+  }
+  const env = noAttest ?? BUILD_ENV_PREFIX;
+  const total = names.length;
+  return names
+    .map(
+      (name, i) =>
+        `echo '── build ${i + 1}/${total}: ${name} ──'\n` +
+        `sudo ${env} docker compose build ${name}`,
+    )
+    .join("\n");
+}

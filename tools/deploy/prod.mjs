@@ -101,6 +101,7 @@ import {
   formatServiceImages,
   formatServiceNames,
   rollbackBoundaryVerdict,
+  serviceBuildScript,
   shellVarName,
 } from "./service-set.mjs";
 import {
@@ -1035,7 +1036,11 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
 { { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
 echo '── build ${sha.slice(0, 12)}… : ${formatServiceImages(services)} ──'
 # ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
-sudo ${NO_ATTEST} docker compose build
+# ONE IMAGE AT A TIME (#2283): a bare 'docker compose build' lets BuildKit run
+# three next-build processes at once beside live production on this 4 vCPU /
+# 8 GB / swapless box — that stalled the site for ~17 min on 2026-09-18. errexit
+# (REMOTE_BASH) aborts the script at the first failing service.
+${serviceBuildScript(services, { noAttest: NO_ATTEST })}
 `,
     { label: "api-prod build", stallBudgetMs: STALL_BUDGET_BUILD_MS },
   );

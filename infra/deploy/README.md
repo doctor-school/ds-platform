@@ -643,7 +643,12 @@ image build.
 
    ```bash
    cd ~/ds-platform/infra/deploy/compose/api-prod
-   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin portal api
+   # ONE IMAGE AT A TIME (#2283): never `build admin portal api` in one command —
+   # BuildKit would run three `next build` processes at once beside live
+   # production on this swapless 8 GB box and stall the site (~17 min, 2026-09-18).
+   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin
+   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build portal
+   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build api
    # admin is NEW; portal MUST rebuild (bakes the captcha site key); api rebuilds
    # to the wave-1 code. centrifugo is pulled (centrifugo/centrifugo:v6).
    ```

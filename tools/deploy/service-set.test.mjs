@@ -19,6 +19,7 @@ import {
   formatServiceNames,
   parseDeployServices,
   rollbackBoundaryVerdict,
+  serviceBuildScript,
   shellVarName,
 } from "./service-set.mjs";
 
@@ -264,4 +265,53 @@ test("1896: service names that would break the generated verify shell are reject
   assert.equal(shellVarName("sms-aero"), "sms_aero");
   // The real compose passes the guard.
   assert.ok(deployServiceSet(currentCompose).length > 0);
+});
+
+test("2283: the build script emits one `docker compose build <name>` line per service, in set order", () => {
+  const script = serviceBuildScript(svc("api", "portal", "admin", "doctor"));
+  const buildLines = script
+    .split("\n")
+    .filter((l) => l.includes("docker compose build"));
+  assert.deepEqual(buildLines, [
+    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build api",
+    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build portal",
+    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin",
+    "sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build doctor",
+  ]);
+  // Never a bare `docker compose build` — that is the #2283 outage: BuildKit
+  // running three `next build` processes at once on the live 8 GB box.
+  assert.equal(
+    buildLines.some((l) => /docker compose build\s*$/.test(l)),
+    false,
+  );
+  // One banner per service, so the no-output watchdog (#905) is fed between
+  // images and the transcript shows which image is being built.
+  for (const name of ["api", "portal", "admin", "doctor"]) {
+    assert.match(script, new RegExp(`^echo '── build .*${name}.*──'$`, "m"));
+  }
+});
+
+test("2283: the build script honours the caller's attestation flag", () => {
+  const script = serviceBuildScript(svc("api"), { noAttest: "FOO=1" });
+  assert.match(script, /^sudo FOO=1 docker compose build api$/m);
+});
+
+test("2283: an empty or unusable service set refuses to render a build script", () => {
+  assert.throws(() => serviceBuildScript([]), ServiceSetError);
+  assert.throws(() => serviceBuildScript(undefined), ServiceSetError);
+  // A name the generated shell cannot carry must never reach the box.
+  assert.throws(() => serviceBuildScript([{ name: "3d" }]), ServiceSetError);
+});
+
+test("2283: the prod deploy builds images one at a time, never all at once", () => {
+  const deploy = readFileSync(join(REPO_ROOT, "tools", "deploy", "prod.mjs"), "utf8");
+  // The build step renders the helper; no bare `docker compose build` survives.
+  // (`--profile migrate run --build --rm migrate` builds ONE image and is not a
+  // match for this shape.)
+  assert.equal(
+    /docker compose build\s*(\n)?`?\s*$/m.test(deploy),
+    false,
+    "prod.mjs still ships a bare `docker compose build` — it would build every image concurrently",
+  );
+  assert.match(deploy, /serviceBuildScript\(services/);
 });

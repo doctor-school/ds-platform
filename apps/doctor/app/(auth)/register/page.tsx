@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
+import { AuthShell } from "@ds/auth-flow/shell";
 
 import type { ConsentTier } from "@ds/schemas";
 import {
@@ -11,12 +12,12 @@ import {
   formatPartnerDataStatement,
 } from "@ds/schemas";
 
-import { AuthShell } from "@/components/auth-shell";
 import { RegistrationScreen } from "@/components/registration-screen";
 import {
   ReturnContextPanel,
   ReturnContextPlate,
 } from "@/components/return-context-card";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import {
@@ -235,6 +236,7 @@ export default async function DoctorRegisterPage({
 
   return (
     <AuthShell
+      config={DOCTOR_AUTH_FLOW}
       returnContext={
         returnEvent ? (
           <ReturnContextPanel event={returnEvent} variant="register" />

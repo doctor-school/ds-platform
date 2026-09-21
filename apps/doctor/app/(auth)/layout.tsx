@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
  * onward links leads the doctor away from the form they came to fill. The
  * Academy (`apps/portal`) already renders its auth surfaces this way; this group
  * is the storefront's half of the same rule. The frame itself — wordmark, brand
- * panel, vertically centred card — is `components/auth-shell.tsx`.
+ * panel, vertically centred card — is `<AuthShell>` from `@ds/auth-flow/shell`.
  *
  * The layout adds no element of its own: the root layout (`app/layout.tsx`) owns
  * `<html>`/`<body>` and the pre-paint theme guard, and the frame is the page's

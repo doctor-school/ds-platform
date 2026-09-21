@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
+import { AuthShell } from "@ds/auth-flow/shell";
 
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
-import { AuthShell } from "@/components/auth-shell";
 import { ResetScreen } from "@/components/reset-screen";
 import {
   RETURN_CONTEXT_PARAM,
@@ -77,7 +78,7 @@ export default async function DoctorResetPage({
   });
 
   return (
-    <AuthShell>
+    <AuthShell config={DOCTOR_AUTH_FLOW}>
       <ResetScreen
         // Rule S3 — back out of recovery through the door they came in by, still
         // carrying it. A rejected or absent target simply drops off.

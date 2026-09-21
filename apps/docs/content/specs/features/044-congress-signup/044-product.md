@@ -102,7 +102,9 @@ The functional map originally scoped 044 as `backend-only` with no screens of it
 
 The admin roster reuses the owner-approved admin Stage-A baseline: spec 012 EARS-18 (`012-requirements-en.md:203`), covering the tabbed Refine compositions and `@ds/design-system` blocks already approved in #1282/#1337/#1578/#1605 — no fresh canvas or option round is needed for the roster's list/search/filter/pagination shell.
 
-The **printable attendance sheet** and the **confirmation email** are new visual classes with no prior approval: both slots are `PENDING owner Stage-A (#2287)`.
+The **printable attendance sheet** and the **confirmation email** are approved (owner Stage-A, 2026-09-21, #2287 issuecomment-5756369423): the print sheet is a full copy of the currently filtered and sorted roster, carrying every roster column except the email-send status, with no signature column; the confirmation email is a copy in the shape of the platform's existing notice emails (`apps/api/src/mailer/notice-emails.ts`), its exact text recorded in `044-requirements-en.md` EARS-13.
+
+Every roster column is sortable and filterable — owner, verbatim: «Сортировка и фильтрация должна быть по всем полям вообще».
 
 The intake **form's look on `orthobio.ru`** is owned by the sibling repository's own Issue, `doctor-school/orthobio-site#78` — that repo's design process, not this PRD, settles it.
 
@@ -118,10 +120,7 @@ The intake **form's look on `orthobio.ru`** is owned by the sibling repository's
 
 ## Open questions
 
-1. **owner** — Confirmation email copy: the exact wording the participant reads (subject, body, how it explains the created account and the code-login mechanism) is not yet written; owner supplies it.
-2. **owner** — Consent text and its data-operator scope: the owner supplied a «Политика в отношении обработки персональных данных» text naming the congress site's operator, scoped to `orthobio.ru`, with recipients «Партнёры, указанные на веб-сайте»; the text does not mention creating a Doctor.School account or name the platform's own operator, and its data list has no «область» field. The owner needs to confirm who the data operator of the **created account** is, and whether the published text needs a purpose/recipient line covering that. This PRD deliberately does not name a legal entity and draws no legal conclusion — it records the open question only.
-3. **owner** — Consent version identifier recorded per acceptance: the recommendation is publication date + sha256 of the page text (per ADR-0009 §2.1), pending owner confirmation of the exact scheme.
-4. **owner** — Print sheet layout and roster columns: which columns the roster/sheet show and in what order is a Stage-A design decision, not yet made.
+None remain. The confirmation-email copy and the print-sheet layout are the owner Stage-A choices recorded above in «Approved-mockup reference» (#2287 issuecomment-5756369423, 2026-09-21). The published consent text is used as provided — owner, verbatim: «В согласии уже всё написано» — this PRD makes no legal conclusion about the data operator or the text's scope. The consent version identifier is confirmed as the publication date plus the sha256 of the page text (ADR-0009 §2.1).
 
 ## Prior art — source system
 

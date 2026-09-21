@@ -45,8 +45,8 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     requestPasswordReset: h.requestPasswordReset,
     completePasswordReset: h.completePasswordReset,

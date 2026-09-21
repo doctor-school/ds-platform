@@ -1,8 +1,6 @@
-import { createAuthClient } from "@ds/auth-flow/client";
 import type { AuthFlowApiConfig, AuthFlowHostConfig } from "@ds/auth-flow/host-config";
 
-import { DOCTOR_AUTH_ROUTES } from "./auth-flow-routes";
-import { DOCTOR_AUTH_FLOW_COPY } from "./auth-flow-copy";
+import { DOCTOR_AUTH_FLOW_COPY } from "../messages/auth-flow-copy";
 
 /**
  * What the doctor storefront states about itself so the shared auth flow can
@@ -10,8 +8,9 @@ import { DOCTOR_AUTH_FLOW_COPY } from "./auth-flow-copy";
  *
  * The host value file of `@ds/auth-flow` on this host. A plain constant rather
  * than the Academy's hook: this storefront ships no i18n runtime. Its RU
- * sentences live one file over in `auth-flow-copy.ts` — the `*-copy.ts` name is
- * what makes them rendered UI to the repo's UI guards — and what stays here is
+ * sentences live in `messages/auth-flow-copy.ts` — the `*-copy.ts` name is what
+ * makes them rendered UI to the repo's UI guards, and `messages/` is where this
+ * host keeps them, as the Academy keeps `messages/ru.json` — and what stays here is
  * the transport, the channels and the site key, which Next inlines from the
  * literal `process.env.NEXT_PUBLIC_…` expression below.
  */
@@ -28,16 +27,30 @@ export const DOCTOR_AUTH_FLOW_API: AuthFlowApiConfig = {
   confirmPath: "/v1/storefront/doctor/confirm",
 };
 
-/** The bound transport every doctor auth screen calls. */
-export const authClient = createAuthClient(DOCTOR_AUTH_FLOW_API);
-
 export const DOCTOR_AUTH_FLOW = {
   api: DOCTOR_AUTH_FLOW_API,
   copy: DOCTOR_AUTH_FLOW_COPY,
-  // The route table lives in `lib/auth-flow-routes.ts`, not inline here: the
-  // auth pages' server-side guard reads it too, and this module binds the
-  // browser auth client at module scope, so a server route must not import it.
-  routes: DOCTOR_AUTH_ROUTES,
+  /**
+   * The auth routes `doctor.school` serves (gate §4.2), stated here as
+   * LITERALS: a host config is data a server route file hands to the package,
+   * so it may not reach back into `lib/` for them. `lib/auth-flow-routes.ts`
+   * re-exports this table for the auth pages' guard and the storefront layout,
+   * and a test pins `login`/`account` against the navigation SSOT.
+   */
+  routes: {
+    login: "/login",
+    register: "/register",
+    // No `verify`: this storefront confirms INLINE on the registration screen
+    // (021 EARS-19) — there is no standalone confirmation surface to guard.
+    reset: "/reset",
+    account: "/account",
+    // 003 EARS-28 — the `/account` change-password action hands off to the
+    // reset flow, so a signed-in doctor must still be able to complete `/reset`.
+    allowAuthenticated: ["/reset"],
+    // 020 — the storefront event page a carried intent lands on. No `room`:
+    // this storefront serves no room route.
+    eventPathTemplate: "/events/:slug",
+  },
   // No parking cookie: this storefront carries the target on the canonical
   // `returnTo` param (wave-1 gate row 29). It does publish the return context
   // as a card beside the door (row 46).

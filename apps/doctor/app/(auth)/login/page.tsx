@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { LoginRoute } from "@ds/auth-flow/login/route";
 
-import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
+import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
 
 export const metadata: Metadata = {
   title: "Вход — Doctor.School",

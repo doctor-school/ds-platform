@@ -6,7 +6,8 @@ import type { AuthFlowCopy } from "@ds/auth-flow/host-config";
  * Every RU sentence the doctor storefront's auth screens can show (#2027, epic
  * #2020 wave 1).
  *
- * A file of its OWN, next to `auth-flow-config.ts`, because copy is rendered UI
+ * A file of its OWN, under `messages/` rather than `lib/`, because copy is
+ * rendered UI
  * and the repo's UI guards classify app-owned `.ts` by the filename contract in
  * `tools/lint/lib/ui-surface.ts` (`*-copy.ts`, `*-theme.ts`, …). Keeping these
  * sentences inside the transport/channels value file would hide a render delta

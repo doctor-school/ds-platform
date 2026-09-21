@@ -1,34 +1,21 @@
-import type { AuthFlowRoutes } from "@ds/auth-flow/host-config";
 import type { ServerAuth } from "@ds/auth-flow/server";
 import type { ShellAuthState } from "@ds/storefront-shell";
 
+import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "@/lib/navigation-model";
 
 /**
  * The doctor storefront's auth-flow ROUTE VALUES and its auth-cluster
- * projection (#2027 PR 1.4, wave-1 gate §4.2).
+ * projection (#2027 PR 1.5, wave-1 gate §4.2).
  *
- * A module of its own rather than part of `lib/auth-flow-config.ts`, for the
- * same reason the Academy splits its table out: this one is read by SERVER
- * code — the auth pages' guard and the storefront layout — while
- * `auth-flow-config.ts` binds the browser auth client at module scope.
+ * The table itself is stated in `lib/auth-flow.host-config.ts`, because a host
+ * config is data a server route file hands to `@ds/auth-flow` and therefore may
+ * not read back out of `lib/`. What this module still OWNS is the auth-cluster
+ * projection below, which the storefront layout renders.
  */
 
 /** The auth routes `doctor.school` serves (gate §4.2). */
-export const DOCTOR_AUTH_ROUTES = {
-  login: "/login",
-  register: "/register",
-  // No `verify`: this storefront confirms INLINE on the registration screen
-  // (021 EARS-19) — there is no standalone confirmation surface to guard.
-  reset: "/reset",
-  account: "/account",
-  // 003 EARS-28 — the `/account` change-password action hands off to the reset
-  // flow, so a signed-in doctor must still be able to complete `/reset`.
-  allowAuthenticated: ["/reset"],
-  // 020 — the storefront event page a carried intent lands on. No `room`: this
-  // storefront serves no room route.
-  eventPathTemplate: "/events/:slug",
-} satisfies AuthFlowRoutes;
+export const DOCTOR_AUTH_ROUTES = DOCTOR_AUTH_FLOW.routes;
 
 /** The ONE guest control of the canvas (`ds-shell.dc.html` line 220) — a single
  *  combined label on both hosts (017 US-7), opening the shipped `/login`

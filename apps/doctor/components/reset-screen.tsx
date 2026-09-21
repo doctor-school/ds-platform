@@ -29,7 +29,8 @@ import {
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
 
-import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 
 /** This host's challenge copy, projected once out of its config. */
 const BOT_PROTECTION_MESSAGES = botProtectionMessages(DOCTOR_AUTH_FLOW);

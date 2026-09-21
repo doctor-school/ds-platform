@@ -23,9 +23,10 @@ describe("rendered UI source classification", () => {
     "packages/design-system/src/primitives/interactive-base.ts",
     "apps/portal/lib/theme.ts",
     "apps/portal/theme.ts",
-    // App-owned `.ts` is rendered UI by the filename contract: the doctor
-    // storefront states its RU auth sentences in a `*-copy.ts` file (#2027).
-    "apps/doctor/lib/auth-flow-copy.ts",
+    // App-owned `.ts` is rendered UI by the filename contract wherever it sits:
+    // the doctor storefront states its RU auth sentences in a `*-copy.ts` file
+    // under `messages/` (#2027).
+    "apps/doctor/messages/auth-flow-copy.ts",
   ])("green: %s is rendered UI source", (path) => {
     expect(isUiSourcePath(path)).toBe(true);
   });

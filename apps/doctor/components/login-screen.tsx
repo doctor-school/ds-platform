@@ -21,8 +21,9 @@ import { completeReturnTarget } from "@ds/events-storefront";
 
 import { authErrorMessage } from "@ds/auth-flow/errors";
 
-import { authClient, DOCTOR_AUTH_FLOW } from "@/lib/auth-flow-config";
-import { DOCTOR_LOGIN_FALLBACK_COPY } from "@/lib/auth-flow-copy";
+import { authClient } from "@/lib/auth-flow-client";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
+import { DOCTOR_LOGIN_FALLBACK_COPY } from "@/messages/auth-flow-copy";
 import { makeResolver } from "@/lib/make-resolver";
 import { doctorReturnHost } from "@/lib/return-completion";
 

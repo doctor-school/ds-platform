@@ -13,7 +13,7 @@ import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
 import { AuthError } from "@ds/auth-flow/client";
 
-import { authClient } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnContext } from "@/lib/return-context";
 
@@ -31,7 +31,7 @@ import { withReturnContext } from "@/lib/return-context";
  *     `login-screen.tsx` precedent); the strings are the Academy `ru.json`
  *     `account` block verbatim, so the two hosts read identically;
  *   • the doctor-origin transport (`@ds/auth-flow/client`, mounted by
- *     `lib/auth-flow-config.ts`): the shipped
+ *     `lib/auth-flow.host-config.ts`): the shipped
  *     003/006 routes reached through THIS origin's rewrite, so the origin-locked
  *     `__Host-ds_session` cookie of `doctor.school` rides them (ADR-0015 §4);
  *   • the EARS-9 dance — one silent refresh and one retry before the door;

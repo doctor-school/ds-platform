@@ -260,6 +260,13 @@
       "when": 1788598757289,
       "tag": "0036_speaker_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789991820617,
+      "tag": "0037_registration_answers",
+      "breakpoints": true
     }
   ]
 }

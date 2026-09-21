@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  jsonb,
   pgTable,
   timestamp,
   unique,
@@ -39,6 +40,40 @@ import { users } from "./users.js";
 // path returns the existing row and emits no second `DoctorRegisteredForEvent` /
 // terminal `audit_ledger` row. The invariant is enforced in the database, not by
 // client discipline (ADR-0003 §5; Constraints).
+/**
+ * Structural shape of `registrations.answers` (044 EARS-5).
+ *
+ * MIRRORS `CongressSignUpAnswersSchema` in `@ds/schemas` — that Zod schema is
+ * the owner and the validator; this declaration exists only so a Drizzle insert
+ * is type-checked at the call site. It is duplicated rather than imported on
+ * purpose and on precedent (`src/seed/golden/consent.ts`, `seed/golden/README.md`):
+ * `@ds/db` sits BELOW `@ds/schemas` in the dependency order, and inverting that
+ * — even with a type-only import, which still needs the workspace dependency
+ * and the TypeScript project reference — for one interface is a cost this
+ * package has already declined once. Every other cross-package contract in this
+ * directory is mirrored the same way (`events.ts`, `specialties.ts`,
+ * `taxonomy.ts`): the DB owns the column, `@ds/schemas` owns the rule.
+ *
+ * Divergence is caught where it matters rather than by the compiler here: the
+ * only writer is the intake endpoint, which assembles this value exclusively
+ * through the schema's own `toCongressSignUpAnswers` mapper and never by hand.
+ */
+export interface RegistrationAnswers {
+  surname: string;
+  firstName: string;
+  patronymic?: string;
+  email: string;
+  /** FK-by-value into `specialties_minzdrav.id`; never free text (EARS-3). */
+  specialtyId: string;
+  workplace: string;
+  city: string;
+  region: string;
+  /** Exactly as the participant typed it (EARS-29). */
+  contactPhone: string;
+  /** The E.164 comparison key derived from it (EARS-29, EARS-30). */
+  contactPhoneNormalised: string;
+}
+
 export const registrations = pgTable(
   "registrations",
   {
@@ -64,6 +99,27 @@ export const registrations = pgTable(
      */
     recordStatus: recordStatus("record_status").notNull().default("active"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /**
+     * 044 EARS-5 — the congress sign-up answers (044 design §Data model).
+     *
+     * NULLABLE, and the nullability is the decision, not a convenience. `null`
+     * means «platform-origin row»: a signed-in doctor registering from the feed
+     * (EARS-16) submits no answers at all, and the roster renders that row from
+     * the account's own profile instead. A NOT NULL column defaulting to `{}`
+     * would erase exactly that distinction — every platform-origin row would
+     * read as a participant who answered nothing.
+     *
+     * The value carries surname, first name, optional patronymic, email, the
+     * `specialties_minzdrav` id (the «Другое / не медицинский работник» row
+     * included — it is an ordinary row), workplace, city, region, and the
+     * contact phone TWICE: as the participant typed it and normalised
+     * (EARS-29). The normalised copy is what the read-time «возможный дубль»
+     * marker of EARS-30 groups on; keeping it in the payload rather than in its
+     * own column keeps the answer sheet one object and the marker derived.
+     * Neither phone is ever written to `users.phone`, which is UNIQUE and a
+     * login identifier.
+     */
+    answers: jsonb("answers").$type<RegistrationAnswers | null>(),
   },
   (table) => [
     // The one-registration invariant (EARS-3, ADR-0003 §5): at most one

@@ -4,11 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import {
-  parseSameOriginReturnTarget,
-  type LoginRequest,
-  type OtpChannel,
-} from "@ds/schemas";
+import { type LoginRequest, type OtpChannel } from "@ds/schemas";
 import {
   botProtectionFailureMessage,
   BotProtectionField,
@@ -32,6 +28,7 @@ import { completeReturnTarget } from "../client/return-completion";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
 import type { AuthFlowHostConfig } from "../host-config";
+import { withReturnTarget } from "../return-target-href";
 import { LoginGlyph } from "./login-glyph";
 import type { ReactNode } from "react";
 
@@ -237,23 +234,6 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       changeMethod: copy.otp.changeMethod,
     },
   };
-}
-
-/**
- * Rule S3 (#2027) — decorate a footer link with the arrival context.
- *
- * The value carried onward is the same-origin guard's own RECONSTRUCTION, never
- * the visitor's raw string, so a hostile target is dropped here and cannot be
- * propagated into `/register` or `/reset` by the door that received it.
- */
-function withReturnTarget(
-  path: string,
-  rawReturnTo: string | null | undefined,
-): string {
-  const safe = parseSameOriginReturnTarget(rawReturnTo ?? null);
-  if (!safe) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}returnTo=${encodeURIComponent(safe)}`;
 }
 
 export function LoginDoor({

@@ -7,15 +7,15 @@ import { useRouter } from "next/navigation";
 import type { MyProfile } from "@ds/schemas";
 import { initialsFromDisplayName } from "@ds/room/display-name";
 
-
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
 import { AuthError } from "@ds/auth-flow/client";
+import { withReturnContext } from "@ds/auth-flow/server";
 
-import { authClient } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
-import { withReturnContext } from "@/lib/return-context";
 
 /**
  * #1958 — the doctor storefront's `/account` projection.
@@ -28,10 +28,10 @@ import { withReturnContext } from "@/lib/return-context";
  *
  * The HOST half — everything this file owns and the block does not:
  *   • RU LITERAL copy, because `apps/doctor` carries no `next-intl` (the
- *     `login-screen.tsx` precedent); the strings are the Academy `ru.json`
+ *     `@ds/auth-flow/login` precedent); the strings are the Academy `ru.json`
  *     `account` block verbatim, so the two hosts read identically;
  *   • the doctor-origin transport (`@ds/auth-flow/client`, mounted by
- *     `lib/auth-flow-config.ts`): the shipped
+ *     `lib/auth-flow.host-config.ts`): the shipped
  *     003/006 routes reached through THIS origin's rewrite, so the origin-locked
  *     `__Host-ds_session` cookie of `doctor.school` rides them (ADR-0015 §4);
  *   • the EARS-9 dance — one silent refresh and one retry before the door;
@@ -132,7 +132,11 @@ export function AccountScreen() {
       // this page back, built by the shared helper out of the host's own route
       // values rather than spelled beside them.
       router.replace(
-        withReturnContext(DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+        withReturnContext(
+          DOCTOR_AUTH_FLOW,
+          DOCTOR_AUTH_ROUTES.login,
+          DOCTOR_AUTH_ROUTES.account,
+        ),
       );
     }
   }, [router]);
@@ -215,6 +219,7 @@ export function AccountScreen() {
       // page they left. Built from the host route constants through the shared
       // helper, never assembled as a literal.
       passwordHref={withReturnContext(
+        DOCTOR_AUTH_FLOW,
         DOCTOR_AUTH_ROUTES.reset,
         DOCTOR_AUTH_ROUTES.account,
       )}

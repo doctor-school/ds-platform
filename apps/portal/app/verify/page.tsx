@@ -13,12 +13,13 @@ import {
   type VerifyResponse,
 } from "@ds/schemas";
 
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@ds/auth-flow/shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnTarget } from "@/lib/registration-handoff";
@@ -82,7 +83,7 @@ import {
 
 export default function VerifyPage() {
   return (
-    <AuthShell>
+    <AuthShell config={ACADEMY_AUTH_FLOW}>
       <Suspense fallback={null}>
         <PortalEmailConfirmCard />
       </Suspense>
@@ -95,7 +96,7 @@ function PortalEmailConfirmCard() {
   const router = useRouter();
   const t = useTranslations("verify");
   const te = useTranslations("errors");
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   const params = useSearchParams();
   const queryEmail = params.get("email") ?? undefined;
   // #904: the branded verification email's CTA points at `/verify#email=<addr>` —

@@ -52,8 +52,8 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     profile: () => h.getMyProfile(),
     refresh: () => h.refreshStorefrontSession(),
@@ -200,9 +200,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
 
   it("#175.1: a 429 save is mapped onto the rate-limit message, not the generic one", async () => {
     const user = userEvent.setup();
-    h.setDoctorDisplayName.mockRejectedValue(
-      new AuthError(429, "too many"),
-    );
+    h.setDoctorDisplayName.mockRejectedValue(new AuthError(429, "too many"));
     await renderReady();
 
     await saveName(user);
@@ -216,9 +214,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
 
   it("#175.2: a 5xx save is mapped onto the temporarily-unavailable message", async () => {
     const user = userEvent.setup();
-    h.setDoctorDisplayName.mockRejectedValue(
-      new AuthError(503, "down"),
-    );
+    h.setDoctorDisplayName.mockRejectedValue(new AuthError(503, "down"));
     await renderReady();
 
     await saveName(user);
@@ -232,9 +228,7 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
 
   it("#175.3: another refusal is the generic retry message, and a thrown fetch is not a validation outcome", async () => {
     const user = userEvent.setup();
-    h.setDoctorDisplayName.mockRejectedValue(
-      new AuthError(400, "bad"),
-    );
+    h.setDoctorDisplayName.mockRejectedValue(new AuthError(400, "bad"));
     await renderReady();
     await saveName(user);
     expect(

@@ -42,12 +42,9 @@ vi.mock("next/headers", () => ({
 vi.mock("@ds/auth-flow/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@ds/auth-flow/server")>()),
   resolveServerAuth,
-}));
-vi.mock("@/lib/specialty-choice", () => ({ resolveRememberedSpecialty }));
-vi.mock("@/lib/return-context", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/return-context")>()),
   resolveReturnContext,
 }));
+vi.mock("@/lib/specialty-choice", () => ({ resolveRememberedSpecialty }));
 
 import DoctorRegisterPage from "@/app/(auth)/register/page";
 

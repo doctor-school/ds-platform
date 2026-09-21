@@ -8,12 +8,13 @@ import { UserPlus } from "lucide-react";
 
 import type { RegisterRequest, RegisterResponse } from "@ds/schemas";
 
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@ds/auth-flow/shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { REQUIRED_CONSENT } from "@/lib/consent";
 import { withReturnTarget } from "@/lib/registration-handoff";
@@ -74,7 +75,7 @@ import {
 
 export default function RegisterPage() {
   return (
-    <AuthShell>
+    <AuthShell config={ACADEMY_AUTH_FLOW}>
       <Suspense fallback={null}>
         <RegisterProjection />
       </Suspense>
@@ -87,7 +88,7 @@ function RegisterProjection() {
   const t = useTranslations("register");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   // 005 EARS-2: the carried registration-intent (validated at every consumption
   // point by `parseReturnTarget` inside `withReturnTarget` — this page only
   // forwards it, never navigates to it).
@@ -109,7 +110,9 @@ function RegisterProjection() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setError(authErrorMessage(err, authFlow.copy.errors, te("registerFailed")));
+      setError(
+        authErrorMessage(err, authFlow.copy.errors, te("registerFailed")),
+      );
     },
   });
 

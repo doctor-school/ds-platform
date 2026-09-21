@@ -9,7 +9,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * The unit tiers pin the pieces: the page composition
  * (`app/(storefront)/events/[slug]/page.test.tsx`), the completion rule
  * (`packages/events-storefront`), and the two doors that complete it
- * (`components/login-screen.return.test.tsx`,
+ * (`packages/auth-flow/src/login/login-door.test.tsx`,
  * `components/registration-screen.test.tsx`). What ONLY a real stand can prove is
  * that the whole thing composes over a REAL session against the REAL command:
  * that the api participation read admits the doctor origin own
@@ -103,7 +103,9 @@ test.describe("005 EARS-1/3/4 (#2005): one-tap registration on the doctor эфи
       "E2E_EVENT_SLUG_ONE_TAP must be an upcoming эфир this account is NOT yet registered for — see STAND PRECONDITIONS at the head of this spec",
     ).toBeVisible();
     // The guest door is NOT what a signed-in doctor is shown (020 EARS-5).
-    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(
+      0,
+    );
 
     const urlBefore = page.url();
     await oneTap.click();
@@ -148,7 +150,8 @@ test.describe("005 EARS-1/3/4 (#2005): one-tap registration on the doctor эфи
     // event path as the returnTo, because `/webinars/*` is not routed here at all
     // (`app/(storefront)/events/[slug]/page.tsx`, pinned in its unit tier). The
     // academy-shaped `/webinars/<slug>` is what the AUTH doors accept on the way
-    // IN (`lib/return-context.ts`), not what the storefront door emits.
+    // IN (`@ds/auth-flow/server` `return-context.ts`), not what the storefront
+    // door emits.
     await expect(door).toHaveAttribute(
       "href",
       "/register?returnTo=" + encodeURIComponent("/events/" + ONE_TAP_SLUG),

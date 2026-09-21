@@ -45,8 +45,8 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     requestPasswordReset: h.requestPasswordReset,
     completePasswordReset: h.completePasswordReset,
@@ -82,7 +82,9 @@ async function requestCode(identifier = "doctor@clinic.ru") {
 
 describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
   it("003 EARS-11: the first paint is the SHARED PasswordRecoveryCard in this host RU copy, back to THIS host sign-in", () => {
-    const html = renderToStaticMarkup(<ResetScreen loginHref="/login" landing="/account" />);
+    const html = renderToStaticMarkup(
+      <ResetScreen loginHref="/login" landing="/account" />,
+    );
 
     // The block's own testid — proof the card is projected, not re-built here.
     expect(html).toContain('data-testid="reset-request-submit"');
@@ -116,9 +118,9 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     await requestCode("nobody@nowhere.example");
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("heading", { level: 1 }).textContent,
-      ).toContain("Новый пароль"),
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
+        "Новый пароль",
+      ),
     );
     expect(screen.getByLabelText("Код из сообщения")).toBeTruthy();
     expect(screen.queryByTestId("reset-request-submit")).toBeNull();
@@ -165,7 +167,9 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText("Не удалось сменить пароль. Проверьте код и попробуйте ещё раз."),
+        screen.getByText(
+          "Не удалось сменить пароль. Проверьте код и попробуйте ещё раз.",
+        ),
       ).toBeTruthy(),
     );
     // The api English never reaches the doctor, and nothing navigated away.
@@ -183,7 +187,9 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText("Сервис временно недоступен. Попробуйте ещё раз через минуту."),
+        screen.getByText(
+          "Сервис временно недоступен. Попробуйте ещё раз через минуту.",
+        ),
       ).toBeTruthy(),
     );
     expect(screen.getByTestId("reset-request-submit")).toBeTruthy();
@@ -202,7 +208,9 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
         "doctor@clinic.ru",
       );
       await user.click(screen.getByTestId("reset-request-submit"));
-      await waitFor(() => expect(screen.queryByTestId("reset-resend")).toBeTruthy());
+      await waitFor(() =>
+        expect(screen.queryByTestId("reset-resend")).toBeTruthy(),
+      );
 
       // Cooling down right after the first send — the timer itself is the
       // block's business and is asserted there; what matters here is WHICH
@@ -221,9 +229,9 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
       );
       // Neutral, identical for every visitor, and masked — never "we found you".
       await waitFor(() =>
-        expect(
-          screen.getByTestId("reset-resend-notice").textContent,
-        ).toContain("Отправили код ещё раз на"),
+        expect(screen.getByTestId("reset-resend-notice").textContent).toContain(
+          "Отправили код ещё раз на",
+        ),
       );
     } finally {
       vi.useRealTimers();

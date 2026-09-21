@@ -96,7 +96,8 @@ test("017 #1955: a signed-in doctor arriving at /login directly lands on the LD-
   await page.goto("/login");
 
   // No remembered specialty on this context ⇒ the storefront home, per LD-4
-  // (`lib/registration-landing.ts`) — never `/account`, and never the door.
+  // (`@ds/auth-flow/server` `resolveDirectArrivalLanding`) — never `/account`,
+  // and never the door.
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId("password-login-form")).toHaveCount(0);
 });

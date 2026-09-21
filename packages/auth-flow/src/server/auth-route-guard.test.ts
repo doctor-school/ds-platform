@@ -23,6 +23,7 @@ const routes: AuthFlowRoutes = {
   reset: "/reset",
   account: "/account",
   allowAuthenticated: ["/reset"],
+  eventPathTemplate: "/webinars/:slug",
 };
 
 describe("003 EARS-28 shared signed-in auth-route guard", () => {
@@ -44,7 +45,11 @@ describe("003 EARS-28 shared signed-in auth-route guard", () => {
 
   it("003 EARS-28.3: /reset stays open to an authenticated visitor via allowAuthenticated", () => {
     expect(
-      resolveAuthRouteGuard({ authenticated: true, pathname: "/reset", routes }),
+      resolveAuthRouteGuard({
+        authenticated: true,
+        pathname: "/reset",
+        routes,
+      }),
     ).toEqual({ action: "render" });
   });
 
@@ -60,10 +65,18 @@ describe("003 EARS-28 shared signed-in auth-route guard", () => {
 
   it("003 EARS-28.4: a trailing slash is the same route - it can never smuggle a form past the guard", () => {
     expect(
-      resolveAuthRouteGuard({ authenticated: true, pathname: "/login/", routes }),
+      resolveAuthRouteGuard({
+        authenticated: true,
+        pathname: "/login/",
+        routes,
+      }),
     ).toEqual({ action: "redirect", to: "/account" });
     expect(
-      resolveAuthRouteGuard({ authenticated: true, pathname: "/reset/", routes }),
+      resolveAuthRouteGuard({
+        authenticated: true,
+        pathname: "/reset/",
+        routes,
+      }),
     ).toEqual({ action: "render" });
   });
 
@@ -92,13 +105,19 @@ describe("003 EARS-28 shared signed-in auth-route guard", () => {
     }) as unknown as (to: string) => never;
 
     expect(() =>
-      guardAuthRoute({ authenticated: true, pathname: "/login", routes }, redirectImpl),
+      guardAuthRoute(
+        { authenticated: true, pathname: "/login", routes },
+        redirectImpl,
+      ),
     ).toThrow(/NEXT_REDIRECT/);
     expect(redirectImpl).toHaveBeenCalledWith("/account");
 
     (redirectImpl as unknown as ReturnType<typeof vi.fn>).mockClear();
     expect(() =>
-      guardAuthRoute({ authenticated: false, pathname: "/login", routes }, redirectImpl),
+      guardAuthRoute(
+        { authenticated: false, pathname: "/login", routes },
+        redirectImpl,
+      ),
     ).not.toThrow();
     expect(redirectImpl).not.toHaveBeenCalled();
   });

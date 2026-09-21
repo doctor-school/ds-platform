@@ -1,0 +1,399 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  RETURN_CONTEXT_PARAM,
+  formatMskDateLabel,
+  formatMskTime,
+  isAccountReturnTarget,
+  resolveCarriedReturnTarget,
+  resolveReturnContext,
+  resolveReturnLandingPath,
+  resolveReturnTargetPath,
+  withReturnContext,
+} from "./return-context";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
+
+/**
+ * 021 EARS-2 (#1538) — the RESOLUTION half of the return context: the canonical
+ * `returnTo` target → the public event read → the card projection.
+ *
+ * The clause's browser tier (`e2e/register-return-context.spec.ts`) proves what
+ * RENDERS; this tier pins the contract the render depends on — that the surface
+ * speaks the ONE return-target vocabulary (005 EARS-2 / 021 LD-3) through the
+ * shared `parseReturnTarget` guard, and that every unsafe or unresolvable value
+ * degrades to absence without ever reaching the api.
+ */
+const EVENT = {
+  id: "00000000-0000-4000-8000-0000000005f7",
+  slug: "prp-pri-gonartroze",
+  title: "PRP при гонартрозе: показания, протоколы, ошибки",
+  school: "Школа ортобиологии",
+  startsAt: "2026-08-27T16:00:00.000Z",
+  durationMin: 90,
+  description: "Разбор показаний, протоколов и типичных ошибок PRP-терапии.",
+  // 012 EARS-24 (#1607): the page-speaker union carries the expert arm only.
+  speakers: [
+    {
+      source: "expert",
+      expertId: "00000000-0000-4000-8000-00000000e001",
+      expertSlug: "anna-sokolova",
+      name: "Анна Соколова",
+      credentials: "к.м.н.",
+      photoUrl: null,
+      role: "Спикер",
+    },
+  ],
+  specialties: ["Травматология"],
+  partners: [],
+  // 020 EARS-2 (#1765): `links` is a REQUIRED member of the public event read.
+  // The doctor host publishes no expert/school/community page yet, so every
+  // key resolves absent — but the object itself is always on the body.
+  links: { speakerPages: [] },
+  // 020 EARS-4 (#1766): the public page read is `.strict()` and requires both.
+  nmo: false,
+  pulCost: 0,
+  state: "published",
+  format: "online",
+  seatsLeft: null,
+  recording: {
+    state: "preparing",
+    primaryKind: null,
+    secondaryKind: null,
+    posterUrl: null,
+    expectedBy: null,
+  },
+};
+
+function stubFetch(
+  body: unknown,
+  init: { status?: number } = {},
+): { impl: typeof fetch; calls: string[] } {
+  const calls: string[] = [];
+  const impl = (async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return new Response(JSON.stringify(body), {
+      status: init.status ?? 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  return { impl, calls };
+}
+
+describe("021 EARS-2: resolveReturnContext", () => {
+  it("021 EARS-2: reads the canonical `returnTo` param, never a surface-local one", () => {
+    expect(RETURN_CONTEXT_PARAM).toBe("returnTo");
+  });
+
+  it("021 EARS-2: resolves the canonical target to the card projection", async () => {
+    const { impl, calls } = stubFetch(EVENT);
+    const resolved = await resolveReturnContext(
+      "/webinars/prp-pri-gonartroze",
+      impl,
+    );
+
+    // The slug comes out of the shared guard, so the read is addressed by the
+    // event slug the target names — not by the raw param value.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/v1/public/events/prp-pri-gonartroze");
+    expect(resolved).not.toBeNull();
+    expect(resolved!.title).toBe(EVENT.title);
+    expect(resolved!.school).toBe("Школа ортобиологии");
+    expect(resolved!.time).toBe("19:00");
+    expect(resolved!.dateLabel).toBe("27 августа · чт");
+    // The projection narrows the speaker rows to name-only — no credentials.
+    expect(resolved!.speakers).toEqual([{ name: "Анна Соколова" }]);
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["a bare slug — the retired second vocabulary", "prp-pri-gonartroze"],
+    ["cross-origin", "https://evil.example/webinars/prp-pri-gonartroze"],
+    ["protocol-relative", "//evil.example/webinars/x"],
+    ["a backslash bypass", String.raw`/webinars/\evil`],
+    ["traversal", "/webinars/../account"],
+    ["not anchored under /webinars/", "/account"],
+  ])(
+    "021 EARS-2: %s never reaches the read and resolves to absence",
+    async (_label, value) => {
+      const { impl, calls } = stubFetch(EVENT);
+      await expect(resolveReturnContext(value, impl)).resolves.toBeNull();
+      expect(calls).toHaveLength(0);
+    },
+  );
+
+  it("019 EARS-12: a feed-shaped returnTo resolves the resumed card through the same one read", async () => {
+    const { impl, calls } = stubFetch(EVENT);
+    // The value the feed's guest CTA mints — the whole feed query rides along,
+    // and the resumed event is named by `resume=`.
+    const resolved = await resolveReturnContext(
+      "/events?day=2026-08-27&tense=upcoming&specialty=mine-and-adjacent" +
+        "&resume=prp-pri-gonartroze",
+      impl,
+    );
+
+    // 021 EARS-2 needed NO change for the 019 shape: the guard hands back the
+    // same `{ eventSlug, returnTo }`, so the resolution reads by slug exactly as
+    // it does for the academy shape.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/v1/public/events/prp-pri-gonartroze");
+    expect(resolved!.title).toBe(EVENT.title);
+  });
+
+  it("019 EARS-12: a feed-shaped target the guard refuses never reaches the read", async () => {
+    for (const hostile of [
+      "/events?tense=upcoming",
+      "/events?resume=a/b",
+      "/events/x?resume=prp-pri-gonartroze",
+      "https://evil.example/events?resume=prp-pri-gonartroze",
+    ]) {
+      const { impl, calls } = stubFetch(EVENT);
+      await expect(resolveReturnContext(hostile, impl)).resolves.toBeNull();
+      expect(calls, `must not read for: ${hostile}`).toHaveLength(0);
+    }
+  });
+
+  it("021 EARS-2: a safe target naming an unknown event is absence, not a throw", async () => {
+    const { impl } = stubFetch(
+      { status: 404, message: "event not found" },
+      { status: 404 },
+    );
+    await expect(
+      resolveReturnContext("/webinars/net-takogo-sobytiya", impl),
+    ).resolves.toBeNull();
+  });
+
+  it("021 EARS-2: a body that fails the contract is absence", async () => {
+    const { impl } = stubFetch({ slug: "prp-pri-gonartroze" });
+    await expect(
+      resolveReturnContext("/webinars/prp-pri-gonartroze", impl),
+    ).resolves.toBeNull();
+  });
+
+  it("021 EARS-2: an api that is down never takes the door down", async () => {
+    const impl = (async () => {
+      throw new Error("ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    await expect(
+      resolveReturnContext("/webinars/prp-pri-gonartroze", impl),
+    ).resolves.toBeNull();
+  });
+
+  it("021 EARS-12: both formatters render the event's own МСК clock", () => {
+    // 16:00Z is 19:00 in Europe/Moscow; the label must not drift to the runtime
+    // zone, and the short weekday carries no trailing period on any ICU build.
+    expect(formatMskTime("2026-08-27T16:00:00.000Z")).toBe("19:00");
+    expect(formatMskDateLabel("2026-08-27T16:00:00.000Z")).toBe(
+      "27 августа · чт",
+    );
+  });
+});
+
+/**
+ * 021 #1945 — the LANDING half. The canonical return target and the path this
+ * host navigates to are two different facts: `/webinars/<slug>` is the academy's
+ * route for the эфир and is not served on `doctor.school` at all, so a doctor
+ * sent there verbatim after signing in met a 404 (020-design §1 route table).
+ * These cases pin the split — same guard, same rejections, doctor-host landing.
+ */
+describe("021 #1945: resolveReturnLandingPath", () => {
+  it("021 #1945: the academy shape lands on the doctor host's own event route", () => {
+    expect(
+      resolveReturnLandingPath(DOCTOR_FIXTURE, "/webinars/prp-pri-gonartroze"),
+    ).toBe("/events/prp-pri-gonartroze");
+    // The canonical target itself is UNCHANGED — it is what rides on into
+    // `/register` and is re-parsed there, so the one vocabulary is intact.
+    expect(resolveReturnTargetPath("/webinars/prp-pri-gonartroze")).toBe(
+      "/webinars/prp-pri-gonartroze",
+    );
+  });
+
+  it("021 #1945: a target this host already serves passes through verbatim", () => {
+    // 020's own event page.
+    expect(
+      resolveReturnLandingPath(DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"),
+    ).toBe("/events/prp-pri-gonartroze");
+    // 019's feed shape — the resumed card, feed query and all.
+    const feed =
+      "/events?day=2026-08-27&tense=upcoming&specialty=mine-and-adjacent" +
+      "&resume=prp-pri-gonartroze";
+    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, feed)).toBe(feed);
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["a bare slug — the retired second vocabulary", "prp-pri-gonartroze"],
+    ["cross-origin", "https://evil.example/webinars/prp-pri-gonartroze"],
+    ["protocol-relative", "//evil.example/webinars/x"],
+    ["a backslash bypass", String.raw`/webinars/\evil`],
+    ["traversal", "/webinars/../account"],
+    ["a multi-segment slug", "/webinars/a/b"],
+    ["not anchored under a declared shape", "/settings"],
+  ])(
+    "021 #1945: %s is no landing at all — the same guard, the same refusal",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(DOCTOR_FIXTURE, value)).toBeNull();
+      // The two functions refuse in lockstep: one parser, one whitelist.
+      expect(resolveReturnTargetPath(value)).toBeNull();
+    },
+  );
+});
+
+/**
+ * #1987 — `/account` is a landing target of its own.
+ *
+ * A guest who presses the 017 signed-in affordance, or opens `/account`
+ * directly, is sent to the door carrying `?returnTo=/account`. Until now the
+ * landing codec knew only эфир shapes, so that arrival resolved NO landing and
+ * the doctor was dropped on the LD-4 default after a successful sign-in — the
+ * one place they had just asked not to go.
+ *
+ * The shape is declared on the LANDING codec, not in the 005
+ * `RETURN_TARGET_SHAPES` whitelist: every member of that list yields a
+ * `RegistrationIntent` whose `eventSlug` a consumer fires `RegisterForEvent`
+ * for, and `/account` names no эфир (wave-1 gate row 32). So the two functions
+ * deliberately DISAGREE here, and that disagreement is the assertion.
+ */
+describe("#1987: /account is a landing target", () => {
+  it("#1987: an account arrival lands on this host's own account route", () => {
+    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/account")).toBe(
+      "/account",
+    );
+    // ...while the canonical return target refuses it, because it resolves no
+    // эфир to register anyone for.
+    expect(resolveReturnTargetPath("/account")).toBeNull();
+  });
+
+  it.each([
+    ["cross-origin", "https://evil.example/account"],
+    ["protocol-relative", "//evil.example/account"],
+    ["a prefix collision", "/accounts-payable"],
+    ["a traversal that ends in the word", "/webinars/../account"],
+  ])(
+    "#1987: %s is not the account shape — the same-origin guard still rules",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(DOCTOR_FIXTURE, value)).toBeNull();
+    },
+  );
+
+  /**
+   * 014 EARS-6 / live C6 walk (PR #2205) — the shape is the FAMILY, not just its
+   * root. This host declares one `routes.account`, and the shared codec derives
+   * the family from that single value, so a doctor bounced off ANY page of the
+   * cabinet comes back to the page they were on rather than to its index. The
+   * doctor storefront serves no cabinet child yet (022 / #1791 adds them); the
+   * rule arrives with the codec so this host does not need a second one later.
+   */
+  it("014 EARS-6.5: a page BELOW this host's account route lands on ITSELF, not on the cabinet index", () => {
+    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/account/events")).toBe(
+      "/account/events",
+    );
+    // …and it is still no эфир: nothing registers on the way back.
+    expect(resolveReturnTargetPath("/account/events")).toBeNull();
+  });
+
+  it.each([
+    ["a plural prefix collision", "/accounts"],
+    ["a hyphen prefix collision", "/account-evil"],
+    ["a plural collision with a child", "/accounts/events"],
+  ])(
+    "014 EARS-6.6: %s shares the characters and not the segment — not the family",
+    (_label, value) => {
+      expect(resolveReturnLandingPath(DOCTOR_FIXTURE, value)).toBeNull();
+    },
+  );
+});
+
+/**
+ * #2258 / rule S3 of the auth-flow standard (`packages/auth-flow/README.md`) —
+ * the CARRY vocabulary admits the account family too.
+ *
+ * `resolveReturnLandingPath` learned the account family in #1987, so a doctor
+ * sent to `/login?returnTo=/account` lands back on the cabinet. But the value
+ * that rides ONWARD across an intermediate auth hop — into `/register`, and back
+ * out of the confirmation screen — was built from `resolveReturnTargetPath`,
+ * which is the 021 EARS-3 RETURN-CONTEXT target and эфир-only by contract: it
+ * exists to name the эфир the surface reads and registers the doctor for, and
+ * the last test below pins that it stays эфир-only. Reusing it as the carry rule
+ * meant a doctor at `/login?returnTo=/account` kept the target through sign-in
+ * and lost it the moment they pressed «Зарегистрироваться», landing on the LD-4
+ * default instead. `resolveCarriedReturnTarget` is the carry rule in its own
+ * right — one function, both shapes, the same shared guards.
+ */
+describe("#2258: the carried target admits the account family", () => {
+  it("#2258: resolveCarriedReturnTarget rebuilds an account arrival instead of dropping it", () => {
+    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account")).toBe(
+      "/account",
+    );
+  });
+
+  it("#2258: a page BELOW the account route is carried as ITSELF, with the segment boundary enforced", () => {
+    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account/events")).toBe(
+      "/account/events",
+    );
+    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/accounts")).toBeNull();
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account-evil"),
+    ).toBeNull();
+  });
+
+  it("#2258: the эфир vocabulary is carried unchanged beside it", () => {
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/webinars/kardio-2026"),
+    ).toBe("/webinars/kardio-2026");
+  });
+
+  it("#2258: withReturnContext carries the account arrival across the /login → /register hop", () => {
+    expect(withReturnContext(DOCTOR_FIXTURE, "/register", "/account")).toBe(
+      "/register?returnTo=%2Faccount",
+    );
+    expect(
+      withReturnContext(DOCTOR_FIXTURE, "/register", "/account/events"),
+    ).toBe("/register?returnTo=%2Faccount%2Fevents");
+  });
+
+  it("#2258: a cross-origin or traversal target is still dropped at the hop", () => {
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "//evil.example/account"),
+    ).toBeNull();
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/../account"),
+    ).toBeNull();
+    expect(
+      withReturnContext(
+        DOCTOR_FIXTURE,
+        "/register",
+        "https://evil.example/account",
+      ),
+    ).toBe("/register");
+  });
+
+  it("#2258: the эфир-only EARS-3 context target is NOT widened by the carry rule", () => {
+    // 021 EARS-3 keeps its own contract: an account arrival resolves no эфир, so
+    // the registration surface still renders no return-context card for it.
+    expect(resolveReturnTargetPath("/account")).toBeNull();
+  });
+});
+
+describe("#2027 PR 1.5: the landing and carry rules read the host config, not a host module", () => {
+  it("021 #1945: on the Academy config the academy event shape is already this host's own route and passes through", () => {
+    expect(
+      resolveReturnLandingPath(ACADEMY_FIXTURE, "/webinars/prp-pri-gonartroze"),
+    ).toBe("/webinars/prp-pri-gonartroze");
+  });
+
+  it("#1987: the account shape is answered against THIS config's routes.account", () => {
+    const moved = {
+      ...DOCTOR_FIXTURE,
+      routes: { ...DOCTOR_FIXTURE.routes, account: "/cabinet" },
+    };
+    expect(resolveReturnLandingPath(moved, "/cabinet/events")).toBe(
+      "/cabinet/events",
+    );
+    expect(isAccountReturnTarget(moved, "/cabinet")).toBe(true);
+    expect(isAccountReturnTarget(moved, "/account")).toBe(false);
+    expect(resolveCarriedReturnTarget(moved, "/account")).toBeNull();
+  });
+});

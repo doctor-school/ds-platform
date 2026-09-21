@@ -6,12 +6,13 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
 
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@ds/auth-flow/shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
 } from "@ds/auth-flow/bot-protection";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import {
   ResetCompleteFormSchema,
@@ -77,7 +78,7 @@ export default function ResetPage() {
     // `app/reset/layout.tsx`, because the /account «Сменить пароль» action hands
     // off HERE for logged-in doctors (003 EARS-28), and completing the reset
     // revokes all sessions + auto-logs-in with the new password (EARS-12).
-    <AuthShell>
+    <AuthShell config={ACADEMY_AUTH_FLOW}>
       <Suspense fallback={null}>
         <PortalRecoveryCard />
       </Suspense>
@@ -93,7 +94,7 @@ function PortalRecoveryCard() {
   const t = useTranslations("reset");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
   const [error, setError] = useState<string | null>(null);

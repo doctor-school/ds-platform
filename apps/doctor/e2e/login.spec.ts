@@ -128,7 +128,7 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
  * #1955 — the wordmark on the auth door follows the THEME.
  *
  * Below the `layout:` breakpoint the brand panel is not rendered at all and the
- * form column carries the colour lockup instead (`components/auth-shell.tsx`).
+ * form column carries the colour lockup instead (`@ds/auth-flow/shell`).
  * That lockup is the dark-ink `logo.svg`, and the storefront's dark theme paints
  * the page behind it near-black — so a doctor who had chosen dark met a wordmark
  * that had all but disappeared into the background. The fix renders BOTH assets

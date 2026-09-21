@@ -32,8 +32,8 @@ vi.mock("next-intl", () => ({
 
 const logout = vi.fn().mockResolvedValue({});
 const refresh = vi.fn().mockResolvedValue({});
-vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     logout: () => logout(),
     refresh: () => refresh(),

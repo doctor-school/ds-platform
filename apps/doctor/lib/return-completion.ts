@@ -19,7 +19,7 @@ import type { ReturnHost } from "@ds/events-storefront";
  * THE INTENT SHAPE is `parseDoctorEventReturnTarget` — `/events/<slug>`, this
  * host's own event page — never the canonical academy `/webinars/<slug>` the
  * gate emits. The auth routes hand this rule the projection they already
- * resolved server-side (`lib/return-context.ts` `resolveReturnLandingPath`,
+ * resolved server-side (`@ds/auth-flow/server` `resolveReturnLandingPath`,
  * #1945), so the raw param is guarded, projected and only then completed.
  *
  * NO ROOM-RETURN SHAPE ON THIS HOST. The academy carries `/webinars/<slug>/room`

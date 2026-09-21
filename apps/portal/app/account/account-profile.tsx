@@ -8,7 +8,8 @@ import { useTranslations } from "next-intl";
 import type { MyProfile } from "@ds/schemas";
 
 import { AuthError } from "@ds/auth-flow/client";
-import { authClient, useAcademyAuthFlow } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";
@@ -58,7 +59,7 @@ export function AccountProfile() {
   const t = useTranslations("account");
   // The «errors» namespace is read inside the host config, which projects it
   // into the copy object the shared dictionary consumes.
-  const authFlow = useAcademyAuthFlow();
+  const authFlow = ACADEMY_AUTH_FLOW;
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {

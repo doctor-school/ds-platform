@@ -43,7 +43,7 @@ export function parkReturnTarget(
   returnTo: AuthFlowReturnToConfig | undefined,
 ): NextResponse | undefined {
   // Row 29 - this host parks nothing.
-  if (!returnTo) return undefined;
+  if (!returnTo?.parkingCookie) return undefined;
 
   const target = parseSameOriginReturnTarget(
     request.nextUrl.searchParams.get("returnTo"),

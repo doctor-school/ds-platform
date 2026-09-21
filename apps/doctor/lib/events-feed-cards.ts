@@ -7,7 +7,7 @@ import {
   type RawQueryRecord,
 } from "@ds/schemas";
 
-import { RETURN_CONTEXT_PARAM } from "./return-context";
+import { RETURN_CONTEXT_PARAM } from "@ds/auth-flow/server";
 
 /**
  * 019 EARS-3 (#1518) — the host projection of the feed payload onto the SHARED

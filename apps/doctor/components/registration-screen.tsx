@@ -40,9 +40,9 @@ import {
 import { completeReturnTarget } from "@ds/events-storefront";
 
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
-import { withReturnContext } from "@/lib/return-context";
 import { doctorReturnHost } from "@/lib/return-completion";
 import { authErrorMessage } from "@ds/auth-flow/errors";
+import { withReturnContext } from "@ds/auth-flow/server";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
@@ -810,7 +810,7 @@ function RegistrationConfirmation({
     // Rule S3 — the CARRY value, not the эфир-only confirm intent: a doctor who
     // arrived here from a closed page has no `returnTarget` at all, and building
     // this hop from it sent them to a bare door.
-    router.push(withReturnContext(DOCTOR_AUTH_ROUTES.login, carriedTarget));
+    router.push(withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, carriedTarget));
   }
 
   return (
@@ -829,8 +829,8 @@ function RegistrationConfirmation({
       // confirmation screen and steps sideways into sign-in or recovery is still
       // on their way to the page they asked for.
       links={{
-        login: withReturnContext(DOCTOR_AUTH_ROUTES.login, carriedTarget),
-        reset: withReturnContext(DOCTOR_AUTH_ROUTES.reset, carriedTarget),
+        login: withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, carriedTarget),
+        reset: withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.reset, carriedTarget),
       }}
       resend={{
         nonce: resendNonce,

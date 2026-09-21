@@ -148,7 +148,8 @@ test.describe("005 EARS-1/3/4 (#2005): one-tap registration on the doctor эфи
     // event path as the returnTo, because `/webinars/*` is not routed here at all
     // (`app/(storefront)/events/[slug]/page.tsx`, pinned in its unit tier). The
     // academy-shaped `/webinars/<slug>` is what the AUTH doors accept on the way
-    // IN (`lib/return-context.ts`), not what the storefront door emits.
+    // IN (`@ds/auth-flow/server` `return-context.ts`), not what the storefront
+    // door emits.
     await expect(door).toHaveAttribute(
       "href",
       "/register?returnTo=" + encodeURIComponent("/events/" + ONE_TAP_SLUG),

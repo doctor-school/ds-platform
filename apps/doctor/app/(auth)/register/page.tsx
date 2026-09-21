@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
+import {
+  RETURN_CONTEXT_PARAM,
+  guardAuthRoute,
+  isAccountReturnTarget,
+  resolveCarriedReturnTarget,
+  resolveReturnContext,
+  resolveReturnLandingPath,
+  resolveReturnTargetPath,
+  resolveServerAuth,
+} from "@ds/auth-flow/server";
 import { AuthShell } from "@ds/auth-flow/shell";
 import { returnContextSlots } from "@ds/auth-flow/login";
 
@@ -17,14 +26,6 @@ import { RegistrationScreen } from "@/components/registration-screen";
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
-import {
-  RETURN_CONTEXT_PARAM,
-  isAccountReturnTarget,
-  resolveReturnContext,
-  resolveReturnLandingPath,
-  resolveCarriedReturnTarget,
-  resolveReturnTargetPath,
-} from "@/lib/return-context";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
 
 /**
@@ -182,12 +183,12 @@ export default async function DoctorRegisterPage({
   // question from `safeTarget`, which is the эфир-only EARS-3 context target:
   // this one also admits the account family, so a doctor who arrived from a
   // closed page keeps it across the confirmation screen's sideways hops.
-  const carriedTarget = resolveCarriedReturnTarget(returnTo) ?? undefined;
+  const carriedTarget = resolveCarriedReturnTarget(DOCTOR_AUTH_FLOW, returnTo) ?? undefined;
   // WHERE this host takes them afterwards. Not the canonical target verbatim:
   // the academy serves the эфир at `/webinars/<slug>` and this storefront serves
   // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
   // projection of the SAME guard output (#1945).
-  const landingTarget = resolveReturnLandingPath(returnTo);
+  const landingTarget = resolveReturnLandingPath(DOCTOR_AUTH_FLOW, returnTo);
   const returnEvent = safeTarget
     ? await resolveReturnContext(safeTarget)
     : null;
@@ -200,7 +201,7 @@ export default async function DoctorRegisterPage({
   // signing in still lost the page. The question is asked of the codec, which
   // admits the whole family under this host's own `routes.account` and not only
   // the cabinet index (014 EARS-6.5).
-  const accountLanding = isAccountReturnTarget(returnTo);
+  const accountLanding = isAccountReturnTarget(DOCTOR_AUTH_FLOW, returnTo);
 
   // EARS-3 / LD-4 — where this arrival lands after confirmation. A gate arrival
   // lands back on the эфир it came from; a direct arrival lands where 017's

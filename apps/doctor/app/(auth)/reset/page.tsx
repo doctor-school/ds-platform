@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
+import {
+  RETURN_CONTEXT_PARAM,
+  guardAuthRoute,
+  resolveReturnLandingPath,
+  resolveServerAuth,
+  withReturnContext,
+} from "@ds/auth-flow/server";
 import { AuthShell } from "@ds/auth-flow/shell";
 
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { ResetScreen } from "@/components/reset-screen";
-import {
-  RETURN_CONTEXT_PARAM,
-  resolveReturnLandingPath,
-  withReturnContext,
-} from "@/lib/return-context";
 
 /**
  * #1989 — `doctor.school/reset`, the doctor storefront password-recovery route.
@@ -82,11 +83,11 @@ export default async function DoctorResetPage({
       <ResetScreen
         // Rule S3 — back out of recovery through the door they came in by, still
         // carrying it. A rejected or absent target simply drops off.
-        loginHref={withReturnContext(DOCTOR_AUTH_ROUTES.login, returnTo)}
+        loginHref={withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, returnTo)}
         // Rule S4 — the host projection of the carried target (#1945), or the
         // #221 default when the arrival carried none.
         landing={
-          resolveReturnLandingPath(returnTo) ?? DOCTOR_AUTH_ROUTES.account
+          resolveReturnLandingPath(DOCTOR_AUTH_FLOW, returnTo) ?? DOCTOR_AUTH_ROUTES.account
         }
       />
     </AuthShell>

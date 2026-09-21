@@ -31,7 +31,7 @@ import type { RememberedSpecialty } from "./specialty-choice";
  * NO SECOND RETURN VOCABULARY (LD-3). This module never parses, builds or
  * inspects a `returnTo` value. When a return context IS resolved, the landing
  * the route publishes is that context's own safe target — the shared
- * `parseReturnTarget` guard's reconstruction, produced by `lib/return-context.ts`
+ * `parseReturnTarget` guard's reconstruction, produced by `@ds/auth-flow/server`
  * — and this resolver is not consulted at all. One attribute, one vocabulary.
  *
  * CONSUMED SEAM, NOT DECORATION. The route publishes the resolved landing as a

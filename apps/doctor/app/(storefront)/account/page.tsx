@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { resolveServerAuth } from "@ds/auth-flow/server";
+import { resolveServerAuth, withReturnContext } from "@ds/auth-flow/server";
 
 import { AccountScreen } from "@/components/account-screen";
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
-import { withReturnContext } from "@/lib/return-context";
 
 /**
  * #1958 — `doctor.school/account`, the doctor storefront's «Личный кабинет».
@@ -54,7 +54,7 @@ export default async function DoctorAccountPage() {
     // what changes is that a later edit to either route value cannot leave the
     // bounce behind.
     redirect(
-      withReturnContext(DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+      withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
     );
   }
 

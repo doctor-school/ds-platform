@@ -183,6 +183,36 @@ export const ACADEMY_AUTH_FLOW = {
         otpVerify: m.errors.otpVerifyFailed,
       },
     },
+    /**
+     * The sign-up door's sentences (#2027 PR 1.6). The Academy MOUNTS the shared
+     * registration door now, so the words the door reads are stated here, from the
+     * same `messages/ru.json` entries the hand-assembled page rendered.
+     *
+     * No `confirm`: `routes.verify` above is this host's own confirmation surface,
+     * so the door navigates there instead of confirming in place, and inline-step
+     * copy would describe a step this host never shows. No `promo`:
+     * `register.promoField` is false — the Academy form has no promo box.
+     */
+    register: {
+      title: m.register.title,
+      description: m.register.description,
+      emailLabel: m.common.email,
+      emailPlaceholder: m.common.emailPlaceholder,
+      passwordLabel: m.common.password,
+      reveal: {
+        show: m.common.passwordShow,
+        hide: m.common.passwordHide,
+        showAria: m.common.passwordShowAria,
+        hideAria: m.common.passwordHideAria,
+      },
+      submit: m.register.submit,
+      // #2331 / 005 EARS-2 — the already-registered visitor's way out; the door
+      // carries the arrival context onward across the hop.
+      haveAccount: m.register.haveAccount,
+      // 003 EARS-16 — one sentence for every registration failure, so the door
+      // never tells a stranger whether an address is already registered here.
+      failed: m.errors.registerFailed,
+    },
     brand: {
       eyebrow: m.brand.eyebrow,
       headline: m.brand.headline,
@@ -215,4 +245,26 @@ export const ACADEMY_AUTH_FLOW = {
   // is the email-or-E.164 union.
   channels: ["email", "sms"],
   register: { promoField: false },
+  /**
+   * 003 EARS-20 — what the Academy records at sign-up, and what it SHOWS.
+   *
+   * One required Terms-of-Service acceptance, read as ONE read-only sentence
+   * rather than a checkbox group: the `statement` is what the visitor reads
+   * under the credentials, the tier item is what gets recorded, and both name
+   * the same purpose. The tier-1 checkbox shape is the doctor storefront's 021
+   * EARS-5 decision, not this host's. The `purpose`/`wordingVersion` pair is the
+   * canonical one the BFF enforces (it refuses an empty consent array).
+   */
+  consents: {
+    tiers: [
+      {
+        tier: "access-conditions",
+        items: [
+          { purpose: "tos", required: true, statement: m.register.consent },
+        ],
+      },
+    ],
+    wordingVersion: "2026-01",
+    statement: m.register.consent,
+  },
 } satisfies AuthFlowHostConfig;

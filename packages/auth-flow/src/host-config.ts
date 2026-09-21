@@ -81,11 +81,11 @@ export type AuthFlowCopy = {
   /**
    * The registration door and its confirmation step (rows 47–64).
    *
-   * Optional only while the hosts are being moved onto the shared door one PR at
-   * a time: a host that MOUNTS the registration door states it, and the mount
-   * refuses without it rather than rendering a door with no words.
+   * Required since #2027 PR 1.6: BOTH storefronts mount the shared sign-up door
+   * now, so a host config that states no registration words is a wiring mistake
+   * the compiler can refuse outright rather than a door rendered full of blanks.
    */
-  readonly register?: AuthFlowRegisterCopy;
+  readonly register: AuthFlowRegisterCopy;
   /** The brand panel's value prop and closing line in the shared auth frame (row 47). */
   readonly brand: AuthFlowBrandCopy;
   /**

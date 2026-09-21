@@ -35,7 +35,6 @@ import { registerFieldHint, registerFieldRules } from "../fields";
 import type {
   AuthFlowConsentsConfig,
   AuthFlowHostConfig,
-  AuthFlowRegisterCopy,
 } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
 import { RegistrationConfirmation } from "./inline-confirmation";
@@ -93,23 +92,6 @@ export type RegisterConfirmationProps = {
   returnTarget?: string | null;
   carriedTarget?: string | null;
 };
-
-/**
- * This host's registration sentences, or a loud failure.
- *
- * `copy.register` is optional on the config because not every auth host has to
- * carry a registration door; a host that mounts THIS component without stating
- * the words is a wiring mistake, and it must read as one at the boundary rather
- * than as a card full of blanks. Returning the non-optional type also keeps the
- * narrowing through the door's own nested handlers.
- */
-function registerCopyOf(config: AuthFlowHostConfig): AuthFlowRegisterCopy {
-  const copy = config.copy.register;
-  if (!copy) {
-    throw new Error("auth-flow: this host states no registration copy");
-  }
-  return copy;
-}
 
 /** The declaration's own key: a DECLARATION is not a consent purpose (021 EARS-4). */
 const MEDWORKER_ID = "medworker";
@@ -245,7 +227,9 @@ export function RegisterDoor({
   carriedTarget = null,
   returnContextPlate,
 }: RegisterDoorProps) {
-  const copy = registerCopyOf(config);
+  // #2027 PR 1.6 — `copy.register` is REQUIRED on the config now that both
+  // storefronts mount this door, so there is nothing left to assert here.
+  const copy = config.copy.register;
   const router = useRouter();
   const errors = config.copy.errors;
   const consents = config.consents;

@@ -8,7 +8,8 @@ import { useTranslations } from "next-intl";
 import type { MyProfile } from "@ds/schemas";
 
 import { AuthError } from "@ds/auth-flow/client";
-import { ACADEMY_AUTH_FLOW, authClient } from "@/lib/auth-flow-config";
+import { authClient } from "@/lib/auth-flow-client";
+import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";

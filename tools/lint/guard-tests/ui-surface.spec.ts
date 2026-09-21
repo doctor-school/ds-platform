@@ -36,7 +36,7 @@ describe("rendered UI source classification", () => {
     "apps/portal/lib/consent.ts",
     // The host VALUE file states transport, channels and the site key — no
     // sentence, so no render delta; the Academy's copy lives in `messages/*.json`.
-    "apps/portal/lib/auth-flow-config.ts",
+    "apps/portal/lib/auth-flow.host-config.ts",
     "apps/admin/lib/admin-auth.ts",
     "apps/docs/lib/source.ts",
   ])("red: %s is outside rendered UI roots", (path) => {

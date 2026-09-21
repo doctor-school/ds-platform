@@ -1,10 +1,7 @@
-import { createAuthClient } from "@ds/auth-flow/client";
 import type {
   AuthFlowApiConfig,
   AuthFlowHostConfig,
 } from "@ds/auth-flow/host-config";
-
-import { ACADEMY_AUTH_ROUTES, ACADEMY_AUTH_RETURN_TO } from "@/lib/auth-flow-routes";
 
 import ru from "../messages/ru.json";
 
@@ -28,11 +25,6 @@ export const ACADEMY_AUTH_FLOW_API: AuthFlowApiConfig = {
   registerPath: "/v1/auth/register",
   confirmPath: "/v1/auth/verify",
 };
-
-/**
- * The bound transport. A module constant because the paths are static.
- */
-export const authClient = createAuthClient(ACADEMY_AUTH_FLOW_API);
 
 /** The Academy's catalogue, read as DATA — this host is single-locale RU (`i18n/request.ts`). */
 const m = ru;
@@ -60,11 +52,46 @@ function template(message: string, placeholder: string): string {
  */
 export const ACADEMY_AUTH_FLOW = {
   api: ACADEMY_AUTH_FLOW_API,
-  // The route table and the parking declaration are stated in
-  // `lib/auth-flow-routes.ts`, because `middleware.ts` and the server auth
-  // layouts read the same values.
-  routes: ACADEMY_AUTH_ROUTES,
-  returnTo: ACADEMY_AUTH_RETURN_TO,
+  /**
+   * The auth routes `academy.doctor.school` serves (gate §4.2), stated here as
+   * LITERALS: a host config is data a route file can hand to the package, so it
+   * may not reach back into `lib/` for them. `lib/auth-flow-routes.ts` re-exports
+   * this table for `middleware.ts` and the server auth layouts, and a test pins
+   * `login`/`account`/`room` against the navigation and room SSOTs.
+   */
+  routes: {
+    login: "/login",
+    register: "/register",
+    // The Academy's confirmation is a standalone surface the verification mail
+    // links into, so it has a path (the doctor storefront confirms inline).
+    verify: "/verify",
+    reset: "/reset",
+    account: "/account",
+    // 003 EARS-28 pins the `/account` change-password action as a handoff to the
+    // reset flow, so a signed-in doctor must still be able to complete `/reset`.
+    allowAuthenticated: ["/reset"],
+    // 005 EARS-2 — the event page a carried registration intent lands on.
+    eventPathTemplate: "/webinars/:slug",
+    // 006 EARS-6 — the room a bounced visitor returns to; the same value
+    // `@ds/room` reads from `lib/room-config.ts`.
+    room: "/webinars/:slug/room",
+  },
+  /**
+   * 014 EARS-6 — the Academy parks the carried return target in a short-lived
+   * same-origin cookie, because its registration branch leaves the browser for
+   * the verification mail and comes back on a cold `/verify#email=…` with no
+   * query at all. The name and the lifetime are host values; the parking RULE
+   * lives in `@ds/auth-flow/server`.
+   */
+  returnTo: {
+    parkingCookie: {
+      name: "ds_return_to",
+      /** Long enough to open a verification mail and come back, short enough
+       *  that an abandoned flow never resurfaces on an unrelated sign-in days
+       *  later. */
+      maxAgeSeconds: 900,
+    },
+  },
   // 013 EARS-15 — no carried target lands on the discovery listing, never the
   // marketing landing; this host keeps no specialty memory (row 38).
   landing: { afterLogin: "/webinars", specialtyAware: false },

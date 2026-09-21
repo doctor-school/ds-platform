@@ -1,6 +1,6 @@
 import { LoginRoute } from "@ds/auth-flow/login/route";
 
-import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow-config";
+import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
 
 export default async function LoginPage({
   searchParams,

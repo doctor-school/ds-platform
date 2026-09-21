@@ -75,8 +75,8 @@ const completePasswordReset = vi.fn().mockResolvedValue({});
 // `authClient.session()` on mount — default it to the unauthenticated path so the
 // form renders as before (the authed branch lives in components/auth-shell.test.tsx).
 const session = vi.fn().mockResolvedValue(null);
-vi.mock("@/lib/auth-flow-config", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-flow-config")>()),
+vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     requestPasswordReset: (body: unknown, captchaToken?: string) =>
       requestPasswordReset(body, captchaToken),

@@ -15,7 +15,10 @@ vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
   registerForEvent,
 }));
 
-import { ACADEMY_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 import { clearStoredReturnTarget } from "./return-target-store";
 
 const ACADEMY_PARKING = ACADEMY_FIXTURE.returnTo!.parkingCookie!;
@@ -71,5 +74,28 @@ describe("014 EARS-6 academy return-target consumption (registration resume)", (
       completeReturnTarget(ACADEMY_FIXTURE, "/webinars/ahilles-042/room"),
     ).resolves.toBe("/webinars/ahilles-042/room");
     expect(registerForEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("013 EARS-15: the server-resolved default landing (doctor specialty feed)", () => {
+  it("013 EARS-15: a caller-supplied default landing stands in for `landing.afterLogin` when nothing was carried", async () => {
+    // The doctor storefront decides the landing per visitor on the SERVER
+    // (`landing.specialtyAware`: a remembered specialty lands on `/events`, not
+    // on the static `/`). The door hands that decision back rather than letting
+    // the package recompute it.
+    await expect(
+      completeReturnTarget(DOCTOR_FIXTURE, null, "/events"),
+    ).resolves.toBe("/events");
+  });
+
+  it("013 EARS-15: a carried target still outranks the supplied default landing", async () => {
+    await expect(
+      completeReturnTarget(DOCTOR_FIXTURE, "/events/cardio-live", "/events"),
+    ).resolves.toBe("/events/cardio-live");
+    expect(registerForEvent).toHaveBeenCalledWith("cardio-live");
+  });
+
+  it("013 EARS-15: without a supplied default the host's own `landing.afterLogin` stands", async () => {
+    await expect(completeReturnTarget(DOCTOR_FIXTURE, null)).resolves.toBe("/");
   });
 });

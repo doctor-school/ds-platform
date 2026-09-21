@@ -49,28 +49,38 @@ type ReturnCompletionHost = Pick<
   "routes" | "landing" | "returnTo"
 >;
 
-function returnHostOf(host: ReturnCompletionHost): ReturnHost {
+function returnHostOf(
+  host: ReturnCompletionHost,
+  defaultLanding?: string,
+): ReturnHost {
   const { room } = host.routes;
   return {
     parseRoomReturn: (returnTo) =>
       room ? parseRoomReturnTarget(returnTo, { room }) : null,
     parseIntent: EVENT_INTENT_PARSERS[host.routes.eventPathTemplate],
-    defaultLanding: host.landing.afterLogin,
+    defaultLanding: defaultLanding ?? host.landing.afterLogin,
   };
 }
 
 /**
  * Given the raw `returnTo` carried through auth, consume the parked target once
  * and complete the round-trip through the shared rule. Returns WHERE to land.
+ *
+ * `defaultLanding` overrides `landing.afterLogin` for THIS completion. A host
+ * whose landing is decided on the SERVER per visitor - the doctor storefront's
+ * specialty-aware `/events` (`landing.specialtyAware`) - resolves that value
+ * before the door renders, and the door hands it straight back here. Absent, the
+ * host's static `landing.afterLogin` stands, which is every other caller.
  */
 export async function completeReturnTarget(
   host: ReturnCompletionHost,
   rawReturnTo: string | null,
+  defaultLanding?: string,
 ): Promise<string> {
   // Resolve + consume once. Everything below sees a guard-clean same-origin path
   // or `null`; a hostile value never reaches a navigation.
   return completeSharedReturnTarget(
     resolveReturnTarget(rawReturnTo, host.returnTo?.parkingCookie),
-    returnHostOf(host),
+    returnHostOf(host, defaultLanding),
   );
 }

@@ -65,7 +65,11 @@ sequenceDiagram
     Note over A,D: no profile field of the existing account is written
     A->>D: BEGIN
     A->>D: insert registrations (user, event, answers) ON CONFLICT (user_id,event_id) DO NOTHING
-    A->>D: insert consent_records (new acceptance row)
+    alt published consent version differs from the recorded one
+        A->>D: insert consent_records (new acceptance row)
+    else same version already recorded
+        Note over A,D: no second consent row
+    end
     A->>D: COMMIT
     A-->>V: the SAME generic success body and status
     alt registration was newly inserted, or its recorded outcome is failed

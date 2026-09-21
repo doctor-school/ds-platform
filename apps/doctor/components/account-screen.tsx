@@ -28,7 +28,7 @@ import { withReturnContext } from "@/lib/return-context";
  *
  * The HOST half — everything this file owns and the block does not:
  *   • RU LITERAL copy, because `apps/doctor` carries no `next-intl` (the
- *     `login-screen.tsx` precedent); the strings are the Academy `ru.json`
+ *     `@ds/auth-flow/login` precedent); the strings are the Academy `ru.json`
  *     `account` block verbatim, so the two hosts read identically;
  *   • the doctor-origin transport (`@ds/auth-flow/client`, mounted by
  *     `lib/auth-flow.host-config.ts`): the shipped

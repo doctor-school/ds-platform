@@ -39,7 +39,7 @@ import { makeResolver } from "@/lib/make-resolver";
 /**
  * #1989 — the doctor storefront password-recovery screen (`doctor.school/reset`).
  *
- * A HOST PROJECTION, like `login-screen.tsx` beside it. The whole recovery
+ * A HOST PROJECTION, like the `/login` mount of `@ds/auth-flow/login` beside it. The whole recovery
  * composition — card frame, both stage forms, the #267 resend footer with its
  * cooldown and the #326 neutral acknowledgement — lives ONCE in the
  * `@ds/design-system/blocks` `<PasswordRecoveryCard>` (#1666), and both
@@ -76,7 +76,7 @@ import { makeResolver } from "@/lib/make-resolver";
  * and mints a fresh one on THIS origin (auto-login, #221 — the response sets the
  * `__Host-ds_session` cookie here), so the doctor goes straight to `/account`
  * rather than back to the door. `router.refresh()` rides along for the reason
- * `login-screen.tsx` states: the 017 shell reads the session SERVER-side
+ * `@ds/auth-flow/login` states: the 017 shell reads the session SERVER-side
  * (`@ds/auth-flow/server`), so re-rendering the server tree — not the Academy's
  * client header-refresh helper — is what flips the header from the guest cluster
  * to the signed-in one.
@@ -369,7 +369,7 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
 
 /**
  * The card-head glyph. Drawn inline rather than pulled from an icon package, for
- * the reason `login-screen.tsx` states: `apps/doctor` ships no icon dependency,
+ * the reason `@ds/auth-flow/login` states: `apps/doctor` ships no icon dependency,
  * and adding one for a single decorative mark is a heavier change than the mark.
  * Purely decorative — the heading carries the meaning.
  */

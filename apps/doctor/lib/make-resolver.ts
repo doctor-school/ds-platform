@@ -11,7 +11,7 @@ import type { Resolver } from "react-hook-form";
  * at every call site; this closure only shapes their verdict into what RHF
  * expects, and the sentence shown to the doctor stays doctor-owned.
  *
- * Extracted from `components/login-screen.tsx` when `/reset` (#1989) became the
+ * Extracted from the doctor sign-in screen (now `@ds/auth-flow/login`) when `/reset` (#1989) became the
  * SECOND doctor-host projection needing exactly this: one helper, two screens,
  * rather than the same fifteen lines written twice inside one app.
  *

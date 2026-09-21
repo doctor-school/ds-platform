@@ -91,6 +91,23 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
     );
   });
 
+  it("017 #1933.13: with no return context NOTHING stands in for it (honest-empty)", () => {
+    // Arrived at the door with nothing resolved: the slot is not merely empty,
+    // its wrapper does not exist — no reserved band, no placeholder card.
+    expect(markup(DOCTOR_FIXTURE)).not.toContain("login-return-context");
+
+    cleanup();
+    // The SAME door, given a plate, renders exactly one slot around it.
+    const { container } = render(
+      <LoginDoor
+        config={DOCTOR_FIXTURE}
+        landing="/"
+        returnContextPlate={<p>эфир</p>}
+      />,
+    );
+    expect(container.innerHTML).toContain("login-return-context");
+  });
+
   it("017 #1989.14: password recovery stays on THIS host — «Забыли пароль» links to the storefront /reset", () => {
     const html = markup(DOCTOR_FIXTURE);
 

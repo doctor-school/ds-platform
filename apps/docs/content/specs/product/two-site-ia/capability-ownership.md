@@ -81,7 +81,6 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------- |
 | `apps/doctor/components/account-screen.tsx`                    | wave 4 twin — deleted by #2073 (wave 4)                                                                 | wave 4 (#2073) |
 | `apps/doctor/components/hero-counters.tsx`                     | host-only surface (doctor home hero)                                                                    | permanent      |
-| `apps/doctor/components/login-screen.tsx`                      | wave 1 twin — deleted by #2027                                                                          | wave 1         |
 | `apps/doctor/components/registration-screen.tsx`               | wave 1 twin — deleted by #2027                                                                          | wave 1         |
 | `apps/doctor/components/reset-screen.tsx`                      | wave 1 twin — deleted by #2027                                                                          | wave 1         |
 | `apps/doctor/components/scale-counters.tsx`                    | host-only surface (doctor home statistics)                                                              | permanent      |

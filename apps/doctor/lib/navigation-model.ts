@@ -18,7 +18,7 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  * in the form its host already renders, byte for byte.
  *
  * `landing` carries the §6.2 evidence — the `h1` each destination paints
- * (`components/storefront-hero.tsx`, `components/login-screen.tsx`,
+ * (`components/storefront-hero.tsx`, the `/login` door,
  * `app/(storefront)/events/page.tsx` → `DOCTOR_EVENTS_FEED_COPY.title`,
  * `components/account-screen.tsx`).
  *

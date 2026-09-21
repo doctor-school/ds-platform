@@ -27,7 +27,7 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
     // DO render the challenge: both intercept the two bot-protection codes ahead
     // of the dictionary and show `botProtection.*` beside the widget. These two
     // sentences are therefore reached only from the login / OTP-request surface,
-    // which still has no slot (`login-screen.tsx` «NO BOT-PROTECTION SLOT»), so
+    // which still has no slot (the sign-in door of `@ds/auth-flow/login` has «NO BOT-PROTECTION SLOT»), so
     // they name the way forward rather than blaming a password. Wave-1 PR 1.6 of
     // the OPEN #2027 owns that slot; once it lands, these two lose their last
     // caller.

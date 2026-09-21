@@ -9,7 +9,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * The unit tiers pin the pieces: the page composition
  * (`app/(storefront)/events/[slug]/page.test.tsx`), the completion rule
  * (`packages/events-storefront`), and the two doors that complete it
- * (`components/login-screen.return.test.tsx`,
+ * (`packages/auth-flow/src/login/login-door.test.tsx`,
  * `components/registration-screen.test.tsx`). What ONLY a real stand can prove is
  * that the whole thing composes over a REAL session against the REAL command:
  * that the api participation read admits the doctor origin own

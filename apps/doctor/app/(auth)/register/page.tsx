@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { guardAuthRoute, resolveServerAuth } from "@ds/auth-flow/server";
 import { AuthShell } from "@ds/auth-flow/shell";
+import { returnContextSlots } from "@ds/auth-flow/login";
 
 import type { ConsentTier } from "@ds/schemas";
 import {
@@ -13,10 +14,6 @@ import {
 } from "@ds/schemas";
 
 import { RegistrationScreen } from "@/components/registration-screen";
-import {
-  ReturnContextPanel,
-  ReturnContextPlate,
-} from "@/components/return-context-card";
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
@@ -234,14 +231,18 @@ export default async function DoctorRegisterPage({
   // reason for a page this route already knows nothing answers.
   const returnTarget = landingTarget && returnEvent ? landingTarget : undefined;
 
+  // Row 46's ONE gate: the card is published by the host config, worded by the
+  // host copy and filled by the resolved эфир, or neither slot renders.
+  const { panel: returnPanel, plate: returnPlate } = returnContextSlots({
+    config: DOCTOR_AUTH_FLOW,
+    event: returnEvent,
+    variant: "register",
+  });
+
   return (
     <AuthShell
       config={DOCTOR_AUTH_FLOW}
-      returnContext={
-        returnEvent ? (
-          <ReturnContextPanel event={returnEvent} variant="register" />
-        ) : undefined
-      }
+      returnContext={returnPanel}
     >
       <RegistrationScreen
         landing={landing}
@@ -251,9 +252,7 @@ export default async function DoctorRegisterPage({
         // intent above: an account arrival has no `returnTarget` at all.
         {...(carriedTarget ? { carriedTarget } : {})}
         consentTiers={CONSENT_TIERS}
-        returnContext={
-          returnEvent ? <ReturnContextPlate event={returnEvent} /> : undefined
-        }
+        returnContext={returnPlate}
       />
     </AuthShell>
   );

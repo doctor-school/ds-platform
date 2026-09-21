@@ -48,10 +48,9 @@ let captchaMode: "bypass" | "manual" = "bypass";
 let captchaProps: CaptchaProps | undefined;
 vi.mock("@ds/design-system/blocks", async () => {
   const React = await import("react");
-  const actual =
-    await vi.importActual<typeof import("@ds/design-system/blocks")>(
-      "@ds/design-system/blocks",
-    );
+  const actual = await vi.importActual<
+    typeof import("@ds/design-system/blocks")
+  >("@ds/design-system/blocks");
   return {
     ...actual,
     BotProtectionField: (props: CaptchaProps) => {
@@ -72,6 +71,7 @@ import {
 } from "@ds/schemas";
 import {
   clearPendingRegistration,
+  maskDestination,
   setPendingRegistration,
   takePendingRegistration,
 } from "@ds/design-system/blocks";
@@ -176,9 +176,7 @@ describe("003 EARS-17: the challenge resumes the submit, exactly once", () => {
     async (_name, config) => {
       captchaMode = "manual";
       register
-        .mockRejectedValueOnce(
-          authError(403, BotProtectionErrorCodes.required),
-        )
+        .mockRejectedValueOnce(authError(403, BotProtectionErrorCodes.required))
         .mockResolvedValueOnce({ status: "pending_verification" });
 
       await submitForm(config);
@@ -201,9 +199,7 @@ describe("003 EARS-17: the challenge resumes the submit, exactly once", () => {
     async (_name, config) => {
       captchaMode = "manual";
       register
-        .mockRejectedValueOnce(
-          authError(403, BotProtectionErrorCodes.required),
-        )
+        .mockRejectedValueOnce(authError(403, BotProtectionErrorCodes.required))
         .mockRejectedValueOnce(
           authError(403, BotProtectionErrorCodes.rejected),
         );
@@ -567,5 +563,35 @@ describe("021 EARS-2: the gate context beside the form", () => {
     await renderDoor(DOCTOR_FIXTURE);
 
     expect(screen.queryByTestId("registration-return-context")).toBeNull();
+  });
+});
+
+describe("rows 51 + 76: the confirmation step a host with no /verify route runs", () => {
+  it("021 EARS-19: an accepted registration on the doctor door replaces the form with the code step for the address just registered", async () => {
+    const confirmCopy = DOCTOR_FIXTURE.copy.register?.confirm;
+    if (!confirmCopy) throw new Error("fixture states no confirmation copy");
+    await submitForm(DOCTOR_FIXTURE);
+
+    // The host serves no `/verify` route, so the accepted command does not hop:
+    // the panel opens in place, naming the address the visitor just gave.
+    await screen.findByLabelText(confirmCopy.codeLabel);
+    expect(screen.getByText(maskDestination(EMAIL))).toBeTruthy();
+    expect(screen.queryByTestId("registration-form")).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("021 EARS-19: the Academy door never reaches the inline step — its own /verify route owns it", async () => {
+    const confirmCopy = ACADEMY_FIXTURE.copy.register?.confirm;
+    // The fixture states no inline copy at all, which is the same fact read
+    // from the config side: this host confirms on a route of its own.
+    expect(confirmCopy).toBeUndefined();
+    await submitForm(ACADEMY_FIXTURE);
+
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByLabelText(
+        DOCTOR_FIXTURE.copy.register?.confirm?.codeLabel ?? "",
+      ),
+    ).toBeNull();
   });
 });

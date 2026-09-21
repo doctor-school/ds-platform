@@ -38,6 +38,7 @@ import type {
   AuthFlowRegisterCopy,
 } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
+import { RegistrationConfirmation } from "./inline-confirmation";
 import { RegisterGlyph } from "./register-glyph";
 
 /**
@@ -92,19 +93,6 @@ export type RegisterConfirmationProps = {
   returnTarget?: string | null;
   carriedTarget?: string | null;
 };
-
-/**
- * The inline confirmation SEAM, and the whole of it.
- *
- * Slice C of this PR implements `./inline-confirmation` and this function
- * becomes `return <RegistrationConfirmation {...props} />`. Until then it
- * returns `null`, which renders nothing rather than an empty frame — and nothing
- * is user-visible either way, because no host mounts this door yet: both
- * storefronts keep their shipped screens until the mounts land.
- */
-function confirmationPanel(_props: RegisterConfirmationProps): ReactNode {
-  return null;
-}
 
 /**
  * This host's registration sentences, or a loud failure.
@@ -447,19 +435,26 @@ export function RegisterDoor({
         />
       }
       confirmation={
-        registeredEmail
-          ? confirmationPanel({
-              config,
-              email: registeredEmail,
-              landing,
-              returnTarget,
-              carriedTarget,
-            })
-          : null
+        registeredEmail ? (
+          // Rows 51 + 76 — a host with no `/verify` route confirms the
+          // address HERE. The panel is a module of its own rather than a mode
+          // of this one: everything past the accepted code (the login replay,
+          // the 005 EARS-2 completion, the EARS-10 landing) is a different
+          // rule set with a different transport.
+          <RegistrationConfirmation
+            config={config}
+            email={registeredEmail}
+            landing={landing}
+            returnTarget={returnTarget}
+            carriedTarget={carriedTarget}
+          />
+        ) : null
       }
       consentItems={consentItems}
       // 021 EARS-7 — stated where this host has consent rows at all.
-      consentNote={consents?.tiers?.length ? (consents.managerNote ?? null) : null}
+      consentNote={
+        consents?.tiers?.length ? (consents.managerNote ?? null) : null
+      }
       {...(config.register.promoField && copy.promo
         ? {
             promo: {

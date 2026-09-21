@@ -5,9 +5,27 @@ import {
   type PublicEventPage,
 } from "@ds/schemas";
 
-import type { AuthFlowHostConfig } from "../host-config";
 import { parseAccountReturnTarget } from "../return-target";
+import {
+  RETURN_CONTEXT_PARAM,
+  resolveCarriedReturnTarget,
+  withReturnContext,
+  type ReturnContextHost,
+} from "../return-context-href";
 import { serverApiBase } from "./session";
+
+/**
+ * The carry-vocabulary helpers live one level up, in a module with no server
+ * import in its graph: the inline confirmation step is a CLIENT component and
+ * hops through the same rule S3 value. Re-exported here so `@ds/auth-flow/server`
+ * keeps its shipped surface - one implementation, two entry points.
+ */
+export {
+  RETURN_CONTEXT_PARAM,
+  resolveCarriedReturnTarget,
+  withReturnContext,
+  type ReturnContextHost,
+};
 
 /**
  * 021 EARS-2 (#1538) / wave-1 gate row 46 - the RETURN CONTEXT a visitor arrived
@@ -36,12 +54,6 @@ import { serverApiBase } from "./session";
  * resolve to `null`, and the caller renders no slot at all - a door must never
  * be taken down by the decoration beside it.
  */
-
-/** The host routes these rules read - data from the host config. */
-type ReturnContextHost = Pick<AuthFlowHostConfig, "routes">;
-
-/** The canonical return-target search param (005 EARS-2 / 021 LD-3). */
-export const RETURN_CONTEXT_PARAM = "returnTo";
 
 /** What the return-context card needs - nothing more than the card renders. */
 export interface ReturnContextEvent {
@@ -112,38 +124,6 @@ export function resolveReturnTargetPath(
   returnTo: string | undefined,
 ): string | null {
   return parseReturnTarget(returnTo)?.returnTo ?? null;
-}
-
-/**
- * #2258 / rule S3 - the value that rides ONWARD across an auth hop, covering
- * both shapes a visitor may legitimately be coming back to: this host account
- * family (`routes.account`, segment boundary enforced) and the эфир vocabulary.
- * Deliberately NOT `resolveReturnTargetPath`, which must stay эфир-only.
- */
-export function resolveCarriedReturnTarget(
-  host: ReturnContextHost,
-  returnTo: string | undefined,
-): string | null {
-  const account = parseAccountReturnTarget(returnTo, host.routes.account);
-  if (account) return account;
-
-  return parseReturnTarget(returnTo)?.returnTo ?? null;
-}
-
-/**
- * 021 EARS-15 / 003 EARS-39 - carry the return context ONWARD across an
- * intermediate auth hop. The value re-appended is what the guards reconstructed,
- * never the raw input; an absent or rejected target is simply dropped.
- */
-export function withReturnContext(
-  host: ReturnContextHost,
-  path: string,
-  returnTo: string | undefined,
-): string {
-  const safe = resolveCarriedReturnTarget(host, returnTo);
-  if (!safe) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}${RETURN_CONTEXT_PARAM}=${encodeURIComponent(safe)}`;
 }
 
 /**

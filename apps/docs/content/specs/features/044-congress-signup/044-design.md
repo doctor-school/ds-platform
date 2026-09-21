@@ -13,8 +13,26 @@ Requirements: [`044-requirements-en.md`](./044-requirements-en.md) · PRD: [`044
 
 The API has no CORS and gains none. The congress site's own nginx terminates the participant's request and proxies `/api` to the platform API, so the browser only ever talks same-origin to the site. Two consequences the implementation must honour:
 
-- The site's nginx egress address enters `TRUSTED_PROXIES` (`apps/api/src/config/trust-proxy.ts:97-120`). Fastify's `trustProxy` walks `X-Forwarded-For` right-to-left and stops at the first untrusted hop; without this entry the rate-limit key (`apps/api/src/auth/rate-limit/rate-limit.types.ts:57-62`) collapses to the proxy address and the per-IP window (20 / 15 min by default, `:32-36`) becomes a global cap on the whole congress site.
+- The site's nginx egress address enters `TRUSTED_PROXIES` (`apps/api/src/config/trust-proxy.ts:97-120`). Fastify's `trustProxy` walks `X-Forwarded-For` right-to-left and stops at the first untrusted hop; without this entry the rate-limit key (`apps/api/src/auth/rate-limit/rate-limit.types.ts:57-62`) collapses to the proxy address and the per-IP window becomes a global cap on the whole congress site. The intake scope raises that window from the platform default of 20 submissions per 15 minutes (`DEFAULT_RATE_LIMIT_THRESHOLDS.perIpPer15Min`, `apps/api/src/auth/rate-limit/rate-limit.types.ts:34`) to **60 per 15 minutes per client address**: congress participants register in bursts from a shared clinic or venue NAT address, and every one of those submissions still has to pass the captcha, so the captcha — not the window — is the bot bound here.
 - Bot protection is per-route opt-in: the global guard no-ops unless the handler carries `@BotProtected` (`apps/api/src/bot-protection/bot-protection.guard.ts`), and the SmartCaptcha provider reads the token from the `x-smartcaptcha-token` header or the `captchaToken` body field. The intake route declares the decorator explicitly; a rejection throws the generic exception that discloses no reason.
+
+## Registration window
+
+The window is two instants — an opening and a closing one — held as constants of this congress in the API's own code or configuration. There is deliberately no settings row and no admin screen: a second event needing its own window is the point at which the constant becomes data, and until then a stored window would be a schema, a migration and an admin surface carrying exactly one value (`DEBT.md`, 2026-09-21). The opening instant is 2026-10-01 00:00 Europe/Moscow. The closing instant is provisionally 2027-01-01 00:00 Europe/Moscow: a placeholder the product owner replaces with the real closing date-time before the launch work package (#2292), which is why the window is a constant rather than a guessed permanent date.
+
+The check is the first thing the intake handler does — before the captcha verification, before Zod validation, before the account lookup — so that a submission outside the window cannot create an account, a registration, a consent row or an email under any branch. Its refusal carries a machine-readable state, `not-yet-open` (with the opening instant, so the caller can render the date) or `closed`, and that refusal is identical for every submitter: it is a property of the clock, never of the submitted email, so it opens no enumeration channel.
+
+Enforcement lives in the API; the congress site only displays the two states. Before the opening instant it renders «Регистрация откроется ДД.ММ в ЧЧ:ММ (мск)» and after the closing instant «Регистрация на конгресс закрыта», in both cases with no form at all — the API refusal is the backstop for a stale page or a direct call, not the participant's normal experience. The dates the site displays and the API constant are the same instants; keeping them equal is a launch check on #2292, because they live in two repositories.
+
+Scope is decided, not open: the window governs the public congress-site intake endpoint only. The signed-in platform path (EARS-16) is deliberately not bound by it and continues to follow the event's own registration rules. The window is also the only bound on intake: no capacity cap, no seat count, no waiting list.
+
+## Contact-phone normalisation and the possible-duplicate derivation
+
+The submitted contact phone is kept twice on the registration's answers: exactly as the participant typed it, and in a normalised form used only for comparison — a leading `+7` or `8` unified to one form, spaces, brackets and dashes stripped. Neither value ever reaches `users.phone`, which is UNIQUE and a login identifier (`packages/db/src/schema/users.ts:29-101`); an unverified typed phone there would either refuse the registration or attach it to the wrong account.
+
+The «возможный дубль» marker is **derived at read time**, not stored: the roster query groups the event's registrations by the normalised phone and marks every registration whose normalised phone is shared by at least one other registration of the same event. Two consequences follow, and both are the reason for the choice. When the team removes one of the sharing registrations through its manual deletion-on-request, the survivor stops being marked with no write and no sweep — a stored flag would have to be recomputed by someone. And a registration with no answers payload (the platform-origin path, EARS-16) has no contact phone at all, so it falls out of the grouping and is never marked.
+
+The marker changes nothing about intake: submissions sharing a phone are accepted exactly like any other, with the same identical success response of EARS-7. A refusal or any hint of a shared phone would both break that response identity and leak that some other person registered with that number.
 
 ## Intake cascade — new account
 
@@ -31,6 +49,7 @@ sequenceDiagram
 
     V->>N: POST /api/... (answers + consent + captcha token)
     N->>A: same-origin proxy, X-Forwarded-For = participant
+    A->>A: registration window check (before any side effect; refuses not-yet-open / closed)
     A->>C: verify(token, action, forwarded ip)
     C-->>A: ok
     A->>A: Zod validate (packages/schemas), specialty = taxonomy id | other
@@ -163,7 +182,7 @@ erDiagram
         uuid user_id FK
         uuid event_id FK
         timestamptz registered_at
-        jsonb answers "NEW - null for platform-origin rows"
+        jsonb answers "NEW - null for platform-origin rows; carries the phone as typed and normalised"
         text confirmation_mail_status "NEW - pending | sent | failed"
         timestamptz confirmation_mail_at "NEW"
         text record_status
@@ -185,7 +204,7 @@ erDiagram
     }
 ```
 
-**`registrations.answers`** (`packages/db/src/schema/registrations.ts:42-93` gains the column) holds surname, first name, optional patronymic, contact phone, email, specialty reference (a `specialties_minzdrav` id or the `is_other` row), workplace, city and region. The shape is owned by a Zod schema in `packages/schemas` — the same schema validates the intake request, so the column can never hold a shape the API would reject. The column is nullable because the platform-origin path (a signed-in doctor registering from the feed) writes no answers; the roster renders those rows from the account's profile and leaves a cell empty where the profile has no value.
+**`registrations.answers`** (`packages/db/src/schema/registrations.ts:42-93` gains the column) holds surname, first name, optional patronymic, the contact phone both as typed and normalised, email, specialty reference (a `specialties_minzdrav` id or the `is_other` row), workplace, city and region. The shape is owned by a Zod schema in `packages/schemas` — the same schema validates the intake request, so the column can never hold a shape the API would reject. The column is nullable because the platform-origin path (a signed-in doctor registering from the feed) writes no answers; the roster renders those rows from the account's profile and leaves a cell empty where the profile has no value.
 
 **`registrations.confirmation_mail_status` / `_at`** make the send outcome a queryable fact rather than a log line, which is what lets the roster show it, the roster filter on it and the resubmission path decide whether to re-send.
 
@@ -206,6 +225,6 @@ The role set in `apps/api/src/authz/authz.types.ts:18-27` gains `event-registrar
 
 ## Roster and print projections
 
-The roster is an HTTP route over the existing in-process `eventRoster()` read model (`apps/api/src/registration/registration.service.ts:178-181`), widened from its current PII-free `(doctor, event, registeredAt)` fact to the answers the registrar needs. It renders on `AdminDataList` (`apps/admin/components/admin-data-list.tsx:62-371`), whose query state today carries `q`, `status`, `includeRetired`, `page` and `pageSize` and no sort field at all. 044 adds sort and filter to that query state and to the server query, one pair per roster column: contains-search on the text columns (ФИО, место работы, город, область, телефон, email), a select on специальность and on статус письма, and a range on дата регистрации; sort accepts any of the same columns, in both directions. № is a row counter and carries neither sort nor filter. Because sort and filter are server-side, the printed sheet and the screen agree on ordering and scope across pages (owner-approved scope, #2287 issuecomment-5756369423: «Сортировка и фильтрация должна быть по всем полям вообще»).
+The roster is an HTTP route over the existing in-process `eventRoster()` read model (`apps/api/src/registration/registration.service.ts:178-181`), widened from its current PII-free `(doctor, event, registeredAt)` fact to the answers the registrar needs. It renders on `AdminDataList` (`apps/admin/components/admin-data-list.tsx:62-371`), whose query state today carries `q`, `status`, `includeRetired`, `page` and `pageSize` and no sort field at all. 044 adds sort and filter to that query state and to the server query, one pair per roster column: contains-search on the text columns (ФИО, место работы, город, область, телефон, email), a select on специальность and on статус письма, and a range on дата регистрации; sort accepts any of the same columns, in both directions. № is a row counter and carries neither sort nor filter. The «возможный дубль» marker joins that query state as one more server-side filter — a yes/no predicate over the read-time derivation above, composable with the search, the column filters, the sort and the page like any other. It is not an eleventh column: it is an indicator on the row, so the column order stays exactly the one EARS-25 fixes; where the indicator sits on the row is settled at implementation through the admin Stage-A design gate rather than guessed here. Because sort and filter are server-side, the printed sheet and the screen agree on ordering and scope across pages (owner-approved scope, #2287 issuecomment-5756369423: «Сортировка и фильтрация должна быть по всем полям вообще»).
 
-The print view is the same filtered, sorted query rendered for paper: the browser's own print path plus a print stylesheet, which is the first `@media print` rule anywhere in `apps/admin` or `packages/design-system`. Nothing is exported to a file. Per the owner's approved variant «Б, без подписи и статуса письма» (#2287 issuecomment-5756369423), the sheet is a full copy of the currently filtered and sorted roster with every roster column except `статус письма`, no signature column, and a header carrying the event's name and date.
+The print view is the same filtered, sorted query rendered for paper: the browser's own print path plus a print stylesheet, which is the first `@media print` rule anywhere in `apps/admin` or `packages/design-system`. Nothing is exported to a file. Per the owner's approved variant «Б, без подписи и статуса письма» (#2287 issuecomment-5756369423), the sheet is a full copy of the currently filtered and sorted roster with every roster column except `статус письма`, no signature column, and a header carrying the event's name and date. The «возможный дубль» marker prints on the affected rows too: the registrar works the desk from the sheet, and a duplicate that is only visible on screen would be invisible exactly where it matters.

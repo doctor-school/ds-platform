@@ -150,8 +150,7 @@ export const RATE_LIMIT_ENV_VARS = {
 /** The three raw env values the {@link resolveRateLimitThresholds} factory reads. */
 export type RateLimitEnv = {
   [K in (typeof RATE_LIMIT_ENV_VARS)[keyof typeof RATE_LIMIT_ENV_VARS]]?:
-    | string
-    | undefined;
+    string | undefined;
 };
 
 /** A rejected override: which env var, and the raw value that failed validation. */

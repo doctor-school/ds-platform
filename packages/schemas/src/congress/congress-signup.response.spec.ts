@@ -20,9 +20,9 @@ describe("044 congress sign-up — intake responses", () => {
         userId: "e7d4b1f0-5a2c-4a3e-9f6b-0c1d2e3f4a5b",
       }).success,
     ).toBe(false);
-    expect(CongressSignUpAcceptedSchema.safeParse({ status: "created" }).success).toBe(
-      false,
-    );
+    expect(
+      CongressSignUpAcceptedSchema.safeParse({ status: "created" }).success,
+    ).toBe(false);
   });
 
   it("EARS-28: when the submission arrives before the registration window opens, system shall refuse with a machine-readable code carrying the opening instant", () => {

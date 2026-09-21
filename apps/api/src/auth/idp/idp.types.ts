@@ -124,8 +124,7 @@ export interface CreateUserPasswordlessInput extends CreateUserIdentity {
 
 /** Input to create a Zitadel user with a single primary identifier. */
 export type CreateUserInput =
-  | CreateUserWithPasswordInput
-  | CreateUserPasswordlessInput;
+  CreateUserWithPasswordInput | CreateUserPasswordlessInput;
 
 /**
  * Result of a create attempt. `alreadyExisted` is the enumeration-safety hinge

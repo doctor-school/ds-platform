@@ -91,7 +91,9 @@ describe("044 congress sign-up — server configuration", () => {
   });
 
   it("EARS-28: when the window instants are read, system shall place the opening at the owner-approved 2026-10-01 Moscow midnight and keep the close after it", () => {
-    expect(CONGRESS_SIGN_UP_WINDOW_OPENS_AT).toBe("2026-10-01T00:00:00.000+03:00");
+    expect(CONGRESS_SIGN_UP_WINDOW_OPENS_AT).toBe(
+      "2026-10-01T00:00:00.000+03:00",
+    );
     expect(Date.parse(CONGRESS_SIGN_UP_WINDOW_CLOSES_AT)).toBeGreaterThan(
       Date.parse(CONGRESS_SIGN_UP_WINDOW_OPENS_AT),
     );

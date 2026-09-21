@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger, UnprocessableEntityException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import type { DrizzleHandle, RegistrationAnswers } from "@ds/db";
 import { consentRecords, events, registrations } from "@ds/db";
@@ -39,10 +44,8 @@ type Db = DrizzleHandle["db"];
  * can drift. This assertion is where that drift becomes a compile error rather
  * than a runtime surprise in a jsonb column nobody reads until the roster does.
  */
-type _CongressAnswersFitTheColumn = CongressSignUpAnswers extends
-  RegistrationAnswers
-  ? true
-  : never;
+type _CongressAnswersFitTheColumn =
+  CongressSignUpAnswers extends RegistrationAnswers ? true : never;
 const _congressAnswersFitTheColumn: _CongressAnswersFitTheColumn = true;
 void _congressAnswersFitTheColumn;
 
@@ -96,19 +99,23 @@ export class CongressSignUpService {
   ) {}
 
   /** 044 EARS-1 — take one public congress submission. */
-  async signUp(request: CongressSignUpRequest): Promise<CongressSignUpAccepted> {
+  async signUp(
+    request: CongressSignUpRequest,
+  ): Promise<CongressSignUpAccepted> {
     this.assertInsideWindow();
 
     const settings = this.settingsOrRefuse();
     await this.assertRegistrableEvent(settings.eventId);
 
-    const consent: { purpose: CongressSignUpConsentPurpose; version: string }[] =
-      [
-        {
-          purpose: CONGRESS_PERSONAL_DATA_PURPOSE,
-          version: settings.consentVersion,
-        },
-      ];
+    const consent: {
+      purpose: CongressSignUpConsentPurpose;
+      version: string;
+    }[] = [
+      {
+        purpose: CONGRESS_PERSONAL_DATA_PURPOSE,
+        version: settings.consentVersion,
+      },
+    ];
 
     const created = await this.auth.createPasswordlessAccount(
       {

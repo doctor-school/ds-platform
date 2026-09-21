@@ -185,11 +185,11 @@ describe("RateLimitService (EARS-13)", () => {
     it("EARS-13: reset() forgives ONLY the per-user window — the per-IP window is untouched", () => {
       const svc = new RateLimitService(
         {
-        perUserPer15Min: 100,
-        perIpPer15Min: 2,
-        perAsnPerHour: 100,
-        scopedPerIpPer15Min: {},
-      },
+          perUserPer15Min: 100,
+          perIpPer15Min: 2,
+          perAsnPerHour: 100,
+          scopedPerIpPer15Min: {},
+        },
         () => now,
       );
       // Spend the per-IP budget with two distinct identifiers from one origin.
@@ -204,11 +204,11 @@ describe("RateLimitService (EARS-13)", () => {
     it("EARS-13: reset() forgives ONLY the per-user window — the per-ASN window is untouched", () => {
       const svc = new RateLimitService(
         {
-        perUserPer15Min: 100,
-        perIpPer15Min: 100,
-        perAsnPerHour: 1,
-        scopedPerIpPer15Min: {},
-      },
+          perUserPer15Min: 100,
+          perIpPer15Min: 100,
+          perAsnPerHour: 1,
+          scopedPerIpPer15Min: {},
+        },
         () => now,
       );
       expect(

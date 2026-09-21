@@ -18,7 +18,9 @@ import { z } from "zod";
 export const CongressSignUpAcceptedSchema = z.strictObject({
   status: z.literal("accepted"),
 });
-export type CongressSignUpAccepted = z.infer<typeof CongressSignUpAcceptedSchema>;
+export type CongressSignUpAccepted = z.infer<
+  typeof CongressSignUpAcceptedSchema
+>;
 
 /** 044 EARS-28 — the two states the registration window can refuse in. */
 export const CONGRESS_SIGN_UP_WINDOW_REFUSAL_CODES = [

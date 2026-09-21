@@ -1325,8 +1325,7 @@ export class ZitadelIdpClient implements IdpClient {
       await this.ensureOtpFactor(userId, challenge);
       // Return the native login code to the existing mailer; Zitadel sends no
       // duplicate. SMS retains its native notifier and unchanged challenge.
-      const challengeBody =
-        challenge === "otpEmail" ? { returnCode: {} } : {};
+      const challengeBody = challenge === "otpEmail" ? { returnCode: {} } : {};
       const res = await this.fetchImpl(this.url("/v2/sessions"), {
         method: "POST",
         headers: this.headers(),

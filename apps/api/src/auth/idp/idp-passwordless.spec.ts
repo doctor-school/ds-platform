@@ -105,7 +105,10 @@ describe("044 congress sign-up — passwordless IdP create (EARS-4)", () => {
 
     const create = calls.find((c) => c.url.endsWith("/v2/users/new"));
     const body = JSON.parse(create?.body ?? "{}") as {
-      human: { password?: { password: string }; profile: { [k: string]: string } };
+      human: {
+        password?: { password: string };
+        profile: { [k: string]: string };
+      };
     };
     expect(body.human.password).toEqual({ password: "S3cret-passphrase" });
     expect(body.human.profile["familyName"]).toBe("guest");

@@ -120,7 +120,8 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
     },
     "POST /v1/auth/login/otp/request": {
       emits: ["OtpSent"],
-      coveredBy: "login-otp.e2e (EARS-6/7); an actual send records auth.otp.sent",
+      coveredBy:
+        "login-otp.e2e (EARS-6/7); an actual send records auth.otp.sent",
     },
     "POST /v1/auth/logout": {
       emits: ["SessionRevoked"],

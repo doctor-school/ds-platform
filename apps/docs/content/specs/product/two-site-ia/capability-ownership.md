@@ -210,7 +210,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | path                                                     | package                                                                                        | until          |
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------- |
 | `apps/doctor/app/(auth)/layout.tsx`                      | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
-| `apps/doctor/app/(auth)/login/page.tsx`                  | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/doctor/app/(auth)/login/page.tsx`                  | `@ds/auth-flow`                                                                                | mounted        |
 | `apps/doctor/app/(auth)/register/page.tsx`               | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
 | `apps/doctor/app/(auth)/reset/page.tsx`                  | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
 | `apps/doctor/app/(room)/events/[slug]/room/page.tsx`     | `@ds/room`                                                                                     | wave 4 (#2073) |
@@ -235,8 +235,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/portal/app/documents/[slug]/page.tsx`      | — host-only surface (legal document reading page; the 028 content package is net-new, no wave) | permanent      |
 | `apps/portal/app/documents/page.tsx`             | — host-only surface (legal documents list; the 028 content package is net-new, no wave)        | permanent      |
 | `apps/portal/app/layout.tsx`                     | — brand frame per host (root html/body, fonts, theme boot)                                     | permanent      |
-| `apps/portal/app/login/layout.tsx`               | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
-| `apps/portal/app/login/page.tsx`                 | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
+| `apps/portal/app/login/page.tsx`                 | `@ds/auth-flow`                                                                                | mounted        |
 | `apps/portal/app/page.tsx`                       | — host-only surface (Academy home)                                                             | permanent      |
 | `apps/portal/app/register/layout.tsx`            | `@ds/auth-flow`                                                                                | wave 1 (#2027) |
 | `apps/portal/app/register/page.tsx`              | `@ds/auth-flow`                                                                                | wave 1 (#2027) |

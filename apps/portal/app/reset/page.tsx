@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
 
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@ds/auth-flow/shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
@@ -78,7 +78,7 @@ export default function ResetPage() {
     // `app/reset/layout.tsx`, because the /account «Сменить пароль» action hands
     // off HERE for logged-in doctors (003 EARS-28), and completing the reset
     // revokes all sessions + auto-logs-in with the new password (EARS-12).
-    <AuthShell>
+    <AuthShell config={ACADEMY_AUTH_FLOW}>
       <Suspense fallback={null}>
         <PortalRecoveryCard />
       </Suspense>

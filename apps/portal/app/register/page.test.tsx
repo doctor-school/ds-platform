@@ -65,16 +65,19 @@ const register = vi.fn(
       resolveRegister = resolve;
     }),
 );
-// #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
-// `authClient.session()` on mount — default it to the unauthenticated path so the
-// form renders as before (the authed branch lives in components/auth-shell.test.tsx).
-const session = vi.fn().mockResolvedValue(null);
+/**
+ * #675 is NOT decided on this surface. The signed-in guard runs SERVER-side in
+ * `app/register/layout.tsx` (`guardAuthRoute` from `@ds/auth-flow/server`), before
+ * any of this renders — pinned by `app/auth-route-guard.test.tsx` and
+ * `packages/auth-flow/src/server/auth-route-guard.test.ts`. The frame around the
+ * card is the shared `<AuthShell>` of `@ds/auth-flow/shell`, covered by
+ * `packages/auth-flow/src/shell/auth-shell.test.tsx`.
+ */
 vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     register: (body: unknown, captchaToken?: string) =>
       register(body, captchaToken),
-    session: () => session(),
   },
 }));
 
@@ -82,9 +85,8 @@ const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
 
 /**
- * Render /register and wait past the #675 <AuthShell> session-guard. The guard
- * renders nothing until `session()` resolves (to `null` here → the anonymous path),
- * so the form appears asynchronously; gate on the submit before interacting.
+ * Render /register and gate on the submit before interacting — the card mounts its
+ * client boundary and its challenge field asynchronously.
  */
 async function renderRegister() {
   render(<RegisterPage />);
@@ -129,11 +131,7 @@ describe("003 EARS-17 on-demand registration protection", () => {
   it("EARS-17: a rejected token gets truthful CAPTCHA feedback and a fresh retry without losing form data", async () => {
     captchaMode = "manual";
     register.mockRejectedValueOnce(
-      new AuthError(
-        403,
-        "bot protection failed",
-        "BOT_PROTECTION_REJECTED",
-      ),
+      new AuthError(403, "bot protection failed", "BOT_PROTECTION_REJECTED"),
     );
     const user = userEvent.setup();
     await renderRegister();

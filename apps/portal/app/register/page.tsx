@@ -8,7 +8,7 @@ import { UserPlus } from "lucide-react";
 
 import type { RegisterRequest, RegisterResponse } from "@ds/schemas";
 
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@ds/auth-flow/shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
@@ -75,7 +75,7 @@ import {
 
 export default function RegisterPage() {
   return (
-    <AuthShell>
+    <AuthShell config={ACADEMY_AUTH_FLOW}>
       <Suspense fallback={null}>
         <RegisterProjection />
       </Suspense>
@@ -110,7 +110,9 @@ function RegisterProjection() {
         setCaptchaError(te("captchaRequired"));
         return;
       }
-      setError(authErrorMessage(err, authFlow.copy.errors, te("registerFailed")));
+      setError(
+        authErrorMessage(err, authFlow.copy.errors, te("registerFailed")),
+      );
     },
   });
 

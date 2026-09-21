@@ -71,17 +71,20 @@ vi.mock("@ds/design-system/blocks", async () => {
 
 const requestPasswordReset = vi.fn().mockResolvedValue({});
 const completePasswordReset = vi.fn().mockResolvedValue({});
-// #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
-// `authClient.session()` on mount — default it to the unauthenticated path so the
-// form renders as before (the authed branch lives in components/auth-shell.test.tsx).
-const session = vi.fn().mockResolvedValue(null);
+/**
+ * #675 is NOT decided on this surface. The signed-in guard runs SERVER-side in
+ * `app/reset/layout.tsx` (`guardAuthRoute` from `@ds/auth-flow/server`), before
+ * any of this renders — pinned by `app/auth-route-guard.test.tsx` and
+ * `packages/auth-flow/src/server/auth-route-guard.test.ts`. The frame around the
+ * card is the shared `<AuthShell>` of `@ds/auth-flow/shell`, covered by
+ * `packages/auth-flow/src/shell/auth-shell.test.tsx`.
+ */
 vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     requestPasswordReset: (body: unknown, captchaToken?: string) =>
       requestPasswordReset(body, captchaToken),
     completePasswordReset: (body: unknown) => completePasswordReset(body),
-    session: () => session(),
   },
 }));
 
@@ -98,12 +101,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 /**
- * Flush the #675 <AuthShell> session-guard microtask under FAKE timers. The guard
- * renders nothing until `session()` resolves (to `null` → anonymous), and a
- * `findBy*` poll would hang while timers are faked — so drain the resolved-promise
- * microtask directly, after which the request form is in the DOM.
+ * Drain the pending mount microtask under FAKE timers: the card settles its client
+ * boundary and its challenge field one microtask in, and a `findBy*` poll would
+ * hang while timers are faked — so drain the resolved promise directly, after
+ * which the request form is in the DOM.
  */
-async function flushAuthGuard() {
+async function flushMount() {
   await act(async () => {
     await Promise.resolve();
   });
@@ -136,7 +139,7 @@ describe("003 EARS-17 on-demand password-reset protection", () => {
     vi.useFakeTimers();
     try {
       render(<ResetPage />);
-      await flushAuthGuard();
+      await flushMount();
       fireEvent.change(screen.getByRole("textbox"), {
         target: { value: IDENTIFIER },
       });
@@ -165,7 +168,6 @@ describe("003 EARS-17 on-demand password-reset protection", () => {
 async function advanceToCompleteStage(
   user: ReturnType<typeof userEvent.setup>,
 ) {
-  // #675: wait past the <AuthShell> session-guard so the request form is mounted.
   await screen.findByTestId("reset-request-submit");
   // Request step: fill the union identifier box and submit to toggle stage→complete.
   const identifierInput = screen.getByRole("textbox");
@@ -195,7 +197,7 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
     vi.useFakeTimers();
     try {
       render(<ResetPage />);
-      await flushAuthGuard(); // #675: mount the request form past the session-guard.
+      await flushMount(); // the request form settles one microtask in.
 
       // Request step → complete step, via synchronous events.
       fireEvent.change(screen.getByRole("textbox"), {
@@ -251,7 +253,7 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
       vi.useFakeTimers();
       try {
         render(<ResetPage />);
-        await flushAuthGuard(); // #675: mount the request form past the session-guard.
+        await flushMount(); // the request form settles one microtask in.
         fireEvent.change(screen.getByRole("textbox"), {
           target: { value: idValue },
         });
@@ -436,7 +438,6 @@ describe("/reset submit pending affordances (#337)", () => {
     const user = userEvent.setup();
     requestPasswordReset.mockImplementationOnce(() => new Promise(() => {}));
     render(<ResetPage />);
-    // #675: wait past the <AuthShell> session-guard so the request form is mounted.
     await screen.findByTestId("reset-request-submit");
 
     await user.type(screen.getByRole("textbox"), IDENTIFIER);

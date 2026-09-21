@@ -13,7 +13,7 @@ import {
   type VerifyResponse,
 } from "@ds/schemas";
 
-import { AuthShell } from "@/components/auth-shell";
+import { AuthShell } from "@ds/auth-flow/shell";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
@@ -83,7 +83,7 @@ import {
 
 export default function VerifyPage() {
   return (
-    <AuthShell>
+    <AuthShell config={ACADEMY_AUTH_FLOW}>
       <Suspense fallback={null}>
         <PortalEmailConfirmCard />
       </Suspense>

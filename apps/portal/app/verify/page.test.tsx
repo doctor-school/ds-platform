@@ -80,10 +80,14 @@ const login = vi.fn().mockResolvedValue({});
 const resendVerification = vi
   .fn()
   .mockResolvedValue({ status: "resend_requested" });
-// #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
-// `authClient.session()` on mount — default it to the unauthenticated path so the
-// surface renders as before (the authed branch lives in components/auth-shell.test.tsx).
-const session = vi.fn().mockResolvedValue(null);
+/**
+ * #675 is NOT decided on this surface. The signed-in guard runs SERVER-side in
+ * `app/verify/layout.tsx` (`guardAuthRoute` from `@ds/auth-flow/server`), before
+ * any of this renders — pinned by `app/auth-route-guard.test.tsx` and
+ * `packages/auth-flow/src/server/auth-route-guard.test.ts`. The frame around the
+ * card is the shared `<AuthShell>` of `@ds/auth-flow/shell`, covered by
+ * `packages/auth-flow/src/shell/auth-shell.test.tsx`.
+ */
 vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
@@ -92,7 +96,6 @@ vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
     login: (body: unknown) => login(body),
     resendVerification: (body: unknown, captchaToken?: string) =>
       resendVerification(body, captchaToken),
-    session: () => session(),
   },
 }));
 
@@ -130,9 +133,8 @@ afterEach(() => {
 });
 
 /**
- * Wait past the #675 <AuthShell> session-guard (real timers): the guard renders
- * nothing until `session()` resolves (to `null` → anonymous), so gate on a stable
- * verify control before interacting.
+ * Gate on a stable verify control before interacting (real timers) — the surface
+ * settles its client boundary and its challenge field asynchronously.
  */
 async function renderVerify() {
   render(<VerifyPage />);
@@ -140,10 +142,10 @@ async function renderVerify() {
 }
 
 /**
- * Flush the #675 session-guard microtask under FAKE timers (a `findBy*` poll would
- * hang while timers are faked), after which the verify surface is in the DOM.
+ * Drain the pending mount microtask under FAKE timers (a `findBy*` poll would hang
+ * while timers are faked), after which the verify surface is in the DOM.
  */
-async function flushAuthGuard() {
+async function flushMount() {
   await act(async () => {
     await Promise.resolve();
   });
@@ -165,7 +167,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
     vi.useFakeTimers();
     try {
       render(<VerifyPage />);
-      await flushAuthGuard();
+      await flushMount();
       const resend = screen.getByTestId("verify-resend");
       act(() => vi.advanceTimersByTime(30_000));
       fireEvent.click(resend);
@@ -205,7 +207,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
     vi.useFakeTimers();
     try {
       render(<VerifyPage />);
-      await flushAuthGuard(); // #675: mount the verify surface past the session-guard.
+      await flushMount(); // the verify surface settles one microtask in.
       const resend = screen.getByTestId("verify-resend");
       // Starts in the 30s cooldown — disabled, no request can fire.
       expect(resend).toBeDisabled();
@@ -251,7 +253,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
       vi.useFakeTimers();
       try {
         render(<VerifyPage />);
-        await flushAuthGuard(); // #675: mount the verify surface past the session-guard.
+        await flushMount(); // the verify surface settles one microtask in.
         const resend = screen.getByTestId("verify-resend");
         act(() => {
           vi.advanceTimersByTime(30_000);

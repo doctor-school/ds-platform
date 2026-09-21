@@ -106,7 +106,7 @@ async function fixture(mode) {
     const result = await new Promise((resolve, reject) => {
       const child = spawn(
         process.platform === "win32"
-          ? "C:/Program Files/Git/bin/bash.exe"
+          ? "C:/Program Files/Git/bin/bash.exe" // no-hardcoded-path-ok: fixture requires Git Bash rather than WSL bash on Windows
           : "bash",
         ["--noprofile", "--norc", "-s"],
         {

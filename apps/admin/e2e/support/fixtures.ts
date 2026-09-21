@@ -35,6 +35,14 @@ export interface AdminWorld {
     curatorName: string;
     memberName: string;
   };
+  /** One project↔Expert row authored and re-read from both Admin endpoints (012). */
+  projectExpertReverseAuthoring?: {
+    projectTitle: string;
+    projectUrl: string;
+    expertName: string;
+    expertUrl: string;
+    rowId?: string;
+  };
   /** Retained row carried across the executable 012 relationship-restore journey. */
   projectRelationshipRestore?: {
     projectTitle: string;

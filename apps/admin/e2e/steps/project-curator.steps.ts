@@ -62,6 +62,30 @@ function roster(world: {
   return world.projectRoster;
 }
 
+function reverseAuthoring(world: {
+  projectExpertReverseAuthoring?: {
+    projectTitle: string;
+    projectUrl: string;
+    expertName: string;
+    expertUrl: string;
+    rowId?: string;
+  };
+}) {
+  if (!world.projectExpertReverseAuthoring) {
+    throw new Error("Expert-side relationship journey was not authored");
+  }
+  return world.projectExpertReverseAuthoring;
+}
+
+function reverseAuthoredRowId(
+  world: Parameters<typeof reverseAuthoring>[0],
+): string {
+  const rowId = reverseAuthoring(world).rowId;
+  if (!rowId)
+    throw new Error("Expert-side relationship identity was not recorded");
+  return rowId;
+}
+
 function relationshipRestore(world: {
   projectRelationshipRestore?: {
     projectTitle: string;
@@ -237,6 +261,113 @@ Then(
       "Участник",
     );
     await expect(rows.filter({ hasText: memberName })).toContainText("Куратор");
+  },
+);
+
+When(
+  "the operator creates a draft project and draft Expert for Expert-side relationship authoring",
+  async ({ page, world }) => {
+    const stamp = Date.now();
+    const projectTitle = `Обратный экспертный проект ${stamp}`;
+    const projectUrl = await createProject(page, projectTitle);
+    const expertName = await createExpert(
+      page,
+      `Обратный-${stamp}`,
+      "Эксперт",
+      "Ильич",
+    );
+    world.projectExpertReverseAuthoring = {
+      projectTitle,
+      projectUrl,
+      expertName,
+      expertUrl: page.url(),
+    };
+  },
+);
+
+When(
+  "the operator opens the Expert's projects and links that project as a member",
+  async ({ page, world }) => {
+    const state = reverseAuthoring(world);
+    await page.goto(state.expertUrl);
+    await page.getByTestId("tab-projects").click();
+    await page
+      .getByTestId("project-experts-panel")
+      .waitFor({ state: "visible" });
+    await selectRelationshipCombobox(
+      page,
+      "project-expert-link-combobox",
+      state.projectTitle,
+      state.projectTitle,
+    );
+    await page.getByTestId("project-expert-link-role").selectOption("member");
+    await page.getByTestId("project-expert-link-submit").click();
+    await expect(page.getByTestId("project-experts-notice")).toContainText(
+      "Эксперт добавлен в проект.",
+    );
+  },
+);
+
+Then(
+  "the Expert's projects show that member relationship and record its identity",
+  async ({ page, world }) => {
+    const state = reverseAuthoring(world);
+    const rows = page.getByTestId(/^project-expert-row-[0-9a-f-]{36}$/);
+    const row = rows.filter({ hasText: state.projectTitle });
+    await expect(rows).toHaveCount(1);
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("Участник");
+    const testId = await row.getAttribute("data-testid");
+    if (!testId) throw new Error("Expert-side relationship row has no test id");
+    state.rowId = testId.replace("project-expert-row-", "");
+  },
+);
+
+When(
+  "the operator opens the authored project's Expert roster",
+  async ({ page, world }) => {
+    await openExpertsTab(page, reverseAuthoring(world).projectUrl);
+  },
+);
+
+Then(
+  "the project roster shows the same member relationship identity exactly once",
+  async ({ page, world }) => {
+    const state = reverseAuthoring(world);
+    const rows = page.getByTestId(/^project-expert-row-[0-9a-f-]{36}$/);
+    const row = page.getByTestId(
+      `project-expert-row-${reverseAuthoredRowId(world)}`,
+    );
+    await expect(rows).toHaveCount(1);
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(state.expertName);
+    await expect(row).toContainText("Участник");
+  },
+);
+
+When(
+  "the operator returns to the authored Expert's projects",
+  async ({ page, world }) => {
+    await page.goto(reverseAuthoring(world).expertUrl);
+    await page.getByTestId("tab-projects").click();
+    await page
+      .getByTestId("project-experts-panel")
+      .waitFor({ state: "visible" });
+  },
+);
+
+Then(
+  "the Expert's projects still show the same member relationship identity exactly once",
+  async ({ page, world }) => {
+    const state = reverseAuthoring(world);
+    const rows = page.getByTestId(/^project-expert-row-[0-9a-f-]{36}$/);
+    const row = page.getByTestId(
+      `project-expert-row-${reverseAuthoredRowId(world)}`,
+    );
+    await expect(rows).toHaveCount(1);
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(state.projectTitle);
+    await expect(row).toContainText("Участник");
   },
 );
 

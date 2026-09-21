@@ -49,10 +49,10 @@ sequenceDiagram
 
     V->>N: POST /api/... (answers + consent + captcha token)
     N->>A: same-origin proxy, X-Forwarded-For = participant
-    A->>A: registration window check (before any side effect; refuses not-yet-open / closed)
     A->>C: verify(token, action, forwarded ip)
     C-->>A: ok
     A->>A: Zod validate (packages/schemas), specialty = taxonomy id | other
+    A->>A: registration window check (first thing the handler does; before any side effect; refuses not-yet-open / closed)
     A->>D: lookup account by email
     D-->>A: none
     A->>I: create human user WITHOUT credential

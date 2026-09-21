@@ -16,6 +16,7 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { CONGRESS_SIGN_UP_CLOCK } from "../../src/congress/congress-signup.tokens.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -33,6 +34,11 @@ import {
  * slice 4 / #2304–#2306), V-16 (the registration window), V-17 (the contact
  * phone, new-account half) and EARS-10 (no medical-worker declaration).
  *
+ * The cascade is asserted as four rows rather than one: EARS-1 owns the SHAPE
+ * (accepted answer, one account + one registration + one consent row), and
+ * EARS-4 / EARS-5 / EARS-9 each own the property of one of those three writes,
+ * so a regression names the handler that broke rather than "the cascade".
+ *
  * Runs against the dev-stand Postgres + the fake IdP; skips when DATABASE_URL or
  * IDP_ISSUER is absent so the shared CI unit job stays green.
  */
@@ -48,7 +54,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
-    const fake = new FakeIdpClient();
+    /** Wired into the fake IdP so an unwanted verification send is visible. */
+    const mailer = new FakeMailer();
+    const fake = new FakeIdpClient(mailer);
     const eventId = randomUUID();
     const createdEmails: string[] = [];
     /** The instant the intake sees; every test sets it explicitly (EARS-28). */
@@ -157,24 +165,51 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         status: "accepted",
       });
 
-      const user = await pool.query<{
-        id: string;
-        zitadel_sub: string;
-        display_name: string | null;
-        phone: string | null;
-        role: string;
+      const row = await accountRow(email);
+      const counts = await pool.query<{
+        registrations: string;
+        consents: string;
       }>(
-        `SELECT id, zitadel_sub, display_name, phone, role FROM users WHERE email = $1`,
-        [email],
+        `SELECT
+           (SELECT count(*) FROM registrations WHERE user_id = $1) AS registrations,
+           (SELECT count(*) FROM consent_records WHERE user_id = $1) AS consents`,
+        [row.id],
       );
-      expect(user.rowCount).toBe(1);
-      const row = user.rows[0]!;
-      expect(row.display_name).toBe("Иванова Мария");
-      // EARS-5: the contact phone is an ANSWER, never a platform identifier.
-      expect(row.phone).toBeNull();
-      expect(row.role).toBe("doctor_guest");
-      // EARS-4: the account carries no credential at all.
+      // One account, one registration, one consent row — the whole cascade and
+      // nothing beyond it. What each of those three rows must CONTAIN is
+      // EARS-4 / EARS-5 / EARS-9 below.
+      expect(counts.rows[0]).toEqual({ registrations: "1", consents: "1" });
+    });
+
+    it("EARS-4: when a congress submission creates an account, system shall create it without any credential and mail no verification", async () => {
+      const email = uniqueEmail("congress-passwordless");
+      const before = mailer.verificationCodeEmails.length;
+
+      expect((await post(submission(email))).statusCode).toBe(200);
+
+      const row = await accountRow(email);
+      // No credential at all: the congress path never asks for a password and
+      // never mints one behind the submitter's back.
       expect(fake.hasCredential(row.zitadel_sub)).toBe(false);
+      // A guest account, named from the submitted surname + first name.
+      expect(row.role).toBe("doctor_guest");
+      expect(row.display_name).toBe("Иванова Мария");
+      // …and no verification code is sent: a congress sign-up is not a platform
+      // registration, so nothing asks the submitter to verify an address.
+      expect(
+        mailer.verificationCodeEmails.slice(before).map((m) => m.to),
+      ).toEqual([]);
+    });
+
+    it("EARS-5: when a submission is accepted, system shall store its typed answers on a registration for the configured event and leave the account phone untouched", async () => {
+      const email = uniqueEmail("congress-answers");
+
+      expect((await post(submission(email))).statusCode).toBe(200);
+
+      const row = await accountRow(email);
+      // The contact phone is an ANSWER on the registration, never a platform
+      // identifier on the account.
+      expect(row.phone).toBeNull();
 
       const registration = await pool.query<{
         event_id: string;
@@ -187,17 +222,35 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(registration.rows[0]!.answers).toMatchObject({
         surname: "Иванова",
         firstName: "Мария",
+        patronymic: "Петровна",
         email,
+        specialtyId: SPECIALTY_ID,
+        workplace: "ГКБ №1",
+        city: "Москва",
+        region: "Москва",
         contactPhone: "+7 (900) 123-45-67",
         contactPhoneNormalised: "+79001234567",
       });
+    });
 
+    it("EARS-9: when a submission is accepted, system shall record exactly one personal-data consent at the SERVER-configured version", async () => {
+      const email = uniqueEmail("congress-consent");
+
+      // The version is not a field of the contract; even when one is smuggled
+      // onto the body, the recorded version is the server's.
+      expect(
+        (
+          await post(
+            submission(email, { consentVersion: "1999-01-01.sha256-forged" }),
+          )
+        ).statusCode,
+      ).toBe(200);
+
+      const row = await accountRow(email);
       const consent = await pool.query<{ purpose: string; version: string }>(
         `SELECT purpose, version FROM consent_records WHERE user_id = $1`,
         [row.id],
       );
-      // EARS-9 + EARS-10: exactly one row, and it is NOT the medical-worker
-      // declaration — a congress sign-up is not a platform registration.
       expect(consent.rows).toEqual([
         { purpose: CONGRESS_PERSONAL_DATA_PURPOSE, version: CONSENT_VERSION },
       ]);
@@ -231,7 +284,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(422);
       const refusal = CongressSignUpWindowRefusalSchema.parse(res.json());
       expect(refusal.code).toBe("not-yet-open");
-      expect(refusal).toHaveProperty("opensAt", "2026-10-01T00:00:00.000+03:00");
+      expect(refusal).toHaveProperty(
+        "opensAt",
+        "2026-10-01T00:00:00.000+03:00",
+      );
       await expectNothingWritten(email);
     });
 
@@ -308,6 +364,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(registrations.rowCount).toBe(1);
     });
+
+    /** The single `users` mirror row this address must now have. */
+    async function accountRow(email: string): Promise<{
+      id: string;
+      zitadel_sub: string;
+      display_name: string | null;
+      phone: string | null;
+      role: string;
+    }> {
+      const user = await pool.query<{
+        id: string;
+        zitadel_sub: string;
+        display_name: string | null;
+        phone: string | null;
+        role: string;
+      }>(
+        `SELECT id, zitadel_sub, display_name, phone, role FROM users WHERE email = $1`,
+        [email],
+      );
+      expect(user.rowCount).toBe(1);
+      return user.rows[0]!;
+    }
 
     /** No account, no registration, no consent row for this address. */
     async function expectNothingWritten(email: string): Promise<void> {

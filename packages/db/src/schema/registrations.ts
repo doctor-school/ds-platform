@@ -61,7 +61,10 @@ import { users } from "./users.js";
 export interface RegistrationAnswers {
   surname: string;
   firstName: string;
-  patronymic?: string;
+  // `| undefined` explicitly: under `exactOptionalPropertyTypes` an optional
+  // Zod field infers `string | undefined`, and without it the contract's own
+  // answers object is not assignable to this mirror at the writer (044 EARS-5).
+  patronymic?: string | undefined;
   email: string;
   /** FK-by-value into `specialties_minzdrav.id`; never free text (EARS-3). */
   specialtyId: string;

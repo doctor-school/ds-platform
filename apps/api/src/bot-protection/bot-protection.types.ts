@@ -28,7 +28,13 @@ export type BotProtectionAction =
   // Another pre-session message-spending endpoint (it re-issues the `otp_email`
   // code for an unverified registrant) — an abuse-prone unauthenticated path
   // gated like register / reset / otp-request.
-  | "verify-resend";
+  | "verify-resend"
+  // 044 EARS-1 (#2294): the public congress sign-up intake. An unauthenticated
+  // surface that CREATES accounts, so it is gated exactly like register — named
+  // as its own action because it is the one bot-protected surface that belongs
+  // to a host outside the platform (the congress site), and an action-scoped
+  // provider added later must be able to tell the two doors apart.
+  | "congress-sign-up";
 
 /**
  * Outcome of a verification. `ok` is the only value a call site branches on;

@@ -17,6 +17,9 @@ export const RELAXED_RATE_LIMIT: RateLimitThresholds = {
   perUserPer15Min: 1_000_000,
   perIpPer15Min: 1_000_000,
   perAsnPerHour: 1_000_000,
+  // Deliberately empty (#2294): a scoped surface must be relaxed here too, and
+  // an entry would reimpose its production ceiling on a functional suite.
+  scopedPerIpPer15Min: {},
 };
 
 export { RATE_LIMIT_THRESHOLDS };

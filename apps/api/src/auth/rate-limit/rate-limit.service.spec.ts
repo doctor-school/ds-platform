@@ -17,6 +17,7 @@ describe("RateLimitService (EARS-13)", () => {
     perUserPer15Min: 5,
     perIpPer15Min: 20,
     perAsnPerHour: 100,
+    scopedPerIpPer15Min: { "test:wide": 60 },
   };
   const identifier = "user@ds.test";
   const ip = "203.0.113.7";
@@ -31,6 +32,25 @@ describe("RateLimitService (EARS-13)", () => {
 
   it("EARS-13: allows an attempt when every dimension has room", () => {
     expect(svc.tryConsume({ ip, identifier, asn })).toBe(true);
+  });
+
+  it("EARS-13: a scope with its own per-address ceiling is held to that ceiling, not the platform one (#2294)", () => {
+    const scope = "test:wide";
+    // 60, not the platform 20: the scoped bucket declares its own number.
+    for (let i = 0; i < 60; i++) {
+      expect(svc.tryConsume({ ip, scope })).toBe(true);
+    }
+    expect(svc.tryConsume({ ip, scope })).toBe(false);
+    // …and the platform budget for the SAME address is untouched by all of it.
+    expect(svc.tryConsume({ ip })).toBe(true);
+  });
+
+  it("EARS-13: a scope with no declared ceiling falls back to the platform per-address ceiling (#2294)", () => {
+    const scope = "test:undeclared";
+    for (let i = 0; i < thresholds.perIpPer15Min; i++) {
+      expect(svc.tryConsume({ ip, scope })).toBe(true);
+    }
+    expect(svc.tryConsume({ ip, scope })).toBe(false);
   });
 
   it("EARS-13: enforces the per-user 15-min limit, refusing the over-limit attempt", () => {
@@ -82,7 +102,12 @@ describe("RateLimitService (EARS-13)", () => {
 
   it("EARS-13: the per-ASN window is only enforced when the edge supplies an ASN", () => {
     const perAsn = new RateLimitService(
-      { perUserPer15Min: 100, perIpPer15Min: 100, perAsnPerHour: 1 },
+      {
+        perUserPer15Min: 100,
+        perIpPer15Min: 100,
+        perAsnPerHour: 1,
+        scopedPerIpPer15Min: {},
+      },
       () => now,
     );
     expect(
@@ -159,7 +184,12 @@ describe("RateLimitService (EARS-13)", () => {
 
     it("EARS-13: reset() forgives ONLY the per-user window — the per-IP window is untouched", () => {
       const svc = new RateLimitService(
-        { perUserPer15Min: 100, perIpPer15Min: 2, perAsnPerHour: 100 },
+        {
+        perUserPer15Min: 100,
+        perIpPer15Min: 2,
+        perAsnPerHour: 100,
+        scopedPerIpPer15Min: {},
+      },
         () => now,
       );
       // Spend the per-IP budget with two distinct identifiers from one origin.
@@ -173,7 +203,12 @@ describe("RateLimitService (EARS-13)", () => {
 
     it("EARS-13: reset() forgives ONLY the per-user window — the per-ASN window is untouched", () => {
       const svc = new RateLimitService(
-        { perUserPer15Min: 100, perIpPer15Min: 100, perAsnPerHour: 1 },
+        {
+        perUserPer15Min: 100,
+        perIpPer15Min: 100,
+        perAsnPerHour: 1,
+        scopedPerIpPer15Min: {},
+      },
         () => now,
       );
       expect(

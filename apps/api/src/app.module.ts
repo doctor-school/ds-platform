@@ -21,6 +21,7 @@ import { AuditModule } from "./audit/audit.module.js";
 import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
 import { RecordingsModule } from "./recordings/recordings.module.js";
 import { StorefrontModule } from "./storefront/storefront.module.js";
+import { CongressModule } from "./congress/congress.module.js";
 
 @Module({
   imports: [
@@ -71,6 +72,11 @@ import { StorefrontModule } from "./storefront/storefront.module.js";
     // 005 registration write + per-user EventRegistrationState read
     // (doctor_guest-authenticated).
     RegistrationModule,
+    // 044 public congress sign-up — the unauthenticated intake that creates a
+    // credential-less account, its congress registration and its personal-data
+    // consent in one cascade (#2294). After AuthModule: it delegates account
+    // creation to that module's AuthService.
+    CongressModule,
     // 006 webinar-room server-side admission gate + RoomConfig grant read
     // (doctor_guest-authenticated, registration-and-live `policy` gate).
     RoomModule,

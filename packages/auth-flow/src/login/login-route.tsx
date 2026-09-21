@@ -118,7 +118,7 @@ export async function LoginRoute({
         // The RAW arrival value: the door's shared carry helper answers both the
         // эфир and the account shape and re-appends only what the guards
         // reconstructed, so a hostile param is dropped at the hop (#2258 / S3).
-        returnTo={returnTo}
+        returnTo={returnTo ?? null}
         // 005 EARS-2 — the эфир intent to COMPLETE after sign-in, in this host's
         // vocabulary, supplied only when the arrival actually resolved.
         returnTarget={landingTarget && gateResolved ? landingTarget : null}

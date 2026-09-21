@@ -1,3 +1,11 @@
+import {
+  MARKETING_COMMUNICATIONS_PURPOSE,
+  PARTNER_DATA_COMPOSITION,
+  PARTNER_DATA_EXCLUDED,
+  PARTNER_DATA_SHARING_PURPOSE,
+  formatPartnerDataStatement,
+} from "@ds/schemas";
+
 import type {
   AuthFlowApiConfig,
   AuthFlowHostConfig,
@@ -84,6 +92,7 @@ export const DOCTOR_AUTH_FLOW = {
     },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
     loginIcon: "shield-check-square",
+    registerIcon: "user-plus-square",
   },
   botProtection: {
     // The prod key is the `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` build arg
@@ -94,5 +103,85 @@ export const DOCTOR_AUTH_FLOW = {
   // Sign-in codes go to email only here; the identifier box therefore refuses a
   // phone shape rather than promising a journey this storefront does not run.
   channels: ["email"],
-  register: { promoField: true },
+  register: {
+    promoField: true,
+    /**
+     * This storefront's Stage-B-evidenced sign-up form: the submit and its
+     * EARS-12 reason stand FIRST, the statements below them, at the wider step
+     * of the spacing scale, and a pending submit goes inert rather than
+     * swapping its label. The Academy states none of the three and keeps the
+     * block's defaults — the delta between the two doors is data here, not a
+     * second composition.
+     */
+    form: {
+      submitBlock: "submit-first",
+      spacing: "md",
+      pendingAffordance: "inert",
+    },
+  },
+  /**
+   * 021 EARS-5 — the F-021-1 «вариант Б» consent read model, stated by the
+   * host and rendered by the shared door.
+   *
+   * It is data on THIS side of the mount and not a constant inside the door for
+   * the reason design §4 gives: the statement the doctor reads and the purpose
+   * that is recorded must come from one source, so the composition arrays travel
+   * with the statement they produced (`@ds/schemas`, the API-contract SSOT). A
+   * door that hardcoded the sentence would let the two drift the moment the
+   * shared composition changes.
+   *
+   * Exactly two tiers, in their rendered order: the access conditions that stand
+   * above the submit, and the optional opt-in below it. The medical-worker
+   * declaration is an access condition too (design §4's table) but is stated
+   * separately — it is a precondition of the command the door owns and renders
+   * unconditionally, so listing it as a tier item would give it two homes.
+   */
+  consents: {
+    tiers: [
+      {
+        tier: "access-conditions",
+        items: [
+          {
+            purpose: PARTNER_DATA_SHARING_PURPOSE,
+            required: true,
+            statement: formatPartnerDataStatement(),
+            dataComposition: [...PARTNER_DATA_COMPOSITION],
+            excluded: [...PARTNER_DATA_EXCLUDED],
+          },
+        ],
+      },
+      {
+        tier: "marketing",
+        items: [
+          {
+            purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+            required: false,
+            // Canvas copy (`#d-register`, «согласия · вариант Б»). No
+            // composition to declare: the opt-in shares nothing, it subscribes.
+            statement:
+              "Хочу получать письма о новых школах и событиях",
+          },
+        ],
+      },
+    ],
+    medicalWorkerDeclaration: {
+      label: "Я являюсь медицинским работником",
+      help: "Требование закона: часть материалов доступна только медицинским работникам.",
+      unmet:
+        "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
+    },
+    partnerDataItem: {
+      help: "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.",
+      unmet:
+        "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.",
+    },
+    marketingOptIn: {
+      help: "Необязательно. Письма отправляет внешний сервис рассылок.",
+      optionalTag: "необязательно",
+    },
+    wordingVersion: "2026-09",
+    managerNote:
+      "Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.",
+    accessGroupHeading: "Условия доступа",
+  },
 } satisfies AuthFlowHostConfig;

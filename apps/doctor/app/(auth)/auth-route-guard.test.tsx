@@ -5,22 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * SERVER, by the same rule the Academy runs.
  *
  * The DECISION («who may see an auth route») is proved once in
- * `packages/auth-flow/src/server/auth-route-guard.test.ts`, and `/login`'s own
- * landing vocabulary is proved in `login/page.test.tsx`. What only this tier can
- * prove is the WIRING of the two remaining doors, and the wiring is where the
- * realistic defect lives: each page hands the guard ITS OWN pathname against the
- * ONE host route table, and a copy-pasted `pathname` would silently make
- * `/register` inherit `/reset`'s exemption.
+ * `packages/auth-flow/src/server/auth-route-guard.test.ts`. Since #2027 wave 1
+ * the two shared doors — `/login` and `/register` — are MOUNTS of
+ * `@ds/auth-flow`, which hands the guard `config.routes.<door>` off the host
+ * config, and the package pins that wiring against `DOCTOR_FIXTURE`; the shipped
+ * host config is pinned in `lib/auth-flow.host-config.test.ts`. So what this
+ * tier still owns is `/reset`, the one auth surface the doctor app composes
+ * itself, plus the smoke check that `/register` is a mount of the shared door
+ * with THIS host's config and not a second composition.
  *
- * So nothing is stubbed between the page and the package: the real
+ * Nothing is stubbed between the page and the package: the real
  * `resolveServerAuth` runs against a stubbed `fetch` and the real guard runs
  * against `DOCTOR_AUTH_ROUTES`. Only the two Next request-scoped primitives
  * (`headers()`, `redirect()`) are mocked, because there is no request here.
- *
- * WHAT CHANGES FOR `/register`. It shipped with no signed-in guard at all, which
- * meant a doctor who already held a session could re-walk the registration form.
- * #2027 PR 1.4 puts both storefronts behind the one rule, so the doctor host
- * gains the guard the Academy already had.
  */
 const redirect = vi.fn((to: string) => {
   throw new Error(`NEXT_REDIRECT:${to}`);
@@ -36,6 +33,10 @@ const incoming = { headers: new Headers() };
 vi.mock("next/headers", () => ({
   headers: async () => incoming.headers,
 }));
+
+import { RegisterRoute } from "@ds/auth-flow/register/route";
+
+import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 
 import DoctorRegisterPage from "./register/page";
 import DoctorResetPage from "./reset/page";
@@ -65,19 +66,21 @@ afterEach(() => {
 const noParams = { searchParams: Promise.resolve({}) };
 
 describe("#675 doctor auth routes, server-side signed-in guard", () => {
-  it("#675: a signed-in doctor on /register is redirected to the LD-4 landing before the form renders", async () => {
-    incoming.headers = SIGNED_IN;
-
-    await expect(DoctorRegisterPage(noParams)).rejects.toThrow(
-      "NEXT_REDIRECT:/",
-    );
-    expect(redirect).toHaveBeenCalledWith("/");
-  });
-
-  it("#675: a guest on /register is served the form and never redirected", async () => {
+  it("#2027 PR 1.6: /register is a MOUNT of the shared sign-up door, stated with THIS host's config", async () => {
     incoming.headers = GUEST;
 
-    await DoctorRegisterPage(noParams);
+    const mounted = (await DoctorRegisterPage(noParams)) as {
+      type: unknown;
+      props: { config: unknown };
+    };
+
+    // The door itself — its guard, landing and composition are the package's,
+    // proved there against `DOCTOR_FIXTURE`. What can only break HERE is the
+    // route handing it someone else's config, or composing a second door.
+    expect(mounted.type).toBe(RegisterRoute);
+    expect(mounted.props.config).toBe(DOCTOR_AUTH_FLOW);
+    // A mount decides nothing before the door runs, so no redirect is issued
+    // at this level.
     expect(redirect).not.toHaveBeenCalled();
   });
 

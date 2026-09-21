@@ -23,14 +23,14 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
     tooManyAttempts:
       "Слишком много попыток. Подождите пару минут и попробуйте снова.",
     unavailable: "Сервис временно недоступен. Попробуйте ещё раз через минуту.",
-    // Registration (`registration-screen.tsx`) and recovery (`reset-screen.tsx`)
-    // DO render the challenge: both intercept the two bot-protection codes ahead
-    // of the dictionary and show `botProtection.*` beside the widget. These two
-    // sentences are therefore reached only from the login / OTP-request surface,
-    // which still has no slot (the sign-in door of `@ds/auth-flow/login` has «NO BOT-PROTECTION SLOT»), so
-    // they name the way forward rather than blaming a password. Wave-1 PR 1.6 of
-    // the OPEN #2027 owns that slot; once it lands, these two lose their last
-    // caller.
+    // The sign-up door (`@ds/auth-flow/register`) and recovery
+    // (`reset-screen.tsx`) DO render the challenge: both intercept the two
+    // bot-protection codes ahead of the dictionary and show `botProtection.*`
+    // beside the widget. These two sentences are therefore reached only from the
+    // login / OTP-request surface, which still has no slot (the sign-in door of
+    // `@ds/auth-flow/login` has «NO BOT-PROTECTION SLOT»), so they name the way
+    // forward rather than blaming a password. A later wave-1 slice owns that
+    // slot; once it lands, these two lose their last caller.
     botProtectionRequired:
       "Нужна дополнительная проверка, которую эта страница пока не умеет показывать. Попробуйте позже или войдите по паролю на academy.doctor.school.",
     botProtectionRejected:
@@ -110,6 +110,58 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
       otpRequest:
         "Не удалось отправить код. Проверьте адрес или номер и повторите.",
       otpVerify: "Код не подошёл. Проверьте цифры или запросите новый.",
+    },
+  },
+  /**
+   * 021 EARS-1 / rows 51, 76 — the sign-up door and its INLINE confirmation.
+   *
+   * This storefront serves no `/verify` route: confirmation is a step of the
+   * door itself, so its words live under `register.confirm` rather than in a
+   * surface copy file of their own. Every sentence below is what the storefront
+   * already shipped; only `haveAccount` is new (#2331), the line that returns a
+   * doctor who already has an account to the sign-in door.
+   */
+  register: {
+    title: "Регистрация",
+    description:
+      "Почта и пароль — этого достаточно. Документы на входе не нужны.",
+    emailLabel: "Рабочая почта",
+    emailPlaceholder: "doctor@clinic.ru",
+    passwordLabel: "Пароль",
+    reveal: {
+      show: "Показать",
+      hide: "Скрыть",
+      showAria: "Показать пароль",
+      hideAria: "Скрыть пароль",
+    },
+    submit: "Зарегистрироваться",
+    promo: {
+      label: "Промокод — если есть",
+      placeholder: "DS-2026",
+    },
+    // #2331 — the one way back out of the sign-up door.
+    haveAccount: "Уже есть аккаунт? Войти",
+    failed: "Не удалось завершить регистрацию. Попробуйте ещё раз.",
+    confirm: {
+      title: "Проверьте почту",
+      description:
+        "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
+      newAccountHeading: "Новый аккаунт — введите код",
+      codeLabel: "Код из письма",
+      submit: "Подтвердить",
+      codeAccepted: "Код принят — почта подтверждена.",
+      resend: "Отправить снова",
+      resendCountdown: "Отправить снова · {seconds} с",
+      existingAccountHeading: "Уже регистрировались?",
+      existingAccountHint:
+        "Войдите в существующий аккаунт или сбросьте пароль.",
+      goToSignIn: "Войти",
+      goToReset: "Сбросить пароль",
+      failed: "Код не подошёл. Попробуйте ещё раз.",
+      resendFailed:
+        "Не удалось отправить код повторно. Попробуйте ещё раз.",
+      resendAcknowledged:
+        "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
     },
   },
   // Row 46 — one eyebrow; the door forks only the line (#1955).

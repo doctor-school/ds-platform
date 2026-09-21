@@ -27,6 +27,7 @@ import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
+import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
 import { LoginGlyph } from "./login-glyph";
@@ -82,35 +83,6 @@ export type LoginDoorProps = {
   /** The gate context the visitor arrived from — the plate beside the form (021 EARS-2). */
   returnContextPlate?: ReactNode;
 };
-
-/**
- * Build a react-hook-form resolver from per-field verdicts.
- *
- * The shared block takes `Resolver`s because the guard is HOST business, and the
- * door is where host business now lives: the RULE is the package field schema
- * (`../fields`, the one identifier/ code guard of both storefronts) and the
- * SENTENCE is the host's own `copy.fields` / `copy.login` string. Neither host's
- * resolver helper is imported — a package may not import from an app — and no
- * message catalogue is consulted, because the config already carries the
- * sentences in the host's voice.
- *
- * The cast is the one every resolver factory needs: the RHF `Resolver` is generic
- * over its internal field-path machinery, which a plain record cannot express.
- */
-function makeResolver<TValues extends object, TResolver>(rules: {
-  [K in keyof TValues]?: (value: TValues[K], values: TValues) => string | null;
-}): TResolver {
-  return ((values: TValues) => {
-    const errors: Record<string, { type: string; message: string }> = {};
-    for (const key of Object.keys(rules) as (keyof TValues)[]) {
-      const message = rules[key]?.(values[key], values) ?? null;
-      if (message) errors[key as string] = { type: "validate", message };
-    }
-    return Object.keys(errors).length > 0
-      ? { values: {}, errors }
-      : { values, errors: {} };
-  }) as unknown as TResolver;
-}
 
 /** EARS-5 — the identifier box this host serves, plus the length-only password rule. */
 function passwordResolverOf(

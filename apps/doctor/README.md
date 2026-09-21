@@ -54,7 +54,8 @@ apps/doctor/
 
 ## Post-confirmation landing (021 EARS-10, amended 2026-09-17)
 
-After the doctor submits the emailed code, `components/registration-screen.tsx`
+After the doctor submits the emailed code, the shared sign-up door's inline
+confirmation (`@ds/auth-flow/register`, mounted by `app/(auth)/register/page.tsx`)
 calls the single storefront command `POST /v1/storefront/doctor/confirm` (it
 verifies the code and decides the landing in one round trip) and then NAVIGATES
 there — `router.replace`, no screen in between. There is no success card: the
@@ -67,9 +68,10 @@ The destination comes from the CONFIRM RESPONSE, not from the client-side
 completion of the return target: the round trip is the only participant that
 re-validated the carried target, so it is the only one that knows the target went
 stale (`reason: ended | full | unpublished | missing`) and where the honest
-destination is. `lib/confirm-landing.ts` holds the whole rule and nothing else —
+destination is. `@ds/auth-flow/register` `resolveConfirmLanding` holds the whole
+rule and nothing else —
 the server's `primaryAction.href` when it honoured or degraded a target, else the
-`landing` prop the register page computed from the specialty read (LD-4 —
+`landing` the shared route computed from the specialty read (LD-4 —
 `/events`, else `/`). Every href reaching a navigation comes from the server
 response or that prop, never assembled on the client. `replace`, not `push`: a
 spent code form must not be reachable by Back.

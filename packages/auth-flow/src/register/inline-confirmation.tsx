@@ -24,6 +24,7 @@ import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
 import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
+import { makeResolver } from "../form-resolver";
 import type {
   AuthFlowHostConfig,
   AuthFlowRegisterConfirmCopy,
@@ -330,12 +331,12 @@ function fillTemplate(template: string, token: string, value: string): string {
 function confirmResolver(
   config: AuthFlowHostConfig,
 ): NonNullable<EmailConfirmCardProps["resolver"]> {
-  return (values) => {
-    const message = resolveVerificationCode(config, values.code);
-    return message === null
-      ? { values, errors: {} }
-      : { values: {}, errors: { code: { type: "validate", message } } };
-  };
+  return makeResolver<
+    EmailConfirmValues,
+    NonNullable<EmailConfirmCardProps["resolver"]>
+  >({
+    code: (value) => resolveVerificationCode(config, value),
+  });
 }
 
 /**

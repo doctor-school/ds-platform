@@ -10,7 +10,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * (`app/(storefront)/events/[slug]/page.test.tsx`), the completion rule
  * (`packages/events-storefront`), and the two doors that complete it
  * (`packages/auth-flow/src/login/login-door.test.tsx`,
- * `components/registration-screen.test.tsx`). What ONLY a real stand can prove is
+ * `packages/auth-flow/src/register/register-door.test.tsx`). What ONLY a real stand can prove is
  * that the whole thing composes over a REAL session against the REAL command:
  * that the api participation read admits the doctor origin own
  * `__Host-ds_session`, that the POST it fires actually puts them on the roster,
@@ -64,7 +64,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * the `support/return-context-api.mjs` double, which by design cannot observe a
  * real registration), and the ORDER of the held-password replay and the
  * `RegisterForEvent` command it now fires in
- * `components/registration-screen.test.tsx` (005 EARS-2, jsdom).
+ * `packages/auth-flow/src/register/register-door.test.tsx` (005 EARS-2, jsdom).
  */
 
 const ENV = [

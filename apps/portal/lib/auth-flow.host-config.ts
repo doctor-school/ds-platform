@@ -110,17 +110,26 @@ export const ACADEMY_AUTH_FLOW = {
       required: m.errors.captchaRequired,
     },
     fields: {
-      email: { required: m.errors.validation.required, invalid: m.errors.validation.email },
+      email: {
+        required: m.errors.validation.required,
+        invalid: m.errors.validation.email,
+      },
       password: {
         required: m.errors.validation.required,
         invalid: m.errors.validation.passwordTooShort,
       },
-      code: { required: m.errors.validation.codeRequired, invalid: m.errors.validation.codeRequired },
+      code: {
+        required: m.errors.validation.codeRequired,
+        invalid: m.errors.validation.codeRequired,
+      },
       identifier: {
         required: m.errors.validation.identifierRequired,
         invalid: m.errors.validation.identifierRequired,
       },
-      phone: { required: m.errors.validation.phone, invalid: m.errors.validation.phone },
+      phone: {
+        required: m.errors.validation.phone,
+        invalid: m.errors.validation.phone,
+      },
       // No `promoCode`: the Academy registration form has no promo box.
     },
     login: {
@@ -190,7 +199,12 @@ export const ACADEMY_AUTH_FLOW = {
   // lockup on the white form column, the clean white one on the blue panel. The
   // Academy page has no dark wordmark swap, so no `darkSrc`.
   brand: {
-    wordmark: { src: "/brand/logo.svg", alt: m.brand.logoAlt, width: 500, height: 164 },
+    wordmark: {
+      src: "/brand/logo.svg",
+      alt: m.brand.logoAlt,
+      width: 500,
+      height: 164,
+    },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
     loginIcon: "shield-check",
   },

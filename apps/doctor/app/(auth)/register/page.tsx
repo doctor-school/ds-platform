@@ -184,7 +184,8 @@ export default async function DoctorRegisterPage({
   // question from `safeTarget`, which is the эфир-only EARS-3 context target:
   // this one also admits the account family, so a doctor who arrived from a
   // closed page keeps it across the confirmation screen's sideways hops.
-  const carriedTarget = resolveCarriedReturnTarget(DOCTOR_AUTH_FLOW, returnTo) ?? undefined;
+  const carriedTarget =
+    resolveCarriedReturnTarget(DOCTOR_AUTH_FLOW, returnTo) ?? undefined;
   // WHERE this host takes them afterwards. Not the canonical target verbatim:
   // the academy serves the эфир at `/webinars/<slug>` and this storefront serves
   // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
@@ -243,10 +244,7 @@ export default async function DoctorRegisterPage({
   });
 
   return (
-    <AuthShell
-      config={DOCTOR_AUTH_FLOW}
-      returnContext={returnPanel}
-    >
+    <AuthShell config={DOCTOR_AUTH_FLOW} returnContext={returnPanel}>
       <RegistrationScreen
         landing={landing}
         {...(returnTarget ? { returnTarget } : {})}

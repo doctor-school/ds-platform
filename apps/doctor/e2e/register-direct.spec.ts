@@ -69,7 +69,9 @@ test.describe("021 EARS-3: the direct arrival carries no context", () => {
     // asserted as a count of zero rather than «not visible».
     await expect(page.getByTestId("return-context-panel")).toHaveCount(0);
     await expect(page.getByTestId("return-context-plate")).toHaveCount(0);
-    await expect(page.getByTestId("registration-return-context")).toHaveCount(0);
+    await expect(page.getByTestId("registration-return-context")).toHaveCount(
+      0,
+    );
     await expect(page.locator("[data-webinar-card]")).toHaveCount(0);
 
     // The split's left half is the brand panel's own pitch, which is what the

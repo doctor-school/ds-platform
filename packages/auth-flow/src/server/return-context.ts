@@ -90,7 +90,9 @@ export function formatMskDateLabel(startsAt: string): string {
 }
 
 /** The card projection of the public event read. */
-export function toReturnContextEvent(page: PublicEventPage): ReturnContextEvent {
+export function toReturnContextEvent(
+  page: PublicEventPage,
+): ReturnContextEvent {
   return {
     time: formatMskTime(page.startsAt),
     dateLabel: formatMskDateLabel(page.startsAt),

@@ -86,9 +86,7 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
     expect(html).toContain("Почта или телефон");
     expect(html).toContain("Создать аккаунт");
     // The same door on the Academy speaks the Academy's identifier sentence.
-    expect(markup(ACADEMY_FIXTURE)).toContain(
-      "Электронная почта или телефон",
-    );
+    expect(markup(ACADEMY_FIXTURE)).toContain("Электронная почта или телефон");
   });
 
   it("017 #1933.13: with no return context NOTHING stands in for it (honest-empty)", () => {
@@ -154,9 +152,7 @@ async function signIn(props?: {
   landing?: string;
 }) {
   const user = userEvent.setup();
-  render(
-    <LoginDoor config={DOCTOR_FIXTURE} landing="/events" {...props} />,
-  );
+  render(<LoginDoor config={DOCTOR_FIXTURE} landing="/events" {...props} />);
   await user.type(screen.getByLabelText("Почта или телефон"), "doc@clinic.ru");
   await user.type(screen.getByLabelText("Пароль"), "correct-horse-battery");
   await user.click(screen.getByRole("button", { name: "Войти" }));

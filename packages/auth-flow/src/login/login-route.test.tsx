@@ -192,7 +192,9 @@ describe("017 #1955: /login is closed to a doctor who already has a session", ()
     // `/webinars/<slug>` and this host serves the same one at `/events/<slug>`
     // (#1945), so the host projection is where the redirect goes.
     expect(
-      await landingOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
+      await landingOf(DOCTOR_FIXTURE, {
+        returnTo: "/webinars/prp-pri-gonartroze",
+      }),
     ).toBe("/events/prp-pri-gonartroze");
   });
 
@@ -200,7 +202,9 @@ describe("017 #1955: /login is closed to a doctor who already has a session", ()
     resolveServerAuth.mockResolvedValue(DOCTOR);
 
     expect(
-      await landingOf(DOCTOR_FIXTURE, { returnTo: "https://evil.example/steal" }),
+      await landingOf(DOCTOR_FIXTURE, {
+        returnTo: "https://evil.example/steal",
+      }),
     ).toBe("/");
   });
 
@@ -317,10 +321,16 @@ describe("#2258: the /login → /register hop carries the arrival target", () =>
 
   it("#2027 S3: «Забыли пароль» carries it too — recovery is an interruption, not a new journey", async () => {
     expect(
-      await linkHrefOf(DOCTOR_FIXTURE, { returnTo: "/account" }, "Забыли пароль?"),
+      await linkHrefOf(
+        DOCTOR_FIXTURE,
+        { returnTo: "/account" },
+        "Забыли пароль?",
+      ),
     ).toBe("/reset?returnTo=%2Faccount");
     cleanup();
-    expect(await linkHrefOf(DOCTOR_FIXTURE, {}, "Забыли пароль?")).toBe("/reset");
+    expect(await linkHrefOf(DOCTOR_FIXTURE, {}, "Забыли пароль?")).toBe(
+      "/reset",
+    );
     cleanup();
     expect(
       await linkHrefOf(
@@ -356,7 +366,9 @@ describe("017 #1955 (Academy): the same rules over the other host config", () =>
     resolveServerAuth.mockResolvedValue(DOCTOR);
 
     expect(
-      await landingOf(ACADEMY_FIXTURE, { returnTo: "https://evil.example/steal" }),
+      await landingOf(ACADEMY_FIXTURE, {
+        returnTo: "https://evil.example/steal",
+      }),
     ).toBe("/webinars");
   });
 

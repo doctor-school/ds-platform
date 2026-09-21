@@ -3,7 +3,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { AuthFlowHostConfig } from "../host-config";
-import { ACADEMY_FIXTURE, DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 import { AuthShell } from "./auth-shell";
 
 /**
@@ -26,7 +29,10 @@ const HOSTS = [
   ["doctor", DOCTOR_FIXTURE],
 ] as const;
 
-function withSiteKey(config: AuthFlowHostConfig, siteKey: string | undefined): AuthFlowHostConfig {
+function withSiteKey(
+  config: AuthFlowHostConfig,
+  siteKey: string | undefined,
+): AuthFlowHostConfig {
   return { ...config, botProtection: { siteKey } };
 }
 
@@ -45,10 +51,17 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       expect(notices).toHaveLength(1);
       expect(notices[0]).toBeVisible();
       const disclosure = config.copy.botProtectionDisclosure;
-      expect(notices[0]).toHaveTextContent(`${disclosure.notice} ${disclosure.link}`);
+      expect(notices[0]).toHaveTextContent(
+        `${disclosure.notice} ${disclosure.link}`,
+      );
 
-      const noticeLink = screen.getByRole("link", { name: disclosure.linkLabel });
-      expect(noticeLink).toHaveAttribute("href", "https://yandex.com/legal/smartcaptcha_notice/");
+      const noticeLink = screen.getByRole("link", {
+        name: disclosure.linkLabel,
+      });
+      expect(noticeLink).toHaveAttribute(
+        "href",
+        "https://yandex.com/legal/smartcaptcha_notice/",
+      );
       expect(noticeLink).toHaveAttribute("target", "_blank");
       expect(noticeLink).toHaveAttribute("rel", "noopener noreferrer");
       expect(noticeLink).not.toHaveClass("underline");
@@ -64,7 +77,9 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
     );
 
     await screen.findByTestId("auth-form");
-    expect(screen.queryByTestId("smartcaptcha-disclosure")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("smartcaptcha-disclosure"),
+    ).not.toBeInTheDocument();
   });
 
   it("row 47: renders the host wordmark, panel mark and brand copy from config", () => {
@@ -77,7 +92,10 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
     const wordmark = screen.getByTestId("auth-wordmark");
     expect(wordmark).toHaveAttribute("src", config.brand.wordmark.src);
     expect(wordmark).toHaveAttribute("alt", config.brand.wordmark.alt);
-    expect(screen.getByTestId("auth-panel-wordmark")).toHaveAttribute("alt", "");
+    expect(screen.getByTestId("auth-panel-wordmark")).toHaveAttribute(
+      "alt",
+      "",
+    );
     expect(screen.getByText(config.copy.brand.headline)).toBeInTheDocument();
     expect(screen.getByText(config.copy.brand.subcopy)).toBeInTheDocument();
     expect(screen.getByText(config.copy.brand.footer)).toBeInTheDocument();
@@ -85,13 +103,18 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
 
   it("row 47: the return-context block takes the value prop's place when supplied", () => {
     render(
-      <AuthShell config={config} returnContext={<div data-testid="return-context">ctx</div>}>
+      <AuthShell
+        config={config}
+        returnContext={<div data-testid="return-context">ctx</div>}
+      >
         <div>form</div>
       </AuthShell>,
     );
 
     expect(screen.getByTestId("return-context")).toBeInTheDocument();
-    expect(screen.queryByText(config.copy.brand.subcopy)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(config.copy.brand.subcopy),
+    ).not.toBeInTheDocument();
   });
 });
 

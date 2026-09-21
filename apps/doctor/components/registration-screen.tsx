@@ -255,8 +255,7 @@ const CONSENT_WORDING_VERSION = "2026-09";
  * that reason — the block takes an already-localized statement and makes no
  * outcome branch of its own.
  */
-const REGISTER_FAILED =
-  "Не удалось завершить регистрацию. Попробуйте ещё раз.";
+const REGISTER_FAILED = "Не удалось завершить регистрацию. Попробуйте ещё раз.";
 
 /** The RU copy the block renders. No copy lives in `@ds/design-system` (#235). */
 const REGISTER_COPY = {
@@ -446,7 +445,10 @@ export function RegistrationScreen({
             version: CONSENT_WORDING_VERSION,
           });
         }
-        await authClient.register<DoctorRegisterRequest, DoctorRegisterResponse>(
+        await authClient.register<
+          DoctorRegisterRequest,
+          DoctorRegisterResponse
+        >(
           {
             email,
             password: values.password,
@@ -463,7 +465,10 @@ export function RegistrationScreen({
         // command leaves no credential behind. The slot is the SHARED one the
         // Academy uses (volatile module memory, single-shot take, TTL-bounded);
         // this host merely spans a state change instead of a route change.
-        setPendingRegistration({ identifier: email, password: values.password });
+        setPendingRegistration({
+          identifier: email,
+          password: values.password,
+        });
         // 003 EARS-16 / 021 EARS-13 — the response is IDENTICAL for a new and
         // an already-registered address, so there is exactly one next state and
         // no branch to make on it.
@@ -749,7 +754,9 @@ function RegistrationConfirmation({
       // status now decides — a 429 from the confirm route says «слишком много
       // попыток» instead of blaming a code the doctor typed correctly, and a 5xx
       // says the service is down. Before this the catch swallowed every status.
-      setError(authErrorMessage(err, DOCTOR_AUTH_FLOW.copy.errors, CONFIRM_FAILED));
+      setError(
+        authErrorMessage(err, DOCTOR_AUTH_FLOW.copy.errors, CONFIRM_FAILED),
+      );
       return;
     }
 
@@ -810,7 +817,13 @@ function RegistrationConfirmation({
     // Rule S3 — the CARRY value, not the эфир-only confirm intent: a doctor who
     // arrived here from a closed page has no `returnTarget` at all, and building
     // this hop from it sent them to a bare door.
-    router.push(withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, carriedTarget));
+    router.push(
+      withReturnContext(
+        DOCTOR_AUTH_FLOW,
+        DOCTOR_AUTH_ROUTES.login,
+        carriedTarget,
+      ),
+    );
   }
 
   return (
@@ -829,8 +842,16 @@ function RegistrationConfirmation({
       // confirmation screen and steps sideways into sign-in or recovery is still
       // on their way to the page they asked for.
       links={{
-        login: withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, carriedTarget),
-        reset: withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.reset, carriedTarget),
+        login: withReturnContext(
+          DOCTOR_AUTH_FLOW,
+          DOCTOR_AUTH_ROUTES.login,
+          carriedTarget,
+        ),
+        reset: withReturnContext(
+          DOCTOR_AUTH_FLOW,
+          DOCTOR_AUTH_ROUTES.reset,
+          carriedTarget,
+        ),
       }}
       resend={{
         nonce: resendNonce,

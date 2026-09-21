@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import type { ReturnContextEvent } from "../server/return-context";
-import { ACADEMY_FIXTURE, DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 import {
   ReturnContextPanel,
   ReturnContextPlate,
@@ -46,7 +49,11 @@ const EVENT: ReturnContextEvent = {
 
 function renderPanel(variant: "register" | "login") {
   return renderToStaticMarkup(
-    <ReturnContextPanel config={DOCTOR_FIXTURE} event={EVENT} variant={variant} />,
+    <ReturnContextPanel
+      config={DOCTOR_FIXTURE}
+      event={EVENT}
+      variant={variant}
+    />,
   );
 }
 
@@ -82,7 +89,11 @@ describe("021 #1955: the return-context assurance line", () => {
 
 describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host publishes it", () => {
   it("021 EARS-2: a host with `returnTo.card` gets both compositions, each hidden at the other's breakpoint — one render per viewport", () => {
-    const slots = returnContextSlots({ config: DOCTOR_FIXTURE, event: EVENT, variant: "login" });
+    const slots = returnContextSlots({
+      config: DOCTOR_FIXTURE,
+      event: EVENT,
+      variant: "login",
+    });
 
     expect(slots.panel).toBeDefined();
     expect(slots.plate).toBeDefined();
@@ -90,21 +101,33 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host pub
     const panel = renderToStaticMarkup(<>{slots.panel}</>);
     const plate = renderToStaticMarkup(<>{slots.plate}</>);
     // Wide layout: the panel shows, the plate is display:none; narrow: the reverse.
-    expect(panel).toMatch(/data-testid="return-context-panel"[^>]*class="hidden [^"]*layout:flex/);
-    expect(plate).toMatch(/data-testid="return-context-plate"[^>]*class="[^"]*layout:hidden/);
+    expect(panel).toMatch(
+      /data-testid="return-context-panel"[^>]*class="hidden [^"]*layout:flex/,
+    );
+    expect(plate).toMatch(
+      /data-testid="return-context-plate"[^>]*class="[^"]*layout:hidden/,
+    );
     // The plate names the event once and carries no assurance line.
     expect(plate.split(EVENT.title)).toHaveLength(2);
     expect(plate).not.toContain("После входа");
   });
 
   it("021 EARS-3: no resolvable return context renders no slot at all — never an empty frame", () => {
-    const slots = returnContextSlots({ config: DOCTOR_FIXTURE, event: null, variant: "login" });
+    const slots = returnContextSlots({
+      config: DOCTOR_FIXTURE,
+      event: null,
+      variant: "login",
+    });
 
     expect(slots).toEqual({ panel: undefined, plate: undefined });
   });
 
   it("021 EARS-3: a host that does not publish the card (Academy) renders no slot even with an event", () => {
-    const slots = returnContextSlots({ config: ACADEMY_FIXTURE, event: EVENT, variant: "login" });
+    const slots = returnContextSlots({
+      config: ACADEMY_FIXTURE,
+      event: EVENT,
+      variant: "login",
+    });
 
     expect(slots).toEqual({ panel: undefined, plate: undefined });
   });
@@ -113,14 +136,18 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host pub
     const { returnContext: _omit, ...copy } = DOCTOR_FIXTURE.copy;
     const config: AuthFlowHostConfig = { ...DOCTOR_FIXTURE, copy };
 
-    expect(returnContextSlots({ config, event: EVENT, variant: "login" })).toEqual({
+    expect(
+      returnContextSlots({ config, event: EVENT, variant: "login" }),
+    ).toEqual({
       panel: undefined,
       plate: undefined,
     });
   });
 
   it("021 EARS-2: the plate reads its eyebrow from the host copy", () => {
-    const html = renderToStaticMarkup(<ReturnContextPlate config={DOCTOR_FIXTURE} event={EVENT} />);
+    const html = renderToStaticMarkup(
+      <ReturnContextPlate config={DOCTOR_FIXTURE} event={EVENT} />,
+    );
 
     expect(html).toContain('data-testid="return-context-card"');
     expect(html).toContain("Вы вернётесь к этому событию");

@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 
 import { WebinarCard } from "@ds/design-system/webinar-card";
 
-import type { AuthFlowHostConfig, AuthFlowReturnContextCopy } from "../host-config";
+import type {
+  AuthFlowHostConfig,
+  AuthFlowReturnContextCopy,
+} from "../host-config";
 import type { ReturnContextEvent } from "../server/return-context";
 
 /**
@@ -119,7 +122,9 @@ export function ReturnContextPanel({
   variant: ReturnContextVariant;
 }) {
   const copy = config.copy.returnContext;
-  return copy ? <PanelBody copy={copy} event={event} variant={variant} /> : null;
+  return copy ? (
+    <PanelBody copy={copy} event={event} variant={variant} />
+  ) : null;
 }
 
 /** The mobile composition: the card as the plate above the form, full-bleed across the column. */

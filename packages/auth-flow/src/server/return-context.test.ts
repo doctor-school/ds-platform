@@ -11,7 +11,10 @@ import {
   resolveReturnTargetPath,
   withReturnContext,
 } from "./return-context";
-import { ACADEMY_FIXTURE, DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 
 /**
  * 021 EARS-2 (#1538) — the RESOLUTION half of the return context: the canonical
@@ -197,9 +200,9 @@ describe("021 EARS-2: resolveReturnContext", () => {
  */
 describe("021 #1945: resolveReturnLandingPath", () => {
   it("021 #1945: the academy shape lands on the doctor host's own event route", () => {
-    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/webinars/prp-pri-gonartroze")).toBe(
-      "/events/prp-pri-gonartroze",
-    );
+    expect(
+      resolveReturnLandingPath(DOCTOR_FIXTURE, "/webinars/prp-pri-gonartroze"),
+    ).toBe("/events/prp-pri-gonartroze");
     // The canonical target itself is UNCHANGED — it is what rides on into
     // `/register` and is re-parsed there, so the one vocabulary is intact.
     expect(resolveReturnTargetPath("/webinars/prp-pri-gonartroze")).toBe(
@@ -209,9 +212,9 @@ describe("021 #1945: resolveReturnLandingPath", () => {
 
   it("021 #1945: a target this host already serves passes through verbatim", () => {
     // 020's own event page.
-    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/events/prp-pri-gonartroze")).toBe(
-      "/events/prp-pri-gonartroze",
-    );
+    expect(
+      resolveReturnLandingPath(DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"),
+    ).toBe("/events/prp-pri-gonartroze");
     // 019's feed shape — the resumed card, feed query and all.
     const feed =
       "/events?day=2026-08-27&tense=upcoming&specialty=mine-and-adjacent" +
@@ -255,7 +258,9 @@ describe("021 #1945: resolveReturnLandingPath", () => {
  */
 describe("#1987: /account is a landing target", () => {
   it("#1987: an account arrival lands on this host's own account route", () => {
-    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/account")).toBe("/account");
+    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/account")).toBe(
+      "/account",
+    );
     // ...while the canonical return target refuses it, because it resolves no
     // эфир to register anyone for.
     expect(resolveReturnTargetPath("/account")).toBeNull();
@@ -282,7 +287,9 @@ describe("#1987: /account is a landing target", () => {
    * rule arrives with the codec so this host does not need a second one later.
    */
   it("014 EARS-6.5: a page BELOW this host's account route lands on ITSELF, not on the cabinet index", () => {
-    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/account/events")).toBe("/account/events");
+    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, "/account/events")).toBe(
+      "/account/events",
+    );
     // …and it is still no эфир: nothing registers on the way back.
     expect(resolveReturnTargetPath("/account/events")).toBeNull();
   });
@@ -317,7 +324,9 @@ describe("#1987: /account is a landing target", () => {
  */
 describe("#2258: the carried target admits the account family", () => {
   it("#2258: resolveCarriedReturnTarget rebuilds an account arrival instead of dropping it", () => {
-    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account")).toBe("/account");
+    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account")).toBe(
+      "/account",
+    );
   });
 
   it("#2258: a page BELOW the account route is carried as ITSELF, with the segment boundary enforced", () => {
@@ -325,30 +334,40 @@ describe("#2258: the carried target admits the account family", () => {
       "/account/events",
     );
     expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/accounts")).toBeNull();
-    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account-evil")).toBeNull();
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/account-evil"),
+    ).toBeNull();
   });
 
   it("#2258: the эфир vocabulary is carried unchanged beside it", () => {
-    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/webinars/kardio-2026")).toBe(
-      "/webinars/kardio-2026",
-    );
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/webinars/kardio-2026"),
+    ).toBe("/webinars/kardio-2026");
   });
 
   it("#2258: withReturnContext carries the account arrival across the /login → /register hop", () => {
     expect(withReturnContext(DOCTOR_FIXTURE, "/register", "/account")).toBe(
       "/register?returnTo=%2Faccount",
     );
-    expect(withReturnContext(DOCTOR_FIXTURE, "/register", "/account/events")).toBe(
-      "/register?returnTo=%2Faccount%2Fevents",
-    );
+    expect(
+      withReturnContext(DOCTOR_FIXTURE, "/register", "/account/events"),
+    ).toBe("/register?returnTo=%2Faccount%2Fevents");
   });
 
   it("#2258: a cross-origin or traversal target is still dropped at the hop", () => {
-    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "//evil.example/account")).toBeNull();
-    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/../account")).toBeNull();
-    expect(withReturnContext(DOCTOR_FIXTURE, "/register", "https://evil.example/account")).toBe(
-      "/register",
-    );
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "//evil.example/account"),
+    ).toBeNull();
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/../account"),
+    ).toBeNull();
+    expect(
+      withReturnContext(
+        DOCTOR_FIXTURE,
+        "/register",
+        "https://evil.example/account",
+      ),
+    ).toBe("/register");
   });
 
   it("#2258: the эфир-only EARS-3 context target is NOT widened by the carry rule", () => {

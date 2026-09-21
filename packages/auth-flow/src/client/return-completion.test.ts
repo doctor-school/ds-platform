@@ -52,13 +52,19 @@ describe("014 EARS-6 academy return-target consumption (registration resume)", (
     await completeReturnTarget(ACADEMY_FIXTURE, null);
     registerForEvent.mockClear();
 
-    await expect(completeReturnTarget(ACADEMY_FIXTURE, null)).resolves.toBe("/webinars");
+    await expect(completeReturnTarget(ACADEMY_FIXTURE, null)).resolves.toBe(
+      "/webinars",
+    );
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
   it("013 EARS-15: with no carried target this host lands on `/webinars`, never on the Academy marketing landing", async () => {
-    await expect(completeReturnTarget(ACADEMY_FIXTURE, "/")).resolves.toBe("/webinars");
-    await expect(completeReturnTarget(ACADEMY_FIXTURE, null)).resolves.toBe("/webinars");
+    await expect(completeReturnTarget(ACADEMY_FIXTURE, "/")).resolves.toBe(
+      "/webinars",
+    );
+    await expect(completeReturnTarget(ACADEMY_FIXTURE, null)).resolves.toBe(
+      "/webinars",
+    );
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 

@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import type { MyProfile } from "@ds/schemas";
 import { initialsFromDisplayName } from "@ds/room/display-name";
 
-
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
@@ -133,7 +132,11 @@ export function AccountScreen() {
       // this page back, built by the shared helper out of the host's own route
       // values rather than spelled beside them.
       router.replace(
-        withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+        withReturnContext(
+          DOCTOR_AUTH_FLOW,
+          DOCTOR_AUTH_ROUTES.login,
+          DOCTOR_AUTH_ROUTES.account,
+        ),
       );
     }
   }, [router]);
@@ -215,7 +218,8 @@ export function AccountScreen() {
       // so without it the doctor lands on the route's default rather than on the
       // page they left. Built from the host route constants through the shared
       // helper, never assembled as a literal.
-      passwordHref={withReturnContext(DOCTOR_AUTH_FLOW, 
+      passwordHref={withReturnContext(
+        DOCTOR_AUTH_FLOW,
         DOCTOR_AUTH_ROUTES.reset,
         DOCTOR_AUTH_ROUTES.account,
       )}

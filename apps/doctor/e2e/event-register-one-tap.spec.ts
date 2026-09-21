@@ -103,7 +103,9 @@ test.describe("005 EARS-1/3/4 (#2005): one-tap registration on the doctor эфи
       "E2E_EVENT_SLUG_ONE_TAP must be an upcoming эфир this account is NOT yet registered for — see STAND PRECONDITIONS at the head of this spec",
     ).toBeVisible();
     // The guest door is NOT what a signed-in doctor is shown (020 EARS-5).
-    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(
+      0,
+    );
 
     const urlBefore = page.url();
     await oneTap.click();

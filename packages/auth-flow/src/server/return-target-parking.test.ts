@@ -34,7 +34,9 @@ function setCookieOf(response: Response): string {
 describe("014 EARS-6 shared returnTo parking rule", () => {
   it("014 EARS-6.1: parks a guard-clean carried target under the host's configured cookie name", () => {
     const response = parkReturnTarget(
-      requestFor("https://academy.doctor.school/login?returnTo=%2Fwebinars%2Fahilles-042"),
+      requestFor(
+        "https://academy.doctor.school/login?returnTo=%2Fwebinars%2Fahilles-042",
+      ),
       parking,
     );
     expect(response?.cookies.get("ds_return_to")?.value).toBe(
@@ -95,14 +97,19 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
 
   it("014 EARS-6.3: no carried target at all parks nothing", () => {
     expect(
-      parkReturnTarget(requestFor("https://academy.doctor.school/login"), parking),
+      parkReturnTarget(
+        requestFor("https://academy.doctor.school/login"),
+        parking,
+      ),
     ).toBeUndefined();
   });
 
   it("014 EARS-6.4: a host that parks nothing (row 29, the doctor storefront) parks nothing", () => {
     expect(
       parkReturnTarget(
-        requestFor("https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042"),
+        requestFor(
+          "https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042",
+        ),
         undefined,
       ),
     ).toBeUndefined();
@@ -112,7 +119,9 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
 describe("#2027 PR 1.5 returnTo without parking", () => {
   it("014 EARS-6.4: a host whose returnTo only publishes the card parks nothing", async () => {
     const { NextRequest } = await import("next/server");
-    const request = new NextRequest("https://doctor.test/login?returnTo=%2Fevents%2Fslug");
+    const request = new NextRequest(
+      "https://doctor.test/login?returnTo=%2Fevents%2Fslug",
+    );
     expect(parkReturnTarget(request, { card: true })).toBeUndefined();
   });
 });

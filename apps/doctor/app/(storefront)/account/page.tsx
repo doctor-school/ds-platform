@@ -54,7 +54,11 @@ export default async function DoctorAccountPage() {
     // what changes is that a later edit to either route value cannot leave the
     // bounce behind.
     redirect(
-      withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, DOCTOR_AUTH_ROUTES.account),
+      withReturnContext(
+        DOCTOR_AUTH_FLOW,
+        DOCTOR_AUTH_ROUTES.login,
+        DOCTOR_AUTH_ROUTES.account,
+      ),
     );
   }
 

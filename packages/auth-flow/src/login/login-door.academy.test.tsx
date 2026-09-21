@@ -54,7 +54,8 @@ vi.mock("@ds/design-system/blocks", async () => {
     BotProtectionField: (props: CaptchaProps) => {
       captchaProps = props;
       React.useEffect(() => {
-        if (!props.sitekey && props.requestKey !== null) props.onToken(undefined);
+        if (!props.sitekey && props.requestKey !== null)
+          props.onToken(undefined);
       }, [props.onToken, props.requestKey, props.sitekey]);
       return props.sitekey ? <div data-testid="bot-protection-field" /> : null;
     },
@@ -155,9 +156,12 @@ describe("003 EARS-17 on-demand login protection", () => {
       screen.getByLabelText(COPY.password.identifierLabel),
       EMAIL,
     );
-    await user.type(screen.getByLabelText(COPY.password.passwordLabel, {
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, {
         selector: "input",
-      }), PASSWORD);
+      }),
+      PASSWORD,
+    );
 
     await user.click(screen.getByTestId("password-login-submit"));
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
@@ -281,9 +285,12 @@ describe("/login submit pending affordances (#337)", () => {
       screen.getByLabelText(COPY.password.identifierLabel),
       EMAIL,
     );
-    await user.type(screen.getByLabelText(COPY.password.passwordLabel, {
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, {
         selector: "input",
-      }), PASSWORD);
+      }),
+      PASSWORD,
+    );
 
     const submit = screen.getByTestId("password-login-submit");
     expect(submit).not.toHaveAttribute("aria-busy");
@@ -336,9 +343,12 @@ describe("005 EARS-2 guest-through-auth completion on the sign-in door", () => {
       screen.getByLabelText(COPY.password.identifierLabel),
       EMAIL,
     );
-    await user.type(screen.getByLabelText(COPY.password.passwordLabel, {
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, {
         selector: "input",
-      }), PASSWORD);
+      }),
+      PASSWORD,
+    );
     await user.click(screen.getByTestId("password-login-submit"));
 
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
@@ -360,9 +370,12 @@ describe("005 EARS-2 guest-through-auth completion on the sign-in door", () => {
       screen.getByLabelText(COPY.password.identifierLabel),
       EMAIL,
     );
-    await user.type(screen.getByLabelText(COPY.password.passwordLabel, {
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, {
         selector: "input",
-      }), PASSWORD);
+      }),
+      PASSWORD,
+    );
     await user.click(screen.getByTestId("password-login-submit"));
 
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
@@ -382,9 +395,12 @@ describe("005 EARS-2 guest-through-auth completion on the sign-in door", () => {
       screen.getByLabelText(COPY.password.identifierLabel),
       EMAIL,
     );
-    await user.type(screen.getByLabelText(COPY.password.passwordLabel, {
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, {
         selector: "input",
-      }), PASSWORD);
+      }),
+      PASSWORD,
+    );
     await user.click(screen.getByTestId("password-login-submit"));
 
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
@@ -464,9 +480,12 @@ describe("008 EARS-5 sign-in drops the client Router Cache (#2281)", () => {
       screen.getByLabelText(COPY.password.identifierLabel),
       EMAIL,
     );
-    await user.type(screen.getByLabelText(COPY.password.passwordLabel, {
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, {
         selector: "input",
-      }), PASSWORD);
+      }),
+      PASSWORD,
+    );
     await user.click(screen.getByTestId("password-login-submit"));
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
     resolveLogin?.();

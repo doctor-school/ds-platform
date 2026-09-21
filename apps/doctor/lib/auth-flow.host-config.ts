@@ -1,4 +1,7 @@
-import type { AuthFlowApiConfig, AuthFlowHostConfig } from "@ds/auth-flow/host-config";
+import type {
+  AuthFlowApiConfig,
+  AuthFlowHostConfig,
+} from "@ds/auth-flow/host-config";
 
 import { DOCTOR_AUTH_FLOW_COPY } from "../messages/auth-flow-copy";
 

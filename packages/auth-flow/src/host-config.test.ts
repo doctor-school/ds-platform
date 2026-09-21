@@ -6,7 +6,10 @@ import type {
   AuthFlowLoginCopy,
   AuthFlowReturnToConfig,
 } from "./host-config";
-import { ACADEMY_FIXTURE, DOCTOR_FIXTURE } from "./test-support/host-config-fixtures";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "./test-support/host-config-fixtures";
 
 /**
  * #2027 PR 1.5 — the host config grows the DATA the sign-in door consumes.
@@ -17,8 +20,13 @@ import { ACADEMY_FIXTURE, DOCTOR_FIXTURE } from "./test-support/host-config-fixt
  */
 describe("#2027 PR 1.5 host config — the sign-in door data", () => {
   it("row 41: each host states its default landing as a path", () => {
-    expectTypeOf<AuthFlowHostConfig["landing"]>().toEqualTypeOf<AuthFlowLandingConfig>();
-    expect(ACADEMY_FIXTURE.landing).toEqual({ afterLogin: "/webinars", specialtyAware: false });
+    expectTypeOf<
+      AuthFlowHostConfig["landing"]
+    >().toEqualTypeOf<AuthFlowLandingConfig>();
+    expect(ACADEMY_FIXTURE.landing).toEqual({
+      afterLogin: "/webinars",
+      specialtyAware: false,
+    });
     expect(DOCTOR_FIXTURE.landing.afterLogin).toBe("/");
   });
 
@@ -52,7 +60,9 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
 
   it("row 33: login copy crosses the server→client boundary — templates are strings with placeholders", () => {
     expectTypeOf<AuthFlowLoginCopy["otp"]["sentTo"]>().toEqualTypeOf<string>();
-    expectTypeOf<AuthFlowLoginCopy["otp"]["resendCountdown"]>().toEqualTypeOf<string>();
+    expectTypeOf<
+      AuthFlowLoginCopy["otp"]["resendCountdown"]
+    >().toEqualTypeOf<string>();
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
       expect(config.copy.login.otp.sentTo).toContain("{destination}");
       expect(config.copy.login.otp.resendCountdown).toContain("{seconds}");

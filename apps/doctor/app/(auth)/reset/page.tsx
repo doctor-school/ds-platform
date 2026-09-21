@@ -83,11 +83,16 @@ export default async function DoctorResetPage({
       <ResetScreen
         // Rule S3 — back out of recovery through the door they came in by, still
         // carrying it. A rejected or absent target simply drops off.
-        loginHref={withReturnContext(DOCTOR_AUTH_FLOW, DOCTOR_AUTH_ROUTES.login, returnTo)}
+        loginHref={withReturnContext(
+          DOCTOR_AUTH_FLOW,
+          DOCTOR_AUTH_ROUTES.login,
+          returnTo,
+        )}
         // Rule S4 — the host projection of the carried target (#1945), or the
         // #221 default when the arrival carried none.
         landing={
-          resolveReturnLandingPath(DOCTOR_AUTH_FLOW, returnTo) ?? DOCTOR_AUTH_ROUTES.account
+          resolveReturnLandingPath(DOCTOR_AUTH_FLOW, returnTo) ??
+          DOCTOR_AUTH_ROUTES.account
         }
       />
     </AuthShell>

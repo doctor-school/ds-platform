@@ -107,7 +107,8 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
     // The per-ACTION generic each login call passes to the dictionary (row 11).
     failed: {
       password: "Не удалось войти. Проверьте почту или телефон и пароль.",
-      otpRequest: "Не удалось отправить код. Проверьте адрес или номер и повторите.",
+      otpRequest:
+        "Не удалось отправить код. Проверьте адрес или номер и повторите.",
       otpVerify: "Код не подошёл. Проверьте цифры или запросите новый.",
     },
   },
@@ -123,7 +124,8 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
   brand: {
     eyebrow: "Врачи учат врачей",
     headline: "Учитесь у практикующих врачей",
-    subcopy: "Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.",
+    subcopy:
+      "Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.",
     footer: "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
   },
   // 003 EARS-17 — the SmartCaptcha processing notice; the same sentences the
@@ -132,7 +134,8 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
   botProtectionDisclosure: {
     notice: "Форма защищена Yandex SmartCaptcha.",
     link: "Условия обработки данных.",
-    linkLabel: "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
+    linkLabel:
+      "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
   },
 };
 
@@ -146,6 +149,7 @@ export const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopy = {
  */
 export const DOCTOR_LOGIN_FALLBACK_COPY = {
   password: "Не удалось войти. Проверьте почту или телефон и пароль.",
-  otpRequest: "Не удалось отправить код. Проверьте адрес или номер и повторите.",
+  otpRequest:
+    "Не удалось отправить код. Проверьте адрес или номер и повторите.",
   otpVerify: "Код не подошёл. Проверьте цифры или запросите новый.",
 } as const;

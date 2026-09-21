@@ -26,17 +26,11 @@ import {
 } from "@ds/design-system/blocks";
 import { OtpCodeFieldSchema } from "@ds/design-system/fields";
 
-import {
-  botProtectionMessages,
-  botProtectionSiteKey,
-} from "../bot-protection";
+import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
 import { authErrorMessage } from "../errors";
-import {
-  identifierFieldSchema,
-  otpIdentifierFormSchema,
-} from "../fields";
+import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
 import type { AuthFlowHostConfig } from "../host-config";
 import { LoginGlyph } from "./login-glyph";
 import type { ReactNode } from "react";
@@ -160,7 +154,11 @@ function otpRequestResolverOf(
   >({
     identifier: (value) => {
       if (!value?.trim()) {
-        return copy.required ?? config.copy.fields.identifier.required ?? copy.invalid;
+        return (
+          copy.required ??
+          config.copy.fields.identifier.required ??
+          copy.invalid
+        );
       }
       // The channel rides the parse so the host's served-channel rule (row 21)
       // decides the shape; only the identifier's own verdict is rendered, the
@@ -462,7 +460,10 @@ export function LoginDoor({
   const captchaSlot = (
     fieldProps: Omit<Parameters<typeof BotProtectionField>[0], "sitekey">,
   ) => (
-    <BotProtectionField sitekey={botProtectionSiteKey(config)} {...fieldProps} />
+    <BotProtectionField
+      sitekey={botProtectionSiteKey(config)}
+      {...fieldProps}
+    />
   );
 
   return (

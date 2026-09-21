@@ -74,12 +74,17 @@ describe("021 EARS-3 — the direct-arrival landing (LD-4)", () => {
 
   it("021 EARS-3: a resolved 'nothing chosen yet' lands on the storefront home", () => {
     expect(
-      resolveDirectArrivalLanding(DOCTOR_FIXTURE, remembered(NO_SPECIALTY_CHOICE)),
+      resolveDirectArrivalLanding(
+        DOCTOR_FIXTURE,
+        remembered(NO_SPECIALTY_CHOICE),
+      ),
     ).toBe("/");
   });
 
   it("021 EARS-3: an unresolved read (api unreachable) lands on the storefront home, not a feed filtered by a guess", () => {
-    expect(resolveDirectArrivalLanding(DOCTOR_FIXTURE, remembered(null))).toBe("/");
+    expect(resolveDirectArrivalLanding(DOCTOR_FIXTURE, remembered(null))).toBe(
+      "/",
+    );
     expect(
       resolveDirectArrivalLanding(DOCTOR_FIXTURE, remembered(null, "doctor")),
     ).toBe("/");
@@ -113,7 +118,9 @@ describe("017 EARS-6 — the remembered specialty, read from the host-named endp
       cookie: "__Host-ds_session=profile-a",
       "x-ds-specialty-consumption-deferred": "1",
     });
-    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new Error("down"));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("down"));
 
     await expect(
       resolveRememberedSpecialty(DOCTOR_READS, headers, fetchImpl),

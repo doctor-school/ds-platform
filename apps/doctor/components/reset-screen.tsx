@@ -226,7 +226,9 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
         );
         return;
       }
-      setRequestError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, REQUEST_FAILED));
+      setRequestError(
+        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, REQUEST_FAILED),
+      );
     },
   });
 
@@ -237,7 +239,9 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
         botProtectionFailureMessage(failure, BOT_PROTECTION_MESSAGES),
       ),
     onActionError: (error) =>
-      setResendError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED)),
+      setResendError(
+        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED),
+      ),
   });
 
   // #267 resend: re-request a code for the SAME held identifier through the
@@ -257,7 +261,9 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
         );
         return;
       }
-      setResendError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED));
+      setResendError(
+        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED),
+      );
     },
     // Clear only resend-owned state; completion feedback answers another question.
     onBeforeResend: () => {
@@ -265,7 +271,9 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
       setNotice(null);
     },
     onSuccess: () =>
-      setNotice("Отправили код ещё раз на " + maskDestination(identifier) + "."),
+      setNotice(
+        "Отправили код ещё раз на " + maskDestination(identifier) + ".",
+      ),
   });
 
   function onRequest(values: PasswordRecoveryRequestValues) {
@@ -273,7 +281,10 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
     const value = values.identifier.trim();
     captcha.request(async (captchaToken) => {
       // Row 18: the token becomes the `x-smartcaptcha-token` header.
-      await authClient.requestPasswordReset({ identifier: value }, captchaToken);
+      await authClient.requestPasswordReset(
+        { identifier: value },
+        captchaToken,
+      );
       // EARS-16: the acknowledgement is identical whether or not the identifier
       // exists, so the screen ALWAYS advances. Carry the identifier into the
       // complete step — the block mounts a FRESH form for the stage, so its code
@@ -297,7 +308,9 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
       router.push(landing);
       router.refresh();
     } catch (error) {
-      setCompleteError(authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, COMPLETE_FAILED));
+      setCompleteError(
+        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, COMPLETE_FAILED),
+      );
     }
   }
 

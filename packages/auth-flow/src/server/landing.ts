@@ -116,7 +116,8 @@ export async function resolveRememberedSpecialty(
   } catch {
     return {
       actor: session.cookie ? "doctor" : "guest",
-      choice: session.cookie && consumptionDeferred ? NO_SPECIALTY_CHOICE : null,
+      choice:
+        session.cookie && consumptionDeferred ? NO_SPECIALTY_CHOICE : null,
     };
   }
 }
@@ -134,7 +135,9 @@ export function resolveDirectArrivalLanding(
   if (!landing.specialtyAware) return landing.afterLogin;
   // `choice: null` is «unresolved», `choice.specialty: null` is «resolved:
   // nothing chosen». Different facts, same landing.
-  return remembered.choice?.specialty ? landing.specialtyFeed : landing.afterLogin;
+  return remembered.choice?.specialty
+    ? landing.specialtyFeed
+    : landing.afterLogin;
 }
 
 /**

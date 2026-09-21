@@ -31,10 +31,12 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   landing: { afterLogin: "/webinars", specialtyAware: false },
   copy: {
     errors: {
-      tooManyAttempts: "Слишком много попыток — повторите через несколько минут.",
+      tooManyAttempts:
+        "Слишком много попыток — повторите через несколько минут.",
       unavailable: "Сервис временно недоступен — попробуйте ещё раз.",
       botProtectionRequired: "Подтвердите, что вы не робот.",
-      botProtectionRejected: "Проверка истекла или не пройдена. Подтвердите ещё раз.",
+      botProtectionRejected:
+        "Проверка истекла или не пройдена. Подтвердите ещё раз.",
     },
     botProtection: {
       required: "Подтвердите, что вы не робот.",
@@ -42,14 +44,23 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
       unavailable: "Не удалось выполнить проверку.",
     },
     fields: {
-      email: { required: "Заполните это поле.", invalid: "Введите корректный адрес электронной почты." },
-      password: { required: "Заполните это поле.", invalid: "Не менее 8 символов." },
+      email: {
+        required: "Заполните это поле.",
+        invalid: "Введите корректный адрес электронной почты.",
+      },
+      password: {
+        required: "Заполните это поле.",
+        invalid: "Не менее 8 символов.",
+      },
       code: { required: "Введите код.", invalid: "Введите код." },
       identifier: {
         required: "Укажите электронную почту или телефон.",
         invalid: "Укажите электронную почту или телефон.",
       },
-      phone: { required: "Введите телефон в формате +79991234567.", invalid: "Введите телефон в формате +79991234567." },
+      phone: {
+        required: "Введите телефон в формате +79991234567.",
+        invalid: "Введите телефон в формате +79991234567.",
+      },
     },
     login: {
       title: "Вход",
@@ -98,16 +109,23 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
       eyebrow: "Врачи учат врачей",
       headline: "Медицинское образование для врачей",
       subcopy: "Учебные программы и сертификация от ведущих экспертов отрасли.",
-      footer: "© Doctor.School. Платформа непрерывного медицинского образования.",
+      footer:
+        "© Doctor.School. Платформа непрерывного медицинского образования.",
     },
     botProtectionDisclosure: {
       notice: "Форма защищена Yandex SmartCaptcha.",
       link: "Условия обработки данных.",
-      linkLabel: "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
+      linkLabel:
+        "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
     },
   },
   brand: {
-    wordmark: { src: "/brand/logo.svg", alt: "Doctor.School", width: 500, height: 164 },
+    wordmark: {
+      src: "/brand/logo.svg",
+      alt: "Doctor.School",
+      width: 500,
+      height: 164,
+    },
     panel: { src: "/brand/logo-white.svg", width: 500, height: 164 },
     loginIcon: "shield-check",
   },
@@ -149,10 +167,14 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   },
   copy: {
     errors: {
-      tooManyAttempts: "Слишком много попыток. Подождите пару минут и попробуйте снова.",
-      unavailable: "Сервис временно недоступен. Попробуйте ещё раз через минуту.",
-      botProtectionRequired: "Нужна дополнительная проверка. Подтвердите, что вы не робот.",
-      botProtectionRejected: "Нужна дополнительная проверка — она истекла или не пройдена.",
+      tooManyAttempts:
+        "Слишком много попыток. Подождите пару минут и попробуйте снова.",
+      unavailable:
+        "Сервис временно недоступен. Попробуйте ещё раз через минуту.",
+      botProtectionRequired:
+        "Нужна дополнительная проверка. Подтвердите, что вы не робот.",
+      botProtectionRejected:
+        "Нужна дополнительная проверка — она истекла или не пройдена.",
     },
     botProtection: {
       required: "Подтвердите, что вы не робот.",
@@ -168,11 +190,15 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
         required: "Придумайте пароль не короче 8 символов.",
         invalid: "Пароль слишком короткий — нужно не менее 8 символов.",
       },
-      promoCode: { invalid: "Промокод длиннее 64 символов — проверьте, что скопировали только код." },
+      promoCode: {
+        invalid:
+          "Промокод длиннее 64 символов — проверьте, что скопировали только код.",
+      },
       code: { invalid: "Введите код из письма." },
       identifier: {
         required: "Введите почту или телефон.",
-        invalid: "Проверьте: почта вида doctor@clinic.ru или телефон в формате +79991234567.",
+        invalid:
+          "Проверьте: почта вида doctor@clinic.ru или телефон в формате +79991234567.",
       },
       phone: {
         required: "Введите почту или телефон.",
@@ -218,25 +244,29 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
       },
       failed: {
         password: "Не удалось войти. Проверьте почту или телефон и пароль.",
-        otpRequest: "Не удалось отправить код. Проверьте адрес или номер и повторите.",
+        otpRequest:
+          "Не удалось отправить код. Проверьте адрес или номер и повторите.",
         otpVerify: "Код не подошёл. Проверьте цифры или запросите новый.",
       },
     },
     returnContext: {
       eyebrow: "Вы вернётесь к этому событию",
       login: "После входа вы вернётесь сюда же — место за вами.",
-      register: "После подтверждения почты вы вернётесь сюда же — место за вами.",
+      register:
+        "После подтверждения почты вы вернётесь сюда же — место за вами.",
     },
     brand: {
       eyebrow: "Врачи учат врачей",
       headline: "Учитесь у практикующих врачей",
-      subcopy: "Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.",
+      subcopy:
+        "Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей.",
       footer: "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
     },
     botProtectionDisclosure: {
       notice: "Форма защищена Yandex SmartCaptcha.",
       link: "Условия обработки данных",
-      linkLabel: "Условия обработки данных Yandex SmartCaptcha — откроются в новой вкладке",
+      linkLabel:
+        "Условия обработки данных Yandex SmartCaptcha — откроются в новой вкладке",
     },
   },
   brand: {

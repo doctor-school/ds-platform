@@ -234,7 +234,6 @@ export type AuthFlowApiConfig = {
   readonly confirmPath: string;
 };
 
-
 /**
  * The route table this host serves (gate §4.2).
  *

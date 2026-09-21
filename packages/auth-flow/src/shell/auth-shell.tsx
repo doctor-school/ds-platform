@@ -59,7 +59,9 @@ export function AuthShell({ config, returnContext, children }: AuthShellProps) {
             height={wordmark.height}
             priority
             unoptimized
-            className={wordmark.darkSrc ? "h-10 w-auto dark:hidden" : "h-10 w-auto"}
+            className={
+              wordmark.darkSrc ? "h-10 w-auto dark:hidden" : "h-10 w-auto"
+            }
             data-testid="auth-wordmark"
           />
           {wordmark.darkSrc ? (

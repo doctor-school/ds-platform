@@ -158,42 +158,6 @@ test.describe("012 EARS-9 — project↔expert relationships in the live admin",
     );
   });
 
-  test("EARS-22: an operator authors a project↔expert link from the expert endpoint through the same relationship panel", async ({
-    page,
-  }) => {
-    await signInAsAdmin(page);
-
-    const stamp = Date.now();
-    const expert = await createExpert(
-      page,
-      `Обратный-${stamp}`,
-      "Эксперт",
-      "Ильич",
-    );
-    const project = await createProject(
-      page,
-      `Обратный экспертный проект ${stamp}`,
-    );
-
-    await page.goto(expert.url);
-    await page.getByTestId("tab-projects").click();
-    await selectRelationshipCombobox(
-      page,
-      "project-expert-link-combobox",
-      project.title,
-      project.title,
-    );
-    await page.getByTestId("project-expert-link-role").selectOption("member");
-    await page.getByTestId("project-expert-link-submit").click();
-
-    await expect(page.getByTestId("project-experts-notice")).toContainText(
-      "Эксперт добавлен в проект.",
-    );
-    await expect(page.getByTestId("project-experts-panel")).toContainText(
-      project.title,
-    );
-  });
-
   test("EARS-22: the expert endpoint withholds curator when the selected project already has one", async ({
     page,
   }) => {

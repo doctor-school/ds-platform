@@ -35,6 +35,19 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       When the operator replaces the curator with that member
       Then the replacement Expert is the only curator and the former curator remains a member
 
+  Rule: An operator authors a project Expert relationship from the Expert detail
+
+    @EARS-9 @EARS-22 @happy
+    Scenario: Expert-side authoring creates one retained member relationship visible from both endpoints
+      Given a platform_admin operator in the admin app
+      When the operator creates a draft project and draft Expert for Expert-side relationship authoring
+      And the operator opens the Expert's projects and links that project as a member
+      Then the Expert's projects show that member relationship and record its identity
+      When the operator opens the authored project's Expert roster
+      Then the project roster shows the same member relationship identity exactly once
+      When the operator returns to the authored Expert's projects
+      Then the Expert's projects still show the same member relationship identity exactly once
+
   Rule: An operator restores a retired project Expert relationship
 
     @EARS-9 @EARS-14 @happy

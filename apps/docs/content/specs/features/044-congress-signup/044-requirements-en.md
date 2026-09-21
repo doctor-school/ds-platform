@@ -3,7 +3,36 @@ title: "044 — Congress sign-up"
 description: "Requirements for the congress sign-up vertical slice: a public unauthenticated intake endpoint reached same-origin from the congress site, a passwordless account created through the shared 003 engine, typed answers and consent stored on the event registration, a confirmation email whose outcome is recorded, and a restricted event-registrar role with a roster and a printable attendance sheet in apps/admin."
 slug: 044-congress-signup
 status: Draft
-issues: []
+issues:
+  [
+    2294,
+    2295,
+    2296,
+    2297,
+    2298,
+    2299,
+    2300,
+    2301,
+    2302,
+    2303,
+    2304,
+    2305,
+    2306,
+    2307,
+    2308,
+    2309,
+    2310,
+    2311,
+    2312,
+    2313,
+    2315,
+    2316,
+    2317,
+    2318,
+    2319,
+    2320,
+    2321,
+  ]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/19
 prior_decisions:

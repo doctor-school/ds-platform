@@ -112,11 +112,11 @@ Feature: 044 — Congress sign-up
     Given a principal holds the event-registrar role
     And the congress roster holds registrations from both the form and the platform feed
     When they open the roster
-    Then the roster lists registrations with pagination and instant search
-    When they filter by specialty, by city or region and by confirmation-mail outcome
-    And they sort by surname and then by registration time
+    Then the roster lists registrations with pagination and instant search, in the column order №, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма
+    When they filter a text column by contains-search, специальность by a select and дата регистрации by a range
+    And they sort by ФИО and then by дата регистрации, in both directions
     Then the server returns the filtered, sorted page
     When they print from that view
-    Then the printable sheet contains exactly the rows of the roster as currently searched, filtered and sorted
-    And the printable sheet is rendered from design-system primitives with tokens-only styling in the owner-approved layout
+    Then the printable sheet contains exactly the rows of the roster as currently searched, filtered and sorted, every roster column except статус письма, with no signature column and a header carrying the event's name and date
+    And the printable sheet is rendered from design-system primitives with tokens-only styling
     And no file is exported

@@ -18,8 +18,8 @@ import { test, expect, type BrowserContext } from "@playwright/test";
  *      specialty 017 already remembers, the storefront home otherwise, and
  *      NEVER the account page (the owner's decision on LD-4).
  *
- * WHY THIS TIER AND NOT A UNIT TEST. `lib/registration-landing.test.ts` pins the
- * decision; it cannot pin that the route reaches it. The remembered specialty is
+ * WHY THIS TIER AND NOT A UNIT TEST. `packages/auth-flow/src/server/landing.test.ts`
+ * pins the decision; it cannot pin that the route reaches it. The remembered specialty is
  * read server-side from the forwarded `__Host-ds_specialty` cookie before the
  * first byte of HTML, so the read is out of reach of any browser-level route
  * interception — the same reason the EARS-2 half of this tier exists. The app is

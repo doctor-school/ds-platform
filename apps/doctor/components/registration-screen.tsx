@@ -118,7 +118,7 @@ export type RegistrationScreenProps = {
    * line 195), and the landing is the part of that function the pixels do not
    * show: a gate arrival carries its return target (the shared guard's own
    * reconstruction — one vocabulary, LD-3), a direct arrival carries the LD-4
-   * decision (`lib/registration-landing.ts`).
+   * decision (`@ds/auth-flow/server` `resolveDirectArrivalLanding`).
    *
    * REQUIRED, and CONSUMED: the post-confirmation navigation of EARS-10
    * (#1546, amended 2026-09-17) sends the doctor to this value whenever the

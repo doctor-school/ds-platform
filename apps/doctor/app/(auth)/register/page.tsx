@@ -5,6 +5,7 @@ import {
   guardAuthRoute,
   isAccountReturnTarget,
   resolveCarriedReturnTarget,
+  resolveDirectArrivalLanding,
   resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
@@ -25,7 +26,6 @@ import {
 import { RegistrationScreen } from "@/components/registration-screen";
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
-import { resolveDirectArrivalLanding } from "@/lib/registration-landing";
 import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
 
 /**
@@ -69,7 +69,8 @@ import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
  * prop, the form column carries no plate — and the one thing the surface still
  * has to decide for them is WHERE THEY LAND once registration completes, because
  * there is by construction no target to return them to. LD-4 answers it:
- * `lib/registration-landing.ts` maps what 017 remembers about this visitor onto
+ * `@ds/auth-flow/server` `resolveDirectArrivalLanding` maps what 017 remembers
+ * about this visitor onto
  * the 019 events feed (`/events`) or the storefront home (`/`), and never onto
  * the account page. The route publishes the answer as a server fact on the form
  * (`data-registration-landing`) — the same «the whole screen is a function of
@@ -211,6 +212,7 @@ export default async function DoctorRegisterPage({
     landingTarget && (returnEvent || accountLanding)
       ? landingTarget
       : resolveDirectArrivalLanding(
+          DOCTOR_AUTH_FLOW,
           await resolveRememberedSpecialty(requestHeaders),
         );
 

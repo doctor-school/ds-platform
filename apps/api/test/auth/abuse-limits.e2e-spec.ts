@@ -75,6 +75,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
             perUserPer15Min: 3,
             perIpPer15Min: 1000,
             perAsnPerHour: 1000,
+            // No scoped entry (#2294): the auth routes here are unscoped.
+            scopedPerIpPer15Min: {},
           }),
       );
     });
@@ -122,6 +124,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
             perUserPer15Min: 3,
             perIpPer15Min: 1000,
             perAsnPerHour: 1000,
+            // No scoped entry (#2294): the auth routes here are unscoped.
+            scopedPerIpPer15Min: {},
           }),
       );
       // Register the recovering user so the success path can actually log in.

@@ -586,6 +586,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           // trip first and the assertion would be about the wrong dimension.
           perIpPer15Min: 1_000_000,
           perAsnPerHour: 1_000_000,
+          // No scoped entry (#2294): the admin routes here are unscoped.
+          scopedPerIpPer15Min: {},
         })
         .compile();
       app = moduleRef.createNestApplication<NestFastifyApplication>(

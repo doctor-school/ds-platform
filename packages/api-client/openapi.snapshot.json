@@ -52,6 +52,75 @@
         "required": ["provider", "embedRef"],
         "type": "object"
       },
+      "CongressSignUpRequestDto": {
+        "properties": {
+          "captchaToken": {
+            "type": "string"
+          },
+          "city": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "contactPhone": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "maxLength": 200,
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "firstName": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "patronymic": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "personalDataConsent": {
+            "const": true,
+            "type": "boolean"
+          },
+          "region": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "specialtyId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "surname": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workplace": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "surname",
+          "firstName",
+          "email",
+          "specialtyId",
+          "workplace",
+          "city",
+          "region",
+          "contactPhone",
+          "personalDataConsent"
+        ],
+        "type": "object"
+      },
       "CreateExpertRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -3962,6 +4031,28 @@
           }
         },
         "tags": ["Auth"]
+      }
+    },
+    "/v1/congress/sign-up": {
+      "post": {
+        "operationId": "CongressSignUpController_signUp",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CongressSignUpRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["CongressSignUp"]
       }
     },
     "/v1/events/{idOrSlug}/chat": {

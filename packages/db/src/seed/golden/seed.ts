@@ -6,8 +6,7 @@
 
 import { and, getTableColumns, gte, lte, sql } from "drizzle-orm";
 
-import { registrations } from "../../schema/registrations.js";
-import { GOLDEN_GROUP, goldenUuid } from "./ids.js";
+import { goldenUuid } from "./ids.js";
 import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
 import { specialtiesMinzdrav } from "../../schema/specialties.js";
 import { seedSpecialtiesMinzdrav } from "../specialties-minzdrav.js";
@@ -66,6 +65,41 @@ export async function loadSpecialtyIdByName(
     );
   }
   return new Map(rows.map((row) => [row.name, row.id]));
+}
+
+/**
+ * Deletes the volume ordinal namespace of a step that declares it owns one.
+ *
+ * Runs inside the seed transaction, immediately before the step's upsert, so a
+ * failure anywhere later restores every row it removed. The range is the id
+ * group's volume ordinals ALONE: named catalogue rows live below
+ * `GOLDEN_VOLUME_ORDINAL_BASE` and product-created rows carry no golden uuid,
+ * so neither can fall inside it.
+ *
+ * This replaces a per-table name check in the writer loop: which tables need it
+ * is a property of the plan (`replacesVolumeNamespace`), declared next to the
+ * rows whose pairing walks with the pin.
+ */
+async function clearVolumeNamespace(
+  tx: GoldenExecutor,
+  step: GoldenSeedStep,
+): Promise<void> {
+  const group = step.replacesVolumeNamespace;
+  if (group === undefined) return;
+  const id = getTableColumns(step.table).id;
+  if (!id) {
+    throw new GoldenPlanError(
+      `${step.name}: declares a volume namespace but has no "id" column`,
+    );
+  }
+  await tx
+    .delete(step.table)
+    .where(
+      and(
+        gte(id, goldenUuid(group, GOLDEN_VOLUME_ORDINAL_BASE)),
+        lte(id, goldenUuid(group, 0xffff_ffff_ffff)),
+      ),
+    );
 }
 
 /** Executes one planned step as an idempotent upsert. */
@@ -168,29 +202,7 @@ export async function seedGolden(
     const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
     const steps: { name: string; rows: number }[] = [];
     for (const step of plan) {
-      if (step.name === "registrations") {
-        // A later pin reshuffles the volume (user,event) pairs among ordinal
-        // ids. Updating them one by one can collide with another old ordinal.
-        // Replace only our volume namespace, inside this same transaction;
-        // named registrations and product-created UUIDs keep their identities.
-        await tx
-          .delete(registrations)
-          .where(
-            and(
-              gte(
-                registrations.id,
-                goldenUuid(
-                  GOLDEN_GROUP.registrations,
-                  GOLDEN_VOLUME_ORDINAL_BASE,
-                ),
-              ),
-              lte(
-                registrations.id,
-                goldenUuid(GOLDEN_GROUP.registrations, 0xffff_ffff_ffff),
-              ),
-            ),
-          );
-      }
+      await clearVolumeNamespace(tx, step);
       steps.push({ name: step.name, rows: await applyGoldenStep(tx, step) });
     }
     return {

@@ -1,12 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { createDrizzle, registrations, users, events } from "@ds/db";
+import {
+  createDrizzle,
+  directions,
+  eventDirections,
+  eventRecordings,
+  events,
+  registrations,
+  users,
+} from "@ds/db";
 import {
   buildGoldenDataset,
   golden,
   goldenUuid,
   GOLDEN_GROUP,
   GOLDEN_IDP_ACCOUNTS,
+  GOLDEN_VOLUME_ORDINAL_BASE,
   isGoldenUuid,
+  isGoldenVolumeUuid,
   resolveGoldenSubjects,
   seedGolden,
 } from "../../../../packages/db/src/seed/golden/index.js";
@@ -29,6 +39,15 @@ describe("golden seed re-pinning (#2262)", () => {
   );
   const firstPin = "2026-09-16T08:00:00.000Z";
   const laterPin = "2026-09-17T08:00:00.000Z";
+  // #2351 — the pin that reproduces the stage failure of 2026-09-22 verbatim,
+  // down to the colliding pair. `event_directions` walks two contiguous
+  // direction slots per эфир over two counters split by
+  // `published && startsAt > now`, so every day the pin passes an эфир's start
+  // re-phases the walk and moves pairs between positional ordinals. Six days
+  // move one DOWN — onto an ordinal the same statement has not rewritten yet.
+  // The one-day `laterPin` above happens to move none, which is why EARS-1
+  // never saw this class here.
+  const reshuffledPin = "2026-09-22T08:00:00.000Z";
   const rollback = new Error("2262 fixture rollback");
   afterAll(() => pool.end());
 
@@ -126,13 +145,11 @@ describe("golden seed re-pinning (#2262)", () => {
           });
         // An obsolete volume ordinal is seed-owned too; a smaller later plan
         // must not leave it behind. Named and ordinary IDs above remain intact.
-        await tx
-          .insert(registrations)
-          .values({
-            id: goldenUuid(GOLDEN_GROUP.registrations, 9999),
-            userId: golden.doctors.mfaEnrolled.id,
-            eventId: golden.events.hidden.id,
-          });
+        await tx.insert(registrations).values({
+          id: goldenUuid(GOLDEN_GROUP.registrations, 9999),
+          userId: golden.doctors.mfaEnrolled.id,
+          eventId: golden.events.hidden.id,
+        });
         // The prior pin changes which pair each ordinal holds: the old executor
         // fails here with registrations_user_id_event_id_unique (SQLSTATE 23505).
         const result = await seedGolden(tx, {
@@ -166,6 +183,115 @@ describe("golden seed re-pinning (#2262)", () => {
         await seedGolden(tx, { subjects, env: { GOLDEN_NOW: laterPin } });
         expect(
           await tx.select().from(registrations).orderBy(registrations.id),
+        ).toEqual(rows);
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
+  }, 120_000);
+
+  it("EARS-2: re-seeds the persistent database at a pin one season-step later without event_directions pair collisions", async () => {
+    let fresh: (typeof eventDirections.$inferSelect)[] = [];
+    let freshRecordings: (typeof eventRecordings.$inferSelect)[] = [];
+    // The reference: what a never-seeded database holds at the later pin.
+    await db
+      .transaction(async (tx) => {
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: reshuffledPin } });
+        fresh = (
+          await tx.select().from(eventDirections).orderBy(eventDirections.id)
+        ).filter((row) => isGoldenUuid(row.id));
+        // `event_recordings` walks with the pin for its own reason (a running
+        // ordinal over the recorded эфиры) and collides on
+        // `event_recordings_event_kind_active_uniq` — the same class, so the
+        // same declaration, and the same reference comparison. VOLUME rows
+        // only: a NAMED recording carries `first_published_at`, which the
+        // set-once trigger pins to the FIRST build, so an in-place re-pin
+        // deliberately keeps an instant a fresh build would compute anew.
+        freshRecordings = (
+          await tx.select().from(eventRecordings).orderBy(eventRecordings.id)
+        ).filter((row) => isGoldenVolumeUuid(row.id));
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error.cause ?? error;
+      });
+    expect(fresh.some((row) => isGoldenVolumeUuid(row.id))).toBe(true);
+
+    await db
+      .transaction(async (tx) => {
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: firstPin } });
+        // A classification the product created: its own direction, so the pair
+        // is the seed's to collide with only if the replacement overreaches.
+        const ordinaryDirection = randomUUID();
+        await tx.insert(directions).values({
+          id: ordinaryDirection,
+          slug: `ordinary-direction-${ordinaryDirection}`,
+          title: "Направление вне golden",
+        });
+        const [ordinaryLink] = await tx
+          .insert(eventDirections)
+          .values({
+            id: randomUUID(),
+            eventId: golden.events.hidden.id,
+            directionId: ordinaryDirection,
+          })
+          .returning();
+        // No inbound FK on either table this test replaces: the replacement
+        // cannot cascade into child rows nor abort on `restrict`. A future child
+        // table invalidates the step's `replacesVolumeNamespace` declaration,
+        // and this is where it surfaces.
+        const inbound = await tx.execute(
+          sql`select conname from pg_constraint where contype = 'f' and confrelid in ('event_directions'::regclass, 'event_recordings'::regclass)`,
+        );
+        expect(inbound.rows).toEqual([]);
+        const namedBefore = (
+          await tx.select().from(eventDirections).orderBy(eventDirections.id)
+        )
+          .filter((row) => isGoldenUuid(row.id) && !isGoldenVolumeUuid(row.id))
+          .map((row) => row.id);
+        expect(namedBefore.length).toBeGreaterThan(0);
+
+        // The moved pin hands ordinal …0a22 the pair a HIGHER ordinal (…0a23)
+        // still holds, and `ON CONFLICT (id)` rewrites in ascending id order:
+        // the old executor fails here with event_directions_pair_key (23505).
+        const result = await seedGolden(tx, {
+          subjects,
+          env: { GOLDEN_NOW: reshuffledPin },
+        });
+        expect(result.now).toBe(reshuffledPin);
+
+        const rows = await tx
+          .select()
+          .from(eventDirections)
+          .orderBy(eventDirections.id);
+        // Re-seeded in place == freshly seeded, row for row.
+        expect(rows.filter((row) => isGoldenUuid(row.id))).toEqual(fresh);
+        expect(
+          (
+            await tx.select().from(eventRecordings).orderBy(eventRecordings.id)
+          ).filter((row) => isGoldenVolumeUuid(row.id)),
+        ).toEqual(freshRecordings);
+        // Named catalogue rows are BELOW the volume base: upserted by id, never
+        // inside the replaced range.
+        expect(
+          rows
+            .filter(
+              (row) => isGoldenUuid(row.id) && !isGoldenVolumeUuid(row.id),
+            )
+            .map((row) => row.id),
+        ).toEqual(namedBefore);
+        expect(Number.parseInt(namedBefore[0]!.slice(-12), 16)).toBeLessThan(
+          GOLDEN_VOLUME_ORDINAL_BASE,
+        );
+        // The product's own row survives untouched.
+        expect(rows.find((row) => row.id === ordinaryLink!.id)).toEqual(
+          ordinaryLink,
+        );
+        // And the moved pin stays idempotent on a third run.
+        await seedGolden(tx, { subjects, env: { GOLDEN_NOW: reshuffledPin } });
+        expect(
+          await tx.select().from(eventDirections).orderBy(eventDirections.id),
         ).toEqual(rows);
         throw rollback;
       })

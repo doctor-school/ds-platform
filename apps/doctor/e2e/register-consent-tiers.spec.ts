@@ -23,7 +23,21 @@ import { test, expect } from "@playwright/test";
  * own tier-2 render.
  */
 
-/** The composition the statement must name, from the 021 read model. */
+/**
+ * The partner-data consent's words, verbatim from the package default
+ * (`packages/auth-flow/src/copy/defaults.ts` -> `consents.partnerDataItem`),
+ * which is itself verbatim from the vendored canvas `design-source/auth.dc.html`.
+ * No host restates them, so what the doctor reads here IS the approved wording.
+ */
+const PARTNER_DATA_LABEL = "Согласие на передачу данных партнёрам платформы";
+const PARTNER_DATA_HELP =
+  "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.";
+
+/**
+ * The data composition is disclosed in the policy text and by the platform
+ * manager, never enumerated inside the consent row (021 EARS-5). These are the
+ * field names the superseded sentence used to list; the row must carry none.
+ */
 const COMPOSITION = ["ФИО", "специальность", "город", "место работы"];
 
 test.describe("021 EARS-5: the two-tier consent block", () => {
@@ -88,23 +102,36 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     expect(unframed, "tier 2 stands outside that group").toBe(0);
   });
 
-  test("021 EARS-5.2: the partner-data statement names the exact composition and says contacts are not shared", async ({
+  test("021 EARS-5.2: the partner-data row carries the canvas wording, and the composition is not enumerated in it", async ({
     page,
   }) => {
     await page.goto("/register");
 
+    // The row is RENDERED, in the shared words: label above, help line below,
+    // both byte-identical to the package default no host overrides.
     const statement = page.getByTestId("register-partner-data-statement");
     await expect(statement).toHaveCount(1);
+    await expect(statement).toBeVisible();
+    expect((await statement.textContent())?.trim()).toBe(PARTNER_DATA_LABEL);
 
-    const text = (await statement.textContent()) ?? "";
+    const help = page.getByTestId("register-partner-data-help");
+    await expect(help).toHaveCount(1);
+    await expect(help).toBeVisible();
+    expect((await help.textContent())?.trim()).toBe(PARTNER_DATA_HELP);
+
+    // The composition belongs to the policy text and to the platform manager,
+    // never to the consent row — the superseded sentence is structurally gone,
+    // not merely reworded.
+    const tier1Text = (await page
+      .getByTestId("registration-consent-access")
+      .textContent()) ?? "";
     for (const field of COMPOSITION) {
-      expect(text, `the statement names ${field}`).toContain(field);
+      expect(
+        tier1Text,
+        `the access tier does not enumerate ${field}`,
+      ).not.toContain(field);
     }
-    // The exclusion is STATED, not implied by omission.
-    expect(text).toContain("Контакты не передаются");
-    expect(text).toBe(
-      "Согласен на передачу партнёрам платформы данных: ФИО, специальность, город, место работы. Контакты не передаются.",
-    );
+    expect(tier1Text).not.toContain("Контакты не передаются");
 
     // EARS-7 — a change or withdrawal is a manager request, and there is no
     // self-service control anywhere on the surface.

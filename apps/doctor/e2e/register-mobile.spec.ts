@@ -58,8 +58,14 @@ const KNOWN_SLUG = "prp-pri-gonartroze";
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
 
-/** The composition statement the tier-1 consent label has to name (021 read model). */
-const COMPOSITION = ["ФИО", "специальность", "город", "место работы"];
+/**
+ * The tier-1 partner-data consent's words, verbatim from the package default
+ * (`packages/auth-flow/src/copy/defaults.ts` -> `consents.partnerDataItem`),
+ * which no host restates. 021 EARS-5 keeps the data composition in the policy
+ * text and with the platform manager, so the accessible name of the control is
+ * this shared wording and not an enumeration of fields.
+ */
+const PARTNER_DATA_LABEL = "Согласие на передачу данных партнёрам платформы";
 
 /**
  * The copy the screen shows when the register command never reaches the
@@ -366,17 +372,17 @@ test.describe("021 EARS-16: the accessibility contracts of the route", () => {
       expect(name, "a checkbox with an empty accessible name").not.toBe("");
     }
 
-    // The tier-1 pair carries the composition statement: the doctor is told
-    // WHAT is shared, in the label of the control that shares it.
+    // The tier-1 partner-data control is named by the shared canvas wording —
+    // the accessible name a screen reader reads out is the approved sentence,
+    // not a host restatement and not a field enumeration.
     const partnerName = await page
       .getByTestId("register-partner-data")
       .locator("xpath=ancestor::label[1]")
       .innerText();
-    for (const part of COMPOSITION) {
-      expect(partnerName, `the partner-data label names "${part}"`).toContain(
-        part,
-      );
-    }
+    expect(
+      partnerName,
+      "the partner-data control is named by the package default label",
+    ).toContain(PARTNER_DATA_LABEL);
   });
 
   test("021 EARS-16.50: every field error is programmatically associated with its field", async ({

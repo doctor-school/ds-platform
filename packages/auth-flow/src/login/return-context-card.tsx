@@ -31,7 +31,7 @@ import type { ReturnContextEvent } from "../server/return-context";
  *
  * DATA, NOT A HOST BRANCH. Whether a host publishes the card is
  * `config.returnTo.card`; every word comes from `copy.returnContext`.
- * `returnContextSlots` is the one gate: no flag, no copy or no resolvable event
+ * `returnContextSlots` is the one gate: no flag or no resolvable event
  * ⇒ no slot at all, never an empty frame (EARS-3).
  */
 
@@ -155,7 +155,7 @@ export function returnContextSlots({
   variant: ReturnContextVariant;
 }): { panel: ReactNode | undefined; plate: ReactNode | undefined } {
   const copy = resolveAuthFlowCopy(config).returnContext;
-  if (!config.returnTo?.card || !copy || !event) {
+  if (!config.returnTo?.card || !event) {
     return { panel: undefined, plate: undefined };
   }
   return {

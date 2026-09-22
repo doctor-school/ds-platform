@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { AuthError } from "../client/auth-client";
+import { resolveAuthFlowCopy } from "../copy";
 import { authErrorMessage } from "./auth-error-message";
 import { DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
 
@@ -13,7 +14,7 @@ import { DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
  * asserted, because a regression in either direction is invisible in the UI —
  * the oracle leak looks like helpfulness, and the flattening looks like caution.
  */
-const COPY = DOCTOR_FIXTURE.copy.errors;
+const COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).errors;
 
 const GENERIC = {
   login: "Не удалось войти. Проверьте почту или телефон и пароль.",

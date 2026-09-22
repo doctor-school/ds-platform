@@ -23,7 +23,8 @@ import {
  * with one hardcoded line naming an email confirmation, and `/login` reused it
  * verbatim: a doctor who already has an account and arrived from a content gate
  * was told to wait for a letter that sign-in never sends. The card, the eyebrow
- * and the frame are shared; only this sentence forks — now as host-config copy.
+ * and the frame are shared; the sentence forks by VARIANT, and both variants
+ * are package defaults — no host restates them.
  *
  * Rendered markup: the card is a server component and the assertion is
  * about what reaches the HTML.
@@ -132,16 +133,14 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host pub
     expect(slots).toEqual({ panel: undefined, plate: undefined });
   });
 
-  it("021 EARS-3: a host flagging the card without its copy renders nothing rather than a wordless frame", () => {
-    const { returnContext: _omit, ...copy } = DOCTOR_FIXTURE.copy;
-    const config: AuthFlowHostConfig = { ...DOCTOR_FIXTURE, copy };
+  it("021 EARS-3: a host flagging the card states no words of its own — the package supplies them", () => {
+    const { copy: _omit, ...withoutCopy } = DOCTOR_FIXTURE;
+    const config: AuthFlowHostConfig = withoutCopy;
 
-    expect(
-      returnContextSlots({ config, event: EVENT, variant: "login" }),
-    ).toEqual({
-      panel: undefined,
-      plate: undefined,
-    });
+    const slots = returnContextSlots({ config, event: EVENT, variant: "login" });
+
+    expect(slots.panel).toBeDefined();
+    expect(slots.plate).toBeDefined();
   });
 
   it("021 EARS-2: the plate reads its eyebrow from the host copy", () => {

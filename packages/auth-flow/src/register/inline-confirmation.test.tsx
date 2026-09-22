@@ -84,6 +84,7 @@ import {
 } from "@ds/design-system/blocks";
 
 import { AuthError } from "../client/auth-client";
+import { resolveAuthFlowCopy } from "../copy";
 import { DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
 import { RegistrationConfirmation } from "./inline-confirmation";
 
@@ -95,7 +96,7 @@ const RETURN_TARGET = "/events/kardio";
 /** Rule S3 — what the ROUTE carries onward, in the canonical vocabulary. */
 const CARRIED_TARGET = "/webinars/kardio";
 
-const REGISTER_COPY = DOCTOR_FIXTURE.copy.register;
+const REGISTER_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).register;
 if (!REGISTER_COPY?.confirm) {
   throw new Error("DOCTOR_FIXTURE must state the inline confirmation copy");
 }
@@ -397,7 +398,7 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
 
     await submitCode(user);
 
-    await screen.findByText(DOCTOR_FIXTURE.copy.errors.tooManyAttempts);
+    await screen.findByText(resolveAuthFlowCopy(DOCTOR_FIXTURE).errors.tooManyAttempts);
     expect(screen.queryByText(CONFIRM_COPY.failed)).toBeNull();
   });
 });

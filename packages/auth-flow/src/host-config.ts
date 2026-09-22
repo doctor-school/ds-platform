@@ -94,8 +94,12 @@ export type AuthFlowCopy = {
    * the challenge can run, so every host that challenges also discloses.
    */
   readonly botProtectionDisclosure: AuthFlowBotProtectionDisclosureCopy;
-  /** The return-context card beside a door (row 46) — present exactly where `returnTo.card`. */
-  readonly returnContext?: AuthFlowReturnContextCopy;
+  /**
+   * The return-context card beside a door (row 46). Its words are the
+   * package's on every host; `returnTo.card` alone decides whether the card is
+   * drawn, so a host that publishes it restates no sentence.
+   */
+  readonly returnContext: AuthFlowReturnContextCopy;
   /**
    * The consent rows' words, keyed by the row the door draws. WHICH rows a host
    * asks for is the host's `consents` flags; what each row SAYS is the

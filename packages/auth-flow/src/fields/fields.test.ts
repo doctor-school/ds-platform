@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveAuthFlowCopy } from "../copy";
 
 import {
   DOCTOR_REGISTER_FIELD_SPECS,
@@ -25,7 +26,7 @@ import {
  * so every rejection here traces back to `DOCTOR_REGISTER_FIELD_SPECS`, and only
  * the Russian wording is the host's.
  */
-const COPY = DOCTOR_FIXTURE.copy.fields;
+const COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).fields;
 
 describe("021 EARS-11: the registration form rules derive from the FieldSpec SSOT", () => {
   it("021 EARS-11.1: the email rule rejects a malformed address with the screen's copy", () => {

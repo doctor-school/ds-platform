@@ -77,6 +77,7 @@ import {
 } from "@ds/design-system/blocks";
 
 import { AuthError } from "../client/auth-client";
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
@@ -202,7 +203,7 @@ describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", (
 
       await waitFor(() =>
         expect(screen.getByTestId("register-captcha-error")).toHaveTextContent(
-          config.copy.botProtection.required,
+          resolveAuthFlowCopy(config).botProtection.required,
         ),
       );
       // A refused challenge is never a failed command…
@@ -226,7 +227,7 @@ describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", (
 
       await waitFor(() =>
         expect(screen.getByTestId("register-captcha-error")).toHaveTextContent(
-          config.copy.botProtection.rejected,
+          resolveAuthFlowCopy(config).botProtection.rejected,
         ),
       );
       expect(screen.queryByTestId("register-command-error")).toBeNull();
@@ -317,7 +318,7 @@ describe("021 EARS-10 (#2331): the already-registered visitor's way out", () => 
   /** The footer link each host words itself — read by ITS own sentence. */
   const signInHref = (config: AuthFlowHostConfig) =>
     screen
-      .getByText(config.copy.register!.haveAccount)
+      .getByText(resolveAuthFlowCopy(config).register.haveAccount)
       .closest("a")
       ?.getAttribute("href");
 
@@ -376,7 +377,7 @@ describe("021 EARS-15.4: what the door holds for the step after the submit", () 
 
     await waitFor(() =>
       expect(screen.getByTestId("register-command-error")).toHaveTextContent(
-        DOCTOR_FIXTURE.copy.register!.failed,
+        resolveAuthFlowCopy(DOCTOR_FIXTURE).register.failed,
       ),
     );
     expect(takePendingRegistration(EMAIL)).toBeNull();
@@ -435,7 +436,7 @@ describe("021 EARS-4/5/6/7/12/19: the consent rows a host states, and what is re
     await renderDoor(ACADEMY_FIXTURE);
 
     expect(
-      screen.getByText(ACADEMY_FIXTURE.consents!.statement!),
+      screen.getByText(resolveAuthFlowCopy(ACADEMY_FIXTURE).consents.statement),
     ).toBeInTheDocument();
     expect(
       screen
@@ -474,7 +475,7 @@ describe("021 EARS-7/12: the blocked submit, and the statement that cannot be se
     // The condition the server still refuses without is stated even though no
     // rendered row covers it — a silently dead button exists in no state.
     expect(screen.getByTestId("register-submit-reason")).toHaveTextContent(
-      DOCTOR_FIXTURE.consents!.partnerDataItem!.unmet,
+      resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.partnerDataItem.unmet!,
     );
     expect(screen.getByTestId("register-submit")).toBeDisabled();
   });
@@ -490,7 +491,7 @@ describe("021 EARS-7/12: the blocked submit, and the statement that cannot be se
     await renderDoor(DOCTOR_FIXTURE);
     expect(
       screen.getByTestId("registration-consent-manager-note"),
-    ).toHaveTextContent(DOCTOR_FIXTURE.consents!.managerNote!);
+    ).toHaveTextContent(resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.managerNote);
 
     cleanup();
     await renderDoor(ACADEMY_FIXTURE);
@@ -545,7 +546,7 @@ describe("003 EARS-16: how a refused registration reads", () => {
 
       await waitFor(() =>
         expect(screen.getByTestId("register-command-error")).toHaveTextContent(
-          config.copy.register!.failed,
+          resolveAuthFlowCopy(config).register.failed,
         ),
       );
     },
@@ -560,7 +561,7 @@ describe("003 EARS-16: how a refused registration reads", () => {
 
       await waitFor(() =>
         expect(screen.getByTestId("register-command-error")).toHaveTextContent(
-          config.copy.errors.tooManyAttempts,
+          resolveAuthFlowCopy(config).errors.tooManyAttempts,
         ),
       );
     },
@@ -587,7 +588,7 @@ describe("021 EARS-2: the gate context beside the form", () => {
 
 describe("rows 51 + 76: the confirmation step a host with no /verify route runs", () => {
   it("021 EARS-19: an accepted registration on the doctor door replaces the form with the code step for the address just registered", async () => {
-    const confirmCopy = DOCTOR_FIXTURE.copy.register?.confirm;
+    const confirmCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).register.confirm;
     if (!confirmCopy) throw new Error("fixture states no confirmation copy");
     await submitForm(DOCTOR_FIXTURE);
 
@@ -600,7 +601,7 @@ describe("rows 51 + 76: the confirmation step a host with no /verify route runs"
   });
 
   it("021 EARS-19: the Academy door never reaches the inline step — its own /verify route owns it", async () => {
-    const confirmCopy = ACADEMY_FIXTURE.copy.register?.confirm;
+    const confirmCopy = resolveAuthFlowCopy(ACADEMY_FIXTURE).register.confirm;
     // The fixture states no inline copy at all, which is the same fact read
     // from the config side: this host confirms on a route of its own.
     expect(confirmCopy).toBeUndefined();
@@ -609,7 +610,7 @@ describe("rows 51 + 76: the confirmation step a host with no /verify route runs"
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(
       screen.queryByLabelText(
-        DOCTOR_FIXTURE.copy.register?.confirm?.codeLabel ?? "",
+        resolveAuthFlowCopy(DOCTOR_FIXTURE).register.confirm?.codeLabel ?? "",
       ),
     ).toBeNull();
   });

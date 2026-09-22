@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { AuthFlowHostConfig } from "../host-config";
+import { resolveAuthFlowCopy } from "../copy";
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
@@ -50,7 +51,7 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       const notices = screen.getAllByTestId("smartcaptcha-disclosure");
       expect(notices).toHaveLength(1);
       expect(notices[0]).toBeVisible();
-      const disclosure = config.copy.botProtectionDisclosure;
+      const disclosure = resolveAuthFlowCopy(config).botProtectionDisclosure;
       expect(notices[0]).toHaveTextContent(
         `${disclosure.notice} ${disclosure.link}`,
       );
@@ -96,9 +97,9 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       "alt",
       "",
     );
-    expect(screen.getByText(config.copy.brand.headline)).toBeInTheDocument();
-    expect(screen.getByText(config.copy.brand.subcopy)).toBeInTheDocument();
-    expect(screen.getByText(config.copy.brand.footer)).toBeInTheDocument();
+    expect(screen.getByText(resolveAuthFlowCopy(config).brand.headline)).toBeInTheDocument();
+    expect(screen.getByText(resolveAuthFlowCopy(config).brand.subcopy)).toBeInTheDocument();
+    expect(screen.getByText(resolveAuthFlowCopy(config).brand.footer)).toBeInTheDocument();
   });
 
   it("row 47: the return-context block takes the value prop's place when supplied", () => {
@@ -113,7 +114,7 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
 
     expect(screen.getByTestId("return-context")).toBeInTheDocument();
     expect(
-      screen.queryByText(config.copy.brand.subcopy),
+      screen.queryByText(resolveAuthFlowCopy(config).brand.subcopy),
     ).not.toBeInTheDocument();
   });
 });

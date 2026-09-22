@@ -33,7 +33,7 @@ features:
   - 041-event-constructor
   - 042-marketing-integration
   - 043-migration-getcourse-and-congress
-  - 044-congress-2026-intake
+  - 044-congress-signup
 lang: en
 ---
 
@@ -82,7 +82,7 @@ lang: en
 | Wave  | Features                | Surfaces                 | What becomes demonstrable                                                                                                                                                                     |
 | ----- | ----------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1** | 017, 018, 019, 020, 021 | doctor (+ event on both) | The whole doctor funnel: entry → specialty → feed → event → «Участвовать» → registration → return to the point of interest; `apps/promo` retired                                              |
-| **2** | 022, 023, 024, 025, 044 | doctor · backend         | The doctor learns and accrues attention points, sees them in the account, reaches a school as a product; congress-2026 sign-ups land in our DB                                                |
+| **2** | 022, 023, 024, 025, 044 | doctor · backend         | The doctor learns and accrues attention points, sees them in the account, reaches a school as a product; congress-2027 sign-ups land in our DB                                                |
 | **3** | 028, 037, 038           | both · backend           | The doctor passes verification, receives a document and an NMO code; the platform is legally public (028 ships in two slices — its thin slice 1 lands in R1 without 037, the rest stays here) |
 | **4** | 029, 030, 031, 033      | academy                  | The whole expert funnel: heard of it → read the backstage → «Это я» / application                                                                                                             |
 | **5** | 032, 034, 035, 036      | academy · backend        | The whole investor funnel: understood the model → checked the leaderboard → cabinet with the accrual report                                                                                   |

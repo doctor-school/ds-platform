@@ -105,6 +105,7 @@
   --font-size-topbar: 0.5625rem;
   --font-size-2xs: 0.625rem;
   --font-size-eyebrow: 0.6875rem;
+  --font-size-pill: 0.71875rem;
   --font-size-xs: 0.75rem;
   --font-size-caption: 0.8125rem;
   --font-size-sm: 0.875rem;
@@ -113,6 +114,7 @@
   --font-size-lg: 1.25rem;
   --font-size-xl: 1.375rem;
   --font-size-title-lg: 1.5rem;
+  --font-size-title-xl: 1.625rem;
   --font-size-2xl: 1.75rem;
   --font-size-3xl: 2.5rem;
   --font-size-4xl: 3.5rem;
@@ -122,9 +124,13 @@
   --font-weight-bold: 700;
   --font-weight-extrabold: 800;
   --font-line-height-none: 1;
+  --font-line-height-title: 1.15;
   --font-line-height-tight: 1.25;
   --font-line-height-snug: 1.375;
+  --font-line-height-label: 1.4;
+  --font-line-height-notice: 1.45;
   --font-line-height-normal: 1.5;
+  --font-line-height-prose: 1.55;
   --font-line-height-relaxed: 1.625;
   --font-letter-spacing-numeric: -0.04em;
   --font-letter-spacing-display: -0.035em;
@@ -416,6 +422,7 @@
   --text-topbar: var(--font-size-topbar);
   --text-2xs: var(--font-size-2xs);
   --text-eyebrow: var(--font-size-eyebrow);
+  --text-pill: var(--font-size-pill);
   --text-xs: var(--font-size-xs);
   --text-caption: var(--font-size-caption);
   --text-sm: var(--font-size-sm);
@@ -424,6 +431,7 @@
   --text-lg: var(--font-size-lg);
   --text-xl: var(--font-size-xl);
   --text-title-lg: var(--font-size-title-lg);
+  --text-title-xl: var(--font-size-title-xl);
   --text-2xl: var(--font-size-2xl);
   --text-3xl: var(--font-size-3xl);
   --text-4xl: var(--font-size-4xl);
@@ -432,6 +440,15 @@
   --font-weight-semibold: var(--font-weight-semibold);
   --font-weight-bold: var(--font-weight-bold);
   --font-weight-extrabold: var(--font-weight-extrabold);
+  --leading-none: var(--font-line-height-none);
+  --leading-title: var(--font-line-height-title);
+  --leading-tight: var(--font-line-height-tight);
+  --leading-snug: var(--font-line-height-snug);
+  --leading-label: var(--font-line-height-label);
+  --leading-notice: var(--font-line-height-notice);
+  --leading-normal: var(--font-line-height-normal);
+  --leading-prose: var(--font-line-height-prose);
+  --leading-relaxed: var(--font-line-height-relaxed);
   --spacing-gutter: var(--space-gutter);
   --spacing-inset: var(--space-inset);
   --spacing-stack: var(--space-stack);

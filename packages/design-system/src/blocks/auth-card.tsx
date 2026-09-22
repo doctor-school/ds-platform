@@ -18,9 +18,11 @@ import {
  * into a square TINT-filled badge tile stacked ABOVE a heavy, up-scaled title with the
  * description below — no longer a small glyph inline beside the title.
  *
- * The badge tile paints from the AA-safe `tint` / `tint-foreground` token pairing (blue
- * tint surface + ink-blue glyph), never a hardcoded colour; an app-supplied icon that
- * carries its own `text-*` class keeps that colour (the tile only provides the default).
+ * The badge tile paints from the `tint` surface with the `info` accent glyph the canvas
+ * draws (`auth.dc.html:62`), never a hardcoded colour; an app-supplied icon that carries
+ * its own `text-*` class keeps that colour (the tile only provides the default). At the
+ * `layout` breakpoint the family steps its own inner padding to the canvas 36px — the
+ * global `Card` primitive keeps its 24px and is not touched.
  *
  * It is a presentation scaffold ONLY: the form, BFF calls, EARS-16 error mapping,
  * routing and i18n are app glue and stay in the app/composition layer. All copy
@@ -62,25 +64,32 @@ export function AuthCard({
 } & Omit<React.ComponentProps<typeof Card>, "title">) {
   return (
     <Card className={className} {...rest}>
-      <CardHeader>
+      <CardHeader className="layout:px-9 layout:pt-9">
         {errorBanner}
         {icon ? (
-          // Neo-brutalist badge tile (#517, canvas `auth-card`): a square tint surface
-          // holding the app-supplied glyph, above the title. `text-tint-foreground` is
-          // the default glyph colour (AA-safe on `tint`); an icon with its own `text-*`
-          // class overrides it. `[&_svg]:size-6` normalises the glyph to the canvas 26px.
-          <span className="mb-3 inline-flex size-12 items-center justify-center bg-tint text-tint-foreground [&_svg]:size-6">
+          // Neo-brutalist badge tile (#517, canvas `auth.dc.html:62`): a square 52px
+          // tint surface holding the app-supplied glyph, above the title, with 20px of
+          // air under it. `text-info` is the canvas accent (#2D84F2) and the default
+          // glyph colour; an icon with its own `text-*` class overrides it.
+          // `[&_svg]:size-6` normalises the glyph to the canvas 26px.
+          <span className="mb-5 inline-flex size-13 items-center justify-center bg-tint text-info [&_svg]:size-6">
             {icon}
           </span>
         ) : null}
-        <CardTitle className="text-2xl font-extrabold tracking-tight">
+        <CardTitle className="text-title-xl font-extrabold tracking-tight leading-title">
           {title}
         </CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
+        {description ? (
+          <CardDescription className="leading-prose">
+            {description}
+          </CardDescription>
+        ) : null}
       </CardHeader>
-      <CardContent className={cn(contentClassName)}>{children}</CardContent>
+      <CardContent className={cn("layout:px-9 layout:pb-9", contentClassName)}>
+        {children}
+      </CardContent>
       {footer ? (
-        <CardFooter className="flex-col items-start gap-1 text-sm">
+        <CardFooter className="flex-col items-start gap-1 text-caption layout:px-9 layout:pb-9">
           {footer}
         </CardFooter>
       ) : null}

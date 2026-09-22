@@ -57,7 +57,8 @@ describe("<AuthCard>", () => {
   it("wraps the icon in a tinted badge tile (neo-brutalist auth-card, #517)", () => {
     // The re-skin promotes the inline icon into a square, tint-filled badge tile above
     // the title (canvas `auth-card` badge: tint surface + accent glyph). It paints from
-    // the AA-safe `tint` / `tint-foreground` token pairing, never a hardcoded colour.
+    // the `tint` surface + `info` accent token pairing, never a hardcoded colour; the
+    // exact kegel/tone the canvas fixes is asserted by the `#2027:` tile spec below.
     render(
       <AuthCard title="Sign in" icon={<span data-testid="glyph">◆</span>}>
         <div>form</div>
@@ -66,7 +67,88 @@ describe("<AuthCard>", () => {
     const tile = screen.getByTestId("glyph").parentElement;
     expect(tile).toBeInTheDocument();
     expect(tile?.className).toContain("bg-tint");
-    expect(tile?.className).toContain("text-tint-foreground");
+    expect(tile?.className).toContain("text-info");
+  });
+
+  // ── Render parity with the owner's canvas (#2027, auth.dc.html 52-64) ───────
+  // Owner rule 2026-09-22: parity is the RENDERING — frame, weights, colours,
+  // spacing — and the canvas beats the spec. These three assertions pin the auth
+  // FAMILY chrome; the global `Card` primitive is deliberately untouched, the
+  // 36px inset lives here.
+
+  it("#2027: the auth card pads to the canvas 36px inset from the layout breakpoint (canvas 52)", () => {
+    // Canvas 52 pads the card `clamp(24px,4vw,36px)`: 24px on a phone, reaching
+    // 36px exactly at the ~900px `layout` threshold. The family expresses that as
+    // the base `p-6` the primitive already draws plus a `layout:` 36px step, and
+    // it never re-pads the edge the next region owns (header keeps its 24px
+    // bottom gap, content and footer keep their zero top).
+    render(
+      <AuthCard title="Sign in" footer={<span>foot</span>}>
+        <div data-testid="body">form</div>
+      </AuthCard>,
+    );
+
+    const header = screen.getByText("Sign in").parentElement;
+    expect(header).toHaveClass("layout:px-9", "layout:pt-9");
+    expect(header?.className ?? "").not.toMatch(/layout:p-9/);
+
+    const content = screen.getByTestId("body").parentElement;
+    expect(content).toHaveClass("layout:px-9", "layout:pb-9");
+    expect(content?.className ?? "").not.toMatch(/layout:p-9/);
+
+    const footer = screen.getByText("foot").parentElement;
+    expect(footer).toHaveClass("layout:px-9", "layout:pb-9");
+  });
+
+  it("#2027: the badge tile is the canvas 52px tile carrying the ACCENT glyph (canvas 62)", () => {
+    // Canvas 62: a 52×52 tint tile, the glyph in `accent` (#2D84F2 = the `info`
+    // role), 20px of air under it. The darker `tint-foreground` pairing was the
+    // pre-canvas default and reads as a different blue on the screen.
+    render(
+      <AuthCard title="Sign in" icon={<span data-testid="glyph">◆</span>}>
+        <div>form</div>
+      </AuthCard>,
+    );
+
+    const tile = screen.getByTestId("glyph").parentElement;
+    expect(tile).toHaveClass("size-13", "bg-tint", "text-info", "mb-5");
+    expect(tile?.className ?? "").not.toMatch(/text-tint-foreground/);
+  });
+
+  it("#2027: the screen title and its sub-copy carry the canvas kegel and leading (canvas 63-64)", () => {
+    // Canvas 63: 26px/800, −.025em, leading 1.15 — a screen title, not the page
+    // h2 (`text-2xl` 28px on Tailwind's 1.333 default leading overshot both).
+    // Canvas 64: the sub-copy runs on 1.55.
+    render(
+      <AuthCard title="Sign in" description="Enter your details">
+        <div>form</div>
+      </AuthCard>,
+    );
+
+    const title = screen.getByText("Sign in");
+    expect(title).toHaveClass(
+      "text-title-xl",
+      "font-extrabold",
+      "tracking-tight",
+      "leading-title",
+    );
+    expect(title.className).not.toMatch(/text-2xl/);
+
+    expect(screen.getByText("Enter your details")).toHaveClass("leading-prose");
+  });
+
+  it("#2027: the footer speaks at the canvas 13px caption (canvas 232)", () => {
+    // The «Уже есть аккаунт? Войти» line is a caption under the card body, not
+    // body copy: the canvas sets it a rung below the form text.
+    render(
+      <AuthCard title="Sign in" footer={<span>foot</span>}>
+        <div>form</div>
+      </AuthCard>,
+    );
+
+    const footer = screen.getByText("foot").parentElement;
+    expect(footer).toHaveClass("text-caption");
+    expect(footer?.className ?? "").not.toMatch(/text-sm/);
   });
 
   it("omits the badge tile entirely when no icon is supplied", () => {

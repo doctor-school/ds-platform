@@ -1,4 +1,5 @@
 ---
+"@ds/design-system": minor
 "@ds/auth-flow": patch
 "@ds/portal": patch
 "@ds/doctor": patch
@@ -21,3 +22,15 @@ Consent tiers, the medical-worker declaration and the partner-data item stay hos
 DATA, so each storefront keeps asking exactly what it asked before. The doctor
 storefront's confirmation step is unchanged in what it does and says — it is now
 rendered by the package.
+
+`<RegisterCard>` draws ONE sign-up composition now. The three host-divergence
+knobs (`submitBlock`, `spacing`, `pendingAffordance`) are gone and the block
+follows the owner's canvas on both storefronts: the withdrawal note sits inside
+the access-conditions frame, a hairline rule separates the conditions, the
+read-only «продолжая, вы соглашаетесь…» statement stands after that frame and
+above the challenge, and the optional opt-in below the submit carries no
+«необязательно» marker — its position says it. A new `partnerPlateSlot` renders
+the partner-link notice under the promo field. `<LoginCard>` moves the challenge
+from the head of the sign-in-code step to directly above the button it protects,
+as it already stood on the password method. The `Checkbox` box no longer shrinks
+when its label wraps onto several lines.

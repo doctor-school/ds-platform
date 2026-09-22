@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { PARTNER_DATA_SHARING_PURPOSE, formatPartnerDataStatement } from "@ds/schemas";
+import {
+  PARTNER_DATA_SHARING_PURPOSE,
+  formatPartnerDataStatement,
+} from "@ds/schemas";
 
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
@@ -61,14 +64,6 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
       "marketing",
     ]);
     expect(tiers[1]?.items[0]?.required).toBe(false);
-  });
-
-  it("021 EARS-12: the accepted form composition — submit first, wider spacing, inert while pending", () => {
-    expect(DOCTOR_AUTH_FLOW.register.form).toEqual({
-      submitBlock: "submit-first",
-      spacing: "md",
-      pendingAffordance: "inert",
-    });
   });
 
   it("#2331: the door names its way back to the sign-in door", () => {

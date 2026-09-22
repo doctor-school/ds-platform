@@ -1214,28 +1214,14 @@ const REGISTER_CARD_PROPS: PropRow[] = [
       "The post-submit state. Non-null replaces the WHOLE form — a slot rather than an owned stage, because one host swaps the card in place and the other navigates to its own route.",
   },
   {
-    name: "submitBlock",
-    type: '"error-first" | "submit-first"',
+    name: "pending",
+    type: "boolean",
     required: false,
     description:
-      "The submit-group order — the one structural fork between the two shipped hosts. An explicit prop rather than a silent pick, because neither order changes without a design re-confirmation.",
+      "Host-side busy signal (an in-flight challenge). The submit shows the loading affordance while it is set — one composition on both storefronts, with no per-host order, rhythm or pending fork.",
   },
   {
-    name: "spacing",
-    type: '"sm" | "md"',
-    required: false,
-    description:
-      "Vertical rhythm between form rows, for the same reason.",
-  },
-  {
-    name: "pending / pendingAffordance",
-    type: 'boolean / "spinner" | "inert"',
-    required: false,
-    description:
-      "Host-side busy signal, and how it reads on the submit: the loading affordance, or plainly disabled where the button is already the disabled control.",
-  },
-  {
-    name: "returnContextSlot / attributionSlot / aboveSubmitSlot / captchaSlot",
+    name: "returnContextSlot / attributionSlot / belowFieldsSlot / aboveSubmitSlot / partnerPlateSlot / captchaSlot",
     type: "ReactNode",
     required: false,
     description:
@@ -1289,7 +1275,6 @@ const REGISTER_CARD_CONSENTS: RegisterCardConsentItem[] = [
     id: "newsletter",
     tier: "marketing",
     label: "Send me occasional programme news",
-    optionalTag: "optional",
     help: "Outside the group the submit depends on, in the quieter tone.",
   },
 ];
@@ -1317,7 +1302,7 @@ function RegisterCardSection() {
   return (
     <BlockSection
       title="RegisterCard"
-      exportsLine="RegisterCard — props: copy · consentItems? · consentNote? · promo? · resolver?/fieldRules? · onSubmit · errors? · unmetPrecondition? · confirmation? · submitBlock? · spacing? · pending?/pendingAffordance? · slots · formDataAttributes? · testIds?"
+      exportsLine="RegisterCard — props: copy · consentItems? · consentNote? · promo? · resolver?/fieldRules? · onSubmit · errors? · unmetPrecondition? · confirmation? · pending? · slots · formDataAttributes? · testIds?"
     >
       <p className="text-sm text-muted-foreground">
         The whole registration composition as one reusable unit: the{" "}

@@ -257,7 +257,10 @@ describe("#337 / gate row 63: how the in-flight submit reads", () => {
     await waitFor(() => expect(push).toHaveBeenCalled());
   });
 
-  it("gate row 63: the doctor submit stays plainly disabled — no second busy signal beside the EARS-12 one", async () => {
+  it("#2027: the doctor door reads its pending submit exactly as the Academy one does", async () => {
+    // The owner's rule (PR #2338): a field — and the control that submits it —
+    // is ONE thing on both storefronts. The door used to go plainly inert here
+    // while the Academy spun; that host fork is gone with `pendingAffordance`.
     let release: (() => void) | undefined;
     register.mockImplementationOnce(
       () =>
@@ -269,9 +272,8 @@ describe("#337 / gate row 63: how the in-flight submit reads", () => {
     await submitForm(DOCTOR_FIXTURE);
 
     const submit = await screen.findByTestId("register-submit");
-    await waitFor(() => expect(submit).toBeDisabled());
-    expect(submit.querySelector(".animate-spin")).toBeNull();
-    expect(submit).not.toHaveAttribute("aria-busy");
+    await waitFor(() => expect(submit).toHaveAttribute("aria-busy", "true"));
+    expect(submit.querySelector(".animate-spin")).not.toBeNull();
 
     act(() => release?.());
     await waitFor(() => expect(register).toHaveBeenCalledTimes(1));

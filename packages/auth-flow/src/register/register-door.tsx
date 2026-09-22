@@ -182,8 +182,6 @@ function consentItemsOf(
       label: marketing.statement,
       help: consents.marketingOptIn.help,
       required: marketing.required,
-      optionalTag: consents.marketingOptIn.optionalTag,
-      optionalTagTestId: "register-marketing-optional-tag",
       testId: "register-marketing",
       helpTestId: "register-marketing-help",
     });
@@ -375,7 +373,6 @@ export function RegisterDoor({
       ? consents.partnerDataItem.unmet
       : null;
 
-  const form = config.register.form;
   const attribution = config.register.attribution;
   const pointsPromise = config.register.pointsPromise;
 
@@ -455,15 +452,6 @@ export function RegisterDoor({
       onSubmit={onSubmit}
       errors={{ challenge: challengeError, command: commandError }}
       pending={captcha.pending}
-      // Absent = the block's own defaults, which ARE the Academy's shipped
-      // render; the doctor host states its Stage-B-evidenced values.
-      {...(form
-        ? {
-            submitBlock: form.submitBlock,
-            spacing: form.spacing,
-            pendingAffordance: form.pendingAffordance,
-          }
-        : {})}
       unmetPrecondition={unmetPrecondition}
       // The server's landing decision, carried on the element the command
       // belongs to rather than recomputed here (021 LD-3/LD-4).

@@ -105,19 +105,6 @@ export const DOCTOR_AUTH_FLOW = {
   channels: ["email"],
   register: {
     promoField: true,
-    /**
-     * This storefront's Stage-B-evidenced sign-up form: the submit and its
-     * EARS-12 reason stand FIRST, the statements below them, at the wider step
-     * of the spacing scale, and a pending submit goes inert rather than
-     * swapping its label. The Academy states none of the three and keeps the
-     * block's defaults — the delta between the two doors is data here, not a
-     * second composition.
-     */
-    form: {
-      submitBlock: "submit-first",
-      spacing: "md",
-      pendingAffordance: "inert",
-    },
   },
   /**
    * 021 EARS-5 — the F-021-1 «вариант Б» consent read model, stated by the
@@ -158,8 +145,7 @@ export const DOCTOR_AUTH_FLOW = {
             required: false,
             // Canvas copy (`#d-register`, «согласия · вариант Б»). No
             // composition to declare: the opt-in shares nothing, it subscribes.
-            statement:
-              "Хочу получать письма о новых школах и событиях",
+            statement: "Хочу получать письма о новых школах и событиях",
           },
         ],
       },
@@ -177,7 +163,6 @@ export const DOCTOR_AUTH_FLOW = {
     },
     marketingOptIn: {
       help: "Необязательно. Письма отправляет внешний сервис рассылок.",
-      optionalTag: "необязательно",
     },
     wordingVersion: "2026-09",
     managerNote:

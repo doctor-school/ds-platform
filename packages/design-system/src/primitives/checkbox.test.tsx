@@ -70,6 +70,25 @@ describe("Checkbox — token-class contract (#513)", () => {
     );
   });
 
+  it("keeps the box square when the label wraps onto several lines", () => {
+    // #2027: the box is a flex CHILD of the label. Without `shrink-0` a long,
+    // wrapping consent statement steals width from it and the 22x22 square
+    // renders as a rectangle — the registration door's consent rows wrap by
+    // design, so the box has to refuse to shrink.
+    const { container } = render(
+      <Checkbox className="items-start">
+        <span>
+          Согласие на передачу данных партнёрам платформы. Это условие
+          бесплатного для врача обучения: без согласия часть материалов
+          недоступна и регистрация невозможна.
+        </span>
+      </Checkbox>,
+    );
+
+    const visual = container.querySelector('span[aria-hidden="true"]');
+    expect(visual).toHaveClass("size-5.5", "shrink-0");
+  });
+
   it("keeps the default label tone unchanged", () => {
     render(<Checkbox>Согласен</Checkbox>);
 

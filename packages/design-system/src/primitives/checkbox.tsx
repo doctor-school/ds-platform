@@ -14,6 +14,9 @@ import { cn } from "../lib/utils";
  *   • disabled  `hairline` border, `muted` fill;
  *   • focus     the flush 3px `shadow-focus` ring rides the box
  *               (`peer-focus-visible`), so keyboard focus is visible.
+ * The box never shrinks (`shrink-0`): it is a flex CHILD of the label, so a
+ * label long enough to wrap used to squeeze the square into a rectangle — the
+ * consent rows of the registration door wrap by design.
  * Square (radius 0). Token-only → light + `.dark` flip automatically.
  */
 function CheckGlyph() {
@@ -65,7 +68,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       <span
         aria-hidden="true"
         className={cn(
-          "grid size-5.5 place-items-center border-2 border-border bg-card text-primary-foreground transition-colors",
+          "grid size-5.5 shrink-0 place-items-center border-2 border-border bg-card text-primary-foreground transition-colors",
           "[&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100",
           "peer-checked:border-primary-action peer-checked:bg-primary-action",
           "peer-focus-visible:shadow-focus",

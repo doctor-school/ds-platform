@@ -1487,6 +1487,15 @@ function CheckboxSection() {
           )}
         />
       </SubRow>
+      <SubRow label="Wrapped label — the box stays square (#2027)">
+        <div className="max-w-64">
+          <Checkbox className="items-start">
+            Согласие на передачу данных партнёрам платформы. Это условие
+            бесплатного для врача обучения: без согласия часть материалов
+            недоступна.
+          </Checkbox>
+        </div>
+      </SubRow>
       <SubRow label='tone="on-primary" — enabled + disabled label'>
         <div className="flex flex-col items-start gap-3 bg-primary-surface p-4">
           <Checkbox tone="on-primary">I agree to data processing</Checkbox>

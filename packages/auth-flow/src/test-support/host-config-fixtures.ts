@@ -299,7 +299,8 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     },
     register: {
       title: "Регистрация",
-      description: "Почта и пароль — этого достаточно. Документы на входе не нужны.",
+      description:
+        "Почта и пароль — этого достаточно. Документы на входе не нужны.",
       emailLabel: "Рабочая почта",
       emailPlaceholder: "doctor@clinic.ru",
       passwordLabel: "Пароль",
@@ -331,8 +332,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
         goToSignIn: "Войти",
         goToReset: "Сбросить пароль",
         failed: "Код не подошёл. Попробуйте ещё раз.",
-        resendFailed:
-          "Не удалось отправить код повторно. Попробуйте ещё раз.",
+        resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
         resendAcknowledged:
           "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
       },
@@ -373,14 +373,6 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   channels: ["email"],
   register: {
     promoField: true,
-    // This host's Stage-B-evidenced registration form: the submit and its
-    // EARS-12 reason first, then the statements, at the wider step of the
-    // spacing scale. The Academy states none and keeps the block's defaults.
-    form: {
-      submitBlock: "submit-first",
-      spacing: "md",
-      pendingAffordance: "inert",
-    },
   },
   // The two shipped tiers with the rows drawn around them: the declaration and
   // the partner-data access condition above the submit, the marketing opt-in
@@ -406,7 +398,8 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
           {
             purpose: MARKETING_COMMUNICATIONS_PURPOSE,
             required: false,
-            statement: "Хочу получать письма о новых школах и событиях",
+            statement:
+              "Хочу получать письма о новых школах и событиях",
           },
         ],
       },
@@ -424,7 +417,6 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     },
     marketingOptIn: {
       help: "Необязательно. Письма отправляет внешний сервис рассылок.",
-      optionalTag: "необязательно",
     },
     wordingVersion: "2026-09",
     managerNote:

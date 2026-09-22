@@ -152,6 +152,34 @@ describe("<LoginCard>", () => {
     expect(screen.getByText("copy.otp.heading")).toBeInTheDocument();
   });
 
+  it("#2027: the challenge stands directly above the control it protects, on both sign-in methods", () => {
+    // Owner's canvas (`design-source/auth.dc.html:88-95` and `:127-131`): the
+    // SmartCaptcha row is the last thing before the button on every auth screen,
+    // not a banner at the head of the step.
+    setup();
+
+    const passwordCaptcha = screen.getByTestId("password-captcha");
+    const passwordSubmit = screen.getByTestId("password-login-submit");
+    expect(
+      passwordCaptcha.compareDocumentPosition(passwordSubmit) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+
+    const otpCaptcha = screen.getByTestId("otp-captcha");
+    const identifier = screen.getByTestId("otp-identifier");
+    const send = screen.getByTestId("otp-send");
+    expect(
+      identifier.compareDocumentPosition(otpCaptcha) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      otpCaptcha.compareDocumentPosition(send) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   // The host's whole reset story hangs on this callback: the block's own state
   // dies with the unmounted tab, but everything the host holds (errors, the OTP
   // stage, an in-flight bot-protection challenge) is cleared only here.

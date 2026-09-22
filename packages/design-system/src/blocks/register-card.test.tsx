@@ -45,7 +45,6 @@ const MARKETING_ITEM = {
   id: "marketingCommunications",
   tier: "marketing" as const,
   label: "Send me the newsletter",
-  optionalTag: "optional",
   testId: "register-marketing",
   itemTestId: "register-marketing-item",
 };
@@ -116,7 +115,17 @@ describe("<RegisterCard>", () => {
       submit.compareDocumentPosition(marketingGroup) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(marketingGroup).toHaveTextContent("optional");
+  });
+
+  it("#2027: the tier-2 statement carries NO «необязательно» marker — its position says it", () => {
+    renderCard();
+
+    // Owner's canvas (`design-source/auth.dc.html:217-225`): the opt-in below
+    // the button is a plain statement. The badge used to restate in words what
+    // standing outside the access frame already says.
+    const marketingGroup = screen.getByTestId("registration-consent-marketing");
+    // Nothing beyond the statement itself is rendered on that row.
+    expect(marketingGroup.textContent?.trim()).toBe("Send me the newsletter");
   });
 
   it("021 EARS-12: the submit stays disabled with the SPECIFIC unmet reason until every access item is granted", async () => {
@@ -169,7 +178,11 @@ describe("<RegisterCard>", () => {
 
     cleanup();
     renderCard({
-      promo: { label: "Promo code", placeholder: "DS-2026", testId: "register-promo" },
+      promo: {
+        label: "Promo code",
+        placeholder: "DS-2026",
+        testId: "register-promo",
+      },
     });
     expect(screen.getByTestId("register-promo")).toHaveAttribute(
       "placeholder",
@@ -193,8 +206,12 @@ describe("<RegisterCard>", () => {
 
     cleanup();
     renderCard({
-      returnContextSlot: <span data-testid="return-context">back to the webinar</span>,
-      attributionSlot: <span data-testid="attribution">from a representative</span>,
+      returnContextSlot: (
+        <span data-testid="return-context">back to the webinar</span>
+      ),
+      attributionSlot: (
+        <span data-testid="attribution">from a representative</span>
+      ),
     });
     expect(screen.getByTestId("return-context")).toBeInTheDocument();
     expect(screen.getByTestId("attribution")).toBeInTheDocument();
@@ -211,12 +228,17 @@ describe("<RegisterCard>", () => {
     expect(screen.queryByTestId("registration-form")).toBeNull();
     expect(screen.queryByTestId("register-submit")).toBeNull();
     expect(screen.queryByTestId("return-context")).toBeNull();
-    expect(screen.queryByTestId("registration-consent-manager-note")).toBeNull();
+    expect(
+      screen.queryByTestId("registration-consent-manager-note"),
+    ).toBeNull();
   });
 
   it("003 EARS-17/16: the challenge and the command statements surface independently, both as alerts", () => {
     renderCard({
-      errors: { challenge: "The challenge failed", command: "The request failed" },
+      errors: {
+        challenge: "The challenge failed",
+        command: "The request failed",
+      },
     });
 
     // Held apart on purpose — a fresh challenge must not erase a command failure
@@ -229,18 +251,36 @@ describe("<RegisterCard>", () => {
     expect(command).toHaveAttribute("role", "alert");
   });
 
-  it("021 EARS-7: the consent note renders below the form only when supplied", () => {
+  it("021 EARS-7: the consent note renders INSIDE the access frame, only when supplied", () => {
     renderCard();
-    expect(screen.queryByTestId("registration-consent-manager-note")).toBeNull();
+    expect(
+      screen.queryByTestId("registration-consent-manager-note"),
+    ).toBeNull();
 
     cleanup();
     renderCard({ consentNote: "You may withdraw a consent at any time" });
+    const note = screen.getByTestId("registration-consent-manager-note");
+    expect(note).toHaveTextContent("You may withdraw a consent at any time");
+    // Owner's canvas (`auth.dc.html:204`) keeps the withdrawal sentence inside
+    // the conditions frame, with the consents it speaks about.
+    expect(screen.getByTestId("registration-consent-access")).toContainElement(
+      note,
+    );
+  });
+
+  it("021 EARS-7: a card with no access frame still says the withdrawal sentence", () => {
+    renderCard({
+      consentItems: [MARKETING_ITEM],
+      consentNote: "You may withdraw a consent at any time",
+    });
+
+    expect(screen.queryByTestId("registration-consent-access")).toBeNull();
     expect(
       screen.getByTestId("registration-consent-manager-note"),
     ).toHaveTextContent("You may withdraw a consent at any time");
   });
 
-  it("003 EARS-20: the below-fields slot renders between the credentials and the consent/submit groups, only when supplied", () => {
+  it("003 EARS-20: the statement slot renders AFTER the access frame and before the submit group, only when supplied", () => {
     renderCard();
     expect(screen.queryByTestId("below-fields")).toBeNull();
 
@@ -249,24 +289,60 @@ describe("<RegisterCard>", () => {
       belowFieldsSlot: <p data-testid="below-fields">Consent statement</p>,
     });
     const slot = screen.getByTestId("below-fields");
-    const password = screen.getByTestId("register-password");
     const accessGroup = screen.getByTestId("registration-consent-access");
+    const submit = screen.getByTestId("register-submit");
     // `compareDocumentPosition` reads the RENDERED order, which is the whole
-    // contract: the Academy statement has shipped under the credentials and above
-    // the challenge, and that position may not drift with a refactor.
+    // contract — the owner's canvas (`auth.dc.html:208`) stands the statement
+    // between the conditions frame and the challenge on BOTH storefronts.
     expect(
-      password.compareDocumentPosition(slot) &
+      accessGroup.compareDocumentPosition(slot) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      slot.compareDocumentPosition(accessGroup) &
+      slot.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("#2027: the partner-link plate renders under the promo field, only when supplied", () => {
+    renderCard({ promo: { label: "Promo code" } });
+    expect(screen.queryByTestId("partner-plate")).toBeNull();
+
+    cleanup();
+    renderCard({
+      promo: { label: "Promo code", testId: "register-promo" },
+      partnerPlateSlot: <p data-testid="partner-plate">Promo prefilled</p>,
+    });
+    const plate = screen.getByTestId("partner-plate");
+    const promo = screen.getByTestId("register-promo");
+    const accessGroup = screen.getByTestId("registration-consent-access");
+    // Canvas 176-182: the plate explains the promo field, so it stands inside
+    // that row and above the conditions frame.
+    expect(
+      promo.compareDocumentPosition(plate) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      plate.compareDocumentPosition(accessGroup) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
+  it("#2027: the access conditions are separated by a hairline rule inside the frame", () => {
+    renderCard();
+
+    // Canvas 195 — two wrapping statements must not read as one paragraph.
+    const rows = screen
+      .getByTestId("registration-consent-access")
+      .querySelectorAll("[data-testid$='-item']");
+    expect(rows.length).toBe(2);
+    expect(rows[0]?.parentElement?.className ?? "").not.toMatch(/border-t-2/);
+    expect(rows[1]?.parentElement?.className ?? "").toContain("border-t-2");
+  });
+
   it("021 EARS-5: no consent is ever pre-ticked, and the granted state reaches onSubmit", async () => {
     const user = userEvent.setup();
-    const { onSubmit } = renderCard({ consentItems: [ACCESS_ITEM, MARKETING_ITEM] });
+    const { onSubmit } = renderCard({
+      consentItems: [ACCESS_ITEM, MARKETING_ITEM],
+    });
 
     expect(screen.getByTestId("register-medworker")).not.toBeChecked();
     expect(screen.getByTestId("register-marketing")).not.toBeChecked();
@@ -319,7 +395,9 @@ describe("<RegisterCard>", () => {
   });
 
   it("publishes the host data-* facts on the form element (021 EARS-3 landing decision)", () => {
-    renderCard({ formDataAttributes: { "data-registration-landing": "webinar" } });
+    renderCard({
+      formDataAttributes: { "data-registration-landing": "webinar" },
+    });
     expect(screen.getByTestId("registration-form")).toHaveAttribute(
       "data-registration-landing",
       "webinar",

@@ -415,7 +415,6 @@ function OtpLogin({
 
   return (
     <div className="space-y-4" aria-label={copy.formLabel}>
-      {captchaSlot}
       {sentIdentifier === null ? (
         <>
           <div className="space-y-1">
@@ -499,6 +498,12 @@ function OtpLogin({
                   )
                 }
               />
+              {/*
+                Owner's canvas (`design-source/auth.dc.html:127-131`): the
+                challenge stands immediately ABOVE the control it protects, on
+                every auth screen — not at the head of the step.
+              */}
+              {captchaSlot}
               <FormError>{error}</FormError>
               <Button
                 type="submit"
@@ -513,19 +518,22 @@ function OtpLogin({
           </Form>
         </>
       ) : (
-        <OtpVerifyForm
-          copy={copy}
-          otpLength={otpLength}
-          identifier={sentIdentifier}
-          channel={channel}
-          resolver={verifyResolver}
-          error={screenError}
-          cooldownSeconds={resendCooldownSeconds}
-          resendNonce={resendNonce}
-          onVerify={onVerify}
-          onResend={() => onResend({ identifier: sentIdentifier, channel })}
-          onChangeMethod={onChangeMethod}
-        />
+        <>
+          {captchaSlot}
+          <OtpVerifyForm
+            copy={copy}
+            otpLength={otpLength}
+            identifier={sentIdentifier}
+            channel={channel}
+            resolver={verifyResolver}
+            error={screenError}
+            cooldownSeconds={resendCooldownSeconds}
+            resendNonce={resendNonce}
+            onVerify={onVerify}
+            onResend={() => onResend({ identifier: sentIdentifier, channel })}
+            onChangeMethod={onChangeMethod}
+          />
+        </>
       )}
     </div>
   );

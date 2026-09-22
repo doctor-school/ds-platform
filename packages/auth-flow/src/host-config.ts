@@ -451,11 +451,13 @@ export type AuthFlowConsentsConfig = {
     /** The reason under a blocked submit, including where the item is unsupplied. */
     readonly unmet: string;
   };
-  /** 021 EARS-6 — the optional opt-in below the submit. */
-  readonly marketingOptIn?: {
-    readonly help: string;
-    readonly optionalTag: string;
-  };
+  /**
+   * 021 EARS-6 — the optional opt-in below the submit. Its optionality is
+   * carried by WHERE it stands (outside the access frame, under the button) and
+   * by its quieter tone, so no «необязательно» marker is drawn beside it
+   * (owner's canvas, `design-source/auth.dc.html:217-225`).
+   */
+  readonly marketingOptIn?: { readonly help: string };
   /** 021 EARS-19 (#1558) — the version of the WORDING every recorded consent is stamped with. */
   readonly wordingVersion: string;
   /** 021 EARS-7 — the withdrawal statement, with no self-service control beside it. */
@@ -502,19 +504,6 @@ export type AuthFlowHostConfig = {
     readonly attribution?: string;
     /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */
     readonly pointsPromise?: string;
-    /**
-     * The two hosts' shipped registration forms differ in their submit-group
-     * ORDER and their vertical rhythm, and neither may move without a Stage-B
-     * re-confirmation — so each is stated here rather than derived from some
-     * other fact (a host that later states a consent sentence must not silently
-     * flip its submit order). Absent = the `<RegisterCard>` own defaults, which
-     * ARE the Academy's shipped render.
-     */
-    readonly form?: {
-      readonly submitBlock: "error-first" | "submit-first";
-      readonly spacing: "sm" | "md";
-      readonly pendingAffordance: "spinner" | "inert";
-    };
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;

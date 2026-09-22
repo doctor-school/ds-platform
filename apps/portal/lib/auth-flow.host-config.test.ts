@@ -82,9 +82,8 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
   });
 
   it("#1934: the shipped Academy render IS the block's own composition", () => {
-    // Stating no form composition and no icon keeps the card exactly as it has
-    // shipped — the doctor host states its Stage-B-evidenced values instead.
-    expect(config.register.form).toBeUndefined();
+    // The block draws ONE registration composition now (#2027, the owner's
+    // canvas), so a host states no icon and nothing about form order or rhythm.
     expect(config.brand.registerIcon).toBeUndefined();
   });
 

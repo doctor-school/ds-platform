@@ -18,9 +18,9 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * into — the doctor storefront confirms inline instead), its one required
  * consent read as a single read-only sentence, and its sentences.
  *
- * The rendered result is the shipped Academy render: the door states no
- * `register.form` and no `brand.registerIcon`, so the card keeps the block's own
- * defaults, which ARE this host's composition.
+ * The rendered result is the `<RegisterCard>` composition itself: since #2027 the
+ * block draws ONE registration form for both storefronts (the owner's canvas),
+ * and this door states only its own field SET and its own words.
  *
  * The #675 guard now runs INSIDE the mount, before the first byte of HTML, so
  * `app/register/layout.tsx` is gone — the same retirement `/login` had in PR 1.5.

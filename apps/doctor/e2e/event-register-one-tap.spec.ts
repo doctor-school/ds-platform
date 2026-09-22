@@ -173,7 +173,7 @@ test.describe("005 EARS-2 (#2005): the эфир intent is completed on the way b
     // «Показать пароль» reveal toggle, so a loose label match is a strict-mode
     // violation (the repo-wide shape — see `login.spec.ts`).
     await page
-      .getByLabel("Почта или телефон", { exact: true })
+      .getByLabel("Электронная почта или телефон", { exact: true })
       .fill(process.env.E2E_DOCTOR_EMAIL ?? "");
     await page
       .getByLabel("Пароль", { exact: true })

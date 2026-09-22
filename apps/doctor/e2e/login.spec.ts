@@ -23,7 +23,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 /** The RU generic the host maps a rejected credential to (`@ds/auth-flow/errors`). */
 const WRONG_PASSWORD_COPY =
-  "Не удалось войти. Проверьте почту или телефон и пароль.";
+  "Не удалось войти. Проверьте данные и попробуйте снова.";
 
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 900 };
@@ -109,7 +109,7 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
   await page.goto("/login");
 
   const form = passwordForm(page);
-  await form.getByLabel("Почта или телефон").fill("doctor@clinic.ru");
+  await form.getByLabel("Электронная почта или телефон").fill("doctor@clinic.ru");
   await form.getByLabel("Пароль", { exact: true }).fill("wrong-password-123");
   await page.getByTestId("password-login-submit").click();
 

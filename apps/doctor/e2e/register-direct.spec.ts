@@ -78,7 +78,7 @@ test.describe("021 EARS-3: the direct arrival carries no context", () => {
     // zone holds when no context takes its place.
     const panel = page.getByTestId("auth-brand-panel");
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText("Учитесь у практикующих врачей");
+    await expect(panel).toContainText("Медицинское образование для врачей");
   });
 
   test("021 EARS-3.2: the form is fully usable on a direct arrival, and the inert submit still states its reason", async ({

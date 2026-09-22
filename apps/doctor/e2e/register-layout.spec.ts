@@ -95,7 +95,7 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
     await expect(page.getByTestId("registration-form-card")).toBeVisible();
     // The route owns the document's single h1 (no layout above it carries one).
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page.locator("h1")).toHaveText("Регистрация");
+    await expect(page.locator("h1")).toHaveText("Создание аккаунта");
   });
 
   test("021 EARS-1.2: exactly three inputs — email, password, optional promo", async ({
@@ -267,7 +267,7 @@ test.describe("021 EARS-1: the vertical axis", () => {
     const mark = page.getByTestId("auth-panel-wordmark");
     const eyebrow = panel.getByText("Врачи учат врачей");
     const closing = panel.getByText(
-      "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
+      "© Doctor.School. Платформа непрерывного медицинского образования.",
     );
 
     await expect(closing).toBeVisible();

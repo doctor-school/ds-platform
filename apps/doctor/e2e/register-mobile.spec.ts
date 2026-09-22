@@ -65,11 +65,11 @@ const COMPOSITION = ["ФИО", "специальность", "город", "ме
  * The copy the screen shows when the register command never reaches the
  * upstream. Since #2027 PR 1.6 the sign-up door resolves a TRANSPORT failure
  * through the shared dictionary, exactly as the sign-in door has since PR 1.5,
- * so this host states its `errors.unavailable` sentence
- * (`apps/doctor/messages/auth-flow-copy.ts`) instead of the command-failed one.
+ * and the sentence itself is the package default
+ * (`packages/auth-flow/src/copy/defaults.ts` -> `errors.unavailable`), which no
+ * host restates.
  */
-const NETWORK_FAILURE_COPY =
-  "Сервис временно недоступен. Попробуйте ещё раз через минуту.";
+const NETWORK_FAILURE_COPY = "Сервис временно недоступен — попробуйте ещё раз.";
 
 /**
  * The canonical gate hand-off URL, built the way the producer builds it

@@ -69,7 +69,7 @@ test.describe("021 #1945: the doctor host's sign-in landing", () => {
     await page.goto(arrival(KNOWN));
 
     const form = passwordForm(page);
-    await form.getByLabel("Почта или телефон").fill("doctor@clinic.ru");
+    await form.getByLabel("Электронная почта или телефон").fill("doctor@clinic.ru");
     await form.getByLabel("Пароль", { exact: true }).fill("correct-horse-1");
     await page.getByTestId("password-login-submit").click();
 

@@ -28,8 +28,11 @@ const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
 
 const PASSWORD_HINT = "Не менее 8 символов.";
-const PASSWORD_TOO_SHORT = "Пароль слишком короткий — нужно не менее 8 символов.";
-const EMAIL_MALFORMED = "Проверьте адрес: он должен быть вида doctor@clinic.ru.";
+// #2027: the canvas states the password rule in ONE sentence, so the hint and
+// the error that enforces it read alike — what changes is the slot's state, not
+// its words (`design-source/auth.dc.html:171,424`).
+const PASSWORD_TOO_SHORT = PASSWORD_HINT;
+const EMAIL_MALFORMED = "Введите корректный адрес электронной почты.";
 const PROMO_TOO_LONG =
   "Промокод длиннее 64 символов — проверьте, что скопировали только код.";
 
@@ -109,13 +112,15 @@ test.describe("021 EARS-11: per-field validation on the registration door", () =
     await expect(
       page.getByText(PASSWORD_HINT, { exact: true }),
       "the hint is replaced, not doubled",
-    ).toHaveCount(0);
+    ).toHaveCount(1);
+    await expect(password).toHaveAttribute("aria-invalid", "true");
 
     await password.fill("longenough");
     await password.blur();
     await expect(await messageSlot(page, "register-password")).toHaveText(
       PASSWORD_HINT,
     );
+    await expect(password).not.toHaveAttribute("aria-invalid", "true");
   });
 
   test("021 EARS-11.3: an over-long promo code is stated, a pasted one is trimmed, and the bound itself is accepted", async ({

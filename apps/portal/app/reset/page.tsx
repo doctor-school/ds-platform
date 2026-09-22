@@ -14,6 +14,7 @@ import {
 import { authClient } from "@/lib/auth-flow-client";
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
+import { resolveAuthFlowCopy } from "@ds/auth-flow/copy";
 import {
   ResetCompleteFormSchema,
   resetIdentifierFormSchema,
@@ -95,6 +96,7 @@ function PortalRecoveryCard() {
   const tc = useTranslations("common");
   const te = useTranslations("errors");
   const authFlow = ACADEMY_AUTH_FLOW;
+  const authCopy = resolveAuthFlowCopy(authFlow);
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +117,7 @@ function PortalRecoveryCard() {
         return;
       }
       setError(
-        authErrorMessage(err, authFlow.copy.errors, te("resetRequestFailed")),
+        authErrorMessage(err, authCopy.errors, te("resetRequestFailed")),
       );
     },
   });
@@ -141,7 +143,7 @@ function PortalRecoveryCard() {
       ),
     onActionError: (err) =>
       setResendError(
-        authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed")),
+        authErrorMessage(err, authCopy.errors, te("resetResendFailed")),
       ),
   });
 
@@ -163,7 +165,7 @@ function PortalRecoveryCard() {
         return;
       }
       setResendError(
-        authErrorMessage(err, authFlow.copy.errors, te("resetResendFailed")),
+        authErrorMessage(err, authCopy.errors, te("resetResendFailed")),
       );
     },
     // Clear only resend-owned state; reset-completion feedback is unrelated.
@@ -235,7 +237,7 @@ function PortalRecoveryCard() {
       router.refresh();
     } catch (err) {
       setCompleteError(
-        authErrorMessage(err, authFlow.copy.errors, te("resetCompleteFailed")),
+        authErrorMessage(err, authCopy.errors, te("resetCompleteFailed")),
       );
     }
   }

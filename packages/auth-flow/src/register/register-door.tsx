@@ -28,6 +28,7 @@ import {
 } from "@ds/design-system/blocks";
 import { Link as DsLink } from "@ds/design-system/link";
 
+import { resolveAuthFlowCopy } from "../copy";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { authErrorMessage } from "../errors";
@@ -227,9 +228,10 @@ export function RegisterDoor({
 }: RegisterDoorProps) {
   // #2027 PR 1.6 — `copy.register` is REQUIRED on the config now that both
   // storefronts mount this door, so there is nothing left to assert here.
-  const copy = config.copy.register;
+  const resolvedCopy = resolveAuthFlowCopy(config);
+  const copy = resolvedCopy.register;
   const router = useRouter();
-  const errors = config.copy.errors;
+  const errors = resolvedCopy.errors;
   const consents = config.consents;
   // One client per host config — the registration ROUTE differs per storefront
   // and is bound once at this boundary, so the call below stays path-free.

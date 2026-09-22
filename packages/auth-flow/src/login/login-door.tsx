@@ -22,6 +22,7 @@ import {
 } from "@ds/design-system/blocks";
 import { OtpCodeFieldSchema } from "@ds/design-system/fields";
 
+import { resolveAuthFlowCopy } from "../copy";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
@@ -89,7 +90,7 @@ function passwordResolverOf(
   config: AuthFlowHostConfig,
 ): LoginCardPasswordProps["resolver"] {
   const identifier = identifierFieldSchema(config);
-  const fields = config.copy.fields;
+  const { fields, login } = resolveAuthFlowCopy(config);
   return makeResolver<
     LoginCardPasswordValues,
     LoginCardPasswordProps["resolver"]
@@ -105,7 +106,7 @@ function passwordResolverOf(
     // Length only — 003 EARS-36 owns the password policy and no surface may
     // declare a second one. The credential authority is the BFF, not this form.
     password: (value) =>
-      value?.length ? null : config.copy.login.password.passwordRequired,
+      value?.length ? null : login.password.passwordRequired,
   });
 }
 
@@ -115,8 +116,8 @@ function otpRequestResolverOf(
   channel: LoginCardOtpChannel,
 ): LoginCardOtpProps["requestResolvers"][LoginCardOtpChannel] {
   const schema = otpIdentifierFormSchema(config, channel as OtpChannel);
-  const copy =
-    channel === "email" ? config.copy.fields.email : config.copy.fields.phone;
+  const fields = resolveAuthFlowCopy(config).fields;
+  const copy = channel === "email" ? fields.email : fields.phone;
   return makeResolver<
     LoginCardOtpRequestValues,
     LoginCardOtpProps["requestResolvers"][LoginCardOtpChannel]
@@ -125,7 +126,7 @@ function otpRequestResolverOf(
       if (!value?.trim()) {
         return (
           copy.required ??
-          config.copy.fields.identifier.required ??
+          fields.identifier.required ??
           copy.invalid
         );
       }
@@ -152,7 +153,7 @@ function otpVerifyResolverOf(
     code: (value) =>
       OtpCodeFieldSchema.safeParse(value).success
         ? null
-        : config.copy.login.otp.codeInvalid,
+        : resolveAuthFlowCopy(config).login.otp.codeInvalid,
   });
 }
 
@@ -163,7 +164,7 @@ function otpVerifyResolverOf(
  * that only exists at render time.
  */
 function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
-  const copy = config.copy.login;
+  const copy = resolveAuthFlowCopy(config).login;
   return {
     title: copy.title,
     description: copy.description,
@@ -216,8 +217,8 @@ export function LoginDoor({
   returnContextPlate,
 }: LoginDoorProps) {
   const router = useRouter();
-  const errors = config.copy.errors;
-  const failed = config.copy.login.failed;
+  const { errors, login } = resolveAuthFlowCopy(config);
+  const failed = login.failed;
   // One client per host config — the paths are bound once at this boundary, so
   // every call below stays path-free (rows 6–8).
   const authClient = useMemo(() => createAuthClient(config.api), [config.api]);

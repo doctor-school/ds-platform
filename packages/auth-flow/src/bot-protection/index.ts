@@ -1,5 +1,6 @@
 import type { BotProtectionMessages } from "@ds/design-system/blocks";
 
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 
 /**
@@ -30,5 +31,5 @@ export function botProtectionSiteKey(
 export function botProtectionMessages(
   config: AuthFlowHostConfig,
 ): BotProtectionMessages {
-  return config.copy.botProtection;
+  return resolveAuthFlowCopy(config).botProtection;
 }

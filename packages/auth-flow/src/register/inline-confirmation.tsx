@@ -19,6 +19,7 @@ import {
   type EmailConfirmValues,
 } from "@ds/design-system/blocks";
 
+import { resolveAuthFlowCopy } from "../copy";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
@@ -153,7 +154,7 @@ export function RegistrationConfirmation({
       // status decides — a 429 from the confirm route says «too many attempts»
       // in this host's words instead of blaming a code that was typed correctly,
       // and a 5xx says the service is down.
-      setError(authErrorMessage(err, config.copy.errors, copy.failed));
+      setError(authErrorMessage(err, resolveAuthFlowCopy(config).errors, copy.failed));
       return;
     }
 
@@ -219,7 +220,7 @@ export function RegistrationConfirmation({
       destination={destination}
       resolver={resolver}
       onSubmit={onSubmit}
-      onInvalid={() => setError(config.copy.fields.code.invalid)}
+      onInvalid={() => setError(resolveAuthFlowCopy(config).fields.code.invalid)}
       error={error}
       // Same-site, relative: a storefront is its own site and hands a visitor
       // off to no other one — and rule S3: both hops carry the arrival target
@@ -259,7 +260,7 @@ export function RegistrationConfirmation({
 function confirmCopyOf(
   config: AuthFlowHostConfig,
 ): AuthFlowRegisterConfirmCopy {
-  const copy = config.copy.register?.confirm;
+  const copy = resolveAuthFlowCopy(config).register?.confirm;
   if (!copy) {
     throw new Error("auth-flow: this host states no inline confirmation copy");
   }

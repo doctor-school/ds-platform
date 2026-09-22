@@ -24,6 +24,7 @@ import {
 } from "@ds/design-system/blocks";
 
 import { authErrorMessage } from "@ds/auth-flow/errors";
+import { resolveAuthFlowCopy } from "@ds/auth-flow/copy";
 import {
   botProtectionMessages,
   botProtectionSiteKey,
@@ -34,6 +35,7 @@ import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 
 /** This host's challenge copy, projected once out of its config. */
 const BOT_PROTECTION_MESSAGES = botProtectionMessages(DOCTOR_AUTH_FLOW);
+const AUTH_ERRORS = resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).errors;
 import { makeResolver } from "@/lib/make-resolver";
 
 /**
@@ -227,7 +229,7 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
         return;
       }
       setRequestError(
-        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, REQUEST_FAILED),
+        authErrorMessage(error, AUTH_ERRORS, REQUEST_FAILED),
       );
     },
   });
@@ -240,7 +242,7 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
       ),
     onActionError: (error) =>
       setResendError(
-        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED),
+        authErrorMessage(error, AUTH_ERRORS, RESEND_FAILED),
       ),
   });
 
@@ -262,7 +264,7 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
         return;
       }
       setResendError(
-        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, RESEND_FAILED),
+        authErrorMessage(error, AUTH_ERRORS, RESEND_FAILED),
       );
     },
     // Clear only resend-owned state; completion feedback answers another question.
@@ -309,7 +311,7 @@ export function ResetScreen({ loginHref, landing }: ResetScreenProps) {
       router.refresh();
     } catch (error) {
       setCompleteError(
-        authErrorMessage(error, DOCTOR_AUTH_FLOW.copy.errors, COMPLETE_FAILED),
+        authErrorMessage(error, AUTH_ERRORS, COMPLETE_FAILED),
       );
     }
   }

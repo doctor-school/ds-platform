@@ -20,6 +20,7 @@ import {
   maskPhoneInput,
 } from "@ds/design-system/fields";
 
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowFieldName, AuthFlowHostConfig } from "../host-config";
 
 /**
@@ -38,7 +39,7 @@ import type { AuthFlowFieldName, AuthFlowHostConfig } from "../host-config";
  * masking are the rule and live here once; which CHANNELS a host serves
  * (`config.channels`) and whether its registration form carries the promo box
  * (`config.register.promoField`) are data, and so is every sentence
- * (`config.copy.fields`). A host that serves no SMS therefore gets a narrower
+ * (the package copy defaults). A host that serves no SMS therefore gets a narrower
  * identifier box from the same rule, not a second rule.
  */
 
@@ -202,7 +203,7 @@ export function registerFieldRules(
   name: AuthFlowFieldName,
 ): RegisterFieldRules {
   const spec = DOCTOR_REGISTER_FIELD_SPECS[name];
-  const copy = config.copy.fields[name];
+  const copy = resolveAuthFlowCopy(config).fields[name];
   if (copy === undefined) {
     throw new Error(`auth-flow: this host states no copy for field "${name}"`);
   }
@@ -237,5 +238,5 @@ export function resolveVerificationCode(
 ): string | null {
   return DOCTOR_REGISTER_FIELD_SPECS.code.rule.safeParse(value).success
     ? null
-    : config.copy.fields.code.invalid;
+    : resolveAuthFlowCopy(config).fields.code.invalid;
 }

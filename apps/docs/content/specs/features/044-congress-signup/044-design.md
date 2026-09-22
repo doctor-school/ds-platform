@@ -231,7 +231,7 @@ erDiagram
 
 ## Specialties list endpoint
 
-The only public specialty-related endpoint today is the per-browser choice cookie (`apps/api/src/storefront/specialty-choice.public.controller.ts:84-97`, `:136-194`) — it remembers one selection, it does not enumerate the book. 044 adds a public, unauthenticated, read-only list over `specialties_minzdrav`, cacheable at the HTTP layer, reached through the same same-origin proxy as the intake. No build-time snapshot is produced: a snapshot baked into the congress site would drift from the taxonomy silently and would make a taxonomy correction require a site redeploy.
+EARS-15 is realised by the public read the platform already serves: `GET /v1/public/specialties` (`apps/api/src/storefront/specialties.public.controller.ts`, 017 EARS-3, #1479) — unauthenticated, read-only, `Cache-Control: public, max-age=300`, serving every `specialties_minzdrav` row including the reserved «Другое» one. The congress site reaches it through the same same-origin nginx `/api` proxy as the intake, so 044 adds no route of its own. No build-time snapshot is produced: a snapshot baked into the congress site would drift from the taxonomy silently and would make a taxonomy correction require a site redeploy. The per-browser choice cookie (`specialty-choice.public.controller.ts:84-97`, `:136-194`) is a different surface — it remembers one selection, it does not enumerate the book.
 
 ## Authorization boundary
 

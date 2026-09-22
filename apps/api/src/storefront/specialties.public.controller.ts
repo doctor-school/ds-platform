@@ -46,6 +46,8 @@ export class SpecialtiesPublicController {
   ) {}
 
   /** `GET /v1/public/specialties` — the whole book plus its `total`. */
+  // 044 EARS-15 (#2308): the congress site's specialties list — same read, via
+  // its same-origin proxy.
   @Get()
   @Public()
   @Header("Cache-Control", "public, max-age=300")
@@ -53,7 +55,7 @@ export class SpecialtiesPublicController {
     access: "public",
     check: "none",
     audit: "none",
-    tests: ["EARS-3"],
+    tests: ["EARS-3", "EARS-15"],
   })
   book(): Promise<SpecialtyBook> {
     return this.specialties.book();

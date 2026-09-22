@@ -1,5 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  type CongressRosterList,
+  type CongressRosterQuery,
   type EventLifecycleState,
   type EventRegistrationState,
   type EventRoster,
@@ -170,14 +172,59 @@ export class RegistrationService {
    * {@link RegistrationEventNotFoundError}, never a silent empty list), then reads
    * every registration row for it — wave 1 has no cancelled state, so the roster
    * is every row and every entry is current (Invariants). Each entry carries no
-   * more than the `(doctor, event, registeredAt)` fact; no registrant PII, and no
-   * public exposure — this is an INTERNAL read with no HTTP route (design §4;
-   * EARS-8, EARS-10). It is the read 006 will call in-process; 005 owns and tests
+   * more than the `(doctor, event, registeredAt)` fact; no registrant PII (design
+   * §4; EARS-8, EARS-10). It is the read 006 calls in-process; 005 owns and tests
    * it here.
+   *
+   * It stays PII-free and stays in-process: 044 EARS-18 does NOT widen this
+   * method. The registrar's HTTP surface is {@link eventRosterPage} below, a
+   * sibling read on its own contract, so the room gate keeps consuming exactly
+   * the fact it always did.
    */
   async eventRoster(idOrSlug: string): Promise<EventRoster> {
     const event = await this.resolveEvent(idOrSlug);
     return this.repo.findEventRoster(event.id);
+  }
+
+  /**
+   * 044 EARS-18 — the registrar's roster page: the same read model widened to the
+   * answers the desk needs, paged and instant-searched, plus the event header the
+   * screen and the printed sheet title themselves with.
+   *
+   * An unknown event is a {@link RegistrationEventNotFoundError}, never a silent
+   * empty page — the same refusal {@link eventRoster} makes, so a mistyped slug
+   * cannot read as «этот конгресс никто не зарегистрировался». An event that
+   * exists with no registrations is the opposite case and is an ordinary empty
+   * page.
+   *
+   * Unlike {@link eventRoster} it resolves the event through the roster header
+   * read rather than the registration-eligibility read: the registrar opens the
+   * roster of an event in ANY lifecycle state (a finished congress is exactly when
+   * the roster is consulted), so gating this on registrability would be a rule
+   * from a different feature.
+   */
+  async eventRosterPage(
+    idOrSlug: string,
+    query: CongressRosterQuery,
+  ): Promise<CongressRosterList> {
+    const event = await this.repo.findEventHeader(idOrSlug);
+    if (!event) throw new RegistrationEventNotFoundError(idOrSlug);
+    const { items, total } = await this.repo.findEventRosterPage(
+      event.id,
+      query,
+    );
+    return {
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      event: {
+        id: event.id,
+        slug: event.slug,
+        title: event.title,
+        startsAt: event.startsAt.toISOString(),
+      },
+    };
   }
 
   private async resolveUser(sub: string): Promise<string> {

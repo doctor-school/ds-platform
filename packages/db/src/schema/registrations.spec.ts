@@ -33,9 +33,18 @@ describe("044 EARS-5: registrations.answers", () => {
     expect(answers?.hasDefault).toBe(false);
   });
 
-  it("044 EARS-5.9: the existing registration columns are untouched", () => {
+  it("044 EARS-5.9: the registration column list is exactly the pinned set", () => {
+    // The 005 columns plus the three 044 adds and nothing else. The mail trio
+    // (`confirmation_mail_status`, `confirmation_mail_at`,
+    // `account_created_by_intake`) is listed here rather than left to the
+    // migration diff for the same reason `answers` is: each of the three is
+    // nullable ON PURPOSE, and NULL carries a meaning a later «tidy it up»
+    // default would erase — see the column comments in `registrations.ts`.
     expect(columns.map((column) => column.name).sort()).toEqual([
+      "account_created_by_intake",
       "answers",
+      "confirmation_mail_at",
+      "confirmation_mail_status",
       "deleted_at",
       "event_id",
       "id",

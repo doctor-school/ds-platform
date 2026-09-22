@@ -12,17 +12,23 @@ import {
 
 const EVENT_ID = "6f1c0a2e-6a7b-4d2f-9b1e-0c3d4e5f6a7b";
 const CONSENT_VERSION = `2026-09-20.sha256-${"a1b2c3d4".repeat(8)}`;
+const VENUE = "Москва, Крокус Экспо, зал 3";
 
 describe("044 congress sign-up — server configuration", () => {
   it("EARS-5: when the intake is configured, system shall take the congress event from server configuration and never from the submission", () => {
     const resolved = resolveCongressSignUpSettings({
       CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
       CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+      CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
     });
 
     expect(resolved).toEqual({
       ok: true,
-      settings: { eventId: EVENT_ID, consentVersion: CONSENT_VERSION },
+      settings: {
+        eventId: EVENT_ID,
+        consentVersion: CONSENT_VERSION,
+        eventVenue: VENUE,
+      },
     });
   });
 
@@ -30,6 +36,7 @@ describe("044 congress sign-up — server configuration", () => {
     expect(
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
       }),
     ).toEqual({ ok: false, reason: "event-id-unset" });
 
@@ -37,6 +44,7 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: "the-congress",
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
       }),
     ).toEqual({ ok: false, reason: "event-id-malformed" });
   });
@@ -61,6 +69,42 @@ describe("044 congress sign-up — server configuration", () => {
         }),
       ).toEqual({ ok: false, reason: "consent-version-malformed" });
     }
+  });
+
+  it("EARS-13: when the congress venue is unset or blank, system shall report the configuration unusable rather than send a confirmation that names no place", () => {
+    // The venue is read at MAIL time, long after the registration has
+    // committed, so a deployment that forgot the key would otherwise accept
+    // submissions for weeks and only then discover it cannot tell anyone where
+    // to come. Failing closed at configuration time is what keeps "accepted"
+    // meaning "and you will be told where to come".
+    for (const missing of [undefined, "", "   "]) {
+      expect(
+        resolveCongressSignUpSettings({
+          CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+          CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+          ...(missing === undefined
+            ? {}
+            : { CONGRESS_SIGNUP_EVENT_VENUE: missing }),
+        }),
+      ).toEqual({ ok: false, reason: "event-venue-unset" });
+    }
+  });
+
+  it("EARS-13: when the configured venue carries surrounding whitespace, system shall resolve it trimmed", () => {
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: `  ${VENUE}  `,
+      }),
+    ).toEqual({
+      ok: true,
+      settings: {
+        eventId: EVENT_ID,
+        consentVersion: CONSENT_VERSION,
+        eventVenue: VENUE,
+      },
+    });
   });
 
   it("EARS-7: when no route timing floor is configured, system shall resolve the conservative default so every runtime boots unchanged", () => {
@@ -120,6 +164,7 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1s",
       }),
     ).toEqual({ ok: false, reason: "timing-floor-malformed" });
@@ -131,11 +176,16 @@ describe("044 congress sign-up — server configuration", () => {
       resolveCongressSignUpSettings({
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_TIMING_FLOOR_MS: "2500",
       }),
     ).toEqual({
       ok: true,
-      settings: { eventId: EVENT_ID, consentVersion: CONSENT_VERSION },
+      settings: {
+        eventId: EVENT_ID,
+        consentVersion: CONSENT_VERSION,
+        eventVenue: VENUE,
+      },
     });
   });
 

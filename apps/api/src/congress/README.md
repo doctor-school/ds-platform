@@ -14,7 +14,7 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `congress-signup.controller` | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`). |
 | `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in.                                                                   |
-| `congress-signup.config`     | The registration window (code constants) and the two configured settings, validated.                                                           |
+| `congress-signup.config`     | The registration window (code constants) and the three configured settings, validated.                                                         |
 | `congress-signup.tokens`     | The injected clock and the per-request configuration reader.                                                                                   |
 | `congress-signup.dto`        | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                            |
 
@@ -33,14 +33,15 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## Configuration
 
-All three keys are validated at request time and a missing or malformed value
+All four keys are validated at request time and a missing or malformed value
 refuses the intake generically — the endpoint never runs with a half-configured meaning.
 
-| Env key                           | Meaning                                                                                                                                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONGRESS_SIGNUP_EVENT_ID`        | The uuid of the congress event every submission is registered for.                                                                                                                                |
-| `CONGRESS_SIGNUP_CONSENT_VERSION` | `YYYY-MM-DD.sha256-<64 hex>` — publication date + digest of the published personal-data text (ADR-0009 §2.1). Stamped by the server; never taken from the caller.                                 |
-| `CONGRESS_SIGNUP_TIMING_FLOOR_MS` | Optional. Whole milliseconds the intake response is padded to, so the new-account and existing-account branches take the same time on the wire (EARS-7). Unset ⇒ the conservative default `1000`. |
+| Env key                           | Meaning                                                                                                                                                                                                                                  |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONGRESS_SIGNUP_EVENT_ID`        | The uuid of the congress event every submission is registered for.                                                                                                                                                                       |
+| `CONGRESS_SIGNUP_CONSENT_VERSION` | `YYYY-MM-DD.sha256-<64 hex>` — publication date + digest of the published personal-data text (ADR-0009 §2.1). Stamped by the server; never taken from the caller.                                                                        |
+| `CONGRESS_SIGNUP_EVENT_VENUE`     | The venue the confirmation email names («{место}», EARS-13). REQUIRED: a missing or blank value refuses every submission. There is no venue column on `events` — the venue is a constant of THIS congress, like the registration window. |
+| `CONGRESS_SIGNUP_TIMING_FLOOR_MS` | Optional. Whole milliseconds the intake response is padded to, so the new-account and existing-account branches take the same time on the wire (EARS-7). Unset ⇒ the conservative default `1000`.                                        |
 
 **Calibrating the timing floor.** The floor only equalises the two branches if it
 exceeds the SLOWER one — the new-account path, which creates a user in the IdP
@@ -65,6 +66,34 @@ already has, with no profile field rewritten and the same `accepted` response.
 Repeat submissions write no second registration and no second consent row at the
 same published version.
 
-Still to land: the confirmation email the success state promises (#2304 / #2305
-/ #2306). Until it does, the response says the submission was accepted and the
-mail itself is not dispatched.
+The confirmation email is live too. It is dispatched AFTER the transaction has
+committed and is never awaited by the response: a slow or unreachable relay can
+neither delay an accepted submission nor turn it into a refusal.
+
+**Mail outcome, and why there is no retry queue.** The outcome is recorded on the
+registration itself — `registrations.confirmation_mail_status` (`sent` |
+`failed`) and `confirmation_mail_at`. `NULL` means no dispatch was ever
+attempted for that row, which is what platform-origin registrations read. Before
+sending, the dispatcher re-reads the row: a `sent` there ends it without touching
+the mailer, so a participant who submits the form twice gets exactly one email.
+A `failed` — or a `NULL` left by an interrupted attempt — dispatches again.
+
+**Which paragraph the confirmation carries** is also a column, not a decision
+taken at send time: `registrations.account_created_by_intake` records whether the
+intake CREATED this participant's account, written inside the account
+transaction and frozen at the first submission by the same `ON CONFLICT DO
+NOTHING`. Reading it back is what makes a re-send identical to the send it
+replaces — by the time a participant resubmits after a failure the account
+exists, so a variant chosen from the current call would tell someone to sign in
+to an account this very intake had just minted. `NULL` is the platform-origin
+row, which is never dispatched to.
+
+The `failed` outcome is written only while the row is not already `sent`, so two
+overlapping dispatches cannot let a loser's rejection overwrite a winner's
+success; a `sent` outcome is written unconditionally.
+
+That re-read IS the whole recovery mechanism: there is no outbox, no scheduler
+and no automatic retry. A participant whose mail failed recovers by submitting
+the form again; a registrar sees the failed rows on the roster and can act on
+them. Adding a retry queue for one congress mail would be a subsystem nobody
+operates.

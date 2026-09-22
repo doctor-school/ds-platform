@@ -4,7 +4,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { DrizzleHandle, RegistrationAnswers } from "@ds/db";
 import { consentRecords, events, registrations } from "@ds/db";
 import {
@@ -19,6 +19,7 @@ import {
   type EventLifecycleState,
 } from "@ds/schemas";
 import { AuthService } from "../auth/auth.service.js";
+import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
   resolveCongressSignUpSettings,
@@ -111,6 +112,7 @@ export class CongressSignUpService {
     @Inject(CONGRESS_SIGN_UP_CLOCK) private readonly now: CongressSignUpClock,
     @Inject(CONGRESS_SIGN_UP_ENV)
     private readonly readEnv: CongressSignUpEnvReader,
+    @Inject(MAILER) private readonly mailer: Mailer,
     private readonly auth: AuthService,
   ) {}
 
@@ -121,7 +123,7 @@ export class CongressSignUpService {
     this.assertInsideWindow();
 
     const settings = this.settingsOrRefuse();
-    await this.assertRegistrableEvent(settings.eventId);
+    const event = await this.loadRegistrableEvent(settings.eventId);
 
     const consent: {
       purpose: CongressSignUpConsentPurpose;
@@ -133,17 +135,27 @@ export class CongressSignUpService {
       },
     ];
 
-    // The return value is deliberately unused: whether the account already
-    // existed changes nothing the participant may observe (EARS-7), and the
-    // writes both paths need have already happened in the callback below.
-    await this.auth.createPasswordlessAccount(
+    // EARS-13: which account path this call took decides which paragraph the
+    // confirmation email carries — and it is RECORDED on the registration row
+    // rather than read off this call's return value, because the two disagree
+    // exactly when it matters. A participant whose first submission created the
+    // account but whose mail was rejected resubmits (EARS-12); on that second
+    // call the account exists, so the current-call flag would hand them the
+    // «войдите в существующий аккаунт» paragraph for an account this very
+    // intake had minted. The row's own `account_created_by_intake`, frozen by
+    // `ON CONFLICT DO NOTHING` at the first submission, is the truth.
+    //
+    // Nothing the participant may observe on the wire branches on it (EARS-7) —
+    // the mail reaches only the address that submitted the form, which is not a
+    // channel a third party can compare.
+    const account = await this.auth.createPasswordlessAccount(
       {
         email: request.email,
         surname: request.surname,
         firstName: request.firstName,
         consent,
       },
-      async (tx, userId) => {
+      async (tx, userId, alreadyExisted) => {
         // EARS-5 / EARS-29: the typed answers, with the normalised contact
         // phone beside the typed one. `users.phone` is deliberately not
         // written — see `createPasswordlessAccount`.
@@ -159,6 +171,10 @@ export class CongressSignUpService {
             userId,
             eventId: settings.eventId,
             answers: toCongressSignUpAnswers(request),
+            // EARS-12: the confirmation paragraph, decided once and stored.
+            // `ON CONFLICT DO NOTHING` below keeps the FIRST submission's value,
+            // which is exactly the guarantee a re-send needs.
+            accountCreatedByIntake: !alreadyExisted,
           })
           .onConflictDoNothing({
             target: [registrations.userId, registrations.eventId],
@@ -167,7 +183,133 @@ export class CongressSignUpService {
       },
     );
 
+    // EARS-11: the transaction above has COMMITTED by the time
+    // `createPasswordlessAccount` resolves, and the dispatch below is started
+    // and not awaited - so the response is never delayed by the relay and can
+    // never be turned into a refusal by it.
+    this.dispatchConfirmationEmail({
+      userId: account.userId,
+      eventId: settings.eventId,
+      email: request.email,
+      eventTitle: event.title,
+      eventStartsAt: event.startsAt,
+      eventVenue: settings.eventVenue,
+    });
+
     return { status: "accepted" };
+  }
+
+  /**
+   * 044 EARS-11 / EARS-12 - send the confirmation email off the response path
+   * and record which way it went.
+   *
+   * Three properties, and each is why a line of this method looks the way it
+   * does:
+   *
+   * 1. **It is started, never awaited** (the `void (async ...)()` of
+   *    `AuthService.dispatchEmail`). A relay that is slow, unreachable or
+   *    hostile must not be able to hold a committed registration's response
+   *    open, and must not be able to fail it.
+   * 2. **It reads the row back before sending.** The re-select is what makes
+   *    EARS-12's "no second email" true: a participant who submits the form
+   *    twice hits `ON CONFLICT DO NOTHING` on the registration, so the only
+   *    record of the first dispatch is the column - and a `sent` there ends
+   *    this method before the mailer is touched. A `failed` (or a `NULL` left
+   *    by an interrupted first attempt) re-dispatches, which is the feature's
+   *    ENTIRE recovery mechanism: no outbox, no scheduled sweep, the
+   *    participant resubmitting (design section "Mail failure"). The same
+   *    re-select is where the confirmation's PARAGRAPH comes from: the row's
+   *    `account_created_by_intake`, frozen at the first submission, so a
+   *    re-send repeats the copy the failed send would have carried rather than
+   *    the copy the current state of the IdP would suggest. A `NULL` there is a
+   *    platform-origin row (EARS-16) - never reached from here, and if it ever
+   *    were, `=== true` resolves it to the existing-account paragraph, which is
+   *    what a doctor already on the platform is owed anyway.
+   * 3. **Every failure is swallowed, none is lost.** A relay rejection becomes
+   *    `failed` on the row - a fact the roster can show and the next submission
+   *    can act on - rather than a log line nobody reads. The outer `catch` is
+   *    for the case where even that write fails: there is no caller left to
+   *    tell, and an unhandled rejection off the response path would take the
+   *    process down for a registration that is safely committed.
+   *
+   * The recorded instant is the moment the OUTCOME was known, not the moment
+   * the send started: it is what a registrar reads as "when did we last try".
+   */
+  private dispatchConfirmationEmail(input: {
+    userId: string;
+    eventId: string;
+    email: string;
+    eventTitle: string;
+    eventStartsAt: Date;
+    eventVenue: string;
+  }): void {
+    const registrationRow = and(
+      eq(registrations.userId, input.userId),
+      eq(registrations.eventId, input.eventId),
+    );
+
+    void (async () => {
+      try {
+        const [existing] = await this.db
+          .select({
+            status: registrations.confirmationMailStatus,
+            accountCreatedByIntake: registrations.accountCreatedByIntake,
+          })
+          .from(registrations)
+          .where(registrationRow)
+          .limit(1);
+
+        // No row means the registration this mail is about does not exist -
+        // nothing to confirm, and nothing to record an outcome on.
+        if (!existing) return;
+        if (existing.status === "sent") return;
+
+        let status: "sent" | "failed" = "sent";
+        try {
+          await this.mailer.sendCongressRegistrationConfirmation({
+            email: input.email,
+            eventTitle: input.eventTitle,
+            eventStartsAt: input.eventStartsAt,
+            eventVenue: input.eventVenue,
+            accountIsNew: existing.accountCreatedByIntake === true,
+          });
+        } catch {
+          // The mailer's own diagnostics already carry the sanitized provider
+          // outcome; re-logging the error here risks putting the recipient
+          // address or provider text in a log line, and adds nothing.
+          status = "failed";
+          this.logger.warn(
+            `congress confirmation email rejected for event ${input.eventId}`,
+          );
+        }
+
+        // A `sent` outcome is written unconditionally; a `failed` one only
+        // while the row is not already `sent`. Two dispatches for the same
+        // registration can overlap — the participant double-submits, or
+        // resubmits while a slow first attempt is still in the relay — and
+        // without the predicate the loser's rejection would overwrite the
+        // winner's success, turning a delivered email into a `failed` the
+        // roster shows and the next submission re-sends on.
+        await this.db
+          .update(registrations)
+          .set({
+            confirmationMailStatus: status,
+            confirmationMailAt: new Date(),
+          })
+          .where(
+            status === "sent"
+              ? registrationRow
+              : and(
+                  registrationRow,
+                  sql`${registrations.confirmationMailStatus} IS DISTINCT FROM 'sent'`,
+                ),
+          );
+      } catch {
+        this.logger.warn(
+          `congress confirmation email outcome could not be recorded for event ${input.eventId}`,
+        );
+      }
+    })();
   }
 
   /**
@@ -266,10 +408,23 @@ export class CongressSignUpService {
    * EARS-5 — the configured event must exist and be registrable BEFORE an
    * account is created, so a misconfigured event id cannot leave a credential-
    * less account behind with no registration to justify it.
+   *
+   * EARS-13 - it also returns the title and the start instant, read on the SAME
+   * hop rather than by the mail dispatch a moment later. That dispatch runs off
+   * the response path, where a second query would be a second thing able to
+   * fail after the participant has already been told "accepted"; reading both
+   * here also guarantees the mail describes the very event the registration was
+   * checked against.
    */
-  private async assertRegistrableEvent(eventId: string): Promise<void> {
+  private async loadRegistrableEvent(
+    eventId: string,
+  ): Promise<{ title: string; startsAt: Date }> {
     const [event] = await this.db
-      .select({ state: events.state })
+      .select({
+        state: events.state,
+        title: events.title,
+        startsAt: events.startsAt,
+      })
       .from(events)
       .where(eq(events.id, eventId))
       .limit(1);
@@ -282,5 +437,7 @@ export class CongressSignUpService {
       );
       throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
     }
+
+    return { title: event.title, startsAt: event.startsAt };
   }
 }

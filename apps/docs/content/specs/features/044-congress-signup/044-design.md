@@ -126,6 +126,8 @@ sequenceDiagram
 
 The existing mailer throws a typed rejection only to a caller that awaits it (`apps/api/src/mailer/smtp-mailer.ts:207-244`); the 003 auth callers deliberately never await on the response path (`auth.service.ts:550-556`, `:618-628`). 044 keeps that isolation but, unlike 003, does not merely log: the outcome becomes a column on the registration row so the registrar sees it in the roster and the resubmission path has something to decide on. No outbox, no scheduled sweep — the recovery mechanism is the participant resubmitting, which the `(user_id, event_id)` uniqueness already makes safe.
 
+The mail's «{место}» has no column to come from: `events` carries a title and a start instant, not a venue, and 044 adds no admin-editable settings. The venue is therefore a per-deployment constant of THIS congress, exactly as the registration window is — a fourth allow-listed key, `CONGRESS_SIGNUP_EVENT_VENUE`, validated beside the event id and REQUIRED: a missing value refuses the intake generically rather than sending a confirmation with a blank place. «{дата}» is `events.starts_at` rendered in `Europe/Moscow`, the zone the congress, the organiser and the audience are all in; rendering an instant in the server's local zone would shift an owner-approved date the day the API runs anywhere else.
+
 ## Registration and mail state
 
 ```mermaid
@@ -191,6 +193,7 @@ erDiagram
         jsonb answers "NEW - null for platform-origin rows; carries the phone as typed and normalised"
         text confirmation_mail_status "NEW - pending | sent | failed"
         timestamptz confirmation_mail_at "NEW"
+        bool account_created_by_intake "NEW - null for platform-origin rows"
         text record_status
     }
 
@@ -212,7 +215,9 @@ erDiagram
 
 **`registrations.answers`** (`packages/db/src/schema/registrations.ts:42-93` gains the column) holds surname, first name, optional patronymic, the contact phone both as typed and normalised, email, specialty reference (a `specialties_minzdrav` id or the `is_other` row), workplace, city and region. The shape is owned by a Zod schema in `packages/schemas` — the same schema validates the intake request, so the column can never hold a shape the API would reject. The column is nullable because the platform-origin path (a signed-in doctor registering from the feed) writes no answers; the roster renders those rows from the account's profile and leaves a cell empty where the profile has no value.
 
-**`registrations.confirmation_mail_status` / `_at`** make the send outcome a queryable fact rather than a log line, which is what lets the roster show it, the roster filter on it and the resubmission path decide whether to re-send.
+**`registrations.confirmation_mail_status` / `_at`** make the send outcome a queryable fact rather than a log line, which is what lets the roster show it, the roster filter on it and the resubmission path decide whether to re-send. The `failed` write is conditional on the row not already reading `sent`, so two overlapping dispatches cannot downgrade a delivered email.
+
+**`registrations.account_created_by_intake`** records which of the two account paths this registration was taken on, written inside the account transaction and frozen at the first submission alongside the answers. It exists because the confirmation email's paragraph — «для вас создан аккаунт» or «регистрация добавлена в ваш аккаунт» — is a fact about the first submission and not about the state of the IdP when a dispatch happens to run: after a failed send the participant resubmits, the account now exists, and a variant derived from that later call would send the existing-account text to someone whose account the intake had created. Nullable, and `NULL` is the platform-origin row: no intake ran, no confirmation is owed, no paragraph has to be chosen.
 
 **`consent_records`** stays append-only and immutable (`packages/db/src/schema/consent-records.ts:26-36`): every acceptance is its own row, and the version is server-stamped exactly as the doctor-storefront door stamps its own purposes (`doctor-register.service.ts:38-63`), never taken from the caller. The new purpose constant joins the closed list in `@ds/schemas`; the DB column stays free text.
 

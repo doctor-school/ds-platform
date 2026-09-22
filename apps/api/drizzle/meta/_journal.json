@@ -267,6 +267,13 @@
       "when": 1789991820617,
       "tag": "0037_registration_answers",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790051680682,
+      "tag": "0038_registration_confirmation_mail",
+      "breakpoints": true
     }
   ]
 }

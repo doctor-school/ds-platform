@@ -12,6 +12,8 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
 import {
   BOT_PROTECTION,
   type BotProtection,
@@ -99,6 +101,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       })
         .overrideProvider(IDP_CLIENT)
         .useValue(fake)
+        // 044 EARS-11: every acceptance dispatches a confirmation email; a
+        // fake relay keeps this suite off the network for 60+ submissions.
+        .overrideProvider(MAILER)
+        .useValue(new FakeMailer())
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(thresholds)
         .overrideProvider(CONGRESS_SIGN_UP_CLOCK)
@@ -250,6 +256,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       })
         .overrideProvider(IDP_CLIENT)
         .useValue(fake)
+        // 044 EARS-11: every acceptance dispatches a confirmation email; a
+        // fake relay keeps this suite off the network for 60+ submissions.
+        .overrideProvider(MAILER)
+        .useValue(new FakeMailer())
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .overrideProvider(BOT_PROTECTION)

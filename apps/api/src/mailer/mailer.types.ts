@@ -14,6 +14,28 @@
  *   logged, never persisted, never echoed into an error (implementations
  *   sanitize provider rejections before surfacing them).
  */
+/**
+ * 044 EARS-13 — everything the confirmation email needs that the CALLER knows.
+ *
+ * The portal base URL is deliberately absent: it is adapter configuration
+ * (`MAILER_PORTAL_BASE_URL`), exactly as it is for the account-exists notice, so
+ * the congress intake never has to learn where the portal lives. The event
+ * instant arrives as a `Date` rather than a pre-rendered string for the same
+ * reason — the Moscow wall-clock rendering is presentation, and presentation
+ * belongs to the mail layer, not to the intake.
+ */
+export interface CongressConfirmationRequest {
+  email: string;
+  /** `events.title` of the congress the participant just signed up for. */
+  eventTitle: string;
+  /** `events.starts_at` as the instant it is; rendered in `Europe/Moscow`. */
+  eventStartsAt: Date;
+  /** The congress venue (a per-deployment constant, 044 EARS-13). */
+  eventVenue: string;
+  /** Selects the ONE branch in the copy; never observable on the wire. */
+  accountIsNew: boolean;
+}
+
 export interface Mailer {
   /**
    * EARS-23: send the account-exists notice to `email` — a sign-in
@@ -62,6 +84,24 @@ export interface Mailer {
    * (contract parity: the fake is no more permissive than the real adapter).
    */
   sendAdminLockoutNotice(email: string): Promise<void>;
+
+  /**
+   * 044 EARS-13: send the congress registration confirmation — a
+   * **product notice**, in the first class above. It carries no code, no token
+   * and nothing about the account beyond the one fact the recipient submitted
+   * the form to establish.
+   *
+   * The caller dispatches it OFF the response path and never rolls a
+   * registration back on a rejection (EARS-11), so this method's contract is
+   * simply «resolve on acceptance, reject on a relay failure after failover» —
+   * the caller records which of the two happened on the registration row.
+   *
+   * Implementations MUST reject an empty / blank / syntactically invalid email
+   * (contract parity: the fake is no more permissive than the real adapter).
+   */
+  sendCongressRegistrationConfirmation(
+    input: CongressConfirmationRequest,
+  ): Promise<void>;
 }
 
 /** DI token for the {@link Mailer} port (SmtpMailer in runtime; FakeMailer in tests). */

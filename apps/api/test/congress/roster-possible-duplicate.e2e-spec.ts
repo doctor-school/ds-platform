@@ -13,6 +13,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { CONGRESS_SIGN_UP_CLOCK } from "../../src/congress/congress-signup.tokens.js";
 import { RegistrationService } from "../../src/registration/registration.service.js";
@@ -171,6 +172,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       })
         .overrideProvider(IDP_CLIENT)
         .useValue(fake)
+        // 044 EARS-11: the intake dispatches a confirmation email after
+        // every acceptance. Without this the suite would make a real relay
+        // attempt per submission and record `failed` on rows it never reads.
+        .overrideProvider(MAILER)
+        .useValue(mailer)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .overrideProvider(CONGRESS_SIGN_UP_CLOCK)

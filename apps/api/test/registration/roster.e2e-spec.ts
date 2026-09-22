@@ -32,8 +32,11 @@ import {
 //     the `EventRoster` — the single basis for room admission (006) and the
 //     sponsor roster; a fresh read after the write returns the persisted rows;
 //   • the record carries NO MORE THAN the `(doctor, event, registeredAt)` fact —
-//     the roster entry is exactly {userId, eventId, registeredAt}, no email,
-//     name, or any denormalized registrant PII;
+//     the roster entry is exactly {userId, eventId, registeredAt} plus the 044
+//     EARS-30 `possibleDuplicate` boolean derived at read time, no email, name,
+//     or any denormalized registrant PII (the marker is owned and driven by
+//     `test/congress/roster-possible-duplicate.e2e-spec.ts`; here it only has to
+//     stay a boolean that leaks nothing);
 //   • every row is CURRENT — wave 1 has no cancelled state, no soft-delete, so
 //     the roster is every registration row for the event, no filter (owner
 //     decision);
@@ -196,12 +199,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(roster).toHaveLength(1);
       const [entry] = roster;
 
-      // Exactly the three fields — no email/name/sub or any extra column.
+      // Exactly the three record fields + the derived 044 EARS-30 marker — no
+      // email/name/sub, no extra column, and no contact phone: the marker is a
+      // bare boolean, so the derivation carries no PII out of the query.
       expect(Object.keys(entry).sort()).toEqual([
         "eventId",
+        "possibleDuplicate",
         "registeredAt",
         "userId",
       ]);
+      // A platform-origin row has no answers payload, so it is never marked.
+      expect(entry.possibleDuplicate).toBe(false);
       // The canonical contract validates and round-trips.
       expect(EventRosterSchema.parse(roster)).toEqual(roster);
       // No registrant PII is present anywhere in the serialized roster.

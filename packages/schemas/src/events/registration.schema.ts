@@ -161,11 +161,24 @@ export type MyEvents = z.infer<typeof MyEventsSchema>;
  * admission (006) join to the `users` mirror (003) at read time for whatever
  * identity they need; 005 never copies PII onto this record and never exposes it
  * on a public 004 surface (EARS-8, EARS-10; recon §6).
+ *
+ * `possibleDuplicate` (044 EARS-30) is the one derived field: `true` when at
+ * least one OTHER registration of the same event carries the same normalised
+ * contact phone (the E.164 comparison key EARS-29 keeps on the registration's
+ * answers). It is DERIVED AT READ TIME by the roster query and is deliberately
+ * NOT a stored flag — so when the team removes one of the sharing registrations
+ * on request, the survivor's marker disappears by itself, with no write to the
+ * surviving row and no sweep. A registration with no answers payload (a
+ * platform-origin row, EARS-16) carries no phone and is never marked; several
+ * such rows do not group with each other through their common empty key. The
+ * phone itself never leaves the query: only this boolean does, so the no-PII
+ * invariant above is unchanged.
  */
 export const EventRosterEntrySchema = z.object({
   userId: z.uuid(),
   eventId: z.uuid(),
   registeredAt: z.iso.datetime({ offset: true }),
+  possibleDuplicate: z.boolean(),
 });
 export type EventRosterEntry = z.infer<typeof EventRosterEntrySchema>;
 

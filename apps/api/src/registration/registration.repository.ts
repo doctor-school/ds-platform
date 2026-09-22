@@ -275,13 +275,31 @@ export class RegistrationRepository {
    * registrant PII is ever read here (a consumer that needs identity joins to 003
    * itself, EARS-8/EARS-10). Ordered nearest-registered first
    * (`registered_at ASC`); an event with no registrations returns an empty list.
+   *
+   * 044 EARS-30 adds the `possibleDuplicate` marker, and adds it HERE rather
+   * than as a column: it is derived per read by a window count over the
+   * normalised contact phone (EARS-29) inside the event, so nothing is stored
+   * and nothing is swept — when the team removes one of the sharing
+   * registrations on request, the survivor simply stops being counted, with no
+   * write to the surviving row. `WHERE event_id = …` is applied before the
+   * window, so the partition is already scoped to this event. The phone itself
+   * is neither selected nor returned: only the boolean leaves the query, so the
+   * no-PII invariant above holds unchanged. Rows whose key is NULL or empty (a
+   * platform-origin registration, EARS-16, has no answers at all) are forced to
+   * `false` by the `CASE`: SQL partitions all NULLs together, so without that
+   * guard every answer-less row on an event would mark every other one.
    */
   async findEventRoster(eventId: string): Promise<EventRosterEntry[]> {
+    const phoneKey = sql`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
     const rows = await this.db
       .select({
         userId: registrations.userId,
         eventId: registrations.eventId,
         registeredAt: registrations.registeredAt,
+        possibleDuplicate: sql<boolean>`case
+          when ${phoneKey} is null then false
+          else count(*) over (partition by ${phoneKey}) > 1
+        end`.as("possible_duplicate"),
       })
       .from(registrations)
       .where(eq(registrations.eventId, eventId))
@@ -290,6 +308,7 @@ export class RegistrationRepository {
       userId: r.userId,
       eventId: r.eventId,
       registeredAt: r.registeredAt.toISOString(),
+      possibleDuplicate: r.possibleDuplicate,
     }));
   }
 

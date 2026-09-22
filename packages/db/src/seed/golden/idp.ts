@@ -19,8 +19,13 @@ export interface GoldenIdpAccount {
   key: GoldenAccountKey;
   /** Login the account signs in with; equals the mirrored `users.email`. */
   username: string;
-  /** `users.role` the mirror row carries. */
-  role: "doctor_guest" | "platform_admin";
+  /**
+   * `users.role` the mirror row carries. The union is the coarse-role vocabulary
+   * the converge may grant — `event-registrar` (044 EARS-17) is declarable here
+   * before any golden account uses it, so the registrar fixture of the congress
+   * roster lands as a catalogue row rather than a type change.
+   */
+  role: "doctor_guest" | "platform_admin" | "event-registrar";
   /** `users.email_verified` — the storefront's «подтвердите почту» fork. */
   emailVerified: boolean;
   /**

@@ -54,7 +54,9 @@ describe("AuthzGuard (runtime mirror, fail-closed)", () => {
       audit: "low-stakes",
       tests: ["EARS-10"],
     };
-    expect(guard.canActivate(ctx(meta, { roles: ["doctor_guest"] }))).toBe(true);
+    expect(guard.canActivate(ctx(meta, { roles: ["doctor_guest"] }))).toBe(
+      true,
+    );
   });
 
   it("denies an authenticated fast-path endpoint when the subject lacks every required role", () => {
@@ -70,6 +72,25 @@ describe("AuthzGuard (runtime mirror, fail-closed)", () => {
     );
   });
 
+  it("044 EARS-17: a subject holding only event-registrar is recognised as that role by the guard", () => {
+    // The congress registrar is a coarse role like any other: the guard resolves
+    // it out of the claim-sourced `subject.roles`, and a principal that does not
+    // hold it is refused on the same handler.
+    const meta: AuthzMeta = {
+      access: "authenticated",
+      roles: ["event-registrar"],
+      check: "fast-path",
+      audit: "low-stakes",
+      tests: ["EARS-17"],
+    };
+    expect(guard.canActivate(ctx(meta, { roles: ["event-registrar"] }))).toBe(
+      true,
+    );
+    expect(() =>
+      guard.canActivate(ctx(meta, { roles: ["doctor_guest"] })),
+    ).toThrow(ForbiddenException);
+  });
+
   it("allows a resource-scoped policy endpoint (no objectAttrs) when the subject holds a required role — the handler then evaluates the domain rule", () => {
     // The 006 room gate: `policy` because registration+live is a resource-scoped
     // decision the role alone cannot make, but no object-level ABAC predicate.
@@ -81,7 +102,9 @@ describe("AuthzGuard (runtime mirror, fail-closed)", () => {
       audit: "none",
       tests: ["EARS-1", "EARS-8"],
     };
-    expect(guard.canActivate(ctx(meta, { roles: ["doctor_guest"] }))).toBe(true);
+    expect(guard.canActivate(ctx(meta, { roles: ["doctor_guest"] }))).toBe(
+      true,
+    );
   });
 
   it("denies a resource-scoped policy endpoint when the subject lacks every required role", () => {

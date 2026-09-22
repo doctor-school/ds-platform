@@ -23,6 +23,10 @@ export const ROLES = [
   "platform_admin",
   "pd_officer",
   "expert",
+  // 044 EARS-17 — the congress event registrar. Coarse role like every other:
+  // its authority is the Zitadel project-roles claim (ADR-0001 §1, §8), and
+  // `users.role` only MIRRORS it, exactly as `platform_admin` works today.
+  "event-registrar",
 ] as const;
 export type Role = (typeof ROLES)[number];
 

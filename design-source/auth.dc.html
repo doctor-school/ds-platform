@@ -455,7 +455,7 @@ class Component extends DCLogic {
 
     const titles = {
       login: ['Вход', 'Доступ к вашему аккаунту Doctor.School.'],
-      register: ['Создание аккаунта', isDoctor ? 'Почта и пароль — этого достаточно. Документы на входе не нужны.' : 'Бесплатно, за две минуты — нужны только e-mail и пароль.'],
+      register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль.'],
       verify: ['Проверьте почту', 'Мы отправили код на ' + maskedDest + '. Введите его, чтобы завершить регистрацию.'],
       reset: s.resetStage === 'request'
         ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
@@ -518,7 +518,7 @@ class Component extends DCLogic {
       : 'После подтверждения почты вы вернётесь сюда же — место за вами.';
 
     // Слоты кода — по одному квадрату на символ
-    const codeLen = 6;
+    const codeLen = 8;
     const slotInput = (i, e) => {
       const ch = (e.target.value || '').replace(/\s/g, '').slice(-1);
       const otp = s.otp.slice(); otp[i] = ch;
@@ -590,7 +590,7 @@ class Component extends DCLogic {
       regBtnLabel: busy('reg', 'Создать аккаунт'), verifyBtnLabel: busy('verify', 'Подтвердить'),
       resetSendLabel: busy('reset', 'Отправить код сброса'), resetPwBtnLabel: busy('reset', 'Задать новый пароль'),
       // регистрация
-      fRegEmail: mkField('regEmail', isDoctor ? 'Рабочая почта' : 'Электронная почта', 'doctor@example.com', vEmail, 'Заполните это поле.'),
+      fRegEmail: mkField('regEmail', 'Электронная почта', 'doctor@example.com', vEmail, 'Заполните это поле.'),
       fRegPw: mkField('regPw', 'Пароль', '', vPw, 'Заполните это поле.'),
       fRegPwHint: (s.touched['regPw'] && s.values['regPw'] && vPw(s.values['regPw'])) ? 'display:none' : 'font-size:12px;font-weight:600;color:' + inkFaint + ';margin-top:7px',
       fPromo: mkField('promo', 'Промокод — если есть', 'MEDREP-2026', null, ''),

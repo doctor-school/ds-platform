@@ -170,39 +170,55 @@ const lastBody = () =>
     unknown
   >;
 
-describe("003 EARS-17: the challenge resumes the submit, exactly once", () => {
+describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", () => {
   it.each(HOSTS)(
-    "003 EARS-17: a fresh challenge on the %s door resumes the registration ONCE, with the minted token",
+    "003 EARS-17: the %s door mints the token first, and the registration carries it on its FIRST call",
     async (_name, config) => {
       captchaMode = "manual";
-      register
-        .mockRejectedValueOnce(authError(403, BotProtectionErrorCodes.required))
-        .mockResolvedValueOnce({ status: "pending_verification" });
 
       await submitForm(config);
       await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
+      // No tokenless probe reaches the api while the challenge is in flight.
+      expect(register).not.toHaveBeenCalled();
 
       act(() => captchaProps?.onToken("minted-token"));
 
-      await waitFor(() => expect(register).toHaveBeenCalledTimes(2));
-      // The RESUMED call carries the token; the first one never did.
-      expect(register.mock.calls[0]?.[1]).toBeUndefined();
-      expect(register.mock.calls[1]?.[1]).toBe("minted-token");
+      await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+      expect(register.mock.calls[0]?.[1]).toBe("minted-token");
       // …and the resumed body is the one the visitor submitted, not a re-read
       // of a form they may have touched since.
-      expect(register.mock.calls[1]?.[0]).toMatchObject({ email: EMAIL });
+      expect(register.mock.calls[0]?.[0]).toMatchObject({ email: EMAIL });
     },
   );
 
   it.each(HOSTS)(
-    "003 EARS-17: a token the api refuses on the %s door reads as that host's refused-challenge sentence, and the typed form survives",
+    "021 EARS-19.4: a challenge the api still REQUIRES on the %s door reads as that host's challenge sentence, in the challenge block",
+    async (_name, config) => {
+      register
+        .mockReset()
+        .mockRejectedValue(authError(403, BotProtectionErrorCodes.required));
+
+      await submitForm(config);
+
+      await waitFor(() =>
+        expect(screen.getByTestId("register-captcha-error")).toHaveTextContent(
+          config.copy.errors.botProtectionRequired,
+        ),
+      );
+      // A refused challenge is never a failed command…
+      expect(screen.queryByTestId("register-command-error")).toBeNull();
+      // …and the visitor may try again right away.
+      expect(screen.getByTestId("register-submit")).toBeEnabled();
+    },
+  );
+
+  it.each(HOSTS)(
+    "021 EARS-19.4: a token the api REFUSES on the %s door reads as that host's refused-challenge sentence, and the typed form survives",
     async (_name, config) => {
       captchaMode = "manual";
       register
-        .mockRejectedValueOnce(authError(403, BotProtectionErrorCodes.required))
-        .mockRejectedValueOnce(
-          authError(403, BotProtectionErrorCodes.rejected),
-        );
+        .mockReset()
+        .mockRejectedValue(authError(403, BotProtectionErrorCodes.rejected));
 
       await submitForm(config);
       await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
@@ -213,6 +229,7 @@ describe("003 EARS-17: the challenge resumes the submit, exactly once", () => {
           config.copy.errors.botProtectionRejected,
         ),
       );
+      expect(screen.queryByTestId("register-command-error")).toBeNull();
       // A retry is a re-submit, not a re-type: nothing was wiped.
       expect(screen.getByTestId("register-email")).toHaveValue(EMAIL);
       expect(screen.getByTestId("register-password")).toHaveValue(PASSWORD);

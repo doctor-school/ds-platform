@@ -301,28 +301,23 @@ export function RegisterDoor({
     setRegisteredEmail(email);
   }
 
-  async function onSubmit(values: RegisterCardValues) {
+  function onSubmit(values: RegisterCardValues) {
     setCommandError(null);
     setChallengeError(null);
     // A hold left by an abandoned attempt must never survive into this one: it
     // would replay a credential this submit is about to replace.
     clearPendingRegistration();
-    try {
-      await finishRegistration(values);
-    } catch (err) {
-      if (isBotProtectionRequired(err)) {
-        // Retry ONCE with the ORIGINAL values: the challenge resumes the command
-        // the visitor already submitted, never a re-read of a mutated form.
-        captcha.request((captchaToken) =>
-          finishRegistration(values, captchaToken),
-        );
-        return;
-      }
-      // EARS-16: the registration OUTCOME stays the host's generic sentence, so
-      // the surface never tells a stranger whether an address is registered
-      // here; only the non-oracle statuses get a specific one.
-      setCommandError(authErrorMessage(err, errors, copy.failed));
-    }
+    // 003 EARS-17 — the challenge runs BEFORE the command, the way both
+    // storefronts ran it before this door and the way the sign-in door requests
+    // a code: `request()` mounts ONE fresh widget and resumes the command with
+    // the minted token (tokenless where no site key is configured, which is
+    // exactly the guard's no-op when the provider is disabled). Because no
+    // tokenless probe is ever sent, a guard that still answers 403
+    // `BOT_PROTECTION_REQUIRED` / `BOT_PROTECTION_REJECTED` is a REFUSED
+    // CHALLENGE and not a failed command: `onActionError` above states it in
+    // the form-level challenge block (021 EARS-19.4), leaves the typed values
+    // untouched and releases the submit for another try.
+    captcha.request((captchaToken) => finishRegistration(values, captchaToken));
   }
 
   const consentItems = useMemo(() => consentItemsOf(config), [config]);

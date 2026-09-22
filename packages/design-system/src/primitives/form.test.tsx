@@ -221,6 +221,48 @@ describe("FormError — single form-level error primitive (one error style sourc
     expect(err).toHaveClass("text-primary-surface-foreground");
     expect(err).not.toHaveClass("text-destructive-text");
   });
+
+  it("#2027: the banner variant is the canvas plate — framed, tinted, at reading size (canvas 56-61)", () => {
+    // Canvas `design-source/auth.dc.html:56-61`: an operation-level refusal is
+    // about the WHOLE screen, so it is drawn as a plate — 2px danger border on
+    // the danger tint, 12/14 padding, 10px gap — and it is READ, at 13px/700 on
+    // a 1.45 line in ink. Only the ⚠ stays danger-coloured: a whole paragraph of
+    // red is a shout, and the canvas does not shout.
+    render(
+      <FormError data-testid="ferr" variant="banner">
+        Не удалось войти.
+      </FormError>,
+    );
+
+    const err = screen.getByTestId("ferr");
+    expect(err).toHaveClass(
+      "border-2",
+      "border-destructive",
+      "bg-destructive-tint",
+      "px-3.5",
+      "py-3",
+      "gap-2.5",
+      "items-start",
+      "text-caption",
+      "font-bold",
+      "leading-notice",
+      "text-foreground",
+    );
+    expect(err.className).not.toMatch(/text-xs/);
+    expect(err).toHaveAttribute("role", "alert");
+
+    const glyph = err.querySelector("span");
+    expect(glyph?.className ?? "").toMatch(/text-destructive-text/);
+    expect(glyph?.className ?? "").toMatch(/font-extrabold/);
+  });
+
+  it("#2027: a field-level error keeps the bare line — the plate is for the whole screen", () => {
+    render(<FormError data-testid="ferr">Не удалось войти.</FormError>);
+
+    const err = screen.getByTestId("ferr");
+    expect(err.className).not.toMatch(/bg-destructive-tint/);
+    expect(err.className).not.toMatch(/border-2/);
+  });
 });
 
 describe("FormMessage — semantic on-primary tone", () => {

@@ -19,7 +19,8 @@ import {
   PhoneField,
   type PasswordRevealLabels,
 } from "../primitives/fields";
-import { AuthCard } from "./auth-card";
+import { cn } from "../lib/utils";
+import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 import { OtpFocusScreen } from "./otp-focus-screen";
 import { maskDestination } from "./mask-destination";
 
@@ -259,7 +260,9 @@ export function LoginCard({
       icon={icon}
       errorBanner={
         operationError ? (
-          <FormError className="mb-3">{operationError}</FormError>
+          <FormError variant="banner" className="mb-5">
+            {operationError}
+          </FormError>
         ) : null
       }
       // #1033: the page title is the document's single h1 (a11y landmark).
@@ -293,9 +296,7 @@ export function LoginCard({
         {/* Canvas 66: the switcher's name is DRAWN above the tabs, not only
             announced — it keeps its `aria-label` too, so the tablist is still
             named for a screen reader that never sees the eyebrow. */}
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-          {copy.methodSwitcherLabel}
-        </p>
+        <p className={cn("mb-2", AUTH_EYEBROW)}>{copy.methodSwitcherLabel}</p>
         <TabsList aria-label={copy.methodSwitcherLabel}>
           <TabsTrigger value="password" data-testid="login-method-password">
             {copy.methodPassword}
@@ -455,9 +456,7 @@ function OtpLogin({
             <div className="space-y-2">
               {/* Canvas 106: the group's name is DRAWN above the buttons and
                   still names the radiogroup for assistive technology. */}
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                {copy.channelGroupLabel}
-              </p>
+              <p className={AUTH_EYEBROW}>{copy.channelGroupLabel}</p>
               <div
                 className="flex gap-2"
                 role="radiogroup"

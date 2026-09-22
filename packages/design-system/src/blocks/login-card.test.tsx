@@ -333,3 +333,41 @@ describe("#2027 <LoginCard> pre-hydration submit", () => {
     }
   });
 });
+
+/**
+ * Canvas render parity (#2027, owner rule 2026-09-22 «parity is the rendering»).
+ * `design-source/auth.dc.html` draws the login door's operation-level refusal as
+ * a framed plate above the title, and names the two choice groups with the same
+ * eyebrow the register door uses for its conditions — one family, one recipe.
+ */
+describe("#2027 <LoginCard> canvas parity", () => {
+  it("#2027: a refused sign-in is the canvas plate, not a bare red line (canvas 56-61)", () => {
+    setup({ passwordError: "copy.password.error" });
+
+    const banner = screen.getByText(/copy\.password\.error/).closest("p");
+    expect(banner).toHaveClass(
+      "border-2",
+      "border-destructive",
+      "bg-destructive-tint",
+      "text-caption",
+      "text-foreground",
+    );
+    expect(banner).toHaveAttribute("role", "alert");
+  });
+
+  it("#2027: both choice groups are named with the family eyebrow (canvas 66/106)", () => {
+    setup();
+
+    const eyebrow = screen.getByText("copy.methodSwitcherLabel", {
+      selector: "p",
+    });
+    expect(eyebrow).toHaveClass(
+      "text-eyebrow",
+      "font-extrabold",
+      "uppercase",
+      "tracking-micro",
+      "text-faint",
+    );
+    expect(eyebrow.className).not.toMatch(/text-muted-foreground/);
+  });
+});

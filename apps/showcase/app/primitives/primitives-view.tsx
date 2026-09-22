@@ -1105,6 +1105,14 @@ function FormPrimitivesSection() {
           />
         </form>
       </Form>
+      <SubRow label='FormError variant="banner" — operation-level refusal (#2027)'>
+        <div className="flex w-72 flex-col gap-3">
+          <FormError variant="banner">
+            Не удалось войти. Проверьте адрес и пароль.
+          </FormError>
+          <FormError>Не удалось войти. Проверьте адрес и пароль.</FormError>
+        </div>
+      </SubRow>
       <SubRow label='tone="on-primary" — invariant primary surface'>
         <OnPrimaryFormToneDemo />
       </SubRow>

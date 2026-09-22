@@ -468,8 +468,8 @@ describe("021 EARS-4/5/6/7/12/19: the consent rows a host states, and what is re
   });
 });
 
-describe("021 EARS-7/12: the blocked submit, and the statement that cannot be self-served", () => {
-  it("021 EARS-12: a doctor host whose read model carries no partner statement says so and keeps the submit shut", async () => {
+describe("021 EARS-7/12: the unmet condition, and the statement that cannot be self-served", () => {
+  it("021 EARS-12: a doctor host whose read model carries no partner statement says so at FORM level and sends no command", async () => {
     const stripped: AuthFlowHostConfig = {
       ...DOCTOR_FIXTURE,
       consents: {
@@ -483,20 +483,58 @@ describe("021 EARS-7/12: the blocked submit, and the statement that cannot be se
 
     await renderDoor(stripped);
     await fillForm(user);
+    await user.click(screen.getByTestId("register-submit"));
 
-    // The condition the server still refuses without is stated even though no
-    // rendered row covers it — a silently dead button exists in no state.
-    expect(screen.getByTestId("register-submit-reason")).toHaveTextContent(
-      resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.partnerDataItem.unmet!,
+    // Nothing on screen can be ticked to satisfy this one — no row covers it —
+    // so it is said where the statements about the COMMAND are said, and the
+    // command is not sent: the visitor never meets a bare server refusal.
+    await waitFor(() =>
+      expect(screen.getByTestId("register-command-error")).toHaveTextContent(
+        resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.partnerDataItem.unmet!,
+      ),
     );
-    expect(screen.getByTestId("register-submit")).toBeDisabled();
+    expect(register).not.toHaveBeenCalled();
+    // …and the button is live, exactly as the canvas draws it in every state.
+    expect(screen.getByTestId("register-submit")).toBeEnabled();
   });
 
   it("021 EARS-12: the Academy states no unmet condition — its submit is live from the first render", async () => {
     await renderDoor(ACADEMY_FIXTURE);
 
-    expect(screen.queryByTestId("register-submit-reason")).toBeNull();
     expect(screen.getByTestId("register-submit")).toBeEnabled();
+    // No condition is unmet, so no form-level statement is rendered at all.
+    expect(screen.queryByTestId("register-command-error")).toBeNull();
+  });
+
+  it("021 EARS-12: the doctor's ungranted conditions are reported on their own rows, in the package's words", async () => {
+    // Owner Stage-B 2026-09-22 + canvas 193/201: the unmet condition is named
+    // under the row it belongs to, after the press — never beside the button.
+    const user = setupUser();
+    const consentCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).consents;
+
+    await renderDoor(DOCTOR_FIXTURE);
+    await user.type(screen.getByTestId("register-email"), EMAIL);
+    await user.type(screen.getByTestId("register-password"), PASSWORD);
+    await user.click(screen.getByTestId("register-submit"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(consentCopy.medicalWorkerDeclaration.unmet!),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(consentCopy.partnerDataItem.unmet!),
+    ).toBeInTheDocument();
+    expect(register).not.toHaveBeenCalled();
+    expect(screen.getByTestId("register-medworker")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    // The opt-in is never accused: it gates nothing.
+    expect(screen.getByTestId("register-marketing")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 
   it("021 EARS-7: the withdrawal statement stands under the doctor's rows and nowhere on the Academy", async () => {

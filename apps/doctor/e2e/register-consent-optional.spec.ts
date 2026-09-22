@@ -88,17 +88,30 @@ test.describe("021 EARS-6: the marketing opt-in is genuinely optional", () => {
     ).not.toBeChecked();
   });
 
-  test("021 EARS-6.2: the blocked submit never names the marketing opt-in as a reason", async ({
+  test("021 EARS-6.2: the refused submit never reports the marketing opt-in", async ({
     page,
   }) => {
     await page.goto("/register");
 
-    // Blocked at its most blocked: nothing filled at all. If withholding the
-    // opt-in ever cost the doctor anything, this line is where it would say so.
-    const reason = page.getByTestId("register-submit-reason");
-    await expect(page.getByTestId("register-submit")).toBeDisabled();
-    await expect(reason).toBeVisible();
-    await expect(reason).not.toContainText(/рассылк|маркетинг|материал/i);
+    // Refused at its most refused: nothing filled at all, then pressed. If
+    // withholding the opt-in ever cost the doctor anything, this is where it
+    // would be said — and the opt-in row stays silent while the two access
+    // rows report (canvas 193/201, owner Stage-B 2026-09-22).
+    await expect(page.getByTestId("register-submit")).toBeEnabled();
+    await page.getByTestId("register-submit").click();
+
+    await expect(
+      page.getByTestId("register-medworker"),
+      "the access row reports",
+    ).toHaveAttribute("aria-invalid", "true");
+    await expect(
+      page.getByTestId("register-marketing"),
+      "the opt-in never reports",
+    ).not.toHaveAttribute("aria-invalid", "true");
+    await expect(
+      page.getByTestId("registration-consent-marketing"),
+      "nothing marketing-shaped is named as an obstacle",
+    ).not.toContainText(/без (него|этого)|невозможна/i);
 
     // And withholding it costs nothing by RENDERING too, not merely by being
     // left out of the reason line: 021 EARS-5 asks for the two tiers to be

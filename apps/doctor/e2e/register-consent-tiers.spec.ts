@@ -40,6 +40,15 @@ const PARTNER_DATA_HELP =
  */
 const COMPOSITION = ["ФИО", "специальность", "город", "место работы"];
 
+/**
+ * The package's own words for an ungranted access condition — the text the
+ * canvas (193/201) stands under the row it belongs to, after the press.
+ */
+const DECLARATION_UNMET =
+  "Отметьте, что вы медицинский работник — без этого регистрация невозможна.";
+const PARTNER_UNMET =
+  "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.";
+
 test.describe("021 EARS-5: the two-tier consent block", () => {
   test("021 EARS-5.1: two tiers in the F-021-1 geometry — access conditions framed above the submit, marketing below it", async ({
     page,
@@ -179,7 +188,7 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     await expect(tier2.locator('input[type="checkbox"]')).toHaveCount(1);
   });
 
-  test("021 EARS-5.4: neither consent is pre-ticked, and the reason line names whichever access condition is unmet", async ({
+  test("021 EARS-5.4: neither consent is pre-ticked, and each unmet access condition is reported on its own row", async ({
     page,
   }) => {
     await page.goto("/register");
@@ -194,22 +203,31 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     await expect(partnerData).not.toBeChecked();
     await expect(marketing).not.toBeChecked();
 
-    const reason = page.getByTestId("register-submit-reason");
-    await expect(reason).toContainText("медицинский работник");
+    // Nothing is said before the press — the canvas shows the warning lines
+    // only in its `submitted` state (369/193/201).
+    const declarationItem = page.getByTestId("register-medworker-item");
+    const partnerItem = page.getByTestId("register-partner-data-item");
+    await expect(declarationItem).not.toContainText(DECLARATION_UNMET);
+    await expect(partnerItem).not.toContainText(PARTNER_UNMET);
+    await expect(page.getByTestId("register-submit")).toBeEnabled();
 
-    // With the declaration granted, the stated obstacle moves to the second
-    // access condition — the real unmet one, named in the doctor's words.
+    // Pressed with both ungranted: BOTH rows report, each in its own words,
+    // rather than one line beside the button naming one condition at a time.
+    await page.getByTestId("register-submit").click();
+    await expect(declarationItem).toContainText(DECLARATION_UNMET);
+    await expect(partnerItem).toContainText(PARTNER_UNMET);
+
+    // Granting one clears ONLY its own report; the other still stands.
     await declaration.locator("xpath=ancestor::label[1]").click();
     await expect(declaration).toBeChecked();
-    await expect(reason).toContainText("передачу данных партнёрам");
+    await expect(declarationItem).not.toContainText(DECLARATION_UNMET);
+    await expect(partnerItem).toContainText(PARTNER_UNMET);
 
-    // With BOTH granted, nothing is left to state: 021 EARS-19 (#1558) wired the
-    // command behind an INVISIBLE challenge that runs inside the submit, so the
-    // challenge is not an obstacle the doctor must clear first. The reason line
-    // is ABSENT rather than re-worded, and the door opens.
+    // With BOTH granted nothing is left to report, and the submit — live the
+    // whole time, exactly as the canvas draws it — opens the door.
     await partnerData.locator("xpath=ancestor::label[1]").click();
     await expect(partnerData).toBeChecked();
-    await expect(reason).toHaveCount(0);
+    await expect(partnerItem).not.toContainText(PARTNER_UNMET);
     await expect(page.getByTestId("register-submit")).toBeEnabled();
   });
 });

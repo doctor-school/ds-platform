@@ -204,26 +204,31 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
     }
   });
 
-  test("021 EARS-1.6: the inert submit is disabled with a stated, wired reason", async ({
+  test("021 EARS-1.6: the submit is live, and what is ungranted is stated on its own row and wired to it", async ({
     page,
   }) => {
     await page.goto("/register");
 
     const submit = page.getByTestId("register-submit");
-    await expect(submit).toBeDisabled();
+    // Canvas 490: the button is live in every state, so the «silently dead
+    // button» EARS-12 forbids cannot exist here — there is no disabled button.
+    await expect(submit).toBeEnabled();
+    await expect(page.getByTestId("register-submit-reason")).toHaveCount(0);
 
-    // EARS-12: a silently dead button exists in no state of this surface.
-    const reason = page.getByTestId("register-submit-reason");
-    await expect(reason).toBeVisible();
-    await expect(reason).not.toHaveText("");
+    await submit.click();
 
-    // The reason is announced with the control, not merely painted near it.
-    const reasonId = await reason.getAttribute("id");
-    expect(reasonId, "the reason line carries an id").toBeTruthy();
-    expect(
-      (await submit.getAttribute("aria-describedby"))?.split(/\s+/) ?? [],
-      "submit aria-describedby names the reason",
-    ).toContain(reasonId);
+    // EARS-12 after the press: the unmet condition is stated where it occurred,
+    // and ANNOUNCED with its own control rather than merely painted near it.
+    const declaration = page.getByTestId("register-medworker");
+    await expect(declaration).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await declaration.getAttribute("aria-describedby");
+    expect(describedBy, "the reporting row points at its message").toBeTruthy();
+    const message = page
+      .locator(`[id="${describedBy!.split(/\s+/).at(-1)}"]`)
+      .first();
+    await expect(message, "the message exists and is visible").toBeVisible();
+    await expect(message, "the message is not empty").not.toHaveText(/^\s*$/);
+    await expect(submit, "and the button stays live").toBeEnabled();
   });
 });
 

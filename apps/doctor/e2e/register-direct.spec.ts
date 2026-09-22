@@ -81,7 +81,7 @@ test.describe("021 EARS-3: the direct arrival carries no context", () => {
     await expect(panel).toContainText("Медицинское образование для врачей");
   });
 
-  test("021 EARS-3.2: the form is fully usable on a direct arrival, and the inert submit still states its reason", async ({
+  test("021 EARS-3.2: the form is fully usable on a direct arrival, and the live submit reports what is still ungranted", async ({
     page,
   }) => {
     await page.goto("/register");
@@ -105,10 +105,19 @@ test.describe("021 EARS-3: the direct arrival carries no context", () => {
       .click();
     await expect(page.getByTestId("register-medworker")).toBeChecked();
 
-    // Inert BY DESIGN (EARS-5 #1541 / EARS-19 #1558 are its preconditions), and
-    // the doctor is told which condition is unmet rather than left guessing.
-    await expect(page.getByTestId("register-submit")).toBeDisabled();
-    await expect(page.getByTestId("register-submit-reason")).not.toBeEmpty();
+    // Live BY DESIGN (canvas 490): pressing with the second access condition
+    // still ungranted tells the doctor so ON THAT ROW rather than leaving a
+    // dead button — and no reason line stands beside the submit at all.
+    await expect(page.getByTestId("register-submit")).toBeEnabled();
+    await page.getByTestId("register-submit").click();
+    await expect(page.getByTestId("register-partner-data")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await expect(
+      page.getByTestId("register-partner-data-item"),
+    ).not.toBeEmpty();
+    await expect(page.getByTestId("register-submit")).toBeEnabled();
   });
 });
 

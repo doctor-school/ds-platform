@@ -108,11 +108,14 @@ export type AuthFlowCopy = {
   readonly consents: AuthFlowConsentsCopy;
 };
 
-/** One consent row: the control's label, the line under it, and the blocked-submit reason. */
+/** One consent row: the control's label, the line under it, and what it reports when left ungranted. */
 export type AuthFlowConsentRowCopy = {
   readonly label: string;
   readonly help: string;
-  /** The reason under a blocked submit; absent on a row that blocks nothing. */
+  /**
+   * What the row reports UNDER ITSELF when the visitor submits without granting
+   * it (021 EARS-12); absent on a row that blocks nothing.
+   */
   readonly unmet?: string;
 };
 

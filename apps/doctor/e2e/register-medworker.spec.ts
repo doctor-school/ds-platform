@@ -46,6 +46,10 @@ const ESCAPE_HATCH_TELLS = [
   "заполню позднее",
 ];
 
+/** The package's own words for the ungranted declaration (canvas 193). */
+const DECLARATION_UNMET =
+  "Отметьте, что вы медицинский работник — без этого регистрация невозможна.";
+
 test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
   test("021 EARS-4.1: the declaration renders with its legal explanation and is not pre-ticked", async ({
     page,
@@ -91,24 +95,31 @@ test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
     expect(order).toEqual({ inForm: true, submitFollowsBox: true });
   });
 
-  test("021 EARS-4.3: registration cannot be submitted without the declaration, and the reason names it", async ({
+  test("021 EARS-4.3: registration cannot be completed without the declaration, and its own row says so", async ({
     page,
   }) => {
     await page.goto("/register");
 
     const submit = page.getByTestId("register-submit");
-    await expect(submit).toBeDisabled();
-    // EARS-12: the reason beside the disabled control names the SPECIFIC unmet
-    // condition, in the canvas's own words — not a generic «заполните форму».
-    await expect(page.getByTestId("register-submit-reason")).toHaveText(
-      "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
+    // Canvas 490 / owner Stage-B 2026-09-22: the button is live; the press is
+    // what turns the ungranted declaration into a stated report.
+    await expect(submit).toBeEnabled();
+    await submit.click();
+
+    // EARS-12: the report under the row names the SPECIFIC unmet condition in
+    // the canvas's own words — not a generic «заполните форму».
+    await expect(page.getByTestId("register-medworker-item")).toContainText(
+      DECLARATION_UNMET,
     );
-    // …and it is announced with the control, not merely placed near it.
-    const describedBy = await submit.getAttribute("aria-describedby");
+    // …and it is announced with the control it belongs to, not merely placed
+    // near it.
+    const describedBy = await page
+      .getByTestId("register-medworker")
+      .getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
-    await expect(page.locator(`#${describedBy}`)).toHaveText(
-      "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
-    );
+    await expect(
+      page.locator(`[id="${describedBy!.split(/\s+/).at(-1)}"]`),
+    ).toHaveText(DECLARATION_UNMET);
   });
 
   test("021 EARS-4.4: filling every other field still does not open the door without the declaration", async ({
@@ -122,19 +133,19 @@ test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
     await page.getByTestId("register-password").blur();
 
     // No «complete the rest and we will ask later» path exists: with the whole
-    // form valid and the declaration unticked, the submit is still refused and
-    // the stated reason is still the declaration.
-    await expect(page.getByTestId("register-submit")).toBeDisabled();
-    await expect(page.getByTestId("register-submit-reason")).toHaveText(
-      "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
+    // form valid and the declaration unticked, the press is still refused and
+    // what it reports is still the declaration.
+    await page.getByTestId("register-submit").click();
+    await expect(page.getByTestId("register-medworker-item")).toContainText(
+      DECLARATION_UNMET,
     );
 
-    // Ticking it clears THAT obstacle — the reason moves on to the next real
-    // one rather than repeating the declaration.
+    // Ticking it clears THAT report — and only it; the row goes quiet rather
+    // than repeating the declaration.
     await tickDeclaration(page);
     await expect(page.getByTestId("register-medworker")).toBeChecked();
-    await expect(page.getByTestId("register-submit-reason")).not.toHaveText(
-      "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
+    await expect(page.getByTestId("register-medworker-item")).not.toContainText(
+      DECLARATION_UNMET,
     );
   });
 

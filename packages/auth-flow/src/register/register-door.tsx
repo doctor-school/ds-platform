@@ -48,7 +48,7 @@ import { RegisterGlyph } from "./register-glyph";
  *
  * Both storefronts register through THIS component; what differs between them is
  * data — `AuthFlowHostConfig` — and never a branch. The card frame, the consent
- * groups, the submit group and the EARS-12 blocked-submit reason are the
+ * groups and the submit group are the
  * design-system `<RegisterCard>` block (ADR-0013 A1); what the door adds is the
  * composition the two hosts used to own twice: the live BFF command, the
  * bot-protection retry-once orchestration, the EARS-16 outcome mapping, the
@@ -109,7 +109,6 @@ const TEST_IDS: RegisterCardTestIds = {
   password: "register-password",
   promo: "register-promo",
   submit: "register-submit",
-  submitReason: "register-submit-reason",
   challengeError: "register-captcha-error",
   commandError: "register-command-error",
   accessGroup: "registration-consent-access",
@@ -139,7 +138,7 @@ function tierItem(
  * still recording the purposes behind its statement.
  *
  * What each row SAYS is the package's (#2027): the label, the help line and the
- * blocked-submit reason come from the copy defaults, so the same declaration
+ * unmet-condition report come from the copy defaults, so the same declaration
  * cannot read two ways on two storefronts. The tier item's own `statement`
  * stays untouched — that is the RECORDED text, not display copy.
  */
@@ -322,6 +321,18 @@ export function RegisterDoor({
   function onSubmit(values: RegisterCardValues) {
     setCommandError(null);
     setChallengeError(null);
+    // 021 EARS-12 — a precondition the server refuses without which NO rendered
+    // row covers (this host words the partner statement, but its read model
+    // carries no such item). There is no row to report it on, so it is said
+    // ONCE at form level, where every other statement about the command as a
+    // whole is said (canvas 56-61), and the command is NOT sent — the refusal is
+    // never one the visitor has to infer from a server answer. The submit stays
+    // live: nothing here is the visitor's to fix, and a dead button would hide a
+    // host MISCONFIGURATION behind what reads as an unfinished form.
+    if (missingPrecondition) {
+      setCommandError(missingPrecondition);
+      return;
+    }
     // A hold left by an abandoned attempt must never survive into this one: it
     // would replay a credential this submit is about to replace.
     clearPendingRegistration();
@@ -382,10 +393,10 @@ export function RegisterDoor({
     [config],
   );
 
-  // 021 EARS-12 — a precondition the server still refuses without and NO
-  // rendered row covers: the host words the row but its read model carries no
-  // such statement, so the submit stays shut with the reason stated.
-  const unmetPrecondition =
+  // The unrenderable precondition itself — see `onSubmit`, which states it at
+  // form level the moment the visitor presses. Read here because it is a fact
+  // about this host's configuration, not about this attempt.
+  const missingPrecondition =
     consents?.partnerDataItem &&
     !tierItem(consents, PARTNER_DATA_SHARING_PURPOSE)
       ? (consentCopy.partnerDataItem.unmet ?? null)
@@ -466,7 +477,6 @@ export function RegisterDoor({
       onSubmit={onSubmit}
       errors={{ challenge: challengeError, command: commandError }}
       pending={captcha.pending}
-      unmetPrecondition={unmetPrecondition}
       // The server's landing decision, carried on the element the command
       // belongs to rather than recomputed here (021 LD-3/LD-4).
       formDataAttributes={{ "data-registration-landing": landing }}

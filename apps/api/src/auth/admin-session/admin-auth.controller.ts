@@ -8,11 +8,12 @@ import {
   HttpStatus,
   Ip,
   Post,
+  Req,
   Res,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { FastifyReply } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type {
   AdminAuthStateResponse,
   AdminEnrollmentOffer,
@@ -20,6 +21,7 @@ import type {
   AdminLogoutResponse,
   AdminMfaEnrollVerifyResponse,
   AdminMfaVerifyResponse,
+  AdminSessionResponse,
 } from "@ds/schemas";
 import { Authz, Public } from "../../authz/index.js";
 import { IdpUnavailableError } from "../idp/idp.types.js";
@@ -34,6 +36,7 @@ import {
   AdminSessionService,
   type AdminLoginOutcome,
   type AdminMfaVerifyOutcome,
+  type AdminSessionPrincipal,
 } from "./admin-session.service.js";
 import {
   AdminLoginRequestDto,
@@ -198,7 +201,10 @@ export class AdminAuthController {
   // possession is proven.
   @Authz({
     access: "pending-auth",
-    roles: ["platform_admin"],
+    // 044 EARS-19: the row records the role the pending principal was admitted
+    // under, and `event-registrar` joined that set with the `role → mfa_required`
+    // policy — the registrar enrols and is challenged on exactly this flow.
+    roles: ["platform_admin", "event-registrar"],
     check: "none",
     audit: "high-stakes",
     tests: ["EARS-4", "EARS-5"],
@@ -240,7 +246,10 @@ export class AdminAuthController {
   @HttpCode(200)
   @Authz({
     access: "pending-auth",
-    roles: ["platform_admin"],
+    // 044 EARS-19: the row records the role the pending principal was admitted
+    // under, and `event-registrar` joined that set with the `role → mfa_required`
+    // policy — the registrar enrols and is challenged on exactly this flow.
+    roles: ["platform_admin", "event-registrar"],
     check: "none",
     audit: "high-stakes",
     tests: ["EARS-4", "EARS-5"],
@@ -290,7 +299,10 @@ export class AdminAuthController {
   @HttpCode(200)
   @Authz({
     access: "pending-auth",
-    roles: ["platform_admin"],
+    // 044 EARS-19: the row records the role the pending principal was admitted
+    // under, and `event-registrar` joined that set with the `role → mfa_required`
+    // policy — the registrar enrols and is challenged on exactly this flow.
+    roles: ["platform_admin", "event-registrar"],
     check: "none",
     audit: "high-stakes",
     tests: ["EARS-6", "EARS-7"],
@@ -357,6 +369,49 @@ export class AdminAuthController {
       fingerprint: computeFingerprint({ userAgent, ip, acceptLanguage }),
     });
     return { state };
+  }
+
+  /**
+   * 044 EARS-19/EARS-20 — `ReadAdminSession`. The roles of the principal behind
+   * an ACTIVE admin session, and nothing else.
+   *
+   * It exists because `apps/admin` became role-aware: the navigation renders from
+   * the signed-in principal's role (EARS-20), and the admin session cookie that
+   * holds that role is `HttpOnly` by design, so «which roles do I hold?» is a
+   * server read exactly as «where am I in this flow?» is. The roles come from the
+   * session RECORD's stored claims — the ones the IdP asserted when the session
+   * was minted (`AdminSessionService.completePending`) — so this read cannot
+   * disagree with what `AuthzGuard` enforces on every other route.
+   *
+   * It is a separate route from `state` above and not a field on it: `state` must
+   * answer a caller who has at most passed primary auth, and adding roles there
+   * would have handed a stolen-password attacker a role oracle before the second
+   * factor. Here the second factor is already behind the caller.
+   *
+   * The client-side nav is a PROJECTION of this read. A registrar who types
+   * another section's URL is refused by the server (EARS-19); this route decides
+   * only what the admin draws.
+   */
+  @Get("session")
+  @HttpCode(200)
+  // `audit: low-stakes` — a read that changes nothing and mints nothing; it
+  // reflects back a principal the hook already resolved.
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin", "event-registrar"],
+    check: "fast-path",
+    audit: "low-stakes",
+    revalidate: "none",
+    tests: ["EARS-19"],
+  })
+  readSession(@Req() req: FastifyRequest): AdminSessionResponse {
+    // The hook resolved the principal from `__Host-ds_admin_session` before the
+    // guard admitted this route, so `user` is present by construction; the
+    // fallback is a fail-empty, never an invented role. The principal type is
+    // the hook's own (`AdminSessionPrincipal`), so this read cannot describe a
+    // shape the admin tier does not actually attach.
+    const principal = (req as { user?: AdminSessionPrincipal }).user;
+    return { roles: principal?.roles ?? [] };
   }
 
   /**
@@ -436,10 +491,13 @@ export class AdminAuthController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin"],
+    // 044 EARS-19: ending one's own session is part of «the session endpoints
+    // needed to hold a session» — a registrar who could sign in but not sign out
+    // would be a boundary that leaks in the wrong direction.
+    roles: ["platform_admin", "event-registrar"],
     check: "fast-path",
     audit: "high-stakes",
-    tests: ["EARS-2"],
+    tests: ["EARS-2", "EARS-19"],
   })
   async logout(
     @Headers("cookie") cookieHeader: string | undefined,

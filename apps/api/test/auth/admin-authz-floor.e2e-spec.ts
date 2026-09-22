@@ -54,18 +54,39 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
 > = {
   "POST /v1/admin/auth/login": { access: "public", roles: undefined },
   "GET /v1/admin/auth/state": { access: "public", roles: undefined },
+  // 044 EARS-19: `event-registrar` joined the `role → mfa_required` policy, so
+  // the second-factor entry routes admit a pending registrar on exactly the
+  // `platform_admin` flow. Admission to the admin ORIGIN is not reach: what a
+  // registrar may then do is the per-route classification below.
   "POST /v1/admin/auth/mfa/enroll/start": {
     access: "pending-auth",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "event-registrar"],
   },
   "POST /v1/admin/auth/mfa/enroll/verify": {
     access: "pending-auth",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "event-registrar"],
   },
   "POST /v1/admin/auth/mfa/verify": {
     access: "pending-auth",
-    roles: ["platform_admin"],
+    roles: ["platform_admin", "event-registrar"],
   },
+};
+
+/**
+ * 044 EARS-19 — the ONLY routes on the raised floor whose required roles are
+ * wider than `platform_admin`, each with the exact set it carries.
+ *
+ * The floor rule below is otherwise absolute, and it stays absolute: this map is
+ * what turns «except where a registrar is admitted» from a judgement into an
+ * enumeration, so a route that quietly gains `event-registrar` fails EARS-11.2
+ * instead of passing it. The denial side of the same boundary — that EVERY other
+ * real route omits the role — is proven in
+ * `apps/api/test/congress/registrar-denial-set.e2e-spec.ts`.
+ */
+const REGISTRAR_ADMITTED: Record<string, string[]> = {
+  // Holding a session: reading back one's own roles, and ending the session.
+  "GET /v1/admin/auth/session": ["platform_admin", "event-registrar"],
+  "POST /v1/admin/auth/logout": ["platform_admin", "event-registrar"],
 };
 
 /** A path-parameterised id that resolves to nothing — the floor is about authz, not existence. */
@@ -87,6 +108,15 @@ const FLOOR_ROUTES: {
     endpoint: "POST /v1/admin/auth/logout",
     method: "POST",
     url: "/v1/admin/auth/logout",
+  },
+  // 044 EARS-19 — `ReadAdminSession`. It is an admin route behind a live
+  // session, so it sits on the same raised floor as every other one; that it
+  // also admits `event-registrar` widens WHO passes the floor, never WHETHER
+  // there is one.
+  {
+    endpoint: "GET /v1/admin/auth/session",
+    method: "GET",
+    url: "/v1/admin/auth/session",
   },
   {
     endpoint: "DELETE /v1/admin/users/:id/mfa",
@@ -854,7 +884,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
           continue;
         }
         expect(row.meta.access, row.endpoint).toBe("authenticated");
-        expect(row.meta.roles, row.endpoint).toEqual(["platform_admin"]);
+        expect(row.meta.roles, row.endpoint).toEqual(
+          REGISTRAR_ADMITTED[row.endpoint] ?? ["platform_admin"],
+        );
       }
     });
 
@@ -991,7 +1023,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const row of events) {
         // 007 EARS-8's classification, unchanged: only the floor beneath it rose.
         expect(row.meta.access, row.endpoint).toBe("authenticated");
-        expect(row.meta.roles, row.endpoint).toEqual(["platform_admin"]);
+        expect(row.meta.roles, row.endpoint).toEqual(
+          REGISTRAR_ADMITTED[row.endpoint] ?? ["platform_admin"],
+        );
         expect(row.meta.check, row.endpoint).toBe("fast-path");
         expect(row.meta.objectAttrs, row.endpoint).toBeUndefined();
         expect(row.meta.tests, row.endpoint).toContain("EARS-8");

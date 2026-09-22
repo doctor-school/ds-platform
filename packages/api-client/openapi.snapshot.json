@@ -2108,6 +2108,18 @@
         "tags": ["AdminAuth"]
       }
     },
+    "/v1/admin/auth/session": {
+      "get": {
+        "operationId": "AdminAuthController_readSession",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["AdminAuth"]
+      }
+    },
     "/v1/admin/auth/state": {
       "get": {
         "operationId": "AdminAuthController_readAuthState",

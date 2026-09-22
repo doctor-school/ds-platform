@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { E164 } from "../auth/auth.schema.js";
 import { normaliseContactPhone } from "./contact-phone.js";
+import { normaliseNameAnswer } from "./name-answer.js";
 
 /**
  * Maximum length of a single free-text answer (surname … region).
@@ -17,6 +18,20 @@ export const CONGRESS_SIGN_UP_ANSWER_MAX = 200;
 const answer = () => z.string().trim().min(1).max(CONGRESS_SIGN_UP_ANSWER_MAX);
 
 /**
+ * 044 EARS-33 — a name answer: an ordinary answer, stored normalised.
+ *
+ * The bounds are checked on what the participant typed and then AGAIN on the
+ * normalised value: `.min(1)` so that an answer of nothing but whitespace is
+ * still a refusal rather than an empty string, `.max` so that the stored value
+ * can never fall outside the shape the same declaration validates it against
+ * when the answers column is read back.
+ */
+const nameAnswer = () =>
+  answer()
+    .transform(normaliseNameAnswer)
+    .pipe(z.string().min(1).max(CONGRESS_SIGN_UP_ANSWER_MAX));
+
+/**
  * The answer fields shared by the intake request and the stored answers shape.
  *
  * Declared once so the two can never drift: the column is validated by the same
@@ -25,14 +40,19 @@ const answer = () => z.string().trim().min(1).max(CONGRESS_SIGN_UP_ANSWER_MAX);
  * reject».
  */
 const answerFields = {
-  surname: answer(),
-  firstName: answer(),
+  surname: nameAnswer(),
+  firstName: nameAnswer(),
   /**
    * 044 EARS-3 — the ONE optional answer. A patronymic is not universal (and
    * not universal among Russian names either), so a participant who has none
    * must be able to submit, not to type a placeholder.
+   *
+   * 044 EARS-33 — the three name answers, and only they, are normalised.
+   * `workplace`, `city` and `region` are institution and place names whose own
+   * capitalisation is not a two-rule affair («НМИЦ им. В. А. Алмазова»,
+   * «Ростов-на-Дону»), so a blind title-case pass would corrupt them.
    */
-  patronymic: answer().optional(),
+  patronymic: nameAnswer().optional(),
   email: z.email().max(CONGRESS_SIGN_UP_ANSWER_MAX),
   /**
    * 044 EARS-3 — specialty as a `specialties_minzdrav` identifier, and nothing

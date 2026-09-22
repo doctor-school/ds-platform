@@ -258,6 +258,40 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
+    it("EARS-33: when the name answers arrive with stray whitespace and casing, system shall store them trimmed, single-spaced and capitalised, and derive the display name from the normalised form", async () => {
+      const email = uniqueEmail("congress-names");
+
+      expect(
+        (
+          await post(
+            submission(email, {
+              surname: "  иванова ",
+              firstName: "мАРИЯ",
+              patronymic: "  сергеевна",
+              // Only the names: an institution keeps the capitalisation the
+              // participant gave it.
+              workplace: "НМИЦ им. В. А. Алмазова",
+            }),
+          )
+        ).statusCode,
+      ).toBe(200);
+
+      const row = await accountRow(email);
+      // The display name is derived from the normalised answers, so the account
+      // an organiser sees is never «  иванова   мАРИЯ».
+      expect(row.display_name).toBe("Иванова Мария");
+
+      const registration = await pool.query<{
+        answers: Record<string, unknown> | null;
+      }>(`SELECT answers FROM registrations WHERE user_id = $1`, [row.id]);
+      expect(registration.rows[0]!.answers).toMatchObject({
+        surname: "Иванова",
+        firstName: "Мария",
+        patronymic: "Сергеевна",
+        workplace: "НМИЦ им. В. А. Алмазова",
+      });
+    });
+
     it("EARS-9: when a submission is accepted, system shall record exactly one personal-data consent at the SERVER-configured version", async () => {
       const email = uniqueEmail("congress-consent");
 

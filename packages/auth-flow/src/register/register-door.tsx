@@ -48,8 +48,8 @@ import { RegisterGlyph } from "./register-glyph";
  *
  * Both storefronts register through THIS component; what differs between them is
  * data — `AuthFlowHostConfig` — and never a branch. The card frame, the consent
- * groups and the submit group are the
- * design-system `<RegisterCard>` block (ADR-0013 A1); what the door adds is the
+ * groups and the submit group are the design-system `<RegisterCard>` block
+ * (ADR-0013 A1); what the door adds is the
  * composition the two hosts used to own twice: the live BFF command, the
  * bot-protection retry-once orchestration, the EARS-16 outcome mapping, the
  * consent READ MODEL → recorded acceptances projection, the held credential for

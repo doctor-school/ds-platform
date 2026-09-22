@@ -80,12 +80,11 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
     // The block's own test ids — proof the card is projected, not re-built here.
     expect(html).toContain('data-testid="password-login-form"');
     expect(html).toContain('data-testid="login-method-otp"');
-    // …and the sentences are the HOST's, read out of its config, never a
-    // package default: these three are the doctor fixture's own.
+    // …and the sentences are the PACKAGE's (#2027): a field is one thing on
+    // both storefronts, so neither host restates them and both read alike.
     expect(html).toContain("Вход");
-    expect(html).toContain("Почта или телефон");
+    expect(html).toContain("Электронная почта или телефон");
     expect(html).toContain("Создать аккаунт");
-    // The same door on the Academy speaks the Academy's identifier sentence.
     expect(markup(ACADEMY_FIXTURE)).toContain("Электронная почта или телефон");
   });
 
@@ -153,8 +152,10 @@ async function signIn(props?: {
 }) {
   const user = userEvent.setup();
   render(<LoginDoor config={DOCTOR_FIXTURE} landing="/events" {...props} />);
-  await user.type(screen.getByLabelText("Почта или телефон"), "doc@clinic.ru");
-  await user.type(screen.getByLabelText("Пароль"), "correct-horse-battery");
+  await user.type(screen.getByLabelText("Электронная почта или телефон"), "doc@clinic.ru");
+  await user.type(
+    screen.getByLabelText("Пароль", { selector: "input" }),
+    "correct-horse-battery");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await waitFor(() => expect(login).toHaveBeenCalled());
 }

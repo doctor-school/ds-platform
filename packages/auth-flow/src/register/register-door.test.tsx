@@ -601,10 +601,9 @@ describe("rows 51 + 76: the confirmation step a host with no /verify route runs"
   });
 
   it("021 EARS-19: the Academy door never reaches the inline step — its own /verify route owns it", async () => {
-    const confirmCopy = resolveAuthFlowCopy(ACADEMY_FIXTURE).register.confirm;
-    // The fixture states no inline copy at all, which is the same fact read
-    // from the config side: this host confirms on a route of its own.
-    expect(confirmCopy).toBeUndefined();
+    // The words of the code step are the package's on every host; WHERE the
+    // step runs is the host's, and this one states a `/verify` route of its own.
+    expect(ACADEMY_FIXTURE.routes.verify).toBe("/verify");
     await submitForm(ACADEMY_FIXTURE);
 
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));

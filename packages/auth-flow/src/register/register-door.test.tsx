@@ -412,9 +412,18 @@ describe("021 EARS-4/5/6/7/12/19: the consent rows a host states, and what is re
       password: PASSWORD,
       medicalWorkerDeclaration: true,
     });
+    // The version travels SYMBOLICALLY from the host: what is proven here is
+    // that the door stamps the version of the wording it rendered, never a
+    // literal that a re-wording would leave behind (021 EARS-7).
     expect(lastBody().consent).toEqual([
-      { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" },
-      { purpose: MARKETING_COMMUNICATIONS_PURPOSE, version: "2026-09" },
+      {
+        purpose: PARTNER_DATA_SHARING_PURPOSE,
+        version: DOCTOR_FIXTURE.consents?.wordingVersion,
+      },
+      {
+        purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+        version: DOCTOR_FIXTURE.consents?.wordingVersion,
+      },
     ]);
   });
 
@@ -428,7 +437,10 @@ describe("021 EARS-4/5/6/7/12/19: the consent rows a host states, and what is re
 
     await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
     expect(lastBody().consent).toEqual([
-      { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "2026-09" },
+      {
+        purpose: PARTNER_DATA_SHARING_PURPOSE,
+        version: DOCTOR_FIXTURE.consents?.wordingVersion,
+      },
     ]);
   });
 

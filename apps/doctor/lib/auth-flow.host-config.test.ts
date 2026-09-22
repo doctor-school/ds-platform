@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
-  formatPartnerDataStatement,
 } from "@ds/schemas";
 
 import {
   DEFAULT_AUTH_FLOW_COPY,
+  consentStatementOf,
   resolveAuthFlowCopy,
 } from "@ds/auth-flow/copy";
 
@@ -52,18 +53,48 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
   });
 
   it("#2027: the host restates no auth wording — every sentence is the package's", () => {
-    expect(DOCTOR_AUTH_FLOW).not.toHaveProperty("copy");
+    expect(DOCTOR_AUTH_FLOW.copy).toBeUndefined();
     expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW)).toBe(DEFAULT_AUTH_FLOW_COPY);
   });
 
-  it("021 EARS-5: the partner-data statement comes from the @ds/schemas SSOT, never a literal", () => {
+  it("021 EARS-7: every recorded statement is the sentence the door renders for that row", () => {
+    const copy = resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).consents;
+    const tiers = DOCTOR_AUTH_FLOW.consents?.tiers ?? [];
+    const access = tiers.find((tier) => tier.tier === "access-conditions");
+    const marketing = tiers.find((tier) => tier.tier === "marketing");
+
+    expect(access?.items[0]?.purpose).toBe(PARTNER_DATA_SHARING_PURPOSE);
+    expect(access?.items[0]?.required).toBe(true);
+    expect(access?.items[0]?.statement).toBe(
+      consentStatementOf(copy.partnerDataItem),
+    );
+
+    expect(marketing?.items[0]?.purpose).toBe(MARKETING_COMMUNICATIONS_PURPOSE);
+    expect(marketing?.items[0]?.statement).toBe(
+      consentStatementOf(copy.marketingOptIn),
+    );
+  });
+
+  it("021 EARS-5: the partner-data item states the exchange and enumerates no data composition", () => {
     const access = DOCTOR_AUTH_FLOW.consents?.tiers.find(
       (tier) => tier.tier === "access-conditions",
     );
 
-    expect(access?.items[0]?.purpose).toBe(PARTNER_DATA_SHARING_PURPOSE);
-    expect(access?.items[0]?.statement).toBe(formatPartnerDataStatement());
-    expect(access?.items[0]?.required).toBe(true);
+    // Owner decision 2026-09-22: the composition of the shared data is
+    // disclosed in the policy text and by the platform manager, not inside the
+    // consent row the doctor ticks.
+    expect(access?.items[0]?.statement).toContain(
+      "Согласие на передачу данных партнёрам платформы",
+    );
+    for (const field of ["ФИО", "специальность", "город", "место работы"]) {
+      expect(access?.items[0]?.statement).not.toContain(field);
+    }
+  });
+
+  it("021 EARS-7: the host names the version of the wording it renders today", () => {
+    // The partner-data and marketing rows were re-worded to the canvas on this
+    // head (#2027), so a record written now may not claim the old version.
+    expect(DOCTOR_AUTH_FLOW.consents?.wordingVersion).toBe("2026-09-22");
   });
 
   it("021 EARS-5: the marketing opt-in is stated as the second, OPTIONAL tier", () => {

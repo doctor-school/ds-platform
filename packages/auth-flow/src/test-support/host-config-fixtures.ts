@@ -1,11 +1,10 @@
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
-  PARTNER_DATA_COMPOSITION,
-  PARTNER_DATA_EXCLUDED,
   PARTNER_DATA_SHARING_PURPOSE,
-  formatPartnerDataStatement,
 } from "@ds/schemas";
 
+import { consentStatementOf } from "../copy";
+import { DEFAULT_AUTH_FLOW_COPY } from "../copy/defaults";
 import type { AuthFlowHostConfig } from "../host-config";
 
 /**
@@ -121,8 +120,8 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   },
   // The two shipped tiers with the rows drawn around them: the declaration and
   // the partner-data access condition above the submit, the marketing opt-in
-  // below it. The statements come from the `@ds/schemas` SSOT, so the sentence
-  // and the recorded composition cannot drift apart.
+  // below it. Each statement is composed from the copy the door RENDERS for
+  // that row, so the sentence read and the sentence recorded cannot drift.
   consents: {
     tiers: [
       {
@@ -131,9 +130,9 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
           {
             purpose: PARTNER_DATA_SHARING_PURPOSE,
             required: true,
-            statement: formatPartnerDataStatement(),
-            dataComposition: [...PARTNER_DATA_COMPOSITION],
-            excluded: [...PARTNER_DATA_EXCLUDED],
+            statement: consentStatementOf(
+              DEFAULT_AUTH_FLOW_COPY.consents.partnerDataItem,
+            ),
           },
         ],
       },
@@ -143,8 +142,9 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
           {
             purpose: MARKETING_COMMUNICATIONS_PURPOSE,
             required: false,
-            statement:
-              "Хочу получать письма о новых школах и событиях",
+            statement: consentStatementOf(
+              DEFAULT_AUTH_FLOW_COPY.consents.marketingOptIn,
+            ),
           },
         ],
       },
@@ -153,7 +153,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     medicalWorkerDeclaration: true,
     partnerDataItem: true,
     marketingOptIn: true,
-    wordingVersion: "2026-09",
+    wordingVersion: "2026-09-22",
   },
   // Row 46 - the doctor door publishes the return context beside the form; it
   // parks nothing (row 29), so there is no cookie here.

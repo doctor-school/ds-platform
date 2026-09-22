@@ -1,13 +1,12 @@
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
-  PARTNER_DATA_COMPOSITION,
-  PARTNER_DATA_EXCLUDED,
   PARTNER_DATA_SHARING_PURPOSE,
-  formatPartnerDataStatement,
 } from "@ds/schemas";
 
+import { consentStatementOf, resolveAuthFlowCopy } from "@ds/auth-flow/copy";
 import type {
   AuthFlowApiConfig,
+  AuthFlowCopyOverride,
   AuthFlowHostConfig,
 } from "@ds/auth-flow/host-config";
 
@@ -34,11 +33,26 @@ export const DOCTOR_AUTH_FLOW_API: AuthFlowApiConfig = {
   confirmPath: "/v1/storefront/doctor/confirm",
 };
 
+/**
+ * The words this host overrides: NONE (#2027 — a field is one thing on both
+ * storefronts). A genuinely host-specific sentence would be a deep-partial
+ * override here.
+ *
+ * It is NAMED rather than merely omitted because the consent statements this
+ * host RECORDS are resolved through it below: render and record read the same
+ * value, so the day a host-specific sentence does appear, both move together
+ * instead of the record keeping the older text (021 EARS-7).
+ */
+const DOCTOR_AUTH_FLOW_COPY: AuthFlowCopyOverride | undefined = undefined;
+
+/** The consent rows as this host renders them — the source of the statements below. */
+const DOCTOR_CONSENT_COPY = resolveAuthFlowCopy({
+  copy: DOCTOR_AUTH_FLOW_COPY,
+}).consents;
+
 export const DOCTOR_AUTH_FLOW = {
   api: DOCTOR_AUTH_FLOW_API,
-  // No `copy`: every auth word is the package's (#2027 — a field is one thing
-  // on both storefronts). A genuinely host-specific sentence would be a
-  // deep-partial `copy` override here; this host has none.
+  copy: DOCTOR_AUTH_FLOW_COPY,
   /**
    * The auth routes `doctor.school` serves (gate §4.2), stated here as
    * LITERALS: a host config is data a server route file hands to the package,
@@ -110,10 +124,10 @@ export const DOCTOR_AUTH_FLOW = {
    *
    * It is data on THIS side of the mount and not a constant inside the door for
    * the reason design §4 gives: the statement the doctor reads and the purpose
-   * that is recorded must come from one source, so the composition arrays travel
-   * with the statement they produced (`@ds/schemas`, the API-contract SSOT). A
-   * door that hardcoded the sentence would let the two drift the moment the
-   * shared composition changes.
+   * that is recorded must come from one source. That source is the resolved
+   * copy above — `consentStatementOf` composes each statement out of the very
+   * label and help line the door draws, so a re-worded row cannot leave a stale
+   * sentence behind in the consent record.
    *
    * Exactly two tiers, in their rendered order: the access conditions that stand
    * above the submit, and the optional opt-in below it. The medical-worker
@@ -129,9 +143,7 @@ export const DOCTOR_AUTH_FLOW = {
           {
             purpose: PARTNER_DATA_SHARING_PURPOSE,
             required: true,
-            statement: formatPartnerDataStatement(),
-            dataComposition: [...PARTNER_DATA_COMPOSITION],
-            excluded: [...PARTNER_DATA_EXCLUDED],
+            statement: consentStatementOf(DOCTOR_CONSENT_COPY.partnerDataItem),
           },
         ],
       },
@@ -141,9 +153,7 @@ export const DOCTOR_AUTH_FLOW = {
           {
             purpose: MARKETING_COMMUNICATIONS_PURPOSE,
             required: false,
-            // Canvas copy (`#d-register`, «согласия · вариант Б»). No
-            // composition to declare: the opt-in shares nothing, it subscribes.
-            statement: "Хочу получать письма о новых школах и событиях",
+            statement: consentStatementOf(DOCTOR_CONSENT_COPY.marketingOptIn),
           },
         ],
       },
@@ -152,6 +162,13 @@ export const DOCTOR_AUTH_FLOW = {
     medicalWorkerDeclaration: true,
     partnerDataItem: true,
     marketingOptIn: true,
-    wordingVersion: "2026-09",
+    /**
+     * The version of the WORDING rendered above, stamped on every row this
+     * host's registrations write (ADR-0009). #2027 re-worded the partner-data
+     * row and the marketing opt-in to the canvas, so the version moved with
+     * them; the API stamps the same value per purpose and keeps the untouched
+     * medical-worker declaration on its own earlier one.
+     */
+    wordingVersion: "2026-09-22",
   },
 } satisfies AuthFlowHostConfig;

@@ -33,21 +33,23 @@ import { EventsService } from "../events/events.service.js";
  * The version stamped on the declaration when it is granted (ADR-0009 —
  * consents are per-purpose AND versioned; a bare boolean is not a consent
  * record). It is the version of the wording the doctor actually read, so it
- * changes when the canvas copy of the declaration changes, never silently.
+ * changes when the canvas copy of the declaration changes, never silently —
+ * and #2027 did not change it: the declaration's label, help line and unmet
+ * reason are byte-identical to the ones this version was first stamped for.
  */
 export const MEDICAL_WORKER_DECLARATION_VERSION = "2026-09";
 
 /**
  * The version stamped on the partner-data consent (021 EARS-5). Same rule as
- * the declaration's: it is the version of the WORDING the doctor read, which is
- * assembled from `PARTNER_DATA_COMPOSITION` — so a change to the shared
- * composition is a change to this constant, and the two never drift apart
- * silently.
+ * the declaration's: it is the version of the WORDING the doctor read — the
+ * shared `@ds/auth-flow` consent row the door renders — so re-wording that row
+ * moves this constant with it and the two never drift apart silently. #2027
+ * moved the door onto the canvas wording; hence `2026-09-22`.
  *
  * Server-stamped rather than trusted from the payload: a client-supplied
  * version would let the recorded row claim a wording the surface never rendered.
  */
-export const PARTNER_DATA_SHARING_VERSION = "2026-09";
+export const PARTNER_DATA_SHARING_VERSION = "2026-09-22";
 
 /**
  * The version stamped on the marketing opt-in (021 EARS-6). Same server-stamp
@@ -58,9 +60,11 @@ export const PARTNER_DATA_SHARING_VERSION = "2026-09";
  *
  * It is a separate constant rather than a shared one because the three wordings
  * version independently: re-wording the marketing opt-in must not silently
- * restamp the access conditions the doctor accepted under the old text.
+ * restamp the access conditions the doctor accepted under the old text. #2027
+ * re-worded the opt-in to the canvas alongside the partner-data row, so both
+ * moved to `2026-09-22` while the untouched declaration stayed behind.
  */
-export const MARKETING_COMMUNICATIONS_VERSION = "2026-09";
+export const MARKETING_COMMUNICATIONS_VERSION = "2026-09-22";
 
 /**
  * The wording version this server stamps on each declared purpose (021 EARS-7).

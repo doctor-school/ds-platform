@@ -174,57 +174,20 @@ export const DOCTOR_REGISTER_CONSENT_REFUSAL_CODES: Readonly<
 };
 
 /**
- * 021 EARS-5 / design §4 — the EXACT composition of the data shared with
- * partners, and what is excluded from it.
- *
- * These arrays are the source of the statement the doctor reads, not a
- * documentation echo of a sentence written elsewhere: design §4 requires the
- * statement to be "data-driven, not a copy blob", so that changing the shared
- * composition changes the rendered statement and the recorded purpose together
- * rather than leaving a stale sentence on the door. A hardcoded Russian
- * sentence in `apps/doctor` is exactly the divergence this pair prevents.
- */
-export const PARTNER_DATA_COMPOSITION = [
-  "ФИО",
-  "специальность",
-  "город",
-  "место работы",
-] as const;
-
-export const PARTNER_DATA_EXCLUDED = ["контакты"] as const;
-
-/**
- * Render the partner-data statement FROM the composition — the canvas sentence
- * of `design-source/auth.dc.html` (`#d-register`, вариант Б), assembled rather
- * than transcribed.
- *
- * The canvas draws: «Согласен на передачу партнёрам платформы данных: ФИО,
- * специальность, город, место работы. Контакты не передаются.» Only the frame
- * of that sentence is copy; the two lists inside it are data.
- */
-export function formatPartnerDataStatement(
-  composition: readonly string[] = PARTNER_DATA_COMPOSITION,
-  excluded: readonly string[] = PARTNER_DATA_EXCLUDED,
-): string {
-  const shared = composition.join(", ");
-  const withheld = excluded.join(", ");
-  const capitalised = withheld.charAt(0).toUpperCase() + withheld.slice(1);
-  return `Согласен на передачу партнёрам платформы данных: ${shared}. ${capitalised} не передаются.`;
-}
-
-/**
  * One consent line as the screen reads it (021 requirements — `ConsentItem`).
  *
- * `statement` is what the doctor reads; `dataComposition` / `excluded` are what
- * it was built from, carried alongside so the surface can render the lists
- * structurally (and a test can assert them) without re-splitting a sentence.
+ * `statement` is the sentence the door RENDERS for that purpose, composed from
+ * the shared auth copy (`consentStatementOf` in `@ds/auth-flow/copy`) rather
+ * than written a second time here: a record may only carry wording the doctor
+ * actually read. The item names the exchange it is the condition of — the
+ * composition of the shared data is disclosed in the policy text and by the
+ * platform manager (021 EARS-5), not enumerated inside the row the doctor
+ * ticks.
  */
 export const ConsentItemSchema = z.strictObject({
   purpose: z.string().min(1),
   required: z.boolean(),
   statement: z.string().min(1),
-  dataComposition: z.array(z.string().min(1)).optional(),
-  excluded: z.array(z.string().min(1)).optional(),
 });
 export type ConsentItem = z.infer<typeof ConsentItemSchema>;
 

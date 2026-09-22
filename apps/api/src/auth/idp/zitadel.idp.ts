@@ -418,7 +418,28 @@ export class ZitadelIdpClient implements IdpClient {
         `zitadel createUser unreachable: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    if (res.status === 409) return { sub: "", alreadyExisted: true };
+    if (res.status === 409) {
+      // The identifier is already taken. {@link CreatedUser.sub} means "the
+      // subject that owns this identifier" on BOTH paths, so the duplicate is
+      // resolved to that subject here rather than handed back as an empty
+      // string: 044 EARS-6 attaches a congress registration to exactly this
+      // account, and a caller that received "" could only either refuse (a
+      // status oracle on "does this address exist?") or write a phantom mirror
+      // row. {@link resolveUserId} fails closed — a non-2xx or empty search
+      // result is `null` — and so does a transport failure here: the sub stays
+      // empty, which is the honest "the IdP could not tell us" the caller must
+      // map to an outage, never to a guess.
+      const identifier = input.email ?? input.phone;
+      let existing: string | null = null;
+      if (identifier) {
+        try {
+          existing = await this.resolveUserId(identifier);
+        } catch {
+          existing = null;
+        }
+      }
+      return { sub: existing ?? "", alreadyExisted: true };
+    }
     if (!res.ok) {
       // #147 residual race: the BFF creation schema mirrors the deployed Zitadel
       // default complexity policy as a baseline, so a baseline-violating password

@@ -9,6 +9,7 @@ import {
   UnauthorizedException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { eq } from "drizzle-orm";
 import { consentRecords, users, type DrizzleHandle } from "@ds/db";
 import type {
   OtpRequest,
@@ -106,13 +107,17 @@ export interface PasswordlessAccountInput {
 }
 
 /**
- * The outcome of a passwordless create. `userId` is `null` exactly when
- * `alreadyExisted` is true — no mirror row was written, so there is no id to
- * hand back and the caller cannot accidentally treat one as present.
+ * The outcome of a passwordless create.
+ *
+ * `userId` is always the id of the `users` mirror row the caller's writes were
+ * attached to — on BOTH paths, because the caller's callback runs on both and
+ * needs an id to write against. `alreadyExisted` says only which of the two
+ * happened; a caller that treats the two alike (044 EARS-7 does, deliberately)
+ * never has to read it.
  */
 export interface PasswordlessAccountCreation {
   sub: string;
-  userId: string | null;
+  userId: string;
   alreadyExisted: boolean;
 }
 
@@ -642,10 +647,29 @@ export class AuthService {
    * that wrote them afterwards would have two transactions and a window in which
    * a PD-bearing row exists with no consent beside it.
    *
-   * Returns `alreadyExisted: true` WITHOUT running the callback when the IdP
-   * already knows the address; deciding what that means is the caller's — for
-   * the congress intake of this slice it is a refusal that writes nothing, and
-   * the real found-account behaviour lands with #2299 / #2300 / #2301.
+   * 044 EARS-6 — when the IdP already knows the address, the account is
+   * FOUND rather than created and the callback runs against it just the same,
+   * inside the same audited transaction. What is deliberately NOT done on that
+   * path is any write to the existing profile: no display name, no phone, no
+   * role, not even an `updated_at` touch. A congress form is a submission about
+   * an event, not a correction of the doctor's platform identity, and a surname
+   * typed by whoever filled the form must never silently overwrite the one the
+   * account already carries.
+   *
+   * The found path is IdP-FIRST, exactly like the created one: the create call
+   * is what reports the address as known, so the two paths share one lookup and
+   * there is no second, differently-keyed «does this email exist?» read to drift
+   * from it. The mirror is then resolved by `zitadel_sub` — the IdP's identity,
+   * not the submitted email — and INSERTED when it is missing, which is the
+   * IdP↔mirror divergence the EARS-19 sweep also heals; without that insert a
+   * diverged account could never sign up at all.
+   *
+   * Neither the project-role grant nor the terminal ledger row runs on the found
+   * path: the account already holds its roles, and nothing was registered, so a
+   * second `Registered` entry would make the ledger's «accounts created» answer
+   * wrong. The latency difference that leaves between the two paths is closed by
+   * the caller's route-specific timing floor (044 EARS-7), not by doing
+   * pointless work here.
    */
   async createPasswordlessAccount(
     input: PasswordlessAccountInput,
@@ -679,7 +703,25 @@ export class AuthService {
     }
 
     if (created.alreadyExisted) {
-      return { sub: created.sub, userId: null, alreadyExisted: true };
+      // The IdP knows the address but could not say WHICH subject holds it
+      // ({@link CreatedUser.sub} is empty only in that fail-closed case). There
+      // is nothing to attach to: a mirror lookup keyed on "" finds nothing and
+      // an insert keyed on "" would mint a phantom account. Answer the SAME
+      // generic 503 the unreachable-IdP path answers, so the status stays
+      // symmetric with the created path and never becomes the "does this
+      // address exist?" oracle 044 EARS-7 closes.
+      if (created.sub === "") {
+        this.logger.error(
+          "idp reported an existing identifier without a resolvable subject",
+        );
+        throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+      }
+      const userId = await this.attachToExistingAccount(
+        created.sub,
+        input,
+        writeWithinAccountTransaction,
+      );
+      return { sub: created.sub, userId, alreadyExisted: true };
     }
 
     let userId: string;
@@ -743,6 +785,69 @@ export class AuthService {
     });
 
     return { sub: created.sub, userId, alreadyExisted: false };
+  }
+
+  /**
+   * 044 EARS-6 — run the caller's writes against an account the IdP already has.
+   *
+   * The mirror row is READ, never updated: the whole point of EARS-6 is that
+   * every profile field is byte-identical before and after, so this method holds
+   * no `onConflictDoUpdate`, no `updatedAt` touch and no field assignment on an
+   * existing row. The only INSERT it may do is the missing mirror of a diverged
+   * account, and that row is written exactly as the created path writes it —
+   * with the submitted display name, because for a row that does not exist yet
+   * the submitted names are the only truthful value there is.
+   *
+   * The unique-violation mapping is the created path's, for the same reason: the
+   * mirror insert conflicts on `zitadel_sub`, so an email collision under a
+   * different sub is not absorbed and must not surface as a distinguishable 500.
+   */
+  private async attachToExistingAccount(
+    sub: string,
+    input: PasswordlessAccountInput,
+    writeWithinAccountTransaction: (
+      tx: AuditedTransaction,
+      userId: string,
+    ) => Promise<void>,
+  ): Promise<string> {
+    try {
+      return await withRequestAuditContext(this.db, async (tx) => {
+        const [mirror] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.zitadelSub, sub))
+          .limit(1);
+
+        if (mirror) {
+          await writeWithinAccountTransaction(tx, mirror.id);
+          return mirror.id;
+        }
+
+        // IdP↔mirror divergence: the IdP knows the address, the mirror does not.
+        // Insert the missing row rather than refuse — refusing would make the
+        // congress intake permanently unavailable to exactly the accounts the
+        // EARS-19 reconciliation sweep exists to heal.
+        const [row] = await tx
+          .insert(users)
+          .values({
+            zitadelSub: sub,
+            email: input.email,
+            role: "doctor_guest",
+            displayName: `${input.surname} ${input.firstName}`.trim(),
+          })
+          .returning({ id: users.id });
+
+        if (!row) throw new Error("mirror insert returned no row");
+
+        await writeWithinAccountTransaction(tx, row.id);
+        return row.id;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new BadRequestException(GENERIC_FAILURE);
+      }
+      throw err;
+    }
   }
 
   /**

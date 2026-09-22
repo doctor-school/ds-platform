@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
   CONGRESS_SIGN_UP_WINDOW_CLOSES_AT,
   CONGRESS_SIGN_UP_WINDOW_OPENS_AT,
   resolveCongressSignUpSettings,
+  resolveCongressSignUpTimingFloorMs,
+  readCongressSignUpTimingFloorMs,
   resolveCongressSignUpWindow,
 } from "./congress-signup.config.js";
 
@@ -57,6 +60,118 @@ describe("044 congress sign-up — server configuration", () => {
           CONGRESS_SIGNUP_CONSENT_VERSION: bad,
         }),
       ).toEqual({ ok: false, reason: "consent-version-malformed" });
+    }
+  });
+
+  it("EARS-7: when no route timing floor is configured, system shall resolve the conservative default so every runtime boots unchanged", () => {
+    // The default is asserted by value, not merely by identity with the
+    // constant: an accidental drop to a floor below the new-account branch
+    // would reopen the existence oracle EARS-7 closes, and that regression must
+    // fail here rather than only under a prod latency measurement.
+    expect(CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS).toBe(1000);
+
+    expect(resolveCongressSignUpTimingFloorMs({})).toEqual({
+      ok: true,
+      floorMs: CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
+    });
+    expect(
+      resolveCongressSignUpTimingFloorMs({
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "",
+      }),
+    ).toEqual({ ok: true, floorMs: CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS });
+  });
+
+  it("EARS-7: when a route timing floor is configured as whole milliseconds, system shall resolve exactly that floor", () => {
+    expect(
+      resolveCongressSignUpTimingFloorMs({
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "2500",
+      }),
+    ).toEqual({ ok: true, floorMs: 2500 });
+
+    // Zero is a legitimate operator choice (a test runtime that does not want
+    // the pad), so it must resolve rather than read as «unset».
+    expect(
+      resolveCongressSignUpTimingFloorMs({
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "0",
+      }),
+    ).toEqual({ ok: true, floorMs: 0 });
+  });
+
+  it("EARS-7: when the configured route timing floor is not whole milliseconds, system shall report the configuration unusable instead of defaulting silently", () => {
+    for (const bad of [
+      "1s",
+      "-5",
+      "1.5",
+      " 1000",
+      "1e3",
+      "1_000",
+      "9007199254740993",
+    ]) {
+      expect(
+        resolveCongressSignUpTimingFloorMs({
+          CONGRESS_SIGNUP_TIMING_FLOOR_MS: bad,
+        }),
+      ).toEqual({ ok: false, reason: "timing-floor-malformed" });
+    }
+  });
+
+  it("EARS-7: when the route timing floor is unusable, system shall refuse the whole intake configuration before any side effect", () => {
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1s",
+      }),
+    ).toEqual({ ok: false, reason: "timing-floor-malformed" });
+
+    // A usable floor changes nothing the intake writes: it is an interceptor
+    // concern, so it deliberately does NOT appear in the settings the service
+    // reads.
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "2500",
+      }),
+    ).toEqual({
+      ok: true,
+      settings: { eventId: EVENT_ID, consentVersion: CONSENT_VERSION },
+    });
+  });
+
+  it("EARS-7: when the route floor is read per request, system shall read the one key it needs and not revalidate the whole environment", () => {
+    // The floor is read on EVERY intake request (an operator raising it after a
+    // live measurement must not need a redeploy), so it reads ONE key rather
+    // than re-parsing the whole process environment through the api env schema.
+    // Proved by an environment that carries nothing BUT that key: a full-schema
+    // parse would throw on the missing required keys and silently hand back the
+    // default, which is exactly the floor the operator did not configure.
+    const original = process.env;
+    try {
+      process.env = {
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "2500",
+      } as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(2500);
+
+      // Changed between two requests — read again, not cached at module init.
+      process.env = {
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1500",
+      } as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(1500);
+
+      // Unusable or unset — the conservative default, the safe direction.
+      process.env = {
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1s",
+      } as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(
+        CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
+      );
+      process.env = {} as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(
+        CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
+      );
+    } finally {
+      process.env = original;
     }
   });
 

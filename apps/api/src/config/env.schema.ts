@@ -258,6 +258,18 @@ export const ApiEnvSchema = z.looseObject({
   // generic refusal every submitter gets.
   CONGRESS_SIGNUP_CONSENT_VERSION: z.string().optional(),
 
+  // 044 EARS-7 — the ROUTE-SPECIFIC timing floor (integer milliseconds) the
+  // congress intake's responses are padded to, so the new-account and the
+  // existing-account branches resolve at the same instant. The platform-wide
+  // 40 ms auth-door floor is far below both branches of this route and would
+  // equalise nothing. Left as a plain string here and validated in
+  // `congress-signup.config.ts` beside the other two keys, so a malformed value
+  // refuses the submission through the one generic refusal instead of failing
+  // the boot of every runtime that merely shares this schema. Unset ⇒ the
+  // conservative default in that unit; raising it after a live p99 measurement
+  // is an ops action, which is why it is configuration and not a constant.
+  CONGRESS_SIGNUP_TIMING_FLOOR_MS: z.string().optional(),
+
   // 006 webinar-room heartbeat cadence N (seconds) — the server-side config the
   // `RoomConfig` grant carries to the client (design §5: "cadence N is server
   // config, default 60 s"). The presence-minute derivation is parameterized over

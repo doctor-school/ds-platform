@@ -53,12 +53,10 @@ sequenceDiagram
     C-->>A: ok
     A->>A: Zod validate (packages/schemas), specialty = taxonomy id | other
     A->>A: registration window check (first thing the handler does; before any side effect; refuses not-yet-open / closed)
-    A->>D: lookup account by email
-    D-->>A: none
     A->>I: create human user WITHOUT credential
-    I-->>A: subject id
+    I-->>A: subject id (the address was unknown)
     A->>D: BEGIN
-    A->>D: upsert users (sub, email, guest role, prefilled display name)
+    A->>D: upsert users on zitadel_sub (sub, email, guest role, prefilled display name)
     A->>D: insert registrations (user, event, answers)
     A->>D: insert consent_records (congress personal-data purpose, version)
     A->>D: COMMIT
@@ -75,14 +73,20 @@ sequenceDiagram
     autonumber
     participant V as Participant browser
     participant A as apps/api intake handler
+    participant I as IdP (Zitadel)
     participant D as Postgres
     participant M as Mailer
 
     V->>A: POST intake (same shape)
-    A->>D: lookup account by email
-    D-->>A: existing user id
-    Note over A,D: no profile field of the existing account is written
+    A->>I: create human user WITHOUT credential
+    I-->>A: the address is already known + its subject id
     A->>D: BEGIN
+    A->>D: select users.id where zitadel_sub = subject id
+    alt mirror row present
+        Note over A,D: taken as is — no displayName, phone, role or updated_at write (EARS-6)
+    else mirror row absent (IdP↔mirror divergence)
+        A->>D: insert users (sub, email, guest role) — heals the divergence (EARS-19)
+    end
     A->>D: insert registrations (user, event, answers) ON CONFLICT (user_id,event_id) DO NOTHING
     alt published consent version differs from the recorded one
         A->>D: insert consent_records (new acceptance row)
@@ -98,7 +102,9 @@ sequenceDiagram
     end
 ```
 
-The two diagrams differ only in the branch the server takes; the response the participant observes is byte-identical in shape and status, and the account-creation hop is kept off the latency difference that would otherwise leak existence (the same isolation the 003 engine already applies to its account-exists notice, `apps/api/src/auth/auth.service.ts:596-628`).
+Both paths ask the IdP to create the account FIRST and learn from its answer which branch they are on; there is no prior lookup by email, so the two diagrams differ only after that one hop. From `BEGIN` onwards they run the SAME callback in the same audited transaction — which is what makes the written state and the response identical by construction rather than by two code paths agreeing. The response the participant observes is byte-identical in shape and status.
+
+The remaining leak is latency: the new-account branch really does create a user in the IdP, and the existing-account branch does not. That difference is closed at the route, not inside the handler — the intake carries a route-specific timing floor (`CONGRESS_SIGNUP_TIMING_FLOOR_MS`, default one second) that both branches are padded to, so the wire time no longer answers «does this address already have an account?». The platform-wide 40 ms auth-door floor is far below either branch and would pad neither.
 
 ## Mail failure
 

@@ -5,7 +5,15 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type pg from "pg";
 import {
   CONGRESS_PERSONAL_DATA_PURPOSE,
@@ -26,13 +34,16 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
 
 /**
- * 044 slice 2 — the public congress intake, NEW-email path.
+ * 044 slices 2 and 3 — the public congress intake, both account paths.
  *
- * Verification rows V-1 (minus the confirmation-email clause, which lands with
- * slice 4 / #2304–#2306), V-16 (the registration window), V-17 (the contact
- * phone, new-account half) and EARS-10 (no medical-worker declaration).
+ * Verification rows V-1, V-2, V-3 and V-21 (each minus its confirmation-email
+ * clause, which lands with slice 4 / #2304–#2306), V-16 (the registration
+ * window), V-17 (the contact phone), V-23 (the single `accepted` state the
+ * congress site renders its confirmation from) and EARS-10 (no medical-worker
+ * declaration).
  *
  * The cascade is asserted as four rows rather than one: EARS-1 owns the SHAPE
  * (accepted answer, one account + one registration + one consent row), and
@@ -50,7 +61,7 @@ import {
 const CONSENT_VERSION = `2026-10-01.sha256-${"a".repeat(64)}`;
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "044 congress sign-up — public intake, new email (e2e)",
+  "044 congress sign-up — public intake, new and existing email (e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
@@ -102,6 +113,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     beforeAll(async () => {
       process.env.CONGRESS_SIGNUP_EVENT_ID = eventId;
       process.env.CONGRESS_SIGNUP_CONSENT_VERSION = CONSENT_VERSION;
+      // EARS-7 — the route-specific timing floor is a PRODUCTION calibration
+      // (≥ the p99 of the heaviest branch, default 1000 ms). Flooring every
+      // request of this suite to a whole second would add ~15 s of pure sleep
+      // and prove nothing the interceptor unit spec does not already prove, so
+      // the suite configures a small floor: what is exercised here is the
+      // response BODY parity, not the latency parity.
+      process.env.CONGRESS_SIGNUP_TIMING_FLOOR_MS = "5";
 
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],
@@ -153,6 +171,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     afterAll(async () => {
       if (pool) await deleteEventFixture(pool, eventId);
       if (app) await app.close();
+      delete process.env.CONGRESS_SIGNUP_TIMING_FLOOR_MS;
     });
 
     it("EARS-1: when a new email submits inside the window, system shall accept it and create account, registration and consent in one cascade", async () => {
@@ -346,24 +365,204 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
     });
 
-    it("EARS-6: when the email already has an account, system shall refuse generically and write nothing new (slice 3 seam — #2299/#2300/#2301)", async () => {
+    // ---------------------------------------------------------------------
+    // Slice 3 (#2299 / #2300 / #2301) — the EXISTING-email path.
+    //
+    // The confirmation-email clauses of V-2 and V-3 are deliberately NOT
+    // asserted here: no confirmation email exists yet on either path, and it
+    // lands with slice 4 (#2304–#2306). Everything else in those rows is below.
+    // ---------------------------------------------------------------------
+
+    it("EARS-6.1: when the email already has an account, system shall attach the registration to it and leave every profile field byte-identical", async () => {
+      // A PLATFORM account, not a congress one: the point of EARS-6 is that a
+      // doctor the platform already knows keeps their profile untouched while
+      // the congress registration is attached to it. Seeding through a first
+      // congress submission would instead exercise EARS-8's repeat branch.
+      const { email } = await registerPlatformUser("congress-existing");
+      const before = await accountJson(email);
+
+      // Every name and the phone differ from what the account already holds.
+      const res = await post(
+        submission(email, {
+          surname: "Смирнова",
+          firstName: "Ольга",
+          patronymic: "Ивановна",
+          workplace: "ГКБ №2",
+          city: "Казань",
+          region: "Татарстан",
+          contactPhone: "8 999 000 11 22",
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      // Not one submitted answer reached the account: the whole `users` row,
+      // `updated_at` included, is byte-identical to the snapshot.
+      expect(await accountJson(email)).toEqual(before);
+
+      const row = await accountRow(email);
+      const registration = await pool.query<{
+        event_id: string;
+        answers: Record<string, unknown> | null;
+      }>(`SELECT event_id, answers FROM registrations WHERE user_id = $1`, [
+        row.id,
+      ]);
+      expect(registration.rowCount).toBe(1);
+      expect(registration.rows[0]!.event_id).toBe(eventId);
+      // The registration — and only the registration — carries the submitted
+      // answers, including the normalised contact phone.
+      expect(registration.rows[0]!.answers).toMatchObject({
+        surname: "Смирнова",
+        firstName: "Ольга",
+        contactPhone: "8 999 000 11 22",
+        contactPhoneNormalised: "+79990001122",
+      });
+    });
+
+    it("EARS-6.2: when the IdP reports the address as known but cannot resolve its subject, system shall refuse as unavailable and write nothing", async () => {
+      // The ONE shape the fake IdP cannot produce and the production adapter
+      // can: a duplicate whose owning subject the User v2 search did not
+      // return (`{ sub: "", alreadyExisted: true }`, zitadel.idp.ts). An empty
+      // subject is an outage, never an account — keying the mirror lookup on
+      // it found nothing, inserted a phantom `users` row and answered 400,
+      // which is the existence oracle EARS-7 exists to close.
+      const { email } = await registerPlatformUser("congress-unresolved");
+      const account = await accountRow(email);
+      const before = await congressRowCounts(account.id);
+
+      const spy = vi
+        .spyOn(fake, "createUser")
+        .mockResolvedValue({ sub: "", alreadyExisted: true });
+      let res;
+      try {
+        res = await post(submission(email));
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The same generic 503 the unreachable-IdP path already answers — one
+      // outage answer for both, so the status still says nothing about the
+      // address.
+      expect(res.statusCode).toBe(503);
+      expect(await congressRowCounts(account.id)).toEqual(before);
+      const phantom = await pool.query(
+        `SELECT 1 FROM users WHERE zitadel_sub = ''`,
+      );
+      expect(phantom.rowCount).toBe(0);
+    });
+
+    it("EARS-7: when the same submission targets a new and an existing account, system shall answer with identical status and body", async () => {
+      const { email: known } = await registerPlatformUser("congress-parity");
+
+      const existing = await post(submission(known));
+      const created = await post(submission(uniqueEmail("congress-parity-new")));
+
+      expect(existing.statusCode).toBe(created.statusCode);
+      expect(existing.json()).toEqual(created.json());
+      // V-23 — the single `accepted` state, on every path, is the ONLY signal
+      // the congress site needs to render the confirmation screen.
+      expect(existing.statusCode).toBe(200);
+      expect(CongressSignUpAcceptedSchema.parse(existing.json())).toEqual({
+        status: "accepted",
+      });
+      expect(existing.json()).toEqual({ status: "accepted" });
+    });
+
+    it("EARS-8.1: when an already-registered pair submits again, system shall answer identically and write no second registration or consent row", async () => {
       const email = uniqueEmail("congress-repeat");
+      const first = await post(submission(email));
+      expect(first.statusCode).toBe(200);
+
+      const second = await post(submission(email, { workplace: "ГКБ №3" }));
+
+      expect(second.statusCode).toBe(first.statusCode);
+      expect(second.json()).toEqual(first.json());
+
+      const row = await accountRow(email); // also asserts exactly one account
+      expect(await congressRowCounts(row.id)).toEqual({
+        registrations: 1,
+        consents: 1,
+      });
+    });
+
+    it("EARS-8.2: when the published consent version differs on a repeat submission, system shall record exactly one fresh acceptance row at the new version", async () => {
+      const email = uniqueEmail("congress-reconsent");
       expect((await post(submission(email))).statusCode).toBe(200);
+      const row = await accountRow(email);
 
-      const second = await post(submission(email));
+      const nextVersion = `2026-11-15.sha256-${"b".repeat(64)}`;
+      // The configuration is read per request, so the published version can
+      // change between two submissions exactly as it does in production.
+      process.env.CONGRESS_SIGNUP_CONSENT_VERSION = nextVersion;
+      let second;
+      try {
+        second = await post(submission(email));
+      } finally {
+        process.env.CONGRESS_SIGNUP_CONSENT_VERSION = CONSENT_VERSION;
+      }
 
-      expect(second.statusCode).toBe(422);
-      const user = await pool.query<{ id: string }>(
-        `SELECT id FROM users WHERE email = $1`,
+      expect(second.statusCode).toBe(200);
+      expect(second.json()).toEqual({ status: "accepted" });
+      // Still one registration; the consent ledger gained exactly one row, at
+      // the NEW version, and the original acceptance is still readable.
+      expect(await congressRowCounts(row.id)).toEqual({
+        registrations: 1,
+        consents: 2,
+      });
+      const consents = await pool.query<{ version: string }>(
+        `SELECT version FROM consent_records
+          WHERE user_id = $1 AND purpose = $2
+          ORDER BY captured_at ASC`,
+        [row.id, CONGRESS_PERSONAL_DATA_PURPOSE],
+      );
+      expect(consents.rows.map((c) => c.version)).toEqual([
+        CONSENT_VERSION,
+        nextVersion,
+      ]);
+    });
+
+    /** A platform account created through the 003 register door, not the intake. */
+    async function registerPlatformUser(
+      prefix: string,
+    ): Promise<{ email: string; sub: string }> {
+      return registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail(prefix),
+        password: "Aa1!ufficiently-long-pw",
+        consent: [{ purpose: "tos", version: "2026-01" }],
+      });
+    }
+
+    /** The WHOLE `users` row as json — the byte-identity snapshot of EARS-6. */
+    async function accountJson(email: string): Promise<unknown> {
+      const snapshot = await pool.query<{ row: unknown }>(
+        `SELECT to_jsonb(u) AS row FROM users u WHERE email = $1`,
         [email],
       );
-      expect(user.rowCount).toBe(1);
-      const registrations = await pool.query(
-        `SELECT 1 FROM registrations WHERE user_id = $1`,
-        [user.rows[0]!.id],
+      expect(snapshot.rowCount).toBe(1);
+      return snapshot.rows[0]!.row;
+    }
+
+    /** How many congress rows this account carries (EARS-8). */
+    async function congressRowCounts(
+      userId: string,
+    ): Promise<{ registrations: number; consents: number }> {
+      const counts = await pool.query<{
+        registrations: string;
+        consents: string;
+      }>(
+        `SELECT
+           (SELECT count(*) FROM registrations WHERE user_id = $1) AS registrations,
+           (SELECT count(*) FROM consent_records
+              WHERE user_id = $1 AND purpose = $2) AS consents`,
+        [userId, CONGRESS_PERSONAL_DATA_PURPOSE],
       );
-      expect(registrations.rowCount).toBe(1);
-    });
+      return {
+        registrations: Number(counts.rows[0]!.registrations),
+        consents: Number(counts.rows[0]!.consents),
+      };
+    }
 
     /** The single `users` mirror row this address must now have. */
     async function accountRow(email: string): Promise<{

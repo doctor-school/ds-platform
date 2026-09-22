@@ -4,7 +4,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { DrizzleHandle, RegistrationAnswers } from "@ds/db";
 import { consentRecords, events, registrations } from "@ds/db";
 import {
@@ -34,6 +34,11 @@ import {
 
 type Db = DrizzleHandle["db"];
 
+/** The audited transaction {@link AuthService.createPasswordlessAccount} opens. */
+type AccountTransaction = Parameters<
+  Parameters<AuthService["createPasswordlessAccount"]>[1]
+>[0];
+
 /**
  * 044 EARS-5 — the contract's answers object must be storable in the
  * `registrations.answers` column WITHOUT a cast, checked HERE because this
@@ -53,12 +58,14 @@ void _congressAnswersFitTheColumn;
  * 044 — the ONE refusal every submitter gets when the intake cannot take a
  * submission for any reason other than the registration window.
  *
- * A misconfigured deployment, an event that is not registrable and an address
- * the platform already knows are three very different facts, and the submitter
- * is told none of them. The endpoint is unauthenticated: a distinguishable
- * refusal for the last of those would turn it into an «is this doctor on the
- * platform?» oracle, and the other two would let an outsider read the state of
- * a deployment. The operator gets the real reason in the server log.
+ * A misconfigured deployment and an event that is not registrable are two very
+ * different facts, and the submitter is told neither. The endpoint is
+ * unauthenticated, so a distinguishable refusal would let an outsider read the
+ * state of a deployment. The operator gets the real reason in the server log.
+ *
+ * Whether the address already has an account is NOT one of the reasons: BOTH
+ * paths are accepted (EARS-6 / EARS-7), which answers the «is this doctor on
+ * the platform?» oracle more strongly than a shared refusal would.
  */
 export const CONGRESS_SIGN_UP_UNAVAILABLE = {
   code: "sign-up-unavailable",
@@ -72,7 +79,7 @@ const WINDOW_REFUSAL_MESSAGES = {
 } as const;
 
 /**
- * 044 slice 2 — the public congress intake, new-email path.
+ * 044 — the public congress intake, both account paths.
  *
  * The order of the checks is the design's, and it is load-bearing: the DTO pipe
  * has already validated the submission and the guards have already run the
@@ -81,10 +88,19 @@ const WINDOW_REFUSAL_MESSAGES = {
  * before the account lookup — so a refusal outside the window is provably
  * identical for a known and an unknown address and provably writes nothing.
  *
- * Everything the accepted path writes (the `users` mirror, the registration and
- * its consent row) happens in ONE transaction, opened by
- * {@link AuthService.createPasswordlessAccount} and continued in the callback
- * this service passes it.
+ * Everything the accepted path writes (the `users` mirror where there is one to
+ * write, the registration and its consent row) happens in ONE transaction,
+ * opened by {@link AuthService.createPasswordlessAccount} and continued in the
+ * callback this service passes it.
+ *
+ * That callback is ONE body for both account paths, not two branches: an address
+ * the platform already knows and one it does not run exactly the same statements
+ * in exactly the same order. This is what makes EARS-7's identical response true
+ * by construction rather than by two code paths kept in sync — and it is why
+ * `ON CONFLICT DO NOTHING` sits on the registration insert instead of a
+ * preceding «is this pair already registered?» read: the uniqueness of
+ * `(user_id, event_id)` is the database's invariant, and asking first would only
+ * add a race the constraint already settles.
  */
 @Injectable()
 export class CongressSignUpService {
@@ -117,7 +133,10 @@ export class CongressSignUpService {
       },
     ];
 
-    const created = await this.auth.createPasswordlessAccount(
+    // The return value is deliberately unused: whether the account already
+    // existed changes nothing the participant may observe (EARS-7), and the
+    // writes both paths need have already happened in the callback below.
+    await this.auth.createPasswordlessAccount(
       {
         email: request.email,
         surname: request.surname,
@@ -128,36 +147,90 @@ export class CongressSignUpService {
         // EARS-5 / EARS-29: the typed answers, with the normalised contact
         // phone beside the typed one. `users.phone` is deliberately not
         // written — see `createPasswordlessAccount`.
-        await tx.insert(registrations).values({
-          userId,
-          eventId: settings.eventId,
-          answers: toCongressSignUpAnswers(request),
-        });
-        // EARS-9 / EARS-10: exactly ONE consent row, the personal-data one, at
-        // the SERVER-stamped version. The medical-worker declaration is neither
-        // recorded nor demanded on this surface.
-        await tx.insert(consentRecords).values(
-          consent.map((c) => ({
+        //
+        // EARS-8: DO NOTHING, never DO UPDATE. The `(user_id, event_id)` unique
+        // constraint says one registration RECORD per pair for all time, and the
+        // FIRST submission is the one that registered the participant — a repeat
+        // must not silently rewrite the answers an organiser is already reading
+        // off the roster, nor move the registration instant.
+        await tx
+          .insert(registrations)
+          .values({
             userId,
-            purpose: c.purpose,
-            version: c.version,
-          })),
-        );
+            eventId: settings.eventId,
+            answers: toCongressSignUpAnswers(request),
+          })
+          .onConflictDoNothing({
+            target: [registrations.userId, registrations.eventId],
+          });
+        await this.recordConsentIfNewVersion(tx, userId, consent);
       },
     );
 
-    if (created.alreadyExisted) {
-      // The existing-account branch is slice 3 (#2299 / #2300 / #2301): until it
-      // lands, a known address is refused generically and NOTHING is written —
-      // the deploy of this slice is held for those three by the PR's
-      // `Release-requires:` line.
-      this.logger.log(
-        "congress sign-up: address already has an account; refused pending #2299/#2300/#2301",
-      );
-      throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
-    }
-
     return { status: "accepted" };
+  }
+
+  /**
+   * EARS-8 / EARS-9 / EARS-10 — the consent ledger for this submission.
+   *
+   * Exactly ONE consent row per ACCEPTANCE, never one per submission: a
+   * participant who sends the form twice agreed once, and a second identical row
+   * would make an append-only ledger read as two separate acts of consent. A row
+   * is written only when this pair has none yet, or when the version the server
+   * publishes today differs from the one last recorded — in that case it IS a
+   * fresh act of consent, to a different text, and belongs in the ledger as its
+   * own row BESIDE (never instead of) the earlier one.
+   *
+   * The comparison is against the LATEST recorded row rather than «any row at
+   * this version», so a participant who accepted v1, then v2, and then meets a
+   * republished v1 is recorded as having accepted v1 again. `consent_records`
+   * carries no unique constraint by design (ADR-0003 design §3.6 rule 4 — it is
+   * legal evidence, and two acceptances of the same version at two instants are
+   * two facts), so the idempotency of a repeat submission is THIS read, inside
+   * the transaction the caller opened, and not a constraint.
+   *
+   * That makes the guarantee SEQUENTIAL, and deliberately so: two submissions
+   * for the same participant racing under READ COMMITTED can both read «no row
+   * at this version» and both insert, so a double-click can leave two identical
+   * acceptance rows. For an append-only legal ledger that is a truthful record
+   * of two submitted acceptances rather than a defect — nothing downstream
+   * counts rows and the VERSION is what is read back — and closing it would
+   * take either a constraint this ledger's own design rejects or a lock on the
+   * participant row taken by every intake request. It is an open item on the
+   * feature, not a promise this method silently makes.
+   *
+   * The medical-worker declaration is neither recorded nor demanded on this
+   * surface (EARS-10): the only purposes written are the caller's.
+   */
+  private async recordConsentIfNewVersion(
+    tx: AccountTransaction,
+    userId: string,
+    consent: readonly {
+      purpose: CongressSignUpConsentPurpose;
+      version: string;
+    }[],
+  ): Promise<void> {
+    for (const c of consent) {
+      const [latest] = await tx
+        .select({ version: consentRecords.version })
+        .from(consentRecords)
+        .where(
+          and(
+            eq(consentRecords.userId, userId),
+            eq(consentRecords.purpose, c.purpose),
+          ),
+        )
+        .orderBy(desc(consentRecords.capturedAt))
+        .limit(1);
+
+      if (latest?.version === c.version) continue;
+
+      await tx.insert(consentRecords).values({
+        userId,
+        purpose: c.purpose,
+        version: c.version,
+      });
+    }
   }
 
   /** EARS-28 — the window, decided first and from the clock alone. */

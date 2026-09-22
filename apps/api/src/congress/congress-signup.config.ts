@@ -47,6 +47,25 @@ export const CONGRESS_SIGN_UP_WINDOW_CLOSES_AT =
 export const CONGRESS_SIGN_UP_CONSENT_VERSION_PATTERN =
   /^\d{4}-\d{2}-\d{2}\.sha256-[0-9a-f]{64}$/;
 
+/**
+ * 044 EARS-7 — the DEFAULT route-specific timing floor (ms) for the intake.
+ *
+ * The platform-wide 40 ms auth-door floor equalises nothing here: the
+ * new-account branch creates a user in the IdP and commits a whole transaction,
+ * and the existing-account branch resolves an account and attaches a
+ * registration. Both run well past 40 ms, so a 40 ms floor pads neither and the
+ * full work difference — which is exactly «did this address already have an
+ * account?» — stays measurable on the wire.
+ *
+ * One second is a deliberately CONSERVATIVE floor: it must exceed the heaviest
+ * branch (a real Zitadel create plus the transaction) for the equalization to
+ * hold at all, and the cost of overshooting is a slower congress form, while the
+ * cost of undershooting is the existence oracle EARS-7 exists to close.
+ * Calibrating it to ≥ the p99 of the new-account path as measured on prod is an
+ * ops task — which is why it is configuration and not a constant.
+ */
+export const CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS = 1000;
+
 /** A uuid, checked here so the config unit needs no Zod round-trip at request time. */
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,7 +83,8 @@ export type CongressSignUpConfigProblem =
   | "event-id-unset"
   | "event-id-malformed"
   | "consent-version-unset"
-  | "consent-version-malformed";
+  | "consent-version-malformed"
+  | "timing-floor-malformed";
 
 export type CongressSignUpConfigResult =
   | { ok: true; settings: CongressSignUpSettings }
@@ -73,8 +93,70 @@ export type CongressSignUpConfigResult =
 /** The environment slice this unit reads — nothing else. */
 export type CongressSignUpEnv = Pick<
   Partial<ApiEnv>,
-  "CONGRESS_SIGNUP_EVENT_ID" | "CONGRESS_SIGNUP_CONSENT_VERSION"
+  | "CONGRESS_SIGNUP_EVENT_ID"
+  | "CONGRESS_SIGNUP_CONSENT_VERSION"
+  | "CONGRESS_SIGNUP_TIMING_FLOOR_MS"
 >;
+
+/** 044 EARS-7 — the resolved timing floor, or why the configured one is unusable. */
+export type CongressSignUpTimingFloorResult =
+  | { ok: true; floorMs: number }
+  | { ok: false; reason: "timing-floor-malformed" };
+
+/**
+ * 044 EARS-7 — read the route-specific timing floor.
+ *
+ * An UNSET key is not a problem: the conservative default applies, and every
+ * runtime that does not host the intake boots unchanged. A SET but unusable
+ * value is a problem, and deliberately not silently defaulted: an operator who
+ * typed `1s` instead of `1000` would otherwise believe the floor they wrote is
+ * the floor that runs.
+ */
+export function resolveCongressSignUpTimingFloorMs(
+  env: CongressSignUpEnv,
+): CongressSignUpTimingFloorResult {
+  const raw = env.CONGRESS_SIGNUP_TIMING_FLOOR_MS;
+  if (raw == null || raw === "") {
+    return { ok: true, floorMs: CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS };
+  }
+  if (!/^\d+$/.test(raw)) return { ok: false, reason: "timing-floor-malformed" };
+  const floorMs = Number(raw);
+  if (!Number.isSafeInteger(floorMs)) {
+    return { ok: false, reason: "timing-floor-malformed" };
+  }
+  return { ok: true, floorMs };
+}
+
+/**
+ * 044 EARS-7 — the floor the `@TimingEqualized` metadata on the intake route
+ * carries, read per request.
+ *
+ * A function rather than a value because a decorator argument is evaluated once
+ * at class-definition time, while this module's rule is that configuration is
+ * read per request: an operator raising the floor after a live measurement must
+ * not need a redeploy.
+ *
+ * It reads the ONE key it needs straight off `process.env` rather than
+ * re-validating the whole api environment on every request: the interceptor
+ * calls this before each intake, and a `z.looseObject` parse of the entire
+ * environment to answer a single key is cost with no reader.
+ *
+ * It never throws and never returns the malformed value: an unusable floor falls
+ * back to the conservative default, which is the SAFE direction (too slow, never
+ * too fast). The submission itself is then refused generically by
+ * {@link resolveCongressSignUpSettings} before any side effect, so the operator
+ * still learns the configuration is broken — from the server log, on the same
+ * request, and without the endpoint having run with a half-configured meaning.
+ */
+export function readCongressSignUpTimingFloorMs(): number {
+  const resolved = resolveCongressSignUpTimingFloorMs({
+    CONGRESS_SIGNUP_TIMING_FLOOR_MS:
+      process.env["CONGRESS_SIGNUP_TIMING_FLOOR_MS"],
+  });
+  return resolved.ok
+    ? resolved.floorMs
+    : CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS;
+}
 
 /**
  * 044 EARS-5 / EARS-9 — read and validate the two configured settings.
@@ -103,6 +185,12 @@ export function resolveCongressSignUpSettings(
   if (!CONGRESS_SIGN_UP_CONSENT_VERSION_PATTERN.test(consentVersion)) {
     return { ok: false, reason: "consent-version-malformed" };
   }
+
+  // EARS-7 — validated HERE, with the other two, so a misconfigured floor
+  // refuses the submission before any side effect and through the same generic
+  // refusal, rather than silently running the intake at the default floor.
+  const timingFloor = resolveCongressSignUpTimingFloorMs(env);
+  if (!timingFloor.ok) return { ok: false, reason: timingFloor.reason };
 
   return { ok: true, settings: { eventId, consentVersion } };
 }

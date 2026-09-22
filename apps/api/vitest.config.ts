@@ -14,6 +14,8 @@ export default defineConfig({
     ],
     globals: false,
     globalSetup: ['./test/setup/migrate.ts'],
+    // Per-file environment every suite shares (see the file for why).
+    setupFiles: ['./test/setup/test-env.ts'],
     // The e2e suites boot DatabaseModule and write/read/delete rows against a
     // single shared Postgres (the dev-stand locally, the `api-e2e` service
     // container on CI). Running files in parallel processes contends on that one

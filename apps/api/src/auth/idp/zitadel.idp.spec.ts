@@ -863,8 +863,16 @@ describe("003 EARS-11/29 password-reset send wire shape (#910)", () => {
  * English `"password"`/`"complexity"` body-token match no longer fires).
  */
 describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () => {
-  /** A fetch double that records calls and answers per-URL (orgs/me + create). */
-  function createFetch(create: { status: number; body?: unknown }): {
+  /**
+   * A fetch double that records calls and answers per-URL (orgs/me + create +
+   * the User v2 search the 409 duplicate path resolves the existing subject
+   * with). `search` is optional: a test that does not script it gets the create
+   * answer on the search hop too, which is what the non-409 tests want.
+   */
+  function createFetch(
+    create: { status: number; body?: unknown },
+    search?: { status: number; body?: unknown },
+  ): {
     fetchImpl: FetchLike;
     calls: ScriptedCall[];
   } {
@@ -882,6 +890,14 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
           ok: true,
           status: 200,
           json: () => Promise.resolve({ org: { id: "org-resolved" } }),
+        });
+      }
+      // User v2 search hop (`/v2/users`, never `/v2/users/new`).
+      if (search && url.endsWith("/v2/users")) {
+        return Promise.resolve({
+          ok: search.status >= 200 && search.status < 300,
+          status: search.status,
+          json: () => Promise.resolve(search.body ?? {}),
         });
       }
       return Promise.resolve({
@@ -1017,12 +1033,54 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
     });
   });
 
-  it("maps a 409 duplicate to alreadyExisted (not a throw) — the enumeration-safety hinge", async () => {
-    const { fetchImpl } = createFetch({
-      status: 409,
-      body: { code: 6, message: "Пользователь уже существует (V3-DKcYh)" },
-    });
+  it("maps a 409 duplicate to alreadyExisted (not a throw) and RESOLVES the existing subject — the enumeration-safety hinge (044 EARS-6)", async () => {
+    const { fetchImpl, calls } = createFetch(
+      {
+        status: 409,
+        body: { code: 6, message: "Пользователь уже существует (V3-DKcYh)" },
+      },
+      { status: 200, body: { result: [{ userId: "u-existing" }] } },
+    );
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    // `sub` is the subject that OWNS the identifier on BOTH paths, created or
+    // found (CreatedUser.sub). An empty sub on the found path made 044 EARS-6
+    // key its mirror lookup on "" — no attach at all, and a 400-vs-200 status
+    // oracle on exactly the question the feature exists to hide.
+    await expect(client.createUser(INPUT)).resolves.toEqual({
+      sub: "u-existing",
+      alreadyExisted: true,
+    });
+    const searches = calls.filter((c) => c.url.endsWith("/v2/users"));
+    expect(searches, "exactly one User v2 search, keyed on the email").toHaveLength(1);
+    expect(JSON.parse(searches[0]!.body ?? "{}")).toEqual({
+      queries: [{ emailQuery: { emailAddress: INPUT.email } }],
+    });
+  });
+
+  it("resolves a PHONE-keyed 409 duplicate through the phone query (044 EARS-6)", async () => {
+    const { fetchImpl, calls } = createFetch(
+      { status: 409, body: { code: 6 } },
+      { status: 200, body: { result: [{ userId: "u-phone" }] } },
+    );
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(
+      client.createUser({ phone: "+79001234567", password: "Aa1!aaaa" }),
+    ).resolves.toEqual({ sub: "u-phone", alreadyExisted: true });
+    const search = calls.find((c) => c.url.endsWith("/v2/users"));
+    expect(JSON.parse(search!.body ?? "{}")).toEqual({
+      queries: [{ phoneQuery: { number: "+79001234567" } }],
+    });
+  });
+
+  it("keeps an EMPTY sub when the 409 duplicate cannot be resolved — fail closed, never a guessed subject (044 EARS-6)", async () => {
+    const { fetchImpl } = createFetch(
+      { status: 409, body: { code: 6 } },
+      { status: 500, body: {} },
+    );
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    // The register door (003 EARS-16) ignores `sub` on this path and stays
+    // byte-identical; 044's found path refuses as unavailable rather than
+    // writing a mirror row keyed on a subject nobody resolved.
     await expect(client.createUser(INPUT)).resolves.toEqual({
       sub: "",
       alreadyExisted: true,

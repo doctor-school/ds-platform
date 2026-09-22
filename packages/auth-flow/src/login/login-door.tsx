@@ -456,6 +456,9 @@ export function LoginDoor({
           captchaSlot: captchaSlot(passwordCaptcha.fieldProps),
         }}
         otp={{
+          // Row 21 — the channels this host serves; a one-channel host draws no
+          // channel row at all (the same list gates the identifier schema).
+          channels: config.channels,
           requestResolvers,
           verifyResolver,
           sentIdentifier,

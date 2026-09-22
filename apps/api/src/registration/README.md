@@ -67,6 +67,18 @@ state, recording }`. `?tab=` is optional and defaults to `upcoming`, so the bare
   exposed on a 004 public surface, and it selects only the three record columns
   (no join to the `users` mirror), so no registrant PII is ever read or leaked
   (EARS-8, EARS-10; cross-checked against the public projection).
+- **044 EARS-30 — `possibleDuplicate`.** The entry carries one DERIVED boolean
+  beside the three record columns: `true` when another registration of the same
+  event holds the same normalised contact phone (the comparison key 044 EARS-29
+  writes onto `registrations.answers`). It is computed per read by a window
+  count inside `findEventRoster`, never stored and never swept — so when the
+  team removes one of the sharing registrations on request, the survivor's
+  marker clears by itself with **no write** to the surviving row. Only the
+  boolean leaves the query: the phone is neither selected nor returned, so the
+  no-PII invariant above is unchanged. A platform-origin row (EARS-16, `answers
+IS NULL`) has no phone and is never marked, and several such rows never group
+  with one another. The roster INDICATOR and its filter live in 044 (#2328),
+  not here.
 
 ## Exported symbols
 

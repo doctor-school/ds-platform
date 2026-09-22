@@ -117,9 +117,11 @@ test.describe("021 EARS-4: the mandatory medical-worker declaration", () => {
       .getByTestId("register-medworker")
       .getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
+    // The canvas (193) prefixes the line with a «⚠» glyph, so the message the
+    // pointer resolves to CARRIES the sentence rather than equalling it.
     await expect(
       page.locator(`[id="${describedBy!.split(/\s+/).at(-1)}"]`),
-    ).toHaveText(DECLARATION_UNMET);
+    ).toContainText(DECLARATION_UNMET);
   });
 
   test("021 EARS-4.4: filling every other field still does not open the door without the declaration", async ({

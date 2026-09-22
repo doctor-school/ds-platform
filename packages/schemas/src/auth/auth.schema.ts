@@ -568,6 +568,31 @@ export type AdminAuthStateResponse = z.infer<
 >;
 
 /**
+ * 044 EARS-19/EARS-20 `ReadAdminSession` response — the roles of the principal
+ * behind an ACTIVE admin session, and nothing else.
+ *
+ * It is a deliberately different surface from {@link AdminAuthStateResponseSchema}
+ * above, not an extension of it. That read answers a caller who has at most
+ * passed primary auth, which is why it discloses the state enum alone; this one
+ * is reachable ONLY through a live admin session cookie that already survived the
+ * second factor, so telling that principal which roles it itself holds is not an
+ * oracle — it is the principal's own claim read back. Adding `roles` to the state
+ * response instead would have widened the pre-session surface, which 011 spends a
+ * whole clause denying.
+ *
+ * The admin navigation (EARS-20) is a PROJECTION of this read: it decides what to
+ * draw, never what is permitted — the server refusal of EARS-19 is the authority.
+ *
+ * `roles` is an open string array on purpose: the role vocabulary's SSOT is the
+ * IdP project-roles claim mirrored in the API (`apps/api/src/authz/authz.types.ts`
+ * `ROLES`), and a second frozen copy in the wire contract could only drift from it.
+ */
+export const AdminSessionResponseSchema = z.strictObject({
+  roles: z.array(z.string().min(1)),
+});
+export type AdminSessionResponse = z.infer<typeof AdminSessionResponseSchema>;
+
+/**
  * 011 `RemoveMfaFactor` request (EARS-13) — the LD-2 operator recovery command.
  *
  * The body carries the **caller's own current TOTP code**, not the target's: this

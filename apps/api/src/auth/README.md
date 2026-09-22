@@ -43,19 +43,19 @@ authentication**, and only a satisfied second factor converts that into
 `__Host-ds_admin_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Strict`,
 opaque reference).
 
-| Concern                                                                              | File                                  |
-| ------------------------------------------------------------------------------------ | ------------------------------------- |
-| Cookie names/attributes + route-namespace helpers                                    | `admin-session.cookie.ts`             |
-| `role → mfa_required` policy (EARS-3)                                                | `mfa-policy.ts`                       |
-| Record shapes + the two store ports                                                  | `admin-session.types.ts`              |
-| Store adapters (in-memory / Redis)                                                   | `admin-session-store.{fake,redis}.ts` |
-| Login → pending → session lifecycle                                                  | `admin-session.service.ts`            |
-| Admin-tier request hook (separation + CSRF)                                          | `admin-session-auth.hook.ts`          |
-| Second-factor soft-lock counter (011 EARS-7)                                         | `mfa-lockout.service.ts`              |
-| `/v1/admin/auth/{login,logout,state}` + `/mfa/verify` + `/mfa/enroll/{start,verify}` | `admin-auth.controller.ts`            |
-| `DELETE /v1/admin/users/:id/mfa` — operator factor removal (011 EARS-13)             | `admin-users.controller.ts`           |
-| LD-2 break-glass removal (ops CLI half)                                              | `break-glass-cli.ts`                  |
-| TOTP registration + login-check seam (Zitadel v2 / fake)                             | `../idp/totp.ts`                      |
+| Concern                                                                                      | File                                  |
+| -------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Cookie names/attributes + route-namespace helpers                                            | `admin-session.cookie.ts`             |
+| `role → mfa_required` policy (EARS-3)                                                        | `mfa-policy.ts`                       |
+| Record shapes + the two store ports                                                          | `admin-session.types.ts`              |
+| Store adapters (in-memory / Redis)                                                           | `admin-session-store.{fake,redis}.ts` |
+| Login → pending → session lifecycle                                                          | `admin-session.service.ts`            |
+| Admin-tier request hook (separation + CSRF)                                                  | `admin-session-auth.hook.ts`          |
+| Second-factor soft-lock counter (011 EARS-7)                                                 | `mfa-lockout.service.ts`              |
+| `/v1/admin/auth/{login,logout,state,session}` + `/mfa/verify` + `/mfa/enroll/{start,verify}` | `admin-auth.controller.ts`            |
+| `DELETE /v1/admin/users/:id/mfa` — operator factor removal (011 EARS-13)                     | `admin-users.controller.ts`           |
+| LD-2 break-glass removal (ops CLI half)                                                      | `break-glass-cli.ts`                  |
+| TOTP registration + login-check seam (Zitadel v2 / fake)                                     | `../idp/totp.ts`                      |
 
 Three properties carry it:
 
@@ -94,6 +94,37 @@ asks for a second sign-in:
 access-control / data providers, plus the EARS-10 CSRF double-submit header on
 every admin write). Release blocker #1204 holds prod deploys of the range until
 the journey closes.
+
+### Who this tier admits (044 EARS-19)
+
+The tier has **two** tenants, and they are two different questions.
+
+- **Admission** is `MFA_REQUIRED_BY_ROLE` (`mfa-policy.ts`). `platform_admin` and
+  `event-registrar` are its entries, and `startLogin` refuses a principal the map
+  does not cover — so the map, not a route list, is what decides who may reach the
+  admin origin at all. `event-registrar`'s factor is TOTP, like `platform_admin`'s:
+  it enrols on first login and is challenged afterwards, on the same flow, with no
+  branch.
+- **Reach** is the per-route `@Authz({ roles })` classification, and holding a
+  session grants none of it. A registrar's reach is the congress roster read
+  (044 EARS-18) plus the session endpoints needed to HOLD a session: `login`,
+  `state`, `mfa/enroll/{start,verify}`, `mfa/verify`, `session` and `logout`.
+  Every other real route — every admin read, and every create, update and delete —
+  omits the role and `AuthzGuard` refuses it (044 EARS-19).
+
+`GET /v1/admin/auth/session` reads back the roles of the principal behind an
+ACTIVE session, and nothing else. It is separate from `state` on purpose: `state`
+answers a caller who has at most passed primary auth, so carrying roles there
+would hand a stolen-password attacker a role oracle BEFORE the second factor.
+The role-aware admin navigation (044 EARS-20) is a projection of this read — it
+decides what is drawn, never what is permitted.
+
+The generated matrix (`apps/api/docs/endpoint-authz-matrix.md`) has one
+`required_roles` allow-list per route and no column for a denial set, so the
+«every other endpoint» half is proven by a sweep over the real route set:
+`apps/api/test/congress/registrar-denial-set.e2e-spec.ts`. The admitted-wider
+routes are enumerated on the other side of the same boundary, in
+`apps/api/test/auth/admin-authz-floor.e2e-spec.ts` (`REGISTRAR_ADMITTED`).
 
 ### Operator factor recovery (011 EARS-13 / LD-2) — runbook
 

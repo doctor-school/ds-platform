@@ -6,12 +6,21 @@ import {
 } from "./mfa-policy.js";
 
 describe("011 EARS-3 — role → mfa_required policy", () => {
-  it("EARS-3: the policy is populated with platform_admin, and with platform_admin only", () => {
+  it("EARS-3: the policy is populated with exactly its two named tenants", () => {
     // 011 Scope → Out is explicit that `moderator` / `support` / `expert` /
     // `clinic_admin` / `investor` are NOT tenants yet (their factor kinds differ
     // per ADR-0001 §4). A silent extra entry here would mandate TOTP for a role
-    // with no enrollment path — a lockout, not a hardening.
-    expect(mfaRequiredRoles()).toEqual(["platform_admin"]);
+    // with no enrollment path — a lockout, not a hardening. `event-registrar`
+    // (044 EARS-19) is a named tenant precisely because it DOES have one: it
+    // enrols and is challenged on the `platform_admin` TOTP flow unchanged.
+    expect(mfaRequiredRoles()).toEqual(["platform_admin", "event-registrar"]);
+  });
+
+  it("044 EARS-19: a principal holding only event-registrar requires a second factor", () => {
+    // This is what admits the registrar to the admin ORIGIN at all: `startLogin`
+    // refuses a principal the policy does not cover, so without this entry the
+    // registrar would need a second, weaker door into the admin tier.
+    expect(requiresMfa(["event-registrar"])).toBe(true);
   });
 
   it("EARS-3: a principal holding platform_admin requires a second factor", () => {

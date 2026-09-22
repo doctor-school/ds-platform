@@ -1462,7 +1462,7 @@ function CheckboxSection() {
   return (
     <PrimitiveSection
       title="Checkbox"
-      exportsLine="Checkbox — state (real native checkbox)"
+      exportsLine="Checkbox — state (real native checkbox); aria-invalid paints the reported-unmet border"
     >
       <SubRow label="Live sample (click / tab + space)">
         <Checkbox defaultChecked>Присылать напоминания об эфирах</Checkbox>
@@ -1482,6 +1482,12 @@ function CheckboxSection() {
               </Cell>
               <Cell label="disabled on">
                 <Checkbox disabled defaultChecked aria-label="disabled on" />
+              </Cell>
+              <Cell label="invalid">
+                <Checkbox aria-invalid aria-label="invalid" />
+              </Cell>
+              <Cell label="invalid on">
+                <Checkbox aria-invalid defaultChecked aria-label="invalid on" />
               </Cell>
             </div>
           )}

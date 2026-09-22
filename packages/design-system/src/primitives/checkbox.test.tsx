@@ -97,4 +97,37 @@ describe("Checkbox — token-class contract (#513)", () => {
       "peer-disabled:text-muted-2",
     );
   });
+
+  it("#2027: the statement reads at the canvas weight, 12px clear of the box", () => {
+    // Owner Stage-B 2026-09-22: parity is the RENDERING. The canvas
+    // (`design-source/auth.dc.html:191/199/221`) sets every checkbox statement
+    // at 13.5px/700 on a 1.4 line, 12px clear of the box.
+    const { container } = render(<Checkbox>Согласен</Checkbox>);
+
+    expect(screen.getByText("Согласен")).toHaveClass(
+      "text-sm",
+      "font-bold",
+      "leading-snug",
+    );
+    expect(container.querySelector("label")).toHaveClass("gap-3");
+  });
+
+  it("#2027: an invalid control carries the reported-unmet border on the box itself", () => {
+    // Canvas 497 — while the unmet statement is being reported the BOX turns
+    // danger, and it stays danger over the checked fill border.
+    const { container } = render(<Checkbox aria-invalid aria-label="x" />);
+
+    const visual = container.querySelector('span[aria-hidden="true"]');
+    expect(visual).toHaveClass("border-destructive-text");
+    expect(visual).not.toHaveClass("border-border");
+    expect(visual?.className).not.toMatch(/peer-checked:border-/);
+  });
+
+  it("#2027: a valid control keeps the resting and checked borders", () => {
+    const { container } = render(<Checkbox aria-label="x" />);
+
+    const visual = container.querySelector('span[aria-hidden="true"]');
+    expect(visual).toHaveClass("border-border", "peer-checked:border-primary-action");
+    expect(visual).not.toHaveClass("border-destructive-text");
+  });
 });

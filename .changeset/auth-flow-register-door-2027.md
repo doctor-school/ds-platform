@@ -39,3 +39,23 @@ Every auth sentence now has ONE source: the package copy defaults, taken from th
 owner's auth canvas. A host config states the SET of fields it renders, its routes,
 endpoints, channels and brand assets — no host words a field any more, and the
 optional `copy` deep-partial override stays declared but unused on both storefronts.
+
+The sign-up button is LIVE in every state, as the owner's canvas draws it. The
+disabled submit and the reason line beside it are gone — with them the
+`RegisterCardProps.unmetPrecondition` prop and the `RegisterCardTestIds.submitReason`
+test id, both removed from the block's public surface (breaking for any consumer
+that set them; both storefronts are updated here). Pressing with an access
+condition still ungranted states it UNDER the row it belongs to — the same
+sentence as before, now tied to its own checkbox, which turns to the danger tone
+while the statement stands — and sends no command; granting one condition clears
+only its own statement, and the optional opt-in never states anything. A host
+that words a condition its read model carries no statement for says so in the
+card's error banner instead, so a misconfiguration fails at the door rather than
+silently at the server.
+
+The consent block is drawn from the canvas: the access-conditions frame loses its
+filled header bar for a quiet eyebrow inside a uniform padding, the two
+conditions are separated by a hairline rule, and every consent label — the
+marketing opt-in included — is bold in the ink tone above a small quiet help
+line. `Checkbox` therefore renders its label bold everywhere it is used, and
+paints its box in the danger tone while the control it wraps is `aria-invalid`.

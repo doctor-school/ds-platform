@@ -12,6 +12,9 @@ import { cn } from "../lib/utils";
  *   • on        `primary-action` border + fill, the ✓ glyph revealed in
  *               `primary-foreground` (ink) — 14px, weight-800 read;
  *   • disabled  `hairline` border, `muted` fill;
+ *   • invalid   `destructive-text` border while the control carries
+ *               `aria-invalid` — the canvas reports an unmet statement on the
+ *               BOX as well as in the message (auth canvas 497);
  *   • focus     the flush 3px `shadow-focus` ring rides the box
  *               (`peer-focus-visible`), so keyboard focus is visible.
  * The box never shrinks (`shrink-0`): it is a flex CHILD of the label, so a
@@ -50,10 +53,21 @@ export interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElemen
 }
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, children, disabled, tone = "default", ...props }, ref) => (
+  ({ className, children, disabled, tone = "default", ...props }, ref) => {
+    // The owner's canvas (`design-source/auth.dc.html:497`) turns the BOX red
+    // while an unmet statement is being reported, so invalidity is carried by
+    // the control itself and not by the message alone. The fact already travels
+    // ON the control: `<FormControl>` publishes `aria-invalid`, so the primitive
+    // reads that rather than asking every call site for a second flag which
+    // could disagree with the one assistive technology is told.
+    const invalid =
+      props["aria-invalid"] === true || props["aria-invalid"] === "true";
+    return (
     <label
       className={cn(
-        "inline-flex items-center gap-2",
+        // 12px between the box and the statement — the gap the canvas draws on
+        // every checkbox row it has (186-224).
+        "inline-flex items-center gap-3",
         disabled ? "cursor-not-allowed" : "cursor-pointer",
         className,
       )}
@@ -68,9 +82,14 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       <span
         aria-hidden="true"
         className={cn(
-          "grid size-5.5 shrink-0 place-items-center border-2 border-border bg-card text-primary-foreground transition-colors",
+          "grid size-5.5 shrink-0 place-items-center border-2 bg-card text-primary-foreground transition-colors",
           "[&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100",
-          "peer-checked:border-primary-action peer-checked:bg-primary-action",
+          "peer-checked:bg-primary-action",
+          // Reported-unmet wins over every resting border, checked included:
+          // the canvas keeps the red frame on until the statement is granted.
+          invalid
+            ? "border-destructive-text"
+            : "border-border peer-checked:border-primary-action",
           "peer-focus-visible:shadow-focus",
           "peer-disabled:border-hairline peer-disabled:bg-muted",
         )}
@@ -80,7 +99,10 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       {children ? (
         <span
           className={cn(
-            "text-sm",
+            // Canvas 191/199/221 — the statement reads 13.5px/700 in ink on a
+            // 1.4 line, one weight for EVERY consent row: an opt-in that reads
+            // quieter than a condition is the platform grading its own asks.
+            "text-sm font-bold leading-snug",
             tone === "on-primary"
               ? "text-primary-surface-foreground peer-disabled:text-primary-surface-foreground"
               : "text-foreground peer-disabled:text-muted-2",
@@ -90,7 +112,8 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
         </span>
       ) : null}
     </label>
-  ),
+    );
+  },
 );
 Checkbox.displayName = "Checkbox";
 

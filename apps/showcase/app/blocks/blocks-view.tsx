@@ -1200,13 +1200,6 @@ const REGISTER_CARD_PROPS: PropRow[] = [
       "Two already-localized FORM-level statements, held apart so a fresh challenge clears one without erasing the other. Neither belongs on a field.",
   },
   {
-    name: "unmetPrecondition",
-    type: "string | null",
-    required: false,
-    description:
-      "A precondition no rendered item covers. Stated beside the disabled submit once every rendered item is granted; null is the enabled state.",
-  },
-  {
     name: "confirmation",
     type: "ReactNode",
     required: false,
@@ -1302,7 +1295,7 @@ function RegisterCardSection() {
   return (
     <BlockSection
       title="RegisterCard"
-      exportsLine="RegisterCard — props: copy · consentItems? · consentNote? · promo? · resolver?/fieldRules? · onSubmit · errors? · unmetPrecondition? · confirmation? · pending? · slots · formDataAttributes? · testIds?"
+      exportsLine="RegisterCard — props: copy · consentItems? · consentNote? · promo? · resolver?/fieldRules? · onSubmit · errors? · confirmation? · pending? · slots · formDataAttributes? · testIds?"
     >
       <p className="text-sm text-muted-foreground">
         The whole registration composition as one reusable unit: the{" "}

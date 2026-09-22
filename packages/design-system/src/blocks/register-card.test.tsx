@@ -11,8 +11,10 @@ afterEach(cleanup);
  * `/register` and the doctor storefront door project. The block owns no copy and
  * no transport, so the harness passes plain markers and asserts on the STRUCTURE
  * the two hosts' shipped e2e depend on: the two consent tiers told apart by their
- * rendering (021 EARS-5, F-021-1 «вариант Б»), the stated reason beside a disabled
- * submit (021 EARS-12), and the form-level statements held apart (003 EARS-17/16).
+ * rendering (021 EARS-5, F-021-1 «вариант Б»), the LIVE submit whose unmet
+ * conditions are reported on their own rows after the press (021 EARS-12, owner
+ * Stage-B 2026-09-22), and the form-level statements held apart (003
+ * EARS-17/16).
  */
 
 const COPY: RegisterCardProps["copy"] = {
@@ -61,7 +63,6 @@ function renderCard(overrides: Partial<RegisterCardProps> = {}) {
       email: "register-email",
       password: "register-password",
       submit: "register-submit",
-      submitReason: "register-submit-reason",
       challengeError: "register-captcha-error",
       commandError: "register-command-error",
       accessGroup: "registration-consent-access",
@@ -128,48 +129,95 @@ describe("<RegisterCard>", () => {
     expect(marketingGroup.textContent?.trim()).toBe("Send me the newsletter");
   });
 
-  it("021 EARS-12: the submit stays disabled with the SPECIFIC unmet reason until every access item is granted", async () => {
+  it("021 EARS-12: the submit is LIVE in every state — there is no disabled button on this surface", async () => {
+    // Owner's Stage-B verdict (2026-09-22) and canvas 211/490: the button is
+    // drawn enabled in every state the canvas has, and the canvas carries no
+    // reason line anywhere.
     const user = userEvent.setup();
     renderCard();
 
     const submit = screen.getByTestId("register-submit");
-    expect(submit).toBeDisabled();
-    // The FIRST unmet condition, in the order it is read on screen.
-    expect(screen.getByTestId("register-submit-reason")).toHaveTextContent(
-      "Confirm you are a medical worker",
-    );
-    expect(submit).toHaveAttribute(
-      "aria-describedby",
-      screen.getByTestId("register-submit-reason").id,
-    );
+    expect(submit).toBeEnabled();
+    expect(submit).not.toHaveAttribute("aria-describedby");
 
     await user.click(screen.getByTestId("register-medworker"));
-    expect(submit).toBeDisabled();
-    expect(screen.getByTestId("register-submit-reason")).toHaveTextContent(
-      "Agree to the partner data transfer",
-    );
+    expect(submit).toBeEnabled();
 
     await user.click(screen.getByTestId("register-partner-data"));
     expect(submit).toBeEnabled();
-    // Honest-empty (021 EARS-3): the paragraph is ABSENT, not empty.
-    expect(screen.queryByTestId("register-submit-reason")).toBeNull();
   });
 
-  it("021 EARS-12: states the host precondition once every rendered item is granted", async () => {
+  it("021 EARS-12: an ungranted access condition is reported ON ITS OWN ROW after the press, and the command is not run", async () => {
     const user = userEvent.setup();
-    renderCard({
-      consentItems: [ACCESS_ITEM],
-      unmetPrecondition: "Registration is temporarily unavailable",
-    });
+    const { onSubmit } = renderCard();
 
-    expect(screen.getByTestId("register-submit-reason")).toHaveTextContent(
-      "Confirm you are a medical worker",
+    // Nothing is said before the visitor asks for anything — the conditions are
+    // not pre-accused.
+    expect(screen.queryByText("Confirm you are a medical worker")).toBeNull();
+
+    await user.type(screen.getByTestId("register-email"), "doctor@clinic.ru");
+    await user.type(screen.getByTestId("register-password"), "supersecret1");
+    await user.click(screen.getByTestId("register-submit"));
+
+    // BOTH unmet conditions are named at once, each under its own row: the
+    // visitor sees everything left to do rather than one obstacle at a time.
+    const medRow = screen.getByTestId("register-medworker-item");
+    const partnerRow = screen.getByTestId("register-partner-data-item");
+    expect(medRow).toHaveTextContent("Confirm you are a medical worker");
+    expect(partnerRow).toHaveTextContent("Agree to the partner data transfer");
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    // The report is TIED to its control, not merely placed near it: the box is
+    // marked invalid and points at the message that explains it.
+    const box = screen.getByTestId("register-medworker");
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    const describedBy = box.getAttribute("aria-describedby") ?? "";
+    const message = medRow.querySelector('[role="alert"]');
+    expect(message).not.toBeNull();
+    expect(describedBy.split(/\s+/)).toContain(message!.id);
+
+    // Granting the condition clears its own report and nothing else.
+    await user.click(box);
+    expect(medRow).not.toHaveTextContent("Confirm you are a medical worker");
+    expect(partnerRow).toHaveTextContent("Agree to the partner data transfer");
+  });
+
+  it("021 EARS-6: the optional opt-in is never reported as unmet", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByTestId("register-submit"));
+
+    const marketingGroup = screen.getByTestId("registration-consent-marketing");
+    expect(marketingGroup.querySelector('[role="alert"]')).toBeNull();
+    expect(screen.getByTestId("register-marketing")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
     );
-    await user.click(screen.getByTestId("register-medworker"));
-    expect(screen.getByTestId("register-submit-reason")).toHaveTextContent(
-      "Registration is temporarily unavailable",
-    );
-    expect(screen.getByTestId("register-submit")).toBeDisabled();
+  });
+
+  it("#2027: the access frame is the canvas frame — no filled heading bar, one uniform padding", () => {
+    // Owner Stage-B 2026-09-22: parity is the RENDERING. Canvas 186-187 frames
+    // the conditions in the card's own 2px ink border with 16px of padding all
+    // round and stands the eyebrow INSIDE that padding as a plain line.
+    renderCard();
+
+    const group = screen.getByTestId("registration-consent-access");
+    expect(group).toHaveClass("border-2", "border-border", "p-4", "gap-3.5");
+
+    const heading = screen.getByText("Access conditions");
+    expect(heading.className).not.toMatch(/\bbg-/);
+    expect(heading.className).not.toMatch(/\bborder-b-2\b/);
+    expect(heading).toHaveClass("text-xs", "font-extrabold", "uppercase");
+  });
+
+  it("#2027: every consent statement reads at one weight — the opt-in is not spoken more quietly", () => {
+    // Canvas 221: the marketing statement is bold ink like any other row. Its
+    // optionality is carried by standing BELOW the submit, outside the frame.
+    renderCard();
+
+    const marketing = screen.getByText("Send me the newsletter");
+    expect(marketing.className ?? "").not.toMatch(/text-muted-foreground/);
   });
 
   it("021 design §7: the promo field is rendered only when the host supplies the slot", () => {

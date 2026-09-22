@@ -11,18 +11,14 @@ import type {
   AuthFlowHostConfig,
 } from "@ds/auth-flow/host-config";
 
-import { DOCTOR_AUTH_FLOW_COPY } from "../messages/auth-flow-copy";
-
 /**
  * What the doctor storefront states about itself so the shared auth flow can
  * serve it (#2027, epic #2020 wave 1).
  *
  * The host value file of `@ds/auth-flow` on this host. A plain constant rather
  * than the Academy's hook: this storefront ships no i18n runtime. Its RU
- * sentences live in `messages/auth-flow-copy.ts` — the `*-copy.ts` name is what
- * makes them rendered UI to the repo's UI guards, and `messages/` is where this
- * host keeps them, as the Academy keeps `messages/ru.json` — and what stays here is
- * the transport, the channels and the site key, which Next inlines from the
+ * auth sentences are the package's own defaults (#2027) — and what stays here is
+ * the transport, the channels, the field SET and the site key, which Next inlines from the
  * literal `process.env.NEXT_PUBLIC_…` expression below.
  */
 
@@ -40,7 +36,9 @@ export const DOCTOR_AUTH_FLOW_API: AuthFlowApiConfig = {
 
 export const DOCTOR_AUTH_FLOW = {
   api: DOCTOR_AUTH_FLOW_API,
-  copy: DOCTOR_AUTH_FLOW_COPY,
+  // No `copy`: every auth word is the package's (#2027 — a field is one thing
+  // on both storefronts). A genuinely host-specific sentence would be a
+  // deep-partial `copy` override here; this host has none.
   /**
    * The auth routes `doctor.school` serves (gate §4.2), stated here as
    * LITERALS: a host config is data a server route file hands to the package,
@@ -150,23 +148,10 @@ export const DOCTOR_AUTH_FLOW = {
         ],
       },
     ],
-    medicalWorkerDeclaration: {
-      label: "Я являюсь медицинским работником",
-      help: "Требование закона: часть материалов доступна только медицинским работникам.",
-      unmet:
-        "Отметьте, что вы медицинский работник — без этого регистрация невозможна.",
-    },
-    partnerDataItem: {
-      help: "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.",
-      unmet:
-        "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.",
-    },
-    marketingOptIn: {
-      help: "Необязательно. Письма отправляет внешний сервис рассылок.",
-    },
+    // WHICH rows this storefront asks for; what each one SAYS is the package's.
+    medicalWorkerDeclaration: true,
+    partnerDataItem: true,
+    marketingOptIn: true,
     wordingVersion: "2026-09",
-    managerNote:
-      "Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.",
-    accessGroupHeading: "Условия доступа",
   },
 } satisfies AuthFlowHostConfig;

@@ -35,6 +35,7 @@ import { authErrorMessage } from "../errors";
 import { registerFieldHint, registerFieldRules } from "../fields";
 import type {
   AuthFlowConsentsConfig,
+  AuthFlowConsentsCopy,
   AuthFlowHostConfig,
 } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
@@ -131,28 +132,35 @@ function tierItem(
 /**
  * The consent CONTROLS this host renders.
  *
- * A row appears exactly where BOTH halves are stated — the read-model item that
- * will be recorded AND the copy of the row drawn around it — so a host that
+ * A row appears exactly where BOTH halves are true — this host ASKS for the row
+ * and its read model carries the item that will be recorded — so a host that
  * shares nothing with partners renders no partner row rather than an empty one,
- * and the Academy, which states one read-only sentence and no row copy, renders
- * no control at all while still recording the purpose behind that sentence.
+ * and the Academy, which asks for no rows, renders no control at all while
+ * still recording the purposes behind its statement.
+ *
+ * What each row SAYS is the package's (#2027): the label, the help line and the
+ * blocked-submit reason come from the copy defaults, so the same declaration
+ * cannot read two ways on two storefronts. The tier item's own `statement`
+ * stays untouched — that is the RECORDED text, not display copy.
  */
 function consentItemsOf(
   config: AuthFlowHostConfig,
+  consentCopy: AuthFlowConsentsCopy,
 ): readonly RegisterCardConsentItem[] {
   const consents = config.consents;
   if (!consents) return [];
   const items: RegisterCardConsentItem[] = [];
 
-  const declaration = consents.medicalWorkerDeclaration;
-  if (declaration) {
+  if (consents.medicalWorkerDeclaration) {
     items.push({
       id: MEDWORKER_ID,
       tier: "access",
-      label: declaration.label,
-      help: declaration.help,
+      label: consentCopy.medicalWorkerDeclaration.label,
+      help: consentCopy.medicalWorkerDeclaration.help,
       required: true,
-      unmetMessage: declaration.unmet,
+      ...(consentCopy.medicalWorkerDeclaration.unmet
+        ? { unmetMessage: consentCopy.medicalWorkerDeclaration.unmet }
+        : {}),
       testId: "register-medworker",
       itemTestId: "register-medworker-item",
       helpTestId: "register-medworker-help",
@@ -164,10 +172,12 @@ function consentItemsOf(
     items.push({
       id: PARTNER_DATA_SHARING_PURPOSE,
       tier: "access",
-      label: partner.statement,
-      help: consents.partnerDataItem.help,
+      label: consentCopy.partnerDataItem.label,
+      help: consentCopy.partnerDataItem.help,
       required: partner.required,
-      unmetMessage: consents.partnerDataItem.unmet,
+      ...(consentCopy.partnerDataItem.unmet
+        ? { unmetMessage: consentCopy.partnerDataItem.unmet }
+        : {}),
       testId: "register-partner-data",
       itemTestId: "register-partner-data-item",
       labelTestId: "register-partner-data-statement",
@@ -180,8 +190,8 @@ function consentItemsOf(
     items.push({
       id: MARKETING_COMMUNICATIONS_PURPOSE,
       tier: "marketing",
-      label: marketing.statement,
-      help: consents.marketingOptIn.help,
+      label: consentCopy.marketingOptIn.label,
+      help: consentCopy.marketingOptIn.help,
       required: marketing.required,
       testId: "register-marketing",
       helpTestId: "register-marketing-help",
@@ -328,7 +338,13 @@ export function RegisterDoor({
     captcha.request((captchaToken) => finishRegistration(values, captchaToken));
   }
 
-  const consentItems = useMemo(() => consentItemsOf(config), [config]);
+  const consentCopy = resolvedCopy.consents;
+  const consentItems = useMemo(
+    () => consentItemsOf(config, consentCopy),
+    [config, consentCopy],
+  );
+  // The access frame is drawn wherever an access row stands in it.
+  const hasAccessRow = consentItems.some((item) => item.tier === "access");
   const cardCopy: RegisterCardCopy = useMemo(
     () => ({
       title: copy.title,
@@ -343,11 +359,11 @@ export function RegisterDoor({
         : {}),
       ...(copy.reveal ? { passwordRevealLabels: copy.reveal } : {}),
       submit: copy.submit,
-      ...(consents?.accessGroupHeading
-        ? { accessGroupHeading: consents.accessGroupHeading }
+      ...(hasAccessRow
+        ? { accessGroupHeading: consentCopy.accessGroupHeading }
         : {}),
     }),
-    [copy, consents],
+    [copy, consentCopy, hasAccessRow],
   );
 
   // The bound field rules of BOTH hosts: the RULE is the package FieldSpec SSOT
@@ -372,7 +388,7 @@ export function RegisterDoor({
   const unmetPrecondition =
     consents?.partnerDataItem &&
     !tierItem(consents, PARTNER_DATA_SHARING_PURPOSE)
-      ? consents.partnerDataItem.unmet
+      ? (consentCopy.partnerDataItem.unmet ?? null)
       : null;
 
   const attribution = config.register.attribution;
@@ -407,12 +423,10 @@ export function RegisterDoor({
           </p>
         ) : null
       }
-      // 003 EARS-20 — the read-only consent sentence a host shows INSTEAD of
-      // controls, in the position it has stood in since it shipped.
+      // 003 EARS-20 — the terms sentence, on EVERY storefront and in the
+      // position it has stood in since it shipped (canvas 208).
       belowFieldsSlot={
-        consents?.statement ? (
-          <p className="text-xs text-muted-foreground">{consents.statement}</p>
-        ) : null
+        <p className="text-xs text-muted-foreground">{consentCopy.statement}</p>
       }
       captchaSlot={
         <BotProtectionField
@@ -438,9 +452,7 @@ export function RegisterDoor({
       }
       consentItems={consentItems}
       // 021 EARS-7 — stated where this host has consent rows at all.
-      consentNote={
-        consents?.tiers?.length ? (consents.managerNote ?? null) : null
-      }
+      consentNote={hasAccessRow ? consentCopy.managerNote : null}
       {...(config.register.promoField && copy.promo
         ? {
             promo: {

@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
-  CONGRESS_SIGN_UP_WINDOW_CLOSES_AT,
-  CONGRESS_SIGN_UP_WINDOW_OPENS_AT,
   resolveCongressSignUpSettings,
   resolveCongressSignUpTimingFloorMs,
   readCongressSignUpTimingFloorMs,
@@ -13,10 +11,29 @@ import {
 const EVENT_ID = "6f1c0a2e-6a7b-4d2f-9b1e-0c3d4e5f6a7b";
 const CONSENT_VERSION = `2026-09-20.sha256-${"a1b2c3d4".repeat(8)}`;
 const VENUE = "Москва, Крокус Экспо, зал 3";
+const OPENS_AT = "2026-10-01T00:00:00.000+03:00";
+const CLOSES_AT = "2027-01-01T00:00:00.000+03:00";
+
+/**
+ * 044 EARS-28 — the two window keys every OTHER case has to carry to reach its
+ * own subject at all: they are required, so a case that omitted them would stop
+ * at the window and never exercise the thing it names.
+ */
+const WINDOW_ENV = {
+  CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
+  CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+} as const;
+
+/** The same two instants as they appear on the resolved settings. */
+const WINDOW_SETTINGS = {
+  windowOpensAt: OPENS_AT,
+  windowClosesAt: CLOSES_AT,
+} as const;
 
 describe("044 congress sign-up — server configuration", () => {
   it("EARS-5: when the intake is configured, system shall take the congress event from server configuration and never from the submission", () => {
     const resolved = resolveCongressSignUpSettings({
+      ...WINDOW_ENV,
       CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
       CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
       CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
@@ -28,6 +45,7 @@ describe("044 congress sign-up — server configuration", () => {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
         eventVenue: VENUE,
+        ...WINDOW_SETTINGS,
       },
     });
   });
@@ -93,6 +111,7 @@ describe("044 congress sign-up — server configuration", () => {
   it("EARS-13: when the configured venue carries surrounding whitespace, system shall resolve it trimmed", () => {
     expect(
       resolveCongressSignUpSettings({
+        ...WINDOW_ENV,
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
         CONGRESS_SIGNUP_EVENT_VENUE: `  ${VENUE}  `,
@@ -103,6 +122,7 @@ describe("044 congress sign-up — server configuration", () => {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
         eventVenue: VENUE,
+        ...WINDOW_SETTINGS,
       },
     });
   });
@@ -162,6 +182,7 @@ describe("044 congress sign-up — server configuration", () => {
   it("EARS-7: when the route timing floor is unusable, system shall refuse the whole intake configuration before any side effect", () => {
     expect(
       resolveCongressSignUpSettings({
+        ...WINDOW_ENV,
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
         CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
@@ -174,6 +195,7 @@ describe("044 congress sign-up — server configuration", () => {
     // reads.
     expect(
       resolveCongressSignUpSettings({
+        ...WINDOW_ENV,
         CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
         CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
         CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
@@ -185,6 +207,7 @@ describe("044 congress sign-up — server configuration", () => {
         eventId: EVENT_ID,
         consentVersion: CONSENT_VERSION,
         eventVenue: VENUE,
+        ...WINDOW_SETTINGS,
       },
     });
   });
@@ -225,42 +248,163 @@ describe("044 congress sign-up — server configuration", () => {
     }
   });
 
-  it("EARS-28: when the clock is before the opening instant, system shall report the window as not yet open and carry that instant", () => {
-    const before = new Date(Date.parse(CONGRESS_SIGN_UP_WINDOW_OPENS_AT) - 1);
+  it("EARS-28: when the clock is before the opening instant, system shall report the window as not yet open and carry the configured instant", () => {
+    const window = { opensAt: OPENS_AT, closesAt: CLOSES_AT };
+    const before = new Date(Date.parse(OPENS_AT) - 1);
 
-    expect(resolveCongressSignUpWindow(before)).toEqual({
+    expect(resolveCongressSignUpWindow(before, window)).toEqual({
       state: "not-yet-open",
-      opensAt: CONGRESS_SIGN_UP_WINDOW_OPENS_AT,
+      // The string as CONFIGURED, not a re-serialisation of the parsed instant:
+      // the caller renders it, and an operator who wrote a Moscow offset must
+      // not see the site announce the same moment in UTC.
+      opensAt: OPENS_AT,
     });
   });
 
   it("EARS-28: when the clock is inside the window, system shall report the window as open", () => {
-    const atOpen = new Date(Date.parse(CONGRESS_SIGN_UP_WINDOW_OPENS_AT));
-    const justBeforeClose = new Date(
-      Date.parse(CONGRESS_SIGN_UP_WINDOW_CLOSES_AT) - 1,
-    );
+    const window = { opensAt: OPENS_AT, closesAt: CLOSES_AT };
+    const atOpen = new Date(Date.parse(OPENS_AT));
+    const justBeforeClose = new Date(Date.parse(CLOSES_AT) - 1);
 
     // The opening instant itself is inside the window; the closing instant is not.
-    expect(resolveCongressSignUpWindow(atOpen)).toEqual({ state: "open" });
-    expect(resolveCongressSignUpWindow(justBeforeClose)).toEqual({
+    expect(resolveCongressSignUpWindow(atOpen, window)).toEqual({
+      state: "open",
+    });
+    expect(resolveCongressSignUpWindow(justBeforeClose, window)).toEqual({
       state: "open",
     });
   });
 
   it("EARS-28: when the clock has reached the closing instant, system shall report the window as closed", () => {
-    const atClose = new Date(Date.parse(CONGRESS_SIGN_UP_WINDOW_CLOSES_AT));
-    const after = new Date(Date.parse(CONGRESS_SIGN_UP_WINDOW_CLOSES_AT) + 1);
+    const window = { opensAt: OPENS_AT, closesAt: CLOSES_AT };
+    const atClose = new Date(Date.parse(CLOSES_AT));
+    const after = new Date(Date.parse(CLOSES_AT) + 1);
 
-    expect(resolveCongressSignUpWindow(atClose)).toEqual({ state: "closed" });
-    expect(resolveCongressSignUpWindow(after)).toEqual({ state: "closed" });
+    expect(resolveCongressSignUpWindow(atClose, window)).toEqual({
+      state: "closed",
+    });
+    expect(resolveCongressSignUpWindow(after, window)).toEqual({
+      state: "closed",
+    });
   });
 
-  it("EARS-28: when the window instants are read, system shall place the opening at the owner-approved 2026-10-01 Moscow midnight and keep the close after it", () => {
-    expect(CONGRESS_SIGN_UP_WINDOW_OPENS_AT).toBe(
-      "2026-10-01T00:00:00.000+03:00",
-    );
-    expect(Date.parse(CONGRESS_SIGN_UP_WINDOW_CLOSES_AT)).toBeGreaterThan(
-      Date.parse(CONGRESS_SIGN_UP_WINDOW_OPENS_AT),
-    );
+  it("EARS-28: when the window instants are configured, system shall resolve them onto the settings exactly as written", () => {
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+        CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
+        CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+      }),
+    ).toEqual({
+      ok: true,
+      settings: {
+        eventId: EVENT_ID,
+        consentVersion: CONSENT_VERSION,
+        eventVenue: VENUE,
+        windowOpensAt: OPENS_AT,
+        windowClosesAt: CLOSES_AT,
+      },
+    });
+  });
+
+  it("EARS-28: when either window instant is unset, system shall report the configuration unusable rather than run an unbounded intake", () => {
+    // There is no default and no open-ended fallback: a deployment that forgot
+    // a key must refuse submissions, not accept them forever. Both directions
+    // are dangerous - an absent opening instant would take registrations before
+    // the congress site is live, an absent closing one would take them after
+    // the congress.
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+        CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+      }),
+    ).toEqual({ ok: false, reason: "window-opens-at-unset" });
+
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+        CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
+        CONGRESS_SIGNUP_WINDOW_CLOSES_AT: "   ",
+      }),
+    ).toEqual({ ok: false, reason: "window-closes-at-unset" });
+  });
+
+  it("EARS-28: when a window instant carries no explicit offset or is not a real date-time, system shall report the configuration unusable", () => {
+    // An offset-less string is the dangerous case this rejects by name: the API
+    // runs in UTC and the congress is in Moscow, so `2026-10-01T00:00:00` would
+    // silently open registration three hours before the date the owner
+    // approved. The operator must write the offset they mean.
+    for (const bad of [
+      "2026-10-01T00:00:00.000",
+      "2026-10-01T00:00:00",
+      "2026-10-01",
+      "01.10.2026 00:00 MSK",
+      "2026-13-01T00:00:00.000+03:00",
+      "tomorrow",
+    ]) {
+      expect(
+        resolveCongressSignUpSettings({
+          CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+          CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+          CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+          CONGRESS_SIGNUP_WINDOW_OPENS_AT: bad,
+          CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+        }),
+      ).toEqual({ ok: false, reason: "window-opens-at-malformed" });
+
+      expect(
+        resolveCongressSignUpSettings({
+          CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+          CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+          CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+          CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
+          CONGRESS_SIGNUP_WINDOW_CLOSES_AT: bad,
+        }),
+      ).toEqual({ ok: false, reason: "window-closes-at-malformed" });
+    }
+
+    // A `Z` offset is explicit and therefore accepted: what is rejected is the
+    // absence of an offset, not the choice of one.
+    expect(
+      resolveCongressSignUpSettings({
+        CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+        CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+        CONGRESS_SIGNUP_WINDOW_OPENS_AT: "2026-09-30T21:00:00Z",
+        CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+      }),
+    ).toEqual({
+      ok: true,
+      settings: {
+        eventId: EVENT_ID,
+        consentVersion: CONSENT_VERSION,
+        eventVenue: VENUE,
+        windowOpensAt: "2026-09-30T21:00:00Z",
+        windowClosesAt: CLOSES_AT,
+      },
+    });
+  });
+
+  it("EARS-28: when the configured close is not strictly after the open, system shall report the configuration unusable", () => {
+    // Equal instants are a window that is never open, and an inverted pair is a
+    // window that is never open either - both would refuse every submitter with
+    // a window refusal the operator would read as «the clock», not «my typo».
+    for (const closesAt of [OPENS_AT, "2026-09-01T00:00:00.000+03:00"]) {
+      expect(
+        resolveCongressSignUpSettings({
+          CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+          CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+          CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+          CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
+          CONGRESS_SIGNUP_WINDOW_CLOSES_AT: closesAt,
+        }),
+      ).toEqual({ ok: false, reason: "window-not-ordered" });
+    }
   });
 });

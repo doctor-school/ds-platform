@@ -60,6 +60,9 @@ import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js"
 // `tsc` actually compiles it — this directory is outside the API's typecheck.
 
 const CONSENT_VERSION = `2026-10-01.sha256-${"a".repeat(64)}`;
+/** 044 EARS-28 — the window this suite drives the clock around, as configured. */
+const WINDOW_OPENS_AT = "2026-10-01T00:00:00.000+03:00";
+const WINDOW_CLOSES_AT = "2027-01-01T00:00:00.000+03:00";
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "044 congress sign-up — public intake, new and existing email (e2e)",
@@ -114,6 +117,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     beforeAll(async () => {
       process.env.CONGRESS_SIGNUP_EVENT_ID = eventId;
       process.env.CONGRESS_SIGNUP_CONSENT_VERSION = CONSENT_VERSION;
+      // EARS-28 — the window is configuration, so this suite configures it
+      // rather than inheriting the runner default: the cases below move the
+      // injected clock to either side of exactly these two instants.
+      process.env.CONGRESS_SIGNUP_WINDOW_OPENS_AT = WINDOW_OPENS_AT;
+      process.env.CONGRESS_SIGNUP_WINDOW_CLOSES_AT = WINDOW_CLOSES_AT;
       // EARS-7 — the route-specific timing floor is a PRODUCTION calibration
       // (≥ the p99 of the heaviest branch, default 1000 ms). Flooring every
       // request of this suite to a whole second would add ~15 s of pure sleep
@@ -343,10 +351,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(422);
       const refusal = CongressSignUpWindowRefusalSchema.parse(res.json());
       expect(refusal.code).toBe("not-yet-open");
-      expect(refusal).toHaveProperty(
-        "opensAt",
-        "2026-10-01T00:00:00.000+03:00",
-      );
+      // The configured string, echoed verbatim - the congress site renders it.
+      expect(refusal).toHaveProperty("opensAt", WINDOW_OPENS_AT);
       await expectNothingWritten(email);
     });
 
@@ -360,6 +366,30 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(CongressSignUpWindowRefusalSchema.parse(res.json()).code).toBe(
         "closed",
       );
+      await expectNothingWritten(email);
+    });
+
+    it("EARS-28: when a window instant is not configured, system shall refuse through the one generic refusal and write nothing", async () => {
+      // The clock is INSIDE the window here: what refuses is the missing key,
+      // not the hour. And it refuses generically rather than with `not-yet-open`
+      // - a deployment that has no opening instant cannot honestly announce one,
+      // and the submitter learns nothing about the deployment either way. The
+      // operator learns the real reason from the server log.
+      const email = uniqueEmail("congress-windowless");
+      const configured = process.env.CONGRESS_SIGNUP_WINDOW_CLOSES_AT;
+      delete process.env.CONGRESS_SIGNUP_WINDOW_CLOSES_AT;
+      let res;
+      try {
+        res = await post(submission(email));
+      } finally {
+        process.env.CONGRESS_SIGNUP_WINDOW_CLOSES_AT = configured;
+      }
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toEqual({
+        code: "sign-up-unavailable",
+        message: "Заявка сейчас не может быть принята.",
+      });
       await expectNothingWritten(email);
     });
 
@@ -494,7 +524,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { email: known } = await registerPlatformUser("congress-parity");
 
       const existing = await post(submission(known));
-      const created = await post(submission(uniqueEmail("congress-parity-new")));
+      const created = await post(
+        submission(uniqueEmail("congress-parity-new")),
+      );
 
       expect(existing.statusCode).toBe(created.statusCode);
       expect(existing.json()).toEqual(created.json());

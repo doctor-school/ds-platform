@@ -10,13 +10,13 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## What lives here
 
-| File                         | Role                                                                                                                                           |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `congress-signup.controller` | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`). |
-| `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in.                                                                   |
-| `congress-signup.config`     | The registration window (code constants) and the three configured settings, validated.                                                         |
-| `congress-signup.tokens`     | The injected clock and the per-request configuration reader.                                                                                   |
-| `congress-signup.dto`        | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                            |
+| File                         | Role                                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `congress-signup.controller` | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`).   |
+| `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in.                                                                     |
+| `congress-signup.config`     | Every configured setting the intake needs — the event, the consent version, the venue, the registration window and the timing floor — validated. |
+| `congress-signup.tokens`     | The injected clock and the per-request configuration reader.                                                                                     |
+| `congress-signup.dto`        | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                              |
 
 ## What this module deliberately does NOT own
 
@@ -33,15 +33,17 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## Configuration
 
-All four keys are validated at request time and a missing or malformed value
+All six keys are validated at request time and a missing or malformed value
 refuses the intake generically — the endpoint never runs with a half-configured meaning.
 
-| Env key                           | Meaning                                                                                                                                                                                                                                  |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONGRESS_SIGNUP_EVENT_ID`        | The uuid of the congress event every submission is registered for.                                                                                                                                                                       |
-| `CONGRESS_SIGNUP_CONSENT_VERSION` | `YYYY-MM-DD.sha256-<64 hex>` — publication date + digest of the published personal-data text (ADR-0009 §2.1). Stamped by the server; never taken from the caller.                                                                        |
-| `CONGRESS_SIGNUP_EVENT_VENUE`     | The venue the confirmation email names («{место}», EARS-13). REQUIRED: a missing or blank value refuses every submission. There is no venue column on `events` — the venue is a constant of THIS congress, like the registration window. |
-| `CONGRESS_SIGNUP_TIMING_FLOOR_MS` | Optional. Whole milliseconds the intake response is padded to, so the new-account and existing-account branches take the same time on the wire (EARS-7). Unset ⇒ the conservative default `1000`.                                        |
+| Env key                            | Meaning                                                                                                                                                                                                                                             |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONGRESS_SIGNUP_EVENT_ID`         | The uuid of the congress event every submission is registered for.                                                                                                                                                                                  |
+| `CONGRESS_SIGNUP_CONSENT_VERSION`  | `YYYY-MM-DD.sha256-<64 hex>` — publication date + digest of the published personal-data text (ADR-0009 §2.1). Stamped by the server; never taken from the caller.                                                                                   |
+| `CONGRESS_SIGNUP_EVENT_VENUE`      | The venue the confirmation email names («{место}», EARS-13). REQUIRED: a missing or blank value refuses every submission. There is no venue column on `events` — the venue is a constant of THIS congress.                                          |
+| `CONGRESS_SIGNUP_WINDOW_OPENS_AT`  | REQUIRED (EARS-28). The instant the intake starts accepting submissions, ISO-8601 with an explicit offset (`2026-10-01T00:00:00.000+03:00` or `…Z`). An offset-less value is refused, never guessed. Echoed verbatim in the `not-yet-open` refusal. |
+| `CONGRESS_SIGNUP_WINDOW_CLOSES_AT` | REQUIRED (EARS-28). The instant it stops, same format, strictly after the open. The closing instant is OUTSIDE the window (half-open interval).                                                                                                     |
+| `CONGRESS_SIGNUP_TIMING_FLOOR_MS`  | Optional. Whole milliseconds the intake response is padded to, so the new-account and existing-account branches take the same time on the wire (EARS-7). Unset ⇒ the conservative default `1000`.                                                   |
 
 **Calibrating the timing floor.** The floor only equalises the two branches if it
 exceeds the SLOWER one — the new-account path, which creates a user in the IdP
@@ -54,9 +56,17 @@ an account?» oracle the floor exists to close. It is read per request, so a
 raised floor needs no redeploy; a value that is not whole milliseconds refuses
 the intake rather than silently reverting to the default.
 
-The registration window is NOT configuration: both instants are code constants
-in `congress-signup.config.ts`, because the window is a product decision
-recorded in the spec rather than an operator knob.
+**The registration window per environment.** Both instants are configuration
+because they differ per environment: a dev stand or a stage slot needs a window
+that is open right now for the intake to be exercisable at all, while production
+carries the owner's real dates (the closing one is a launch input on #2292, and
+the same instants the congress site displays). They are validated beside the
+other 044 keys and fail CLOSED as a pair: unset, offset-less, unparseable or
+closing-before-opening refuses the submission through the one generic refusal —
+NOT through a window refusal, because a deployment with no opening instant
+cannot honestly announce one. There is still no admin screen and no settings
+row; making the window admin-editable is tracked separately (`DEBT.md`,
+2026-09-21).
 
 ## Slice state
 

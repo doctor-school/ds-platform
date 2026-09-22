@@ -279,6 +279,22 @@ export const ApiEnvSchema = z.looseObject({
 
   CONGRESS_SIGNUP_TIMING_FLOOR_MS: z.string().optional(),
 
+  // 044 EARS-28 — the registration window: the instant the public congress
+  // intake starts accepting submissions and the instant it stops, each an
+  // ISO-8601 date-time that states its own OFFSET
+  // (`2026-10-01T00:00:00.000+03:00`). Configuration and not code constants
+  // because the instants differ per environment — the dev-stand and each stage
+  // slot need a window that is open right now for the intake to be exercisable
+  // at all, production needs the owner's real dates — and because the closing
+  // date the owner settles on (#2292) must not cost an API release. Plain
+  // strings here and validated in `congress-signup.config.ts` beside the other
+  // 044 keys: unset, offset-less, unparseable or closing-before-opening refuses
+  // the submission through the one generic refusal, instead of failing the boot
+  // of every runtime that merely shares this schema.
+  CONGRESS_SIGNUP_WINDOW_OPENS_AT: z.string().optional(),
+
+  CONGRESS_SIGNUP_WINDOW_CLOSES_AT: z.string().optional(),
+
   // 006 webinar-room heartbeat cadence N (seconds) — the server-side config the
   // `RoomConfig` grant carries to the client (design §5: "cadence N is server
   // config, default 60 s"). The presence-minute derivation is parameterized over

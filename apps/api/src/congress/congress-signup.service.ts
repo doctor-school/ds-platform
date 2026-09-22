@@ -120,9 +120,15 @@ export class CongressSignUpService {
   async signUp(
     request: CongressSignUpRequest,
   ): Promise<CongressSignUpAccepted> {
-    this.assertInsideWindow();
-
+    // EARS-28 — the settings come FIRST because the window is one of them: the
+    // window cannot be decided before the configuration that states it is
+    // readable. A broken configuration therefore answers the one generic
+    // refusal rather than a window refusal, which is the honest answer — «ещё
+    // не открыта» would tell the submitter a date the deployment does not
+    // actually have. Both still refuse before any side effect, which is what
+    // EARS-28 requires of the window check.
     const settings = this.settingsOrRefuse();
+    this.assertInsideWindow(settings);
     const event = await this.loadRegistrableEvent(settings.eventId);
 
     const consent: {
@@ -375,9 +381,12 @@ export class CongressSignUpService {
     }
   }
 
-  /** EARS-28 — the window, decided first and from the clock alone. */
-  private assertInsideWindow(): void {
-    const window = resolveCongressSignUpWindow(this.now());
+  /** EARS-28 — the configured window against the clock, before any side effect. */
+  private assertInsideWindow(settings: CongressSignUpSettings): void {
+    const window = resolveCongressSignUpWindow(this.now(), {
+      opensAt: settings.windowOpensAt,
+      closesAt: settings.windowClosesAt,
+    });
     if (window.state === "open") return;
 
     const refusal: CongressSignUpWindowRefusal =
@@ -392,7 +401,7 @@ export class CongressSignUpService {
     throw new UnprocessableEntityException(refusal);
   }
 
-  /** EARS-5 / EARS-9 — the configured event and consent version, or a refusal. */
+  /** EARS-5 / EARS-9 / EARS-28 — the whole configured intake, or a refusal. */
   private settingsOrRefuse(): CongressSignUpSettings {
     const resolved = resolveCongressSignUpSettings(this.readEnv());
     if (!resolved.ok) {

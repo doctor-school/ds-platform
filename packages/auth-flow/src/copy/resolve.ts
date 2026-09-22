@@ -1,4 +1,4 @@
-import type { AuthFlowCopy, AuthFlowCopyOverride, AuthFlowHostConfig } from "../host-config";
+import type { AuthFlowCopy, AuthFlowCopyOverride } from "../host-config";
 
 import { DEFAULT_AUTH_FLOW_COPY } from "./defaults";
 
@@ -33,10 +33,18 @@ const mergeDeep = (base: unknown, override: unknown): unknown => {
  */
 const cache = new WeakMap<object, AuthFlowCopy>();
 
+/**
+ * Any host config: only `copy` is read, and the index signature keeps the
+ * parameter from being a weak type, so a config that states no override at all
+ * — the normal case today — still satisfies it.
+ */
+type AuthFlowCopySource = {
+  readonly copy?: AuthFlowCopyOverride | undefined;
+  readonly [key: string]: unknown;
+};
+
 /** The words this host renders: the package defaults with its own override merged over them. */
-export const resolveAuthFlowCopy = (
-  config: Pick<AuthFlowHostConfig, "copy">,
-): AuthFlowCopy => {
+export const resolveAuthFlowCopy = (config: AuthFlowCopySource): AuthFlowCopy => {
   const cached = cache.get(config);
   if (cached) return cached;
 

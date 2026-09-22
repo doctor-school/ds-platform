@@ -5,6 +5,11 @@ import {
   formatPartnerDataStatement,
 } from "@ds/schemas";
 
+import {
+  DEFAULT_AUTH_FLOW_COPY,
+  resolveAuthFlowCopy,
+} from "@ds/auth-flow/copy";
+
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
 
@@ -41,9 +46,14 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
 describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
   it("EARS-1: confirmation has no route of its own — this host confirms INLINE", () => {
     expect(DOCTOR_AUTH_FLOW.routes).not.toHaveProperty("verify");
-    expect(DOCTOR_AUTH_FLOW.copy.register?.confirm?.title).toBe(
+    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).register.confirm?.title).toBe(
       "Проверьте почту",
     );
+  });
+
+  it("#2027: the host restates no auth wording — every sentence is the package's", () => {
+    expect(DOCTOR_AUTH_FLOW).not.toHaveProperty("copy");
+    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW)).toBe(DEFAULT_AUTH_FLOW_COPY);
   });
 
   it("021 EARS-5: the partner-data statement comes from the @ds/schemas SSOT, never a literal", () => {
@@ -67,7 +77,7 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
   });
 
   it("#2331: the door names its way back to the sign-in door", () => {
-    expect(DOCTOR_AUTH_FLOW.copy.register?.haveAccount).toBe(
+    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).register.haveAccount).toBe(
       "Уже есть аккаунт? Войти",
     );
   });

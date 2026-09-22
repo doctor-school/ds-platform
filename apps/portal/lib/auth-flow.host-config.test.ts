@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { AuthFlowHostConfig } from "@ds/auth-flow/host-config";
 
+import {
+  DEFAULT_AUTH_FLOW_COPY,
+  resolveAuthFlowCopy,
+} from "@ds/auth-flow/copy";
+
 import { ACADEMY_AUTH_FLOW } from "./auth-flow.host-config";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";
 import { LOGIN_HREF, PROFILE_HREF } from "./shell-config";
@@ -47,7 +52,6 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     // it after the ack instead of swapping the card in place (the doctor
     // storefront states no `verify` and confirms inline).
     expect(config.routes.verify).toBe("/verify");
-    expect(config.copy.register?.confirm).toBeUndefined();
   });
 
   it("003 EARS-20: ONE required Terms-of-Service tier, at the canonical wording version", () => {
@@ -62,8 +66,9 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     // Both halves name the same purpose: the statement is what the visitor
     // reads, the tier item is what is recorded.
     const items = (config.consents?.tiers ?? []).flatMap((tier) => tier.items);
-    expect(config.consents?.statement).toBe(items[0]?.statement);
-    expect(config.consents?.statement).toBeTruthy();
+    expect(resolveAuthFlowCopy(config).consents.statement).toBe(
+      items[0]?.statement,
+    );
     // No row copy ⇒ the door renders no consent CONTROL on this host.
     expect(config.consents?.medicalWorkerDeclaration).toBeUndefined();
     expect(config.consents?.partnerDataItem).toBeUndefined();
@@ -77,8 +82,6 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     expect(config.register.attribution).toBeUndefined();
     expect(config.register.pointsPromise).toBeUndefined();
     expect(config.register.promoField).toBe(false);
-    expect(config.copy.register?.promo).toBeUndefined();
-    expect(config.copy.fields.promoCode).toBeUndefined();
   });
 
   it("#1934: the shipped Academy render IS the block's own composition", () => {
@@ -88,6 +91,13 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
   });
 
   it("#2331: the door names its way back to the sign-in door", () => {
-    expect(config.copy.register?.haveAccount).toBe("Уже есть аккаунт? Войти");
+    expect(resolveAuthFlowCopy(config).register.haveAccount).toBe(
+      "Уже есть аккаунт? Войти",
+    );
+  });
+
+  it("#2027: the host restates no auth wording — every sentence is the package's", () => {
+    expect(ACADEMY_AUTH_FLOW).not.toHaveProperty("copy");
+    expect(resolveAuthFlowCopy(config)).toBe(DEFAULT_AUTH_FLOW_COPY);
   });
 });

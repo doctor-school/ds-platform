@@ -24,6 +24,36 @@ describe("<AuthCard>", () => {
     expect(screen.getByTestId("body")).toHaveTextContent("the form");
   });
 
+  // Canvas 56-61 (#2027): an OPERATION error — the command the door just ran
+  // failed — stands above the card title, where it is read before the form is
+  // re-read. Field-level messages stay at their field.
+  it("renders the app's error banner above the title", () => {
+    render(
+      <AuthCard
+        title="Sign in"
+        errorBanner={<div data-testid="banner">it failed</div>}
+      >
+        <div>form</div>
+      </AuthCard>,
+    );
+
+    const banner = screen.getByTestId("banner");
+    const title = screen.getByText("Sign in");
+    expect(
+      banner.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("draws no banner region when the app passes none", () => {
+    render(
+      <AuthCard title="Sign in">
+        <div>form</div>
+      </AuthCard>,
+    );
+
+    expect(screen.queryByTestId("banner")).toBeNull();
+  });
+
   it("wraps the icon in a tinted badge tile (neo-brutalist auth-card, #517)", () => {
     // The re-skin promotes the inline icon into a square, tint-filled badge tile above
     // the title (canvas `auth-card` badge: tint surface + accent glyph). It paints from

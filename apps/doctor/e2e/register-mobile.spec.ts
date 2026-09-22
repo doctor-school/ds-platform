@@ -61,9 +61,15 @@ const PASSWORD = "correct horse battery";
 /** The composition statement the tier-1 consent label has to name (021 read model). */
 const COMPOSITION = ["ФИО", "специальность", "город", "место работы"];
 
-/** The copy the screen shows when the register command never reaches the upstream. */
+/**
+ * The copy the screen shows when the register command never reaches the
+ * upstream. Since #2027 PR 1.6 the sign-up door resolves a TRANSPORT failure
+ * through the shared dictionary, exactly as the sign-in door has since PR 1.5,
+ * so this host states its `errors.unavailable` sentence
+ * (`apps/doctor/messages/auth-flow-copy.ts`) instead of the command-failed one.
+ */
 const NETWORK_FAILURE_COPY =
-  "Не удалось завершить регистрацию. Попробуйте ещё раз.";
+  "Сервис временно недоступен. Попробуйте ещё раз через минуту.";
 
 /**
  * The canonical gate hand-off URL, built the way the producer builds it

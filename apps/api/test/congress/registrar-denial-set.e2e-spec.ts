@@ -49,7 +49,10 @@ const REGISTRAR = "event-registrar";
  * session-hold routes must all be real.
  */
 const REGISTRAR_ALLOW_SET: ReadonlySet<string> = new Set([
-  // The reach the role exists for (044 EARS-18 / #2311).
+  // The reach the role exists for (044 EARS-18 / #2311). EARS-19 also names
+  // «the print-sheet data it reads»: no such route is registered yet, and when
+  // one lands it joins this set explicitly — a new route that carries the role
+  // without being enumerated here is exactly what the sweep must fail on.
   "GET /v1/admin/events/:idOrSlug/roster",
   // Holding a session at the admin origin.
   "POST /v1/admin/auth/login",

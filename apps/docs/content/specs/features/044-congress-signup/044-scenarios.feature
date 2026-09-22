@@ -106,6 +106,14 @@ Feature: 044 — Congress sign-up
     When one of those two registrations is removed at the team's manual request
     Then the remaining registration is no longer marked "возможный дубль"
 
+  @EARS-33
+  Scenario: The name answers are cleaned up before anything stores them
+    Given no Doctor.School account exists for "names@example.org"
+    When a participant submits the sign-up form for "names@example.org" with the surname "  иванова ", the first name "мАРИЯ", the patronymic "  сергеевна" and the workplace "НМИЦ им. В. А. Алмазова"
+    Then the registration's answers hold the surname "Иванова", the first name "Мария" and the patronymic "Сергеевна"
+    And the account's display name is "Иванова Мария"
+    And the workplace is stored exactly as the participant typed it
+
   @EARS-30
   Scenario: A registration with no answers payload is never marked
     Given a signed-in doctor has registered for the congress event from the platform feed

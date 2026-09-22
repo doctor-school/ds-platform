@@ -215,3 +215,61 @@ describe("044 EARS-5: the stored answers shape", () => {
     expect(CongressSignUpAnswersSchema.safeParse(answers).success).toBe(true);
   });
 });
+
+describe("044 EARS-33: the name answers of the intake contract", () => {
+  it("044 EARS-33.12: the parsed request carries the normalised names", () => {
+    expect(
+      CongressSignUpRequestSchema.parse({
+        ...valid,
+        surname: "  иванова ",
+        firstName: "мАРИЯ",
+        patronymic: "  сергеевна",
+      }),
+    ).toMatchObject({
+      surname: "Иванова",
+      firstName: "Мария",
+      patronymic: "Сергеевна",
+    });
+  });
+
+  it("044 EARS-33.13: the stored answers carry the normalised names too", () => {
+    const answers = toCongressSignUpAnswers(
+      CongressSignUpRequestSchema.parse({
+        ...valid,
+        surname: "салтыков   щедрин",
+        firstName: "анна-мария",
+      }),
+    );
+    expect(answers).toMatchObject({
+      surname: "Салтыков Щедрин",
+      firstName: "Анна-Мария",
+    });
+    // Idempotent: the same declaration validates the column on read-back.
+    expect(CongressSignUpAnswersSchema.parse(answers)).toMatchObject({
+      surname: "Салтыков Щедрин",
+      firstName: "Анна-Мария",
+    });
+  });
+
+  it("044 EARS-33.14: only the names are normalised — workplace, city and region keep their own capitalisation", () => {
+    expect(
+      CongressSignUpRequestSchema.parse({
+        ...valid,
+        workplace: "НМИЦ им. В. А. Алмазова",
+        city: "ростов-на-Дону",
+        region: "МОСКОВСКАЯ область",
+      }),
+    ).toMatchObject({
+      workplace: "НМИЦ им. В. А. Алмазова",
+      city: "ростов-на-Дону",
+      region: "МОСКОВСКАЯ область",
+    });
+  });
+
+  it("044 EARS-33.15: a name answer of nothing but whitespace is still refused", () => {
+    expect(
+      CongressSignUpRequestSchema.safeParse({ ...valid, surname: "    " })
+        .success,
+    ).toBe(false);
+  });
+});

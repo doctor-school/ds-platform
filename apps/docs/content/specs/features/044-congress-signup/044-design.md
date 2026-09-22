@@ -34,6 +34,14 @@ The «возможный дубль» marker is **derived at read time**, not st
 
 The marker changes nothing about intake: submissions sharing a phone are accepted exactly like any other, with the same identical success response of EARS-7. A refusal or any hint of a shared phone would both break that response identity and leak that some other person registered with that number.
 
+## Name-answer normalisation
+
+The surname, first name and patronymic are normalised in the intake contract itself (`packages/schemas/src/congress/name-answer.ts`, applied by `congress-signup.schema.ts` to those three fields and no others): surrounding whitespace removed, every internal whitespace run collapsed to one space, and each segment capitalised, where a segment ends at a space, a hyphen or an apostrophe — « иван » becomes «Иван», «анна-мария» becomes «Анна-Мария», «ПЕТРОВ» becomes «Петров». These answers are read by an organiser off the roster and off the printed attendance sheet, and `users.display_name` of EARS-4 is derived from them, so the casing a phone keyboard happened to produce is noise rather than evidence.
+
+Server-side rather than an input mask on the congress site, for two reasons. The intake endpoint is public and accepts any well-formed body, so site JavaScript is not part of the trust boundary — a mask would be a suggestion, not a guarantee. And a mask fights the participant mid-word while they are still typing their own name, which is the one field where that is least welcome. The congress site may mirror the same rule on blur as a courtesy; the contract does not depend on it.
+
+Unlike the contact phone above, only the normalised value is stored: there is no comparison job here, and keeping both would give the roster two spellings of one name to choose between. The transform is therefore **idempotent** by construction, and has to be — `answerFields` validates the stored `registrations.answers` column with the very declaration that validates the intake request, so the normalisation runs again on every read-back of a row it already normalised. The bounds are re-checked on the normalised value, so a name that survives `.min(1)`/`.max()` on intake can never fall outside that shape on read. `workplace`, `city` and `region` are deliberately left alone: institution and place names («НМИЦ им. В. А. Алмазова», «Ростов-на-Дону») do not obey a two-rule capitalisation pass, and corrupting them would be worse than uneven casing.
+
 ## Intake cascade — new account
 
 ```mermaid
@@ -191,7 +199,7 @@ erDiagram
         uuid event_id FK
         timestamptz registered_at
         jsonb answers "NEW - null for platform-origin rows; carries the phone as typed and normalised"
-        text confirmation_mail_status "NEW - pending | sent | failed"
+        text confirmation_mail_status "NEW - sent | failed; null until dispatched"
         timestamptz confirmation_mail_at "NEW"
         bool account_created_by_intake "NEW - null for platform-origin rows"
         text record_status

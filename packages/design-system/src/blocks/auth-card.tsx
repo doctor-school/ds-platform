@@ -1,6 +1,14 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../primitives/card";
 
 /**
  * The auth family's eyebrow recipe (#2027, canvas `design-source/auth.dc.html`
@@ -12,14 +20,6 @@ import { cn } from "../lib/utils";
  */
 export const AUTH_EYEBROW =
   "text-eyebrow font-extrabold uppercase tracking-micro text-faint";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "../primitives/card";
 
 /**
  * `<AuthCard>` (#235, re-skinned to the neo-brutalist language in #517) — the owned

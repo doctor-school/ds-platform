@@ -55,7 +55,7 @@
 | GET /v1/public/projects/:idOrSlug/events                        | public        | —                            | none       | —            | false   | none       | none        | EARS-6, EARS-16                    |
 | GET /v1/public/projects/:idOrSlug/experts                       | public        | —                            | none       | —            | false   | none       | none        | EARS-9, EARS-16                    |
 | GET /v1/public/projects/:idOrSlug/partners                      | public        | —                            | none       | —            | false   | none       | none        | EARS-10, EARS-16                   |
-| GET /v1/public/specialties                                      | public        | —                            | none       | —            | false   | none       | none        | EARS-3                             |
+| GET /v1/public/specialties                                      | public        | —                            | none       | —            | false   | none       | none        | EARS-3, EARS-15                    |
 | GET /v1/public/specialties/frequent                             | public        | —                            | none       | —            | false   | none       | none        | EARS-3                             |
 | GET /v1/public/specialties/search                               | public        | —                            | none       | —            | false   | none       | none        | EARS-5                             |
 | GET /v1/public/specialty-choice                                 | public        | —                            | none       | —            | false   | none       | none        | EARS-6                             |

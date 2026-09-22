@@ -398,21 +398,33 @@ with no rows referring to a missing object.
 
 `seed:golden` writes the dataset inside **one** transaction, refreshing the
 columns it owns except the set-once publication instants. Most rows upsert on
-their fixed UUID. Volume **registrations** are re-pinned in place by replacing
-only the seed-owned registration UUID namespace (group `0005`, ordinals ≥1000)
-before inserting the new plan. At a later pin the eligible event pool changes,
-so the same ordinal can acquire a different `(user_id, event_id)` pair; ordinary
-id-keyed updates could collide with a pair still held by another old ordinal.
-The replacement removes those old assignments atomically, including obsolete
-ordinals. Named catalogue registration ids and all non-golden registrations
-(including product-created rows for golden doctors) remain outside that delete.
-A conflicting non-golden pair fails the transaction rather than overwriting it.
+their fixed UUID. Some volume rows cannot: their id is a POSITION in the plan
+while the logical row is a PAIRING the pin decides, so a later pin hands an
+ordinal a pair another ordinal still holds and an id-keyed update walks into the
+table's unique key instead. Those steps declare `replacesVolumeNamespace` in
+`plan.ts`, and the executor replaces the seed-owned ordinal namespace of that id
+group (ordinals ≥1000) before inserting the new plan — atomically, obsolete
+ordinals included. Three steps declare it today:
+
+| Step               | Id group | Unique key a re-pin would hit             | Why the pairing walks                                    |
+| ------------------ | -------- | ----------------------------------------- | -------------------------------------------------------- |
+| `event_directions` | `000f`   | `event_directions_pair_key`               | two direction slots walked per эфир, split by «upcoming» |
+| `registrations`    | `0005`   | `registrations_user_id_event_id_unique`   | the eligible event pool changes with the pin             |
+| `event_recordings` | `0006`   | `event_recordings_event_kind_active_uniq` | a running ordinal over the pin-dependent recorded эфиры  |
+
+Named catalogue ids sit BELOW ordinal 1000 and all non-golden rows carry no
+golden UUID, so neither is inside the replaced range — product-created rows for
+golden doctors survive a re-seed untouched. A conflicting non-golden pair fails
+the transaction rather than overwriting it. A step may declare the property only
+while nothing references its rows: a child FK would turn the replacement into a
+cascade or a `restrict` failure, which is what the e2e regression asserts with a
+`pg_constraint` query per table.
 
 A second run under the same `GOLDEN_NOW` changes no dataset values. A later run
-re-dates events and replaces the volume registration plan, while preserving
-set-once publication instants. No reset is needed for persistent `main`.
-All-or-nothing: a later failure rolls the registration replacement back with the
-rest of the seed. Production never invokes this staging-only seed.
+re-dates events and replaces those volume plans, while preserving set-once
+publication instants. No reset is needed for persistent `main`. All-or-nothing:
+a later failure rolls every replacement back with the rest of the seed.
+Production never invokes this staging-only seed.
 
 The database regression runs in the API's PostgreSQL-backed CI job:
 `pnpm --filter @ds/api test test/scripts/golden-seed.e2e-spec.ts`. It executes the

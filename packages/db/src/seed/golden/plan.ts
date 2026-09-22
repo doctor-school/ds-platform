@@ -29,6 +29,7 @@ import {
   projects,
 } from "../../schema/taxonomy.js";
 import { users } from "../../schema/users.js";
+import { GOLDEN_GROUP } from "./ids.js";
 import type {
   GoldenDataset,
   GoldenDirectionSpecialtyLink,
@@ -58,6 +59,26 @@ export interface GoldenSeedStep {
   rows: Record<string, unknown>[];
   conflictKeys: string[];
   updateKeys: string[];
+  /**
+   * Id group ({@link GOLDEN_GROUP}) whose VOLUME ordinal namespace this step
+   * owns outright and replaces on every run.
+   *
+   * Declared by the steps whose rows are a pin-dependent PAIRING rather than a
+   * pinned identity: a later pin reshuffles which logical pair each positional
+   * ordinal carries, so a row-by-row upsert on `id` walks straight into the
+   * table's pair unique key against an ordinal the same run has not rewritten
+   * yet (`registrations_user_id_event_id_unique` #2271,
+   * `event_directions_pair_key` #2351). The executor deletes
+   * `[GOLDEN_VOLUME_ORDINAL_BASE, max ordinal]` of this group inside the seed
+   * transaction, immediately before the upsert.
+   *
+   * Deliberately NOT a blanket policy. Named catalogue rows sit BELOW the
+   * volume base and keep their identity through the upsert, product-created
+   * rows carry no golden uuid at all, and a step may declare it only while no
+   * other table references its rows — a child FK would turn the replacement
+   * into a cascade or a `restrict` failure.
+   */
+  replacesVolumeNamespace?: number;
 }
 
 /**
@@ -175,9 +196,17 @@ export function buildGoldenSeedPlan(
     step("stream_config", streamConfig, dataset.streamConfig, ["eventId"]),
     step("event_experts", eventExperts, dataset.eventExperts, ["id"]),
     step("event_projects", eventProjects, dataset.eventProjects, ["id"]),
-    step("event_directions", eventDirections, dataset.eventDirections, ["id"]),
-    step("registrations", registrations, dataset.registrations, ["id"]),
-    step("event_recordings", eventRecordings, dataset.eventRecordings, ["id"]),
+    // The three tables below carry a pairing that walks with the pin rather
+    // than a pinned identity: see `replacesVolumeNamespace`.
+    step("event_directions", eventDirections, dataset.eventDirections, ["id"], {
+      replacesVolumeNamespace: GOLDEN_GROUP.eventDirections,
+    }),
+    step("registrations", registrations, dataset.registrations, ["id"], {
+      replacesVolumeNamespace: GOLDEN_GROUP.registrations,
+    }),
+    step("event_recordings", eventRecordings, dataset.eventRecordings, ["id"], {
+      replacesVolumeNamespace: GOLDEN_GROUP.eventRecordings,
+    }),
     step("consent_records", consentRecords, dataset.consentRecords, ["id"]),
     step(
       "doctor_specialties",
@@ -232,6 +261,7 @@ function step(
   table: unknown,
   rows: readonly Record<string, unknown>[],
   conflictKeys: string[],
+  options: { replacesVolumeNamespace?: number } = {},
 ): GoldenSeedStep {
   const keys = new Set<string>();
   for (const row of rows) for (const key of Object.keys(row)) keys.add(key);
@@ -240,6 +270,9 @@ function step(
     table,
     rows: rows as Record<string, unknown>[],
     conflictKeys,
+    ...(options.replacesVolumeNamespace === undefined
+      ? {}
+      : { replacesVolumeNamespace: options.replacesVolumeNamespace }),
     // A re-run refreshes every non-key column it wrote, minus the set-once
     // publication instants. Columns the dataset never sets are left alone
     // rather than reset to a default: the seed owns what it writes, not the

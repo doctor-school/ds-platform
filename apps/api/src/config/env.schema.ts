@@ -268,6 +268,15 @@ export const ApiEnvSchema = z.looseObject({
   // the boot of every runtime that merely shares this schema. Unset ⇒ the
   // conservative default in that unit; raising it after a live p99 measurement
   // is an ops action, which is why it is configuration and not a constant.
+  // 044 EARS-13 — the congress VENUE, as the confirmation email names it
+  // («{место}»). A per-deployment constant of this one congress rather than an
+  // `events` column: the catalogue's other events are webinars with no place,
+  // and 044 adds no admin-editable setting. Optional here so every runtime that
+  // merely shares this schema still boots; the intake itself fails CLOSED —
+  // unset or blank refuses the submission through the same generic refusal the
+  // event id produces, before any side effect.
+  CONGRESS_SIGNUP_EVENT_VENUE: z.string().optional(),
+
   CONGRESS_SIGNUP_TIMING_FLOOR_MS: z.string().optional(),
 
   // 006 webinar-room heartbeat cadence N (seconds) — the server-side config the

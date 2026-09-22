@@ -5,7 +5,11 @@ import {
   verificationCodeEmail,
   passwordResetCodeEmail,
 } from "./code-emails.js";
-import { accountExistsMessage, adminLockoutMessage } from "./notice-emails.js";
+import {
+  accountExistsMessage,
+  adminLockoutMessage,
+  congressConfirmationMessage,
+} from "./notice-emails.js";
 
 // Contract parity (a test fake must be no more permissive than the real
 // dependency, #202 precedent): FakeMailer and the real SmtpMailer must reject the
@@ -25,6 +29,16 @@ describe("transactional HTML/plain-text content parity", () => {
     ["reset", passwordResetCodeEmail("GX5AVU")],
     ["account-exists", accountExistsMessage("https://academy.example.test")],
     ["admin-lockout", adminLockoutMessage()],
+    [
+      "congress-confirmation",
+      congressConfirmationMessage({
+        portalBaseUrl: "https://academy.example.test",
+        eventTitle: "Конгресс-2027",
+        eventDate: "12 марта 2027 г. в 10:00",
+        eventVenue: "Москва, Крокус Экспо",
+        accountIsNew: true,
+      }),
+    ],
   ] as const) {
     it(`EARS-29: ${name} has the same visible content and actions in HTML and plain text`, () => {
       const visibleHtml = message.html
@@ -164,6 +178,58 @@ describe("003 EARS-29: code-email FakeMailer ↔ SmtpMailer contract parity", ()
     ]);
     expect(fake.passwordResetCodeEmails).toEqual([
       { to: VALID_EMAIL, code: CODE },
+    ]);
+  });
+});
+
+// 044 EARS-13: the confirmation email joins the SAME parity contract — the fake
+// must refuse exactly the recipient addresses the real adapter refuses, so a
+// congress e2e that leaned on the fake accepting a malformed address fails here
+// rather than the first time a real relay is asked to deliver to it.
+describe("044 EARS-13: congress-confirmation FakeMailer ↔ SmtpMailer contract parity", () => {
+  const CONFIRMATION = {
+    eventTitle: "Конгресс-2027",
+    eventStartsAt: new Date("2027-03-12T07:00:00.000Z"),
+    eventVenue: "Москва, Крокус Экспо",
+    accountIsNew: true,
+  } as const;
+
+  it("044 EARS-13: when the recipient is invalid, both adapters shall reject", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    for (const bad of INVALID_EMAILS) {
+      await expect(
+        fake.sendCongressRegistrationConfirmation({
+          ...CONFIRMATION,
+          email: bad,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        smtp.sendCongressRegistrationConfirmation({
+          ...CONFIRMATION,
+          email: bad,
+        }),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("044 EARS-13: when the recipient is valid, both adapters shall accept; the fake records the send", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    await expect(
+      fake.sendCongressRegistrationConfirmation({
+        ...CONFIRMATION,
+        email: VALID_EMAIL,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      smtp.sendCongressRegistrationConfirmation({
+        ...CONFIRMATION,
+        email: VALID_EMAIL,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.congressConfirmations).toEqual([
+      { ...CONFIRMATION, email: VALID_EMAIL, to: VALID_EMAIL },
     ]);
   });
 });

@@ -1,5 +1,10 @@
 import { emailSender } from "./email-layout.js";
-import { accountExistsMessage, adminLockoutMessage } from "./notice-emails.js";
+import {
+  accountExistsMessage,
+  adminLockoutMessage,
+  congressConfirmationMessage,
+  formatCongressEventDate,
+} from "./notice-emails.js";
 import { resolveRealSmtp } from "../config/real-smtp.js";
 import {
   loginCodeEmail,
@@ -9,6 +14,7 @@ import {
 import {
   assertSendableCode,
   assertSendableEmail,
+  type CongressConfirmationRequest,
   type Mailer,
 } from "./mailer.types.js";
 import {
@@ -105,6 +111,22 @@ export class SmtpMailer implements Mailer {
     assertSendableEmail(email);
     assertSendableCode(code);
     await this.dispatch(email, loginCodeEmail(code), "login-code email");
+  }
+  async sendCongressRegistrationConfirmation(
+    input: CongressConfirmationRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      congressConfirmationMessage({
+        portalBaseUrl: this.config.portalBaseUrl,
+        eventTitle: input.eventTitle,
+        eventDate: formatCongressEventDate(input.eventStartsAt),
+        eventVenue: input.eventVenue,
+        accountIsNew: input.accountIsNew,
+      }),
+      "congress registration confirmation",
+    );
   }
   private async dispatch(
     to: string,

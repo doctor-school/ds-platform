@@ -126,6 +126,8 @@ sequenceDiagram
 
 The existing mailer throws a typed rejection only to a caller that awaits it (`apps/api/src/mailer/smtp-mailer.ts:207-244`); the 003 auth callers deliberately never await on the response path (`auth.service.ts:550-556`, `:618-628`). 044 keeps that isolation but, unlike 003, does not merely log: the outcome becomes a column on the registration row so the registrar sees it in the roster and the resubmission path has something to decide on. No outbox, no scheduled sweep — the recovery mechanism is the participant resubmitting, which the `(user_id, event_id)` uniqueness already makes safe.
 
+The mail's «{место}» has no column to come from: `events` carries a title and a start instant, not a venue, and 044 adds no admin-editable settings. The venue is therefore a per-deployment constant of THIS congress, exactly as the registration window is — a fourth allow-listed key, `CONGRESS_SIGNUP_EVENT_VENUE`, validated beside the event id and REQUIRED: a missing value refuses the intake generically rather than sending a confirmation with a blank place. «{дата}» is `events.starts_at` rendered in `Europe/Moscow`, the zone the congress, the organiser and the audience are all in; rendering an instant in the server's local zone would shift an owner-approved date the day the API runs anywhere else.
+
 ## Registration and mail state
 
 ```mermaid

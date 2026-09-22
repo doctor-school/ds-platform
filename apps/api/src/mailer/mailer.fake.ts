@@ -1,6 +1,7 @@
 import {
   assertSendableCode,
   assertSendableEmail,
+  type CongressConfirmationRequest,
   type Mailer,
 } from "./mailer.types.js";
 
@@ -28,8 +29,14 @@ export class FakeMailer implements Mailer {
   /** Every accepted §13.4 password-reset-code send (EARS-11), in order. */
   readonly passwordResetCodeEmails: Array<{ to: string; code: string }> = [];
   readonly loginCodeEmails: Array<{ to: string; code: string }> = [];
+  /** Every accepted 044 EARS-13 congress confirmation, in order. */
+  readonly congressConfirmations: Array<
+    CongressConfirmationRequest & { to: string }
+  > = [];
   /** When set, the NEXT code send rejects with it (models a transport outage). */
   private nextCodeSendFailure: Error | undefined;
+  /** When set, the NEXT congress confirmation rejects with it (044 EARS-12). */
+  private nextCongressConfirmationFailure: Error | undefined;
 
   /**
    * Test control: make every SUBSEQUENT code send reject with `error` — the
@@ -38,6 +45,20 @@ export class FakeMailer implements Mailer {
    */
   failNextCodeSends(error: Error): void {
     this.nextCodeSendFailure = error;
+  }
+
+  /**
+   * Test control for 044 EARS-12: make the NEXT congress confirmation reject
+   * with `error`, then clear itself.
+   *
+   * One-shot rather than sticky (unlike {@link failNextCodeSends}) because the
+   * handler under test is the RESUBMISSION path: the first dispatch must fail
+   * and the second must succeed within one test, which a sticky flag cannot
+   * express without the test reaching into the fake between two requests it
+   * does not control the ordering of.
+   */
+  failNextCongressConfirmation(error: Error): void {
+    this.nextCongressConfirmationFailure = error;
   }
 
   // `async` so the parity guard's rejection is delivered as a rejected promise
@@ -80,6 +101,21 @@ export class FakeMailer implements Mailer {
     this.passwordResetCodeEmails.push({
       to: email.trim().toLowerCase(),
       code,
+    });
+  }
+
+  async sendCongressRegistrationConfirmation(
+    input: CongressConfirmationRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    if (this.nextCongressConfirmationFailure) {
+      const failure = this.nextCongressConfirmationFailure;
+      this.nextCongressConfirmationFailure = undefined;
+      throw failure;
+    }
+    this.congressConfirmations.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
     });
   }
 }

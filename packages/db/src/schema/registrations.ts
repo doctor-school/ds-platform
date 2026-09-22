@@ -3,6 +3,7 @@ import {
   check,
   index,
   jsonb,
+  pgEnum,
   pgTable,
   timestamp,
   unique,
@@ -77,6 +78,26 @@ export interface RegistrationAnswers {
   contactPhoneNormalised: string;
 }
 
+/**
+ * 044 EARS-12 — the outcome of the congress confirmation-email dispatch.
+ *
+ * Two values and no third: a dispatch either reached the relay chain's
+ * acceptance (`sent`) or was rejected after failover (`failed`). There is no
+ * `pending` member, because the column is NULLABLE and `NULL` already carries
+ * that meaning precisely — see the column's own comment. A `pending` enum value
+ * would need a writer that sets it before the send and a reader that can tell
+ * «pending since a second ago» from «pending since the process died», which is
+ * an outbox; 044 deliberately has none (design §Mail failure).
+ *
+ * A SEPARATE type from `record_status` and from `events.state` on the #1278
+ * precedent: this axis is «did one email leave the building», not the row's
+ * presence and not a domain state machine.
+ */
+export const confirmationMailStatus = pgEnum("confirmation_mail_status", [
+  "sent",
+  "failed",
+]);
+
 export const registrations = pgTable(
   "registrations",
   {
@@ -123,6 +144,28 @@ export const registrations = pgTable(
      * login identifier.
      */
     answers: jsonb("answers").$type<RegistrationAnswers | null>(),
+    /**
+     * 044 EARS-12 — the recorded outcome of the confirmation email for THIS
+     * registration, and the instant it was recorded.
+     *
+     * NULLABLE, and both meanings of `NULL` are deliberate: a platform-origin
+     * row (EARS-16, a signed-in doctor registering from the feed) is never owed
+     * a congress confirmation and stays `NULL` for all time, and a congress row
+     * is `NULL` only in the window between the commit and the off-response-path
+     * dispatch resolving. Defaulting to a `pending` value would make those two
+     * facts indistinguishable and would promise a sweeper that re-reads them;
+     * 044 has no outbox and no scheduled sweep (design §Mail failure).
+     *
+     * The pair is what the resubmission path decides on: `failed` re-dispatches
+     * and overwrites, `sent` sends no second email (EARS-12), and the roster
+     * reads the same two columns to show the registrar the mail state. Written
+     * ONLY after the account/registration/consent transaction has committed, so
+     * a send outcome can never roll a registration back (EARS-11).
+     */
+    confirmationMailStatus: confirmationMailStatus("confirmation_mail_status"),
+    confirmationMailAt: timestamp("confirmation_mail_at", {
+      withTimezone: true,
+    }),
   },
   (table) => [
     // The one-registration invariant (EARS-3, ADR-0003 §5): at most one

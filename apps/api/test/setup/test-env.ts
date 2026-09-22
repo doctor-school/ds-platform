@@ -13,3 +13,11 @@
 // inside its own file, and a suite that deletes the key in `afterAll` cannot
 // take the default away from the file that runs next in the same worker.
 process.env["CONGRESS_SIGNUP_TIMING_FLOOR_MS"] ??= "5";
+
+// 044 EARS-13: the venue is a required deployment constant of the congress, so
+// `resolveCongressSignUpSettings` refuses every submission without it. The
+// three suites that drive the intake care about the OTHER settings, and the one
+// suite that asserts the mail copy sets its own venue in `beforeAll` - so the
+// runner supplies a neutral default the same way it supplies the floor.
+process.env["CONGRESS_SIGNUP_EVENT_VENUE"] ??= "Москва, тестовая площадка";
+

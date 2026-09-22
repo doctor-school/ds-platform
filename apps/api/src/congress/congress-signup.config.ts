@@ -76,6 +76,19 @@ export interface CongressSignUpSettings {
   eventId: string;
   /** The version stamped on the personal-data consent row (EARS-9). */
   consentVersion: string;
+  /**
+   * 044 EARS-13 — the «{место}» line of the confirmation email.
+   *
+   * Configuration and NOT an `events` column, for the same reason the window
+   * instants are code constants rather than a knob: this is one congress, and
+   * the venue is a constant of it. Adding a venue column to `events` would put
+   * a field on every webinar in the catalogue — none of which has a place —
+   * purely so one mail can name one address, and 044 explicitly adds no new
+   * admin-editable setting. It is trimmed and required: a confirmation email
+   * that says «зарегистрированы на …: 12 марта, .» is worse than a refused
+   * submission the operator can see in the log.
+   */
+  eventVenue: string;
 }
 
 /** Why the congress configuration cannot be used, for the server log only. */
@@ -84,6 +97,7 @@ export type CongressSignUpConfigProblem =
   | "event-id-malformed"
   | "consent-version-unset"
   | "consent-version-malformed"
+  | "event-venue-unset"
   | "timing-floor-malformed";
 
 export type CongressSignUpConfigResult =
@@ -95,6 +109,7 @@ export type CongressSignUpEnv = Pick<
   Partial<ApiEnv>,
   | "CONGRESS_SIGNUP_EVENT_ID"
   | "CONGRESS_SIGNUP_CONSENT_VERSION"
+  | "CONGRESS_SIGNUP_EVENT_VENUE"
   | "CONGRESS_SIGNUP_TIMING_FLOOR_MS"
 >;
 
@@ -186,13 +201,24 @@ export function resolveCongressSignUpSettings(
     return { ok: false, reason: "consent-version-malformed" };
   }
 
+  // EARS-13 — validated HERE with the rest, and BEFORE any side effect: the
+  // venue is only read once the registration has committed and the mail is
+  // being built, so a deployment that forgot the key would otherwise register
+  // participants for weeks and only then discover it cannot describe the event
+  // to them. Failing the submission closed instead keeps «accepted» meaning
+  // «and you will be told where to come».
+  const eventVenue = env.CONGRESS_SIGNUP_EVENT_VENUE?.trim();
+  if (eventVenue == null || eventVenue === "") {
+    return { ok: false, reason: "event-venue-unset" };
+  }
+
   // EARS-7 — validated HERE, with the other two, so a misconfigured floor
   // refuses the submission before any side effect and through the same generic
   // refusal, rather than silently running the intake at the default floor.
   const timingFloor = resolveCongressSignUpTimingFloorMs(env);
   if (!timingFloor.ok) return { ok: false, reason: timingFloor.reason };
 
-  return { ok: true, settings: { eventId, consentVersion } };
+  return { ok: true, settings: { eventId, consentVersion, eventVenue } };
 }
 
 /** 044 EARS-28 — where `now` falls relative to the registration window. */

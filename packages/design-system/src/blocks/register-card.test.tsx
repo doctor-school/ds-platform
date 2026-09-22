@@ -208,7 +208,9 @@ describe("<RegisterCard>", () => {
     const heading = screen.getByText("Access conditions");
     expect(heading.className).not.toMatch(/\bbg-/);
     expect(heading.className).not.toMatch(/\bborder-b-2\b/);
-    expect(heading).toHaveClass("text-xs", "font-extrabold", "uppercase");
+    // The exact kegel/tracking/tone of that line is the family eyebrow recipe,
+    // asserted against the canvas by the `#2027` tone spec below.
+    expect(heading).toHaveClass("font-extrabold", "uppercase");
   });
 
   it("#2027: every consent statement reads at one weight — the opt-in is not spoken more quietly", () => {
@@ -473,5 +475,60 @@ describe("#2027 <RegisterCard> pre-hydration submit", () => {
     for (const form of forms) {
       expect(form.getAttribute("method")).toBe("post");
     }
+  });
+});
+
+/**
+ * Canvas tone pass (#2027, owner rule 2026-09-22 «parity is the rendering»).
+ * `design-source/auth.dc.html` speaks the door's secondary copy in `inkFaint`,
+ * not the darker `inkMuted` the block had been reaching for, and it sets three
+ * half-step kegels the Tailwind ladder has no rung for: the consent statement at
+ * 13.5px, the conditions note at 11.5px, the eyebrow at 11px. The design system
+ * now carries all three as named tokens, so the block names the token instead of
+ * approximating with the nearest whole step.
+ */
+describe("#2027 <RegisterCard> canvas tone and kegel", () => {
+  it("#2027: the conditions eyebrow speaks at the canvas 11px in the FAINT tone (canvas 187)", () => {
+    renderCard();
+
+    const heading = screen.getByText("Access conditions");
+    expect(heading).toHaveClass(
+      "text-eyebrow",
+      "font-extrabold",
+      "uppercase",
+      "tracking-micro",
+      "text-faint",
+    );
+    expect(heading.className).not.toMatch(/text-muted-foreground/);
+  });
+
+  it("#2027: the withdrawal note runs at the canvas 11.5px half-step in the faint tone (canvas 204)", () => {
+    renderCard({ consentNote: "You may withdraw a consent at any time" });
+    expect(
+      screen.getByTestId("registration-consent-manager-note"),
+    ).toHaveClass("text-pill", "leading-normal", "text-faint");
+
+    cleanup();
+    // The frameless host (marketing rows only) says the same sentence in the
+    // same voice — a second placement is not a second style.
+    renderCard({
+      consentItems: [MARKETING_ITEM],
+      consentNote: "You may withdraw a consent at any time",
+    });
+    expect(
+      screen.getByTestId("registration-consent-manager-note"),
+    ).toHaveClass("text-pill", "leading-normal", "text-faint");
+  });
+
+  it("#2027: the reason under a consent statement is faint, not muted (canvas 192/200/222)", () => {
+    renderCard({
+      consentItems: [
+        { ...ACCESS_ITEM, help: "We check the register", helpTestId: "help" },
+      ],
+    });
+
+    const help = screen.getByTestId("help");
+    expect(help).toHaveClass("text-xs", "leading-normal", "text-faint");
+    expect(help.className).not.toMatch(/text-muted-foreground/);
   });
 });

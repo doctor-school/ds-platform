@@ -20,7 +20,7 @@ import {
   FormMessage,
 } from "../primitives/form";
 import { Input } from "../primitives/input";
-import { AuthCard } from "./auth-card";
+import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 
 /**
  * `<RegisterCard>` (#1934) — the ONE canonical registration composition both
@@ -497,8 +497,10 @@ export function RegisterCard({
                 {copy.accessGroupHeading ? (
                   <p
                     id={accessHeadingId}
-                    // Canvas 187 — an eyebrow, in the quiet tone.
-                    className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground"
+                    // Canvas 187 — an eyebrow: 11px/800 on the `micro`
+                    // tracking, in the FAINT tone the canvas gives every
+                    // secondary line on the door.
+                    className={AUTH_EYEBROW}
                   >
                     {copy.accessGroupHeading}
                   </p>
@@ -528,7 +530,9 @@ export function RegisterCard({
                 {consentNote ? (
                   <p
                     {...testIdProps(testIds?.note)}
-                    className="text-xs leading-normal text-muted-foreground"
+                    // Canvas 204 — the withdrawal sentence at the 11.5px
+                    // half-step on a 1.5 line, in the faint tone.
+                    className="text-pill leading-normal text-faint"
                   >
                     {consentNote}
                   </p>
@@ -579,7 +583,9 @@ export function RegisterCard({
             {!accessItems.length && consentNote ? (
               <p
                 {...testIdProps(testIds?.note)}
-                className="text-xs leading-normal text-muted-foreground"
+                // Canvas 204 — the same sentence in the same voice when the
+                // host draws no conditions frame to hold it.
+                className="text-pill leading-normal text-faint"
               >
                 {consentNote}
               </p>
@@ -636,7 +642,7 @@ function ConsentControl({
                     // Canvas 192/200/222 — the reason under the statement is
                     // 12px on a 1.5 line in the quiet tone, a step below the
                     // statement rather than the same size as it.
-                    className="text-xs leading-normal font-normal text-muted-foreground"
+                    className="text-xs leading-normal font-normal text-faint"
                   >
                     {item.help}
                   </span>

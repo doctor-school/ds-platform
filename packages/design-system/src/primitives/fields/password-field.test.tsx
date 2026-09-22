@@ -68,7 +68,9 @@ describe("PasswordField composition (inline message)", () => {
     expect(descs).toHaveLength(1);
     const desc = descs[0]!;
     expect(desc).toHaveTextContent(POLICY);
-    expect(desc).toHaveClass("text-xs", "text-muted-foreground");
+    // #2027 canvas — the password hint is the form's quietest line: 12px/600
+    // in the faint tone, the package-wide helper voice.
+    expect(desc).toHaveClass("text-xs", "font-semibold", "text-faint");
     // Exactly one message paragraph under the field — no extra blank line.
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });

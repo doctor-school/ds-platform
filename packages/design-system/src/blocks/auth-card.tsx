@@ -1,6 +1,17 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+
+/**
+ * The auth family's eyebrow recipe (#2027, canvas `design-source/auth.dc.html`
+ * 66/106/187): 11px weight 800, uppercase, on the `micro` tracking, in the faint
+ * tone. «Способ входа», «Канал кода» and «Условия доступа» are the same kind of
+ * line on three screens, so they share ONE recipe rather than three hand-tuned
+ * class strings that drift apart. Package-internal on purpose — it is a family
+ * detail, not a public API surface.
+ */
+export const AUTH_EYEBROW =
+  "text-eyebrow font-extrabold uppercase tracking-micro text-faint";
 import {
   Card,
   CardContent,

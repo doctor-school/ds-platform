@@ -164,7 +164,11 @@ const FORM_MESSAGE_TEXT = "text-xs";
 // text rides its own role (light #C81E1E / dark red.400 #E15555, 4.75:1 on the
 // dark card), which keeps the message legible in both themes.
 const FORM_ERROR_TONE = "font-bold text-destructive-text";
-const FORM_HELPER_TONE = "text-muted-foreground";
+// #2027 canvas `design-source/auth.dc.html` — the hint under a field is the
+// quietest line on the screen: 12px weight 600 in the FAINT tone, a rung below
+// the muted body copy. A field is ONE thing, so this is the package default for
+// every helper, not an auth-only override.
+const FORM_HELPER_TONE = "font-semibold text-faint";
 const FORM_ON_PRIMARY_TONE = "text-primary-surface-foreground";
 // Success tone (#529, source §07 «Формы и валидация» — the `Success` cell): the
 // confirmation reads 12px **weight 700** in the success role with a leading `✓`, the

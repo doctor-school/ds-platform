@@ -102,7 +102,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
             // Canvas 191/199/221 — the statement reads 13.5px/700 in ink on a
             // 1.4 line, one weight for EVERY consent row: an opt-in that reads
             // quieter than a condition is the platform grading its own asks.
-            "text-sm font-bold leading-snug",
+            "text-chip font-bold leading-label",
             tone === "on-primary"
               ? "text-primary-surface-foreground peer-disabled:text-primary-surface-foreground"
               : "text-foreground peer-disabled:text-muted-2",

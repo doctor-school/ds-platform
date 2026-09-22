@@ -447,9 +447,14 @@ describe("021 EARS-4/5/6/7/12/19: the consent rows a host states, and what is re
   it("003 EARS-20: the Academy asks for no control — it states one read-only sentence under the credentials", async () => {
     await renderDoor(ACADEMY_FIXTURE);
 
-    expect(
-      screen.getByText(resolveAuthFlowCopy(ACADEMY_FIXTURE).consents.statement),
-    ).toBeInTheDocument();
+    const statement = screen.getByText(
+      resolveAuthFlowCopy(ACADEMY_FIXTURE).consents.statement,
+    );
+    expect(statement).toBeInTheDocument();
+    // #2027 canvas `design-source/auth.dc.html:208` — the terms sentence is the
+    // quietest line in the form: 12px on a 1.55 prose line in the FAINT tone.
+    expect(statement).toHaveClass("text-xs", "leading-prose", "text-faint");
+    expect(statement.className).not.toMatch(/text-muted-foreground/);
     expect(
       screen
         .getByTestId("registration-form")

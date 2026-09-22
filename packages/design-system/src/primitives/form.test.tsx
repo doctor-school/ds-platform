@@ -86,11 +86,15 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     expect(msg).toHaveAttribute("role", "alert");
   });
 
-  it("shows the helper by default (muted, small, visible, no alert)", () => {
+  it("shows the helper by default (quiet, small, visible, no alert)", () => {
+    // #2027 canvas `design-source/auth.dc.html` — the hint under a field reads
+    // 12px/600 in the FAINT tone. It is the quietest line on the screen, a rung
+    // below the muted body copy the helper used to borrow.
     render(<Harness helper="We never share this." />);
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("We never share this.");
-    expect(msg).toHaveClass("text-xs", "text-muted-foreground");
+    expect(msg).toHaveClass("text-xs", "font-semibold", "text-faint");
+    expect(msg.className).not.toMatch(/text-muted-foreground/);
     expect(msg).not.toHaveAttribute("aria-hidden");
     expect(msg).not.toHaveAttribute("role", "alert");
   });

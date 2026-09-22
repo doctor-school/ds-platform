@@ -437,7 +437,9 @@ export function RegisterDoor({
       // 003 EARS-20 — the terms sentence, on EVERY storefront and in the
       // position it has stood in since it shipped (canvas 208).
       belowFieldsSlot={
-        <p className="text-xs text-muted-foreground">{consentCopy.statement}</p>
+        <p className="text-xs leading-prose text-faint">
+          {consentCopy.statement}
+        </p>
       }
       captchaSlot={
         <BotProtectionField

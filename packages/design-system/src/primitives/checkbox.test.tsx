@@ -104,10 +104,13 @@ describe("Checkbox — token-class contract (#513)", () => {
     // at 13.5px/700 on a 1.4 line, 12px clear of the box.
     const { container } = render(<Checkbox>Согласен</Checkbox>);
 
+    // The scale now carries that half-step as `chip` (13.5px) and the 1.4 line
+    // as `label`, so the statement names them instead of rounding up to the
+    // nearest whole rung.
     expect(screen.getByText("Согласен")).toHaveClass(
-      "text-sm",
+      "text-chip",
       "font-bold",
-      "leading-snug",
+      "leading-label",
     );
     expect(container.querySelector("label")).toHaveClass("gap-3");
   });

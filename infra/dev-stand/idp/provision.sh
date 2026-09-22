@@ -54,8 +54,10 @@ REDIRECT_URIS="${IDP_REDIRECT_URIS:-http://localhost:3000/auth/callback,http://l
 POST_LOGOUT_URIS="${IDP_POST_LOGOUT_URIS:-http://localhost:3000,http://localhost:3100}"
 # Project roles to seed, comma-separated (the live BFF test asserts the roles
 # claim is parsed). `doctor_guest` is the default registrant role; `platform_admin`
-# is the admin role the 007 admin surface + admin E2E depend on (#662).
-SEED_ROLE="${IDP_SEED_ROLE:-doctor_guest,platform_admin}"
+# is the admin role the 007 admin surface + admin E2E depend on (#662);
+# `event-registrar` is the 044 congress registrar role (044 EARS-17) the roster
+# route authorizes on. Seeding the KEY costs nothing until a user is granted it.
+SEED_ROLE="${IDP_SEED_ROLE:-doctor_guest,platform_admin,event-registrar}"
 
 # Delivery-mode flags (#176) — switch Zitadel's email/SMS providers between the
 # free dev sinks (default) and the REAL providers, the env-flag precedent of
@@ -260,7 +262,7 @@ else
 fi
 
 # ── 2. ensure seed project roles ─────────────────────────────────────────────
-# Seeds ALL roles in the SEED_ROLE CSV (doctor_guest + platform_admin) — each is
+# Seeds ALL roles in the SEED_ROLE CSV (see its default above) — each is
 # search-by-key/create-if-absent, so this loop is idempotent per role.
 IFS=',' read -r -a _roles <<< "$SEED_ROLE"
 for role in "${_roles[@]}"; do

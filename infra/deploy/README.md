@@ -479,7 +479,9 @@ at first-instance init (Apply order step 9, `zitadel.env` FIRSTINSTANCE block):
 **Operator access to the product admin app is a PROJECT role, not a Zitadel
 manager role.** `platform_admin` is a project role on the OIDC project (seeded
 by provision.sh step 2); the admin surface authorizes on that role in the token
-(spec §6.4). Issue it to a future admin user as a user grant, via the bootstrap
+(spec §6.4). `event-registrar` (044 EARS-17) is the second such project role,
+seeded by the same step and granted the same way — it authorizes the congress
+roster surface only. Issue either to a user as a user grant, via the bootstrap
 PAT (idempotent — re-granting an existing grant is rejected as a no-change):
 
 ```bash

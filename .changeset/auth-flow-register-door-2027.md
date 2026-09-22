@@ -34,3 +34,8 @@ the partner-link notice under the promo field. `<LoginCard>` moves the challenge
 from the head of the sign-in-code step to directly above the button it protects,
 as it already stood on the password method. The `Checkbox` box no longer shrinks
 when its label wraps onto several lines.
+
+Every auth sentence now has ONE source: the package copy defaults, taken from the
+owner's auth canvas. A host config states the SET of fields it renders, its routes,
+endpoints, channels and brand assets — no host words a field any more, and the
+optional `copy` deep-partial override stays declared but unused on both storefronts.

@@ -500,7 +500,12 @@ export type AuthFlowCopyOverride = DeepPartial<AuthFlowCopy>;
 type DeepPartial<T> = T extends readonly (infer Item)[]
   ? readonly Item[]
   : T extends object
-    ? { readonly [K in keyof T]?: DeepPartial<T[K]> }
+    ? {
+        // `| undefined` is deliberate under `exactOptionalPropertyTypes`: a host
+        // may hand a key through whose value is absent at runtime, and the
+        // resolver reads that as «states nothing», keeping the package default.
+        readonly [K in keyof T]?: DeepPartial<T[K]> | undefined;
+      }
     : T;
 
 export type AuthFlowHostConfig = {

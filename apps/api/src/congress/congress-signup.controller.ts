@@ -6,6 +6,7 @@ import { BotProtected } from "../bot-protection/index.js";
 import { RateLimited } from "../auth/rate-limit/index.js";
 import { CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import { TimingEqualized } from "../auth/timing/index.js";
+import { readCongressSignUpTimingFloorMs } from "./congress-signup.config.js";
 import { CongressSignUpRequestDto } from "./congress-signup.dto.js";
 import { CongressSignUpService } from "./congress-signup.service.js";
 
@@ -22,13 +23,18 @@ import { CongressSignUpService } from "./congress-signup.service.js";
  *   its own 60/15-min per-client-address ceiling. A scoped bucket means this
  *   page can never exhaust the budget register / login / reset share, nor be
  *   exhausted by them (#1646 mechanism, #2294 ceiling).
- * - `@TimingEqualized()` — the refusal for a known address must not be faster
- *   than the acceptance of an unknown one; an existence oracle in the timing is
- *   an existence oracle whatever the body says.
+ * - `@TimingEqualized({ floorMs })` — the existing-account path must not answer
+ *   faster than the new-account one; an existence oracle in the timing is an
+ *   existence oracle whatever the body says. The floor is this route's OWN
+ *   (EARS-7), not the 40 ms auth-door default: both branches here run past that
+ *   default, so it would pad neither and the whole work difference — an IdP
+ *   create plus a transaction versus an account lookup — would stay on the wire.
+ *   It is read per request from server configuration, so raising it after a live
+ *   p99 measurement needs no redeploy.
  *
  * `@HttpCode(200)`, not 201: the success body is deliberately identical for the
- * new-account path and (from slice 3) the existing-account one, and a 201 would
- * disclose which of the two happened.
+ * new-account path and the existing-account one, and a 201 would disclose which
+ * of the two happened.
  *
  * No CORS configuration is added here or anywhere for this route: the congress
  * site posts through its own origin's proxy, and a cross-origin allowance would
@@ -47,7 +53,7 @@ export class CongressSignUpController {
   @Post("sign-up")
   @Public()
   @RateLimited(CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE)
-  @TimingEqualized()
+  @TimingEqualized({ floorMs: readCongressSignUpTimingFloorMs })
   @BotProtected("congress-sign-up")
   @HttpCode(200)
   @Authz({

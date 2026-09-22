@@ -38,16 +38,17 @@ Feature: 044 — Congress sign-up
     And no credential was ever set on that account
 
   @EARS-6 @EARS-7
-  Scenario: Failure branch — existing email never rewrites the profile and never leaks
+  Scenario: An email the platform already knows is attached, not rewritten and not disclosed
     Given an account exists for "known@example.org" with its own display name, phone and profile values
     When a participant submits the sign-up form with "known@example.org" and different name, phone, workplace, city and region values
     Then the registration is attached to the existing account
     And every profile field of that account is unchanged
     And the submitted answers are stored only on the registration row
     And the response body, status code and timing class are identical to the new-account response
+    And that response body is exactly the single accepted state the congress site renders its confirmation from
 
   @EARS-8 @EARS-12
-  Scenario: Failure branch — repeat submission is a no-op that looks like success
+  Scenario: A repeat submission is an idempotent no-op behind the same success response
     Given "known@example.org" is already registered for the congress event
     And that registration's confirmation-mail outcome is sent
     When the same form is submitted again with the same email

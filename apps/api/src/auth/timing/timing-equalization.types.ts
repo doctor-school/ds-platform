@@ -30,3 +30,31 @@ export const TIMING_CLOCK = Symbol("TIMING_CLOCK");
 
 /** Nest metadata key the `@TimingEqualized` decorator writes and the interceptor reads. */
 export const TIMING_EQUALIZED_KEY = "ds:timing-equalized";
+
+/**
+ * A route-specific floor: a fixed number of milliseconds, or a READER of one.
+ *
+ * The reader form exists because a decorator argument is evaluated once, at
+ * class-definition time, while some floors are server configuration an operator
+ * may raise without a redeploy (044 EARS-7 / `CONGRESS_SIGNUP_TIMING_FLOOR_MS`).
+ * The metadata then carries the reader rather than the number and the
+ * interceptor resolves it per request — the same "read per request, not captured
+ * at boot" rule the congress configuration already follows.
+ */
+export type TimingFloor = number | (() => number);
+
+/**
+ * What `@TimingEqualized(...)` may carry.
+ *
+ * A route that omits it keeps {@link DEFAULT_TIMING_FLOOR_MS} — the auth doors
+ * (register / login / reset), whose branches all sit under that default. A route
+ * whose heaviest branch runs past the default MUST name its own floor: a floor
+ * below the heavier branch pads neither branch, so the full work difference
+ * stays on the wire and the equalization is nominal only.
+ */
+export interface TimingEqualizedOptions {
+  floorMs?: TimingFloor;
+}
+
+/** The metadata value: `true` for the default floor, or the route's options. */
+export type TimingEqualizedMetadata = true | TimingEqualizedOptions;

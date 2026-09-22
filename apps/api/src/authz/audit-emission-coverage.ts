@@ -91,7 +91,15 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
     // 044 EARS-1 (#2294) — the public congress intake. Like the 021 command
     // above it is a host projection: account creation is delegated to
     // `AuthService.createPasswordlessAccount`, which appends the one
-    // `Registered` row. A 044-local event would double-count one account.
+    // `Registered` row ON CREATION. A 044-local event would double-count one
+    // account.
+    //
+    // 044 EARS-6 (#2299): when the submitted email ALREADY has an account the
+    // same route attaches a registration to it and appends no `Registered` row
+    // — nothing was registered as an account, and a second row would make the
+    // ledger's «how many accounts were created» answer wrong. The declaration
+    // below is therefore the set of events this route CAN emit, not a per-call
+    // obligation.
     "POST /v1/congress/sign-up": {
       emits: ["Registered"],
       coveredBy:

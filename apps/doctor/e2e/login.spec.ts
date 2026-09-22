@@ -115,7 +115,13 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
 
   // `role="alert"` is the design system's `<FormError>` — the assertion is that
   // the message arrives through the BLOCK, carrying the host's RU mapping.
-  const alert = form
+  // #2027: an OPERATION-level failure is about the whole screen, so the canvas
+  // (`design-source/auth.dc.html:56-61`) states it in `AuthCard.errorBanner` —
+  // above the card title, and therefore OUTSIDE the password `<form>`. Scoped to
+  // the block's own screen root, so a doctor-local re-implementation of the
+  // element would still not satisfy it.
+  const alert = page
+    .getByTestId("login-screen")
     .getByRole("alert")
     .filter({ hasText: WRONG_PASSWORD_COPY });
   await expect(alert).toBeVisible();

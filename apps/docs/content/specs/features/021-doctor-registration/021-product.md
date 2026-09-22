@@ -60,7 +60,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 **Register from a gate (US-1, US-2, US-3, US-4, US-6, US-7, US-8, US-9, US-13):**
 
 1. A guest doctor presses «Участвовать» on an event (020), or opens a gated lesson, or reaches a congress ticket → they arrive at the registration screen with the **return context carried along**.
-2. The screen states the soft terms («email and password — that is enough; no documents at the door») and shows **what they will get back to**.
+2. The screen states the soft terms in the card subtitle («free, two minutes — e-mail and password are all that is needed») and shows **what they will get back to**.
 3. They fill in email and password, optionally a promo code, then tick the **mandatory** medical-worker box and the **mandatory** partner-data consent; the **optional** newsletter box is visually set apart from both.
 4. Submit → «letter sent, confirm your email» (the state carried by the `auth` canvas).
 5. They confirm the email → the success state: **starting points credited**, a line on what completing the profile adds (certificates and НМО), and the **return to the point of interest** as the primary action; «to my account» is secondary. _(Amended 2026-09-17: the doctor now lands on that point of interest **directly** — the post-confirmation success state and its secondary «в личный кабинет» action are withdrawn, the destination unchanged. See [`021-requirements-en.md`](./021-requirements-en.md) → Amendment — 2026-09-17.)_

@@ -109,8 +109,12 @@ test.describe("021 EARS-11: per-field validation on the registration door", () =
     // never stacks under it, and it restates the same rule so nothing is lost.
     const slot = await messageSlot(page, "register-password");
     await expect(slot).toContainText(PASSWORD_TOO_SHORT);
+    // ONE element on the door carries the sentence — the slot itself. Counted
+    // by containment rather than by exact text: an erroring `FormMessage`
+    // prefixes the design system's own «⚠» affordance (see EARS-11.1 above), so
+    // an exact-text count would measure the glyph, not the doubling this pins.
     await expect(
-      page.getByText(PASSWORD_HINT, { exact: true }),
+      page.getByTestId("registration-form").getByText(PASSWORD_HINT),
       "the hint is replaced, not doubled",
     ).toHaveCount(1);
     await expect(password).toHaveAttribute("aria-invalid", "true");

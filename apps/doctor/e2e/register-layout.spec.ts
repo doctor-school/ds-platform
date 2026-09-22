@@ -12,13 +12,14 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * On REQ-22 and the word «документ». The requirement (021-requirements-en §112)
  * bans the *request*: "no upload control, no file input, no document field and no
- * «прикрепите диплом» copy". It does not ban the promise — the canvas card head
- * says «Документы на входе не нужны.», which is REQ-22 being *stated to the
- * doctor*, and 021-product.md builds the whole positioning on it. So 1.3 scans
- * for request-shaped tells and asserts the promise is present, instead of
- * banning a substring. The scan stays scoped to the registration screen because
- * that is the surface the requirement governs — the scope is the contract, not a
- * workaround for neighbouring copy.
+ * «прикрепите диплом» copy". It does not ban the promise — and the owner's canvas
+ * (#2027, `design-source/auth.dc.html`) carries the soft terms in ONE sentence,
+ * the card subtitle «Бесплатно, за две минуты — нужны только e-mail и пароль.»,
+ * instead of the former second line «Документы на входе не нужны.». So 1.3 scans
+ * for request-shaped tells and asserts the subtitle that states the soft terms,
+ * instead of banning a substring. The scan stays scoped to the registration
+ * screen because that is the surface the requirement governs — the scope is the
+ * contract, not a workaround for neighbouring copy.
  *
  * Scope of this slice: layout only. The envelope's other slots (return context,
  * attribution, points promise, consent tiers — return context #1538, attribution
@@ -50,8 +51,9 @@ const DOCUMENT_REQUEST_TELLS = [
   "подтвердите квалификацию",
 ];
 
-/** The REQ-22 promise as the canvas states it in the card head. */
-const NO_DOCUMENTS_PROMISE = "Документы на входе не нужны.";
+/** The soft terms as the canvas states them in the card head (#2027). */
+const SOFT_TERMS_SUBTITLE =
+  "Бесплатно, за две минуты — нужны только e-mail и пароль.";
 
 async function assertNoDocumentRequest(page: Page, state: string) {
   // No upload affordance anywhere on the document, in any state.
@@ -143,9 +145,10 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
   }) => {
     await page.goto("/register");
     await assertNoDocumentRequest(page, "empty");
-    // REQ-22 is not merely absent — the card head states it to the doctor.
+    // REQ-22 is not merely absent — the card head still states the soft terms
+    // the doctor is being asked to accept, in the canvas's own one sentence.
     await expect(page.getByTestId("registration-form-card")).toContainText(
-      NO_DOCUMENTS_PROMISE,
+      SOFT_TERMS_SUBTITLE,
     );
 
     await page.getByTestId("register-email").fill("doctor@clinic.ru");

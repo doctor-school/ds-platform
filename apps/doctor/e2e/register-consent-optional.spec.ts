@@ -100,11 +100,30 @@ test.describe("021 EARS-6: the marketing opt-in is genuinely optional", () => {
     await expect(reason).toBeVisible();
     await expect(reason).not.toContainText(/рассылк|маркетинг|материал/i);
 
-    // And the opt-in is marked optional on its own label rather than merely
-    // being left out of the reason line.
+    // And withholding it costs nothing by RENDERING too, not merely by being
+    // left out of the reason line: 021 EARS-5 asks for the two tiers to be
+    // distinguishable on the screen, and the owner's canvas says how (#2027,
+    // `design-source/auth.dc.html:217-225`) — no optional badge, the opt-in
+    // simply stands OUTSIDE the access-conditions frame the submit depends on,
+    // BELOW the submit.
     await expect(
-      page.getByTestId("register-marketing-optional-tag"),
-    ).toBeVisible();
+      page.getByTestId("registration-consent-access").getByTestId(
+        "register-marketing",
+      ),
+      "the opt-in is not inside the access-conditions frame",
+    ).toHaveCount(0);
+    await expect(page.getByTestId("register-marketing")).toBeVisible();
+
+    const submitBox = await page.getByTestId("register-submit").boundingBox();
+    const optInBox = await page
+      .getByTestId("registration-consent-marketing")
+      .boundingBox();
+    expect(submitBox, "submit box").not.toBeNull();
+    expect(optInBox, "opt-in box").not.toBeNull();
+    expect(
+      optInBox!.y,
+      "the opt-in stands below the submit",
+    ).toBeGreaterThan(submitBox!.y + submitBox!.height);
   });
 
   test("021 EARS-6.3: left alone, the opt-in sends no consent entry at all", async ({

@@ -194,7 +194,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         [
           eventId,
           eventSlug,
-          "Конгресс-2026",
+          "Конгресс-2027",
           "Конгресс",
           "2026-11-20T09:00:00.000Z",
           480,

@@ -202,7 +202,7 @@ describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", (
 
       await waitFor(() =>
         expect(screen.getByTestId("register-captcha-error")).toHaveTextContent(
-          config.copy.errors.botProtectionRequired,
+          config.copy.botProtection.required,
         ),
       );
       // A refused challenge is never a failed command…
@@ -226,7 +226,7 @@ describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", (
 
       await waitFor(() =>
         expect(screen.getByTestId("register-captcha-error")).toHaveTextContent(
-          config.copy.errors.botProtectionRejected,
+          config.copy.botProtection.rejected,
         ),
       );
       expect(screen.queryByTestId("register-command-error")).toBeNull();

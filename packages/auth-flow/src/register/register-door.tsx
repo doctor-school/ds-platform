@@ -248,12 +248,20 @@ export function RegisterDoor({
         botProtectionFailureMessage(failure, botProtectionMessages(config)),
       ),
     onActionError: (err) => {
+      // 021 EARS-19.4 — a guard that REFUSES the token, or answers that one was
+      // required, is a challenge outcome and reads out of the CHALLENGE
+      // dictionary beside the widget, never out of `errors.botProtection*`:
+      // those two sentences word the surfaces that carry no challenge slot
+      // (the sign-in door), and on the doctor host they send the visitor to the
+      // other storefront — which from a form that CAN re-run the challenge
+      // would be false advice.
+      const challenge = botProtectionMessages(config);
       if (isBotProtectionRejected(err)) {
-        setChallengeError(errors.botProtectionRejected);
+        setChallengeError(challenge.rejected);
         return;
       }
       if (isBotProtectionRequired(err)) {
-        setChallengeError(errors.botProtectionRequired);
+        setChallengeError(challenge.required);
         return;
       }
       setCommandError(authErrorMessage(err, errors, copy.failed));

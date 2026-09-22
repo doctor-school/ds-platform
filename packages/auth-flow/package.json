@@ -6,6 +6,7 @@
   "description": "DS Platform shared auth-flow unit — one BFF auth client, one error dictionary, one bot-protection composition, one field-rule set, and the server half (one session read, one signed-in guard, one returnTo parking rule), hosted by both storefronts (ADR-0013 A1, epic #2020 wave 1).",
   "exports": {
     "./host-config": "./src/host-config.ts",
+    "./copy": "./src/copy/index.ts",
     "./client": "./src/client/index.ts",
     "./server": "./src/server/index.ts",
     "./errors": "./src/errors/index.ts",

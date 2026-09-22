@@ -96,6 +96,33 @@ export type AuthFlowCopy = {
   readonly botProtectionDisclosure: AuthFlowBotProtectionDisclosureCopy;
   /** The return-context card beside a door (row 46) — present exactly where `returnTo.card`. */
   readonly returnContext?: AuthFlowReturnContextCopy;
+  /**
+   * The consent rows' words, keyed by the row the door draws. WHICH rows a host
+   * asks for is the host's `consents` flags; what each row SAYS is the
+   * package's, so the same declaration cannot read two ways on two storefronts.
+   */
+  readonly consents: AuthFlowConsentsCopy;
+};
+
+/** One consent row: the control's label, the line under it, and the blocked-submit reason. */
+export type AuthFlowConsentRowCopy = {
+  readonly label: string;
+  readonly help: string;
+  /** The reason under a blocked submit; absent on a row that blocks nothing. */
+  readonly unmet?: string;
+};
+
+/** The registration door's consent block (021 EARS-4/5/6/7/12). */
+export type AuthFlowConsentsCopy = {
+  /** The frame the access conditions stand in. */
+  readonly accessGroupHeading: string;
+  readonly medicalWorkerDeclaration: AuthFlowConsentRowCopy;
+  readonly partnerDataItem: AuthFlowConsentRowCopy;
+  readonly marketingOptIn: AuthFlowConsentRowCopy;
+  /** 021 EARS-7 — the withdrawal statement, with no self-service control beside it. */
+  readonly managerNote: string;
+  /** The terms sentence under the consent group, on every host (canvas 208). */
+  readonly statement: string;
 };
 
 /** The brand panel's four lines (row 47) — the canvas value prop and the panel footer. */
@@ -254,11 +281,13 @@ export type AuthFlowRegisterCopy = {
     readonly hideAria: string;
   };
   readonly submit: string;
-  /** The promo box's words — stated exactly where `register.promoField` is true (row 9). */
+  /** The promo box's words — rendered exactly where `register.promoField` is true (row 9). */
   readonly promo?: {
     readonly label: string;
     readonly placeholder: string;
   };
+  /** The partner-link plate above the promo box (canvas 177-179). */
+  readonly partnerPlate: string;
   /** #2331 — the already-registered visitor's way out, on BOTH doors. */
   readonly haveAccount: string;
   /**
@@ -436,48 +465,49 @@ export type AuthFlowConsentsConfig = {
   /** The composed statements and purposes this door renders as CONTROLS. */
   readonly tiers?: readonly ConsentTier[];
   /**
-   * 021 EARS-4 — the medical-worker declaration. A DECLARATION: stating it asks
-   * for no document, and the row renders (and the purpose is recorded) exactly
-   * where this copy is stated.
+   * 021 EARS-4 — whether this door asks for the medical-worker declaration. A
+   * DECLARATION: asking for it asks for no document. Its words are the
+   * package's (`copy.consents.medicalWorkerDeclaration`); the host states only
+   * that the row is asked for.
    */
-  readonly medicalWorkerDeclaration?: {
-    readonly label: string;
-    readonly help: string;
-    readonly unmet: string;
-  };
-  /** 021 EARS-5/12 — the partner-data access condition; its statement is a tier item. */
-  readonly partnerDataItem?: {
-    readonly help: string;
-    /** The reason under a blocked submit, including where the item is unsupplied. */
-    readonly unmet: string;
-  };
+  readonly medicalWorkerDeclaration?: boolean;
+  /** 021 EARS-5/12 — whether the partner-data access condition is asked for; its statement is a tier item. */
+  readonly partnerDataItem?: boolean;
   /**
-   * 021 EARS-6 — the optional opt-in below the submit. Its optionality is
-   * carried by WHERE it stands (outside the access frame, under the button) and
-   * by its quieter tone, so no «необязательно» marker is drawn beside it
-   * (owner's canvas, `design-source/auth.dc.html:217-225`).
+   * 021 EARS-6 — whether the optional opt-in stands below the submit. Its
+   * optionality is carried by WHERE it stands and by its quieter tone, so no
+   * marker is drawn beside it (`design-source/auth.dc.html:217-225`).
    */
-  readonly marketingOptIn?: { readonly help: string };
+  readonly marketingOptIn?: boolean;
   /** 021 EARS-19 (#1558) — the version of the WORDING every recorded consent is stamped with. */
   readonly wordingVersion: string;
-  /** 021 EARS-7 — the withdrawal statement, with no self-service control beside it. */
-  readonly managerNote?: string;
-  /** The frame the access conditions stand in («Условия доступа»). */
-  readonly accessGroupHeading?: string;
-  /**
-   * The read-only consent sentence a host shows INSTEAD of controls, under the
-   * credentials and above the challenge (the Academy's shipped render). The
-   * purposes it covers are still the `tiers` items, so the sentence and the
-   * record cannot drift.
-   */
-  readonly statement?: string;
 };
+
+/**
+ * A host's copy override: any single key of {@link AuthFlowCopy}, merged over
+ * the package defaults by `resolveAuthFlowCopy` (`@ds/auth-flow/copy`).
+ *
+ * TODAY NEITHER HOST SETS IT. It exists for a genuinely host-specific sentence,
+ * never as a place to restate the shared wording — a field is one thing on both
+ * storefronts, and the host varies only the SET of fields (#2027).
+ */
+export type AuthFlowCopyOverride = DeepPartial<AuthFlowCopy>;
+
+type DeepPartial<T> = T extends readonly (infer Item)[]
+  ? readonly Item[]
+  : T extends object
+    ? { readonly [K in keyof T]?: DeepPartial<T[K]> }
+    : T;
 
 export type AuthFlowHostConfig = {
   readonly api: AuthFlowApiConfig;
   readonly routes: AuthFlowRoutes;
   readonly landing: AuthFlowLandingConfig;
-  readonly copy: AuthFlowCopy;
+  /**
+   * Absent on both storefronts today: every word comes from the package
+   * defaults. Set a key here only for a sentence that genuinely differs.
+   */
+  readonly copy?: AuthFlowCopyOverride;
   readonly brand: AuthFlowBrand;
   /**
    * The SmartCaptcha site key VALUE, not the env name.

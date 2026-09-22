@@ -271,6 +271,36 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const sent = await waitForMailOutcome(email, "sent");
       expect(confirmationsFor(email)).toHaveLength(1);
       expect(sent.at!.getTime()).toBeGreaterThanOrEqual(failed.at!.getTime());
+      // The re-send is the SAME message the failed attempt owed, copy included.
+      // By the second submission the account exists - this intake created it on
+      // the first - so a paragraph chosen from the current call would tell a
+      // participant to sign in to an account they have never heard of. The
+      // variant is a stored fact of the registration (EARS-12), frozen at the
+      // first submission by `ON CONFLICT DO NOTHING`.
+      expect(confirmationsFor(email)[0]).toMatchObject({ accountIsNew: true });
+    });
+
+    it("044 EARS-12.4: when a participant who already had an account resubmits after a failure, the re-sent confirmation shall keep the existing-account paragraph", async () => {
+      const { email } = await registerUniqueFakeUserFixture({
+        app,
+        pool,
+        fake,
+        nextEmail: () => uniqueEmail("congress-mail-retry-existing"),
+        password: "Aa1!ufficiently-long-pw",
+        consent: [{ purpose: "tos", version: "2026-01" }],
+      });
+      mailer.failNextCongressConfirmation(new Error("relay unreachable"));
+      expect((await post(submission(email))).statusCode).toBe(200);
+      await waitForMailOutcome(email, "failed");
+
+      expect((await post(submission(email))).statusCode).toBe(200);
+
+      await waitForMailOutcome(email, "sent");
+      expect(confirmationsFor(email)).toHaveLength(1);
+      // The mirror of 12.2: the stored fact says the intake did NOT create this
+      // account, so the re-send keeps the existing-account paragraph rather
+      // than flipping because the row was read a second time.
+      expect(confirmationsFor(email)[0]).toMatchObject({ accountIsNew: false });
     });
 
     it("044 EARS-12.3: when a participant whose confirmation was sent resubmits, system shall not send a second email", async () => {

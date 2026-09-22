@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   jsonb,
@@ -166,6 +167,31 @@ export const registrations = pgTable(
     confirmationMailAt: timestamp("confirmation_mail_at", {
       withTimezone: true,
     }),
+    /**
+     * 044 EARS-12 — whether the congress intake CREATED the account this
+     * registration hangs off, recorded at the moment it happened.
+     *
+     * The confirmation email carries one of two paragraphs — «мы завели вам
+     * аккаунт» or «войдите в существующий» — and which one is right is a fact
+     * about THIS registration's first submission, not about the state of the
+     * IdP at the instant some later dispatch runs. A resubmission after a
+     * `failed` outcome finds the account already there (the first submission
+     * created it), so deciding the paragraph from the current call would send
+     * the existing-account text to a participant whose account this very intake
+     * had minted. Storing the fact on the row is what makes the re-sent message
+     * identical to the one that failed.
+     *
+     * NULLABLE, and `NULL` is the platform-origin row (EARS-16, a signed-in
+     * doctor registering from the feed): no congress intake ran, no confirmation
+     * email is owed, and no paragraph has to be chosen. Those rows are never
+     * dispatched to.
+     *
+     * Written inside the account transaction by the intake's callback, and
+     * `ON CONFLICT DO NOTHING` on the registration insert keeps the FIRST
+     * submission's value for all time (EARS-8) — the same rule that freezes the
+     * answers and the registration instant.
+     */
+    accountCreatedByIntake: boolean("account_created_by_intake"),
   },
   (table) => [
     // The one-registration invariant (EARS-3, ADR-0003 §5): at most one

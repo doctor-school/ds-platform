@@ -78,6 +78,20 @@ sending, the dispatcher re-reads the row: a `sent` there ends it without touchin
 the mailer, so a participant who submits the form twice gets exactly one email.
 A `failed` — or a `NULL` left by an interrupted attempt — dispatches again.
 
+**Which paragraph the confirmation carries** is also a column, not a decision
+taken at send time: `registrations.account_created_by_intake` records whether the
+intake CREATED this participant's account, written inside the account
+transaction and frozen at the first submission by the same `ON CONFLICT DO
+NOTHING`. Reading it back is what makes a re-send identical to the send it
+replaces — by the time a participant resubmits after a failure the account
+exists, so a variant chosen from the current call would tell someone to sign in
+to an account this very intake had just minted. `NULL` is the platform-origin
+row, which is never dispatched to.
+
+The `failed` outcome is written only while the row is not already `sent`, so two
+overlapping dispatches cannot let a loser's rejection overwrite a winner's
+success; a `sent` outcome is written unconditionally.
+
 That re-read IS the whole recovery mechanism: there is no outbox, no scheduler
 and no automatic retry. A participant whose mail failed recovers by submitting
 the form again; a registrar sees the failed rows on the roster and can act on

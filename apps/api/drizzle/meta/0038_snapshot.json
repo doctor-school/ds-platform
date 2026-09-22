@@ -1,5 +1,5 @@
 {
-  "id": "bd9b0acc-72f3-4643-a17e-9c24b9fd9755",
+  "id": "9fdda5b1-f061-4f1b-a617-fe1402c7bdda",
   "prevId": "7522c236-51fe-4439-b2ba-2b3ebc0b9f79",
   "version": "7",
   "dialect": "postgresql",
@@ -269,23 +269,17 @@
         "users_zitadel_sub_unique": {
           "name": "users_zitadel_sub_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "zitadel_sub"
-          ]
+          "columns": ["zitadel_sub"]
         },
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "users_phone_unique": {
           "name": "users_phone_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "phone"
-          ]
+          "columns": ["phone"]
         }
       },
       "policies": {},
@@ -344,12 +338,8 @@
           "name": "consent_records_user_id_users_id_fk",
           "tableFrom": "consent_records",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -421,20 +411,14 @@
       "compositePrimaryKeys": {
         "audit_ledger_pkey": {
           "name": "audit_ledger_pkey",
-          "columns": [
-            "id",
-            "created_at"
-          ]
+          "columns": ["id", "created_at"]
         }
       },
       "uniqueConstraints": {
         "audit_ledger_event_id_unique": {
           "name": "audit_ledger_event_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "event_id",
-            "created_at"
-          ]
+          "columns": ["event_id", "created_at"]
         }
       },
       "policies": {},
@@ -610,9 +594,7 @@
         "events_slug_unique": {
           "name": "events_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -672,12 +654,8 @@
           "name": "stream_config_event_id_events_id_fk",
           "tableFrom": "stream_config",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -755,6 +733,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "account_created_by_intake": {
+          "name": "account_created_by_intake",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -780,12 +764,8 @@
           "name": "registrations_user_id_users_id_fk",
           "tableFrom": "registrations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -793,12 +773,8 @@
           "name": "registrations_event_id_events_id_fk",
           "tableFrom": "registrations",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -808,10 +784,7 @@
         "registrations_user_id_event_id_unique": {
           "name": "registrations_user_id_event_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id",
-            "event_id"
-          ]
+          "columns": ["user_id", "event_id"]
         }
       },
       "policies": {},
@@ -888,12 +861,8 @@
           "name": "presence_beats_user_id_users_id_fk",
           "tableFrom": "presence_beats",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -901,12 +870,8 @@
           "name": "presence_beats_event_id_events_id_fk",
           "tableFrom": "presence_beats",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1033,12 +998,8 @@
           "name": "direction_adjacency_direction_id_directions_id_fk",
           "tableFrom": "direction_adjacency",
           "tableTo": "directions",
-          "columnsFrom": [
-            "direction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["direction_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1046,12 +1007,8 @@
           "name": "direction_adjacency_adjacent_direction_id_directions_id_fk",
           "tableFrom": "direction_adjacency",
           "tableTo": "directions",
-          "columnsFrom": [
-            "adjacent_direction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["adjacent_direction_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1181,12 +1138,8 @@
           "name": "direction_specialties_direction_id_directions_id_fk",
           "tableFrom": "direction_specialties",
           "tableTo": "directions",
-          "columnsFrom": [
-            "direction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["direction_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1194,12 +1147,8 @@
           "name": "direction_specialties_specialty_minzdrav_id_specialties_minzdrav_id_fk",
           "tableFrom": "direction_specialties",
           "tableTo": "specialties_minzdrav",
-          "columnsFrom": [
-            "specialty_minzdrav_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["specialty_minzdrav_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1439,12 +1388,8 @@
           "name": "event_directions_event_id_events_id_fk",
           "tableFrom": "event_directions",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1452,12 +1397,8 @@
           "name": "event_directions_direction_id_directions_id_fk",
           "tableFrom": "event_directions",
           "tableTo": "directions",
-          "columnsFrom": [
-            "direction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["direction_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1598,12 +1539,8 @@
           "name": "event_experts_event_id_events_id_fk",
           "tableFrom": "event_experts",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1611,12 +1548,8 @@
           "name": "event_experts_expert_id_experts_id_fk",
           "tableFrom": "event_experts",
           "tableTo": "experts",
-          "columnsFrom": [
-            "expert_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["expert_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1746,12 +1679,8 @@
           "name": "event_projects_event_id_events_id_fk",
           "tableFrom": "event_projects",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1759,12 +1688,8 @@
           "name": "event_projects_project_id_projects_id_fk",
           "tableFrom": "event_projects",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1940,12 +1865,8 @@
           "name": "experts_user_id_users_id_fk",
           "tableFrom": "experts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2280,12 +2201,8 @@
           "name": "project_experts_project_id_projects_id_fk",
           "tableFrom": "project_experts",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2293,12 +2210,8 @@
           "name": "project_experts_expert_id_experts_id_fk",
           "tableFrom": "project_experts",
           "tableTo": "experts",
-          "columnsFrom": [
-            "expert_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["expert_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2443,12 +2356,8 @@
           "name": "project_partners_project_id_projects_id_fk",
           "tableFrom": "project_partners",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2456,12 +2365,8 @@
           "name": "project_partners_partner_id_partners_id_fk",
           "tableFrom": "project_partners",
           "tableTo": "partners",
-          "columnsFrom": [
-            "partner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["partner_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2919,12 +2824,8 @@
           "name": "event_recordings_event_id_events_id_fk",
           "tableFrom": "event_recordings",
           "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3200,12 +3101,8 @@
           "name": "doctor_specialties_doctor_id_users_id_fk",
           "tableFrom": "doctor_specialties",
           "tableTo": "users",
-          "columnsFrom": [
-            "doctor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["doctor_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3213,12 +3110,8 @@
           "name": "doctor_specialties_specialty_id_specialties_minzdrav_id_fk",
           "tableFrom": "doctor_specialties",
           "tableTo": "specialties_minzdrav",
-          "columnsFrom": [
-            "specialty_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["specialty_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3243,116 +3136,67 @@
     "public.record_status": {
       "name": "record_status",
       "schema": "public",
-      "values": [
-        "active",
-        "retired"
-      ]
+      "values": ["active", "retired"]
     },
     "public.idempotency_execution_state": {
       "name": "idempotency_execution_state",
       "schema": "public",
-      "values": [
-        "processing",
-        "completed"
-      ]
+      "values": ["processing", "completed"]
     },
     "public.idempotency_record_status": {
       "name": "idempotency_record_status",
       "schema": "public",
-      "values": [
-        "active",
-        "expired"
-      ]
+      "values": ["active", "expired"]
     },
     "public.event_lifecycle_state": {
       "name": "event_lifecycle_state",
       "schema": "public",
-      "values": [
-        "draft",
-        "published",
-        "live",
-        "ended",
-        "hidden",
-        "in_archive"
-      ]
+      "values": ["draft", "published", "live", "ended", "hidden", "in_archive"]
     },
     "public.event_origin": {
       "name": "event_origin",
       "schema": "public",
-      "values": [
-        "platform",
-        "legacy"
-      ]
+      "values": ["platform", "legacy"]
     },
     "public.event_participation_format": {
       "name": "event_participation_format",
       "schema": "public",
-      "values": [
-        "online",
-        "offline",
-        "hybrid"
-      ]
+      "values": ["online", "offline", "hybrid"]
     },
     "public.stream_provider": {
       "name": "stream_provider",
       "schema": "public",
-      "values": [
-        "rutube",
-        "youtube",
-        "vk",
-        "cdnvideo"
-      ]
+      "values": ["rutube", "youtube", "vk", "cdnvideo"]
     },
     "public.confirmation_mail_status": {
       "name": "confirmation_mail_status",
       "schema": "public",
-      "values": [
-        "sent",
-        "failed"
-      ]
+      "values": ["sent", "failed"]
     },
     "public.direction_adjacency_kind": {
       "name": "direction_adjacency_kind",
       "schema": "public",
-      "values": [
-        "related",
-        "subdiscipline",
-        "interdisciplinary"
-      ]
+      "values": ["related", "subdiscipline", "interdisciplinary"]
     },
     "public.project_expert_role": {
       "name": "project_expert_role",
       "schema": "public",
-      "values": [
-        "curator",
-        "member"
-      ]
+      "values": ["curator", "member"]
     },
     "public.project_kind": {
       "name": "project_kind",
       "schema": "public",
-      "values": [
-        "school",
-        "media",
-        "program"
-      ]
+      "values": ["school", "media", "program"]
     },
     "public.relationship_status": {
       "name": "relationship_status",
       "schema": "public",
-      "values": [
-        "active",
-        "retired"
-      ]
+      "values": ["active", "retired"]
     },
     "public.taxonomy_status": {
       "name": "taxonomy_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "published",
-        "retired"
-      ]
+      "values": ["draft", "published", "retired"]
     },
     "public.media_cleanup_error": {
       "name": "media_cleanup_error",
@@ -3367,70 +3211,42 @@
     "public.media_cleanup_execution_state": {
       "name": "media_cleanup_execution_state",
       "schema": "public",
-      "values": [
-        "pending",
-        "processing",
-        "completed"
-      ]
+      "values": ["pending", "processing", "completed"]
     },
     "public.media_cleanup_kind": {
       "name": "media_cleanup_kind",
       "schema": "public",
-      "values": [
-        "replace",
-        "clear",
-        "content_removal"
-      ]
+      "values": ["replace", "clear", "content_removal"]
     },
     "public.media_cleanup_status": {
       "name": "media_cleanup_status",
       "schema": "public",
-      "values": [
-        "active",
-        "expired"
-      ]
+      "values": ["active", "expired"]
     },
     "public.media_entity_kind": {
       "name": "media_entity_kind",
       "schema": "public",
-      "values": [
-        "project",
-        "expert",
-        "partner"
-      ]
+      "values": ["project", "expert", "partner"]
     },
     "public.media_slot": {
       "name": "media_slot",
       "schema": "public",
-      "values": [
-        "cover",
-        "photo",
-        "logo"
-      ]
+      "values": ["cover", "photo", "logo"]
     },
     "public.recording_kind": {
       "name": "recording_kind",
       "schema": "public",
-      "values": [
-        "edited",
-        "raw"
-      ]
+      "values": ["edited", "raw"]
     },
     "public.recording_status": {
       "name": "recording_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "published",
-        "retired"
-      ]
+      "values": ["draft", "published", "retired"]
     },
     "public.doctor_specialty_role": {
       "name": "doctor_specialty_role",
       "schema": "public",
-      "values": [
-        "primary"
-      ]
+      "values": ["primary"]
     }
   },
   "schemas": {},

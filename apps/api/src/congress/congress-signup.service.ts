@@ -4,7 +4,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { DrizzleHandle, RegistrationAnswers } from "@ds/db";
 import { consentRecords, events, registrations } from "@ds/db";
 import {
@@ -135,10 +135,19 @@ export class CongressSignUpService {
       },
     ];
 
-    // EARS-13: the ONE thing the return value is read for is which paragraph
-    // the confirmation email carries. Nothing the participant may observe on
-    // the wire branches on it (EARS-7) - the mail reaches only the address that
-    // submitted the form, which is not a channel a third party can compare.
+    // EARS-13: which account path this call took decides which paragraph the
+    // confirmation email carries — and it is RECORDED on the registration row
+    // rather than read off this call's return value, because the two disagree
+    // exactly when it matters. A participant whose first submission created the
+    // account but whose mail was rejected resubmits (EARS-12); on that second
+    // call the account exists, so the current-call flag would hand them the
+    // «войдите в существующий аккаунт» paragraph for an account this very
+    // intake had minted. The row's own `account_created_by_intake`, frozen by
+    // `ON CONFLICT DO NOTHING` at the first submission, is the truth.
+    //
+    // Nothing the participant may observe on the wire branches on it (EARS-7) —
+    // the mail reaches only the address that submitted the form, which is not a
+    // channel a third party can compare.
     const account = await this.auth.createPasswordlessAccount(
       {
         email: request.email,
@@ -146,7 +155,7 @@ export class CongressSignUpService {
         firstName: request.firstName,
         consent,
       },
-      async (tx, userId) => {
+      async (tx, userId, alreadyExisted) => {
         // EARS-5 / EARS-29: the typed answers, with the normalised contact
         // phone beside the typed one. `users.phone` is deliberately not
         // written — see `createPasswordlessAccount`.
@@ -162,6 +171,10 @@ export class CongressSignUpService {
             userId,
             eventId: settings.eventId,
             answers: toCongressSignUpAnswers(request),
+            // EARS-12: the confirmation paragraph, decided once and stored.
+            // `ON CONFLICT DO NOTHING` below keeps the FIRST submission's value,
+            // which is exactly the guarantee a re-send needs.
+            accountCreatedByIntake: !alreadyExisted,
           })
           .onConflictDoNothing({
             target: [registrations.userId, registrations.eventId],
@@ -181,7 +194,6 @@ export class CongressSignUpService {
       eventTitle: event.title,
       eventStartsAt: event.startsAt,
       eventVenue: settings.eventVenue,
-      accountIsNew: !account.alreadyExisted,
     });
 
     return { status: "accepted" };
@@ -205,7 +217,14 @@ export class CongressSignUpService {
    *    this method before the mailer is touched. A `failed` (or a `NULL` left
    *    by an interrupted first attempt) re-dispatches, which is the feature's
    *    ENTIRE recovery mechanism: no outbox, no scheduled sweep, the
-   *    participant resubmitting (design section "Mail failure").
+   *    participant resubmitting (design section "Mail failure"). The same
+   *    re-select is where the confirmation's PARAGRAPH comes from: the row's
+   *    `account_created_by_intake`, frozen at the first submission, so a
+   *    re-send repeats the copy the failed send would have carried rather than
+   *    the copy the current state of the IdP would suggest. A `NULL` there is a
+   *    platform-origin row (EARS-16) - never reached from here, and if it ever
+   *    were, `=== true` resolves it to the existing-account paragraph, which is
+   *    what a doctor already on the platform is owed anyway.
    * 3. **Every failure is swallowed, none is lost.** A relay rejection becomes
    *    `failed` on the row - a fact the roster can show and the next submission
    *    can act on - rather than a log line nobody reads. The outer `catch` is
@@ -223,7 +242,6 @@ export class CongressSignUpService {
     eventTitle: string;
     eventStartsAt: Date;
     eventVenue: string;
-    accountIsNew: boolean;
   }): void {
     const registrationRow = and(
       eq(registrations.userId, input.userId),
@@ -233,7 +251,10 @@ export class CongressSignUpService {
     void (async () => {
       try {
         const [existing] = await this.db
-          .select({ status: registrations.confirmationMailStatus })
+          .select({
+            status: registrations.confirmationMailStatus,
+            accountCreatedByIntake: registrations.accountCreatedByIntake,
+          })
           .from(registrations)
           .where(registrationRow)
           .limit(1);
@@ -250,7 +271,7 @@ export class CongressSignUpService {
             eventTitle: input.eventTitle,
             eventStartsAt: input.eventStartsAt,
             eventVenue: input.eventVenue,
-            accountIsNew: input.accountIsNew,
+            accountIsNew: existing.accountCreatedByIntake === true,
           });
         } catch {
           // The mailer's own diagnostics already carry the sanitized provider
@@ -262,13 +283,27 @@ export class CongressSignUpService {
           );
         }
 
+        // A `sent` outcome is written unconditionally; a `failed` one only
+        // while the row is not already `sent`. Two dispatches for the same
+        // registration can overlap — the participant double-submits, or
+        // resubmits while a slow first attempt is still in the relay — and
+        // without the predicate the loser's rejection would overwrite the
+        // winner's success, turning a delivered email into a `failed` the
+        // roster shows and the next submission re-sends on.
         await this.db
           .update(registrations)
           .set({
             confirmationMailStatus: status,
             confirmationMailAt: new Date(),
           })
-          .where(registrationRow);
+          .where(
+            status === "sent"
+              ? registrationRow
+              : and(
+                  registrationRow,
+                  sql`${registrations.confirmationMailStatus} IS DISTINCT FROM 'sent'`,
+                ),
+          );
       } catch {
         this.logger.warn(
           `congress confirmation email outcome could not be recorded for event ${input.eventId}`,

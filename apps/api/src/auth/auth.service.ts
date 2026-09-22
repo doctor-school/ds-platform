@@ -673,9 +673,15 @@ export class AuthService {
    */
   async createPasswordlessAccount(
     input: PasswordlessAccountInput,
+    // The third argument is the account path this call took, handed to the
+    // callback because it is a fact the caller may need to STORE and not merely
+    // react to: 044 records it on the registration row so a later resubmission
+    // still knows which confirmation paragraph this participant is owed (044
+    // EARS-12). It is additive — a callback that ignores it is unchanged.
     writeWithinAccountTransaction: (
       tx: AuditedTransaction,
       userId: string,
+      alreadyExisted: boolean,
     ) => Promise<void>,
   ): Promise<PasswordlessAccountCreation> {
     let created;
@@ -750,7 +756,7 @@ export class AuthService {
 
         if (!row) throw new Error("mirror upsert returned no row");
 
-        await writeWithinAccountTransaction(tx, row.id);
+        await writeWithinAccountTransaction(tx, row.id, false);
         return row.id;
       });
     } catch (err) {
@@ -808,6 +814,7 @@ export class AuthService {
     writeWithinAccountTransaction: (
       tx: AuditedTransaction,
       userId: string,
+      alreadyExisted: boolean,
     ) => Promise<void>,
   ): Promise<string> {
     try {
@@ -819,7 +826,7 @@ export class AuthService {
           .limit(1);
 
         if (mirror) {
-          await writeWithinAccountTransaction(tx, mirror.id);
+          await writeWithinAccountTransaction(tx, mirror.id, true);
           return mirror.id;
         }
 
@@ -839,7 +846,10 @@ export class AuthService {
 
         if (!row) throw new Error("mirror insert returned no row");
 
-        await writeWithinAccountTransaction(tx, row.id);
+        // `true`: the IdP already held this address, so the intake did NOT
+        // create the account. The mirror row being missing is a 003 divergence
+        // this method heals in passing, not a fresh account.
+        await writeWithinAccountTransaction(tx, row.id, true);
         return row.id;
       });
     } catch (err) {

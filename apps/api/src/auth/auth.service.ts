@@ -703,6 +703,19 @@ export class AuthService {
     }
 
     if (created.alreadyExisted) {
+      // The IdP knows the address but could not say WHICH subject holds it
+      // ({@link CreatedUser.sub} is empty only in that fail-closed case). There
+      // is nothing to attach to: a mirror lookup keyed on "" finds nothing and
+      // an insert keyed on "" would mint a phantom account. Answer the SAME
+      // generic 503 the unreachable-IdP path answers, so the status stays
+      // symmetric with the created path and never becomes the "does this
+      // address exist?" oracle 044 EARS-7 closes.
+      if (created.sub === "") {
+        this.logger.error(
+          "idp reported an existing identifier without a resolvable subject",
+        );
+        throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
+      }
       const userId = await this.attachToExistingAccount(
         created.sub,
         input,

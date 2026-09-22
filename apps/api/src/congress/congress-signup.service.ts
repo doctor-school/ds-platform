@@ -189,6 +189,16 @@ export class CongressSignUpService {
    * two facts), so the idempotency of a repeat submission is THIS read, inside
    * the transaction the caller opened, and not a constraint.
    *
+   * That makes the guarantee SEQUENTIAL, and deliberately so: two submissions
+   * for the same participant racing under READ COMMITTED can both read «no row
+   * at this version» and both insert, so a double-click can leave two identical
+   * acceptance rows. For an append-only legal ledger that is a truthful record
+   * of two submitted acceptances rather than a defect — nothing downstream
+   * counts rows and the VERSION is what is read back — and closing it would
+   * take either a constraint this ledger's own design rejects or a lock on the
+   * participant row taken by every intake request. It is an open item on the
+   * feature, not a promise this method silently makes.
+   *
    * The medical-worker declaration is neither recorded nor demanded on this
    * surface (EARS-10): the only purposes written are the caller's.
    */

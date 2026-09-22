@@ -5,7 +5,15 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type pg from "pg";
 import {
   CONGRESS_PERSONAL_DATA_PURPOSE,
@@ -365,7 +373,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // lands with slice 4 (#2304–#2306). Everything else in those rows is below.
     // ---------------------------------------------------------------------
 
-    it("EARS-6: when the email already has an account, system shall attach the registration to it and leave every profile field byte-identical", async () => {
+    it("EARS-6.1: when the email already has an account, system shall attach the registration to it and leave every profile field byte-identical", async () => {
       // A PLATFORM account, not a congress one: the point of EARS-6 is that a
       // doctor the platform already knows keeps their profile untouched while
       // the congress registration is attached to it. Seeding through a first
@@ -408,6 +416,38 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         contactPhone: "8 999 000 11 22",
         contactPhoneNormalised: "+79990001122",
       });
+    });
+
+    it("EARS-6.2: when the IdP reports the address as known but cannot resolve its subject, system shall refuse as unavailable and write nothing", async () => {
+      // The ONE shape the fake IdP cannot produce and the production adapter
+      // can: a duplicate whose owning subject the User v2 search did not
+      // return (`{ sub: "", alreadyExisted: true }`, zitadel.idp.ts). An empty
+      // subject is an outage, never an account — keying the mirror lookup on
+      // it found nothing, inserted a phantom `users` row and answered 400,
+      // which is the existence oracle EARS-7 exists to close.
+      const { email } = await registerPlatformUser("congress-unresolved");
+      const account = await accountRow(email);
+      const before = await congressRowCounts(account.id);
+
+      const spy = vi
+        .spyOn(fake, "createUser")
+        .mockResolvedValue({ sub: "", alreadyExisted: true });
+      let res;
+      try {
+        res = await post(submission(email));
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The same generic 503 the unreachable-IdP path already answers — one
+      // outage answer for both, so the status still says nothing about the
+      // address.
+      expect(res.statusCode).toBe(503);
+      expect(await congressRowCounts(account.id)).toEqual(before);
+      const phantom = await pool.query(
+        `SELECT 1 FROM users WHERE zitadel_sub = ''`,
+      );
+      expect(phantom.rowCount).toBe(0);
     });
 
     it("EARS-7: when the same submission targets a new and an existing account, system shall answer with identical status and body", async () => {

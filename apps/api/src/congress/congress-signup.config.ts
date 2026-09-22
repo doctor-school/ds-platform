@@ -1,4 +1,4 @@
-import { loadEnv, type ApiEnv } from "../config/env.schema.js";
+import type { ApiEnv } from "../config/env.schema.js";
 
 /**
  * 044 — the single place the public congress intake learns WHICH event it
@@ -136,6 +136,11 @@ export function resolveCongressSignUpTimingFloorMs(
  * read per request: an operator raising the floor after a live measurement must
  * not need a redeploy.
  *
+ * It reads the ONE key it needs straight off `process.env` rather than
+ * re-validating the whole api environment on every request: the interceptor
+ * calls this before each intake, and a `z.looseObject` parse of the entire
+ * environment to answer a single key is cost with no reader.
+ *
  * It never throws and never returns the malformed value: an unusable floor falls
  * back to the conservative default, which is the SAFE direction (too slow, never
  * too fast). The submission itself is then refused generically by
@@ -144,14 +149,13 @@ export function resolveCongressSignUpTimingFloorMs(
  * request, and without the endpoint having run with a half-configured meaning.
  */
 export function readCongressSignUpTimingFloorMs(): number {
-  try {
-    const resolved = resolveCongressSignUpTimingFloorMs(loadEnv());
-    return resolved.ok
-      ? resolved.floorMs
-      : CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS;
-  } catch {
-    return CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS;
-  }
+  const resolved = resolveCongressSignUpTimingFloorMs({
+    CONGRESS_SIGNUP_TIMING_FLOOR_MS:
+      process.env["CONGRESS_SIGNUP_TIMING_FLOOR_MS"],
+  });
+  return resolved.ok
+    ? resolved.floorMs
+    : CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS;
 }
 
 /**

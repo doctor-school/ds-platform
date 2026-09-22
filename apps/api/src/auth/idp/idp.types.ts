@@ -134,6 +134,19 @@ export type CreateUserInput =
  * to know it must respond identically to the success path.
  */
 export interface CreatedUser {
+  /**
+   * The subject that OWNS the identifier — on both paths. When the account was
+   * created it is the new subject; when {@link alreadyExisted} is `true` it is
+   * the subject the IdP already holds for that email/phone, resolved by the
+   * adapter (044 EARS-6 attaches to exactly this account, keyed on the IdP's
+   * identity rather than on a second, differently-keyed lookup by email).
+   *
+   * Empty ONLY when the identifier already existed and the IdP could not
+   * resolve which subject holds it — a fail-closed "unknown", never a guess. A
+   * caller that keys a write on this value must treat `""` as an outage
+   * (generic 503), not as a subject; the register door (003 EARS-16) does not
+   * read it on the `alreadyExisted` path at all.
+   */
   sub: string;
   alreadyExisted: boolean;
   /**

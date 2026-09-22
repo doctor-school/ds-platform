@@ -56,7 +56,7 @@ sequenceDiagram
     A->>I: create human user WITHOUT credential
     I-->>A: subject id (the address was unknown)
     A->>D: BEGIN
-    A->>D: insert users (sub, email, guest role, prefilled display name)
+    A->>D: upsert users on zitadel_sub (sub, email, guest role, prefilled display name)
     A->>D: insert registrations (user, event, answers)
     A->>D: insert consent_records (congress personal-data purpose, version)
     A->>D: COMMIT

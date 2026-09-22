@@ -6,6 +6,7 @@ import {
   CONGRESS_SIGN_UP_WINDOW_OPENS_AT,
   resolveCongressSignUpSettings,
   resolveCongressSignUpTimingFloorMs,
+  readCongressSignUpTimingFloorMs,
   resolveCongressSignUpWindow,
 } from "./congress-signup.config.js";
 
@@ -136,6 +137,42 @@ describe("044 congress sign-up — server configuration", () => {
       ok: true,
       settings: { eventId: EVENT_ID, consentVersion: CONSENT_VERSION },
     });
+  });
+
+  it("EARS-7: when the route floor is read per request, system shall read the one key it needs and not revalidate the whole environment", () => {
+    // The floor is read on EVERY intake request (an operator raising it after a
+    // live measurement must not need a redeploy), so it reads ONE key rather
+    // than re-parsing the whole process environment through the api env schema.
+    // Proved by an environment that carries nothing BUT that key: a full-schema
+    // parse would throw on the missing required keys and silently hand back the
+    // default, which is exactly the floor the operator did not configure.
+    const original = process.env;
+    try {
+      process.env = {
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "2500",
+      } as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(2500);
+
+      // Changed between two requests — read again, not cached at module init.
+      process.env = {
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1500",
+      } as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(1500);
+
+      // Unusable or unset — the conservative default, the safe direction.
+      process.env = {
+        CONGRESS_SIGNUP_TIMING_FLOOR_MS: "1s",
+      } as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(
+        CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
+      );
+      process.env = {} as NodeJS.ProcessEnv;
+      expect(readCongressSignUpTimingFloorMs()).toBe(
+        CONGRESS_SIGN_UP_DEFAULT_TIMING_FLOOR_MS,
+      );
+    } finally {
+      process.env = original;
+    }
   });
 
   it("EARS-28: when the clock is before the opening instant, system shall report the window as not yet open and carry that instant", () => {

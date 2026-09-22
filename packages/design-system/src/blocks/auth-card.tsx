@@ -31,6 +31,7 @@ import {
 export function AuthCard({
   title,
   description,
+  errorBanner,
   icon,
   footer,
   className,
@@ -42,6 +43,13 @@ export function AuthCard({
   title: React.ReactNode;
   /** Card description / sub-copy (app-supplied, localized). */
   description?: React.ReactNode;
+  /**
+   * Operation-level failure, rendered ABOVE the icon and the title (canvas
+   * `auth.dc.html:56-61`): a refused command or an expired challenge is about
+   * the whole screen, so it stands where the eye enters the card instead of
+   * beside the submit. Field-level messages stay at their field.
+   */
+  errorBanner?: React.ReactNode;
   /** Optional leading icon rendered next to the title (e.g. a lucide glyph). */
   icon?: React.ReactNode;
   /** Optional footer slot — secondary links (e.g. "create account"). */
@@ -55,6 +63,7 @@ export function AuthCard({
   return (
     <Card className={className} {...rest}>
       <CardHeader>
+        {errorBanner}
         {icon ? (
           // Neo-brutalist badge tile (#517, canvas `auth-card`): a square tint surface
           // holding the app-supplied glyph, above the title. `text-tint-foreground` is

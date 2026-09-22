@@ -341,6 +341,9 @@ export function RegisterCard({
   // confirmation state, and the form surroundings do not travel with it.
   if (confirmation) return root(confirmation);
 
+  // Canvas 56-61 — an operation-level failure stands ABOVE the card title, on
+  // every auth screen. The test ids travel with the statements, so what a
+  // journey asserts is the sentence, not the place it used to stand in.
   const errorStatements = (
     <>
       <FormError {...testIdProps(testIds?.challengeError)}>
@@ -395,6 +398,7 @@ export function RegisterCard({
         // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling.
         title={<h1>{copy.title}</h1>}
         description={copy.description}
+        errorBanner={<div className="mb-3">{errorStatements}</div>}
         footer={footer}
       >
         <Form {...form}>
@@ -564,11 +568,11 @@ export function RegisterCard({
             {aboveSubmitSlot ? <div>{aboveSubmitSlot}</div> : null}
 
             {/*
-              Canvas 209-214 — ONE order on both storefronts: the challenge, the
-              form-level statements, then the submit.
+              Canvas 209-214 — ONE order on both storefronts: the challenge,
+              then the submit. The form-level statements stand in the card's
+              error banner above the title (canvas 56-61).
             */}
             {captchaSlot}
-            {errorStatements}
             {submitControl}
 
             {/*

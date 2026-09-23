@@ -67,6 +67,31 @@ const FILLERS = [
   "Худякова",
 ].map((surname) => `${surname} Ирина Сергеевна`);
 
+/**
+ * Put the page under the design-system palette. The admin ships no theme toggle
+ * and does not follow `prefers-color-scheme`: the dark palette is the `.dark`
+ * token block in `@ds/design-system` on the document root (the #1927 recipe,
+ * `legacy-broadcast.spec.ts`). The token-painted `body` background is the honest
+ * signal that the recalculation has happened.
+ */
+async function setPalette(
+  page: Page,
+  palette: "light" | "dark",
+): Promise<void> {
+  await page.evaluate((mode) => {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, palette);
+  await page.waitForFunction((mode) => {
+    const channels = getComputedStyle(document.body).backgroundColor.match(
+      /[\d.]+/g,
+    );
+    if (!channels || channels.length < 3) return false;
+    const [r, g, b] = channels.map(Number);
+    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return mode === "dark" ? luminance < 128 : luminance >= 128;
+  }, palette);
+}
+
 async function shot(
   page: Page,
   name: string,
@@ -74,18 +99,18 @@ async function shot(
 ): Promise<void> {
   if (!SHOT_DIR) return;
   await mkdir(SHOT_DIR, { recursive: true });
-  const schemes = dark ? (["light", "dark"] as const) : (["light"] as const);
-  for (const colorScheme of schemes) {
-    await page.emulateMedia({ colorScheme });
+  const palettes = dark ? (["light", "dark"] as const) : (["light"] as const);
+  for (const palette of palettes) {
+    await setPalette(page, palette);
     await page.screenshot({
       path: path.join(
         SHOT_DIR,
-        dark ? `${name}-${colorScheme}.png` : `${name}.png`,
+        dark ? `${name}-${palette}.png` : `${name}.png`,
       ),
       fullPage: true,
     });
   }
-  await page.emulateMedia({ colorScheme: "light" });
+  await setPalette(page, "light");
 }
 
 /** The desktop table's ФИО cells (the phone record cards are hidden at this width). */
@@ -208,7 +233,7 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
     await shot(page, "roster-mobile", { dark: true });
   });
 
-  test("044 EARS-21.2: answer-less rows render profile values and empty cells, no placeholder", async ({
+  test("044 EARS-16: answer-less rows render profile values and empty cells, no placeholder", async ({
     page,
   }) => {
     test.skip(!eventId, "depends on the event seeded by EARS-21");

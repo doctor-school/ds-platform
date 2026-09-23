@@ -63,7 +63,7 @@ describe("044 EARS-21 roster projection", () => {
     expect(cells.confirmationMailStatus).toBe("Отправлено");
   });
 
-  it("EARS-21.2: an answer-less row renders empty cells, never a placeholder", () => {
+  it("EARS-16: an answer-less row renders empty cells, never a placeholder", () => {
     const cells = congressRosterCells(
       {
         ...row,

@@ -237,4 +237,24 @@ test.describe("#400 page-level axe a11y scan (backend-free)", () => {
       legal: true,
     });
   });
+
+  // 045 — the temporary education-index demo pages (backend-free, static
+  // fixtures). Both carry data bars, tint plates and hero-band copy whose
+  // contrast only a composed page shows; the disabled demo controls are
+  // exempt from contrast by WCAG, their visible label is not.
+  test("045 EARS-12: the public education-index demo passes WCAG 2 A/AA + one-h1 shell check", async ({
+    page,
+  }) => {
+    await scan(page, "/education-index", {
+      ready: '[data-testid="leaderboard-table"]',
+    });
+  });
+
+  test("045 EARS-12: the partner-cabinet demo passes WCAG 2 A/AA + one-h1 shell check", async ({
+    page,
+  }) => {
+    await scan(page, "/education-index/partner-demo", {
+      ready: '[data-testid="audience"]',
+    });
+  });
 });

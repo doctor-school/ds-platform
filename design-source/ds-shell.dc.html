@@ -168,7 +168,7 @@ class Component extends DCLogic {
     const host = s.hostS || p.host || 'doctor';
     const academy = host === 'academy';
     const loggedIn = s.authS ? s.authS === 'in' : !!p.loggedIn;
-    const m = s.widthS ? s.widthS === 'm' : s.viewportMobile;
+    const m = s.widthS ? s.widthS === 'm' : (p.mobile != null ? !!p.mobile : s.viewportMobile);
 
     const ink = d ? '#fff' : 'oklch(.21 .02 250)';
     const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';

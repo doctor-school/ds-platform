@@ -68,7 +68,14 @@ export interface DataTableColumn<Row> {
   key: string;
   /** Column header copy (app-supplied, localized) — rendered as `<th scope="col">`. */
   header: string;
-  /** DECLARED width (CSS length or %). Omitted = the column absorbs the remainder. */
+  /**
+   * DECLARED width. Omitted = the column absorbs the remainder. Two contracts:
+   * PERCENT (`"20%"`) — the grid always fits its frame and shares it out; ABSOLUTE
+   * (`"12rem"`, `"180px"`) — sized to the column's content. When EVERY track (record
+   * + columns, no actions column) is absolute, the table's `min-width` is their sum
+   * and the headers stay on one line: a grid wider than its frame scrolls inside the
+   * keyboard-focusable region of `Table` instead of squeezing the columns (#2357).
+   */
   width?: string;
   /** `end` for numeric columns so figures scan as a column. */
   align?: DataTableAlign;
@@ -131,6 +138,30 @@ export interface DataTableProps<Row> {
 const alignClass = (align: DataTableAlign | undefined) =>
   align === "end" ? "text-right tabular-nums" : "text-left";
 
+/** An absolute CSS length (`16rem`, `180px`) — never a share of the frame. */
+const ABSOLUTE_LENGTH = /^\s*(\d*\.?\d+)(rem|px|em|ch)\s*$/;
+
+/**
+ * The table's `min-width` when every track declares an absolute width: their sum
+ * (one unit → a plain length, mixed units → `calc()`). `undefined` otherwise — a
+ * percent or undeclared track keeps the fit-the-frame contract.
+ */
+export function absoluteGridMinWidth(
+  widths: Array<string | undefined>,
+): string | undefined {
+  const lengths = widths.map((width) =>
+    width === undefined ? null : ABSOLUTE_LENGTH.exec(width),
+  );
+  if (lengths.length === 0 || lengths.some((match) => !match)) return undefined;
+  const matches = lengths as RegExpExecArray[];
+  const units = new Set(matches.map((match) => match[2]));
+  if (units.size === 1) {
+    const sum = matches.reduce((total, match) => total + Number(match[1]), 0);
+    return `${Number(sum.toFixed(4))}${matches[0]?.[2] ?? ""}`;
+  }
+  return `calc(${matches.map((match) => `${match[1]}${match[2]}`).join(" + ")})`;
+}
+
 export function DataTable<Row>({
   record,
   columns,
@@ -152,6 +183,12 @@ export function DataTable<Row>({
 }: DataTableProps<Row>) {
   const clickable = Boolean(rowHref || onRowClick);
   const columnCount = 1 + columns.length + (actions ? 1 : 0);
+  // An actions column declares no width (it absorbs the remainder), so a grid with
+  // one is never all-absolute.
+  const minWidth = actions
+    ? undefined
+    : absoluteGridMinWidth([record.width, ...columns.map((c) => c.width)]);
+  const headClass = minWidth ? "whitespace-nowrap" : undefined;
 
   const activation = (row: Row) => {
     const label = record.label(row);
@@ -340,7 +377,11 @@ export function DataTable<Row>({
     <div className={cn("flex flex-col gap-3", className)}>
       {/* ≥ md — the declared column grid. */}
       <div className="hidden md:block">
-        <Table regionLabel={caption} className="table-fixed">
+        <Table
+          regionLabel={caption}
+          className="table-fixed"
+          style={minWidth ? { minWidth } : undefined}
+        >
           <caption className="sr-only">{caption}</caption>
           <colgroup>
             <col style={record.width ? { width: record.width } : undefined} />
@@ -354,11 +395,11 @@ export function DataTable<Row>({
           </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead>{record.header}</TableHead>
+              <TableHead className={headClass}>{record.header}</TableHead>
               {columns.map((column) => (
                 <TableHead
                   key={column.key}
-                  className={alignClass(column.align)}
+                  className={cn(alignClass(column.align), headClass)}
                 >
                   {column.header}
                 </TableHead>

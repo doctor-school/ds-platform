@@ -51,7 +51,7 @@ test.describe("045 education-index demo · public leaderboard (V-1, V-2)", () =>
     );
   });
 
-  test.fixme("045 EARS-1: /education-index/partner-demo answers 200 with no login redirect", async ({
+  test("045 EARS-1: /education-index/partner-demo answers 200 with no login redirect", async ({
     page,
   }) => {
     const response = await page.goto(CABINET);
@@ -170,6 +170,139 @@ test.describe("045 education-index demo · public leaderboard (V-1, V-2)", () =>
   });
 });
 
+test.describe("045 education-index demo · partner cabinet (V-1, V-3)", () => {
+  test("045 EARS-11: the cabinet plaque names the partner cabinet as demonstration data", async ({
+    page,
+  }) => {
+    await page.goto(CABINET);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Кабинет партнёра · Ортелла Биотех",
+    );
+    const plaque = page.getByTestId("demo-plaque");
+    await expect(plaque).toHaveText(
+      "Демонстрационные данные · так будет выглядеть кабинет партнёра",
+    );
+    await expect(plaque).toHaveCSS("position", "sticky");
+  });
+
+  test("045 EARS-8: plan/fact scale and the 4 KPI tiles", async ({ page }) => {
+    await page.goto(CABINET);
+    const scale = page.getByTestId("plan-fact");
+    await expect(scale).toContainText("В графике: 68% плана к 60% срока");
+    await expect(scale).toContainText(
+      "план 56 300 очков внимания · факт 38 300",
+    );
+    await expect(scale.getByTestId("plan-fact-bar")).toHaveCount(1);
+    const tiles = page.getByTestId("kpi-tile");
+    await expect(tiles).toHaveText([
+      /1 240\s*врачей обучено/,
+      /28\s*уроков создано/,
+      /2,9 из 7\s*средняя глубина пути/,
+      /6\s*мероприятий проведено/,
+    ]);
+  });
+
+  test("045 EARS-8: awareness before/after — two bars per topic across the 4 fixed topics (fork awareness = А)", async ({
+    page,
+  }) => {
+    await page.goto(CABINET);
+    const rows = page.getByTestId("awareness-row");
+    await expect(rows).toHaveCount(4);
+    await expect(rows.nth(0)).toContainText(
+      "PRP-терапия: показания и противопоказания",
+    );
+    await expect(rows.nth(1)).toContainText("Ранняя диагностика остеоартрита");
+    await expect(rows.nth(2)).toContainText("Реабилитация после артроскопии");
+    await expect(rows.nth(3)).toContainText("Ортобиология в спортивной травме");
+    for (let i = 0; i < 4; i += 1) {
+      await expect(rows.nth(i).getByTestId("awareness-bar")).toHaveCount(2);
+    }
+    await expect(rows.nth(0)).toContainText("24%");
+    await expect(rows.nth(0)).toContainText("71%");
+    await expect(rows.nth(0)).toContainText("+47 п.п.");
+    await expect(page.getByTestId("awareness")).toContainText(
+      "Пул осведомлённых врачей: 612 из 1 240",
+    );
+  });
+
+  test("045 EARS-8: the 7-step engagement funnel in its fixed order", async ({
+    page,
+  }) => {
+    await page.goto(CABINET);
+    await expect(page.getByTestId("funnel-step-name")).toHaveText([
+      "сериал",
+      "микрообучение",
+      "вебинар",
+      "подкаст",
+      "клуб",
+      "практическая школа",
+      "наставничество",
+    ]);
+    await expect(page.getByTestId("funnel-bar")).toHaveCount(7);
+    const steps = page.getByTestId("funnel-step");
+    await expect(steps.nth(0)).toContainText("вход в путь");
+    await expect(steps.nth(1)).toContainText("986");
+    await expect(steps.nth(1)).toContainText("80% из предыдущего");
+  });
+
+  test("045 EARS-8: weekly attention dynamics and the research-request unit with one submitted request", async ({
+    page,
+  }) => {
+    await page.goto(CABINET);
+    const attention = page.getByTestId("weekly-attention");
+    await expect(attention).toContainText("итого 38 300");
+    await expect(attention.getByTestId("attention-bar")).toHaveText([
+      "6 200",
+      "7 900",
+      "9 400",
+      "14 800",
+    ]);
+    const research = page.getByTestId("research-request");
+    await expect(research.getByTestId("research-request-item")).toHaveCount(1);
+    await expect(research).toContainText(
+      "Осведомлённость по теме «Ранняя диагностика остеоартрита» — до/после",
+    );
+    await expect(research).toContainText(
+      "Заявка отправлена · команда Академии свяжется с вами",
+    );
+  });
+
+  test("045 EARS-9: audience table — header with the 1 240 total, exactly 5 rows, the «5 of 1 240» caption", async ({
+    page,
+  }) => {
+    await page.goto(CABINET);
+    const audience = page.getByTestId("audience");
+    await expect(
+      audience.getByRole("heading", {
+        name: "Аудитория ваших проектов · 1 240 врачей",
+      }),
+    ).toBeVisible();
+    const table = audience.getByRole("table");
+    await expect(table.locator("tbody tr")).toHaveCount(5);
+    await expect(table.locator("tbody tr").first()).toContainText(
+      "Корнилова Мария Сергеевна",
+    );
+    await expect(audience).toContainText(
+      "показано 5 из 1 240 · полный список — в выгрузке для отчётности",
+    );
+  });
+
+  test("045 EARS-10: show-more, export and request-a-study are disabled and labelled unavailable in the demo", async ({
+    page,
+  }) => {
+    await page.goto(CABINET);
+    for (const name of [
+      "Показать ещё",
+      "Выгрузить для отчётности",
+      "Запросить исследование",
+    ]) {
+      const button = page.getByRole("button", { name });
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveAccessibleDescription("в демо недоступно");
+    }
+  });
+});
+
 function withoutScripts(html: string): string {
   let out = "";
   let at = 0;
@@ -211,7 +344,7 @@ test.describe("045 education-index demo · noindex + compliance words (V-7)", ()
     await assertNoindexAndClean(request, PUBLIC);
   });
 
-  test.fixme("045 EARS-13: /education-index/partner-demo emits noindex and renders no forbidden compliance word", async ({
+  test("045 EARS-13: /education-index/partner-demo emits noindex and renders no forbidden compliance word", async ({
     request,
   }) => {
     await assertNoindexAndClean(request, CABINET);

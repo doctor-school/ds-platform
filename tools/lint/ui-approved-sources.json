@@ -46,6 +46,8 @@
         "apps/admin/app/experts/page.tsx",
         "apps/admin/app/partners/page.tsx",
         "apps/admin/app/projects/page.tsx",
+        "apps/admin/app/events/[id]/page.tsx",
+        "apps/admin/app/events/[id]/roster/page.tsx",
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/admin-list-shell.tsx",
         "apps/admin/components/recordings-panel.tsx",

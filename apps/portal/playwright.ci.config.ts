@@ -84,6 +84,9 @@ export default defineConfig({
     // 028 V-4: the documents surface reads a workspace package from disk and
     // issues no api call, so it is hermetic in exactly this tier.
     /[\\/]e2e[\\/]documents\.spec\.ts$/,
+    // 045: the education-index demo pages render from a static fixture module
+    // and issue no api/DB call, so they are hermetic in exactly this tier.
+    /[\\/]e2e[\\/]education-index-demo\.spec\.ts$/,
   ],
   globalTeardown: "./e2e/support/academy-submissions-global-teardown.ts",
   fullyParallel: true,

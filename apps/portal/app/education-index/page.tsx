@@ -56,7 +56,7 @@ function Poster() {
     <div className={styles.poster}>
       <div className={styles.inner}>
         <nav aria-label="Навигационная цепочка" className={styles.crumbs}>
-          <Link asChild tone="on-primary">
+          <Link asChild tone="on-primary" variant="inline">
             <NextLink href="/">Академия</NextLink>
           </Link>
           <span aria-hidden="true" className={styles.crumbSep}>

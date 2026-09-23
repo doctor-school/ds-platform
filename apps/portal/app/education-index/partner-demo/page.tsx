@@ -94,13 +94,13 @@ function Poster() {
     <div className={styles.poster}>
       <div className={styles.inner}>
         <nav aria-label="Навигационная цепочка" className={styles.crumbs}>
-          <Link asChild tone="on-primary">
+          <Link asChild tone="on-primary" variant="inline">
             <NextLink href="/">Академия</NextLink>
           </Link>
           <span aria-hidden="true" className={styles.crumbSep}>
             /
           </span>
-          <Link asChild tone="on-primary">
+          <Link asChild tone="on-primary" variant="inline">
             <NextLink href="/education-index">Образовательный индекс</NextLink>
           </Link>
           <span aria-hidden="true" className={styles.crumbSep}>
@@ -364,7 +364,7 @@ function ResearchAndPlace() {
         <div className={styles.placeLine}>
           <span className={styles.placeValue}>{OWN_PLACE}-е</span>
           <span className={styles.placeMeta}>
-            <span className={styles.deltaUp}>▲{OWN_DELTA} за неделю</span>
+            <Badge variant="success">▲{OWN_DELTA} за неделю</Badge>
             <span>индекс {OWN.index}</span>
           </span>
         </div>

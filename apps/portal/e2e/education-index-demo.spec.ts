@@ -100,7 +100,9 @@ test.describe("045 education-index demo · public leaderboard (V-1, V-2)", () =>
     await page.goto(PUBLIC);
     const ortella = leaderboardRow(page, "Ортелла Биотех");
     await expect(ortella).toHaveAttribute("aria-expanded", "true");
-    const detail = page.locator(`#${await ortella.getAttribute("aria-controls")}`);
+    const detail = page.locator(
+      `#${await ortella.getAttribute("aria-controls")}`,
+    );
     await expect(detail).toBeVisible();
     await expect(detail).toContainText("Инвестиции в образование");
     await expect(detail).toContainText("15% всех инвестиций");
@@ -168,6 +170,19 @@ test.describe("045 education-index demo · public leaderboard (V-1, V-2)", () =>
   });
 });
 
+function withoutScripts(html: string): string {
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const open = html.indexOf("<script", at);
+    if (open === -1) return out + html.slice(at);
+    out += html.slice(at, open);
+    const close = html.indexOf("</script>", open);
+    if (close === -1) return out;
+    at = close + "</script>".length;
+  }
+}
+
 test.describe("045 education-index demo · noindex + compliance words (V-7)", () => {
   async function assertNoindexAndClean(
     request: import("@playwright/test").APIRequestContext,
@@ -177,7 +192,14 @@ test.describe("045 education-index demo · noindex + compliance words (V-7)", ()
     expect(response.status()).toBe(200);
     const html = await response.text();
     expect(html).toMatch(/<meta name="robots" content="noindex, nofollow"/);
-    const lower = html.toLowerCase();
+    // The invariant is about what RENDERS. The document minus its <script>
+    // elements is every rendered node, attribute and head tag; the scripts carry
+    // the framework flight payload, which serialises the portal-wide message
+    // bundle the root layout hands its client providers (other routes' copy,
+    // never rendered here).
+    const lower = withoutScripts(html).toLowerCase();
+    // Non-vacuous: the rendered page itself is still in what is scanned.
+    expect(lower).toContain("демонстрационные данные");
     for (const word of FORBIDDEN) {
       expect(lower, `forbidden word «${word}» on ${path}`).not.toContain(word);
     }

@@ -200,7 +200,10 @@
 }
 .tableGrid {
   display: grid;
-  grid-template-columns: 34px 40px minmax(210px, 1fr) 96px 58px 156px 70px 60px 96px 14px;
+  grid-template-columns: 34px 40px minmax(
+      210px,
+      1fr
+    ) 96px 58px 156px 70px 60px 96px 14px;
   gap: 14px;
   align-items: center;
 }

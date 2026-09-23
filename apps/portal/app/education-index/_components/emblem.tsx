@@ -1,4 +1,7 @@
-import type { Emblem as EmblemData, EmblemMark } from "@/lib/education-index-demo/fixtures";
+import type {
+  Emblem as EmblemData,
+  EmblemMark,
+} from "@/lib/education-index-demo/fixtures";
 
 import styles from "./education-index.module.css";
 

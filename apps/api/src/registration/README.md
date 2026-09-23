@@ -80,13 +80,46 @@ IS NULL`) has no phone and is never marked, and several such rows never group
   with one another. The roster INDICATOR and its filter live in 044 (#2328),
   not here.
 
+**044 EARS-18** puts an HTTP route over that read model — a SECOND, widened read,
+never a widening of the one above:
+
+- `GET /v1/admin/events/:idOrSlug/roster`
+  (`EventRosterAdminController` → `RegistrationService.eventRosterPage`) — one
+  paged page of the registrar's desk roster. Its query state is exactly the
+  `AdminDataList` baseline (`q`, `page`, `pageSize`); sorting and per-column
+  filters are EARS-22/EARS-23 and the «возможный дубль» marker on this row is
+  EARS-30/EARS-31, none of them here.
+- The row carries the answers the registrar identifies a person by — ФИО,
+  specialty NAME (resolved through `specialties_minzdrav`, EARS-25), место
+  работы, город, область, телефон as typed (EARS-29), email, `registeredAt` and
+  the confirmation-letter outcome. Every answer-derived cell is nullable and
+  falls back to the account mirror (EARS-16) — `users.display_name`,
+  `users.email`, `users.phone`: a platform-origin registration carries no
+  answers, and a cell with neither stays EMPTY rather than inventing a
+  placeholder. Reading `users.phone` back is not the write EARS-29 forbids.
+- The `q` search is one case-insensitive «contains» term over the concatenated
+  identifying cells, with the caller's own `%`/`_`/`\` escaped. The
+  NORMALISED contact phone (EARS-29) is in the searched set although it is
+  never rendered, so `89001112233` finds the row that shows
+  `+7 (900) 111-22-33`.
+- `eventRoster()` above is untouched by this: feature 006's room gate keeps
+  reading the PII-free `(doctor, event, registeredAt)` fact, and the two reads
+  are separate methods precisely so a change to one can never widen the other.
+- Authorization is `event-registrar` **or** `platform_admin`
+  (`@Authz({ access: "authenticated", roles: [...], check: "fast-path" })`), on
+  its own controller rather than on the 007 `platform_admin` events surface, so
+  the registrar's reach stays readable as a file rather than a grep. `total`
+  counts the filtered set over the WHOLE event — the pager's denominator — and
+  an unknown event is a 404, never an empty page.
+
 ## Exported symbols
 
 - `RegistrationModule` — the Nest module (both controllers + service +
   repository).
 - `RegistrationService` — the `RegisterForEvent` command, the
   `EventRegistrationState` read, the `MyEvents` list, and the internal
-  `EventRoster` read (`eventRoster`, consumed in-process by 006 + the report);
+  `EventRoster` read (`eventRoster`, consumed in-process by 006 + the report)
+  and the 044 EARS-18 `eventRosterPage` read behind the registrar's HTTP route;
   resolves the acting doctor's `user_id` from the authenticated Zitadel `sub`
   (003 mirror) and the target event from its slug/id (007 read model). Domain
   errors: `EventNotRegistrableError` (→ 409), `RegistrationEventNotFoundError`
@@ -94,9 +127,13 @@ IS NULL`) has no phone and is never marked, and several such rows never group
 - `RegistrationController` — the `/events/:idOrSlug/registration` write + state
   read; `MyEventsController` — the `/me/events` list (`/me` path prefix, the
   caller's own resources). Both `doctor_guest`-authenticated (EARS-10).
+  `EventRosterAdminController` — the 044 EARS-18 registrar roster read, the one
+  admin-tier route of this module (`event-registrar` / `platform_admin`).
 - `RegistrationRepository` — Drizzle access: writes the `registrations` record;
   reads `events` (007) and `users` (003) read-only, including the `MyEvents` join
-  and the `findEventRoster` roster read (record columns only, no PII join).
+  and the `findEventRoster` roster read (record columns only, no PII join). The
+  044 EARS-18 `findEventRosterPage` is its widened sibling: it joins `users`
+  (003) and `specialties_minzdrav` (017) read-only for the registrar's desk row.
 
 **EARS-3** layers the one-registration invariant on top of that record:
 

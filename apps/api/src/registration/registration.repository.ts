@@ -1,13 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
-import { auditLedger, events, registrations, users } from "@ds/db";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
+  auditLedger,
+  events,
+  registrations,
+  specialtiesMinzdrav,
+  users,
+} from "@ds/db";
+import {
+  type CongressRosterQuery,
+  type CongressRosterRow,
   type EventLifecycleState,
   type EventRosterEntry,
   type MyEventItem,
   type MyEventsCounts,
   type MyEventsTab,
+  normaliseContactPhone,
   REGISTRABLE_EVENT_STATES,
 } from "@ds/schemas";
 import { and, asc, desc, eq, gte, inArray, or, type SQL, sql } from "drizzle-orm";
@@ -310,6 +320,212 @@ export class RegistrationRepository {
       registeredAt: r.registeredAt.toISOString(),
       possibleDuplicate: r.possibleDuplicate,
     }));
+  }
+
+  /**
+   * 044 EARS-18 — the SAME roster read, widened for the registrar's desk.
+   *
+   * It is a second method rather than an option on {@link findEventRoster}
+   * because the two readers differ in what they are ALLOWED to see: feature 006
+   * admits a doctor to a room and must keep reading the PII-free fact, while this
+   * one resolves the person standing at the desk. Keeping them apart means a
+   * future change to the room gate can never quietly widen into participant
+   * contact data.
+   *
+   * Two properties are load-bearing:
+   *
+   *   • **Every answer-derived cell falls back to the account** (EARS-16): a
+   *     platform-origin registration has `answers = null`, so its name, email
+   *     and phone come from `users`, and a cell with neither stays empty rather
+   *     than rendering a placeholder.
+   *   • **`total` counts the filtered set over the whole event**, not the page:
+   *     it is the pager's denominator, so it must be the same predicate without
+   *     `limit`/`offset`.
+   *
+   * Sorting and per-column filters are EARS-22/EARS-23, and the «возможный
+   * дубль» marker is EARS-30/EARS-31 — none of them is here. The order is the
+   * `registered_at ASC` the read model has always had, tie-broken by `id` so that
+   * a page boundary is stable when two rows share an instant.
+   */
+  async findEventRosterPage(
+    eventId: string,
+    query: CongressRosterQuery,
+  ): Promise<{ items: CongressRosterRow[]; total: number }> {
+    // The answers payload is the primary source; the account mirror is the
+    // EARS-16 fallback. `nullif(trim(...), '')` turns «nothing to show» into a
+    // NULL cell, so the screen renders an empty cell rather than a stray space.
+    const fullName = sql<string>`coalesce(
+      nullif(trim(concat_ws(' ',
+        ${registrations.answers}->>'surname',
+        ${registrations.answers}->>'firstName',
+        ${registrations.answers}->>'patronymic'
+      )), ''),
+      nullif(trim(${users.displayName}), ''),
+      ''
+    )`;
+    const email = sql<
+      string | null
+    >`coalesce(nullif(${registrations.answers}->>'email', ''), ${users.email})`;
+    // EARS-16 applies to the phone exactly as it does to the name and the
+    // email: `users.phone` is one of «the account's own profile values», so a
+    // platform-origin row renders it rather than an empty cell. EARS-29 forbids
+    // WRITING a congress phone into `users.phone`; reading the account's own
+    // number back is not that write.
+    const phone = sql<string | null>`coalesce(
+      nullif(${registrations.answers}->>'contactPhone', ''),
+      nullif(trim(${users.phone}), '')
+    )`;
+    // Never rendered — searched only. The normalised form exists for comparison
+    // (EARS-29), so a registrar typing `89001112233` finds the row that renders
+    // `+7 (900) 111-22-33`.
+    const phoneNormalised = sql<
+      string | null
+    >`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
+    const workplace = sql<
+      string | null
+    >`nullif(${registrations.answers}->>'workplace', '')`;
+    const city = sql<
+      string | null
+    >`nullif(${registrations.answers}->>'city', '')`;
+    const region = sql<
+      string | null
+    >`nullif(${registrations.answers}->>'region', '')`;
+
+    const specialtyJoin = sql`${specialtiesMinzdrav.id} = nullif(${registrations.answers}->>'specialtyId', '')::uuid`;
+    const where = and(
+      eq(registrations.eventId, eventId),
+      this.rosterSearchPredicate(
+        query.q,
+        {
+          fullName,
+          email,
+          phone,
+          workplace,
+          city,
+          region,
+          specialtyName: specialtiesMinzdrav.name,
+        },
+        phoneNormalised,
+      ),
+    );
+
+    const pageSize = query.pageSize;
+    const offset = (query.page - 1) * pageSize;
+
+    const rows = await this.db
+      .select({
+        registrationId: registrations.id,
+        fullName,
+        specialtyName: specialtiesMinzdrav.name,
+        workplace,
+        city,
+        region,
+        phone,
+        email,
+        registeredAt: registrations.registeredAt,
+        confirmationMailStatus: registrations.confirmationMailStatus,
+      })
+      .from(registrations)
+      .leftJoin(users, eq(users.id, registrations.userId))
+      .leftJoin(specialtiesMinzdrav, specialtyJoin)
+      .where(where)
+      .orderBy(asc(registrations.registeredAt), asc(registrations.id))
+      .limit(pageSize)
+      .offset(offset);
+
+    const [counted] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(registrations)
+      .leftJoin(users, eq(users.id, registrations.userId))
+      .leftJoin(specialtiesMinzdrav, specialtyJoin)
+      .where(where);
+
+    return {
+      items: rows.map((r) => ({
+        registrationId: r.registrationId,
+        fullName: r.fullName,
+        specialtyName: r.specialtyName ?? null,
+        workplace: r.workplace ?? null,
+        city: r.city ?? null,
+        region: r.region ?? null,
+        phone: r.phone ?? null,
+        email: r.email ?? null,
+        registeredAt: r.registeredAt.toISOString(),
+        confirmationMailStatus: r.confirmationMailStatus ?? null,
+      })),
+      total: counted?.total ?? 0,
+    };
+  }
+
+  /**
+   * The EARS-21 instant search: one case-insensitive «contains» term over every
+   * identifying cell of the row. The term is matched against the concatenation
+   * rather than column-by-column so that «Иванов Москва» is not silently a
+   * no-match on a per-column `OR` — and the caller's own `%`/`_`/`\` are escaped,
+   * because a registrar typing a phone fragment must not be able to turn the
+   * search into a wildcard that matches the whole event.
+   *
+   * The phone is the one cell where a literal «contains» is not enough: the row
+   * renders the number exactly as it was typed (EARS-29), so `+7 (900) 111-22-33`
+   * would be invisible to a registrar typing `89001112233`. The normalised value
+   * EARS-29 stores beside it exists for exactly that comparison, so a term that
+   * normalises to a phone of its own is ALSO matched against it, under the same
+   * `8 → 7` and punctuation rules the intake applied to the stored value — which
+   * is what makes the two comparable at all.
+   */
+  private rosterSearchPredicate(
+    q: string | undefined,
+    cells: Record<string, SQL<unknown> | SQL<string | null> | AnyPgColumn>,
+    phoneNormalised: SQL<string | null>,
+  ): SQL | undefined {
+    const term = q?.trim();
+    if (!term) return undefined;
+    const escape = (value: string): string =>
+      value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const blob = sql.join(
+      Object.values(cells).map((cell) => sql`coalesce(${cell}, '')`),
+      sql`, `,
+    );
+    const text = sql`concat_ws(' ', ${blob}) ilike ${`%${escape(term)}%`} escape '\\'`;
+
+    // The leading `+` is dropped so a FRAGMENT matches too: the stored key is
+    // `+79001112233`, and a registrar typing `9001112` means those digits
+    // anywhere in the number, not a number that starts with them.
+    const digits = normaliseContactPhone(term).replace(/^\+/, "");
+    // Four digits is the shortest run that is plausibly a phone fragment rather
+    // than a house number inside an address the text arm already covers.
+    if (digits.length < 4) return text;
+    return or(
+      text,
+      sql`coalesce(${phoneNormalised}, '') like ${`%${escape(digits)}%`} escape '\\'`,
+    );
+  }
+
+  /**
+   * 044 EARS-18 — the event header the roster page titles itself with. Read
+   * separately from the rows because it must answer for an event with NO
+   * registrations too: an empty roster is a valid page of a real event, not a 404.
+   */
+  async findEventHeader(
+    idOrSlug: string,
+  ): Promise<
+    { id: string; slug: string; title: string; startsAt: Date } | undefined
+  > {
+    const [row] = await this.db
+      .select({
+        id: events.id,
+        slug: events.slug,
+        title: events.title,
+        startsAt: events.startsAt,
+      })
+      .from(events)
+      .where(
+        UUID_RE.test(idOrSlug)
+          ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
+          : eq(events.slug, idOrSlug),
+      )
+      .limit(1);
+    return row;
   }
 
   /**

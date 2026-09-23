@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { RecordingsModule } from "../recordings/recordings.module.js";
+import { EventRosterAdminController } from "./event-roster.admin.controller.js";
 import { MyEventsController } from "./my-events.controller.js";
 import { RegistrationController } from "./registration.controller.js";
 import { RegistrationRepository } from "./registration.repository.js";
@@ -20,7 +21,15 @@ import { RegistrationService } from "./registration.service.js";
   // edited-over-raw rule here — so the badge on a doctor's row and the badge on
   // the public card have one implementation.
   imports: [RecordingsModule],
-  controllers: [RegistrationController, MyEventsController],
+  // 044 EARS-18: the registrar's roster route is the third controller of this
+  // module — the read model it serves is owned here, so the route lives beside
+  // it rather than on the 007 `platform_admin` events surface (its own file
+  // documents why the two authorization classes stay apart).
+  controllers: [
+    RegistrationController,
+    MyEventsController,
+    EventRosterAdminController,
+  ],
   providers: [RegistrationService, RegistrationRepository],
   exports: [RegistrationService],
 })

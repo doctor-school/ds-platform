@@ -87,6 +87,13 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // Holding a session: reading back one's own roles, and ending the session.
   "GET /v1/admin/auth/session": ["platform_admin", "event-registrar"],
   "POST /v1/admin/auth/logout": ["platform_admin", "event-registrar"],
+  // 044 EARS-18 — the congress roster read, the one working surface the role
+  // exists for. It is the registrar's whole reach into admin data: a read of
+  // one event's roster, with no sibling write on its controller (EARS-24).
+  "GET /v1/admin/events/:idOrSlug/roster": [
+    "platform_admin",
+    "event-registrar",
+  ],
 };
 
 /** A path-parameterised id that resolves to nothing — the floor is about authz, not existence. */
@@ -195,6 +202,14 @@ const FLOOR_ROUTES: {
     method: "POST",
     url: `/v1/admin/events/${ABSENT_ID}/transition`,
     payload: { to: "published" },
+  },
+  // 044 EARS-18 — the congress roster read. It hangs under the `admin/events`
+  // prefix but is a 044 read model rather than a 007 event command, so it is
+  // listed here and excluded from the EARS-11.7 command-shape count below.
+  {
+    endpoint: "GET /v1/admin/events/:idOrSlug/roster",
+    method: "GET",
+    url: `/v1/admin/events/${ABSENT_ID}/roster`,
   },
   // 012 EARS-1/EARS-16 (#1283) — the taxonomy project routes sit on the same
   // raised floor as every other admin route: the guard refuses before validation,
@@ -1014,10 +1029,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // must keep that shape too. (`POST /v1/admin/legacy-broadcasts` is the
       // creation entry and hangs off its own path, so it is asserted by the
       // floor-table rows above rather than counted here.)
+      // 044 EARS-18's roster read is excluded for the same reason as the
+      // recordings routes: it shares the path prefix but is a different
+      // feature with its own EARS coverage (and its own role set), and the
+      // floor-table rows above assert it.
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&
-          !r.endpoint.includes("/recordings"),
+          !r.endpoint.includes("/recordings") &&
+          !r.endpoint.endsWith("/roster"),
       );
       expect(events.length).toBe(12);
       for (const row of events) {

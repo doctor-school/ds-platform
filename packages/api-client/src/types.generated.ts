@@ -772,6 +772,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/events/{idOrSlug}/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventRosterAdminController_roster"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/experts": {
         parameters: {
             query?: never;
@@ -1910,6 +1926,33 @@ export interface components {
             embedRef: string;
             /** @enum {string} */
             provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+        };
+        CongressRosterListDto: {
+            event: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                /** Format: date-time */
+                startsAt: string;
+                title: string;
+            };
+            items: {
+                city: string | null;
+                confirmationMailStatus: ("sent" | "failed") | null;
+                email: string | null;
+                fullName: string;
+                phone: string | null;
+                region: string | null;
+                /** Format: date-time */
+                registeredAt: string;
+                /** Format: uuid */
+                registrationId: string;
+                specialtyName: string | null;
+                workplace: string | null;
+            }[];
+            page: number;
+            pageSize: number;
+            total: number;
         };
         CongressSignUpRequestDto: {
             captchaToken?: string;
@@ -3454,6 +3497,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    EventRosterAdminController_roster: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                idOrSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressRosterListDto"];
+                };
             };
         };
     };

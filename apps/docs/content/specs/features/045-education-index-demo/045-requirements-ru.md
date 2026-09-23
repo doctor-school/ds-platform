@@ -2,7 +2,7 @@
 title: "045 — Образовательный индекс · демо"
 description: "Требования к двум временным публичным демо-страницам на academy.doctor.school — публичный лидерборд инвестиций в образование и кабинет партнёра на вымышленных данных, удаляются с запуском фич 032/035."
 slug: 045-education-index-demo
-status: Draft
+status: In dev
 issues: [2360]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/25

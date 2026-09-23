@@ -2,7 +2,7 @@
 title: "045 — Education index demo"
 description: "Requirements for two temporary, unauthenticated static demo pages on academy.doctor.school — a public education-investment leaderboard and a partner-cabinet dashboard on fictional data, deleted once features 032/035 ship."
 slug: 045-education-index-demo
-status: Draft
+status: In dev
 issues: [2360]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/25

@@ -91,6 +91,13 @@ describe("<DataTable>", () => {
     expect(cols[2]).toHaveStyle({ width: "120px" });
   });
 
+  it("lays the grid out FIXED so the declared widths hold instead of content-sized auto layout", () => {
+    const { container } = renderTable();
+    const table = container.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(table?.className).toContain("table-fixed");
+  });
+
   it("keeps the full value reachable on a truncated cell (title attribute)", () => {
     const { container } = renderTable();
     const truncated = container.querySelector('td[title="Диагностика"]');

@@ -340,7 +340,7 @@ export function DataTable<Row>({
     <div className={cn("flex flex-col gap-3", className)}>
       {/* ≥ md — the declared column grid. */}
       <div className="hidden md:block">
-        <Table>
+        <Table regionLabel={caption} className="table-fixed">
           <caption className="sr-only">{caption}</caption>
           <colgroup>
             <col style={record.width ? { width: record.width } : undefined} />

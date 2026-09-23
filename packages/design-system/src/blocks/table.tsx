@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 
 import { cn } from "../lib/utils";
@@ -41,18 +43,72 @@ import { cn } from "../lib/utils";
  * `primitives-first` violation `DataTable` exists to close (#1578).
  */
 
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="w-full overflow-x-auto border-2 border-border bg-card">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom border-collapse text-sm", className)}
-      {...props}
-    />
-  </div>
-));
+/** Default accessible name for the scroll region when the consumer passes none. */
+const DEFAULT_REGION_LABEL = "Таблица";
+
+/**
+ * True while the element is wider inside than out (`scrollWidth > clientWidth`).
+ * Re-measured when the wrapper resizes (viewport) AND when the table inside it
+ * resizes (rows arriving, a page change), since either can start or end overflow.
+ */
+function useHorizontalOverflow(
+  scroller: React.RefObject<HTMLDivElement | null>,
+  content: React.RefObject<HTMLTableElement | null>,
+) {
+  const [overflows, setOverflows] = React.useState(false);
+  React.useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const measure = () =>
+      setOverflows(element.scrollWidth > element.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (content.current) observer.observe(content.current);
+    return () => observer.disconnect();
+  }, [scroller, content]);
+  return overflows;
+}
+
+export interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  /**
+   * Accessible name of the horizontal scroll region (#2357). When the grid is wider
+   * than its container the wrapper becomes a named, keyboard-focusable `region`
+   * (axe `scrollable-region-focusable`) so a keyboard user can scroll to the
+   * clipped columns; a table that fits gains no tab stop. `DataTable` passes its
+   * caption.
+   */
+  regionLabel?: string | undefined;
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({ className, regionLabel, ...props }, ref) => {
+    const scrollerRef = React.useRef<HTMLDivElement>(null);
+    const tableRef = React.useRef<HTMLTableElement>(null);
+    React.useImperativeHandle(ref, () => tableRef.current as HTMLTableElement);
+    const overflows = useHorizontalOverflow(scrollerRef, tableRef);
+    return (
+      <div
+        ref={scrollerRef}
+        className="w-full overflow-x-auto border-2 border-border bg-card focus-visible:outline-none focus-visible:shadow-focus"
+        {...(overflows
+          ? {
+              role: "region",
+              tabIndex: 0,
+              "aria-label": regionLabel ?? DEFAULT_REGION_LABEL,
+            }
+          : {})}
+      >
+        <table
+          ref={tableRef}
+          className={cn("w-full caption-bottom border-collapse text-sm", className)}
+          {...props}
+        />
+      </div>
+    );
+  },
+);
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<

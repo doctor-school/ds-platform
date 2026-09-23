@@ -28,7 +28,7 @@ flowchart LR
 One TypeScript module under `apps/portal` (e.g. `lib/education-index-demo/fixtures.ts`) exporting:
 
 - `organizations`: 12 entries (id, name, emblem plate/monogram/shape, investment amount+share, attention share, doctors, lessons, events, index, rank-delta) — the table in design prompt 23.
-- `weeklySeries`: index values per organisation per week 1–4. The prompt states weeks 1, 3 and 4 for every place and weeks 1–4 only for places 1–3; **the fixture author derives weeks 1–2 for places 4–12** by linear interpolation between the stated week-1 baseline and week-3 value, rounded to the nearest integer — a documented fixture-authoring rule, not a design decision, because the canvas never renders those intermediate points.
+- `weeklySeries`: index values per organisation per week. The prompt gives the full week 1–4 series only for the top-3 organisations (the dynamics chart's subjects, EARS-7) and a single week-3 index value for all 12 places (the source of the rank-delta column, EARS-3); the fixture carries exactly that — full series for places 1–3, one week-3 value for places 4–12 — with no invented interpolation for weeks the canvas never renders.
 - `cabinet`: the Ortella Biotech KPI tiles, awareness before/after rows, funnel steps, weekly attention totals, audience summary chips and the 5-row audience table.
 
 ## No chart primitive
@@ -39,13 +39,15 @@ One TypeScript module under `apps/portal` (e.g. `lib/education-index-demo/fixtur
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Rendered: page load (SSG/SSR, no client fetch)
-  Rendered --> RowExpanded: click Ortella Biotech row
-  RowExpanded --> Rendered: click again
-  Rendered --> [*]: navigate away
+  state "Closed" as Closed
+  state "Open" as Open
+  [*] --> Open: Ortella Biotech row — page load, already expanded
+  [*] --> Closed: every other row — page load, collapsed
+  Closed --> Open: click row
+  Open --> Closed: click row
 ```
 
-No loading, error or empty state exists (Invariants — the demo is fully static); the only client-side state is the single expanded leaderboard row.
+No loading, error or empty state exists (Invariants — the demo is fully static); the only client-side state is each leaderboard row's independent open/closed toggle — any row may be open, several at once, and the Ortella Biotech row starts open on page load while every other row starts closed.
 
 ## Removal plan
 

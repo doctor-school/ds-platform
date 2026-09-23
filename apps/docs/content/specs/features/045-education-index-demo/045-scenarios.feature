@@ -18,10 +18,18 @@ Feature: 045 — Education index demo
     And each row shows its index, rank delta, investment amount and share, doctors, lessons and events
 
   @EARS-6
-  Scenario: expanding a row reveals its sub-metrics
+  Scenario: Ortella Biotech row is open by default
+    Given the visitor opens "/education-index"
+    Then the Ortella Biotech row is already expanded
+    And two sub-metric bars appear for education-investment share and doctor-attention share
+
+  @EARS-6
+  Scenario: any leaderboard row toggles open and closed independently
     Given the visitor is on "/education-index"
-    When the visitor expands the Ortella Biotech row
-    Then two sub-metric bars appear for education-investment share and doctor-attention share
+    When the visitor clicks a leaderboard row that is closed
+    Then that row expands to reveal its two sub-metric bars, and every other row's open/closed state is unchanged
+    When the visitor clicks that same row again
+    Then that row collapses, and every other row's open/closed state is unchanged
 
   @EARS-7
   Scenario: index dynamics start at the launch date
@@ -49,9 +57,10 @@ Feature: 045 — Education index demo
       | dark  | 1440     |
       | light | 390      |
 
+  @EARS-13
   Scenario: no forbidden compliance word appears
     When the visitor opens "/education-index" and "/education-index/partner-demo"
-    Then the response contains none of "патент, спасённая жизнь, спонсор, рекламодатель, вкладчик, майнинг"
+    Then the response contains none of "пациент, спасённая жизнь, помощь родственникам, связь с продажами, торговое название препарата, спонсор, рекламодатель, вкладчик, майнинг"
 
   @EARS-13
   Scenario: pages are not indexable

@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}</style></helmet>
+
+<div style="min-height:100vh;background:{{ outerBg }};padding:{{ outerPad }}">
+<div style="{{ frame }}">
+  <dc-import name="ds-shell" host="academy" loggedIn="{{ false }}" dark="{{ dark }}" mobile="{{ isMobile }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}">
+
+  <!-- Плашка демо · общая для обоих экранов -->
+  <div data-screen-label="a-index-demo · плашка демо" style="position:sticky;top:0;z-index:30;background:{{ warnTint }};border-bottom:2px solid {{ warn }};padding:8px {{ padX }};display:flex;align-items:center;gap:10px">
+    <span style="width:8px;height:8px;background:{{ warn }};flex:none"></span>
+    <span style="font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ warn }};line-height:1.5">{{ demoText }}</span>
+  </div>
+
+  <!-- ═══════════════ ЭКРАН «ПУБЛИЧНЫЙ» · /education-index ═══════════════ -->
+  <sc-if value="{{ isPublic }}" hint-placeholder-val="{{ true }}">
+
+  <div data-screen-label="a-index-demo · публичный · постер-шапка" style="background:#114D9E;padding:{{ posterPad }}">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:13px;font-weight:700;margin-bottom:24px">
+        <a href="academy-home.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <span style="color:#D3E8FD">Образовательный индекс</span>
+      </nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Кто и сколько вкладывает в образование врачей</div>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">открытый рейтинг</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="flex:1 1 260px;min-width:min(260px,100%)">
+          <h1 style="margin:10px 0 0;font-size:{{ h1Size }};line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Образовательный индекс Doctor.School</h1>
+          <p style="margin:18px 0 0;max-width:640px;font-size:16px;line-height:1.65;font-weight:500;color:#D3E8FD;text-wrap:pretty">Индекс — среднее доли инвестиций в образование врачей и доли внимания врачей к урокам и событиям партнёра; лидер недели = 100</p>
+        </div>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;line-height:2;padding-bottom:4px">запущен 1 сентября 2026<br><span style="color:#fff">срез: неделя 4</span></div>
+      </div>
+    </div>
+  </div>
+
+  <main style="padding:0 {{ padX }} 88px">
+    <div style="max-width:1104px;margin:0 auto">
+
+      <!-- Три главные плашки -->
+      <section data-screen-label="a-index-demo · главные плашки" style="margin-top:48px;{{ plateGrid }}">
+        <sc-for list="{{ heroPlates }}" as="hp" hint-placeholder-count="3">
+          <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};padding:22px 22px 24px">
+            <div style="font-size:clamp(32px,4vw,44px);font-weight:800;letter-spacing:-.035em;line-height:1;color:{{ ink }};font-variant-numeric:tabular-nums">{{ hp.val }}</div>
+            <div style="margin-top:10px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ accent }}">{{ hp.cap }}</div>
+            <div style="margin-top:6px;font-size:12.5px;font-weight:600;line-height:1.5;color:{{ inkFaint }}">{{ hp.sub }}</div>
+          </div>
+        </sc-for>
+      </section>
+
+      <!-- Лидерборд -->
+      <section data-screen-label="a-index-demo · лидерборд" style="margin-top:64px">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Рейтинг · неделя 4</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }};margin-bottom:20px">12 партнёров · нажмите на строку, чтобы увидеть, из чего сложился индекс</div>
+
+        <!-- Развилка podium · Б -->
+        <sc-if value="{{ showPodium }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-index-demo · подиум топ-3 · вариант Б" style="{{ podiumGrid }}">
+            <sc-for list="{{ podium }}" as="r" hint-placeholder-count="3">
+              <div style="{{ r.podiumStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <span style="font-size:34px;font-weight:800;letter-spacing:-.04em;color:{{ tintInk }};font-variant-numeric:tabular-nums">{{ r.rank }}</span>
+                  <span style="position:relative;width:48px;height:48px;flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 6px 6px;background:{{ r.plate }};"><span style="font-size:18px;font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ r.fg }}">{{ r.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:6px;right:6px;width:13px;height:13px;display:block"><path d="{{ r.mark }}" style="fill:{{ r.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+                </div>
+                <div style="margin-top:14px;font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Партнёр · {{ r.name }}</div>
+                <div style="margin-top:14px;display:flex;align-items:baseline;gap:10px">
+                  <span style="font-size:40px;font-weight:800;letter-spacing:-.035em;color:{{ ink }};font-variant-numeric:tabular-nums">{{ r.idx }}</span>
+                  <span style="{{ r.deltaStyle }}">{{ r.deltaTxt }}</span>
+                </div>
+                <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};margin-top:2px">Индекс</div>
+                <div style="margin-top:12px;font-size:12.5px;font-weight:700;line-height:1.6;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ r.podiumLine }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- Таблица · десктоп -->
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="a-index-demo · таблица-рейтинг" style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};overflow-x:auto">
+            <div style="display:grid;grid-template-columns:{{ rowGrid }};gap:14px;align-items:center;padding:12px 20px;background:{{ sectionGray }};border-bottom:2px solid {{ border }}">
+              <span style="{{ headCap }}">№</span><span></span><span style="{{ headCap }}">Организация</span>
+              <span style="{{ headCap }}">Индекс</span>
+              <span style="{{ headCapR }}">Δ мест</span>
+              <span style="{{ headCapR }}">Инвестиции</span>
+              <span style="{{ headCapR }}">Врачей</span>
+              <span style="{{ headCapR }}">Уроков</span>
+              <span style="{{ headCapR }}">Мероприятий</span>
+              <span></span>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="12">
+              <div style="border-top:1px solid {{ hairline }};background:{{ r.rowBg }}">
+                <div onClick="{{ r.toggle }}" title="{{ r.toggleTitle }}" style="display:grid;grid-template-columns:{{ rowGrid }};gap:14px;align-items:center;padding:13px 20px;cursor:pointer" style-hover="background:{{ sectionGray }}">
+                  <span style="{{ r.rankStyle }}">{{ r.rank }}</span>
+                  <span style="position:relative;width:40px;height:40px;flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 5px 5px;background:{{ r.plate }};"><span style="font-size:15px;font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ r.fg }}">{{ r.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:5px;right:5px;width:11px;height:11px;display:block"><path d="{{ r.mark }}" style="fill:{{ r.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+                  <span style="font-size:15.5px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};min-width:0">Партнёр · {{ r.name }}</span>
+                  <span style="min-width:0">
+                    <span style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};font-variant-numeric:tabular-nums">{{ r.idx }}</span>
+                    <span style="display:block;height:5px;background:{{ hairline }};margin-top:6px"><span style="{{ r.idxBar }}"></span></span>
+                  </span>
+                  <span style="{{ r.deltaStyleR }}">{{ r.deltaTxt }}</span>
+                  <span style="text-align:right;font-size:13.5px;font-weight:700;color:{{ ink }};font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.invTxt }}</span>
+                  <span style="text-align:right;font-size:13.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ r.doctors }}</span>
+                  <span style="text-align:right;font-size:13.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ r.lessons }}</span>
+                  <span style="text-align:right;font-size:13.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ r.events }}</span>
+                  <span style="font-size:13px;color:{{ accent }};text-align:right">{{ r.chev }}</span>
+                </div>
+                <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                  <div data-screen-label="a-index-demo · строка раскрыта · два подбалла" style="padding:4px 20px 20px 128px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 32px">
+                    <div>
+                      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12.5px;font-weight:700;color:{{ inkMuted }}"><span>Инвестиции в образование</span><span style="color:{{ ink }};font-weight:800;font-variant-numeric:tabular-nums">{{ r.invSubTxt }}</span></div>
+                      <div style="margin-top:8px;height:14px;border:2px solid {{ border }};background:{{ surface }}"><span style="{{ r.invSubBar }}"></span></div>
+                    </div>
+                    <div>
+                      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12.5px;font-weight:700;color:{{ inkMuted }}"><span>Внимание врачей</span><span style="color:{{ ink }};font-weight:800;font-variant-numeric:tabular-nums">{{ r.attSubTxt }}</span></div>
+                      <div style="margin-top:8px;height:14px;border:2px solid {{ border }};background:{{ surface }}"><span style="{{ r.attSubBar }}"></span></div>
+                    </div>
+                    <div style="grid-column:1/-1;font-size:12.5px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ r.idxExplain }}</div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- Мобильный 390 · плоские полосы -->
+        <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-index-demo · 390 · лидерборд полосами" style="margin:0 -16px;background:{{ surface }};border-top:2px solid {{ border }}">
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="12">
+              <div style="border-bottom:1px solid {{ hairline }};background:{{ r.rowBg }}">
+                <div onClick="{{ r.toggle }}" style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;cursor:pointer">
+                  <span style="{{ r.rankStyle }}">{{ r.rank }}</span>
+                  <span style="position:relative;width:36px;height:36px;flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 4px 4px;background:{{ r.plate }};"><span style="font-size:13px;font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ r.fg }}">{{ r.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:4px;right:4px;width:10px;height:10px;display:block"><path d="{{ r.mark }}" style="fill:{{ r.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                    <span style="font-size:15px;font-weight:800;letter-spacing:-.015em;color:{{ ink }};line-height:1.3">Партнёр · {{ r.name }}</span>
+                    <span style="font-size:12.5px;font-weight:700;line-height:1.5;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ r.mobLine }}</span>
+                  </span>
+                  <span style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+                    <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};font-variant-numeric:tabular-nums;line-height:1">{{ r.idx }}</span>
+                    <span style="{{ r.deltaStyle }}">{{ r.deltaTxt }}</span>
+                  </span>
+                </div>
+                <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:12px">
+                    <div>
+                      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:700;color:{{ inkMuted }}"><span>Инвестиции в образование</span><span style="color:{{ ink }};font-weight:800">{{ r.invSubTxt }}</span></div>
+                      <div style="margin-top:6px;height:12px;border:2px solid {{ border }}"><span style="{{ r.invSubBar }}"></span></div>
+                    </div>
+                    <div>
+                      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:700;color:{{ inkMuted }}"><span>Внимание врачей</span><span style="color:{{ ink }};font-weight:800">{{ r.attSubTxt }}</span></div>
+                      <div style="margin-top:6px;height:12px;border:2px solid {{ border }}"><span style="{{ r.attSubBar }}"></span></div>
+                    </div>
+                    <div style="font-size:12px;font-weight:700;line-height:1.5;color:{{ inkFaint }}">{{ r.idxExplain }}</div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </section>
+
+      <!-- Топ-5 · составная полоса долей -->
+      <section data-screen-label="a-index-demo · топ-5 дают 80% инвестиций" style="margin-top:64px;border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadowSm }};padding:{{ cardPad }}">
+        <div style="font-size:clamp(22px,3vw,28px);font-weight:800;letter-spacing:-.025em;line-height:1.2;color:{{ ink }}">Топ-5 партнёров дают 80% инвестиций</div>
+        <div style="margin-top:6px;font-size:13px;font-weight:600;color:{{ inkMuted }}">Доли в 13,6 млн ₽, инвестированных в образование врачей</div>
+        <div style="margin-top:22px;display:flex;height:{{ shareH }};border:2px solid {{ border }}">
+          <sc-for list="{{ shareSegs }}" as="sg" hint-placeholder-count="6">
+            <div title="{{ sg.title }}" style="{{ sg.style }}">
+              <sc-if value="{{ sg.hasEmblem }}" hint-placeholder-val="{{ true }}">
+                <span style="position:relative;width:26px;height:26px;flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 3px 3px;background:{{ sg.plate }};outline:2px solid rgba(255,255,255,.7)"><span style="font-size:10px;font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ sg.fg }}">{{ sg.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:3px;right:3px;width:7px;height:7px;display:block"><path d="{{ sg.mark }}" style="fill:{{ sg.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+              </sc-if>
+              <sc-if value="{{ sg.showPct }}" hint-placeholder-val="{{ true }}">
+                <span style="font-size:15px;font-weight:800;letter-spacing:-.02em;color:{{ sg.fg }};font-variant-numeric:tabular-nums">{{ sg.pct }}</span>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px 22px;flex-wrap:wrap">
+          <sc-for list="{{ shareSegs }}" as="sg" hint-placeholder-count="6">
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">
+              <span style="{{ sg.dot }}"></span>{{ sg.legend }}
+            </span>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- Динамика индекса -->
+      <section data-screen-label="a-index-demo · динамика индекса" style="margin-top:64px">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:20px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Динамика индекса</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="{{ dynGrid }}">
+          <sc-for list="{{ dyn }}" as="dy" hint-placeholder-count="3">
+            <div style="border:2px solid {{ border }};background:{{ surface }};padding:18px 18px 14px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="position:relative;width:28px;height:28px;flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 3px 3px;background:{{ dy.plate }};"><span style="font-size:10px;font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ dy.fg }}">{{ dy.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:3px;right:3px;width:8px;height:8px;display:block"><path d="{{ dy.mark }}" style="fill:{{ dy.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+                <span style="font-size:14px;font-weight:800;color:{{ ink }}">{{ dy.name }}</span>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:10px;height:130px;margin-top:16px">
+                <sc-for list="{{ dy.bars }}" as="b" hint-placeholder-count="4">
+                  <div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:5px">
+                    <span style="font-size:12px;font-weight:800;color:{{ ink }};text-align:center;font-variant-numeric:tabular-nums">{{ b.val }}</span>
+                    <span style="{{ b.style }}"></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:8px">
+                <sc-for list="{{ weekLabels }}" as="wl" hint-placeholder-count="4">
+                  <span style="flex:1;text-align:center;font-size:11px;font-weight:700;color:{{ inkFaint }}">{{ wl }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:14px;font-size:12.5px;font-weight:600;line-height:1.6;color:{{ inkFaint }};max-width:720px">Точка отсчёта — запуск индекса 1 сентября 2026; неделя 1 — первый срез, раньше индекс не считался</div>
+      </section>
+
+      <!-- Новости индекса -->
+      <section data-screen-label="a-index-demo · новости индекса" style="margin-top:64px">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:20px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Новости индекса</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="{{ dynGrid }}">
+          <sc-for list="{{ news }}" as="nw" hint-placeholder-count="3">
+            <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }};padding:20px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="position:relative;width:36px;height:36px;flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 4px 4px;background:{{ nw.plate }};"><span style="font-size:13px;font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ nw.fg }}">{{ nw.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:4px;right:4px;width:10px;height:10px;display:block"><path d="{{ nw.mark }}" style="fill:{{ nw.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+                <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:5px 10px">неделя 4</span>
+              </div>
+              <div style="font-size:17px;font-weight:800;letter-spacing:-.015em;line-height:1.35;color:{{ ink }};text-wrap:pretty">{{ nw.title }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- CTA (юнит academy-partners) -->
+      <section data-screen-label="a-index-demo · хотите на лидерборд" style="margin-top:64px">
+        <div style="{{ ctaBox }}">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Хотите на этот лидерборд?</div>
+            <div style="font-size:14px;line-height:1.65;color:{{ inkMuted }};margin-top:8px;max-width:560px">Организации инвестируют в образовательные проекты Академии и попадают в открытый индекс. Как это устроено и с чего начать — на странице для партнёров.</div>
+          </div>
+          <a href="academy-invest.dc.html" title="#a-invest" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 24px;text-decoration:none;box-shadow:4px 4px 0 {{ border }};text-align:center" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Стать партнёром — как это работает</a>
+        </div>
+      </section>
+    </div>
+  </main>
+  </sc-if>
+
+  <!-- ═══════════════ ЭКРАН «КАБИНЕТ» · /education-index/partner-demo ═══════════════ -->
+  <sc-if value="{{ isCabinet }}" hint-placeholder-val="{{ false }}">
+
+  <div data-screen-label="a-index-demo · кабинет · постер + план/факт" style="background:#114D9E;padding:{{ posterPad }}">
+    <div style="max-width:1104px;margin:0 auto">
+      <nav style="font-size:13px;font-weight:700;margin-bottom:24px;line-height:1.8">
+        <a href="academy-home.dc.html" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Академия</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <a href="#" onClick="{{ goPublic }}" style="color:#AED4FB;text-decoration:underline;text-underline-offset:4px">Образовательный индекс</a>
+        <span style="color:rgba(211,232,253,.5);margin:0 8px">/</span>
+        <span style="color:#D3E8FD">Кабинет партнёра</span>
+      </nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD">Отчётность партнёра · неделя 4</div>
+        <span style="display:inline-block;background:#fff;color:#114D9E;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:9px 14px;box-shadow:3px 3px 0 {{ headerShadow }};transform:rotate(2deg)">рабочее место</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:18px;margin-top:14px">
+        <span style="position:relative;width:{{ posterEmblem }};height:{{ posterEmblem }};flex:none;display:inline-flex;align-items:flex-end;box-sizing:border-box;padding:0 0 {{ posterInset }} {{ posterInset }};background:{{ own.plate }};box-shadow:3px 3px 0 #0D3A77"><span style="font-size:{{ posterMonoSize }};font-weight:800;letter-spacing:-.04em;line-height:.9;color:{{ own.fg }}">{{ own.mono }}</span><svg viewBox="0 0 14 14" style="position:absolute;top:{{ posterInset }};right:{{ posterInset }};width:{{ posterMarkSize }};height:{{ posterMarkSize }};display:block"><path d="{{ own.mark }}" style="fill:{{ own.fg }};fill-rule:evenodd;opacity:.9"></path></svg></span>
+        <h1 style="margin:0;font-size:{{ h1SizeCab }};line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Кабинет партнёра · Ортелла Биотех</h1>
+      </div>
+      <p style="margin:16px 0 0;max-width:640px;font-size:16px;line-height:1.6;font-weight:500;color:#D3E8FD">Отчётность по образовательным проектам на doctor.school</p>
+
+      <div data-screen-label="a-index-demo · шкала план/факт · в графике" style="margin-top:28px;max-width:760px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <span style="font-size:15px;font-weight:800;color:#fff">В графике: 68% плана к 60% срока</span>
+          <span style="font-size:12.5px;font-weight:700;color:#D3E8FD;font-variant-numeric:tabular-nums">план 56 300 очков внимания · факт 38 300</span>
+        </div>
+        <div style="margin-top:12px;height:18px;border:2px solid #fff;position:relative">
+          <span style="display:block;height:100%;width:68%;background:#fff"></span>
+          <span style="position:absolute;left:60%;top:-8px;bottom:-8px;width:3px;background:#0D3A77;outline:2px solid #fff"></span>
+        </div>
+        <div style="position:relative;height:22px;margin-top:10px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#D3E8FD">
+          <span style="position:absolute;left:60%;transform:translateX(-50%);white-space:nowrap">60% срока</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main style="padding:0 {{ padX }} 88px">
+    <div style="max-width:1104px;margin:0 auto">
+
+      <!-- KPI -->
+      <section data-screen-label="a-index-demo · плитки KPI" style="margin-top:48px;{{ kpiGrid }}">
+        <sc-for list="{{ kpis }}" as="mt" hint-placeholder-count="4">
+          <div style="border:2px solid {{ border }};background:{{ surface }};padding:20px 20px 22px">
+            <div style="font-size:clamp(26px,3vw,34px);font-weight:800;letter-spacing:-.03em;line-height:1;color:{{ ink }};font-variant-numeric:tabular-nums">{{ mt.val }}</div>
+            <div style="margin-top:10px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ accent }}">{{ mt.cap }}</div>
+          </div>
+        </sc-for>
+      </section>
+
+      <!-- Осведомлённость до и после -->
+      <section data-screen-label="a-index-demo · осведомлённость до и после" style="margin-top:64px">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Осведомлённость до и после</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};margin-bottom:20px">Доля врачей, оценивших знания по теме на 8+ из 10 — до и после урока</div>
+        <div style="border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }}">
+          <sc-if value="{{ awA }}" hint-placeholder-val="{{ true }}">
+            <div data-screen-label="a-index-demo · осведомлённость · вариант А — две полосы">
+              <sc-for list="{{ aware }}" as="aw" hint-placeholder-count="4">
+                <div style="{{ aw.rowStyle }}">
+                  <div style="font-size:14.5px;font-weight:800;line-height:1.35;color:{{ ink }};text-wrap:pretty">{{ aw.topic }}</div>
+                  <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+                    <div style="display:grid;grid-template-columns:54px minmax(0,1fr) 44px;gap:10px;align-items:center">
+                      <span style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }}">до</span>
+                      <span style="height:12px;background:{{ sectionGray }}"><span style="{{ aw.beforeBar }}"></span></span>
+                      <span style="font-size:13px;font-weight:700;color:{{ inkMuted }};text-align:right;font-variant-numeric:tabular-nums">{{ aw.before }}%</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:54px minmax(0,1fr) 44px;gap:10px;align-items:center">
+                      <span style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }}">после</span>
+                      <span style="height:12px;background:{{ sectionGray }}"><span style="{{ aw.afterBar }}"></span></span>
+                      <span style="font-size:13px;font-weight:800;color:{{ ink }};text-align:right;font-variant-numeric:tabular-nums">{{ aw.after }}%</span>
+                    </div>
+                  </div>
+                  <span style="font-size:15px;font-weight:800;color:{{ success }};text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ aw.gain }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ awB }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="a-index-demo · осведомлённость · вариант Б — шкала со стрелкой">
+              <sc-for list="{{ aware }}" as="aw" hint-placeholder-count="4">
+                <div style="{{ aw.rowStyle }}">
+                  <div style="font-size:14.5px;font-weight:800;line-height:1.35;color:{{ ink }};text-wrap:pretty">{{ aw.topic }}</div>
+                  <div style="min-width:0">
+                    <div style="position:relative;height:14px;background:{{ sectionGray }}">
+                      <span style="{{ aw.rangeBar }}"></span>
+                      <span style="{{ aw.fromDot }}"></span>
+                      <span style="{{ aw.toHead }}"></span>
+                    </div>
+                    <div style="margin-top:6px;font-size:12.5px;font-weight:700;color:{{ inkMuted }};font-variant-numeric:tabular-nums">{{ aw.before }}% → <b style="color:{{ ink }}">{{ aw.after }}%</b></div>
+                  </div>
+                  <span style="font-size:15px;font-weight:800;color:{{ success }};text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ aw.gain }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="border-top:2px solid {{ border }};background:{{ sectionGray }};padding:16px 20px;display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap">
+            <span style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};font-variant-numeric:tabular-nums">Пул осведомлённых врачей: 612 из 1 240</span>
+            <span style="flex:1;min-width:140px;height:12px;border:2px solid {{ border }};background:{{ surface }}"><span style="{{ poolBar }}"></span></span>
+            <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">самооценка врача до и после урока</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Глубина вовлечения -->
+      <section data-screen-label="a-index-demo · глубина вовлечения" style="margin-top:64px">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Глубина вовлечения</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="font-size:13px;font-weight:600;line-height:1.6;color:{{ inkMuted }};margin-bottom:20px">Сколько врачей дошли до каждого шага образовательного пути · конверсия — из предыдущего шага</div>
+        <div style="border:2px solid {{ border }};background:{{ surface }}">
+          <sc-for list="{{ funnel }}" as="fn" hint-placeholder-count="7">
+            <div style="{{ fn.rowStyle }}">
+              <span style="font-size:12px;font-weight:800;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ fn.n }}</span>
+              <span style="font-size:14px;font-weight:800;color:{{ ink }}">{{ fn.step }}</span>
+              <span style="{{ fn.trackStyle }}"><span style="{{ fn.bar }}"></span></span>
+              <span style="font-size:15px;font-weight:800;color:{{ ink }};text-align:right;font-variant-numeric:tabular-nums">{{ fn.count }}</span>
+              <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }};text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ fn.conv }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- Внимание по неделям (юнит кабинета) -->
+      <section data-screen-label="a-index-demo · внимание по неделям" style="margin-top:64px">
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:20px 20px 16px">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">Очки внимания по неделям</span>
+            <span style="margin-left:auto;font-size:13px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">итого 38 300</span>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:14px;height:160px;margin-top:16px">
+            <sc-for list="{{ weeks }}" as="wk" hint-placeholder-count="4">
+              <div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:6px">
+                <span style="font-size:13px;font-weight:800;color:{{ ink }};text-align:center;font-variant-numeric:tabular-nums">{{ wk.val }}</span>
+                <span style="{{ wk.style }}"></span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:14px;margin-top:8px">
+            <sc-for list="{{ weekLabels }}" as="wl" hint-placeholder-count="4">
+              <span style="flex:1;text-align:center;font-size:11px;font-weight:700;color:{{ inkFaint }}">{{ wl }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <!-- Аудитория ваших проектов -->
+      <section data-screen-label="a-index-demo · аудитория ваших проектов" style="margin-top:64px">
+        <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:14px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Аудитория ваших проектов · 1 240 врачей</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:18px">
+          <span style="font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:8px 12px">Контактные данные не передаются</span>
+        </div>
+        <div data-screen-label="a-index-demo · сводка аудитории" style="{{ audSumGrid }}">
+          <sc-for list="{{ audSummary }}" as="ag" hint-placeholder-count="3">
+            <div style="border:2px solid {{ hairline }};background:{{ sectionGray }};padding:14px 16px">
+              <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:10px">{{ ag.title }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{ ag.items }}" as="ai" hint-placeholder-count="5">
+                  <span style="font-size:12px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ hairline }};padding:5px 9px;font-variant-numeric:tabular-nums">{{ ai.l }} <b style="color:{{ accent }}">{{ ai.v }}%</b></span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:20px;border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }}">
+            <div style="display:grid;grid-template-columns:{{ audCols }};gap:14px;padding:13px 18px;background:{{ sectionGray }}">
+              <sc-for list="{{ audHead }}" as="ah" hint-placeholder-count="5">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }}">{{ ah }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ audRows }}" as="ar" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:{{ audCols }};gap:14px;padding:14px 18px;border-top:1px solid {{ hairline }};align-items:baseline" style-hover="background:{{ sectionGray }}">
+                <span style="font-size:13.5px;font-weight:800;color:{{ ink }}">{{ ar.fio }}</span>
+                <span style="font-size:13px;font-weight:600;color:{{ inkMuted }}">{{ ar.spec }}</span>
+                <span style="font-size:13px;font-weight:600;color:{{ inkMuted }}">{{ ar.city }}</span>
+                <span style="font-size:13px;font-weight:600;color:{{ inkMuted }}">{{ ar.work }}</span>
+                <span style="font-size:13px;font-weight:700;color:{{ ink }}">{{ ar.act }}</span>
+              </div>
+            </sc-for>
+            <div style="border-top:2px solid {{ hairline }};padding:12px 18px;font-size:12.5px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">показано 5 из 1 240 · полный список — в выгрузке для отчётности</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+          <div data-screen-label="a-index-demo · 390 · аудитория карточками" style="margin:20px -16px 0">
+            <sc-for list="{{ audRows }}" as="ar" hint-placeholder-count="5">
+              <div style="padding:16px;border-top:1px solid {{ hairline }};background:{{ surface }}">
+                <div style="font-size:15px;font-weight:800;color:{{ ink }}">{{ ar.fio }}</div>
+                <div style="margin-top:5px;font-size:12.5px;font-weight:600;line-height:1.5;color:{{ inkMuted }}">{{ ar.metaLine }}</div>
+                <div style="margin-top:6px;font-size:13px;font-weight:700;color:{{ ink }}">{{ ar.act }}</div>
+              </div>
+            </sc-for>
+            <div style="padding:12px 16px;border-top:1px solid {{ hairline }};font-size:12.5px;font-weight:700;color:{{ inkFaint }}">показано 5 из 1 240 · полный список — в выгрузке для отчётности</div>
+          </div>
+        </sc-if>
+
+        <div style="margin-top:18px;display:flex;align-items:center;gap:14px 24px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;gap:10px">
+            <button disabled="{{ true }}" title="в демо недоступно" style="{{ disabledBtn }}">Показать ещё</button>
+            <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">в демо недоступно</span>
+          </span>
+          <span style="display:inline-flex;align-items:center;gap:10px">
+            <button disabled="{{ true }}" title="в демо недоступно" style="{{ disabledBtn }}">Выгрузить для отчётности</button>
+            <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">в демо недоступно</span>
+          </span>
+        </div>
+      </section>
+
+      <!-- Опросы и исследования + тизер индекса -->
+      <section style="margin-top:64px;{{ twoGrid }}">
+        <div data-screen-label="a-index-demo · опросы и исследования" style="border:2px solid {{ border }};background:{{ surface }};box-shadow:5px 5px 0 {{ shadowSm }};padding:22px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
+            <span style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }}">Опросы и исследования</span>
+            <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+          </div>
+          <div style="border:2px solid {{ success }};background:{{ successTint }};padding:14px 16px">
+            <div style="font-size:13.5px;font-weight:800;line-height:1.45;color:{{ ink }}">Осведомлённость по теме «Ранняя диагностика остеоартрита» — до/после</div>
+            <div style="margin-top:6px;font-size:12.5px;font-weight:700;line-height:1.55;color:{{ successText }}">✓ Заявка отправлена · команда Академии свяжется с вами</div>
+          </div>
+          <div style="margin-top:18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button disabled="{{ true }}" title="в демо недоступно" style="{{ disabledBtn }}">Запросить исследование</button>
+            <span style="font-size:12px;font-weight:700;color:{{ inkFaint }}">в демо недоступно</span>
+          </div>
+        </div>
+
+        <div data-screen-label="a-index-demo · тизер «Ваше место в индексе»" style="border:2px solid {{ border }};background:{{ tint }};box-shadow:5px 5px 0 {{ shadow }};padding:22px;display:flex;flex-direction:column;gap:14px">
+          <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintFg }}">Ваше место в индексе</div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <span style="font-size:48px;font-weight:800;letter-spacing:-.04em;line-height:1;color:{{ tintFg }};font-variant-numeric:tabular-nums">3-е</span>
+            <span style="display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:14px;font-weight:800;color:{{ successText }}">▲2 за неделю</span>
+              <span style="font-size:14px;font-weight:800;color:{{ tintFg }};font-variant-numeric:tabular-nums">индекс 72</span>
+            </span>
+          </div>
+          <a href="#" onClick="{{ goPublic }}" style="margin-top:auto;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 20px;text-decoration:none;box-shadow:3px 3px 0 {{ border }};align-self:flex-start" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">Открыть образовательный индекс →</a>
+        </div>
+      </section>
+    </div>
+  </main>
+  </sc-if>
+
+  </dc-import>
+</div>
+
+  <!-- Панель развилок -->
+  <div style="position:fixed;left:16px;bottom:16px;z-index:60;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:12px 14px;display:flex;flex-direction:column;gap:8px;max-width:340px">
+    <div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ artboard }}</div>
+    <sc-for list="{{ panelRows }}" as="pr" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkMuted }};width:74px;flex:none">{{ pr.label }}</span>
+        <span style="display:flex;gap:5px;flex:none">
+          <sc-for list="{{ pr.btns }}" as="pb" hint-placeholder-count="2">
+            <button onClick="{{ pb.onClick }}" title="{{ pb.title }}" style="{{ pb.style }}">{{ pb.label }}</button>
+          </sc-for>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;публичный&quot;,&quot;кабинет&quot;],&quot;default&quot;:&quot;публичный&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;viewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1440&quot;,&quot;390&quot;],&quot;default&quot;:&quot;1440&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;podium&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А&quot;,&quot;Б&quot;],&quot;default&quot;:&quot;А&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;money&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А&quot;,&quot;Б&quot;],&quot;default&quot;:&quot;А&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;},&quot;awareness&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;А&quot;,&quot;Б&quot;],&quot;default&quot;:&quot;А&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилки&quot;}}">
+class Component extends DCLogic {
+  state = { screenV: null, vpV: null, darkV: null, podV: null, monV: null, awV: null, open: { 'Ортелла Биотех': true }, mq: false };
+  componentDidMount() {
+    this.m = window.matchMedia('(max-width: 900px)');
+    this.u = () => this.setState({ mq: this.m.matches });
+    this.u(); this.m.addEventListener('change', this.u);
+  }
+  componentWillUnmount() { this.m && this.m.removeEventListener('change', this.u); }
+  renderVals() {
+    const s = this.state, p = this.props;
+    const screen = s.screenV || p.screen || 'публичный';
+    const vp = s.vpV || String(p.viewport || '1440');
+    const d = s.darkV != null ? s.darkV : (p.theme || 'light') === 'dark';
+    const podium = s.podV || p.podium || 'А';
+    const money = s.monV || p.money || 'А';
+    const awv = s.awV || p.awareness || 'А';
+    const m = vp === '390' || s.mq;
+    const framed = vp === '390' && !s.mq;
+
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const tintInk = d ? '#6BB1F7' : '#114D9E';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const success = d ? '#4ADE80' : '#009959';
+    const successText = d ? '#4ADE80' : '#00693D';
+    const successTint = d ? '#0E2A1C' : '#E6F6EE';
+    const dangerText = d ? '#E15555' : '#C81E1E';
+    const warn = d ? '#F5B740' : '#8A5A00';
+    const warnTint = d ? '#332612' : '#FDF4E3';
+    const darkInk = 'oklch(.21 .02 250)';
+
+    const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const pc = n => String(n).replace('.', ',') + '%';
+    const plural = (n, a, b, c) => { const t = n % 10, h = n % 100; return (t === 1 && h !== 11) ? a : (t >= 2 && t <= 4 && (h < 12 || h > 14)) ? b : c; };
+
+    // эмблемы: плашка · монограмма · знак (14×14, сдвиг в правый верхний угол)
+    const MK = {
+      romb: 'M7 0L14 7L7 14L0 7Z',
+      semis: 'M0 6A7 6 0 0 1 14 6Z M0 8A7 6 0 0 0 14 8Z',
+      ring: 'M0 7a7 7 0 1 0 14 0a7 7 0 1 0 -14 0Z M3 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0Z M5.3 7a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0Z',
+      tri: 'M7 0L14 14L0 14Z',
+      notch: 'M0 0H14V14H0Z M7 7H14V14H7Z',
+      stripes: 'M0 0H14V3H0Z M0 5.5H14V8.5H0Z M0 11H14V14H0Z',
+      hex: 'M3.5 0H10.5L14 7L10.5 14H3.5L0 7Z',
+      drop: 'M7 0C7 0 13 6.5 13 9A6 5 0 0 1 1 9C1 6.5 7 0 7 0Z',
+      cross: 'M5 0H9V4H5Z M0 5H4V9H0Z M5 5H9V9H5Z M10 5H14V9H10Z M5 10H9V14H5Z',
+      wave: 'M0 5Q3.5 1 7 5T14 5V9Q10.5 13 7 9T0 9Z',
+      half: 'M0 11A7 7 0 0 1 14 11Z',
+      diag: 'M0 6L6 0H9.5L0 9.5Z M4.5 14L14 4.5V8L8 14Z'
+    };
+    const W = '#fff';
+    const O = (rank, name, mono, plate, fg, mark, idx, dRank, inv, invSh, attSh, docs, les, ev) => ({ rank, name, mono, plate, fg, mark: MK[mark], idx, dRank, inv, invSh, attSh, docs, les, ev });
+    const orgs = [
+      O(1, 'Карталис Фарма', 'КФ', 'oklch(.5 .15 258)', W, 'romb', 100, 0, 3400000, 25, 22, 1820, 42, 9),
+      O(2, 'Велтора Фарм', 'ВФ', 'oklch(.52 .09 195)', W, 'semis', 79, 0, 2720000, 20, 17, 1460, 34, 7),
+      O(3, 'Ортелла Биотех', 'ОБ', 'oklch(.52 .13 150)', W, 'ring', 72, 2, 2040000, 15, 19, 1240, 28, 6),
+      O(4, 'Фортакс Биофарм', 'ФБ', 'oklch(.48 .15 295)', W, 'tri', 49, -1, 1500000, 11, 12, 890, 21, 4),
+      O(5, 'Эвкрит Фарма', 'ЭФ', 'oklch(.55 .15 48)', W, 'notch', 36, -1, 1224000, 9, 8, 610, 16, 3),
+      O(6, 'Претона Биосистемс', 'ПБ', 'oklch(.48 .16 340)', W, 'stripes', 26, 1, 680000, 5, 7, 540, 12, 3),
+      O(7, 'Калинта Медтех', 'КМ', 'oklch(.78 .09 225)', darkInk, 'hex', 19, -1, 544000, 4, 5, 380, 9, 2),
+      O(8, 'Селмира Фарма', 'СФ', 'oklch(.8 .13 82)', darkInk, 'drop', 14, 0, 476000, 3.5, 3, 260, 6, 1),
+      O(9, 'Острана Медтех', 'ОМ', 'oklch(.38 .012 250)', W, 'cross', 12, 0, 340000, 2.5, 3, 230, 5, 1),
+      O(10, 'Кверион Фарма', 'КВ', 'oklch(.5 .17 12)', W, 'wave', 9, 0, 272000, 2, 2, 150, 4, 1),
+      O(11, 'Имбрель Медикал', 'ИМ', 'oklch(.55 .09 118)', W, 'half', 6, 0, 204000, 1.5, 1.5, 110, 3, 1),
+      O(12, 'Равестра Медтех', 'РМ', 'oklch(.52 .04 245)', W, 'diag', 4, 0, 200000, 1.5, 0.5, 70, 2, 1)
+    ];
+    const deltaTxt = o => o.dRank > 0 ? '▲' + o.dRank : o.dRank < 0 ? '▼' + (-o.dRank) : '—';
+    const deltaCol = o => o.dRank > 0 ? successText : o.dRank < 0 ? dangerText : inkFaint;
+    const rankStyle = r => 'flex:none;width:34px;height:34px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;' + (r <= 3 ? 'background:' + tint + ';color:' + tintFg : 'color:' + inkFaint + ';border:2px solid ' + hairline);
+    const invTxt = o => money === 'А' ? fmt(o.inv) + ' ₽ · ' + pc(o.invSh) : pc(o.invSh);
+    const subBar = (v, c) => 'display:block;height:100%;width:' + v + '%;background:' + c;
+
+    const rows = orgs.map(o => {
+      const open = !!s.open[o.name];
+      return {
+        ...o, idx: String(o.idx), rank: String(o.rank), open,
+        rankStyle: rankStyle(o.rank),
+        rowBg: open ? sectionGray : 'transparent',
+        chev: open ? '▴' : '▾',
+        toggleTitle: open ? 'Свернуть' : 'Из чего сложился индекс',
+        toggle: () => this.setState(st => ({ open: { ...st.open, [o.name]: !st.open[o.name] } })),
+        idxBar: 'display:block;height:5px;width:' + Math.max(o.idx, 2) + '%;background:' + accent,
+        deltaTxt: deltaTxt(o),
+        deltaStyle: 'font-size:13px;font-weight:800;color:' + deltaCol(o) + ';font-variant-numeric:tabular-nums',
+        deltaStyleR: 'text-align:right;font-size:13.5px;font-weight:800;color:' + deltaCol(o) + ';font-variant-numeric:tabular-nums',
+        invTxt: invTxt(o), doctors: fmt(o.docs), lessons: String(o.les), events: String(o.ev),
+        invSubTxt: pc(o.invSh) + ' всех инвестиций',
+        attSubTxt: pc(o.attSh) + ' всего внимания',
+        invSubBar: subBar(o.invSh, btnBg), attSubBar: subBar(o.attSh, accent),
+        idxExplain: 'Индекс ' + o.idx + ': среднее двух долей, пересчитанное к лидеру недели',
+        mobLine: invTxt(o) + ' · ' + fmt(o.docs) + ' ' + plural(o.docs, 'врач', 'врача', 'врачей') + ' · ' + o.les + ' ' + plural(o.les, 'урок', 'урока', 'уроков') + ' · ' + o.ev + ' ' + plural(o.ev, 'мероприятие', 'мероприятия', 'мероприятий'),
+        podiumLine: (money === 'А' ? 'Инвестиции ' + fmt(o.inv) + ' ₽ · ' + pc(o.invSh) : 'Доля инвестиций ' + pc(o.invSh)) + ' · ' + fmt(o.docs) + ' врачей обучено',
+        podiumStyle: 'display:flex;flex-direction:column;background:' + surface + ';border:2px solid ' + border + ';padding:22px;box-sizing:border-box;' + (o.rank === 1 ? 'box-shadow:6px 6px 0 ' + shadow : 'box-shadow:4px 4px 0 ' + shadowSm)
+      };
+    });
+
+    // топ-5 полоса долей
+    const tailSh = 20;
+    const shareSegs = orgs.slice(0, 5).map((o, i) => ({
+      plate: o.plate, fg: o.fg, mark: o.mark, mono: o.mono,
+      hasEmblem: !m, showPct: !m || o.invSh >= 11, pct: o.invSh + '%',
+      title: o.name + ' — ' + o.invSh + '%',
+      legend: o.name + ' ' + o.invSh + '%',
+      dot: 'width:12px;height:12px;background:' + o.plate + ';flex:none',
+      style: 'width:' + o.invSh + '%;background:' + o.plate + ';display:flex;align-items:center;justify-content:center;gap:8px;overflow:hidden;min-width:0;' + (i > 0 ? 'border-left:2px solid ' + surface : '')
+    })).concat([{
+      plate: '', fg: inkMuted, mark: '', mono: '', hasEmblem: false, showPct: true, pct: m ? '20%' : 'остальные 7 — 20%',
+      title: 'остальные 7 партнёров — 20%', legend: 'остальные 7 партнёров — 20%',
+      dot: 'width:12px;height:12px;background:' + sectionGray + ';border:2px solid ' + inkFaint + ';box-sizing:border-box;flex:none',
+      style: 'width:' + tailSh + '%;background:' + sectionGray + ';display:flex;align-items:center;justify-content:center;border-left:2px solid ' + border + ';overflow:hidden;min-width:0;padding:0 6px;box-sizing:border-box;text-align:center'
+    }]);
+
+    // динамика
+    const dynData = [[orgs[0], [100, 100, 100, 100]], [orgs[1], [84, 82, 80, 79]], [orgs[2], [38, 43, 47, 72]]];
+    const dyn = dynData.map(([o, v]) => ({
+      name: o.name, plate: o.plate, fg: o.fg, mark: o.mark, mono: o.mono,
+      bars: v.map((x, i) => ({ val: String(x), style: 'display:block;height:' + Math.round(x * 0.78) + '%;background:' + (i === 3 ? accent : tint) + ';border:2px solid ' + border }))
+    }));
+    const news = [
+      [orgs[2], 'Ортелла Биотех вошла в тройку лидеров индекса'],
+      [orgs[0], 'Карталис Фарма — первая четвёртую неделю подряд'],
+      [orgs[5], 'Претона Биосистемс поднялась на 6-е место']
+    ].map(([o, t]) => ({ plate: o.plate, fg: o.fg, mark: o.mark, mono: o.mono, title: t }));
+
+    // кабинет
+    const own = orgs[2];
+    const kpis = [
+      { val: '1 240', cap: 'врачей обучено' },
+      { val: '28', cap: 'уроков создано' },
+      { val: '2,9 из 7', cap: 'средняя глубина пути' },
+      { val: '6', cap: 'мероприятий проведено' }
+    ];
+    const awRowStyle = 'display:grid;grid-template-columns:' + (m ? '1fr' : 'minmax(0,300px) minmax(0,1fr) 80px') + ';gap:' + (m ? '10px' : '24px') + ';align-items:center;padding:' + (m ? '16px' : '18px 20px');
+    const aware = [
+      ['PRP-терапия: показания и противопоказания', 24, 71],
+      ['Ранняя диагностика остеоартрита', 31, 68],
+      ['Реабилитация после артроскопии', 18, 57],
+      ['Ортобиология в спортивной травме', 12, 49]
+    ].map(([topic, b, a], i) => ({
+      topic, before: String(b), after: String(a), gain: '+' + (a - b) + ' п.п.',
+      rowStyle: awRowStyle + (i > 0 ? ';border-top:1px solid ' + hairline : ''),
+      beforeBar: 'display:block;height:100%;width:' + b + '%;background:' + inkFaint,
+      afterBar: 'display:block;height:100%;width:' + a + '%;background:' + accent,
+      rangeBar: 'position:absolute;top:0;bottom:0;left:' + b + '%;width:' + (a - b) + '%;background:' + accent,
+      fromDot: 'position:absolute;top:-3px;left:calc(' + b + '% - 5px);width:10px;height:20px;box-sizing:border-box;background:' + surface + ';border:2px solid ' + border,
+      toHead: 'position:absolute;top:-5px;left:' + a + '%;width:0;height:0;border-top:12px solid transparent;border-bottom:12px solid transparent;border-left:12px solid ' + border
+    }));
+    const steps = [['сериал', 1240], ['микрообучение', 986], ['вебинар', 640], ['подкаст', 410], ['клуб', 236], ['практическая школа', 92], ['наставничество', 18]];
+    const funnel = steps.map(([step, c], i) => ({
+      n: String(i + 1), step, count: fmt(c),
+      conv: i === 0 ? 'вход в путь' : Math.round(c / steps[i - 1][1] * 100) + '% из предыдущего',
+      rowStyle: 'display:grid;grid-template-columns:' + (m ? '20px minmax(0,1fr) 56px' : '24px 170px minmax(0,1fr) 64px 150px') + ';gap:' + (m ? '6px 10px' : '16px') + ';align-items:center;padding:' + (m ? '12px 16px' : '13px 20px') + (i > 0 ? ';border-top:1px solid ' + hairline : ''),
+      trackStyle: 'display:block;height:14px;background:' + sectionGray + (m ? ';grid-column:2/-1;grid-row:2' : ''),
+      bar: 'display:block;height:100%;width:' + Math.max(c / 1240 * 100, 1.5) + '%;background:' + (i === 0 ? btnBg : accent)
+    }));
+    if (m) funnel.forEach(f => { f.conv = f.conv; });
+    const wk = [6200, 7900, 9400, 14800];
+    const weeks = wk.map((v, i) => ({ val: fmt(v), style: 'display:block;height:' + Math.round(v / 14800 * 78) + '%;background:' + (i === 3 ? accent : tint) + ';border:2px solid ' + border }));
+    const audSummary = [
+      { title: 'Специальности', items: [['травматологи-ортопеды', 46], ['спортивные врачи', 21], ['ревматологи', 14], ['врачи ЛФК и реабилитологи', 12], ['другие', 7]] },
+      { title: 'Города', items: [['Москва', 34], ['Санкт-Петербург', 17], ['Казань', 8], ['Екатеринбург', 7], ['Новосибирск', 6], ['другие', 28]] },
+      { title: 'Стаж', items: [['до 5 лет', 22], ['5–15 лет', 47], ['более 15 лет', 31]] }
+    ].map(g => ({ title: g.title, items: g.items.map(([l, v]) => ({ l, v: String(v) })) }));
+    const audRows = [
+      ['Корнилова Мария Сергеевна', 'травматолог-ортопед', 'Москва', 'клиника «Северный берег»', 'прошла 6 уроков школы'],
+      ['Абрамов Илья Петрович', 'спортивный врач', 'Казань', 'центр спортивной медицины «Старт»', 'вебинар и клуб'],
+      ['Лебедева Ольга Андреевна', 'ревматолог', 'Санкт-Петербург', 'диагностический центр «Линия»', '4 урока'],
+      ['Гарипов Тимур Рустемович', 'травматолог-ортопед', 'Екатеринбург', 'медицинский центр «Опора»', 'практическая школа'],
+      ['Соколова Анна Викторовна', 'врач ЛФК', 'Новосибирск', 'реабилитационный центр «Движение»', 'подкаст и 2 урока']
+    ].map(([fio, spec, city, work, act]) => ({ fio, spec, city, work, act, metaLine: spec + ' · ' + city + ' · ' + work }));
+
+    // панель развилок
+    const pbs = a => 'font:inherit;font-size:10.5px;font-weight:800;padding:0 9px;height:28px;cursor:pointer;border:2px solid ' + (a ? btnBg : border) + ';color:' + (a ? btnFg : ink) + ';background:' + (a ? btnBg : 'transparent');
+    const B = (label, title, a, patch) => ({ label, title, onClick: () => this.setState(patch), style: pbs(a) });
+    const isPub = screen !== 'кабинет';
+    const panelRows = [
+      { label: 'Экран', btns: [B('публичный', '/education-index', isPub, { screenV: 'публичный' }), B('кабинет', '/education-index/partner-demo', !isPub, { screenV: 'кабинет' })] },
+      { label: 'Ширина', btns: [B('1440', 'Десктоп', vp !== '390', { vpV: '1440' }), B('390', 'Мобильный', vp === '390', { vpV: '390' })] },
+      { label: 'Тема', btns: [B('light', 'Светлая', !d, { darkV: false }), B('dark', 'Тёмная', d, { darkV: true })] },
+      { label: 'podium', btns: [B('А', 'Без подиума — таблица сразу', podium === 'А', { podV: 'А' }), B('Б', 'Подиум топ-3 над таблицей', podium === 'Б', { podV: 'Б' })] },
+      { label: 'money', btns: [B('А', 'Абсолют + доля', money === 'А', { monV: 'А' }), B('Б', 'Только доля', money === 'Б', { monV: 'Б' })] },
+      { label: 'awareness', btns: [B('А', 'Две полосы до/после', awv === 'А', { awV: 'А' }), B('Б', 'Одна шкала со стрелкой', awv === 'Б', { awV: 'Б' })] }
+    ];
+    const goPublic = e => { if (e && e.preventDefault) e.preventDefault(); this.setState({ screenV: 'публичный' }); try { window.scrollTo(0, 0); } catch (x) {} };
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m, isPublic: isPub, isCabinet: !isPub,
+      outerBg: framed ? sectionGray : pageBg, outerPad: framed ? '24px 0 120px' : '0',
+      frame: framed ? 'width:390px;margin:0 auto;background:' + pageBg + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';overflow:clip' : 'min-height:100vh;background:' + pageBg,
+      padX: m ? '16px' : 'clamp(16px,4vw,48px)',
+      posterPad: m ? '28px 16px 36px' : '44px clamp(16px,4vw,48px) 60px',
+      h1Size: m ? '32px' : 'clamp(32px,5vw,54px)', h1SizeCab: m ? '26px' : 'clamp(28px,4.2vw,44px)',
+      posterEmblem: m ? '48px' : '64px', posterMonoSize: m ? '18px' : '24px', posterMarkSize: m ? '13px' : '18px', posterInset: m ? '6px' : '8px',
+      cardPad: m ? '20px 16px' : '28px',
+      shareH: m ? '44px' : '60px',
+      demoText: isPub ? 'Демонстрационные данные · так будет выглядеть Образовательный индекс' : 'Демонстрационные данные · так будет выглядеть кабинет партнёра',
+      pageBg, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, shadow, shadowSm, tint, tintFg, tintInk, sectionGray, success, successText, successTint, warn, warnTint,
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      toggleTheme: () => this.setState({ darkV: !d }),
+      heroPlates: [
+        { val: '13,6 млн ₽', cap: 'инвестировано в образование врачей', sub: '12 партнёров · с 1 сентября 2026' },
+        { val: '5 930', cap: 'врачей обучено', sub: 'врач, учившийся у нескольких партнёров, учтён один раз' },
+        { val: '182', cap: 'урока создано', sub: 'уроки, курсы и школы партнёров индекса' }
+      ],
+      plateGrid: m ? 'display:grid;grid-template-columns:1fr;gap:16px' : 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px',
+      showPodium: podium === 'Б',
+      podium: rows.slice(0, 3),
+      podiumGrid: (m ? 'display:grid;grid-template-columns:1fr;gap:14px' : 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px') + ';margin-bottom:28px',
+      rows,
+      rowGrid: '34px 40px minmax(210px,1fr) 96px 58px ' + (money === 'А' ? '156px' : '84px') + ' 70px 60px 96px 14px',
+      headCap: 'font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:' + inkFaint,
+      headCapR: 'font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;text-align:right;color:' + inkFaint,
+      shareSegs, dyn, news,
+      weekLabels: ['нед. 1', 'нед. 2', 'нед. 3', 'нед. 4'],
+      dynGrid: m ? 'display:grid;grid-template-columns:1fr;gap:16px' : 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px',
+      ctaBox: m
+        ? 'margin:0 -16px;background:' + sectionGray + ';padding:24px 16px;display:flex;flex-direction:column;gap:20px;align-items:stretch'
+        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';padding:32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      own, kpis,
+      kpiGrid: m ? 'display:grid;grid-template-columns:1fr 1fr;gap:12px' : 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px',
+      aware, awA: awv === 'А', awB: awv === 'Б',
+      poolBar: 'display:block;height:100%;width:' + (612 / 1240 * 100).toFixed(1) + '%;background:' + success,
+      funnel, weeks, audSummary, audRows,
+      audSumGrid: m ? 'display:grid;grid-template-columns:1fr;gap:12px' : 'display:grid;grid-template-columns:1.3fr 1.3fr 1fr;gap:16px',
+      audHead: ['ФИО', 'Специальность', 'Город', 'Место работы', 'Что делал'],
+      audCols: '1.4fr 1fr .9fr 1.5fr 1.1fr',
+      disabledBtn: 'font:inherit;font-size:13.5px;font-weight:800;color:' + inkFaint + ';background:' + sectionGray + ';border:2px solid ' + hairline + ';padding:12px 20px;cursor:not-allowed',
+      twoGrid: m ? 'display:flex;flex-direction:column;gap:18px' : 'display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:stretch',
+      goPublic,
+      artboard: 'a-index-demo · ' + (m ? '390' : '1440') + ' · ' + (d ? 'dark' : 'light') + ' · ' + screen,
+      panelRows
+    };
+  }
+}
+</script>
+</body>
+</html>

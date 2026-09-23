@@ -1289,5 +1289,38 @@
       "requestInProgress": "Предыдущая отправка ещё выполняется. Подождите пару секунд и повторите.",
       "authorityUnavailable": "Не удалось подтвердить права администратора. Ничего не изменилось — повторите через минуту."
     }
+  },
+  "congressRoster": {
+    "entryLink": "Реестр участников",
+    "listTitle": "Реестр участников",
+    "listDescription": "{title} · {date} МСК",
+    "loadingDescription": "Загрузка мероприятия…",
+    "backToEvent": "← К мероприятию",
+    "tableCaption": "Реестр участников мероприятия",
+    "empty": "На мероприятие пока никто не зарегистрировался.",
+    "emptyDescription": "Участники появятся здесь сразу после регистрации.",
+    "columns": {
+      "number": "№",
+      "fullName": "ФИО",
+      "specialtyName": "Специальность",
+      "workplace": "Место работы",
+      "city": "Город",
+      "region": "Область",
+      "phone": "Телефон",
+      "email": "Email",
+      "registeredAt": "Дата регистрации",
+      "confirmationMailStatus": "Статус письма"
+    },
+    "mailStatuses": {
+      "sent": "Отправлено",
+      "failed": "Не отправлено"
+    },
+    "filters": {
+      "search": "Поиск участника",
+      "searchPlaceholder": "ФИО, email, телефон, город…"
+    },
+    "errors": {
+      "listFailed": "Не удалось загрузить реестр участников."
+    }
   }
 }

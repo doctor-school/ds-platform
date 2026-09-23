@@ -895,6 +895,20 @@ export const directionAdjacencyUrl = {
 };
 
 /**
+ * 044 EARS-21 — the congress roster read (`GET /v1/admin/events/:idOrSlug/roster`,
+ * #2311). Not a Refine resource: the roster is one event's read-only desk list,
+ * read through `custom` like the other non-CRUD admin reads. The query is the
+ * `AdminDataList` baseline the route accepts — search and the server page.
+ */
+export const congressRosterUrl = {
+  list: (
+    eventIdOrSlug: string,
+    query: { q: string; page: number; pageSize: number },
+  ) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/roster?${relationQuery(query)}`,
+};
+
+/**
  * The publish command of the three remaining taxonomy entities (012 EARS-5,
  * #1287). Built the same way `directionsUrl.publish` is, for the same reason:
  * each stays a Refine CRUD resource for its list / create / PATCH, and this map

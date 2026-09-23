@@ -2,6 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PROJECT_DESCRIPTION_MAX } from "@ds/schemas";
 import { bootstrapAdminSession } from "../support/admin-session";
+import {
+  createPublishedEvent,
+  eventSlugFromRoster,
+  registerDoctorThroughPlatform,
+} from "../support/congress-roster";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
 import { totpCode } from "../support/totp";
 
@@ -708,6 +713,27 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.goto(`/events/${id}`);
     await page.getByTestId("tab-directions").click();
     await page.getByTestId("event-directions-panel").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 044 EARS-21 (#2315) — the congress roster on the shared list shell, scanned
+  // with a real row so the ten-column table and its record column are covered.
+  test("the congress roster passes WCAG 2 A/AA (light)", async ({
+    page,
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    await loginAsAdmin(page);
+    const id = await createPublishedEvent(page, `Axe-скан реестр ${Date.now()}`);
+    const slug = await eventSlugFromRoster(page, id);
+    await registerDoctorThroughPlatform(
+      browser,
+      slug,
+      "Аксенова Мария Петровна",
+    );
+
+    await page.goto(`/events/${id}/roster`);
+    await expect(page.getByTestId("roster-total")).toHaveText("Найдено: 1");
     for (const theme of THEMES) await scan(page, theme);
   });
 });

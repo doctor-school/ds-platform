@@ -36,7 +36,7 @@
 /* ── poster ────────────────────────────────────────────────────────── */
 .poster {
   background: var(--color-hero);
-  padding: 44px var(--space-gutter) 60px;
+  padding: 40px var(--space-gutter) 64px;
 }
 .inner {
   max-width: 1104px;
@@ -68,7 +68,7 @@
 }
 .stamp {
   display: inline-block;
-  padding: 9px 14px;
+  padding: 8px 12px;
   background: var(--color-white);
   color: var(--color-blue-700);
   font-size: var(--font-size-eyebrow);
@@ -126,7 +126,7 @@
 
 /* ── main column ───────────────────────────────────────────────────── */
 .main {
-  padding: 0 var(--space-gutter) 88px;
+  padding: 0 var(--space-gutter) 64px;
 }
 .section {
   margin-top: var(--space-16);
@@ -200,11 +200,10 @@
 }
 .tableGrid {
   display: grid;
-  grid-template-columns: 34px 40px minmax(
-      210px,
-      1fr
-    ) 96px 58px 156px 70px 60px 96px 14px;
-  gap: 14px;
+  grid-template-columns:
+    34px 40px minmax(210px, 1fr)
+    96px 58px 156px 70px 60px 96px 14px;
+  gap: 12px;
   align-items: center;
 }
 .tableHead {
@@ -234,7 +233,7 @@
 .rowButton {
   width: 100%;
   margin: 0;
-  padding: 13px var(--space-5);
+  padding: 12px var(--space-5);
   border: 0;
   background: transparent;
   font: inherit;
@@ -336,10 +335,10 @@
 
 /* ── expanded row · two sub-scores (EARS-6) ────────────────────────── */
 .detail {
-  padding: var(--space-1) var(--space-5) var(--space-5) 128px;
+  padding: var(--space-1) var(--space-5) var(--space-5) 64px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px var(--space-8);
+  gap: 12px var(--space-8);
 }
 .subHead {
   display: flex;
@@ -381,14 +380,14 @@
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
-  padding: 14px var(--space-4);
+  padding: 12px var(--space-4);
 }
 .listMain {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .listLine {
   font-size: var(--font-size-caption);
@@ -402,7 +401,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: 2px;
   font-size: var(--font-size-caption);
 }
 .listDetail {
@@ -508,7 +507,7 @@
   gap: var(--space-5);
 }
 .dynCard {
-  padding: 18px 18px 14px;
+  padding: 16px 16px 12px;
   border: 2px solid var(--color-border);
   background: var(--color-card);
 }
@@ -534,7 +533,7 @@
   flex-direction: column;
   justify-content: flex-end;
   align-items: stretch;
-  gap: 5px;
+  gap: 4px;
 }
 .dynValue {
   font-size: var(--font-size-xs);
@@ -566,7 +565,7 @@
   color: var(--color-muted-foreground);
 }
 .caption {
-  margin-top: 14px;
+  margin-top: 12px;
   max-width: 720px;
   font-size: var(--font-size-caption);
   font-weight: var(--font-weight-semibold);
@@ -579,7 +578,7 @@
   padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   border: 2px solid var(--color-border);
   background: var(--color-card);
   box-shadow: 5px 5px 0 var(--color-elevation-soft);
@@ -646,13 +645,13 @@
     padding: var(--space-2) var(--space-4);
   }
   .poster {
-    padding: 28px var(--space-4) 36px;
+    padding: 28px var(--space-4) 32px;
   }
   .h1 {
     font-size: var(--font-size-2xl);
   }
   .main {
-    padding: 0 var(--space-4) 88px;
+    padding: 0 var(--space-4) 64px;
   }
   .plates,
   .threeUp {
@@ -708,4 +707,475 @@
   font-family: var(--font-family-sans);
   font-weight: var(--font-weight-extrabold);
   letter-spacing: -0.04em;
+}
+
+/* ══ partner cabinet (/education-index/partner-demo, EARS-8…10) ════════ */
+.cabTitle {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+.posterEmblem {
+  display: block;
+  flex: none;
+  box-shadow: 3px 3px 0 var(--color-header-topbar);
+}
+.posterEmblem.onlyMobile {
+  display: none;
+}
+.h1Cab {
+  margin: 0;
+  font-size: clamp(var(--font-size-2xl), 4.2vw, var(--font-size-3xl));
+  line-height: 1.05;
+}
+.cabTitle + .lede {
+  margin-top: var(--space-4);
+}
+
+/* plan/fact scale — white on the hero band (canvas l.285) */
+.planFact {
+  margin-top: 28px;
+  max-width: 760px;
+}
+.planFactHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.planFactTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-hero-foreground);
+}
+.planFactNums {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-hero-muted);
+}
+.planTrack {
+  position: relative;
+  height: 18px;
+  margin-top: var(--space-3);
+  border: 2px solid var(--color-hero-foreground);
+}
+.planFill {
+  display: block;
+  height: 100%;
+  width: var(--bar-value);
+  background: var(--color-hero-foreground);
+}
+.planMark {
+  position: absolute;
+  left: var(--bar-value);
+  top: -8px;
+  bottom: -8px;
+  width: 3px;
+  background: var(--color-header-topbar);
+  outline: 2px solid var(--color-hero-foreground);
+}
+.planMarkRow {
+  position: relative;
+  height: 22px;
+  margin-top: var(--space-2-5);
+}
+.planMarkLabel {
+  position: absolute;
+  left: var(--bar-value);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: var(--font-size-eyebrow);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-hero-muted);
+}
+
+/* KPI tiles */
+.kpis {
+  margin-top: var(--space-12);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+/* shared framed block (2px border, card surface, offset cast) */
+.frame {
+  border: 2px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: var(--shadow-lg);
+}
+.frameFlat {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 2px solid var(--color-border);
+  background: var(--color-card);
+}
+.barFaint {
+  background: var(--color-faint);
+}
+.barSuccess {
+  background: var(--color-success);
+}
+
+/* awareness before/after — fork А, two bars (canvas l.323) */
+.awRow {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr) 80px;
+  gap: var(--space-6);
+  align-items: center;
+  padding: 16px var(--space-5);
+}
+.awRow + .awRow {
+  border-top: 1px solid var(--color-hairline);
+}
+.awTopic {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1.35;
+  color: var(--color-foreground);
+  text-wrap: pretty;
+}
+.awBars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.awLine {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 44px;
+  gap: var(--space-2-5);
+  align-items: center;
+}
+.awLabel {
+  font-size: var(--font-size-eyebrow);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+.awLabelAfter {
+  color: var(--color-primary-action);
+}
+.awTrack {
+  display: block;
+  height: 12px;
+  background: var(--color-section);
+}
+.awValue {
+  text-align: right;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground);
+}
+.awGain {
+  text-align: right;
+  white-space: nowrap;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-success-text);
+}
+.awPool {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-top: 2px solid var(--color-border);
+  background: var(--color-section);
+}
+.awPoolTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-foreground);
+}
+.awPoolTrack {
+  flex: 1;
+  min-width: 140px;
+  height: 12px;
+  border: 2px solid var(--color-border);
+  background: var(--color-card);
+}
+.awPoolNote {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-muted-foreground);
+}
+
+/* engagement funnel — 7 steps (canvas l.371) */
+.fnRow {
+  display: grid;
+  grid-template-columns: 24px 170px minmax(0, 1fr) 64px 150px;
+  gap: var(--space-4);
+  align-items: center;
+  padding: 12px var(--space-5);
+}
+.fnRow + .fnRow {
+  border-top: 1px solid var(--color-hairline);
+}
+.fnN {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground);
+}
+.fnStep {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-foreground);
+}
+.fnTrack {
+  display: block;
+  height: 14px;
+  background: var(--color-section);
+}
+.fnCount {
+  text-align: right;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-foreground);
+}
+.fnConv {
+  text-align: right;
+  white-space: nowrap;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground);
+}
+
+/* weekly attention (canvas l.391) */
+.attnCard {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border: 2px solid var(--color-border);
+  background: var(--color-card);
+}
+.attnHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.attnTitle {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+.attnTotal {
+  margin-left: auto;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-foreground);
+}
+.attnBars {
+  height: 160px;
+  gap: 12px;
+}
+
+/* audience (canvas l.414) */
+.audNote {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+.audSummary {
+  display: grid;
+  grid-template-columns: 1.3fr 1.3fr 1fr;
+  gap: var(--space-4);
+}
+.audGroup {
+  padding: 12px var(--space-4);
+  border: 2px solid var(--color-hairline);
+  background: var(--color-section);
+}
+.audGroupTitle {
+  margin: 0 0 var(--space-2-5);
+  font-size: var(--font-size-eyebrow);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+.audChips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.audChip {
+  padding: 4px 8px;
+  border: 2px solid var(--color-hairline);
+  background: var(--color-card);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-foreground);
+}
+.audChipValue {
+  color: var(--color-primary-action);
+}
+.audTable {
+  margin-top: var(--space-5);
+}
+.audCaption {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground);
+}
+.demoControls {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px var(--space-6);
+  flex-wrap: wrap;
+}
+.demoControl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2-5);
+}
+.demoHint {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-muted-foreground);
+}
+
+/* research requests + «your place» teaser (canvas l.481–497) */
+.twoUp {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
+}
+.research {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  border: 2px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: 5px 5px 0 var(--color-elevation-soft);
+}
+.researchItem {
+  padding: 12px var(--space-4);
+  border: 2px solid var(--color-success);
+  background: var(--color-success-tint);
+}
+.researchTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1.45;
+  color: var(--color-foreground);
+}
+.researchStatus {
+  margin-top: 6px;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.55;
+  color: var(--color-success-text);
+}
+.place {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border: 2px solid var(--color-border);
+  background: var(--color-tint);
+  box-shadow: 5px 5px 0 var(--color-elevation);
+}
+.placeTitle {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-tint-foreground);
+}
+.placeLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.placeValue {
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tint-foreground);
+}
+.placeMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tint-foreground);
+}
+.placeCta {
+  margin-top: auto;
+}
+
+@media (max-width: 900px) {
+  .posterEmblem.onlyDesktop {
+    display: none;
+  }
+  .posterEmblem.onlyMobile {
+    display: block;
+  }
+  .h1Cab {
+    font-size: var(--font-size-2xl);
+  }
+  .kpis {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+  .awRow {
+    grid-template-columns: 1fr;
+    gap: var(--space-2-5);
+    padding: var(--space-4);
+  }
+  .awGain {
+    text-align: left;
+  }
+  .fnRow {
+    grid-template-columns: 20px minmax(0, 1fr) 56px;
+    gap: 6px var(--space-2-5);
+    padding: var(--space-3) var(--space-4);
+  }
+  .fnTrack {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+  .fnConv {
+    grid-column: 2 / -1;
+    text-align: left;
+  }
+  .audSummary {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  .twoUp {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }

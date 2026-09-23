@@ -365,3 +365,120 @@ export function organizationByName(name: string): Organization {
   if (!found) throw new Error(`045 fixture: unknown organisation «${name}»`);
   return found;
 }
+
+/**
+ * EARS-8…10 — the partner cabinet of Ортелла Биотех (place 3), prompt 23
+ * l.71–79, 128, 144, 158, 164 as the canvas `screen=кабинет` draws it. The
+ * cabinet reuses the organisation row above for its own index, place and delta.
+ */
+export const cabinet = {
+  organization: "Ортелла Биотех",
+  planFact: {
+    planPercent: 68,
+    termPercent: 60,
+    planPoints: 56_300,
+    factPoints: 38_300,
+  },
+  kpis: [
+    { value: "1 240", caption: "врачей обучено" },
+    { value: "28", caption: "уроков создано" },
+    { value: "2,9 из 7", caption: "средняя глубина пути" },
+    { value: "6", caption: "мероприятий проведено" },
+  ],
+  /** Share of doctors rating their knowledge 8+/10, before → after (percent). */
+  awareness: [
+    { topic: "PRP-терапия: показания и противопоказания", before: 24, after: 71 },
+    { topic: "Ранняя диагностика остеоартрита", before: 31, after: 68 },
+    { topic: "Реабилитация после артроскопии", before: 18, after: 57 },
+    { topic: "Ортобиология в спортивной травме", before: 12, after: 49 },
+  ],
+  awarePool: { aware: 612, total: 1240 },
+  /** The 7-step engagement funnel, fixed order (EARS-8). */
+  funnel: [
+    { step: "сериал", doctors: 1240 },
+    { step: "микрообучение", doctors: 986 },
+    { step: "вебинар", doctors: 640 },
+    { step: "подкаст", doctors: 410 },
+    { step: "клуб", doctors: 236 },
+    { step: "практическая школа", doctors: 92 },
+    { step: "наставничество", doctors: 18 },
+  ],
+  /** Attention points per week, weeks 1–4. */
+  weeklyAttention: [6200, 7900, 9400, 14_800],
+  audienceTotal: 1240,
+  audienceSummary: [
+    {
+      title: "Специальности",
+      items: [
+        { label: "травматологи-ортопеды", percent: 46 },
+        { label: "спортивные врачи", percent: 21 },
+        { label: "ревматологи", percent: 14 },
+        { label: "врачи ЛФК и реабилитологи", percent: 12 },
+        { label: "другие", percent: 7 },
+      ],
+    },
+    {
+      title: "Города",
+      items: [
+        { label: "Москва", percent: 34 },
+        { label: "Санкт-Петербург", percent: 17 },
+        { label: "Казань", percent: 8 },
+        { label: "Екатеринбург", percent: 7 },
+        { label: "Новосибирск", percent: 6 },
+        { label: "другие", percent: 28 },
+      ],
+    },
+    {
+      title: "Стаж",
+      items: [
+        { label: "до 5 лет", percent: 22 },
+        { label: "5–15 лет", percent: 47 },
+        { label: "более 15 лет", percent: 31 },
+      ],
+    },
+  ],
+  /** Exactly the 5 fixture rows the audience table ever shows (EARS-9). */
+  audience: [
+    {
+      name: "Корнилова Мария Сергеевна",
+      specialty: "травматолог-ортопед",
+      city: "Москва",
+      workplace: "клиника «Северный берег»",
+      activity: "прошла 6 уроков школы",
+    },
+    {
+      name: "Абрамов Илья Петрович",
+      specialty: "спортивный врач",
+      city: "Казань",
+      workplace: "центр спортивной медицины «Старт»",
+      activity: "вебинар и клуб",
+    },
+    {
+      name: "Лебедева Ольга Андреевна",
+      specialty: "ревматолог",
+      city: "Санкт-Петербург",
+      workplace: "диагностический центр «Линия»",
+      activity: "4 урока",
+    },
+    {
+      name: "Гарипов Тимур Рустемович",
+      specialty: "травматолог-ортопед",
+      city: "Екатеринбург",
+      workplace: "медицинский центр «Опора»",
+      activity: "практическая школа",
+    },
+    {
+      name: "Соколова Анна Викторовна",
+      specialty: "врач ЛФК",
+      city: "Новосибирск",
+      workplace: "реабилитационный центр «Движение»",
+      activity: "подкаст и 2 урока",
+    },
+  ],
+  /** The one already-submitted research request (EARS-8). */
+  researchRequests: [
+    "Осведомлённость по теме «Ранняя диагностика остеоартрита» — до/после",
+  ],
+} as const;
+
+export type AudienceRow = (typeof cabinet.audience)[number];

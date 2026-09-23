@@ -36,6 +36,9 @@ const SIZES = {
   sm: [28, 10, 8, 3],
   md: [36, 13, 10, 4],
   lg: [40, 15, 11, 5],
+  // Cabinet poster (canvas `posterEmblem`): 64 at 1440, 48 at 390.
+  poster: [64, 24, 18, 8],
+  posterSm: [48, 18, 13, 6],
 } as const;
 
 export function Emblem({

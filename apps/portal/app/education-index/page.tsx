@@ -22,6 +22,7 @@ import { DemoPlaque } from "./_components/demo-plaque";
 import { Emblem } from "./_components/emblem";
 import styles from "./_components/education-index.module.css";
 import { Leaderboard } from "./_components/leaderboard";
+import { SectionHead } from "./_components/section-head";
 
 /**
  * 045 — the public education-index demo page (EARS-1…7, 11, 13), built from the
@@ -48,27 +49,6 @@ const WEEKS = [1, 2, 3, 4] as const;
 
 function vars(values: Record<string, string>): CSSProperties {
   return values as CSSProperties;
-}
-
-function SectionHead({
-  title,
-  tight = false,
-}: {
-  title: string;
-  tight?: boolean;
-}) {
-  return (
-    <div
-      className={
-        tight
-          ? `${styles.sectionHead} ${styles.sectionHeadTight}`
-          : styles.sectionHead
-      }
-    >
-      <h2 className={styles.sectionTitle}>{title}</h2>
-      <span aria-hidden="true" className={styles.sectionRule} />
-    </div>
-  );
 }
 
 function Poster() {

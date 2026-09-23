@@ -61,6 +61,12 @@ routes:
     route: /documents/[slug]
     file: apps/portal/app/documents/[slug]/page.tsx
     status: product-ready
+  # 045 — temporary demo (Issue #2360): product-ready on purpose (ships to prod,
+  # noindex); removed together with the release that ships 032/035 (EARS-14).
+  - app: portal
+    route: /education-index
+    file: apps/portal/app/education-index/page.tsx
+    status: product-ready
   - app: portal
     route: /account/events
     file: apps/portal/app/account/events/page.tsx

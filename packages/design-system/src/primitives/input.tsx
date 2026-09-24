@@ -82,7 +82,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           "focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground",
           "data-[success=true]:border-success data-[success=true]:bg-success-tint",
-          "aria-invalid:border-destructive aria-invalid:bg-destructive-tint",
+          "aria-invalid:border-destructive-text aria-invalid:bg-destructive-tint",
           // The surface variant emits LAST of the primitive's own classes, so it
           // wins the resting border, background, ink and focus border over the
           // base; a positional utility from the call site still wins over it.

@@ -65,6 +65,13 @@ describe("012 EARS-1 Textarea — character counter", () => {
     );
     const control = screen.getByLabelText("Описание");
     expect(control).toHaveAttribute("aria-invalid", "true");
+    // The invalid frame takes the danger TEXT tone in every state (#2027 P2).
+    expect(control).toHaveClass(
+      "aria-invalid:border-destructive-text",
+      "aria-invalid:hover:border-destructive-text",
+      "aria-invalid:active:border-destructive-text",
+    );
+    expect(control.className).not.toMatch(/border-destructive(?![\w-])/);
     // No native maxLength: the operator's text is never silently cut.
     expect(control).not.toHaveAttribute("maxlength");
     expect(control).toHaveValue("0123456789");

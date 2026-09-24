@@ -430,6 +430,11 @@ describe("<Combobox>", () => {
       "aria-invalid",
       "true",
     );
+    // The invalid frame takes the danger TEXT tone, as every field does (#2027 P2).
+    expect(screen.getByRole("combobox")).toHaveClass(
+      "aria-invalid:border-destructive-text",
+      "aria-invalid:bg-destructive-tint",
+    );
     rerender(
       <Combobox
         options={KINDS}

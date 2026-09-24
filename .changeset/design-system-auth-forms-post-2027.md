@@ -41,7 +41,10 @@ drove no utility at all.
 Dark-mode field controls now sit on the surface colour (`bg-card`) instead of
 the page background, matching every design-source canvas: `Input`, `Textarea`,
 `NativeSelect` and the `Combobox` control and search field. Light is unchanged
-(both tokens are white there).
+(both tokens are white there). An invalid field's frame — `Input`, `Textarea`,
+`NativeSelect` and the `Combobox` control, hover and press included — takes the
+danger text tone, so it reads `#E15555` in dark as the canvas draws it; light is
+byte-identical (both tokens are `#C81E1E` there).
 
 The auth brand panel takes the canvas measures: a `.95fr 1.05fr` split, the fluid
 `clamp(40px,4vw,64px)` padding, the eyebrow at .14em in the panel's pale blue, a

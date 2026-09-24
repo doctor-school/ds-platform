@@ -78,8 +78,13 @@ describe("Input filled-border (#529, source §07 filled state)", () => {
     );
     const i = screen.getByTestId("i");
     expect(i).toHaveClass(
-      "aria-invalid:border-destructive",
+      "aria-invalid:border-destructive-text",
       "aria-invalid:bg-destructive-tint",
+    );
+    // The frame takes the danger TEXT tone: identical in light, `#E15555` in
+    // dark as the canvas draws it (#2027 P2) — never the fill tone.
+    expect(i.className.split(/\s+/)).not.toContain(
+      "aria-invalid:border-destructive",
     );
   });
 });

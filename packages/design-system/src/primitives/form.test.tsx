@@ -343,7 +343,7 @@ describe("Input invalid state (K-3 — red border + danger tint carry the error)
     // Neo-brutalist error (#512, source §07): destructive 2px border + the pale
     // `destructive-tint` (dangerTint) fill, set by aria-invalid on the control.
     expect(inp).toHaveClass(
-      "aria-invalid:border-destructive",
+      "aria-invalid:border-destructive-text",
       "aria-invalid:bg-destructive-tint",
     );
   });

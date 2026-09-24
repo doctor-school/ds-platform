@@ -218,7 +218,7 @@ export function Combobox({
             "hover:border-ring active:border-primary-action active:bg-muted",
             "focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none",
             "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground",
-            "aria-invalid:border-destructive aria-invalid:bg-destructive-tint",
+            "aria-invalid:border-destructive-text aria-invalid:bg-destructive-tint",
             className,
           )}
         >

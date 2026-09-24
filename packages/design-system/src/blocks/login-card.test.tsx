@@ -348,7 +348,7 @@ describe("#2027 <LoginCard> canvas parity", () => {
     const banner = screen.getByText(/copy\.password\.error/).closest("p");
     expect(banner).toHaveClass(
       "border-2",
-      "border-destructive",
+      "border-destructive-text",
       "bg-destructive-tint",
       "text-caption",
       "text-foreground",

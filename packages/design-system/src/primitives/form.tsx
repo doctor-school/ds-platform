@@ -166,9 +166,13 @@ const FORM_MESSAGE_TEXT = "text-xs";
 const FORM_ERROR_TONE = "font-bold text-destructive-text";
 // #2027 canvas `design-source/auth.dc.html:56-61` — the operation-level plate.
 // The frame and the tint carry the alarm, so the sentence itself stays ink and
-// readable; an all-red paragraph is a shout the canvas never makes.
+// readable; an all-red paragraph is a shout the canvas never makes. The plate is
+// a NON-fill danger surface, so its frame and its ⚠ share the danger TEXT tone
+// (`destructive-text`: light #C81E1E / dark #E15555 — the canvas draws both with
+// one `danger`), like the `Checkbox` invalid box; `destructive` stays the
+// interactive-FILL role (dark #C81E1E would frame the plate darker than its ⚠).
 const FORM_ERROR_BANNER =
-  "border-2 border-destructive bg-destructive-tint px-3.5 py-3 text-caption font-bold leading-notice text-foreground";
+  "border-2 border-destructive-text bg-destructive-tint px-3.5 py-3 text-caption font-bold leading-notice text-foreground";
 // #2027 canvas `design-source/auth.dc.html` — the hint under a field is the
 // quietest line on the screen: 12px weight 600 in the FAINT tone, a rung below
 // the muted body copy. A field is ONE thing, so this is the package default for
@@ -323,8 +327,8 @@ const FormError = React.forwardRef<
     /**
      * `inline` (default) — the bare ⚠ line a field-level failure uses.
      * `banner` — the canvas plate (`design-source/auth.dc.html:56-61`) an
-     * OPERATION-level refusal is drawn as: a 2px danger frame on the danger
-     * tint, standing where the eye enters the screen. Its body is READ rather
+     * OPERATION-level refusal is drawn as: a 2px danger-text-tone frame
+     * (`destructive-text`, the ⚠'s own tone) on the danger tint, standing where the eye enters the screen. Its body is READ rather
      * than shouted, so the copy sits at 13px/700 on a 1.45 line in ink and only
      * the ⚠ keeps the danger colour.
      */

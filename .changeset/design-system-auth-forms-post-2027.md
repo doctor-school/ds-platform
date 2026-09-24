@@ -26,7 +26,9 @@ every field in the system.
 `FormError` gains a public `variant` prop. `banner` draws the canvas plate an
 operation-level refusal deserves — a 2px danger frame on the danger tint, the
 sentence itself at 13px/700 in ink so it is read rather than shouted — while the
-default `inline` keeps the bare line a field-level failure uses. The sign-in door
+default `inline` keeps the bare line a field-level failure uses. The plate frame
+takes the danger text tone, so in dark mode it reads `#E15555` with its glyph, as
+the canvas draws it; light is unchanged. The sign-in door
 now reports a refused attempt as that plate, and both of its choice groups are
 named with the same eyebrow the sign-up door's conditions use.
 

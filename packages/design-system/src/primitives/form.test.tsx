@@ -237,7 +237,7 @@ describe("FormError — single form-level error primitive (one error style sourc
     const err = screen.getByTestId("ferr");
     expect(err).toHaveClass(
       "border-2",
-      "border-destructive",
+      "border-destructive-text",
       "bg-destructive-tint",
       "px-3.5",
       "py-3",
@@ -249,6 +249,10 @@ describe("FormError — single form-level error primitive (one error style sourc
       "text-foreground",
     );
     expect(err.className).not.toMatch(/text-xs/);
+    // The plate is a non-fill danger surface: its frame shares the ⚠'s danger
+    // TEXT tone (dark #E15555, as the canvas draws both with one `danger`), never
+    // the interactive `destructive` FILL (dark #C81E1E).
+    expect(err.className.split(/\s+/)).not.toContain("border-destructive");
     expect(err).toHaveAttribute("role", "alert");
 
     const glyph = err.querySelector("span");

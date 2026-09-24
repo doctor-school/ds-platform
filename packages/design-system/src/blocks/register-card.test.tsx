@@ -504,9 +504,11 @@ describe("#2027 <RegisterCard> canvas tone and kegel", () => {
 
   it("#2027: the withdrawal note runs at the canvas 11.5px half-step in the faint tone (canvas 204)", () => {
     renderCard({ consentNote: "You may withdraw a consent at any time" });
-    expect(
-      screen.getByTestId("registration-consent-manager-note"),
-    ).toHaveClass("text-pill", "leading-normal", "text-faint");
+    expect(screen.getByTestId("registration-consent-manager-note")).toHaveClass(
+      "text-pill",
+      "leading-normal",
+      "text-faint",
+    );
 
     cleanup();
     // The frameless host (marketing rows only) says the same sentence in the
@@ -515,9 +517,11 @@ describe("#2027 <RegisterCard> canvas tone and kegel", () => {
       consentItems: [MARKETING_ITEM],
       consentNote: "You may withdraw a consent at any time",
     });
-    expect(
-      screen.getByTestId("registration-consent-manager-note"),
-    ).toHaveClass("text-pill", "leading-normal", "text-faint");
+    expect(screen.getByTestId("registration-consent-manager-note")).toHaveClass(
+      "text-pill",
+      "leading-normal",
+      "text-faint",
+    );
   });
 
   it("#2027: the reason under a consent statement is faint, not muted (canvas 192/200/222)", () => {
@@ -530,5 +534,35 @@ describe("#2027 <RegisterCard> canvas tone and kegel", () => {
     const help = screen.getByTestId("help");
     expect(help).toHaveClass("text-xs", "leading-normal", "text-faint");
     expect(help.className).not.toMatch(/text-muted-foreground/);
+  });
+
+  it("#2027: an error-free card draws no banner frame above the glyph (canvas 56-62)", () => {
+    renderCard({ icon: <span data-testid="glyph">◆</span> });
+    const tile = screen.getByTestId("glyph").parentElement;
+    expect(tile?.previousElementSibling).toBeNull();
+  });
+
+  it("#2027: a refused command still stands in the banner above the glyph (canvas 56-61)", () => {
+    renderCard({
+      icon: <span data-testid="glyph">◆</span>,
+      errors: { command: "It failed" },
+    });
+    const tile = screen.getByTestId("glyph").parentElement;
+    expect(tile?.previousElementSibling).toHaveTextContent("It failed");
+  });
+
+  it("003 EARS-17: the invisible challenge mount stands out of the form's 18px rhythm (canvas 209-211)", () => {
+    renderCard({ captchaSlot: <div data-testid="captcha">challenge</div> });
+    const mount = screen.getByTestId("captcha").parentElement;
+    expect(mount).toHaveClass("absolute");
+    expect(mount?.parentElement).toBe(screen.getByTestId("registration-form"));
+  });
+
+  it("#2027: the password input carries the host placeholder (canvas 151)", () => {
+    renderCard({ copy: { ...COPY, passwordPlaceholder: "••••••••" } });
+    expect(screen.getByTestId("register-password")).toHaveAttribute(
+      "placeholder",
+      "••••••••",
+    );
   });
 });

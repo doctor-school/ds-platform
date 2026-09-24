@@ -133,6 +133,8 @@ export interface RegisterCardCopy {
   emailLabel: string;
   emailPlaceholder?: string;
   passwordLabel: string;
+  /** The password input's placeholder (canvas 151 `••••••••`); absent = none. */
+  passwordPlaceholder?: string;
   /** The length baseline ONLY — 003 EARS-36 forbids a surface declaring a second password policy. */
   passwordPolicyHint?: string;
   /**
@@ -373,7 +375,11 @@ export function RegisterCard({
         // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling.
         title={<h1>{copy.title}</h1>}
         description={copy.description}
-        errorBanner={<div className="mb-3">{errorStatements}</div>}
+        errorBanner={
+          errors?.challenge || errors?.command ? (
+            <div className="mb-3">{errorStatements}</div>
+          ) : null
+        }
         footer={footer}
       >
         <Form {...form}>
@@ -398,7 +404,9 @@ export function RegisterCard({
                 <EmailField
                   field={field}
                   label={copy.emailLabel}
-                  {...(copy.emailPlaceholder === undefined ? {} : { placeholder: copy.emailPlaceholder })}
+                  {...(copy.emailPlaceholder === undefined
+                    ? {}
+                    : { placeholder: copy.emailPlaceholder })}
                   {...testIdProps2(testIds?.email)}
                 />
               )}
@@ -413,7 +421,12 @@ export function RegisterCard({
                   field={field}
                   purpose="new"
                   label={copy.passwordLabel}
-                  {...(copy.passwordPolicyHint === undefined ? {} : { policyHint: copy.passwordPolicyHint })}
+                  {...(copy.passwordPlaceholder === undefined
+                    ? {}
+                    : { placeholder: copy.passwordPlaceholder })}
+                  {...(copy.passwordPolicyHint === undefined
+                    ? {}
+                    : { policyHint: copy.passwordPolicyHint })}
                   {...(copy.passwordRevealLabels === undefined
                     ? {}
                     : { revealLabels: copy.passwordRevealLabels })}
@@ -554,7 +567,11 @@ export function RegisterCard({
               then the submit. The form-level statements stand in the card's
               error banner above the title (canvas 56-61).
             */}
-            {captchaSlot}
+            {/* The invisible challenge mounts a zero-height provider node; as a
+                flex row it would add a second 18px gap above the submit. The
+                `absolute` wrapper keeps it mounted in the form while it takes
+                no place in the column's rhythm. */}
+            {captchaSlot ? <div className="absolute">{captchaSlot}</div> : null}
             {submitControl}
 
             {/*

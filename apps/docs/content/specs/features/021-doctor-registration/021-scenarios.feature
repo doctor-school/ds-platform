@@ -177,7 +177,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Given a doctor completed registration
     When any state of the registration surface is scanned
     Then no withdrawal toggle or «отозвать согласие» control exists
-    And the interface states that a change or withdrawal is a request handled by a platform manager
+    And no withdrawal sentence is rendered
 
   @EARS-18 @process
   Scenario: The surface is composed from the auth canvas and the design system, never hand-assembled

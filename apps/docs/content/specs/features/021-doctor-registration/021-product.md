@@ -41,7 +41,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 - **US-7** — As a **doctor**, the consent to share my professional data with partners says in plain words what exchange it is the condition of, and the composition of the shared data is spelled out in the policy text and by the platform manager, so I am agreeing to something specific rather than to a legal wall.
 - **US-8** — As a **doctor**, the mandatory access conditions and the optional marketing opt-in are **visually distinguishable**, so I never mistake one for the other.
 - **US-9** — As a **doctor**, the newsletter opt-in is genuinely optional and I can complete registration without it.
-- **US-10** — As a **doctor**, my consents are recorded separately and with a date, and I am told how to change or withdraw them — through a platform manager, since the product offers no self-service toggle.
+- **US-10** — As a **doctor**, my consents are recorded separately and with a date, and changing or withdrawing them goes through a platform manager, since the product offers no self-service toggle.
 - **US-11** — As a **doctor who arrived on a partner's promo code or a medical representative's link**, the screen shows me who brought me here instead of tagging me invisibly.
 - **US-12** — As a **partner's medical representative**, a doctor who came through my personal link is attributed to me at the moment of registration, so my referrals are countable.
 - **US-13** — As a **doctor**, I am credited starting attention points for registering, and I am told what completing my profile adds and what it unlocks.
@@ -85,7 +85,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 
 **Consent lifecycle (US-10, US-21):**
 
-1. Each consent is recorded separately, by purpose, with its date, and is presented as changeable **through a platform manager**.
+1. Each consent is recorded separately, by purpose, with its date, and is changeable **through a platform manager**.
 2. A doctor who opted in to the newsletter is handed to the external mailing service with their segmentation attributes; unsubscribing there and withdrawing here stay in sync (REQ-115; mechanics in 042).
 3. Any refusal or withdrawal of the mandatory consent is a whole-account case worked by a manager by hand — the interface carries **no toggle** for it.
 
@@ -103,7 +103,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 - A **mandatory partner-data consent** states the exchange in plain words — sharing professional data with partners is the condition of education that stays free for the doctor; the composition of the shared data lives in the **policy text and the manager path**, not inside the consent item.
 - A **separate, genuinely optional newsletter consent** exists, and registration completes without it.
 - Mandatory access conditions and the optional marketing opt-in are **visually distinguishable**, not distinguished by wording alone.
-- Consents are **separate by purpose and recorded provably with a date**; the interface presents change/withdrawal as a manager-handled request and offers **no self-service withdrawal toggle**.
+- Consents are **separate by purpose and recorded provably with a date**; change/withdrawal is a manager-handled request, and the interface offers **no self-service withdrawal toggle**.
 - No interface copy anywhere on this surface states **who pays** for the doctor's education; the surface says only that it is free for the doctor.
 - When the doctor arrived on a partner's promo code or a medical representative's personal link, the **attribution is visible on the screen** and is attached to the resulting account; without one, the same screen renders with no attribution element.
 - After email confirmation the doctor is **returned to the point of interest** they came from, with «to my account» as a secondary action; the account page is never the default outcome of registration. _(Amended 2026-09-17: the doctor now lands on that point of interest **directly** — the post-confirmation success state and its secondary «в личный кабинет» action are withdrawn, the destination unchanged. See [`021-requirements-en.md`](./021-requirements-en.md) → Amendment — 2026-09-17.)_

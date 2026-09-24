@@ -155,7 +155,8 @@
                 <div style="{{ fRegPw.errStyle }}">⚠ {{ fRegPw.error }}</div>
               </div>
 
-              <!-- Промокод — выше согласий, на обеих витринах -->
+              <!-- Промокод — только витрина врача, выше согласий; на Академии поля нет -->
+              <sc-if value="{{ isDoctor }}" hint-placeholder-val="{{ false }}">
               <div>
                 <label style="{{ fPromo.labelStyle }}">{{ fPromo.label }}</label>
                 <input type="text" value="{{ fPromo.value }}" onChange="{{ fPromo.onChange }}" onBlur="{{ fPromo.onBlur }}" placeholder="{{ fPromo.placeholder }}" style="{{ fPromo.inputStyle }}">
@@ -163,6 +164,7 @@
                   <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;font-weight:700;color:{{ tintFg }};background:{{ tint }};padding:8px 10px">Регистрация по ссылке партнёра — промокод подставлен автоматически.</div>
                 </sc-if>
               </div>
+              </sc-if>
 
               <!-- Условия доступа: обе галочки обязательны -->
               <sc-if value="{{ isDoctor }}" hint-placeholder-val="{{ false }}">
@@ -184,7 +186,6 @@
                       <div style="{{ cbPartner.errStyle }}">⚠ Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.</div>
                     </div>
                   </div>
-                  <p style="margin:0;font-size:11.5px;line-height:1.5;color:{{ inkFaint }}">Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.</p>
                 </div>
               </sc-if>
 
@@ -305,12 +306,14 @@
       </sc-if>
       <sc-if value="{{ showBrandPanel }}" hint-placeholder-val="{{ true }}">
       <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px">
-        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">Врачи учат врачей</div>
-        <h2 style="margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch">Медицинское образование для врачей</h2>
+        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">{{ brandEyebrow }}</div>
+        <h2 style="margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch">{{ brandHeadline }}</h2>
+        <sc-if value="{{ isDoctor }}" hint-placeholder-val="{{ false }}">
         <p style="margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch">Учебные программы и сертификация от ведущих экспертов отрасли — в едином пространстве Doctor.School.</p>
+        </sc-if>
       </div>
       </sc-if>
-      <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.85)">© Doctor.School. Платформа непрерывного медицинского образования.</div>
+      <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.85)">{{ brandFooter }}</div>
     </div>
     </sc-if>
   </div>
@@ -373,7 +376,7 @@ class Component extends DCLogic {
     const shadowSm = d ? '#1F69C8' : '#AED4FB';
     const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.972 .004 250)';
     const headerBg = '#114D9E';
-    const danger = d ? '#FF8A8A' : '#C81E1E';
+    const danger = d ? '#E15555' : '#C81E1E';
     const dangerTint = d ? '#3a1414' : '#fdecec';
     const success = d ? '#4ADE80' : '#009959';
     const successTint = d ? '#0e2a1c' : '#e6f6ee';
@@ -488,7 +491,11 @@ class Component extends DCLogic {
     return {
       toggleTheme: () => this.setState(st => { const dark = !st.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
       themeIcon: d ? '☀' : '☾',
-      isDesktop: !m, isDoctor, page, surface, ink, inkMuted, inkFaint, border, hairline, accent, linkColor, btnHover, btnBg, btnFg, tint, tintFg, shadow, shadowSm, headerBg, danger, dangerTint, success, successTint, sectionGray, darkFlag: d,
+      isDesktop: !m, isDoctor, page,
+      // Брендовая панель — по хосту (владелец 2026-09-24): у Академии свой надзаголовок, заголовок и футер, подзаголовка нет.
+      brandEyebrow: isDoctor ? 'Врачи учат врачей' : 'Академия Doctor.School',
+      brandHeadline: isDoctor ? 'Медицинское образование для врачей' : 'Среда обитания экспертов здравоохранения',
+      brandFooter: isDoctor ? '© Doctor.School. Платформа непрерывного медицинского образования.' : '© Doctor.School.', surface, ink, inkMuted, inkFaint, border, hairline, accent, linkColor, btnHover, btnBg, btnFg, tint, tintFg, shadow, shadowSm, headerBg, danger, dangerTint, success, successTint, sectionGray, darkFlag: d,
       codeSlots,
       showFormLogoLight: !d && m, showFormLogoDark: d && m,
       showGateCardPanel: gateCardOn && !m, showGateCardMobile: gateCardOn && m, showBrandPanel: !gateCardOn || m,

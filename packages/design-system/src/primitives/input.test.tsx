@@ -2,6 +2,8 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Input, inputVariants } from "./input";
+import { NativeSelect } from "./native-select";
+import { Textarea } from "./textarea";
 
 afterEach(cleanup);
 
@@ -134,12 +136,39 @@ describe("Input header surface (#2180, canvas ds-shell.dc.html line 24)", () => 
       "placeholder:text-header-foreground",
       "focus-visible:border-header-foreground",
     );
-    // The base page-surface values lose to the variant (tailwind-merge).
-    expect(i).not.toHaveClass("bg-background", "border-hairline", "text-foreground");
+    // The base surface values lose to the variant (tailwind-merge).
+    expect(i).not.toHaveClass("bg-card", "border-hairline", "text-foreground");
     expect(i).not.toHaveAttribute("variant");
   });
 
   it("017 EARS-5: the default variant leaves the page-surface field untouched", () => {
     expect(inputVariants()).not.toMatch(/header/);
+  });
+});
+
+describe("Field controls sit on the canvas surface (#2027, every design-source canvas draws inputs on --color-card)", () => {
+  it("the canvas surface: Input paints bg-card, never the page background", () => {
+    render(<Input data-testid="i" aria-label="e" />);
+    const i = screen.getByTestId("i");
+    expect(i).toHaveClass("bg-card");
+    expect(i).not.toHaveClass("bg-background");
+  });
+
+  it("the canvas surface: Textarea paints bg-card, never the page background", () => {
+    render(<Textarea data-testid="t" aria-label="e" />);
+    const t = screen.getByTestId("t");
+    expect(t).toHaveClass("bg-card");
+    expect(t).not.toHaveClass("bg-background");
+  });
+
+  it("the canvas surface: NativeSelect paints bg-card, never the page background", () => {
+    render(
+      <NativeSelect data-testid="s" aria-label="e">
+        <option value="a">a</option>
+      </NativeSelect>,
+    );
+    const s = screen.getByTestId("s");
+    expect(s).toHaveClass("bg-card");
+    expect(s).not.toHaveClass("bg-background");
   });
 });

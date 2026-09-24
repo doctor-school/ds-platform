@@ -21,7 +21,7 @@ describe("Input — hard 2px border, flush focus ring, danger-tint error (#512)"
   it("rests on a 2px hairline border and focuses to the brand ring + flush shadow", () => {
     render(<Input aria-label="x" data-testid="inp" />);
     const inp = screen.getByTestId("inp");
-    expect(inp).toHaveClass("border-2", "border-hairline", "bg-background");
+    expect(inp).toHaveClass("border-2", "border-hairline", "bg-card");
     expect(inp).toHaveClass(
       "focus-visible:border-ring",
       "focus-visible:shadow-focus",

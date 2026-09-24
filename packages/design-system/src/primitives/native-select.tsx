@@ -39,7 +39,7 @@ const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
             onChange?.(event);
           }}
           className={cn(
-            "flex h-11 w-full appearance-none border-2 bg-background px-3.5 py-3 pr-10 text-sm transition-colors",
+            "flex h-11 w-full appearance-none border-2 bg-card px-3.5 py-3 pr-10 text-sm transition-colors",
             filled
               ? "border-border text-foreground"
               : "border-hairline text-muted-foreground",

@@ -74,7 +74,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           onChange?.(e);
         }}
         className={cn(
-          "flex h-11 w-full border-2 bg-background px-3.5 py-3 text-sm text-foreground transition-colors",
+          "flex h-11 w-full border-2 bg-card px-3.5 py-3 text-sm text-foreground transition-colors",
           // Resting border: ink once filled, hairline when empty (base class — the
           // state variants below have higher specificity and still win).
           filled ? "border-border" : "border-hairline",

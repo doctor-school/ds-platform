@@ -35,3 +35,8 @@ New type tokens back the above: `font.size.pill` (11.5px, `text-pill`) and
 are additionally mapped onto Tailwind's `--leading-*` namespace, so
 `leading-title|label|notice|prose` exist as utilities — previously those tokens
 drove no utility at all.
+
+Dark-mode field controls now sit on the surface colour (`bg-card`) instead of
+the page background, matching every design-source canvas: `Input`, `Textarea`,
+`NativeSelect` and the `Combobox` control and search field. Light is unchanged
+(both tokens are white there).

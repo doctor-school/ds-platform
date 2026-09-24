@@ -81,10 +81,18 @@ export const ACADEMY_AUTH_FLOW = {
   // 013 EARS-15 — no carried target lands on the discovery listing, never the
   // marketing landing; this host keeps no specialty memory (row 38).
   landing: { afterLogin: "/webinars", specialtyAware: false },
-  // No `copy`: every auth word is the package's own default (#2027 — a field is
-  // one thing on both storefronts, and the host varies only the SET of fields).
-  // A genuinely Academy-specific sentence would be a deep-partial `copy`
-  // override here; this host has none.
+  // Every auth word is the package's own default (#2027 — a field is one thing
+  // on both storefronts, and the host varies only the SET of fields) EXCEPT the
+  // brand panel, which is the Academy's own (owner 2026-09-24, #2027 Stage-B
+  // r3): its eyebrow, headline and footer, and no sub-copy line at all.
+  copy: {
+    brand: {
+      eyebrow: "Академия Doctor.School",
+      headline: "Среда обитания экспертов здравоохранения",
+      subcopy: null,
+      footer: "© Doctor.School.",
+    },
+  },
   // The Doctor School wordmark (`public/brand/`, viewBox 500×164): the colour
   // lockup on the white form column, the clean white one on the blue panel. The
   // Academy page has no dark wordmark swap, so no `darkSrc`.

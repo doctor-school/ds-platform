@@ -96,8 +96,23 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     );
   });
 
-  it("#2027: the host restates no auth wording — every sentence is the package's", () => {
-    expect(ACADEMY_AUTH_FLOW).not.toHaveProperty("copy");
-    expect(resolveAuthFlowCopy(config)).toBe(DEFAULT_AUTH_FLOW_COPY);
+  it("#2027: the brand panel is the Academy's own — eyebrow, headline, footer, no sub-copy (owner 2026-09-24)", () => {
+    expect(resolveAuthFlowCopy(config).brand).toEqual({
+      eyebrow: "Академия Doctor.School",
+      headline: "Среда обитания экспертов здравоохранения",
+      subcopy: null,
+      footer: "© Doctor.School.",
+    });
+  });
+
+  it("#2027: the host restates no other auth wording — every other sentence is the package's", () => {
+    expect(Object.keys(ACADEMY_AUTH_FLOW.copy ?? {})).toEqual(["brand"]);
+    const resolved = resolveAuthFlowCopy(config);
+    for (const key of Object.keys(DEFAULT_AUTH_FLOW_COPY)) {
+      if (key === "brand") continue;
+      expect(resolved[key as keyof typeof resolved]).toBe(
+        DEFAULT_AUTH_FLOW_COPY[key as keyof typeof DEFAULT_AUTH_FLOW_COPY],
+      );
+    }
   });
 });

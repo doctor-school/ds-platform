@@ -52,6 +52,16 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
     );
   });
 
+  it("#2027: the brand panel keeps the package's doctor copy (owner 2026-09-24)", () => {
+    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).brand).toEqual({
+      eyebrow: "Врачи учат врачей",
+      headline: "Медицинское образование для врачей",
+      subcopy:
+        "Учебные программы и сертификация от ведущих экспертов отрасли — в едином пространстве Doctor.School.",
+      footer: "© Doctor.School. Платформа непрерывного медицинского образования.",
+    });
+  });
+
   it("#2027: the host restates no auth wording — every sentence is the package's", () => {
     expect(DOCTOR_AUTH_FLOW.copy).toBeUndefined();
     expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW)).toBe(DEFAULT_AUTH_FLOW_COPY);

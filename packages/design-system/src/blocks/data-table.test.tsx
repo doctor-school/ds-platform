@@ -91,6 +91,81 @@ describe("<DataTable>", () => {
     expect(cols[2]).toHaveStyle({ width: "120px" });
   });
 
+  it("lays the grid out FIXED so the declared widths hold instead of content-sized auto layout", () => {
+    const { container } = renderTable();
+    const table = container.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(table?.className).toContain("table-fixed");
+  });
+
+  it("gives an ALL-ABSOLUTE grid a min-width equal to the sum of its declared widths, so a wider-than-frame table scrolls instead of squeezing (#2357)", () => {
+    const { container } = renderTable({
+      record: {
+        header: "Направление",
+        width: "16rem",
+        title: (row) => row.title,
+        label: (row) => `Открыть «${row.title}»`,
+      },
+      columns: [
+        { ...COLUMNS[0]!, width: "12rem" },
+        { ...COLUMNS[1]!, width: "8rem" },
+      ],
+    });
+    const table = container.querySelector("table");
+    expect(table?.style.minWidth).toBe("36rem");
+  });
+
+  it("sums MIXED absolute units through calc() for the min-width", () => {
+    const { container } = renderTable({
+      record: {
+        header: "Направление",
+        width: "16rem",
+        title: (row) => row.title,
+        label: (row) => `Открыть «${row.title}»`,
+      },
+    });
+    // jsdom re-orders calc() terms when it serialises; the sum is what matters.
+    const minWidth = container.querySelector("table")?.style.minWidth ?? "";
+    expect(minWidth).toMatch(/^calc\(/);
+    for (const term of ["16rem", "220px", "120px"]) {
+      expect(minWidth).toContain(term);
+    }
+  });
+
+  it("keeps a header on ONE line in an all-absolute grid (whitespace-nowrap)", () => {
+    const { container } = renderTable({
+      record: {
+        header: "Направление",
+        width: "16rem",
+        title: (row) => row.title,
+        label: (row) => `Открыть «${row.title}»`,
+      },
+    });
+    const headers = container.querySelectorAll("thead th");
+    expect(headers.length).toBe(3);
+    headers.forEach((th) => expect(th.className).toContain("whitespace-nowrap"));
+  });
+
+  it("leaves the PERCENT contract unchanged: no min-width, headers may wrap", () => {
+    const { container } = renderTable();
+    const table = container.querySelector("table");
+    expect(table?.style.minWidth).toBe("");
+    container
+      .querySelectorAll("thead th")
+      .forEach((th) => expect(th.className).not.toContain("whitespace-nowrap"));
+  });
+
+  it("treats a column with no declared width (it absorbs the remainder) as NOT all-absolute", () => {
+    const { container } = renderTable({
+      record: {
+        header: "Направление",
+        title: (row) => row.title,
+        label: (row) => `Открыть «${row.title}»`,
+      },
+    });
+    expect(container.querySelector("table")?.style.minWidth).toBe("");
+  });
+
   it("keeps the full value reachable on a truncated cell (title attribute)", () => {
     const { container } = renderTable();
     const truncated = container.querySelector('td[title="Диагностика"]');

@@ -24,7 +24,8 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     tooManyAttempts: "Слишком много попыток — повторите через несколько минут.",
     unavailable: "Сервис временно недоступен — попробуйте ещё раз.",
     botProtectionRequired: "Подтвердите, что вы не робот.",
-    botProtectionRejected: "Проверка истекла или не пройдена. Подтвердите ещё раз.",
+    botProtectionRejected:
+      "Проверка истекла или не пройдена. Подтвердите ещё раз.",
   },
   botProtection: {
     required: "Подтвердите, что вы не робот.",
@@ -109,6 +110,7 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     emailLabel: "Электронная почта",
     emailPlaceholder: "doctor@example.com",
     passwordLabel: "Пароль",
+    passwordPlaceholder: "••••••••",
     reveal: {
       show: "Показать",
       hide: "Скрыть",
@@ -132,7 +134,8 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       resend: "Отправить снова",
       resendCountdown: "Отправить снова · {seconds} с",
       existingAccountHeading: "Уже регистрировались?",
-      existingAccountHint: "Войдите в существующий аккаунт или сбросьте пароль.",
+      existingAccountHint:
+        "Войдите в существующий аккаунт или сбросьте пароль.",
       goToSignIn: "Войти",
       goToReset: "Сбросить пароль",
       failed: "Код не подошёл. Попробуйте ещё раз.",

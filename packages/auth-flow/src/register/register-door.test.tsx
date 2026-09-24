@@ -238,6 +238,19 @@ describe("003 EARS-17 / 021 EARS-19.4: the challenge runs BEFORE the command", (
   );
 });
 
+describe("#2027: the password field's canvas placeholder", () => {
+  it.each(HOSTS)(
+    "#2027: the %s door's password input carries the canvas placeholder (canvas 151)",
+    async (_host, config) => {
+      await renderDoor(config);
+      expect(screen.getByTestId("register-password")).toHaveAttribute(
+        "placeholder",
+        "••••••••",
+      );
+    },
+  );
+});
+
 describe("#337 / gate row 63: how the in-flight submit reads", () => {
   it("#337: the Academy submit states the wait with the loading affordance", async () => {
     let release: (() => void) | undefined;
@@ -546,7 +559,9 @@ describe("021 EARS-7/12: the unmet condition, and the statement that cannot be s
     await renderDoor(DOCTOR_FIXTURE);
     expect(
       screen.getByTestId("registration-consent-manager-note"),
-    ).toHaveTextContent(resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.managerNote);
+    ).toHaveTextContent(
+      resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.managerNote,
+    );
 
     cleanup();
     await renderDoor(ACADEMY_FIXTURE);

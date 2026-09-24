@@ -363,6 +363,7 @@ export function RegisterDoor({
       emailLabel: copy.emailLabel,
       emailPlaceholder: copy.emailPlaceholder,
       passwordLabel: copy.passwordLabel,
+      passwordPlaceholder: copy.passwordPlaceholder,
       // 003 EARS-36 — the length baseline, from the ONE field SSOT. No surface
       // declares a password policy of its own.
       ...(registerFieldHint("password")

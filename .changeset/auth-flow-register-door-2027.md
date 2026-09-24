@@ -59,3 +59,14 @@ conditions are separated by a hairline rule, and every consent label — the
 marketing opt-in included — is bold in the ink tone above a small quiet help
 line. `Checkbox` therefore renders its label bold everywhere it is used, and
 paints its box in the danger tone while the control it wraps is `aria-invalid`.
+
+The auth card family now renders to the canvas measures on both storefronts: the
+logo, the card and the processing notice under it share a 440px column (new
+`--container-auth` token, `max-w-auth`); the title stands 10px above its
+sub-copy; the badge glyph is 26px and takes the tile's accent in dark mode too;
+the «Уже есть аккаунт? Войти» line sits 24px under the form instead of 36px; an
+error-free sign-up card no longer reserves an empty banner gap above the glyph;
+the invisible bot-protection mount no longer adds a second gap above the submit;
+the password hint hangs 7px under its field; the processing notice under the card
+is a left-aligned faint 12/18 line; and the sign-up password field shows the
+canvas `••••••••` placeholder (new `RegisterCardCopy.passwordPlaceholder`).

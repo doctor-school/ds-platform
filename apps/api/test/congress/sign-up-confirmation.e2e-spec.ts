@@ -256,7 +256,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const outcome = await waitForMailOutcome(email, "failed");
       expect(outcome.at).toBeInstanceOf(Date);
-      expect(outcome.at!.getTime()).toBeGreaterThanOrEqual(before.getTime() - 1);
+      expect(outcome.at!.getTime()).toBeGreaterThanOrEqual(
+        before.getTime() - 1,
+      );
       expect(confirmationsFor(email)).toHaveLength(0);
     });
 
@@ -290,7 +292,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       await waitForMailOutcome(email, "sent");
       expect(confirmationsFor(email)).toHaveLength(1);
-      expect(confirmationsFor(email)[0]).toMatchObject({ email });
+      const [resent] = confirmationsFor(email);
+      expect(resent).toMatchObject({
+        email,
+        eventTitle: EVENT_TITLE,
+        eventVenue: EVENT_VENUE,
+      });
+      expect(resent!.eventStartsAt.toISOString()).toBe(EVENT_STARTS_AT);
+      expectSingleCopy(resent!);
     });
 
     it("044 EARS-12.3: when a participant whose confirmation was sent resubmits, system shall not send a second email", async () => {

@@ -141,19 +141,14 @@ export class CongressSignUpService {
       },
     ];
 
-    // EARS-13: which account path this call took decides which paragraph the
-    // confirmation email carries — and it is RECORDED on the registration row
-    // rather than read off this call's return value, because the two disagree
-    // exactly when it matters. A participant whose first submission created the
-    // account but whose mail was rejected resubmits (EARS-12); on that second
-    // call the account exists, so the current-call flag would hand them the
-    // «войдите в существующий аккаунт» paragraph for an account this very
-    // intake had minted. The row's own `account_created_by_intake`, frozen by
-    // `ON CONFLICT DO NOTHING` at the first submission, is the truth.
+    // Which account path this call took (new account vs an existing one) is
+    // RECORDED on the registration row as `account_created_by_intake`, frozen by
+    // `ON CONFLICT DO NOTHING` at the first submission. It is roster/audit data
+    // only: since #2369 the confirmation email carries one copy for everyone
+    // (EARS-13 production amendment), so nothing sent or answered branches on it.
     //
-    // Nothing the participant may observe on the wire branches on it (EARS-7) —
-    // the mail reaches only the address that submitted the form, which is not a
-    // channel a third party can compare.
+    // Nothing the participant may observe on the wire branches on the path
+    // either (EARS-7) — the response is one success state for both.
     const account = await this.auth.createPasswordlessAccount(
       {
         email: request.email,
@@ -177,9 +172,9 @@ export class CongressSignUpService {
             userId,
             eventId: settings.eventId,
             answers: toCongressSignUpAnswers(request),
-            // EARS-12: the confirmation paragraph, decided once and stored.
-            // `ON CONFLICT DO NOTHING` below keeps the FIRST submission's value,
-            // which is exactly the guarantee a re-send needs.
+            // Audit: the account path of the FIRST submission, kept by
+            // `ON CONFLICT DO NOTHING` below; read by the roster, never by the
+            // confirmation email (#2369).
             accountCreatedByIntake: !alreadyExisted,
           })
           .onConflictDoNothing({
@@ -223,14 +218,10 @@ export class CongressSignUpService {
    *    this method before the mailer is touched. A `failed` (or a `NULL` left
    *    by an interrupted first attempt) re-dispatches, which is the feature's
    *    ENTIRE recovery mechanism: no outbox, no scheduled sweep, the
-   *    participant resubmitting (design section "Mail failure"). The same
-   *    re-select is where the confirmation's PARAGRAPH comes from: the row's
-   *    `account_created_by_intake`, frozen at the first submission, so a
-   *    re-send repeats the copy the failed send would have carried rather than
-   *    the copy the current state of the IdP would suggest. A `NULL` there is a
-   *    platform-origin row (EARS-16) - never reached from here, and if it ever
-   *    were, `=== true` resolves it to the existing-account paragraph, which is
-   *    what a doctor already on the platform is owed anyway.
+   *    participant resubmitting (design section "Mail failure"). A re-send
+   *    carries the same single copy as the first attempt - the email takes no
+   *    input from the account path (EARS-13 production amendment, #2369), so
+   *    the row's `account_created_by_intake` is not read here.
    * 3. **Every failure is swallowed, none is lost.** A relay rejection becomes
    *    `failed` on the row - a fact the roster can show and the next submission
    *    can act on - rather than a log line nobody reads. The outer `catch` is

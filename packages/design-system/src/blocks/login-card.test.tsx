@@ -40,6 +40,7 @@ const copy: LoginCardCopy = {
     identifierLabel: "copy.password.identifierLabel",
     identifierPlaceholder: "copy.password.identifierPlaceholder",
     passwordLabel: "copy.password.passwordLabel",
+    passwordPlaceholder: "copy.password.passwordPlaceholder",
     reveal: {
       show: "copy.password.revealShow",
       hide: "copy.password.revealHide",
@@ -353,6 +354,13 @@ describe("#2027 <LoginCard> canvas parity", () => {
       "text-foreground",
     );
     expect(banner).toHaveAttribute("role", "alert");
+  });
+
+  it("#2027: the password input carries the host placeholder (canvas 82, owner 2026-09-24)", () => {
+    setup();
+    expect(
+      screen.getByLabelText("copy.password.passwordLabel", { selector: "input" }),
+    ).toHaveAttribute("placeholder", "copy.password.passwordPlaceholder");
   });
 
   it("#2027: both choice groups are named with the family eyebrow (canvas 66/106)", () => {

@@ -6,7 +6,9 @@ import { AuthLayout } from "./auth-layout";
 export type AuthShellCopy = {
   eyebrow: React.ReactNode;
   headline: React.ReactNode;
-  subcopy: React.ReactNode;
+  /** The quiet line under the headline. Absent (or `null`) = the panel draws no
+   *  sub-copy line at all — never an empty node (Academy host, owner 2026-09-24). */
+  subcopy?: React.ReactNode;
   footer: React.ReactNode;
 };
 
@@ -106,9 +108,11 @@ export function AuthShell({
               <p className="max-w-lg text-4xl font-extrabold leading-tight tracking-tight text-balance">
                 {copy.headline}
               </p>
-              <p className="max-w-md text-base font-medium leading-relaxed text-primary-surface-muted">
-                {copy.subcopy}
-              </p>
+              {copy.subcopy === undefined || copy.subcopy === null ? null : (
+                <p className="max-w-md text-base font-medium leading-relaxed text-primary-surface-muted">
+                  {copy.subcopy}
+                </p>
+              )}
             </div>
           )}
           {/* Zone 3 — the panel's own closing line. Not site chrome: the auth route

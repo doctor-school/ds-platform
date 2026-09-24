@@ -67,6 +67,26 @@ describe("AuthShell", () => {
     expect(container.querySelector(".layout\\:grid-cols-2")).not.toBeNull();
   });
 
+  it("#2027: a panel with no sub-copy renders no sub-copy node (owner 2026-09-24)", () => {
+    const { eyebrow, headline, footer } = copy;
+    render(
+      <AuthShell
+        logo={<span>logo</span>}
+        panelMark={<img alt="" src="/mark.svg" />}
+        copy={{ eyebrow, headline, footer }}
+      >
+        <div>form</div>
+      </AuthShell>,
+    );
+
+    const valueProp = screen.getByText(headline).parentElement;
+    // Eyebrow + headline only — an absent line is absent, never an empty <p>.
+    expect(valueProp?.children).toHaveLength(2);
+    expect(screen.getByTestId("auth-brand-panel").textContent).toBe(
+      `${eyebrow}${headline}${footer}`,
+    );
+  });
+
   it("021 EARS-2: returnContext replaces the value prop and widens the split", () => {
     const { container } = render(
       <AuthShell

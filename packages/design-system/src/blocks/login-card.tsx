@@ -107,6 +107,8 @@ export interface LoginCardCopy {
     identifierLabel: string;
     identifierPlaceholder: string;
     passwordLabel: string;
+    /** The password input's placeholder (canvas 82 `••••••••`); absent = none. */
+    passwordPlaceholder?: string;
     /** Localized show/hide copy for the password reveal toggle (003 EARS-38);
      * omitted leaves the design-system RU default. */
     reveal?: PasswordRevealLabels;
@@ -384,6 +386,9 @@ function PasswordLogin({
               field={field}
               purpose="current"
               label={copy.passwordLabel}
+              {...(copy.passwordPlaceholder === undefined
+                ? {}
+                : { placeholder: copy.passwordPlaceholder })}
               {...(copy.reveal ? { revealLabels: copy.reveal } : {})}
             />
           )}

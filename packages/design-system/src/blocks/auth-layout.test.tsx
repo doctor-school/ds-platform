@@ -87,15 +87,21 @@ describe("<AuthLayout>", () => {
     expect(formColumn?.className).toContain("layout:order-2");
   });
 
-  it("splits the shell 50/50 by default", () => {
+  it("#2027 P1: splits the shell .95fr 1.05fr by default and pads the panel to the canvas clamp", () => {
+    // design-source/auth.dc.html: `shellCols = '.95fr 1.05fr'` (the panel is the
+    // first visual track, 684px at 1440) and the panel's own padding
+    // `clamp(40px,4vw,64px)` — the `panel` spacing role.
     const { container } = render(
       <AuthLayout logo={<span>logo</span>} aside={<p>brand-aside</p>}>
         <div>form</div>
       </AuthLayout>,
     );
-    expect(container.firstElementChild?.className).toContain(
-      "layout:grid-cols-2",
-    );
+    const shell = container.firstElementChild;
+    expect(shell?.className).toContain("layout:grid-cols-[.95fr_1.05fr]");
+    expect(shell?.className).not.toContain("layout:grid-cols-2");
+    const panel = container.querySelector("aside");
+    expect(panel?.className.split(" ")).toContain("p-panel");
+    expect(panel?.className.split(" ")).not.toContain("p-12");
   });
 
   it('widens the brand panel to 1.1fr .9fr with split="wide-aside" (021 return context)', () => {
@@ -115,7 +121,7 @@ describe("<AuthLayout>", () => {
     );
     const shell = container.firstElementChild;
     expect(shell?.className).toContain("layout:grid-cols-[1.1fr_.9fr]");
-    expect(shell?.className).not.toContain("layout:grid-cols-2");
+    expect(shell?.className).not.toContain("layout:grid-cols-[.95fr_1.05fr]");
   });
 
   it("omits the brand panel entirely when no aside is supplied (form-only fallback)", () => {

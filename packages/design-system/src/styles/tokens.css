@@ -53,6 +53,8 @@
   --color-primary-surface: #114d9e;
   --color-primary-surface-foreground: #ffffff;
   --color-primary-surface-muted: #cfdbec;
+  --color-primary-surface-soft: #d3e8fd;
+  --color-primary-surface-footer: rgba(255, 255, 255, 0.85);
   --color-secondary: oklch(0.968 0.004 250);
   --color-secondary-foreground: oklch(0.21 0.02 250);
   --color-muted: oklch(0.968 0.004 250);
@@ -118,6 +120,8 @@
   --font-size-2xl: 1.75rem;
   --font-size-3xl: 2.5rem;
   --font-size-4xl: 3.5rem;
+  --font-size-lead: 1.0625rem;
+  --font-size-panel-headline: clamp(1.875rem, 3.4vw, 2.875rem);
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
@@ -131,6 +135,7 @@
   --font-line-height-notice: 1.45;
   --font-line-height-normal: 1.5;
   --font-line-height-prose: 1.55;
+  --font-line-height-display: 1.05;
   --font-line-height-relaxed: 1.625;
   --font-letter-spacing-numeric: -0.04em;
   --font-letter-spacing-display: -0.035em;
@@ -141,6 +146,7 @@
   --font-letter-spacing-wide: 0.025em;
   --font-letter-spacing-micro: 0.12em;
   --font-letter-spacing-topbar: 0.22em;
+  --font-letter-spacing-eyebrow: 0.14em;
   --space-0: 0rem;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -165,11 +171,14 @@
   --space-section-sm: 2rem;
   --space-controls: 0.75rem;
   --space-inline: 0.5rem;
+  --space-panel: clamp(2.5rem, 4vw, 4rem);
   --space-chip-x: 1.375rem;
   --space-day-band: 0rem;
   --container-content: 69rem;
   --container-calendar: 83.5rem;
   --container-search: 27.5rem;
+  --container-panel-headline: 16ch;
+  --container-panel-lead: 38ch;
   --container-auth: 27.5rem;
   --radius-base: 0rem;
   --radius-control: 0rem;
@@ -251,6 +260,8 @@
   --color-primary-surface: #114d9e;
   --color-primary-surface-foreground: #ffffff;
   --color-primary-surface-muted: #cfdbec;
+  --color-primary-surface-soft: #d3e8fd;
+  --color-primary-surface-footer: rgba(255, 255, 255, 0.85);
   --color-secondary: oklch(0.372 0.016 250);
   --color-secondary-foreground: oklch(0.985 0.002 250);
   --color-muted: oklch(0.372 0.016 250);
@@ -311,6 +322,8 @@
   --color-primary-surface: #114d9e;
   --color-primary-surface-foreground: #ffffff;
   --color-primary-surface-muted: #cfdbec;
+  --color-primary-surface-soft: #d3e8fd;
+  --color-primary-surface-footer: rgba(255, 255, 255, 0.85);
   --color-secondary: oklch(0.968 0.004 250);
   --color-secondary-foreground: oklch(0.21 0.02 250);
   --color-muted: oklch(0.968 0.004 250);
@@ -371,6 +384,8 @@
   --color-primary-surface: var(--color-primary-surface);
   --color-primary-surface-foreground: var(--color-primary-surface-foreground);
   --color-primary-surface-muted: var(--color-primary-surface-muted);
+  --color-primary-surface-soft: var(--color-primary-surface-soft);
+  --color-primary-surface-footer: var(--color-primary-surface-footer);
   --color-secondary: var(--color-secondary);
   --color-secondary-foreground: var(--color-secondary-foreground);
   --color-muted: var(--color-muted);
@@ -436,6 +451,8 @@
   --text-2xl: var(--font-size-2xl);
   --text-3xl: var(--font-size-3xl);
   --text-4xl: var(--font-size-4xl);
+  --text-lead: var(--font-size-lead);
+  --text-panel-headline: var(--font-size-panel-headline);
   --font-weight-normal: var(--font-weight-normal);
   --font-weight-medium: var(--font-weight-medium);
   --font-weight-semibold: var(--font-weight-semibold);
@@ -449,6 +466,7 @@
   --leading-notice: var(--font-line-height-notice);
   --leading-normal: var(--font-line-height-normal);
   --leading-prose: var(--font-line-height-prose);
+  --leading-display: var(--font-line-height-display);
   --leading-relaxed: var(--font-line-height-relaxed);
   --spacing-gutter: var(--space-gutter);
   --spacing-inset: var(--space-inset);
@@ -458,11 +476,14 @@
   --spacing-section-sm: var(--space-section-sm);
   --spacing-controls: var(--space-controls);
   --spacing-inline: var(--space-inline);
+  --spacing-panel: var(--space-panel);
   --spacing-chip-x: var(--space-chip-x);
   --spacing-day-band: var(--space-day-band);
   --container-content: var(--container-content);
   --container-calendar: var(--container-calendar);
   --container-search: var(--container-search);
+  --container-panel-headline: var(--container-panel-headline);
+  --container-panel-lead: var(--container-panel-lead);
   --container-auth: var(--container-auth);
   --shadow-sm: var(--shadow-sm);
   --shadow-base: var(--shadow-base);
@@ -495,5 +516,7 @@
   --tracking-micro: var(--font-letter-spacing-micro);
   --tracking-numeric: var(--font-letter-spacing-numeric);
   --tracking-topbar: var(--font-letter-spacing-topbar);
+  --tracking-eyebrow: var(--font-letter-spacing-eyebrow);
+  --tracking-display: var(--font-letter-spacing-display);
   --spacing-time-plate: var(--webinar-card-time-plate);
 }

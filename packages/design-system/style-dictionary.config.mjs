@@ -331,6 +331,13 @@ async function build() {
     name: "--tracking-topbar",
     ref: "var(--font-letter-spacing-topbar)",
   });
+  // The auth brand panel tracking rungs (#2027 P1, auth.dc.html 309/310): the
+  // eyebrow at +.14em and the headline at the existing `display` −.035em — no
+  // default Tailwind rung carries either.
+  themeEntries.push(
+    { name: "--tracking-eyebrow", ref: "var(--font-letter-spacing-eyebrow)" },
+    { name: "--tracking-display", ref: "var(--font-letter-spacing-display)" },
+  );
   // The webinar-card time-plate width as a SIZING utility (`w-time-plate`, #514).
   // A named `--spacing-*` key drives the sizing utilities (`w-*` / `basis-*`) the
   // same way the §09 role keys drive gap/padding; the value lives in the component

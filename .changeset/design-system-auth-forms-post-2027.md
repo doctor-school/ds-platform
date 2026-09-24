@@ -42,3 +42,11 @@ Dark-mode field controls now sit on the surface colour (`bg-card`) instead of
 the page background, matching every design-source canvas: `Input`, `Textarea`,
 `NativeSelect` and the `Combobox` control and search field. Light is unchanged
 (both tokens are white there).
+
+The auth brand panel takes the canvas measures: a `.95fr 1.05fr` split, the fluid
+`clamp(40px,4vw,64px)` padding, the eyebrow at .14em in the panel's pale blue, a
+fluid 30–46px headline on the 1.05 line capped at 16ch (the long Academy headline
+no longer runs into the padding), the 17px sub-copy at 38ch and the 13px footer
+in white at 85% — new tokens `text-lead`, `text-panel-headline`,
+`leading-display`, `tracking-eyebrow|display`, `p-panel`,
+`max-w-panel-headline|panel-lead`, `primary-surface-soft|footer`.

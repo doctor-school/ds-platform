@@ -190,7 +190,15 @@
       },
       "2xl": { "$value": "1.75rem" },
       "3xl": { "$value": "2.5rem" },
-      "4xl": { "$value": "3.5rem" }
+      "4xl": { "$value": "3.5rem" },
+      "lead": {
+        "$value": "1.0625rem",
+        "$description": "17px — the auth brand panel sub-copy (auth.dc.html 312: 17px/400/1.55, max-width 38ch). Between base (16) and lg (20): a lead paragraph on the brand panel, not body copy."
+      },
+      "panel-headline": {
+        "$value": "clamp(1.875rem, 3.4vw, 2.875rem)",
+        "$description": "clamp(30px, 3.4vw, 46px) — the fluid auth brand panel headline (auth.dc.html 310: 800 / lh 1.05 / -.035em / max-width 16ch). Fluid on the viewport so the longest host headline stays inside the panel's right padding at every desktop width."
+      }
     },
     "weight": {
       "$type": "fontWeight",
@@ -211,6 +219,10 @@
       "notice": { "$value": 1.45 },
       "normal": { "$value": 1.5 },
       "prose": { "$value": 1.55 },
+      "display": {
+        "$value": 1.05,
+        "$description": "1.05 — the auth brand panel headline leading (auth.dc.html 310)."
+      },
       "relaxed": { "$value": 1.625 }
     },
     "letter-spacing": {
@@ -224,7 +236,11 @@
       "normal": { "$value": "0em" },
       "wide": { "$value": "0.025em" },
       "micro": { "$value": "0.12em" },
-      "topbar": { "$value": "0.22em" }
+      "topbar": { "$value": "0.22em" },
+      "eyebrow": {
+        "$value": "0.14em",
+        "$description": "+.14em — the auth brand panel eyebrow and return-context label (auth.dc.html 302/309: 11px/800/.14em uppercase). Wider than the micro-label rung (.12em) by canvas decision."
+      }
     }
   },
 
@@ -256,6 +272,14 @@
     "search": {
       "$value": "27.5rem",
       "$description": "440px — the desktop cap of the storefront header search (`flex:1;max-width:440px`, ds-shell.dc.html line 24): it grows into free bar width but never past the cap, so the nav and the auth cluster keep their place. Surface as `max-w-search`; below the `layout` breakpoint the search re-flows to its own full-width row."
+    },
+    "panel-headline": {
+      "$value": "16ch",
+      "$description": "16ch — the measure of the auth brand panel headline (auth.dc.html 310 `max-width:16ch`). Surface as `max-w-panel-headline`."
+    },
+    "panel-lead": {
+      "$value": "38ch",
+      "$description": "38ch — the measure of the auth brand panel sub-copy (auth.dc.html 312 `max-width:38ch`). Surface as `max-w-panel-lead`."
     },
     "auth": {
       "$value": "27.5rem",

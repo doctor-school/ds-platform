@@ -96,20 +96,22 @@ export function AuthShell({
               LEFT exactly as the canvas pins it (`align-self:flex-start`). */}
           {panelMark ? <div className="self-start">{panelMark}</div> : null}
           {/* Zone 2 — the return context when the visitor arrived from a gate,
-              otherwise the value prop. One or the other, never both. The quiet
-              tiers (eyebrow / sub-copy) use the `text-primary-surface-muted`
-              token — one weight below the white headline, AA on the blue.700
-              panel in both themes (#537). */}
+              otherwise the value prop. One or the other, never both. Every
+              measure is the canvas's (auth.dc.html 309/310/312/316, #2027 P1):
+              the quiet tiers (eyebrow / sub-copy) take the panel's pale-blue
+              `primary-surface-soft` (#D3E8FD, both themes), the headline is
+              fluid and capped at 16ch so the longest host line stays inside the
+              panel padding. */}
           {returnContext ?? (
             <div className="flex flex-1 flex-col justify-center gap-5">
-              <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
+              <p className="text-eyebrow font-extrabold uppercase tracking-eyebrow text-primary-surface-soft">
                 {copy.eyebrow}
               </p>
-              <p className="max-w-lg text-4xl font-extrabold leading-tight tracking-tight text-balance">
+              <p className="max-w-panel-headline text-panel-headline font-extrabold leading-display tracking-display">
                 {copy.headline}
               </p>
               {copy.subcopy === undefined || copy.subcopy === null ? null : (
-                <p className="max-w-md text-base font-medium leading-relaxed text-primary-surface-muted">
+                <p className="max-w-panel-lead text-lead leading-prose text-primary-surface-soft">
                   {copy.subcopy}
                 </p>
               )}
@@ -118,7 +120,7 @@ export function AuthShell({
           {/* Zone 3 — the panel's own closing line. Not site chrome: the auth route
               stays chromeless, and this line lives inside the brand panel, which
               the layout renders only above `layout:`. */}
-          <p className="text-sm font-semibold text-primary-surface-muted">
+          <p className="text-caption font-semibold text-primary-surface-footer">
             {copy.footer}
           </p>
         </div>

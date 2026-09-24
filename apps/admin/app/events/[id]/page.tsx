@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Authenticated, useOne, useUpdate } from "@refinedev/core";
 import { useTranslations } from "next-intl";
@@ -10,6 +11,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Link as DsLink,
   Tabs,
   TabsContent,
   TabsList,
@@ -84,6 +86,16 @@ export default function EventEditPage() {
                 <p className="text-sm text-muted-foreground">
                   {formatMskDateTime(detail.startsAt)} {t("events.mskSuffix")}
                 </p>
+                {/* 044 EARS-21 — the platform administrator's way into the
+                    event's registrations; view-only, like the roster itself. */}
+                <DsLink asChild variant="standalone" size="sm">
+                  <Link
+                    href={`/events/${id}/roster`}
+                    data-testid="event-roster-link"
+                  >
+                    {t("congressRoster.entryLink")}
+                  </Link>
+                </DsLink>
               </div>
               <StateBadge state={detail.state} />
             </div>

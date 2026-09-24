@@ -33,6 +33,10 @@ public projection (#1294) and speaker projection (#1290) cannot disagree.
 
 The direction form is the thinnest of the three — the operator authors a title, while the retained slug/address is derived once by the API. There is no description box or dropzone because a direction has neither; event classification selects an existing, non-retired direction from `/directions`, never an inline-created value.
 
+## The 044 congress roster surface
+
+`app/events/[id]/roster/page.tsx` (#2315, 044 EARS-21) is one event's registrations on the `AdminDataList` composition above, unchanged: instant search `q` and the pager, the query held in component state exactly as on the taxonomy lists. It is **server**-paged — `q`, `page` and `pageSize` go to `GET /v1/admin/events/:idOrSlug/roster` (#2311) through `congressRosterUrl` in `providers/data-provider.ts`, `total` comes back from the route, and nothing is sliced client-side. The columns are EARS-25 in order (№, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма); № is the `DataTable` record column and a row counter continuous across pages. `lib/congress-roster.ts` is the pure row → cells projection: a cell the read model returns `null` for renders empty, never a placeholder. The screen is view-only (EARS-24): no create button, no row link, no lifecycle facet. The platform administrator reaches it from the event detail's «Реестр участников» link; sort (EARS-22), column filters (EARS-23), print (EARS-26) and the registrar's own navigation (#2313) are separate handlers. Driven by `e2e/congress-roster.spec.ts`, rows seeded through the platform registration path.
+
 ## Develop
 
 ```bash

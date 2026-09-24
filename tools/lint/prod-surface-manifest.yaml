@@ -244,6 +244,14 @@ routes:
     route: /events/[id]
     file: apps/admin/app/events/[id]/page.tsx
     status: product-ready
+  # 044 EARS-21 (#2315): the congress roster — one event's registrations on the
+  # shared AdminDataList shell (012 baseline), view-only. Driven live in
+  # `apps/admin/e2e/congress-roster.spec.ts` and scanned by the roster block of
+  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`. Sort/filters/print are later handlers.
+  - app: admin
+    route: /events/[id]/roster
+    file: apps/admin/app/events/[id]/roster/page.tsx
+    status: product-ready
   # 012 EARS-1 (#1283): the project authoring vertical — the shared taxonomy admin
   # list shell plus the Stage-A composition-B tabbed detail (#1282, owner pick
   # 2026-08-17). Real product deliverables, driven live in

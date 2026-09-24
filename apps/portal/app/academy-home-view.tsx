@@ -260,7 +260,7 @@ function ExpertCard({ expert }: { expert: (typeof EXPERTS)[number] }) {
       data-testid="academy-expert-card"
       className="flex h-full flex-col overflow-hidden"
     >
-      <div className="relative flex aspect-4/3 items-center justify-center overflow-hidden border-b-2 border-border bg-tint">
+      <div className="relative flex aspect-3/4 items-center justify-center overflow-hidden border-b-2 border-border bg-tint">
         <Image
           src={expert.photo}
           alt={expert.fullName}

@@ -8,7 +8,7 @@
 <body>
 <x-dc>
 <a href="{{ href }}" style="display:flex;flex-direction:column;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};text-decoration:none;height:100%;box-sizing:border-box" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
-  <div style="aspect-ratio:4/3;background:{{ tint }};display:flex;align-items:center;justify-content:center;border-bottom:2px solid {{ border }};position:relative;overflow:hidden;flex:none">
+  <div style="aspect-ratio:3/4;background:{{ tint }};display:flex;align-items:center;justify-content:center;border-bottom:2px solid {{ border }};position:relative;overflow:hidden;flex:none">
     <span style="font-size:44px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">{{ initials }}</span>
     <span style="position:absolute;bottom:8px;right:10px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ photoNote }}">фото</span>
   </div>
@@ -23,7 +23,7 @@
   </div>
 </a>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:280,&quot;height&quot;:420},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;fullName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Анна Соколова&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;role&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Травматолог-ортопед&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;credentials&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;д.м.н., ведущий научный сотрудник&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;org&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;НМИЦ им. Пирогова&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;meta&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;12 эфиров&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;href&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;#&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:280,&quot;height&quot;:600},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;fullName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Анна Соколова&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;role&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Травматолог-ортопед&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;credentials&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;д.м.н., ведущий научный сотрудник&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;org&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;НМИЦ им. Пирогова&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;meta&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;12 эфиров&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;href&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;#&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
   renderVals() {
     const p = this.props, d = !!p.dark;

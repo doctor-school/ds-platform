@@ -259,7 +259,6 @@ export class CongressSignUpService {
         const [existing] = await this.db
           .select({
             status: registrations.confirmationMailStatus,
-            accountCreatedByIntake: registrations.accountCreatedByIntake,
           })
           .from(registrations)
           .where(registrationRow)
@@ -277,7 +276,6 @@ export class CongressSignUpService {
             eventTitle: input.eventTitle,
             eventStartsAt: input.eventStartsAt,
             eventVenue: input.eventVenue,
-            accountIsNew: existing.accountCreatedByIntake === true,
           });
         } catch {
           // The mailer's own diagnostics already carry the sanitized provider

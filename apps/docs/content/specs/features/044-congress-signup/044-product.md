@@ -114,7 +114,7 @@ Two registrations of the same congress can legitimately carry the same phone —
 
 The admin roster reuses the owner-approved admin Stage-A baseline: spec 012 EARS-18 (`012-requirements-en.md:203`), covering the tabbed Refine compositions and `@ds/design-system` blocks already approved in #1282/#1337/#1578/#1605 — no fresh canvas or option round is needed for the roster's list/search/filter/pagination shell.
 
-The **printable attendance sheet** and the **confirmation email** are approved (owner Stage-A, 2026-09-21, #2287 issuecomment-5756369423): the print sheet is a full copy of the currently filtered and sorted roster, carrying every roster column except the email-send status, with no signature column; the confirmation email is a copy in the shape of the platform's existing notice emails (`apps/api/src/mailer/notice-emails.ts`), its exact text recorded in `044-requirements-en.md` EARS-13.
+The **printable attendance sheet** and the **confirmation email** are approved (owner Stage-A, 2026-09-21, #2287 issuecomment-5756369423): the print sheet is a full copy of the currently filtered and sorted roster, carrying every roster column except the email-send status, with no signature column; the confirmation email is a copy in the shape of the platform's existing notice emails (`apps/api/src/mailer/notice-emails.ts`), its exact text recorded in `044-requirements-en.md` EARS-13 (amended 2026-09-24, #2369: one copy for every participant, no account paragraph, no sign-in action).
 
 Every roster column is sortable and filterable — owner, verbatim: «Сортировка и фильтрация должна быть по всем полям вообще».
 

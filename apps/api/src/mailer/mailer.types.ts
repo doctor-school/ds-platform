@@ -17,12 +17,11 @@
 /**
  * 044 EARS-13 — everything the confirmation email needs that the CALLER knows.
  *
- * The portal base URL is deliberately absent: it is adapter configuration
- * (`MAILER_PORTAL_BASE_URL`), exactly as it is for the account-exists notice, so
- * the congress intake never has to learn where the portal lives. The event
- * instant arrives as a `Date` rather than a pre-rendered string for the same
- * reason — the Moscow wall-clock rendering is presentation, and presentation
- * belongs to the mail layer, not to the intake.
+ * The letter carries no portal link and no account fact (044 EARS-13
+ * production amendment, #2369), so the request names only the event. The event
+ * instant arrives as a `Date` rather than a pre-rendered string: the Moscow
+ * wall-clock rendering is presentation, and presentation belongs to the mail
+ * layer, not to the intake.
  */
 export interface CongressConfirmationRequest {
   email: string;
@@ -32,8 +31,6 @@ export interface CongressConfirmationRequest {
   eventStartsAt: Date;
   /** The congress venue (a per-deployment constant, 044 EARS-13). */
   eventVenue: string;
-  /** Selects the ONE branch in the copy; never observable on the wire. */
-  accountIsNew: boolean;
 }
 
 export interface Mailer {

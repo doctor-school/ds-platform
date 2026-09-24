@@ -57,8 +57,8 @@ const EVENT_VENUE = "Москва, МВЦ «Крокус Экспо», пави�
 const EVENT_TITLE = "Конгресс-2027";
 /** 10:00 Moscow on 2027-03-12, as a `timestamptz` instant. */
 const EVENT_STARTS_AT = "2027-03-12T07:00:00.000Z";
-/** Only used to render the expected copy; the port carries no URL. */
-const PORTAL_BASE_URL = "https://portal.test";
+/** 044 EARS-13 amendment (#2369): wording the letter must never carry. */
+const REMOVED_COPY = ["аккаунт", "Пароль не нужен", "Войти", "/login"] as const;
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "044 congress sign-up - confirmation email (e2e)",
@@ -271,16 +271,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const sent = await waitForMailOutcome(email, "sent");
       expect(confirmationsFor(email)).toHaveLength(1);
       expect(sent.at!.getTime()).toBeGreaterThanOrEqual(failed.at!.getTime());
-      // The re-send is the SAME message the failed attempt owed, copy included.
-      // By the second submission the account exists - this intake created it on
-      // the first - so a paragraph chosen from the current call would tell a
-      // participant to sign in to an account they have never heard of. The
-      // variant is a stored fact of the registration (EARS-12), frozen at the
-      // first submission by `ON CONFLICT DO NOTHING`.
-      expect(confirmationsFor(email)[0]).toMatchObject({ accountIsNew: true });
     });
 
-    it("044 EARS-12.4: when a participant who already had an account resubmits after a failure, the re-sent confirmation shall keep the existing-account paragraph", async () => {
+    it("044 EARS-12.4: when a participant who already had an account resubmits after a failure, system shall send the confirmation again", async () => {
       const { email } = await registerUniqueFakeUserFixture({
         app,
         pool,
@@ -297,10 +290,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       await waitForMailOutcome(email, "sent");
       expect(confirmationsFor(email)).toHaveLength(1);
-      // The mirror of 12.2: the stored fact says the intake did NOT create this
-      // account, so the re-send keeps the existing-account paragraph rather
-      // than flipping because the row was read a second time.
-      expect(confirmationsFor(email)[0]).toMatchObject({ accountIsNew: false });
+      expect(confirmationsFor(email)[0]).toMatchObject({ email });
     });
 
     it("044 EARS-12.3: when a participant whose confirmation was sent resubmits, system shall not send a second email", async () => {
@@ -323,7 +313,39 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(after!.at!.getTime()).toBe(sent.at!.getTime());
     });
 
-    it("044 EARS-13.1: when the participant is new to the platform, the confirmation shall name the event, its date and venue and say the account was created", async () => {
+    /**
+     * 044 EARS-13 (production amendment 2026-09-24, #2369) — ONE copy for
+     * every participant: the letter only confirms the registration. Asserted
+     * the same way on both paths so the new-account and existing-account
+     * participants provably receive the same letter.
+     */
+    function expectSingleCopy(dispatched: {
+      eventTitle: string;
+      eventStartsAt: Date;
+      eventVenue: string;
+    }): string {
+      const message = congressConfirmationMessage({
+        eventTitle: dispatched.eventTitle,
+        eventDate: formatCongressEventDate(dispatched.eventStartsAt),
+        eventVenue: dispatched.eventVenue,
+      });
+      expect(message.subject).toBe(
+        "Doctor.School — вы зарегистрированы на Конгресс-2027",
+      );
+      expect(message.text).toContain(
+        `Вы зарегистрированы на ${EVENT_TITLE}: 12 марта 2027 г. в 10:00, ${EVENT_VENUE}.`,
+      );
+      expect(message.text).toContain(
+        "Если это были не вы, просто проигнорируйте это письмо.",
+      );
+      for (const removed of REMOVED_COPY) {
+        expect(message.text).not.toContain(removed);
+        expect(message.html).not.toContain(removed);
+      }
+      return message.text;
+    }
+
+    it("044 EARS-13.1: when the participant is new to the platform, the confirmation shall name the event, its date and venue and carry no account paragraph and no sign-in action", async () => {
       const email = uniqueEmail("congress-mail-new");
 
       expect((await post(submission(email))).statusCode).toBe(200);
@@ -334,29 +356,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         email,
         eventTitle: EVENT_TITLE,
         eventVenue: EVENT_VENUE,
-        accountIsNew: true,
       });
       expect(dispatched!.eventStartsAt.toISOString()).toBe(EVENT_STARTS_AT);
-
-      const message = congressConfirmationMessage({
-        portalBaseUrl: PORTAL_BASE_URL,
-        eventTitle: dispatched!.eventTitle,
-        eventDate: formatCongressEventDate(dispatched!.eventStartsAt),
-        eventVenue: dispatched!.eventVenue,
-        accountIsNew: dispatched!.accountIsNew,
-      });
-      expect(message.subject).toBe(
-        "Doctor.School — вы зарегистрированы на Конгресс-2027",
-      );
-      expect(message.text).toContain(
-        `Вы зарегистрированы на ${EVENT_TITLE}: 12 марта 2027 г. в 10:00, ${EVENT_VENUE}.`,
-      );
-      expect(message.text).toContain(
-        "Для вас создан аккаунт Doctor.School на этот адрес электронной почты.",
-      );
+      expectSingleCopy(dispatched!);
     });
 
-    it("044 EARS-13.2: when the participant already has an account, the confirmation shall say the registration was added to it", async () => {
+    it("044 EARS-13.2: when the participant already has an account, the confirmation shall be the same single copy", async () => {
       const { email } = await registerUniqueFakeUserFixture({
         app,
         pool,
@@ -370,20 +375,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await waitForMailOutcome(email, "sent");
 
       const [dispatched] = confirmationsFor(email);
-      expect(dispatched).toMatchObject({ email, accountIsNew: false });
-
-      const message = congressConfirmationMessage({
-        portalBaseUrl: PORTAL_BASE_URL,
-        eventTitle: dispatched!.eventTitle,
-        eventDate: formatCongressEventDate(dispatched!.eventStartsAt),
-        eventVenue: dispatched!.eventVenue,
-        accountIsNew: dispatched!.accountIsNew,
-      });
-      expect(message.subject).toBe(
-        "Doctor.School — вы зарегистрированы на Конгресс-2027",
-      );
-      expect(message.text).toContain(
-        "Регистрация добавлена в ваш аккаунт Doctor.School. Создавать новый не нужно.",
+      expect(dispatched).toMatchObject({ email, eventTitle: EVENT_TITLE });
+      expect(expectSingleCopy(dispatched!)).toBe(
+        expectSingleCopy({
+          eventTitle: EVENT_TITLE,
+          eventStartsAt: new Date(EVENT_STARTS_AT),
+          eventVenue: EVENT_VENUE,
+        }),
       );
     });
   },

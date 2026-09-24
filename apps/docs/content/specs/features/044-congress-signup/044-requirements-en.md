@@ -57,6 +57,20 @@ lang: en
 
 # 044 — Congress sign-up (Requirements)
 
+## Production amendment — confirmation email copy (2026-09-24, #2369)
+
+This amendment overrides only the confirmation-email copy of EARS-13 and the sentence of EARS-7 that calls the email body «differing»; the running-production baseline is retained below. The product owner decided on 2026-09-24: «вот эту часть из шаблона письма надо удалить. Мы так только путаем юзера и он не понимает, почему он регался на Конгресс, а попал в Доктор.Скул и ещё и аккаунт какой-то, куда нужно входить» — and chose that BOTH the new-account and the existing-account variants lose the account paragraph and the «Войти» action.
+
+The system shall send ONE copy to every participant, with no account paragraph and no action button or link; the subject «Doctor.School — вы зарегистрированы на {название мероприятия}» and the footer are unchanged:
+
+```
+Вы зарегистрированы на {название мероприятия}: {дата}, {место}.
+Если это были не вы, просто проигнорируйте это письмо.
+Команда Doctor.School
+```
+
+Whether the account is new or existing no longer reaches the email; the `registrations.account_created_by_intake` column stays as roster/audit data. The first-login path (EARS-14) is unchanged.
+
 ## Outcomes
 
 - A congress sign-up submitted on the congress site becomes, in one transaction, a Doctor.School account and a registration on the existing `registrations` table — the participant never registers a second time.

@@ -194,7 +194,7 @@ export type AuthFlowBrand = {
 /**
  * The registration card's glyph, named rather than passed as a node: the config
  * crosses a server/client boundary and a component cannot travel over it.
- * `user-plus` = lucide `UserPlus` in the primary tint (the Academy);
+ * `user-plus` = lucide `UserPlus` (the Academy);
  * `user-plus-square` = the square-capped currentColor mark (the doctor host).
  */
 export type AuthFlowRegisterIcon = "user-plus" | "user-plus-square";
@@ -280,6 +280,8 @@ export type AuthFlowRegisterCopy = {
   readonly emailLabel: string;
   readonly emailPlaceholder: string;
   readonly passwordLabel: string;
+  /** The password input's placeholder (canvas `auth.dc.html:151`). */
+  readonly passwordPlaceholder: string;
   /** 003 EARS-38 — the reveal toggle's labels; absent = the primitive's defaults. */
   readonly reveal?: {
     readonly show: string;

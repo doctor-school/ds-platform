@@ -4,15 +4,16 @@ import type { AuthFlowRegisterIcon } from "../host-config";
 
 /**
  * The registration card's glyph, named by `brand.registerIcon` (#2027 PR 1.6).
- * Both drawings are moved verbatim from their hosts — the Academy's lucide mark
- * with its primary tint, the doctor storefront's square-capped user-plus in
- * currentColor — so the lift is invisible on each host. Purely decorative: the
+ * Both drawings are moved verbatim from their hosts — the Academy's lucide mark,
+ * the doctor storefront's square-capped user-plus. Both draw in currentColor,
+ * the accent the AuthCard tile paints (canvas 62: #2D84F2 light, the accent-dark
+ * value in dark) — a pinned `text-primary` stayed #2D84F2 on the dark card. Purely decorative: the
  * heading carries the meaning, exactly as `LoginGlyph` does for the sign-in door.
  */
 export function RegisterGlyph({ icon }: { icon: AuthFlowRegisterIcon }) {
   switch (icon) {
     case "user-plus":
-      return <UserPlus className="text-primary" aria-hidden />;
+      return <UserPlus aria-hidden />;
     case "user-plus-square":
       return (
         <svg

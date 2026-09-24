@@ -20,10 +20,7 @@ afterEach(cleanup);
 describe("<AuthLayout>", () => {
   it("renders the form slot (children) so a surface's AuthCard is shown", () => {
     render(
-      <AuthLayout
-        logo={<span>brand-logo</span>}
-        aside={<p>brand-aside</p>}
-      >
+      <AuthLayout logo={<span>brand-logo</span>} aside={<p>brand-aside</p>}>
         <div data-testid="form-slot">the form</div>
       </AuthLayout>,
     );
@@ -81,8 +78,12 @@ describe("<AuthLayout>", () => {
         <div data-testid="form-slot">form</div>
       </AuthLayout>,
     );
-    expect(screen.getByRole("complementary").className).toContain("layout:order-1");
-    const formColumn = screen.getByTestId("form-slot").closest("div.flex.flex-col");
+    expect(screen.getByRole("complementary").className).toContain(
+      "layout:order-1",
+    );
+    const formColumn = screen
+      .getByTestId("form-slot")
+      .closest("div.flex.flex-col");
     expect(formColumn?.className).toContain("layout:order-2");
   });
 
@@ -92,10 +93,12 @@ describe("<AuthLayout>", () => {
         <div>form</div>
       </AuthLayout>,
     );
-    expect(container.firstElementChild?.className).toContain("layout:grid-cols-2");
+    expect(container.firstElementChild?.className).toContain(
+      "layout:grid-cols-2",
+    );
   });
 
-  it("widens the brand panel to 1.1fr .9fr with split=\"wide-aside\" (021 return context)", () => {
+  it('widens the brand panel to 1.1fr .9fr with split="wide-aside" (021 return context)', () => {
     // The canvas widens the split exactly when the panel stops carrying a value
     // prop and starts carrying content the visitor came for (`shellCols =
     // gateCardOnPanel ? '1.1fr .9fr'`, design-source/auth.dc.html). The ratio is a
@@ -122,5 +125,20 @@ describe("<AuthLayout>", () => {
       </AuthLayout>,
     );
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  });
+
+  it("#2027: the form column caps the logo and the card at the canvas 440px (canvas 53)", () => {
+    render(
+      <AuthLayout logo={<span data-testid="logo">brand-logo</span>}>
+        <div data-testid="form-slot">the form</div>
+      </AuthLayout>,
+    );
+    expect(screen.getByTestId("form-slot").parentElement).toHaveClass(
+      "max-w-auth",
+    );
+    expect(screen.getByTestId("logo").parentElement).toHaveClass("max-w-auth");
+    expect(
+      screen.getByTestId("form-slot").parentElement?.className ?? "",
+    ).not.toMatch(/max-w-md/);
   });
 });

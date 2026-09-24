@@ -44,6 +44,15 @@ describe("<AuthCard>", () => {
     ).toBeTruthy();
   });
 
+  it("#2027: a footer-less card closes on the canvas 36px inset under its content", () => {
+    render(
+      <AuthCard title="Sign in">
+        <div data-testid="body">form</div>
+      </AuthCard>,
+    );
+    expect(screen.getByTestId("body").parentElement).toHaveClass("layout:pb-9");
+  });
+
   it("draws no banner region when the app passes none", () => {
     render(
       <AuthCard title="Sign in">
@@ -93,7 +102,8 @@ describe("<AuthCard>", () => {
     expect(header?.className ?? "").not.toMatch(/layout:p-9/);
 
     const content = screen.getByTestId("body").parentElement;
-    expect(content).toHaveClass("layout:px-9", "layout:pb-9");
+    // With a footer the footer owns the bottom inset (see the canvas-212 test).
+    expect(content).toHaveClass("layout:px-9");
     expect(content?.className ?? "").not.toMatch(/layout:p-9/);
 
     const footer = screen.getByText("foot").parentElement;
@@ -176,5 +186,38 @@ describe("<AuthCard>", () => {
       </AuthCard>,
     );
     expect(screen.queryByText("Create account")).not.toBeInTheDocument();
+  });
+
+  it("#2027: the title and its sub-copy stand the canvas 10px apart (canvas 63-64)", () => {
+    render(
+      <AuthCard title="Sign in" description="Enter your details">
+        <div>form</div>
+      </AuthCard>,
+    );
+    const header = screen.getByText("Sign in").parentElement;
+    expect(header).toHaveClass("space-y-2.5");
+    expect(header?.className ?? "").not.toMatch(/space-y-1\.5/);
+  });
+
+  it("#2027: the badge glyph is the canvas 26px mark (canvas 62)", () => {
+    render(
+      <AuthCard title="Sign in" icon={<span data-testid="glyph">◆</span>}>
+        <div>form</div>
+      </AuthCard>,
+    );
+    const tile = screen.getByTestId("glyph").parentElement;
+    expect(tile).toHaveClass("[&_svg]:size-6.5");
+    expect(tile?.className ?? "").not.toMatch(/\[&_svg\]:size-6(?!\.)/);
+  });
+
+  it("#2027: the footer line stands the canvas 24px under the form, not a stacked 36px (canvas 212)", () => {
+    render(
+      <AuthCard title="Sign in" footer={<span>foot</span>}>
+        <div data-testid="body">form</div>
+      </AuthCard>,
+    );
+    const content = screen.getByTestId("body").parentElement;
+    expect(content).toHaveClass("layout:px-9");
+    expect(content?.className ?? "").not.toMatch(/layout:pb-9/);
   });
 });

@@ -256,6 +256,10 @@
     "search": {
       "$value": "27.5rem",
       "$description": "440px — the desktop cap of the storefront header search (`flex:1;max-width:440px`, ds-shell.dc.html line 24): it grows into free bar width but never past the cap, so the nav and the auth cluster keep their place. Surface as `max-w-search`; below the `layout` breakpoint the search re-flows to its own full-width row."
+    },
+    "auth": {
+      "$value": "27.5rem",
+      "$description": "440px — the auth family's card column (`width:100%;max-width:440px`, auth.dc.html line 53 card and line 289 processing notice): the logo, the card and the notice under it share one cap. Surface as `max-w-auth`."
     }
   },
 

@@ -46,7 +46,8 @@ export type AuthShellProps = {
  */
 export function AuthShell({ config, returnContext, children }: AuthShellProps) {
   const { wordmark, panel } = config.brand;
-  const { brand: brandCopy, botProtectionDisclosure: disclosure } = resolveAuthFlowCopy(config);
+  const { brand: brandCopy, botProtectionDisclosure: disclosure } =
+    resolveAuthFlowCopy(config);
 
   return (
     <AuthShellBlock
@@ -98,7 +99,7 @@ export function AuthShell({ config, returnContext, children }: AuthShellProps) {
       {children}
       {config.botProtection.siteKey ? (
         <p
-          className="mt-3 text-center text-xs text-muted-foreground"
+          className="mt-3.5 text-xs leading-normal text-faint"
           data-testid="smartcaptcha-disclosure"
         >
           {disclosure.notice}{" "}

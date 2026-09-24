@@ -75,15 +75,18 @@ export function AuthCard({
 } & Omit<React.ComponentProps<typeof Card>, "title">) {
   return (
     <Card className={className} {...rest}>
-      <CardHeader className="layout:px-9 layout:pt-9">
+      {/* `space-y-2.5`: the canvas 10px between the title and its sub-copy
+          (canvas 64 `margin:10px 0 24px`) — the family's rhythm, composed here
+          so the global `CardHeader` keeps its 6px default for every other card. */}
+      <CardHeader className="space-y-2.5 layout:px-9 layout:pt-9">
         {errorBanner}
         {icon ? (
           // Neo-brutalist badge tile (#517, canvas `auth.dc.html:62`): a square 52px
           // tint surface holding the app-supplied glyph, above the title, with 20px of
           // air under it. `text-info` is the canvas accent (#2D84F2) and the default
           // glyph colour; an icon with its own `text-*` class overrides it.
-          // `[&_svg]:size-6` normalises the glyph to the canvas 26px.
-          <span className="mb-5 inline-flex size-13 items-center justify-center bg-tint text-info [&_svg]:size-6">
+          // `[&_svg]:size-6.5` normalises the glyph to the canvas 26px.
+          <span className="mb-5 inline-flex size-13 items-center justify-center bg-tint text-info [&_svg]:size-6.5">
             {icon}
           </span>
         ) : null}
@@ -96,7 +99,17 @@ export function AuthCard({
           </CardDescription>
         ) : null}
       </CardHeader>
-      <CardContent className={cn("layout:px-9 layout:pb-9", contentClassName)}>
+      {/* The card's bottom inset belongs to its LAST region: with a footer the
+          content keeps the primitive's 24px, which is the canvas gap above the
+          footer line (canvas 212 `margin-top:24px`), and the footer closes on
+          the 36px inset — the two never stack into a 36px gap. */}
+      <CardContent
+        className={cn(
+          "layout:px-9",
+          footer ? undefined : "layout:pb-9",
+          contentClassName,
+        )}
+      >
         {children}
       </CardContent>
       {footer ? (

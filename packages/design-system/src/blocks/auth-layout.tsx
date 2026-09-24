@@ -93,11 +93,16 @@ export function AuthLayout({
           is unaffected. */}
       <div className="flex min-w-0 flex-col items-center justify-center gap-8 px-6 py-12 layout:order-2">
         {logo ? (
-          <div className={cn("w-full max-w-md", aside ? "layout:hidden" : undefined)}>
+          <div
+            className={cn(
+              "w-full max-w-auth",
+              aside ? "layout:hidden" : undefined,
+            )}
+          >
             {logo}
           </div>
         ) : null}
-        <div className="w-full max-w-md">{children}</div>
+        <div className="w-full max-w-auth">{children}</div>
       </div>
 
       {/* Brand panel — the branded surface (token fill). Hidden below the `layout`

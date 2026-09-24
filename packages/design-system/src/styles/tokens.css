@@ -170,6 +170,7 @@
   --container-content: 69rem;
   --container-calendar: 83.5rem;
   --container-search: 27.5rem;
+  --container-auth: 27.5rem;
   --radius-base: 0rem;
   --radius-control: 0rem;
   --border-width-0: 0px;
@@ -462,6 +463,7 @@
   --container-content: var(--container-content);
   --container-calendar: var(--container-calendar);
   --container-search: var(--container-search);
+  --container-auth: var(--container-auth);
   --shadow-sm: var(--shadow-sm);
   --shadow-base: var(--shadow-base);
   --shadow-md: var(--shadow-md);

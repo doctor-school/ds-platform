@@ -70,6 +70,23 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
     },
   );
 
+  it("#2027: the processing notice reads as the canvas faint line under the card (canvas 289)", async () => {
+    render(
+      <AuthShell config={withSiteKey(config, "configured-client-key")}>
+        <div data-testid="auth-form">form</div>
+      </AuthShell>,
+    );
+
+    const notice = await screen.findByTestId("smartcaptcha-disclosure");
+    expect(notice).toHaveClass(
+      "mt-3.5",
+      "text-xs",
+      "leading-normal",
+      "text-faint",
+    );
+    expect(notice.className).not.toMatch(/text-center|text-muted-foreground/);
+  });
+
   it("003 EARS-17: renders no processing notice when SmartCaptcha is not configured", async () => {
     render(
       <AuthShell config={withSiteKey(config, undefined)}>
@@ -97,9 +114,15 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       "alt",
       "",
     );
-    expect(screen.getByText(resolveAuthFlowCopy(config).brand.headline)).toBeInTheDocument();
-    expect(screen.getByText(resolveAuthFlowCopy(config).brand.subcopy)).toBeInTheDocument();
-    expect(screen.getByText(resolveAuthFlowCopy(config).brand.footer)).toBeInTheDocument();
+    expect(
+      screen.getByText(resolveAuthFlowCopy(config).brand.headline),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(resolveAuthFlowCopy(config).brand.subcopy),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(resolveAuthFlowCopy(config).brand.footer),
+    ).toBeInTheDocument();
   });
 
   it("row 47: the return-context block takes the value prop's place when supplied", () => {

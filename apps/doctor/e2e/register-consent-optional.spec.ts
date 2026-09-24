@@ -11,11 +11,11 @@ import { test, expect, type Page, type Request } from "@playwright/test";
  * absence is the whole clause: an ungranted purpose produces no record at all,
  * and `consent_records` is append-only, so a row sent by accident is permanent.
  *
- * The EARS-7 assertion here is likewise a negative one: the block states that a
- * change or withdrawal goes through a platform manager (the manager-side
- * operation of feature 037), and NO self-service control contradicts it. A
- * toggle or an "отозвать" link would promise a mechanism this surface does not
- * have. The row-level guarantees — one versioned, dated row per granted
+ * The EARS-7 assertions here are likewise negative: a change or withdrawal is a
+ * request handled by a platform manager outside this surface (the manager-side
+ * operation of feature 037), so the door renders NO withdrawal sentence at all
+ * (owner Stage-B 2026-09-24) and NO self-service control. A toggle or an
+ * "отозвать" link would promise a mechanism this surface does not have. The row-level guarantees — one versioned, dated row per granted
  * purpose, the server-stamped wording version, no row for an undeclared
  * purpose — are proven against real Postgres in
  * `apps/api/test/storefront/doctor-register-consents.e2e-spec.ts`.
@@ -182,18 +182,23 @@ test.describe("021 EARS-6: the marketing opt-in is genuinely optional", () => {
 });
 
 test.describe("021 EARS-7: one record per purpose, changed only through a manager", () => {
-  test("021 EARS-7.1: the block states that a change or withdrawal goes through a platform manager", async ({
+  test("021 EARS-7.1: no withdrawal sentence stands on the door (owner 2026-09-24)", async ({
     page,
   }) => {
     await page.goto("/register");
+    await expect(page.getByTestId("register-marketing")).toHaveCount(1);
 
+    // The withdrawal route lives outside this surface — the door says nothing
+    // about it rather than a sentence the owner removed in Stage-B r3.
     await expect(
-      page.getByText(/через менеджера платформы/i).first(),
-      "the withdrawal route is stated on the surface, not left implicit",
-    ).toBeVisible();
+      page.getByTestId("registration-consent-manager-note"),
+    ).toHaveCount(0);
+    const body = await page.locator("body").innerText();
+    expect(body).not.toMatch(/менеджера платформы/i);
+    expect(body).not.toMatch(/Согласия раздельные/i);
   });
 
-  test("021 EARS-7.2: no self-service withdrawal control contradicts that statement", async ({
+  test("021 EARS-7.2: no self-service withdrawal control stands on the surface", async ({
     page,
   }) => {
     await page.goto("/register");

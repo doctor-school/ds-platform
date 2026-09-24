@@ -25,8 +25,9 @@ rendered by the package.
 
 `<RegisterCard>` draws ONE sign-up composition now. The three host-divergence
 knobs (`submitBlock`, `spacing`, `pendingAffordance`) are gone and the block
-follows the owner's canvas on both storefronts: the withdrawal note sits inside
-the access-conditions frame, a hairline rule separates the conditions, the
+follows the owner's canvas on both storefronts: no consent-withdrawal sentence
+stands on the door (the package default `managerNote` is gone; `consentNote`
+stays a generic slot no host fills), a hairline rule separates the conditions, the
 read-only «продолжая, вы соглашаетесь…» statement stands after that frame and
 above the challenge, and the optional opt-in below the submit carries no
 «необязательно» marker — its position says it. A new `partnerPlateSlot` renders
@@ -37,8 +38,15 @@ when its label wraps onto several lines.
 
 Every auth sentence now has ONE source: the package copy defaults, taken from the
 owner's auth canvas. A host config states the SET of fields it renders, its routes,
-endpoints, channels and brand assets — no host words a field any more, and the
-optional `copy` deep-partial override stays declared but unused on both storefronts.
+endpoints, channels and brand assets — no host words a field any more. The
+optional `copy` deep-partial override carries exactly one host statement: the
+Academy's brand panel (eyebrow «Академия Doctor.School», headline «Среда обитания
+экспертов здравоохранения», footer «© Doctor.School.», no sub-copy line); the
+doctor storefront keeps the package brand copy. `AuthFlowBrandCopy.subcopy` is
+`string | null`, and `<AuthShell>` renders no sub-copy node when its `copy.subcopy`
+is absent or null. The sign-in password field shows the same canvas `••••••••`
+placeholder as sign-up on both hosts (new optional
+`LoginCard` `copy.password.passwordPlaceholder`, package default in auth-flow).
 
 The sign-up button is LIVE in every state, as the owner's canvas draws it. The
 disabled submit and the reason line beside it are gone — with them the

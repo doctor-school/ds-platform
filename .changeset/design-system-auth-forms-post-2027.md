@@ -16,7 +16,7 @@ The auth family is also retuned to the owner's canvas, in RENDERING and not only
 in words. The sign-up and sign-in cards step their inner padding to 36px, raise
 the badge tile to 52px with the accent glyph, put the title on its own 26px kegel
 and drop the footer to the 13px caption; every secondary line of the door — the
-password hint, the access-conditions eyebrow, the withdrawal note, the consent
+password hint, the access-conditions eyebrow, the consent-note slot, the consent
 help and the terms sentence — moves to the faint tone and the half-step kegels
 the canvas actually draws. Two of those are package defaults rather than auth
 overrides, because a field is one thing: `Checkbox` states its label at 13.5px on

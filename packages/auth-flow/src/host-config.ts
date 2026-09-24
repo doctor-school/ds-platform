@@ -500,9 +500,10 @@ export type AuthFlowConsentsConfig = {
  * A host's copy override: any single key of {@link AuthFlowCopy}, merged over
  * the package defaults by `resolveAuthFlowCopy` (`@ds/auth-flow/copy`).
  *
- * TODAY NEITHER HOST SETS IT. It exists for a genuinely host-specific sentence,
- * never as a place to restate the shared wording — a field is one thing on both
- * storefronts, and the host varies only the SET of fields (#2027).
+ * It exists for a genuinely host-specific sentence, never as a place to restate
+ * the shared wording — a field is one thing on both storefronts, and the host
+ * varies only the SET of fields (#2027). Today only the Academy sets it, for its
+ * own brand panel (owner 2026-09-24).
  */
 export type AuthFlowCopyOverride = DeepPartial<AuthFlowCopy>;
 
@@ -522,8 +523,8 @@ export type AuthFlowHostConfig = {
   readonly routes: AuthFlowRoutes;
   readonly landing: AuthFlowLandingConfig;
   /**
-   * Absent on both storefronts today: every word comes from the package
-   * defaults. Set a key here only for a sentence that genuinely differs.
+   * Every word comes from the package defaults unless stated here; set a key
+   * only for a sentence that genuinely differs (today: the Academy's brand panel).
    */
   readonly copy?: AuthFlowCopyOverride;
   readonly brand: AuthFlowBrand;

@@ -142,11 +142,11 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     }
     expect(tier1Text).not.toContain("Контакты не передаются");
 
-    // EARS-7 — a change or withdrawal is a manager request, and there is no
-    // self-service control anywhere on the surface.
+    // EARS-7 — withdrawal is a manager-side case: the surface carries no
+    // self-service control and no withdrawal sentence (owner 2026-09-24).
     await expect(
       page.getByTestId("registration-consent-manager-note"),
-    ).toContainText("через менеджера платформы");
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /отозвать|отзыв/i }),
       "no self-service withdrawal control",

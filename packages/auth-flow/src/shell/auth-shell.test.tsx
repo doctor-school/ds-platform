@@ -30,6 +30,12 @@ const HOSTS = [
   ["doctor", DOCTOR_FIXTURE],
 ] as const;
 
+/** A default the fixtures keep: both state the package's own sub-copy line. */
+function stated(value: string | null): string {
+  expect(value).not.toBeNull();
+  return value ?? "";
+}
+
 function withSiteKey(
   config: AuthFlowHostConfig,
   siteKey: string | undefined,
@@ -118,7 +124,7 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       screen.getByText(resolveAuthFlowCopy(config).brand.headline),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(resolveAuthFlowCopy(config).brand.subcopy),
+      screen.getByText(stated(resolveAuthFlowCopy(config).brand.subcopy)),
     ).toBeInTheDocument();
     expect(
       screen.getByText(resolveAuthFlowCopy(config).brand.footer),
@@ -137,8 +143,34 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
 
     expect(screen.getByTestId("return-context")).toBeInTheDocument();
     expect(
-      screen.queryByText(resolveAuthFlowCopy(config).brand.subcopy),
+      screen.queryByText(stated(resolveAuthFlowCopy(config).brand.subcopy)),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("#2027: the brand panel's words are host data (owner 2026-09-24)", () => {
+  it("a host that states no sub-copy line gets no sub-copy node — the rest of the panel stays", () => {
+    const config: AuthFlowHostConfig = {
+      ...ACADEMY_FIXTURE,
+      copy: {
+        brand: {
+          eyebrow: "host.eyebrow",
+          headline: "host.headline",
+          subcopy: null,
+          footer: "host.footer",
+        },
+      },
+    };
+    render(
+      <AuthShell config={config}>
+        <div>form</div>
+      </AuthShell>,
+    );
+
+    expect(screen.getByTestId("auth-brand-panel").textContent).toBe(
+      "host.eyebrowhost.headlinehost.footer",
+    );
+    expect(screen.getByText("host.headline").parentElement?.children).toHaveLength(2);
   });
 });
 

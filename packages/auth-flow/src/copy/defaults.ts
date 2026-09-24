@@ -68,6 +68,7 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       identifierLabel: "Электронная почта или телефон",
       identifierPlaceholder: "doctor@example.com или +7…",
       passwordLabel: "Пароль",
+      passwordPlaceholder: "••••••••",
       passwordRequired: "Заполните это поле.",
       reveal: {
         show: "Показать",
@@ -162,8 +163,6 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       label: "Полезные письма о новых эфирах",
       help: "И другие уведомления о релевантных для Вас событиях. Отписаться можно в любой момент.",
     },
-    managerNote:
-      "Согласия раздельные и фиксируются с датой. Изменить или отозвать согласие можно через менеджера платформы.",
     statement:
       "Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.",
   },

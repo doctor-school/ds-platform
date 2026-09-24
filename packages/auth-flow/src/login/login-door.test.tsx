@@ -88,6 +88,16 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
     expect(markup(ACADEMY_FIXTURE)).toContain("Электронная почта или телефон");
   });
 
+  it("#2027: the password box shows the «••••••••» placeholder on both hosts (canvas 82, owner 2026-09-24)", () => {
+    for (const config of [DOCTOR_FIXTURE, ACADEMY_FIXTURE]) {
+      render(<LoginDoor config={config} landing="/" />);
+      expect(
+        screen.getByLabelText("Пароль", { selector: "input" }),
+      ).toHaveAttribute("placeholder", "••••••••");
+      cleanup();
+    }
+  });
+
   it("017 #1933.13: with no return context NOTHING stands in for it (honest-empty)", () => {
     // Arrived at the door with nothing resolved: the slot is not merely empty,
     // its wrapper does not exist — no reserved band, no placeholder card.

@@ -555,19 +555,16 @@ describe("021 EARS-7/12: the unmet condition, and the statement that cannot be s
     );
   });
 
-  it("021 EARS-7: the withdrawal statement stands under the doctor's rows and nowhere on the Academy", async () => {
-    await renderDoor(DOCTOR_FIXTURE);
-    expect(
-      screen.getByTestId("registration-consent-manager-note"),
-    ).toHaveTextContent(
-      resolveAuthFlowCopy(DOCTOR_FIXTURE).consents.managerNote,
-    );
-
-    cleanup();
-    await renderDoor(ACADEMY_FIXTURE);
-    expect(
-      screen.queryByTestId("registration-consent-manager-note"),
-    ).toBeNull();
+  it("021 EARS-7: no withdrawal sentence stands on the door, on either host (owner 2026-09-24)", async () => {
+    for (const config of [DOCTOR_FIXTURE, ACADEMY_FIXTURE]) {
+      await renderDoor(config);
+      expect(
+        screen.queryByTestId("registration-consent-manager-note"),
+      ).toBeNull();
+      expect(document.body).not.toHaveTextContent(/менеджера платформы/);
+      expect(document.body).not.toHaveTextContent(/Согласия раздельные/);
+      cleanup();
+    }
   });
 });
 

@@ -126,8 +126,6 @@ export type AuthFlowConsentsCopy = {
   readonly medicalWorkerDeclaration: AuthFlowConsentRowCopy;
   readonly partnerDataItem: AuthFlowConsentRowCopy;
   readonly marketingOptIn: AuthFlowConsentRowCopy;
-  /** 021 EARS-7 — the withdrawal statement, with no self-service control beside it. */
-  readonly managerNote: string;
   /** The terms sentence under the consent group, on every host (canvas 208). */
   readonly statement: string;
 };
@@ -136,7 +134,11 @@ export type AuthFlowConsentsCopy = {
 export type AuthFlowBrandCopy = {
   readonly eyebrow: string;
   readonly headline: string;
-  readonly subcopy: string;
+  /**
+   * The quiet line under the headline. `null` = this host's panel has no such
+   * line — the panel draws no node for it (Academy, owner 2026-09-24).
+   */
+  readonly subcopy: string | null;
   readonly footer: string;
 };
 
@@ -220,6 +222,8 @@ export type AuthFlowLoginCopy = {
     readonly identifierLabel: string;
     readonly identifierPlaceholder: string;
     readonly passwordLabel: string;
+    /** The password input's placeholder (canvas 82 `••••••••`). */
+    readonly passwordPlaceholder: string;
     /** The empty password box on the sign-in form (the registration sentence differs). */
     readonly passwordRequired: string;
     /** The password-reveal toggle (003 EARS-38); absent = the design-system default. */

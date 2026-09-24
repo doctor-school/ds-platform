@@ -113,7 +113,6 @@ const TEST_IDS: RegisterCardTestIds = {
   commandError: "register-command-error",
   accessGroup: "registration-consent-access",
   marketingGroup: "registration-consent-marketing",
-  note: "registration-consent-manager-note",
 };
 
 /** The read-model item that carries a purpose, across every stated tier. */
@@ -465,8 +464,6 @@ export function RegisterDoor({
         ) : null
       }
       consentItems={consentItems}
-      // 021 EARS-7 — stated where this host has consent rows at all.
-      consentNote={hasAccessRow ? consentCopy.managerNote : null}
       {...(config.register.promoField && copy.promo
         ? {
             promo: {

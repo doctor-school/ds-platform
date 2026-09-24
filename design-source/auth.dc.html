@@ -308,9 +308,7 @@
       <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px">
         <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">{{ brandEyebrow }}</div>
         <h2 style="margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch">{{ brandHeadline }}</h2>
-        <sc-if value="{{ isDoctor }}" hint-placeholder-val="{{ false }}">
-        <p style="margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch">Учебные программы и сертификация от ведущих экспертов отрасли — в едином пространстве Doctor.School.</p>
-        </sc-if>
+        <p style="margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:38ch">{{ brandSubcopy }}</p>
       </div>
       </sc-if>
       <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.85)">{{ brandFooter }}</div>
@@ -492,9 +490,10 @@ class Component extends DCLogic {
       toggleTheme: () => this.setState(st => { const dark = !st.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
       themeIcon: d ? '☀' : '☾',
       isDesktop: !m, isDoctor, page,
-      // Брендовая панель — по хосту (владелец 2026-09-24): у Академии свой надзаголовок, заголовок и футер, подзаголовка нет.
+      // Брендовая панель — по хосту (владелец 2026-09-24): у Академии свой надзаголовок, заголовок, подзаголовок и футер.
       brandEyebrow: isDoctor ? 'Врачи учат врачей' : 'Академия Doctor.School',
       brandHeadline: isDoctor ? 'Медицинское образование для врачей' : 'Среда обитания экспертов здравоохранения',
+      brandSubcopy: isDoctor ? 'Учебные программы и сертификация от ведущих экспертов отрасли — в едином пространстве Doctor.School.' : 'Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.',
       brandFooter: isDoctor ? '© Doctor.School. Платформа непрерывного медицинского образования.' : '© Doctor.School.', surface, ink, inkMuted, inkFaint, border, hairline, accent, linkColor, btnHover, btnBg, btnFg, tint, tintFg, shadow, shadowSm, headerBg, danger, dangerTint, success, successTint, sectionGray, darkFlag: d,
       codeSlots,
       showFormLogoLight: !d && m, showFormLogoDark: d && m,

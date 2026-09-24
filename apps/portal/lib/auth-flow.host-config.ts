@@ -84,12 +84,13 @@ export const ACADEMY_AUTH_FLOW = {
   // Every auth word is the package's own default (#2027 — a field is one thing
   // on both storefronts, and the host varies only the SET of fields) EXCEPT the
   // brand panel, which is the Academy's own (owner 2026-09-24, #2027 Stage-B
-  // r3): its eyebrow, headline and footer, and no sub-copy line at all.
+  // r3): its eyebrow, headline, sub-copy and footer.
   copy: {
     brand: {
       eyebrow: "Академия Doctor.School",
       headline: "Среда обитания экспертов здравоохранения",
-      subcopy: null,
+      subcopy:
+        "Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.",
       footer: "© Doctor.School.",
     },
   },

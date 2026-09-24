@@ -49,4 +49,6 @@ fluid 30–46px headline on the 1.05 line capped at 16ch (the long Academy headl
 no longer runs into the padding), the 17px sub-copy at 38ch and the 13px footer
 in white at 85% — new tokens `text-lead`, `text-panel-headline`,
 `leading-display`, `tracking-eyebrow|display`, `p-panel`,
-`max-w-panel-headline|panel-lead`, `primary-surface-soft|footer`.
+`max-w-panel-headline|panel-lead`, `primary-surface-soft|footer`. The return-context
+assurance line on that panel adds `leading-assurance` (1.6) and
+`max-w-panel-assurance` (44ch).

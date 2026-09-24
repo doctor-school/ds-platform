@@ -86,6 +86,35 @@ describe("021 #1955: the return-context assurance line", () => {
       expect(html).toContain(EVENT.title);
     }
   });
+
+  it("#2027: the panel's eyebrow and assurance line take the canvas panel measures (auth.dc.html 302/304)", () => {
+    const { container } = render(
+      <ReturnContextPanel config={DOCTOR_FIXTURE} event={EVENT} variant="login" />,
+    );
+    const panel = container.querySelector('[data-testid="return-context-panel"]');
+    const [eyebrow, assurance] = [
+      panel?.firstElementChild,
+      panel?.lastElementChild,
+    ];
+
+    // Eyebrow: 11px/800/.14em uppercase in #D3E8FD — the brand panel's eyebrow.
+    expect(eyebrow?.textContent).toBe("Вы вернётесь к этому событию");
+    expect(eyebrow?.className).toContain("tracking-eyebrow");
+    expect(eyebrow?.className).toContain("text-primary-surface-soft");
+    expect(eyebrow?.className).not.toContain("tracking-micro");
+    expect(eyebrow?.className).not.toContain("text-primary-surface-muted");
+
+    // Assurance: 14px on the 1.6 line in #D3E8FD, capped at 44ch.
+    expect(assurance?.tagName).toBe("P");
+    expect(assurance?.className.split(" ").sort()).toEqual(
+      [
+        "leading-assurance",
+        "max-w-panel-assurance",
+        "text-primary-surface-soft",
+        "text-sm",
+      ].sort(),
+    );
+  });
 });
 
 describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host publishes it", () => {

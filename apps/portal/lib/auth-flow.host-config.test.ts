@@ -96,11 +96,11 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     );
   });
 
-  it("#2027: the brand panel is the Academy's own — eyebrow, headline, footer, no sub-copy (owner 2026-09-24)", () => {
+  it("#2027: the brand panel is the Academy's own — eyebrow, headline, sub-copy, footer (owner 2026-09-24)", () => {
     expect(resolveAuthFlowCopy(config).brand).toEqual({
       eyebrow: "Академия Doctor.School",
       headline: "Среда обитания экспертов здравоохранения",
-      subcopy: null,
+      subcopy: "Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.",
       footer: "© Doctor.School.",
     });
   });

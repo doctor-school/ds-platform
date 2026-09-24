@@ -41,8 +41,12 @@ owner's auth canvas. A host config states the SET of fields it renders, its rout
 endpoints, channels and brand assets — no host words a field any more. The
 optional `copy` deep-partial override carries exactly one host statement: the
 Academy's brand panel (eyebrow «Академия Doctor.School», headline «Среда обитания
-экспертов здравоохранения», footer «© Doctor.School.», no sub-copy line); the
-doctor storefront keeps the package brand copy. `AuthFlowBrandCopy.subcopy` is
+экспертов здравоохранения», sub-copy «Эфиры, программы и сертификация от
+практикующих экспертов — в одном пространстве.», footer «© Doctor.School.»); the
+doctor storefront keeps the package brand copy. On the doctor storefront the
+return-context panel beside the door takes the brand panel's measures: the
+eyebrow at .14em in the panel's pale blue, the assurance line at 14px on the 1.6
+line in the same pale blue, capped at 44ch. `AuthFlowBrandCopy.subcopy` is
 `string | null`, and `<AuthShell>` renders no sub-copy node when its `copy.subcopy`
 is absent or null. The sign-in password field shows the same canvas `••••••••`
 placeholder as sign-up on both hosts (new optional

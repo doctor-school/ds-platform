@@ -223,6 +223,10 @@
         "$value": 1.05,
         "$description": "1.05 — the auth brand panel headline leading (auth.dc.html 310)."
       },
+      "assurance": {
+        "$value": 1.6,
+        "$description": "1.6 — the return-context assurance line on the auth brand panel (auth.dc.html 304 `line-height:1.6`)."
+      },
       "relaxed": { "$value": 1.625 }
     },
     "letter-spacing": {
@@ -280,6 +284,10 @@
     "panel-lead": {
       "$value": "38ch",
       "$description": "38ch — the measure of the auth brand panel sub-copy (auth.dc.html 312 `max-width:38ch`). Surface as `max-w-panel-lead`."
+    },
+    "panel-assurance": {
+      "$value": "44ch",
+      "$description": "44ch — the measure of the return-context assurance line on the auth brand panel (auth.dc.html 304 `max-width:44ch`). Surface as `max-w-panel-assurance`."
     },
     "auth": {
       "$value": "27.5rem",

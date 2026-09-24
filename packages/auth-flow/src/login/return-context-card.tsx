@@ -74,7 +74,7 @@ function PanelBody({
       data-testid="return-context-panel"
       className="hidden flex-1 flex-col justify-center gap-5 py-8 layout:flex"
     >
-      <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
+      <p className="text-eyebrow font-extrabold uppercase tracking-eyebrow text-primary-surface-soft">
         {copy.eyebrow}
       </p>
       {/* The card is LIGHT in both themes on the blue panel (canvas pins
@@ -83,7 +83,7 @@ function PanelBody({
       <div className="light max-w-xl">
         <ReturnEventCard event={event} />
       </div>
-      <p className="max-w-md text-sm leading-relaxed text-primary-surface-muted">
+      <p className="max-w-panel-assurance text-sm leading-assurance text-primary-surface-soft">
         {copy[variant]}
       </p>
     </div>

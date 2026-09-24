@@ -136,6 +136,7 @@
   --font-line-height-normal: 1.5;
   --font-line-height-prose: 1.55;
   --font-line-height-display: 1.05;
+  --font-line-height-assurance: 1.6;
   --font-line-height-relaxed: 1.625;
   --font-letter-spacing-numeric: -0.04em;
   --font-letter-spacing-display: -0.035em;
@@ -179,6 +180,7 @@
   --container-search: 27.5rem;
   --container-panel-headline: 16ch;
   --container-panel-lead: 38ch;
+  --container-panel-assurance: 44ch;
   --container-auth: 27.5rem;
   --radius-base: 0rem;
   --radius-control: 0rem;
@@ -467,6 +469,7 @@
   --leading-normal: var(--font-line-height-normal);
   --leading-prose: var(--font-line-height-prose);
   --leading-display: var(--font-line-height-display);
+  --leading-assurance: var(--font-line-height-assurance);
   --leading-relaxed: var(--font-line-height-relaxed);
   --spacing-gutter: var(--space-gutter);
   --spacing-inset: var(--space-inset);
@@ -484,6 +487,7 @@
   --container-search: var(--container-search);
   --container-panel-headline: var(--container-panel-headline);
   --container-panel-lead: var(--container-panel-lead);
+  --container-panel-assurance: var(--container-panel-assurance);
   --container-auth: var(--container-auth);
   --shadow-sm: var(--shadow-sm);
   --shadow-base: var(--shadow-base);

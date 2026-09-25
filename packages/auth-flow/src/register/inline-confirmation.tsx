@@ -145,10 +145,10 @@ export function RegistrationConfirmation({
         ...(returnTarget ? { returnTo: returnTarget } : {}),
       });
     } catch (err) {
-      // Only the CODE failing keeps the visitor on this screen: it is the one
-      // failure they can act on from here, by typing the code again. Everything
-      // below has already accepted the code, so it can no longer produce this
-      // state (003 EARS-16 — the message stays generic either way).
+      // A failing CODE keeps the visitor on this screen: it is the failure they
+      // can act on from here, by typing the code again. The login replay below
+      // throwing lands on the SAME state (tech spec §5 Q1) — 003 EARS-16 keeps
+      // the message generic either way.
       //
       // #2001 (gate row 13): the outcome is still the generic sentence, but the
       // status decides — a 429 from the confirm route says «too many attempts»
@@ -166,15 +166,20 @@ export function RegistrationConfirmation({
     // from confirm — and let the ONWARD NAVIGATION EXIST ONLY FOR A VISITOR WHO
     // IS SIGNED IN.
     //
-    // No held credential (a reload, a restored tab, an expired hold) or a replay
-    // the login refuses (the classic case: the same address re-registered with a
-    // SECOND password, so the slot holds a credential the IdP never took — 003
-    // EARS-16 answers a repeat registration identically) both mean the same
-    // thing: the email is verified and there is no session. That visitor goes to
-    // the sign-in door carrying their return context, NOT onward to the эфир,
-    // which would walk them in as a guest and back through the registration loop
-    // this rule exists to close. The slot is wiped by the take whether the
-    // replay then succeeds or throws.
+    // No held credential (a reload, a restored tab, an expired hold) means the
+    // email is verified and there is no session: that visitor goes to the
+    // sign-in door carrying their return context, NOT onward to the эфир, which
+    // would walk them in as a guest and back through the registration loop this
+    // rule exists to close (owner decision 2026-09-15, tech spec §5 Q2 — the
+    // Academy's cold `/verify` exit).
+    //
+    // A replay the login refuses (the classic case: the same address
+    // re-registered with a SECOND password, so the slot holds a credential the
+    // IdP never took — 003 EARS-16 answers a repeat registration identically)
+    // keeps the visitor on THIS step with the generic 003 EARS-16 sentence —
+    // the one post-throw exit both hosts share (owner decision 2026-09-15, tech
+    // spec §5 Q1). The slot is wiped by the take whether the replay then
+    // succeeds or throws.
     const held = takePendingRegistration(email);
     if (held) {
       try {
@@ -200,10 +205,14 @@ export function RegistrationConfirmation({
         // code has already been consumed.
         router.replace(resolveConfirmLanding(confirmed, landing));
         return;
-      } catch {
-        // Fall through to the sign-in door below — the same exit as no hold at
-        // all, because the visitor is in the same position: verified, not signed
-        // in, and holding a password only they can now supply.
+      } catch (err) {
+        // 003 EARS-16 — the same generic sentence as a refused code (only
+        // 429/5xx/network surface a specific message), no routing: the Academy
+        // `/verify` catch, verbatim in behaviour.
+        setError(
+          authErrorMessage(err, resolveAuthFlowCopy(config).errors, copy.failed),
+        );
+        return;
       }
     }
     // Rule S3 — the CARRY value, not the эфир-only confirm intent: a visitor who

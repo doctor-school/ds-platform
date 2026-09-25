@@ -15,6 +15,12 @@
  */
 export const SESSION_COOKIE_NAME = "__Host-ds_session";
 const ADMIN_ROLE = "platform_admin";
+/** 044 EARS-17: the congress registrar project role (seeded by `provision.sh`). */
+export const REGISTRAR_ROLE = "event-registrar";
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  [ADMIN_ROLE]: "Platform Admin",
+  [REGISTRAR_ROLE]: "Event Registrar",
+};
 
 export interface BootstrapResult {
   email: string;
@@ -67,7 +73,10 @@ async function resolveSub(email: string): Promise<string> {
  * the management-v1 user-grant API (stable search+update shape); reads the service
  * token + project id from env.
  */
-async function grantAdminRole(sub: string): Promise<void> {
+async function grantProjectRole(
+  sub: string,
+  role: string = ADMIN_ROLE,
+): Promise<void> {
   const issuer = required("IDP_ISSUER").replace(/\/$/, "");
   const token = required("IDP_SERVICE_TOKEN");
   const projectId = required("IDP_PROJECT_ID");
@@ -87,15 +96,15 @@ async function grantAdminRole(sub: string): Promise<void> {
       method: "POST",
       headers,
       body: JSON.stringify({
-        roleKey: ADMIN_ROLE,
-        displayName: "Platform Admin",
+        roleKey: role,
+        displayName: ROLE_DISPLAY_NAMES[role] ?? role,
         group: "",
       }),
     },
   );
   if (!roleRes.ok && roleRes.status !== 409) {
     throw new Error(
-      `zitadel ensure platform_admin role failed: HTTP ${roleRes.status}`,
+      `zitadel ensure ${role} role failed: HTTP ${roleRes.status}`,
     );
   }
 
@@ -119,9 +128,7 @@ async function grantAdminRole(sub: string): Promise<void> {
   }
 
   if (existing) {
-    const roleKeys = Array.from(
-      new Set([...(existing.roleKeys ?? []), ADMIN_ROLE]),
-    );
+    const roleKeys = Array.from(new Set([...(existing.roleKeys ?? []), role]));
     const upd = await fetch(
       `${issuer}/management/v1/users/${sub}/grants/${existing.id}`,
       { method: "PUT", headers, body: JSON.stringify({ roleKeys }) },
@@ -135,7 +142,7 @@ async function grantAdminRole(sub: string): Promise<void> {
   const create = await fetch(`${issuer}/management/v1/users/${sub}/grants`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ projectId, roleKeys: [ADMIN_ROLE] }),
+    body: JSON.stringify({ projectId, roleKeys: [role] }),
   });
   if (!create.ok && create.status !== 409) {
     throw new Error(`zitadel grant create failed: HTTP ${create.status}`);
@@ -179,7 +186,7 @@ export async function bootstrapAdminSession(
   const email = uniqueEmail("admin");
   await register(adminOrigin, email, E2E_PASSWORD);
   const sub = await resolveSub(email);
-  await grantAdminRole(sub);
+  await grantProjectRole(sub);
   // Let the grant project into the token-issuance read model before the browser
   // login mints the session (the login step still confirms + retries the role).
   await new Promise((r) => setTimeout(r, 2500));
@@ -193,5 +200,23 @@ export async function bootstrapDoctorSession(
 ): Promise<BootstrapResult> {
   const email = uniqueEmail(prefix);
   await register(adminOrigin, email, E2E_PASSWORD);
+  return { email, password: E2E_PASSWORD };
+}
+
+/**
+ * Provision a congress registrar (044 EARS-17/38): register → grant the
+ * `event-registrar` project role on the IdP (in place of `platform_admin`). The
+ * account holds no event binding yet — the caller binds it through the tech-lead
+ * SQL runbook (`bindRegistrarToEvent`, `support/event-grants.ts`) — and signs in
+ * through the same browser arc as an administrator (`signInAsAdmin`).
+ */
+export async function bootstrapRegistrarAccount(
+  adminOrigin: string,
+): Promise<BootstrapResult> {
+  const email = uniqueEmail("registrar");
+  await register(adminOrigin, email, E2E_PASSWORD);
+  const sub = await resolveSub(email);
+  await grantProjectRole(sub, REGISTRAR_ROLE);
+  await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }

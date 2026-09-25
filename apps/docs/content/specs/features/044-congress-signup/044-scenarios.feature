@@ -130,6 +130,7 @@ Feature: 044 — Congress sign-up
     Then the rows sharing a phone show the "возможный дубль" indicator, in the unchanged column order
     When they apply the "возможный дубль" filter together with a text-column filter and a sort
     Then the server returns only the marked rows matching that filter, sorted as requested
+    # Production amendment 2026-09-25 (#2377): the print steps below are the running-production baseline and are cancelled (EARS-32 not implemented).
     When they print from that view
     Then the printed sheet contains exactly those rows and shows the "возможный дубль" marker on them
 
@@ -164,6 +165,8 @@ Feature: 044 — Congress sign-up
     And that registration carries no answers payload
     And the roster renders its cells from the doctor's own profile, leaving a cell empty where the profile has no value
 
+  # Production amendment 2026-09-25 (#2377): for event-registrar the navigation shows only the bound event's roster and create/edit/delete narrows to the two desk
+  # mutations — see «Failure branch — the registrar is bound to one event» and «The registrar marks attendance per congress day» (EARS-24, EARS-38).
   @EARS-17 @EARS-19 @EARS-20 @EARS-24
   Scenario: Failure branch — the registrar is refused everywhere else
     Given a principal holds only the event-registrar role
@@ -178,11 +181,75 @@ Feature: 044 — Congress sign-up
     Given a principal holds the event-registrar role
     And the congress roster holds registrations from both the form and the platform feed
     When they open the roster
+    # Production amendment 2026-09-25 (#2377): the column order on the next line is the baseline; EARS-37 replaces it — see «The registrar reads the reduced roster and opens a card».
     Then the roster lists registrations with pagination and instant search, in the column order №, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма
     When they filter a text column by contains-search, специальность by a select and дата регистрации by a range
     And they sort by ФИО and then by дата регистрации, in both directions
     Then the server returns the filtered, sorted page
+    # Production amendment 2026-09-25 (#2377, 044-requirements «Production amendment — congress registration desk»): the print steps below are the running-production
+    # baseline and are cancelled (EARS-26/27 not implemented); the roster columns are now №, ФИО, специальность, город, телефон, дата регистрации, присутствие (EARS-37).
     When they print from that view
     Then the printable sheet contains exactly the rows of the roster as currently searched, filtered and sorted, every roster column except статус письма, with no signature column and a header carrying the event's name and date
     And the printable sheet is rendered from design-system primitives with tokens-only styling
     And no file is exported
+
+  # Production amendment 2026-09-25 (#2377, 044-requirements «Production amendment — congress registration desk»): the registration desk scenarios.
+
+  @EARS-34
+  Scenario: The registrar marks attendance per congress day
+    Given a principal holds the event-registrar role bound to the congress event
+    And the congress days are 2027-04-23 and 2027-04-24
+    And a participant is registered for the congress event
+    When the registrar marks the participant present for 2027-04-23
+    Then the registration carries attendance present for 2027-04-23 and not marked for 2027-04-24
+    And the change audit records the registrar as the actor and the time of the mark
+    When the registrar filters the roster by attendance present on 2027-04-23
+    Then the participant is in the result
+    When the registrar clears the mark for 2027-04-23
+    Then the change audit records that change with its actor and time too
+    When the registrar tries to mark the participant for a day that is not a congress day
+    Then the mark is refused
+
+  @EARS-35
+  Scenario: The registrar enters a walk-in participant at the desk
+    Given a principal holds the event-registrar role bound to the congress event
+    And the public registration window is closed
+    And no Doctor.School account exists for "walkin@example.org"
+    When the registrar enters surname, first name, contact phone, "walkin@example.org", a specialty, workplace, city and region and ticks that personal-data consent was obtained on paper
+    Then exactly one account is created for "walkin@example.org" with no credential
+    And exactly one registration exists for that account and the congress event, with origin "desk"
+    And exactly one consent record is written under the congress personal-data purpose with the server-stamped version and origin "paper"
+    And the same confirmation email as the site form is dispatched and its outcome is recorded
+    When the registrar enters "walkin@example.org" again
+    Then no second account or registration is created
+    And the desk names the existing registration so the registrar can open its card
+
+  @EARS-35
+  Scenario: Failure branch — the desk entry without paper consent is refused
+    Given a principal holds the event-registrar role bound to the congress event
+    When the registrar submits a desk entry without ticking the paper-consent box
+    Then the entry is refused
+    And no account, registration or consent record is created
+    And no email is dispatched
+
+  @EARS-36 @EARS-37
+  Scenario: The registrar reads the reduced roster and opens a card
+    Given a principal holds the event-registrar role bound to the congress event
+    And the roster holds registrations from the site form, the desk and the platform feed
+    When they open the roster
+    Then the columns are №, ФИО, специальность, город, телефон, дата регистрации, присутствие in that order
+    And workplace, region, email and mail status are offered as filters in the filter panel
+    When they open a row
+    Then the participant card shows every stored field, the registration date and origin, the consent with its version and origin, the confirmation-mail outcome, the "возможный дубль" marker and the attendance per day with who marked it and when
+    And no field of the card can be edited and nothing can be deleted
+
+  @EARS-38
+  Scenario: Failure branch — the registrar is bound to one event
+    Given a principal holds only the event-registrar role, bound to the congress event
+    When they sign in to the admin app
+    Then the navigation shows only the congress event's roster and no other section or event link
+    When they request the roster, a card, an attendance mark or a desk entry of any other event, or the event list
+    Then the server refuses the request
+    Given another principal holds the event-registrar role with no event binding
+    When they request any endpoint other than the session endpoints
+    Then the server refuses the request

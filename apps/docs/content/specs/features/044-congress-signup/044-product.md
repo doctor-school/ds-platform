@@ -28,6 +28,8 @@ Sign-up is open only inside a **registration window**. It opens on 1 October 202
 
 Two registrations of the same congress can legitimately carry the same phone — a colleague signing a second person up from one number, a clinic's shared line. The platform never refuses or merges them: it **marks** them «возможный дубль» for the registrar, who decides. The marker is computed from the registrations themselves each time the roster is read, so once the team removes one of them on request the other stops being marked.
 
+**Production amendment — registration desk (2026-09-25, #2377).** The product owner cancelled the printed attendance sheet («печатный лист #2291 отменяем - рабочей админки достаточно») and turned the roster into a working registration desk at the congress itself: the registrar is bound to one event and sees neither other events nor other admin sections; marks a participant's attendance separately for each congress day (23 and 24 April 2027), with who marked it and when recorded by the platform's existing change audit; enters walk-ins who never signed up on the site — they get the same account and the same email, and the registrar ticks the consent signed on paper; opens a participant card with all the data, while the table shrinks to №, ФИО, специальность, город, телефон, дата регистрации, присутствие. The text above and US-9 are the running-production baseline.
+
 ## User stories
 
 - **US-1** — As a **congress participant** filling out the form on `orthobio.ru`, submitting it registers me for the congress **and** gives me a Doctor.School account, with no password to set and no second registration to do later.
@@ -45,6 +47,7 @@ Two registrations of the same congress can legitimately carry the same phone —
 - **US-13** — As a **congress participant**, if the platform's confirmation email happens to fail to send, my registration and my account still exist — a delivery hiccup never costs me my spot or forces me to resubmit.
 - **US-14** — As a **congress participant**, I can submit the sign-up form only while registration is open; before it opens I am told when it opens, and after it closes I am told that registration is closed — in both cases there is no form to fill in and nothing I submit is accepted.
 - **US-15** — As an **event registrar**, I see which registrations share a contact phone with another registration for the same congress, marked «возможный дубль» both in the roster and on the printed attendance sheet, so that I can decide whether it is a real duplicate; once I have one of them removed on request, the other stops being marked.
+- **US-16** — As an **event registrar** bound to one congress, I work the registration desk: I find a participant, open their card with all their data, mark that they came, separately for each congress day, and enter into the base someone who came without a site sign-up — with the same account and email as the site form, and with the consent signed on paper; I see no other events and no other admin sections (amendment 2026-09-25, #2377; replaces US-9).
 
 ## Flows
 
@@ -80,6 +83,13 @@ Two registrations of the same congress can legitimately carry the same phone —
 2. They search, filter (e.g., by specialty or city), paginate and sort the list; the role has no create/edit/delete affordance anywhere in the admin app, and any attempt to reach another admin section is refused.
 3. From the currently filtered view, they print an attendance sheet — the printed rows match what was on screen at the time.
 
+**Registrar at the congress registration desk (US-16, amendment 2026-09-25):**
+
+1. A registrar bound to the congress signs in to `apps/admin` and sees only that event's roster — no other events, no other sections.
+2. A participant comes to the desk; the registrar finds them by search, opens their card, checks the data and marks attendance for today's congress day. The second day takes its own mark.
+3. If the participant never signed up on the site, the registrar enters their data in the manual-registration form and ticks «consent obtained on paper»; the participant gets an account and the same confirmation email as after the site form. If the email is already registered, the desk creates no second record and opens the existing card instead.
+4. At any moment the registrar filters the roster by attendance on a given day.
+
 **Branches:**
 
 - **Outside the registration window (US-14)** — before the opening instant the congress site shows «Регистрация откроется ДД.ММ в ЧЧ:ММ (мск)» and no form; after the closing instant it shows «Регистрация на конгресс закрыта» and no form. A submission that reaches the API anyway — a stale page, a direct call — is refused with a machine-readable state saying which of the two it is, and nothing is created: no account, no registration, no consent record, no email.
@@ -109,6 +119,11 @@ Two registrations of the same congress can legitimately carry the same phone —
 - The public form is protected by a bot-detection challenge and by submission-rate throttling, consistent with the platform's other public-facing forms.
 - A failure to send the confirmation email never loses, blocks, delays the HTTP response for, or requires a resubmission of the underlying registration.
 - `surface: user-facing` — the feature's own screens (admin roster, print sheet) live on this platform even though the intake form itself is hosted on `orthobio.ru`.
+- Amendment 2026-09-25 (#2377): there is no printed sheet. The registrar is bound to exactly one event and sees only its roster; any data of another event, the event list and other admin sections are refused server-side; a registrar with no binding sees nothing. The binding is granted by the tech lead on the product owner's request for now.
+- Attendance is marked and cleared separately for each congress day (23 and 24 April 2027); who set or cleared a mark and when is visible in the participant card from the platform's change audit; the roster filters by attendance on a chosen day.
+- Manual registration of a walk-in creates the same account, the same registration and the same confirmation email as the site form, without the captcha and outside the registration window; without the paper-consent tick it does not go through; a repeat entry for the same email creates no duplicate.
+- The participant card shows all stored data, the registration origin (site, desk, platform feed), the consent, the mail status, the «возможный дубль» marker and attendance per day; nothing in it can be edited or deleted.
+- Roster columns: №, ФИО, специальность, город, телефон, дата регистрации, присутствие; the other fields are in the card and available as filters. Roster search works as before and is checked by a live drive.
 
 ## Approved-mockup reference
 
@@ -131,10 +146,15 @@ The intake **form's look on `orthobio.ru`** is owned by the sibling repository's
 - **Event constructor** — feature **041** (the admin tool that builds out congress programs, sessions, speakers, etc.) is separate; this feature only registers people for an event that already exists.
 - **Historical-base migration** — feature **043** owns migrating the previous operator's historical congress registrations; this feature only handles new registrations going forward.
 - **An email confirmation step before the sign-up counts** — owner, verbatim: «Если ты хочешь прийти на мероприятие, ты укажешь свою почту. Укажешь чужую - не попадёшь.» The registration is created immediately on submission; there is no pending/unverified state to confirm out of.
+- **A screen for granting the role's event binding** — #2378; until then the tech lead grants the binding on the product owner's request (owner: «Пока "вручную" запросом к тебе.»).
+- **The event partner role** — feature **046** (#2379); it reuses the same binding table but is not part of this amendment.
+- **Editing and deleting a participant's stored answers** — still outside the feature; the desk adds only the attendance mark and manual registration.
 
 ## Open questions
 
 - **The final closing date-time of the registration window** — owner, before #2292. The constant currently holds the provisional 1 January 2027, 00:00 Moscow time; the API constant and the dates the congress site displays are both set from the owner's final answer, and the launch checklist verifies the two agree.
+
+The 2026-09-25 amendment (#2377) adds no open questions: the congress days, the column set, the consent origin and the way the binding is granted are owner-decided.
 
 The confirmation-email copy and the print-sheet layout are the owner Stage-A choices recorded above in «Approved-mockup reference» (#2287 issuecomment-5756369423, 2026-09-21). The published consent text is used as provided — owner, verbatim: «В согласии уже всё написано» — this PRD makes no legal conclusion about the data operator or the text's scope. The consent version identifier is confirmed as the publication date plus the sha256 of the page text (ADR-0009 §2.1).
 

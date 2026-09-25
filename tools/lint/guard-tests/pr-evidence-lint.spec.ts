@@ -177,6 +177,63 @@ describe("pr-evidence-lint (#1637)", () => {
     expect(code).toBe(0);
   });
 
+  describe("#2373: zero-failure counts and reasoned `none`", () => {
+    const base = () =>
+      readFileSync(
+        new URL("fixtures/pr-evidence/bodies/base.md", import.meta.url),
+        "utf8",
+      );
+    const local = (value: string) =>
+      base().replace(
+        /^Local touched-suite verification:.*$/m,
+        `Local touched-suite verification: \`pnpm exec vitest run tools/lint/guard-tests\` — ${value}`,
+      );
+    const run = (body: string) =>
+      runGuard(GUARD, ".", {
+        env: { ...prEnv("16370", "green-complete"), PR_BODY: body },
+      });
+
+    it("«N passed / 0 failed» and «0 FAIL» read as a pass", () => {
+      for (const value of [
+        "42 passed / 0 failed",
+        "0 FAIL, 42 PASS",
+        "PASS (42 passed, 0 failures, 0 errors)",
+      ])
+        expect(run(local(value)).code, value).toBe(0);
+    });
+
+    it("a non-zero failure count still blocks", () => {
+      for (const value of ["41 passed / 1 failed", "PASS, 2 FAIL"]) {
+        const { code, stderr } = run(local(value));
+        expect(code, value).toBe(1);
+        expect(stderr).toContain("Local touched-suite verification");
+      }
+    });
+
+    it("`none — <reason>` is a reasoned N/A on the same terms as `N/A — <reason>`", () => {
+      const body = base()
+        .replace(
+          /^Changeset:.*$/m,
+          "Changeset: none — tools/hooks only, no package version change",
+        )
+        .replace(
+          /^Behavior change:.*$/m,
+          "Behavior change: none — no runtime/product code",
+        );
+      expect(run(body).code).toBe(0);
+    });
+
+    it("a bare or unreasoned `none` still blocks", () => {
+      for (const value of ["none", "none — x"]) {
+        const { code, stderr } = run(
+          base().replace(/^Changeset:.*$/m, `Changeset: ${value}`),
+        );
+        expect(code, value).toBe(1);
+        expect(stderr).toContain("Changeset");
+      }
+    });
+  });
+
   it("blocks Changeset: N/A when Behavior change declares a change", () => {
     const { code, stderr } = runGuard(GUARD, ".", {
       env: {

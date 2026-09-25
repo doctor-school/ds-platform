@@ -1,5 +1,88 @@
 # @ds/db
 
+## 3.1.0
+
+### Minor Changes
+
+- [#2334](https://github.com/doctor-school/ds-platform/pull/2334) [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2296](https://github.com/doctor-school/ds-platform/issues/2296) — the 044 congress sign-up intake contract and the registration answers
+  column.
+
+  New `packages/schemas/src/congress/`: `CongressSignUpRequestSchema` (EARS-3) —
+  surname, first name, contact phone, email, specialty, workplace, city, region
+  and the personal-data consent required, patronymic optional. Specialty is a
+  `specialties_minzdrav` uuid and nothing else: the reserved «Другое / не
+  медицинский работник» option is an ordinary row of that table, so free text is
+  structurally unrepresentable rather than merely refused. The consent is
+  `z.literal(true)` — a precondition of the command, not a field that can arrive
+  `false` — and its version is server-stamped, so the client sends no version at
+  all. The captcha token rides the body optionally, mirroring
+  `DoctorRegisterRequestSchema` and how `BotProtectionGuard` actually reads it
+  (header first, body fallback, no-op while the provider is disabled).
+
+  `normaliseContactPhone` (EARS-29) applies the same rule the client-side input
+  mask already applies — digits only, a domestic-length leading `8` rewritten to
+  the `7` country code, capped at the E.164 maximum — so the server and the form
+  agree on what one phone number is. `CongressSignUpAnswersSchema` is the stored
+  shape: the same answers with the phone kept twice, as typed and normalised, and
+  neither the consent flag nor the captcha token. `toCongressSignUpAnswers` is its
+  only assembler, so no call site can hand-build the column value.
+
+  `registrations` gains a nullable `answers` jsonb column (EARS-5, migration
+  `0037_registration_answers`). Nullable is the decision: `null` means a
+  platform-origin registration — a signed-in doctor registering from the feed
+  submits no answers, and the roster renders that row from the account's own
+  profile instead.
+
+- [#2088](https://github.com/doctor-school/ds-platform/pull/2088) [`390c917`](https://github.com/doctor-school/ds-platform/commit/390c9178288cc3737efbad87ba9ee1dbe5289d6b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2063](https://github.com/doctor-school/ds-platform/issues/2063) — `@ds/db` gains the golden dataset and its seed (`src/seed/golden`), the
+  deterministic fixture the staging regression contour restores from.
+
+  Every identity is pinned: fixed UUIDs (`goldenUuid`) and a typed `golden`
+  catalogue of the entities scenarios address by name
+  (`golden.events.upcoming.slug`, `golden.doctors.verifiedCardiologist`, …).
+  Timestamps are derived from one «now» that defaults to the seed run time — so an
+  «upcoming» event stays upcoming on a stand whose apps read the real clock — with
+  `GOLDEN_NOW` as the explicit pin for the unit suite and the drift check; the
+  set-once publication instants (`first_published_at`) are excluded from the
+  upsert's update set and keep the value of the first write. `seedGolden` upserts
+  the whole set in one transaction keyed on those ids, so a second run under the
+  same pin rewrites the same values into the same rows and changes nothing
+  observable; it refuses to run when a golden IdP account's subject is missing
+  rather than inventing one.
+
+  New scripts: `pnpm seed:golden` (fills the database `DATABASE_URL` points at) and
+  `pnpm staging:golden-db` (`tools/staging/golden-db.mjs` — builds `ds_golden_next`,
+  migrates, fills, then rotates it into `ds_golden` and keeps one `ds_golden_prev`;
+  it never migrates the live template in place).
+
+- [#2216](https://github.com/doctor-school/ds-platform/pull/2216) [`640a608`](https://github.com/doctor-school/ds-platform/commit/640a60846ef16544d4bf4e61d4d22db6e6d53ba1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2213](https://github.com/doctor-school/ds-platform/issues/2213) — the golden dataset gains every remaining admin family and the targeting
+  chain that carries an эфир to a doctor.
+
+  `taxonomy.ts` is a new authored catalogue: 41 directions (38 `published`, 2
+  `draft`, 1 `retired`), 14 partners across the same three states, and 77 weighted
+  adjacency edges between the published directions. The 118 `Раздел I` specialties
+  of the Минздрав book are PARTITIONED over those directions, and the
+  `event_directions` walk sweeps the published directions contiguously, so at any
+  pin a doctor who picks any specialty of the book reaches an upcoming published
+  эфир — the invariant a feed that renders empty behind healthy-looking counts
+  violates. `project_experts` and `project_partners` complete the admin nav: one
+  active curator per project, at most one primary partner.
+
+  New exports: the `taxonomy.ts` catalogue, `resolveDirectionSpecialtyRows`
+  (maps authored specialty names onto the seeded book's ids and fails loudly on a
+  name it does not carry), `goldenDirectionId`, `goldenPartnerId`,
+  `partnerLogoKey` / `ordinalFromPartnerLogoKey`, `renderPartnerLogoSvg` and
+  `PARTNER_LOGO_CONTENT_TYPE`. Every partner row now names a logo object, and the
+  media plan generates it: a deterministic inline-SVG wordmark derived from the
+  partner's own title and ordinal, written `if-absent` like a committed portrait
+  because nothing in it moves with the pin.
+
+  `GOLDEN_SEED_ORDER` writes the taxonomy parents before every link that
+  references them, and the referential check covers the nine new FK columns.
+
+### Patch Changes
+
+- [#2354](https://github.com/doctor-school/ds-platform/pull/2354) [`33d4899`](https://github.com/doctor-school/ds-platform/commit/33d4899eb80239139650707795fab82fc8be84e9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add `event-registrar` to the API coarse-role vocabulary (044 EARS-17, [#2310](https://github.com/doctor-school/ds-platform/issues/2310)): the congress registrar is authorized from the Zitadel project-roles claim like every other role and only mirrored into `users.role`, the dev-stand/staging IdP converge seeds the project role key by default, and the golden IdP contract can declare it. No endpoint names the role yet — the authorization matrix is unchanged.
+
 ## 3.0.0
 
 ### Major Changes

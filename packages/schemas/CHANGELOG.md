@@ -1,5 +1,118 @@
 # @ds/schemas
 
+## 6.1.0
+
+### Minor Changes
+
+- [#2334](https://github.com/doctor-school/ds-platform/pull/2334) [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2296](https://github.com/doctor-school/ds-platform/issues/2296) — the 044 congress sign-up intake contract and the registration answers
+  column.
+
+  New `packages/schemas/src/congress/`: `CongressSignUpRequestSchema` (EARS-3) —
+  surname, first name, contact phone, email, specialty, workplace, city, region
+  and the personal-data consent required, patronymic optional. Specialty is a
+  `specialties_minzdrav` uuid and nothing else: the reserved «Другое / не
+  медицинский работник» option is an ordinary row of that table, so free text is
+  structurally unrepresentable rather than merely refused. The consent is
+  `z.literal(true)` — a precondition of the command, not a field that can arrive
+  `false` — and its version is server-stamped, so the client sends no version at
+  all. The captcha token rides the body optionally, mirroring
+  `DoctorRegisterRequestSchema` and how `BotProtectionGuard` actually reads it
+  (header first, body fallback, no-op while the provider is disabled).
+
+  `normaliseContactPhone` (EARS-29) applies the same rule the client-side input
+  mask already applies — digits only, a domestic-length leading `8` rewritten to
+  the `7` country code, capped at the E.164 maximum — so the server and the form
+  agree on what one phone number is. `CongressSignUpAnswersSchema` is the stored
+  shape: the same answers with the phone kept twice, as typed and normalised, and
+  neither the consent flag nor the captcha token. `toCongressSignUpAnswers` is its
+  only assembler, so no call site can hand-build the column value.
+
+  `registrations` gains a nullable `answers` jsonb column (EARS-5, migration
+  `0037_registration_answers`). Nullable is the decision: `null` means a
+  platform-origin registration — a signed-in doctor registering from the feed
+  submits no answers, and the roster renders that row from the account's own
+  profile instead.
+
+- [#2346](https://github.com/doctor-school/ds-platform/pull/2346) [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now cleans up the name a participant types ([#2340](https://github.com/doctor-school/ds-platform/issues/2340), feature
+  044 EARS-33). « иван » is stored as «Иван», «ПЕТРОВ» as «Петров»,
+  «анна-мария» as «Анна-Мария» and «салтыков щедрин» as «Салтыков Щедрин»:
+  surrounding whitespace removed, every internal run of spaces collapsed to one,
+  and each name segment capitalised, where a segment ends at a space, a hyphen or
+  an apostrophe. It applies to the surname, the first name and the patronymic and
+  to nothing else — workplace, city and region keep the capitalisation the
+  participant gave them, because institution and place names do not obey a
+  two-rule pass. What an organiser reads off the roster and the printed attendance
+  sheet, and the display name of the account the intake creates, are all the
+  cleaned form.
+
+  The rule lives in the intake contract (`normaliseNameAnswer` in `@ds/schemas`),
+  not in an input mask on the congress site: the intake endpoint is public, so the
+  site's JavaScript cannot be the guarantee, and a mask would fight the
+  participant mid-word in the one field where that is least welcome. Only the
+  cleaned value is kept — unlike the contact phone, which keeps the typed form
+  beside its comparison key, there is nothing here to compare, and one spelling per
+  name is the point. The transform is idempotent, which it has to be: the same
+  declaration validates the stored answers column that validates the submission,
+  so it runs again on every read of a row it already cleaned. Existing rows are
+  left exactly as they are; no migration and no configuration change.
+
+- [#2339](https://github.com/doctor-school/ds-platform/pull/2339) [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress sign-up intake is live on the API ([#2294](https://github.com/doctor-school/ds-platform/issues/2294), feature 044 slice 2):
+  `POST /v1/congress/sign-up` takes a submission from the congress site — public,
+  captcha-gated and throttled — and, for an address the platform does not know
+  yet, creates the whole cascade in one transaction: a credential-less account
+  through the shared 003 engine, a registration for the configured congress event
+  carrying the typed answers, and one personal-data consent row stamped at the
+  server-configured version (ADR-0009 §2.1). Nothing asks the participant for a
+  password, and nothing sends a verification mail: a congress sign-up is not a
+  platform registration.
+
+  The registration window is decided first and from the clock alone, before the
+  configuration is read and before the account lookup, so a submission outside it
+  is refused identically for a known and an unknown address and provably writes
+  nothing. Outside the window the refusal names the state (`not-yet-open`, with
+  the opening instant, or `closed`); every other reason the intake cannot take a
+  submission collapses into one generic refusal, so the unauthenticated endpoint
+  is no «is this doctor on the platform?» oracle.
+
+  `@ds/schemas` gains the congress request/response contract and the
+  personal-data consent purpose; `@ds/api-client` is the regenerated SDK for the
+  new route. The rate limiter gains a per-scope ceiling map: the intake keeps its
+  own 60 / 15 min per client address — a congress landing page behind one
+  corporate NAT legitimately submits far more than an auth door does — while the
+  platform default of 20 for register / login / reset is untouched.
+
+  The existing-email path is refused generically until slice 3 ([#2299](https://github.com/doctor-school/ds-platform/issues/2299) / [#2300](https://github.com/doctor-school/ds-platform/issues/2300) /
+  [#2301](https://github.com/doctor-school/ds-platform/issues/2301)), and the confirmation email lands with slice 4 ([#2304](https://github.com/doctor-school/ds-platform/issues/2304)–[#2306](https://github.com/doctor-school/ds-platform/issues/2306)).
+
+- [#2355](https://github.com/doctor-school/ds-platform/pull/2355) [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the roster HTTP route over the event read model (044 EARS-18, [#2311](https://github.com/doctor-school/ds-platform/issues/2311)): `GET /v1/admin/events/:idOrSlug/roster` answers a paged, instant-searchable page of the registrar's desk roster — ФИО, specialty name, место работы, город, область, телефон as typed, email, registration instant and the confirmation-letter outcome — authorized for `event-registrar` and `platform_admin` on its own controller. It is a second, widened read (`eventRosterPage`) beside the PII-free `eventRoster()` the room gate consumes, which is unchanged. Query state is the `AdminDataList` baseline (`q`, `page`, `pageSize`) only; sorting, per-column filters and the «возможный дубль» marker on this row are EARS-22/23/30/31.
+
+- [#2341](https://github.com/doctor-school/ds-platform/pull/2341) [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The event roster now carries the «возможный дубль» marker ([#2327](https://github.com/doctor-school/ds-platform/issues/2327), feature 044
+  EARS-30): an entry is marked when another registration of the same event holds
+  the same normalised contact phone — the comparison key the intake writes onto
+  the registration answers. Two people submitting from one phone are still
+  accepted exactly like anyone else, with the same generic success body and no
+  hint that the number is already there: the intake is not an oracle, and sorting
+  a genuine family out from a genuine duplicate is the registrar's judgement, not
+  the server's.
+
+  The marker is derived on every read of the roster rather than stored as a flag.
+  A window count inside the roster query groups the event's registrations by that
+  normalised phone; nothing is written, no migration is added and no sweep exists,
+  so when the team removes one of the sharing registrations on request the
+  survivor's marker clears by itself, with no write to the surviving row. Only the
+  boolean leaves the query — the phone is neither selected nor returned — so the
+  roster read model keeps its no-registrant-PII invariant. A registration created
+  through the signed-in platform path carries no answers payload at all, and such
+  rows are never marked, not even against each other.
+
+  `@ds/schemas` gains the required `possibleDuplicate` field on the roster entry
+  contract. The read model has no HTTP route yet, so no SDK surface changes; the
+  registrar-facing indicator and its roster filter land next ([#2328](https://github.com/doctor-school/ds-platform/issues/2328), [#2329](https://github.com/doctor-school/ds-platform/issues/2329)).
+
+### Patch Changes
+
+- [#2356](https://github.com/doctor-school/ds-platform/pull/2356) [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fence the `event-registrar` role to its allow-set (044 EARS-19, [#2312](https://github.com/doctor-school/ds-platform/issues/2312)): the role joins the `role → mfa_required` policy and the admin second-factor entry routes, so a registrar reaches the admin origin on the `platform_admin` TOTP flow and may hold a session — sign in, enrol/answer the factor, read back its own roles through the new `GET /v1/admin/auth/session`, sign out. Reach is unchanged everywhere else: every other real route, including every create, update and delete, omits the role and `AuthzGuard` refuses it. The generated matrix carries no denial-set column, so that half is proven by a sweep over the real registered route set.
+
 ## 6.0.0
 
 ### Major Changes

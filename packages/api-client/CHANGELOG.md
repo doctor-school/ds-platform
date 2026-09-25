@@ -1,5 +1,43 @@
 # @ds/api-client
 
+## 2.1.0
+
+### Minor Changes
+
+- [#2339](https://github.com/doctor-school/ds-platform/pull/2339) [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress sign-up intake is live on the API ([#2294](https://github.com/doctor-school/ds-platform/issues/2294), feature 044 slice 2):
+  `POST /v1/congress/sign-up` takes a submission from the congress site — public,
+  captcha-gated and throttled — and, for an address the platform does not know
+  yet, creates the whole cascade in one transaction: a credential-less account
+  through the shared 003 engine, a registration for the configured congress event
+  carrying the typed answers, and one personal-data consent row stamped at the
+  server-configured version (ADR-0009 §2.1). Nothing asks the participant for a
+  password, and nothing sends a verification mail: a congress sign-up is not a
+  platform registration.
+
+  The registration window is decided first and from the clock alone, before the
+  configuration is read and before the account lookup, so a submission outside it
+  is refused identically for a known and an unknown address and provably writes
+  nothing. Outside the window the refusal names the state (`not-yet-open`, with
+  the opening instant, or `closed`); every other reason the intake cannot take a
+  submission collapses into one generic refusal, so the unauthenticated endpoint
+  is no «is this doctor on the platform?» oracle.
+
+  `@ds/schemas` gains the congress request/response contract and the
+  personal-data consent purpose; `@ds/api-client` is the regenerated SDK for the
+  new route. The rate limiter gains a per-scope ceiling map: the intake keeps its
+  own 60 / 15 min per client address — a congress landing page behind one
+  corporate NAT legitimately submits far more than an auth door does — while the
+  platform default of 20 for register / login / reset is untouched.
+
+  The existing-email path is refused generically until slice 3 ([#2299](https://github.com/doctor-school/ds-platform/issues/2299) / [#2300](https://github.com/doctor-school/ds-platform/issues/2300) /
+  [#2301](https://github.com/doctor-school/ds-platform/issues/2301)), and the confirmation email lands with slice 4 ([#2304](https://github.com/doctor-school/ds-platform/issues/2304)–[#2306](https://github.com/doctor-school/ds-platform/issues/2306)).
+
+### Patch Changes
+
+- [#2356](https://github.com/doctor-school/ds-platform/pull/2356) [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fence the `event-registrar` role to its allow-set (044 EARS-19, [#2312](https://github.com/doctor-school/ds-platform/issues/2312)): the role joins the `role → mfa_required` policy and the admin second-factor entry routes, so a registrar reaches the admin origin on the `platform_admin` TOTP flow and may hold a session — sign in, enrol/answer the factor, read back its own roles through the new `GET /v1/admin/auth/session`, sign out. Reach is unchanged everywhere else: every other real route, including every create, update and delete, omits the role and `AuthzGuard` refuses it. The generated matrix carries no denial-set column, so that half is proven by a sweep over the real registered route set.
+
+- [#2355](https://github.com/doctor-school/ds-platform/pull/2355) [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the roster HTTP route over the event read model (044 EARS-18, [#2311](https://github.com/doctor-school/ds-platform/issues/2311)): `GET /v1/admin/events/:idOrSlug/roster` answers a paged, instant-searchable page of the registrar's desk roster — ФИО, specialty name, место работы, город, область, телефон as typed, email, registration instant and the confirmation-letter outcome — authorized for `event-registrar` and `platform_admin` on its own controller. It is a second, widened read (`eventRosterPage`) beside the PII-free `eventRoster()` the room gate consumes, which is unchanged. Query state is the `AdminDataList` baseline (`q`, `page`, `pageSize`) only; sorting, per-column filters and the «возможный дубль» marker on this row are EARS-22/23/30/31.
+
 ## 2.0.0
 
 ### Major Changes

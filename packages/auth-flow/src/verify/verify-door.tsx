@@ -158,6 +158,9 @@ export function VerifyDoor({
       setResendError(authErrorMessage(err, errors, copy.resendFailed));
     },
     onBeforeResend: () => {
+      // The one plate says the failure of the operation just performed
+      // (canvas 53-56): a resend withdraws a stale refused-code sentence.
+      setError(null);
       setResendError(null);
       setNotice(null);
       setSucceeded(false);

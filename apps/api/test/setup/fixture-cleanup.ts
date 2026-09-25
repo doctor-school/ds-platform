@@ -20,6 +20,8 @@ import type pg from "pg";
 
 /** Child tables of `events`, in the order they must be removed. */
 const EVENT_CHILDREN = [
+  // 044 EARS-38 (#2384) — an event-scoped role binding names its event.
+  "event_role_grants",
   "presence_beats",
   "registrations",
   // 012 EARS-24 — `event_experts` is the ONLY speaker source since the cutover
@@ -37,6 +39,8 @@ const EVENT_CHILDREN = [
 
 /** Child tables of `users`, in the order they must be removed. */
 const USER_CHILDREN = [
+  // 044 EARS-38 (#2384) — a registrar's event binding names its user.
+  "event_role_grants",
   "presence_beats",
   "registrations",
   "consent_records",

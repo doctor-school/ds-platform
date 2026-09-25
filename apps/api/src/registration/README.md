@@ -106,11 +106,37 @@ never a widening of the one above:
   reading the PII-free `(doctor, event, registeredAt)` fact, and the two reads
   are separate methods precisely so a change to one can never widen the other.
 - Authorization is `event-registrar` **or** `platform_admin`
-  (`@Authz({ access: "authenticated", roles: [...], check: "fast-path" })`), on
-  its own controller rather than on the 007 `platform_admin` events surface, so
-  the registrar's reach stays readable as a file rather than a grep. `total`
-  counts the filtered set over the WHOLE event — the pager's denominator — and
-  an unknown event is a 404, never an empty page.
+  (`@Authz({ access: "authenticated", roles: [...], check: "policy" })`, no
+  `objectAttrs`), on its own controller rather than on the 007
+  `platform_admin` events surface, so the registrar's reach stays readable as a
+  file rather than a grep. The role is necessary, not sufficient (044 EARS-38):
+  the handler runs `EventGrantPolicy.assertEventAccess`
+  (`apps/api/src/authz/event-grant.policy.ts`), which admits a registrar only
+  for the event its `event_role_grants` row binds it to — another event, an
+  unknown one, or no binding row at all is a 403 — and does not limit
+  `platform_admin`. `total` counts the filtered set over the WHOLE event — the
+  pager's denominator — and, for the administrator, an unknown event is a 404,
+  never an empty page.
+
+### Binding a registrar to an event (runbook, until #2378)
+
+There is no grants screen yet (#2378). On the product owner's request the tech
+lead binds a registrar by hand, after the registrar's account exists and holds
+the `event-registrar` project role in Zitadel:
+
+```sql
+-- Outside any API request, so the 010 audit trigger records the row as
+-- `db-direct` — which is exactly what happened. One registrar grant per user
+-- (partial unique index): to re-bind, DELETE the old row first.
+INSERT INTO event_role_grants (user_id, role, event_id)
+SELECT u.id, 'event-registrar', e.id
+FROM users u, events e
+WHERE u.email = '<registrar email>' AND e.slug = '<event slug>';
+```
+
+The registrar sees the bound roster on the next `GET /v1/admin/auth/session`
+read (its `eventGrants` field); no re-login is needed, because the binding is
+read from the table on every request rather than baked into the session.
 
 ## Exported symbols
 

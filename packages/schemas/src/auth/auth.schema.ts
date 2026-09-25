@@ -587,8 +587,27 @@ export type AdminAuthStateResponse = z.infer<
  * IdP project-roles claim mirrored in the API (`apps/api/src/authz/authz.types.ts`
  * `ROLES`), and a second frozen copy in the wire contract could only drift from it.
  */
+export const AdminSessionEventGrantSchema = z.strictObject({
+  role: z.string().min(1),
+  eventId: z.uuid(),
+  eventSlug: z.string().min(1),
+});
+export type AdminSessionEventGrant = z.infer<
+  typeof AdminSessionEventGrantSchema
+>;
+
+/**
+ * `eventGrants` — 044 EARS-38 (#2384): the principal's event bindings from
+ * `event_role_grants`, each with the bound event's id and slug, so the admin
+ * navigation can draw exactly the bound event's roster (EARS-20) without a
+ * second read. Always present; empty when the principal holds no binding (a
+ * `platform_admin`, or a registrar the tech lead has not bound yet — who is then
+ * refused every desk route). Like `roles`, it decides only what is drawn: the
+ * server step on each desk route is the authority.
+ */
 export const AdminSessionResponseSchema = z.strictObject({
   roles: z.array(z.string().min(1)),
+  eventGrants: z.array(AdminSessionEventGrantSchema),
 });
 export type AdminSessionResponse = z.infer<typeof AdminSessionResponseSchema>;
 

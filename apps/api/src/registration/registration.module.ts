@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { RecordingsModule } from "../recordings/recordings.module.js";
 import { EventRosterAdminController } from "./event-roster.admin.controller.js";
+import { EventGrantPolicy } from "../authz/event-grant.policy.js";
 import { MyEventsController } from "./my-events.controller.js";
 import { RegistrationController } from "./registration.controller.js";
 import { RegistrationRepository } from "./registration.repository.js";
@@ -30,7 +31,9 @@ import { RegistrationService } from "./registration.service.js";
     MyEventsController,
     EventRosterAdminController,
   ],
-  providers: [RegistrationService, RegistrationRepository],
+  // 044 EARS-38: the event-binding step every desk route runs (stateless; it
+  // reads `event_role_grants` through the @Global DRIZZLE_DB).
+  providers: [RegistrationService, RegistrationRepository, EventGrantPolicy],
   exports: [RegistrationService],
 })
 export class RegistrationModule {}

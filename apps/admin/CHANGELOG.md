@@ -1,5 +1,18 @@
 # @ds/admin
 
+## 3.1.0
+
+### Minor Changes
+
+- [#2358](https://github.com/doctor-school/ds-platform/pull/2358) [`d9454b6`](https://github.com/doctor-school/ds-platform/commit/d9454b69c50b4fe34080c41748107564450fc4cc) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the congress roster screen to admin (044 EARS-21, [#2315](https://github.com/doctor-school/ds-platform/issues/2315)): `/events/:id/roster` shows one event's registrations on the `AdminDataList` composition — instant search and server paging over `GET /v1/admin/events/:idOrSlug/roster`, columns in the EARS-25 order (№, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма), answer-less cells rendered empty. View-only: no create, no row link, no lifecycle filter. The event detail page links to it as «Реестр участников». Sort, per-column filters, print and the registrar's navigation are later handlers.
+
+### Patch Changes
+
+- Updated dependencies [[`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0), [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc), [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9)]:
+  - @ds/design-system@5.5.0
+  - @ds/schemas@6.1.0
+  - @ds/api-client@2.1.0
+
 ## 3.0.0
 
 ### Major Changes

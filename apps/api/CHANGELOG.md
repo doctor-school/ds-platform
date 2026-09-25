@@ -1,5 +1,194 @@
 # @ds/api
 
+## 4.1.0
+
+### Minor Changes
+
+- [#2345](https://github.com/doctor-school/ds-platform/pull/2345) [`fdd6a73`](https://github.com/doctor-school/ds-platform/commit/fdd6a73db692d0d806dc502cb1179b0ee105ebf5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now sends the participant the confirmation email its
+  `accepted` answer has been promising ([#2304](https://github.com/doctor-school/ds-platform/issues/2304) / [#2305](https://github.com/doctor-school/ds-platform/issues/2305) / [#2306](https://github.com/doctor-school/ds-platform/issues/2306), feature 044 slice
+  4). The mail names the event, its start in Moscow wall-clock time and the venue,
+  and carries one branch: an address the platform did not know is told an account
+  was created for it and that no password is needed, while an address that already
+  had an account is told the registration was added to the account it already has.
+  That branch lives in the inbox of the person the fact is about — the HTTP
+  response stays the single `accepted` state on both paths, so the congress site
+  still cannot tell the two apart.
+
+  The send runs AFTER the transaction has committed and is never awaited by the
+  response: a slow, unreachable or hostile relay can neither delay an accepted
+  registration nor turn it into a refusal. Its outcome is not a log line. Each
+  registration row now carries `confirmation_mail_status` (`sent` | `failed`) and
+  `confirmation_mail_at`, added by migration `0038_registration_confirmation_mail`
+  as nullable columns — `NULL` means no dispatch was ever attempted, which is what
+  the platform-origin registrations read. The dispatcher re-reads that column
+  before sending, so a participant who submits the form twice receives exactly one
+  email, and a row left `failed` (or `NULL` by an interrupted attempt) sends again
+  on the next submission. That is the entire recovery mechanism: no outbox, no
+  scheduled sweep, nothing to operate.
+
+  Deployments gain one REQUIRED key, `CONGRESS_SIGNUP_EVENT_VENUE`, the venue the
+  mail names. `events` has no venue column and 044 adds no admin-editable
+  settings, so the venue is a per-deployment constant of this congress exactly as
+  the registration window is. It is validated with the other congress keys: unset
+  or blank refuses every submission through the same generic refusal, before any
+  side effect, rather than mailing a confirmation with a blank place in it.
+
+- [#2342](https://github.com/doctor-school/ds-platform/pull/2342) [`871974f`](https://github.com/doctor-school/ds-platform/commit/871974f49b1fe9ead17b6b6cd76b248cb55689db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now accepts an address the platform already knows ([#2299](https://github.com/doctor-school/ds-platform/issues/2299) /
+  [#2300](https://github.com/doctor-school/ds-platform/issues/2300) / [#2301](https://github.com/doctor-school/ds-platform/issues/2301), feature 044 slice 3). Where slice 2 refused such a submission
+  generically, `POST /v1/congress/sign-up` attaches the registration to the
+  account that address already has and leaves every field of that account's own
+  profile byte-identical: the submitted surname, first name, patronymic,
+  workplace, city, region and contact phone are stored on the registration row
+  only. A congress form is not a profile editor, and an unauthenticated endpoint
+  must never be able to rewrite an existing doctor's account.
+
+  Both branches now run the SAME callback inside the same audited transaction, so
+  the written state and the response are identical by construction rather than by
+  two code paths agreeing. The registration insert is `ON CONFLICT (user_id,
+event_id) DO NOTHING` and the consent row is written only when the published
+  version differs from the one last recorded for that account and purpose — a
+  repeat submission therefore answers exactly as the first one did and writes
+  nothing new, while a submission made after the consent text was republished
+  records exactly one fresh acceptance row at the new version.
+
+  Every path answers with the one `accepted` state and HTTP 200. That single
+  state is all the congress site needs to render its confirmation, and it is the
+  reason the site cannot tell whether the address was already on the platform.
+
+  The remaining difference between the two branches was latency — the new-account
+  branch really does create a user in the IdP. `@TimingEqualized` now takes an
+  optional route-specific floor, and the intake carries one: a conservative
+  default of one second, overridable through the new `CONGRESS_SIGNUP_TIMING_FLOOR_MS`
+  key and read per request, so raising it after a production measurement needs no
+  redeploy. The platform-wide 40 ms auth-door floor is below either branch and
+  equalised neither; the bare `@TimingEqualized()` used by the auth doors is
+  unchanged. A floor that is not whole milliseconds refuses the intake through the
+  same generic refusal as the other configuration keys, before any side effect,
+  rather than silently reverting to the default.
+
+  The confirmation email the success state promises still lands with slice 4
+  ([#2304](https://github.com/doctor-school/ds-platform/issues/2304)–[#2306](https://github.com/doctor-school/ds-platform/issues/2306)).
+
+- [#2339](https://github.com/doctor-school/ds-platform/pull/2339) [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress sign-up intake is live on the API ([#2294](https://github.com/doctor-school/ds-platform/issues/2294), feature 044 slice 2):
+  `POST /v1/congress/sign-up` takes a submission from the congress site — public,
+  captcha-gated and throttled — and, for an address the platform does not know
+  yet, creates the whole cascade in one transaction: a credential-less account
+  through the shared 003 engine, a registration for the configured congress event
+  carrying the typed answers, and one personal-data consent row stamped at the
+  server-configured version (ADR-0009 §2.1). Nothing asks the participant for a
+  password, and nothing sends a verification mail: a congress sign-up is not a
+  platform registration.
+
+  The registration window is decided first and from the clock alone, before the
+  configuration is read and before the account lookup, so a submission outside it
+  is refused identically for a known and an unknown address and provably writes
+  nothing. Outside the window the refusal names the state (`not-yet-open`, with
+  the opening instant, or `closed`); every other reason the intake cannot take a
+  submission collapses into one generic refusal, so the unauthenticated endpoint
+  is no «is this doctor on the platform?» oracle.
+
+  `@ds/schemas` gains the congress request/response contract and the
+  personal-data consent purpose; `@ds/api-client` is the regenerated SDK for the
+  new route. The rate limiter gains a per-scope ceiling map: the intake keeps its
+  own 60 / 15 min per client address — a congress landing page behind one
+  corporate NAT legitimately submits far more than an auth door does — while the
+  platform default of 20 for register / login / reset is untouched.
+
+  The existing-email path is refused generically until slice 3 ([#2299](https://github.com/doctor-school/ds-platform/issues/2299) / [#2300](https://github.com/doctor-school/ds-platform/issues/2300) /
+  [#2301](https://github.com/doctor-school/ds-platform/issues/2301)), and the confirmation email lands with slice 4 ([#2304](https://github.com/doctor-school/ds-platform/issues/2304)–[#2306](https://github.com/doctor-school/ds-platform/issues/2306)).
+
+- [#2355](https://github.com/doctor-school/ds-platform/pull/2355) [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the roster HTTP route over the event read model (044 EARS-18, [#2311](https://github.com/doctor-school/ds-platform/issues/2311)): `GET /v1/admin/events/:idOrSlug/roster` answers a paged, instant-searchable page of the registrar's desk roster — ФИО, specialty name, место работы, город, область, телефон as typed, email, registration instant and the confirmation-letter outcome — authorized for `event-registrar` and `platform_admin` on its own controller. It is a second, widened read (`eventRosterPage`) beside the PII-free `eventRoster()` the room gate consumes, which is unchanged. Query state is the `AdminDataList` baseline (`q`, `page`, `pageSize`) only; sorting, per-column filters and the «возможный дубль» marker on this row are EARS-22/23/30/31.
+
+- [#2341](https://github.com/doctor-school/ds-platform/pull/2341) [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The event roster now carries the «возможный дубль» marker ([#2327](https://github.com/doctor-school/ds-platform/issues/2327), feature 044
+  EARS-30): an entry is marked when another registration of the same event holds
+  the same normalised contact phone — the comparison key the intake writes onto
+  the registration answers. Two people submitting from one phone are still
+  accepted exactly like anyone else, with the same generic success body and no
+  hint that the number is already there: the intake is not an oracle, and sorting
+  a genuine family out from a genuine duplicate is the registrar's judgement, not
+  the server's.
+
+  The marker is derived on every read of the roster rather than stored as a flag.
+  A window count inside the roster query groups the event's registrations by that
+  normalised phone; nothing is written, no migration is added and no sweep exists,
+  so when the team removes one of the sharing registrations on request the
+  survivor's marker clears by itself, with no write to the surviving row. Only the
+  boolean leaves the query — the phone is neither selected nor returned — so the
+  roster read model keeps its no-registrant-PII invariant. A registration created
+  through the signed-in platform path carries no answers payload at all, and such
+  rows are never marked, not even against each other.
+
+  `@ds/schemas` gains the required `possibleDuplicate` field on the roster entry
+  contract. The read model has no HTTP route yet, so no SDK surface changes; the
+  registrar-facing indicator and its roster filter land next ([#2328](https://github.com/doctor-school/ds-platform/issues/2328), [#2329](https://github.com/doctor-school/ds-platform/issues/2329)).
+
+### Patch Changes
+
+- [#2372](https://github.com/doctor-school/ds-platform/pull/2372) [`84cdeb6`](https://github.com/doctor-school/ds-platform/commit/84cdeb69860d69828fef7fcbb016dba008a6b3d0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044: the congress confirmation email is one copy for every participant — no account paragraph and no «Войти» action ([#2369](https://github.com/doctor-school/ds-platform/issues/2369)).
+
+- [#2354](https://github.com/doctor-school/ds-platform/pull/2354) [`33d4899`](https://github.com/doctor-school/ds-platform/commit/33d4899eb80239139650707795fab82fc8be84e9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add `event-registrar` to the API coarse-role vocabulary (044 EARS-17, [#2310](https://github.com/doctor-school/ds-platform/issues/2310)): the congress registrar is authorized from the Zitadel project-roles claim like every other role and only mirrored into `users.role`, the dev-stand/staging IdP converge seeds the project role key by default, and the golden IdP contract can declare it. No endpoint names the role yet — the authorization matrix is unchanged.
+
+- [#2346](https://github.com/doctor-school/ds-platform/pull/2346) [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress intake now cleans up the name a participant types ([#2340](https://github.com/doctor-school/ds-platform/issues/2340), feature
+  044 EARS-33). « иван » is stored as «Иван», «ПЕТРОВ» as «Петров»,
+  «анна-мария» as «Анна-Мария» and «салтыков щедрин» as «Салтыков Щедрин»:
+  surrounding whitespace removed, every internal run of spaces collapsed to one,
+  and each name segment capitalised, where a segment ends at a space, a hyphen or
+  an apostrophe. It applies to the surname, the first name and the patronymic and
+  to nothing else — workplace, city and region keep the capitalisation the
+  participant gave them, because institution and place names do not obey a
+  two-rule pass. What an organiser reads off the roster and the printed attendance
+  sheet, and the display name of the account the intake creates, are all the
+  cleaned form.
+
+  The rule lives in the intake contract (`normaliseNameAnswer` in `@ds/schemas`),
+  not in an input mask on the congress site: the intake endpoint is public, so the
+  site's JavaScript cannot be the guarantee, and a mask would fight the
+  participant mid-word in the one field where that is least welcome. Only the
+  cleaned value is kept — unlike the contact phone, which keeps the typed form
+  beside its comparison key, there is nothing here to compare, and one spelling per
+  name is the point. The transform is idempotent, which it has to be: the same
+  declaration validates the stored answers column that validates the submission,
+  so it runs again on every read of a row it already cleaned. Existing rows are
+  left exactly as they are; no migration and no configuration change.
+
+- [#2356](https://github.com/doctor-school/ds-platform/pull/2356) [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fence the `event-registrar` role to its allow-set (044 EARS-19, [#2312](https://github.com/doctor-school/ds-platform/issues/2312)): the role joins the `role → mfa_required` policy and the admin second-factor entry routes, so a registrar reaches the admin origin on the `platform_admin` TOTP flow and may hold a session — sign in, enrol/answer the factor, read back its own roles through the new `GET /v1/admin/auth/session`, sign out. Reach is unchanged everywhere else: every other real route, including every create, update and delete, omits the role and `AuthzGuard` refuses it. The generated matrix carries no denial-set column, so that half is proven by a sweep over the real registered route set.
+
+- [#2349](https://github.com/doctor-school/ds-platform/pull/2349) [`1b507cb`](https://github.com/doctor-school/ds-platform/commit/1b507cb5ac987404976d705b3cadd0cfb8688076) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress registration window is now API configuration rather than two
+  constants in the code ([#2348](https://github.com/doctor-school/ds-platform/issues/2348), feature 044 EARS-28). Two required env keys,
+  `CONGRESS_SIGNUP_WINDOW_OPENS_AT` and `CONGRESS_SIGNUP_WINDOW_CLOSES_AT`, state
+  the instant the public congress intake starts accepting submissions and the
+  instant it stops. Each is an ISO-8601 date-time that states its own offset
+  (`2026-10-01T00:00:00.000+03:00`, or a `Z` value); an offset-less string is
+  refused rather than guessed, because the API runs in UTC while the congress is
+  in Moscow and the silent three-hour shift would open registration a day the
+  owner did not approve. The close must be strictly after the open.
+
+  They are configuration for the reason the event id and the consent version
+  already are: the instants differ per environment. A dev stand and each stage
+  slot need a window that is open right now for the form to be reviewable at all,
+  production carries the owner's real dates — and the closing date-time, which
+  lands as a launch input, must not cost an API release. The pair is validated
+  beside the other 044 keys and fails CLOSED: unset, unparseable or inverted
+  refuses the submission through the one generic refusal every submitter gets,
+  before any account, registration, consent row or email — not through a window
+  refusal, since a deployment that has no opening instant cannot honestly announce
+  one. The wire is unchanged: `not-yet-open` still carries the opening instant
+  exactly as configured, and `closed` is still the same refusal.
+
+  Deployment note: every environment running the intake must carry both keys
+  before this version is deployed, or the intake refuses every submission.
+
+- [#2125](https://github.com/doctor-school/ds-platform/pull/2125) [`31ba498`](https://github.com/doctor-school/ds-platform/commit/31ba49863d99564905db934f46d52a122cb738b0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add explicit Postbox SMTP selection with bounded, cancellable email attempts and opt-in fallback. Keep uncertain acceptance from triggering duplicate sends, and report provider acceptance separately from delivery.
+
+- [#2190](https://github.com/doctor-school/ds-platform/pull/2190) [`42c3d48`](https://github.com/doctor-school/ds-platform/commit/42c3d483e808611ecbcdfc2bb11d8deec553c6e2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Send verified-account login codes through the existing shared email template without native action links.
+
+- [#2163](https://github.com/doctor-school/ds-platform/pull/2163) [`c94c3de`](https://github.com/doctor-school/ds-platform/commit/c94c3de46a378d9a2c0abb96be228d7708e54b10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Select a separate native Postbox SMTP profile while retaining the existing mail.ru profile for deliberate rollback.
+
+- [#2176](https://github.com/doctor-school/ds-platform/pull/2176) [`0e8d27a`](https://github.com/doctor-school/ds-platform/commit/0e8d27aa624dc62a7abd9982c48a245aac1dab10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Reuse the existing code-email layout for BFF transactional notices, keep only the duplicate-registration login action, and clarify code entry in the requesting tab with consistent Doctor.School sender naming.
+- Updated dependencies [[`33d4899`](https://github.com/doctor-school/ds-platform/commit/33d4899eb80239139650707795fab82fc8be84e9), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`390c917`](https://github.com/doctor-school/ds-platform/commit/390c9178288cc3737efbad87ba9ee1dbe5289d6b), [`640a608`](https://github.com/doctor-school/ds-platform/commit/640a60846ef16544d4bf4e61d4d22db6e6d53ba1), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1)]:
+  - @ds/db@3.1.0
+  - @ds/schemas@6.1.0
+
 ## 4.0.0
 
 ### Major Changes

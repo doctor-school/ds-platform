@@ -1,5 +1,31 @@
 # @ds/room
 
+## 1.0.0
+
+### Major Changes
+
+- [#2057](https://github.com/doctor-school/ds-platform/pull/2057) [`5dc1a61`](https://github.com/doctor-school/ds-platform/commit/5dc1a617adcb66eb5716d498b4223a133e6947db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Forward the client's `x-forwarded-for` on every SSR authed read ([#2054](https://github.com/doctor-school/ds-platform/issues/2054)).
+
+  Since [#1655](https://github.com/doctor-school/ds-platform/issues/1655) the api runs behind `FastifyAdapter({ trustProxy })`, so `request.ip`
+  is the real browser taken from the forwarded chain and the BFF session
+  fingerprint (ADR-0001 §6) is bound to the BROWSER's IP/24. Every server-side read
+  from the Next containers built its own header set and dropped the chain, so the
+  api saw the container address (172.18.0.x), re-derived a different fingerprint and
+  401'd valid sessions — signed-in doctors were bounced off «Мои события» and the
+  event/room pages.
+
+  `ForwardedSession` gains a required `forwardedFor`, and one canonical
+  `forwardedSessionFrom` / `forwardedHeaders` pair in `@ds/events-storefront/server`
+  now builds every hop's headers (`@ds/room` mirrors it as `roomForwardedHeaders`
+  for its own structural `RoomSession`, which likewise gains the field). Both are
+  required-field additions to an exported interface, i.e. breaking for consumers.
+
+### Patch Changes
+
+- Updated dependencies [[`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0), [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc), [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9)]:
+  - @ds/design-system@5.5.0
+  - @ds/schemas@6.1.0
+
 ## 0.1.0
 
 ### Minor Changes

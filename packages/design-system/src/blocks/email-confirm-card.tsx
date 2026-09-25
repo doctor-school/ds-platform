@@ -428,7 +428,9 @@ function EmailConfirmResend({
           // jitter as the seconds tick down (#227/#267 owner finding). `min-w-0` +
           // `whitespace-normal` override the Button base `whitespace-nowrap` so the
           // label wraps instead of overflowing the card at any width (#542).
-          className="min-w-0 whitespace-normal text-right tabular-nums"
+          // `font-extrabold` — canvas 406 draws the resend label at 13px / 800;
+          // the `sm` size already gives the 13px `caption` step.
+          className="min-w-0 whitespace-normal text-right font-extrabold tabular-nums"
         >
           {resendDisabled ? copy.resendCountdown(remaining) : copy.resend}
         </Button>

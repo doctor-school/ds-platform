@@ -290,6 +290,15 @@ describe("#2027 <EmailConfirmCard> canvas «Подтверждение»", () =>
     );
   });
 
+  it("003 EARS-25: the resend link is the canvas's 13px / 800 label (canvas 406)", () => {
+    setup();
+
+    expect(screen.getByTestId("verify-resend")).toHaveClass(
+      "text-caption",
+      "font-extrabold",
+    );
+  });
+
   it("003 EARS-24: the already-registered actions share a wrapping row (canvas 238-241)", () => {
     setup();
 

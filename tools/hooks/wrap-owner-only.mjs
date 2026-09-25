@@ -100,13 +100,15 @@ function requestText(text) {
     .replace(/`[^`]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/g, "");
 }
 
-// A workflow verb anywhere in a clause (dictated speech puts it after leading
-// words: «Так, давай в этой сессии проведем ретро»). The text after the verb
-// is the target; the words before it must not negate it or carry another
-// action verb whose object the workflow name is («run a check of … /wrap»).
+// Retro only: a workflow verb anywhere in a clause (dictated speech puts it
+// after leading words: «Так, давай в этой сессии проведем ретро»). The text
+// after the verb is the target; the words before it must not negate it, ask or
+// condition it («Should we run…», «Если проведём…» — dictation drops the «?»),
+// or carry another action verb whose object the workflow name is. A full
+// `/wrap` never uses this matcher: it keeps the strict line-start rule.
 const WORKFLOW_VERB =
   /(?<![\p{L}\p{N}_/-])(?:run|perform|conduct|do|проведи|проведем|проведём|сделай|сделаем|давай|запусти|запустим)(?![\p{L}\p{N}_-])\s+(?:(?:a|the|full|полный|полноценный|поноценный|независимый)\s+)?/giu;
-const NEGATION_WORDS = new Set([
+const NON_REQUEST_WORDS = new Set([
   "not",
   "don't",
   "don’t",
@@ -115,6 +117,20 @@ const NEGATION_WORDS = new Set([
   "не",
   "нельзя",
   "никогда",
+  // Question, conditional and modal lead words.
+  "should",
+  "shall",
+  "can",
+  "could",
+  "would",
+  "will",
+  "if",
+  "when",
+  "whether",
+  "unless",
+  "ли",
+  "если",
+  "когда",
 ]);
 const BLOCKING_VERBS = new Set([
   "run",
@@ -143,7 +159,9 @@ function clauseTargets(line) {
           .slice(0, match.index)
           .toLowerCase()
           .split(/[^\p{L}\p{N}'’]+/u);
-        if (before.some((w) => NEGATION_WORDS.has(w) || BLOCKING_VERBS.has(w)))
+        if (
+          before.some((w) => NON_REQUEST_WORDS.has(w) || BLOCKING_VERBS.has(w))
+        )
           continue;
         targets.push(clause.slice(match.index + match[0].length).trim());
       }
@@ -173,11 +191,16 @@ function ownerRequested(jsonl, kind) {
       if (kind === "wrap" && /^\/wrap(?:-init)?[.!]?$/i.test(request))
         return true;
       // The verb must directly target the workflow, not a check or discussion of it.
-      for (const target of clauseTargets(request)) {
-        if (kind === "wrap" && /^\/wrap(?:-init)?(?=\s|[.!]?$)/i.test(target))
+      if (kind === "wrap") {
+        const target = request.match(
+          /^(?:(?:please|ok(?:ay)?|окей|пожалуйста)[, .]+)*(?:run|perform|conduct|do|проведи|сделай|давай|запусти)\s+(?:(?:a|the|full|полный|полноценный|поноценный|независимый)\s+)?(.+)$/i,
+        )?.[1];
+        if (target && /^\/wrap(?:-init)?(?=\s|[.!]?$)/i.test(target))
           return true;
+        continue;
+      }
+      for (const target of clauseTargets(request)) {
         if (
-          kind === "retro" &&
           /^(?:session retro|retrospective|run-session-retro|ретро)(?=\s|[.!]?$)/i.test(
             target,
           )

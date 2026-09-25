@@ -143,12 +143,21 @@ export interface EmailConfirmCardProps {
    * that renames one does it here, in one map, rather than around the block.
    */
   testIds?: Partial<EmailConfirmCardTestIds> | undefined;
+  /**
+   * 021 EARS-2 — the gate-context plate above the card, the slot the
+   * registration door carries (`RegisterCard.returnContextSlot`), so the step
+   * that follows it keeps what the visitor came for. Absent → NOTHING renders
+   * (EARS-3 honest-empty rule).
+   */
+  returnContextSlot?: React.ReactNode | undefined;
 }
 
 /** The block's addressable parts — see `EMAIL_CONFIRM_TEST_IDS` for the shipped ids. */
 export interface EmailConfirmCardTestIds {
   /** The card frame; unnamed by default. */
   root: string | undefined;
+  /** Wrapper of the 021 EARS-2 gate-context plate; unnamed by default. */
+  returnContext: string | undefined;
   /** The one operation-failure plate above the title (canvas 53-56). */
   error: string;
   succeeded: string;
@@ -162,6 +171,7 @@ export interface EmailConfirmCardTestIds {
 /** The ids the block shipped with (#1666) — the defaults of `testIds`. */
 export const EMAIL_CONFIRM_TEST_IDS: EmailConfirmCardTestIds = {
   root: undefined,
+  returnContext: undefined,
   error: "verify-error",
   succeeded: "verify-succeeded",
   submit: "verify-submit",
@@ -195,6 +205,7 @@ export function EmailConfirmCard({
   otpLength = EMAIL_CONFIRM_OTP_LENGTH,
   resendCooldownSeconds = EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
   testIds,
+  returnContextSlot,
 }: EmailConfirmCardProps) {
   const form = useForm<EmailConfirmValues>({
     resolver,
@@ -245,7 +256,7 @@ export function EmailConfirmCard({
   // are live, because it is the one the visitor just acted on.
   const operationError = error ?? resend?.error;
 
-  return (
+  const card = (
     <AuthCard
       {...(ids.root ? { "data-testid": ids.root } : {})}
       icon={icon}
@@ -364,6 +375,18 @@ export function EmailConfirmCard({
         </div>
       </section>
     </AuthCard>
+  );
+
+  // Supplied or absent, never an empty frame (021 EARS-2 / EARS-3) — the same
+  // column and gap the registration door stacks its plate in.
+  if (!returnContextSlot) return card;
+  return (
+    <div className="flex w-full flex-col gap-4.5">
+      <div {...(ids.returnContext ? { "data-testid": ids.returnContext } : {})}>
+        {returnContextSlot}
+      </div>
+      {card}
+    </div>
   );
 }
 

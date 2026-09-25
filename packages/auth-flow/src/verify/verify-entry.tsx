@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import { VerifyDoor } from "./verify-door";
@@ -21,12 +21,15 @@ export function VerifyEntry({
   email,
   landing,
   returnTo,
+  returnContextPlate,
 }: {
   config: AuthFlowHostConfig;
   email?: string | undefined;
   landing: string;
   /** The RAW arrival `returnTo`; guarded at every consumption point. */
   returnTo: string | null;
+  /** 021 EARS-2 — the mobile plate the server mount resolved; passed through. */
+  returnContextPlate?: ReactNode;
 }) {
   const deepLinkEntry = config.verify.deepLinkEntry;
   const [fragmentEmail, setFragmentEmail] = useState<string | undefined>();
@@ -48,6 +51,7 @@ export function VerifyEntry({
       // 014 EARS-6) and carried by the sideways hops (rule S3).
       completionTarget={returnTo}
       carriedTarget={returnTo}
+      returnContextPlate={returnContextPlate}
     />
   );
 }

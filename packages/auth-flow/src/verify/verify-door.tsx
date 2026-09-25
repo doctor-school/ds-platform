@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -80,11 +80,18 @@ export type VerifyDoorProps = {
   completionTarget?: string | null;
   /** Rule S3 — the target the sideways hops and the cold exit carry onward. */
   carriedTarget?: string | null;
+  /**
+   * 021 EARS-2 — the mobile return-context plate above the card, the one the
+   * registration door draws (`returnContextSlots(...).plate`). Absent → nothing.
+   */
+  returnContextPlate?: ReactNode;
 };
 
 /** The canonical `data-testid` map, one on both hosts (the ids #1666 shipped). */
 export const VERIFY_TEST_IDS: Partial<EmailConfirmCardTestIds> = {
   root: "verify-card",
+  // The registration door's id: the step shows the same plate the form did.
+  returnContext: "registration-return-context",
   error: "verify-error",
   succeeded: "verify-succeeded",
   submit: "verify-submit",
@@ -101,6 +108,7 @@ export function VerifyDoor({
   returnTarget = null,
   completionTarget = null,
   carriedTarget = null,
+  returnContextPlate,
 }: VerifyDoorProps) {
   const router = useRouter();
   const resolvedCopy = resolveAuthFlowCopy(config);
@@ -266,6 +274,7 @@ export function VerifyDoor({
           : undefined
       }
       testIds={VERIFY_TEST_IDS}
+      returnContextSlot={returnContextPlate}
     />
   );
 }

@@ -67,7 +67,7 @@ export async function VerifyRoute({
       ? await resolveReturnContext(safeTarget)
       : null;
   // The registration variant: its line is the confirmation's promise.
-  const { panel } = returnContextSlots({
+  const { panel, plate } = returnContextSlots({
     config,
     event: returnEvent,
     variant: "register",
@@ -80,6 +80,8 @@ export async function VerifyRoute({
         {...(email ? { email } : {})}
         landing={landing}
         returnTo={returnTo}
+        // The mobile plate above the card, as the registration door draws it.
+        returnContextPlate={plate}
       />
     </AuthShell>
   );

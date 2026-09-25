@@ -25,6 +25,7 @@ export function RegistrationConfirmation({
   landing,
   returnTarget = null,
   carriedTarget = null,
+  returnContextPlate,
 }: RegisterConfirmationProps) {
   return (
     <VerifyDoor
@@ -34,6 +35,7 @@ export function RegistrationConfirmation({
       returnTarget={returnTarget}
       completionTarget={returnTarget}
       carriedTarget={carriedTarget}
+      returnContextPlate={returnContextPlate}
     />
   );
 }

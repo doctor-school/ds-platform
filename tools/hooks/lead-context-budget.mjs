@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** PreToolUse dispatch boundary (Agent/Task/spawn_agent). Claude retains
- * 120K/160K; Codex uses 70%/85% of the reported effective model window.
+ * 250K/400K; Codex uses 70%/85% of the reported effective model window.
  * Only new dispatch is denied, never completion of already-running agents.
  * Missing telemetry emits an advisory. Owner override remains loud and scoped.
  * Transcript parsing is a best-effort adapter, not a stable host API. */
@@ -20,12 +20,21 @@ import {
 import { readTail } from "./subagent-context-budget.mjs";
 
 /** Soft cap: the wave in flight may finish; no NEW wave may start.
- * Owner-tunable (owner decision 2026-08-31: 120K). */
-export const SOFT_THRESHOLD = 120_000;
+ * Owner-tunable (owner decision 2026-09-25, #2373: 250K — a restart below it
+ * saves neither money nor subscription usage). */
+export const SOFT_THRESHOLD = 250_000;
 
 /** Hard cap: a new dispatch is DENIED — hand off instead.
- * Owner-tunable (owner decision 2026-08-31: 160K). */
-export const HARD_THRESHOLD = 160_000;
+ * Owner-tunable (owner decision 2026-09-25, #2373: 400K). A closeout
+ * dispatch (CLOSEOUT_SUBAGENT_TYPES) still passes, with an advisory. */
+export const HARD_THRESHOLD = 400_000;
+
+/** Subagent types that CLOSE the current wave (review verdict, PR landing):
+ * dispatching them frees lead context, so the hard tier never blocks them. */
+export const CLOSEOUT_SUBAGENT_TYPES = Object.freeze([
+  "ds-reviewer",
+  "ds-lander",
+]);
 
 /** Owner-only escape hatch, repo-relative. Gitignored: it is a live-session
  * marker, never a committed setting. */
@@ -66,6 +75,16 @@ export function hardMessage(contextTokens) {
   );
 }
 
+export function closeoutMessage(contextTokens, subagentType) {
+  const k = Math.round(contextTokens / 1000);
+  const hard = Math.round(HARD_THRESHOLD / 1000);
+  return (
+    `⚠ Контекст лида ≈${k}K ≥ ${hard}K — диспатч ${subagentType} разрешён: ` +
+    `закрытие текущей волны освобождает контекст. Новую работу не начинать → ` +
+    `handoff (skill handoff-prompt).`
+  );
+}
+
 export function overrideMessage(contextTokens) {
   const k = Math.round(contextTokens / 1000);
   const soft = Math.round(SOFT_THRESHOLD / 1000);
@@ -80,14 +99,18 @@ export function overrideMessage(contextTokens) {
  * Pure decision seam (unit-tested without FS or stdin).
  * - below SOFT                    → `{ action: "silent" }`
  * - ≥ SOFT, override marker set   → `{ action: "override" }` (loud allow)
+ * - ≥ HARD, closeout subagent     → `{ action: "closeout" }` (advisory allow)
  * - ≥ HARD                        → `{ action: "deny" }`
  * - ≥ SOFT                        → `{ action: "soft" }`
  */
-export function decide({ contextTokens, override }) {
+export function decide({ contextTokens, override, subagentType }) {
   const ctx = Number.isFinite(contextTokens) ? contextTokens : 0;
   if (ctx < SOFT_THRESHOLD) return { action: "silent" };
   if (override) return { action: "override" };
-  if (ctx >= HARD_THRESHOLD) return { action: "deny" };
+  if (ctx >= HARD_THRESHOLD)
+    return CLOSEOUT_SUBAGENT_TYPES.includes(subagentType)
+      ? { action: "closeout" }
+      : { action: "deny" };
   return { action: "soft" };
 }
 
@@ -130,6 +153,7 @@ function main() {
     const decision = decide({
       contextTokens,
       override: overrideActive(projectRoot(payload)),
+      subagentType: payload.tool_input?.subagent_type,
     });
     if (decision.action === "silent") process.exit(0);
     if (decision.action === "deny") {
@@ -149,7 +173,9 @@ function main() {
     const msg =
       decision.action === "override"
         ? overrideMessage(contextTokens)
-        : softMessage(contextTokens);
+        : decision.action === "closeout"
+          ? closeoutMessage(contextTokens, payload.tool_input.subagent_type)
+          : softMessage(contextTokens);
     // `additionalContext` only — no `permissionDecision: "allow"`, which would
     // auto-approve the dispatch and bypass the operator's own permission view.
     process.stdout.write(

@@ -66,6 +66,11 @@ describe("pr-preflight STATIC_GUARDS roster (#462)", () => {
     const files = STATIC_GUARDS.map((g) => g.file);
     expect(new Set(files).size).toBe(files.length);
   });
+
+  it("#2373: instruction-budget judges the PR only — the machine-local MEMORY.md is advisory in preflight / pr:land", () => {
+    const guard = STATIC_GUARDS.find((g) => g.name === "instruction-budget");
+    expect(guard?.env).toEqual({ INSTRUCTION_BUDGET_LOCAL_MEMORY: "advisory" });
+  });
 });
 
 describe("pr-preflight MERGE_GUARDS roster (#692)", () => {

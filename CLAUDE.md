@@ -8,7 +8,7 @@ Read [portable agent discipline](apps/docs/content/agent-discipline.md) at entry
 
 `.claude/settings.json` supplies `pnpm bootstrap` via SessionStart `additionalContext`; it is a derived snapshot, not board ground truth. Hook diagnostics live in `tools/hooks/README.md`.
 
-`/wrap` is owner-entered only. Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 120K/160K. The owner-only `.claude/lead-budget-override` is removed by wrap. Child hooks request ROTATE at 150K and deny non-git tools at 200K; rotate before rework when the actual lagging notification usage reaches 120K. These constants are Claude-specific; Codex uses observed effective input/window bands in portable discipline.
+`/wrap` is owner-entered only. Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 250K/400K; at 400K only `ds-reviewer`/`ds-lander` dispatch. The owner-only `.claude/lead-budget-override` is removed by wrap. Child hooks ROTATE at 250K and deny non-git tools at 350K; rotate before rework once lagging notification usage hits 250K. Claude-only constants; Codex uses observed effective input/window bands in portable discipline.
 
 ## Dispatch
 

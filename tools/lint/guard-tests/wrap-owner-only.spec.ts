@@ -385,6 +385,20 @@ describe("direct workflow target regression (Mode a)", () => {
     "Run a check of the documentation for /wrap",
     "Run a check of this example: 'please run /wrap now'",
     "Проведи проверку документации /wrap",
+    // #2373: mid-sentence matching still refuses negation, questions and a quoted example.
+    "Мы сегодня не проведем ретро и не сделаем /wrap",
+    "Так, давай не будем, не проведем ретро",
+    "Should we run a retrospective?",
+    "Please check whether we should run /wrap",
+    // #2373 Mode a: a question, conditional or modal before the verb is not a request,
+    // with or without a trailing «?» (dictated speech drops it).
+    "Should we run /wrap",
+    "If you run /wrap, tell me first",
+    "Should we run a retrospective",
+    "Стоит ли проводить ретро?",
+    "Если проведём ретро, скажи",
+    "Когда проведем ретро, посмотрим",
+    "Можно ли сделать ретро",
   ])("does not execute a workflow from %s", (text) => {
     const jsonl = userText(text);
     for (const skill of ["run-wrap", "run-session-retro"]) {
@@ -405,6 +419,9 @@ describe("direct workflow target regression (Mode a)", () => {
     "Проведи ретро этой сессии",
     "Please conduct a retrospective",
     "Run session retro",
+    // #2373: dictated speech — the verb + target sit mid-sentence after leading words.
+    "Так, давай в этой сессии проведем ретро эм, наших последних сессий.",
+    "В общем, собери корпус, как обычно, сделай, сделай ретро.",
   ])("keeps explicit analysis request: %s", (text) => {
     expect(
       decide({

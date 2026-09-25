@@ -70,7 +70,7 @@ test-results/
 .claude/scratchpad/
 
 # Owner-only escape hatch for the lead context budget (#1693): its presence lifts
-# the 120K/160K dispatch tiers for the CURRENT session — live marker, never a
+# the 250K/400K dispatch tiers for the CURRENT session — live marker, never a
 # committed setting (created on an explicit owner instruction, removed by /wrap)
 .claude/lead-budget-override
 

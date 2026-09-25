@@ -59,11 +59,19 @@ export function stageBDecisions(records: StageBRecord[]) {
     .sort((a, b) => a.time - b.time || a.order - b.order || a.index - b.index);
 }
 
+/** Patch-id equivalence probe between a recorded head and the current head
+ * (the merge gate's `checkRebaseEquivalence`, injected so this stays pure). */
+export type HeadEquivalence = (
+  recordedHead: string,
+  head: string,
+) => { accepted: boolean; reason: string; equal?: number; total?: number };
+
 export function validateStageB(
   records: StageBRecord[],
   head: string,
   paths: string[],
   gates: Record<number, string>,
+  headEquivalent?: HeadEquivalence,
 ): Verdict {
   const candidates = stageBDecisions(records);
   if (!candidates.length) return { ok: false, reason: "No Stage-B record" };
@@ -89,12 +97,28 @@ export function validateStageB(
       reason:
         "Latest decision is not a Stage-B GO/batched/lead-certified approval (pending/refused/revoked)",
     };
-  if (!/^[a-f0-9]{40}$/.test(head) || field("head") !== head)
-    return {
-      ok: false,
-      reason:
-        "Stage-B head is missing or stale; record current applicability or obtain a fresh verdict",
-    };
+  const recordedHead = field("head");
+  let carried = "";
+  if (!/^[a-f0-9]{40}$/.test(head) || recordedHead !== head) {
+    const stale =
+      "Stage-B head is missing or stale; record current applicability or obtain a fresh verdict";
+    // #2373: a pure rebase keeps a valid record, exactly as the Mode (a)
+    // carry-over does (#1865). A lead certification stays head-pinned: its
+    // report proves the tested SHA itself.
+    if (
+      lead ||
+      !headEquivalent ||
+      !/^[a-f0-9]{40}$/.test(head) ||
+      !/^[a-f0-9]{40}$/.test(recordedHead)
+    )
+      return { ok: false, reason: stale };
+    const probe = headEquivalent(recordedHead, head);
+    if (!probe.accepted)
+      return { ok: false, reason: `${stale} (${probe.reason})` };
+    const rows =
+      probe.total === undefined ? "" : `, ${probe.equal}/${probe.total} =`;
+    carried = ` — carried from ${recordedHead.slice(0, 12)} to ${head.slice(0, 12)} (patch-id-identical: git range-diff origin/main${rows})`;
+  }
   if (
     !utc(field("recorded-at")) ||
     Date.parse(field("recorded-at")) > Date.now() + 60_000
@@ -162,7 +186,7 @@ export function validateStageB(
   }
   return {
     ok: true,
-    reason: `Current Stage-B record: ${latest.value}`,
+    reason: `Current Stage-B record: ${latest.value}${carried}`,
     decision: latest,
   };
 }

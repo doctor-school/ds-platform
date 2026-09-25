@@ -80,9 +80,9 @@ function fixture(opts: { lead: number; subagent?: number; agentId?: string }): {
 }
 
 describe("subagent-context-budget thresholds", () => {
-  it("owner-decided constants (2026-08-18): 150K soft / 200K hard / +25K repeat", () => {
-    expect(SOFT_THRESHOLD).toBe(150_000);
-    expect(HARD_THRESHOLD).toBe(200_000);
+  it("owner-decided constants (2026-09-25, #2373): 250K soft / 350K hard / +25K repeat", () => {
+    expect(SOFT_THRESHOLD).toBe(250_000);
+    expect(HARD_THRESHOLD).toBe(350_000);
     expect(SOFT_REPEAT_STEP).toBe(25_000);
   });
 });
@@ -151,20 +151,20 @@ describe("subagent-context-budget decide() — soft cadence", () => {
   };
 
   it("below the soft cap → silent", () => {
-    expect(decide({ ...base, contextTokens: 149_999 }).action).toBe("silent");
+    expect(decide({ ...base, contextTokens: 249_999 }).action).toBe("silent");
   });
 
   it("first crossing of the soft cap → soft directive + state", () => {
-    const d = decide({ ...base, contextTokens: 150_000 });
+    const d = decide({ ...base, contextTokens: 250_000 });
     expect(d.action).toBe("soft");
-    expect(d.state).toEqual({ lastNotifiedAt: 150_000 });
+    expect(d.state).toEqual({ lastNotifiedAt: 250_000 });
   });
 
   it("already notified, still inside the same +25K step → silent", () => {
     const d = decide({
       ...base,
-      contextTokens: 170_000,
-      state: { lastNotifiedAt: 150_000 },
+      contextTokens: 270_000,
+      state: { lastNotifiedAt: 250_000 },
     });
     expect(d.action).toBe("silent");
   });
@@ -172,36 +172,36 @@ describe("subagent-context-budget decide() — soft cadence", () => {
   it("+25K past the last notification → soft directive again", () => {
     const d = decide({
       ...base,
-      contextTokens: 175_000,
-      state: { lastNotifiedAt: 150_000 },
+      contextTokens: 275_000,
+      state: { lastNotifiedAt: 250_000 },
     });
     expect(d.action).toBe("soft");
-    expect(d.state).toEqual({ lastNotifiedAt: 175_000 });
+    expect(d.state).toEqual({ lastNotifiedAt: 275_000 });
   });
 });
 
 describe("subagent-context-budget decide() — hard cap + allow-list", () => {
-  it("199_999 allows a plain Read; 200_000 denies it", () => {
+  it("349_999 allows a plain Read; 350_000 denies it", () => {
     expect(
       decide({
-        contextTokens: 199_999,
+        contextTokens: 349_999,
         toolName: "Read",
         toolInput: {},
-        state: { lastNotifiedAt: 199_000 },
+        state: { lastNotifiedAt: 349_000 },
       }).action,
     ).toBe("silent");
     expect(
       decide({
-        contextTokens: 200_000,
+        contextTokens: 350_000,
         toolName: "Read",
         toolInput: {},
-        state: { lastNotifiedAt: 199_000 },
+        state: { lastNotifiedAt: 349_000 },
       }).action,
     ).toBe("deny");
   });
 
   it("denies above the hard cap on EVERY call (no cadence gap)", () => {
-    for (const ctx of [200_000, 200_001, 210_000, 600_000]) {
+    for (const ctx of [350_000, 350_001, 360_000, 600_000]) {
       expect(
         decide({
           contextTokens: ctx,
@@ -266,10 +266,10 @@ describe("subagent-context-budget decide() — hard cap + allow-list", () => {
   it("an allow-listed tool above the hard cap stays silent (hand-back path)", () => {
     expect(
       decide({
-        contextTokens: 300_000,
+        contextTokens: 500_000,
         toolName: "Bash",
         toolInput: { command: "git add -- tools/x.mjs" },
-        state: { lastNotifiedAt: 300_000 },
+        state: { lastNotifiedAt: 500_000 },
       }).action,
     ).toBe("silent");
   });
@@ -281,10 +281,10 @@ describe("subagent-context-budget messages + paths", () => {
     expect(path.replace(/\\/g, "/")).toContain(
       "claude-checkpoints/checkpoint-a1.md",
     );
-    expect(softMessage(160_000, path)).toContain(`ROTATE: ${path}`);
-    expect(softMessage(160_000, path)).toContain("160K");
-    expect(hardMessage(210_000, path)).toContain(`ROTATE: ${path}`);
-    expect(hardMessage(210_000, path)).toContain("210K");
+    expect(softMessage(260_000, path)).toContain(`ROTATE: ${path}`);
+    expect(softMessage(260_000, path)).toContain("260K");
+    expect(hardMessage(360_000, path)).toContain(`ROTATE: ${path}`);
+    expect(hardMessage(360_000, path)).toContain("360K");
   });
 
   it("checkpoint file names are filename-safe", () => {
@@ -319,8 +319,8 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
     ).toBe("");
   });
 
-  it("denies a Read when the SUBAGENT transcript is ≈210K (lead below cap)", () => {
-    const { leadPath } = fixture({ lead: 10_000, subagent: 210_000 });
+  it("denies a Read when the SUBAGENT transcript is ≈360K (lead below cap)", () => {
+    const { leadPath } = fixture({ lead: 10_000, subagent: 360_000 });
     const json = JSON.parse(
       runHook({
         session_id: "sess-1",
@@ -344,7 +344,7 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
       .slice(2, 8)}`;
     const { leadPath } = fixture({
       lead: 10_000,
-      subagent: 160_000,
+      subagent: 260_000,
       agentId: softAgentId,
     });
     const json = JSON.parse(
@@ -374,7 +374,7 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
   });
 
   it("is silent for the same payload with no agent_id (the lead's own call)", () => {
-    const { leadPath } = fixture({ lead: 10_000, subagent: 210_000 });
+    const { leadPath } = fixture({ lead: 10_000, subagent: 360_000 });
     expect(
       runHook({
         session_id: "sess-1",

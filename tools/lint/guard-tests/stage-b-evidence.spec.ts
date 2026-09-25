@@ -76,3 +76,58 @@ describe("EARS-1920: Stage-B current approval evidence", () => {
       ).toBe(false);
   });
 });
+describe("#2373: Stage-B head carry-over across a patch-id-identical head", () => {
+  const recorded = "b".repeat(40);
+  const carried = base.replace(sha, recorded);
+  it("accepts a record whose head is patch-id-identical to the current head, with an audit line", () => {
+    const calls: string[][] = [];
+    const verdict = validateStageB([{ body: carried }], sha, [], {}, (r, h) => {
+      calls.push([r, h]);
+      return { accepted: true, reason: "pure rebase", equal: 2, total: 2 };
+    });
+    expect(calls).toEqual([[recorded, sha]]);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("carried");
+    expect(verdict.reason).toContain(recorded.slice(0, 12));
+    expect(verdict.reason).toContain(sha.slice(0, 12));
+    expect(verdict.reason).toContain("2/2");
+  });
+  it("a rework push (range-diff not all `=`) keeps the stale refusal and names why", () => {
+    const verdict = validateStageB([{ body: carried }], sha, [], {}, () => ({
+      accepted: false,
+      reason: "git range-diff shows 1/2 commit(s) differing",
+    }));
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain("stale");
+    expect(verdict.reason).toContain("1/2 commit(s) differing");
+  });
+  it("without an equivalence probe a different head stays stale", () =>
+    expect(validateStageB([{ body: carried }], sha, [], {}).ok).toBe(false));
+  it("a missing or malformed recorded head is never probed", () => {
+    let probed = false;
+    const probe = () => {
+      probed = true;
+      return { accepted: true, reason: "pure rebase" };
+    };
+    for (const body of [
+      base.replace(`Stage-B-head: ${sha}\n`, ""),
+      base.replace(sha, "not-a-sha"),
+    ])
+      expect(validateStageB([{ body }], sha, [], {}, probe).ok).toBe(false);
+    expect(probed).toBe(false);
+  });
+  it("a lead-certified record never carries over (its report pins the tested head)", () => {
+    let probed = false;
+    const lead = carried.replace(
+      "Stage-B: GO",
+      "Stage-B: N/A (no visual surface) - lead-certified; run UTC: 2026-09-06T00:00:00Z; harness: x; report: https://example.test/r",
+    );
+    expect(
+      validateStageB([{ body: lead }], sha, [], {}, () => {
+        probed = true;
+        return { accepted: true, reason: "pure rebase" };
+      }).ok,
+    ).toBe(false);
+    expect(probed).toBe(false);
+  });
+});

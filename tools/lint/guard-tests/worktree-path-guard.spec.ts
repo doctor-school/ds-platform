@@ -1,6 +1,14 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 // The hook is plain ESM JS (runs under bare `node` from settings.json), so the
 // spec imports its pure seams directly — same construct as
@@ -48,7 +56,9 @@ describe("worktree-path-guard classifyWritePath() — #1453", () => {
   });
 
   it("allows a write outside the repo entirely (scratchpad, temp files)", () => {
-    expect(classify(resolve(tmpdir(), "scratch", "note.md")).verdict).toBe("ok");
+    expect(classify(resolve(tmpdir(), "scratch", "note.md")).verdict).toBe(
+      "ok",
+    );
   });
 
   it("flags a write into a DIFFERENT worktree as wrong-worktree, naming it", () => {
@@ -87,6 +97,26 @@ describe("worktree-path-guard classifyWritePath() — #1453", () => {
     expect(classify(join(MAIN, ".claude", "settings.json")).verdict).toBe(
       "main-tree-escape",
     );
+  });
+});
+
+describe("worktree-path-guard classifyWritePath() — main-tree session (#2373)", () => {
+  const fromMain = (target: string, roots: string[] = ROOTS) =>
+    classifyWritePath({ target, mainRoot: MAIN, worktreeRoot: MAIN, roots });
+
+  it("allows a main-tree session to write under ANY registered worktree", () => {
+    expect(fromMain(join(SELF, "a.ts")).verdict).toBe("ok");
+    expect(fromMain(join(OTHER, "apps", "docs", "spec.md")).verdict).toBe("ok");
+  });
+
+  it("keeps wrong-worktree for an UNREGISTERED worktree-shaped path from the main tree", () => {
+    const d = fromMain(join(WT("1450"), "notes.md"));
+    expect(d.verdict).toBe("wrong-worktree");
+    expect(d.registered).toBe(false);
+  });
+
+  it("keeps wrong-worktree for a worktree-pinned session writing into another registered checkout", () => {
+    expect(classify(join(OTHER, "a.md")).verdict).toBe("wrong-worktree");
   });
 });
 
@@ -167,5 +197,67 @@ describe("worktree-path-guard owningRoot() / gitWorktreeRoots()", () => {
         throw new Error("git missing");
       }),
     ).toEqual([]);
+  });
+});
+
+/**
+ * #2373 end-to-end: a dispatched subagent keeps the main-tree cwd and cannot
+ * `EnterWorktree`, so its writes under a registered `.claude/worktrees/<N>`
+ * must pass; a worktree-pinned session writing into ANOTHER registered
+ * checkout is still refused. Real `git worktree add`, real hook process.
+ */
+describe("worktree-path-guard end-to-end (real git worktrees, #2373)", () => {
+  const HOOK = resolve(__dirname, "../../hooks/worktree-path-guard.mjs");
+  const dirs: string[] = [];
+  afterEach(() => {
+    while (dirs.length)
+      rmSync(dirs.pop() as string, { recursive: true, force: true });
+  });
+
+  function repoWithWorktrees() {
+    const main = realpathSync(mkdtempSync(join(tmpdir(), "wt-guard-")));
+    dirs.push(main);
+    const git = (...args: string[]) =>
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@example.test", ...args],
+        { cwd: main, stdio: "pipe" },
+      );
+    git("init", "-q", "-b", "main");
+    writeFileSync(join(main, "README.md"), "x\n");
+    git("add", "README.md");
+    git("commit", "-q", "-m", "init");
+    mkdirSync(join(main, ".claude", "worktrees"), { recursive: true });
+    const a = join(main, ".claude", "worktrees", "77");
+    const b = join(main, ".claude", "worktrees", "88");
+    git("worktree", "add", "-q", "-b", "wt-77", a);
+    git("worktree", "add", "-q", "-b", "wt-88", b);
+    return { main, a, b };
+  }
+
+  const run = (cwd: string, filePath: string, projectDir: string) =>
+    spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({
+        session_id: "wt-guard-e2e",
+        cwd,
+        tool_name: "Write",
+        tool_input: { file_path: filePath, content: "x" },
+      }),
+      encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+    });
+
+  it("a main-tree session writes under a registered worktree → allowed", () => {
+    const { main, a } = repoWithWorktrees();
+    const r = run(main, join(a, "src", "x.ts"), main);
+    expect(r.stderr).not.toContain("BLOCKED");
+    expect(r.status).toBe(0);
+  });
+
+  it("a worktree-pinned session writes into ANOTHER registered worktree → wrong-worktree", () => {
+    const { a, b } = repoWithWorktrees();
+    const r = run(a, join(b, "src", "x.ts"), a);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("wrong-worktree");
   });
 });

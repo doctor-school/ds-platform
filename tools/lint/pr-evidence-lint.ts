@@ -86,8 +86,16 @@ function isPlaceholder(value: string): boolean {
     )
   );
 }
+/** `N/A` or `none` opener (#2373: `none — <reason>` is a reasoned N/A). */
+const NA_OPENER = /^(?:N\/A|none)\b/i;
 function isReasonedNa(value: string): boolean {
-  return /^N\/A\s*(?:\([^)]{4,}\)\s*)?(?:—|–|-|:)\s*\S.{5,}$/i.test(value);
+  return /^(?:N\/A|none)\s*(?:\([^)]{4,}\)\s*)?(?:—|–|-|:)\s*\S.{5,}$/i.test(
+    value,
+  );
+}
+/** #2373: a zero count («0 failed», «0 FAIL», «0 errors») is a pass signal. */
+function withoutZeroFailureCounts(value: string): string {
+  return value.replace(/\b0\s+(?:fail(?:ed|ures?|ing)?|errors?)\b/gi, "");
 }
 function validStageB(value: string): boolean {
   if (/^GO\b.{6,}$/i.test(value)) return true;
@@ -111,8 +119,8 @@ function validBehavior(value: string): boolean {
 function validLocalVerification(value: string): boolean {
   if (
     isPlaceholder(value) ||
-    /\b(?:known[- ]?red|fail(?:ed|ing|ure)?|error|not run|skipped|pending|blocked)\b|exit(?:ed)?\s+[1-9]\d*/i.test(
-      value,
+    /\b(?:known[- ]?red|fail(?:ed|ing|ures?)?|errors?|not run|skipped|pending|blocked)\b|exit(?:ed)?\s+[1-9]\d*/i.test(
+      withoutZeroFailureCounts(value),
     )
   ) {
     return false;
@@ -217,14 +225,14 @@ async function main(): Promise<void> {
     (result.data.files ?? []).flatMap((file) => (file.path ? [file.path] : [])),
   );
   if (
-    behaviorValues.some((value) => !/^N\/A\b/i.test(value)) &&
+    behaviorValues.some((value) => !NA_OPENER.test(value)) &&
     declaredChangesets.length === 0
   ) {
     findings.push(
       "Behavior change: a declared behavior change requires a real .changeset/*.md; Changeset: N/A is not allowed",
     );
   }
-  if (behaviorValues.some((value) => !/^N\/A\b/i.test(value))) {
+  if (behaviorValues.some((value) => !NA_OPENER.test(value))) {
     for (const path of new Set(declaredChangesets)) {
       if (!changedFiles.has(path)) {
         findings.push(
@@ -241,7 +249,7 @@ async function main(): Promise<void> {
   for (const deviation of deviations) {
     if (isPlaceholder(deviation)) {
       findings.push("Deviations: placeholder evidence");
-    } else if (/^N\/A\b/i.test(deviation) && !isReasonedNa(deviation)) {
+    } else if (NA_OPENER.test(deviation) && !isReasonedNa(deviation)) {
       findings.push("Deviations: N/A must include a reason");
     } else if (namesClause(deviation)) {
       if (!hasTracking(deviation)) {

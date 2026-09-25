@@ -254,7 +254,7 @@ You CANNOT \`EnterWorktree\` (cwd is pinned to the repo root; the tool refuses t
 
 ## Research budget
 EDIT-FIRST: ≤15 tool calls before your first file edit. Recon facts below are DONE — do not re-verify handed facts. Hitting the cap without editing = STOP + return a partial verdict + what blocked you.
-CONTEXT BUDGET: hook rotates you at 150K (write the checkpoint, return \`ROTATE: <path>\` line 1) and denies non-git tools at 200K — plan the slice to finish under 150K.
+CONTEXT BUDGET: hook rotates you at 250K (write the checkpoint, return \`ROTATE: <path>\` line 1) and denies non-git tools at 350K — plan the slice to finish under 250K.
 SPEC ANCHORS: read only the line ranges / anchors named in Recon facts — never a whole NNN-design.md.
 
 ## Recon facts (authoritative — do not re-verify)

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/** Operator-only context advisory. Claude retains 120K/160K tiers. Codex
+/** Operator-only context advisory. Claude uses 250K/400K tiers
+ * (owner decision 2026-09-25, #2373). Codex
  * uses current request input / effective model window at 70%/85%, with cache
  * counted once. Missing/stale telemetry is explicit and never a zero reading.
  * No additionalContext: the owner decides when to /wrap. */
@@ -8,8 +9,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { telemetryUnavailable } from "./hook-compat.mjs";
 
-export const WARN_THRESHOLD = 120_000;
-export const WRAP_THRESHOLD = 160_000;
+export const WARN_THRESHOLD = 250_000;
+export const WRAP_THRESHOLD = 400_000;
 
 /** Last request usage, never lifetime totals. Codex cache is included in input. */
 export function contextReadingFromJsonl(jsonl, nowMs = Date.now()) {

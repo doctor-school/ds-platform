@@ -42,24 +42,20 @@ export function adminLockoutMessage(): EmailMessage {
 }
 
 /**
- * 044 EARS-13 — what the congress confirmation email is told about the
- * participant's account, and nothing more.
+ * 044 EARS-13 — what the congress confirmation email is rendered from: the
+ * event, and nothing about the participant's account.
  *
- * `accountIsNew` is the ONLY branch in the copy, and it is not an existence
- * oracle: the mail reaches exactly the address that submitted the form, never a
- * third party able to compare two responses (EARS-7 says so explicitly). The
- * HTTP response stays byte-identical on both paths — the difference lives here,
- * in the inbox of the person the fact is about.
+ * One copy for every participant (production amendment 2026-09-24, #2369): the
+ * letter only confirms the registration, so it carries no account-dependent
+ * branch and no portal destination.
  */
 export interface CongressConfirmationContent {
-  portalBaseUrl: string;
   /** The event's own title, as `events.title` holds it. */
   eventTitle: string;
   /** Already rendered for a human — see {@link formatCongressEventDate}. */
   eventDate: string;
   /** The congress venue, a per-deployment constant of THIS congress. */
   eventVenue: string;
-  accountIsNew: boolean;
 }
 
 /**
@@ -91,27 +87,18 @@ export function formatCongressEventDate(startsAt: Date): string {
  * Carries no code, no token and no personal data beyond the event the reader
  * just signed up for: it belongs to the product-notice class of the
  * {@link import("./mailer.types.js").Mailer} port, not the credential class.
- * The action is the ordinary portal login, because the credential-less congress
- * account is entered through the existing email-code door (EARS-14).
+ * It has no action: the letter confirms the registration and says nothing
+ * about a Doctor.School account or signing in (#2369).
  */
 export function congressConfirmationMessage(
   content: CongressConfirmationContent,
 ): EmailMessage {
-  const loginUrl = `${content.portalBaseUrl.replace(/\/+$/, "")}/login`;
   const headline = `Вы зарегистрированы на ${content.eventTitle}`;
   return composeEmail({
     subject: `Doctor.School — вы зарегистрированы на ${content.eventTitle}`,
     preheader: headline,
     intro: `${headline}: ${content.eventDate}, ${content.eventVenue}.`,
-    paragraphs: [
-      content.accountIsNew
-        ? "Для вас создан аккаунт Doctor.School на этот адрес электронной " +
-          "почты. Пароль не нужен: чтобы войти, укажите этот адрес и введите " +
-          "код из письма."
-        : "Регистрация добавлена в ваш аккаунт Doctor.School. Создавать " +
-          "новый не нужно.",
-    ],
-    action: { label: "Войти", url: loginUrl },
+    paragraphs: [],
     footer: [
       "Если это были не вы, просто проигнорируйте это письмо.",
       "Команда Doctor.School",

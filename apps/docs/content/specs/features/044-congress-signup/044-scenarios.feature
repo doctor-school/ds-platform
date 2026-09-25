@@ -24,6 +24,8 @@ Feature: 044 — Congress sign-up
     And exactly one consent record is written under the congress personal-data purpose with the server-stamped version
     And no medical-worker-declaration consent record is written
     And the participant receives the generic success response, which confirms the registration was accepted, states that a confirmation email has been sent to the address given, and states that nothing further is required
+    # Production amendment 2026-09-24 (#2369, 044-requirements «Production amendment — confirmation email copy»): the line below is the running-production baseline; the amended email names the event, its date and venue
+    # as ONE copy for every participant, with no account paragraph and no sign-in action (EARS-13.1 / EARS-13.2).
     And a confirmation email is dispatched naming the event, the created Doctor.School account and code-based sign-in
     And the registration's confirmation-mail outcome is recorded as sent with its timestamp
 

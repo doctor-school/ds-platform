@@ -119,11 +119,9 @@ export class SmtpMailer implements Mailer {
     await this.dispatch(
       input.email,
       congressConfirmationMessage({
-        portalBaseUrl: this.config.portalBaseUrl,
         eventTitle: input.eventTitle,
         eventDate: formatCongressEventDate(input.eventStartsAt),
         eventVenue: input.eventVenue,
-        accountIsNew: input.accountIsNew,
       }),
       "congress registration confirmation",
     );

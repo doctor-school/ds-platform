@@ -32,11 +32,9 @@ describe("transactional HTML/plain-text content parity", () => {
     [
       "congress-confirmation",
       congressConfirmationMessage({
-        portalBaseUrl: "https://academy.example.test",
         eventTitle: "Конгресс-2027",
         eventDate: "12 марта 2027 г. в 10:00",
         eventVenue: "Москва, Крокус Экспо",
-        accountIsNew: true,
       }),
     ],
   ] as const) {
@@ -191,7 +189,6 @@ describe("044 EARS-13: congress-confirmation FakeMailer ↔ SmtpMailer contract 
     eventTitle: "Конгресс-2027",
     eventStartsAt: new Date("2027-03-12T07:00:00.000Z"),
     eventVenue: "Москва, Крокус Экспо",
-    accountIsNew: true,
   } as const;
 
   it("044 EARS-13: when the recipient is invalid, both adapters shall reject", async () => {

@@ -305,6 +305,15 @@ describe("#2027 <EmailConfirmCard> canvas «Подтверждение»", () =>
     const row = screen.getByTestId("verify-go-to-login").parentElement;
     expect(row).toHaveClass("flex", "flex-wrap", "gap-3");
     expect(row).not.toHaveClass("flex-col");
+    // Canvas 390px: the row stays one row and the longer label wraps inside its
+    // button (147px each, «Сбросить пароль» on two lines), never a stack.
+    for (const id of ["verify-go-to-login", "verify-go-to-reset"]) {
+      expect(screen.getByTestId(id)).toHaveClass(
+        "flex-1",
+        "min-w-32",
+        "whitespace-normal",
+      );
+    }
   });
 
   it("#2027: a host may rename the test ids through one map, the shipped ids staying the defaults", () => {

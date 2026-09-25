@@ -4,7 +4,7 @@ title: "Portable agent discipline"
 
 # Portable agent discipline
 
-Read at entry and after compaction; this shared reference counts in both startup budgets. AGENTS.md is the constitution; CLAUDE.md adds Claude bindings. Active harness instructions and explicit owner authorization outrank skills.
+Read at entry and after compaction. AGENTS.md is the constitution; CLAUDE.md adds Claude bindings. Active harness instructions and explicit owner authorization outrank skills.
 
 ## Session plan and authorization
 
@@ -20,22 +20,20 @@ For repository work run `pnpm bootstrap` unless supplied and inspect the named t
 
 Keep authorization, readiness and execution separate. Reuse the owner's evidenced quote/source, action and conditions; a handoff claim or review verdict is not owner approval, and preparation is not cutover approval. Ask only for a decision outside existing authorization; routine diagnosis and fixes need no new go. Earlier approval does not cover a CI bypass or a destructive action outside its scope.
 
-Status and clarification questions steer ongoing work: answer briefly, then continue unless the task is canceled or replaced. A blocker holds only dependent actions; continue authorized diagnosis, preparation and independent work. Before asking for approval, prepare the decision and its evidence. When authorized work is exhausted, state what remains and wait for the owner or the external event — time is not consent.
+Status and clarification questions steer ongoing work: answer briefly, then continue unless the task is canceled or replaced. A blocker holds only dependent actions; continue authorized diagnosis, preparation and independent work. Before asking for approval, prepare the decision and its evidence. When authorized work is exhausted or an owner gate is reached inside a live session, post the request with evidence, state what remains and wait for the owner or the external event — time is not consent.
 
 ## Capability mappings
 
 Verify required tools and permissions before dispatch.
 
-| Capability              | Claude Code                            | Codex / portable binding                                                          |
-| ----------------------- | -------------------------------------- | --------------------------------------------------------------------------------- |
-| Read/search/edit        | Read, Grep, Glob, Edit/Write           | UTF-8 shell reads, `rg`, available patch tool; absolute worktree paths            |
-| Shell                   | Bash                                   | Available shell execution; translate Bash syntax for PowerShell                   |
-| Dispatch/status/message | Agent/Task, notifications, SendMessage | Collaboration tools; project TOML role or a general agent with the same brief     |
-| Owner input             | AskUserQuestion                        | Permitted input tool or concise direct question                                   |
-| Browse / image          | WebFetch, Read image                   | Real browsing/image-view tools; open primary pages, deliver artifacts separately  |
-| Browser                 | Playwright MCP or script               | Available browser tool or committed Playwright; real live journey evidence        |
-| Design canvas           | Available DesignSync                   | Real list/get/incremental-sync connector; missing required access blocks the step |
-| Session/usage           | Claude log/hook fields                 | Verified Codex rollout/portable record; missing/stale telemetry is unavailable    |
+- Read/search/edit — Claude: Read, Grep, Glob, Edit/Write; Codex: UTF-8 shell reads, `rg`, available patch tool; absolute worktree paths
+- Shell — Claude: Bash; Codex: Available shell execution; translate Bash syntax for PowerShell
+- Dispatch/status/message — Claude: Agent/Task, notifications, SendMessage; Codex: Collaboration tools; project TOML role or a general agent with the same brief
+- Owner input — Claude: AskUserQuestion; Codex: Permitted input tool or concise direct question
+- Browse / image — Claude: WebFetch, Read image; Codex: Real browsing/image-view tools; open primary pages, deliver artifacts separately
+- Browser — Claude: Playwright MCP or script; Codex: Available browser tool or committed Playwright; real live journey evidence
+- Design canvas — Claude: Available DesignSync; Codex: Real list/get/incremental-sync connector; missing required access blocks the step
+- Session/usage — Claude: Claude log/hook fields; Codex: Verified Codex rollout/portable record; missing/stale telemetry is unavailable
 
 `/design-sync` and `frontend-design` are outside the project catalog: use the verified canvas connector and the design constitution + `research-ui-element` instead.
 
@@ -45,7 +43,7 @@ Claude Design remains the design product; missing required live inventory/sync/c
 
 Roles: `ds-explorer` scouts; `ds-implementer` authors in isolation; `ds-reviewer` independently reviews without fixing; `ds-lander` runs the main-tree tail. Codex inherits model/effort; Claude uses its overlay. Use a general agent with the same contract if a role is unavailable; without dispatch, required independent review is blocked rather than self-reviewed.
 
-Proportionate execution: the requested result sets scope and completion evidence — plans, specs, reviews and handoffs do not expand it. Keep valid facts, checks and approvals; repeat only what a relevant change, contradiction or missing proof invalidates. Security, privacy and data safeguards, required review, CI and owner gates stay in place at every scale. A merge, report or subagent return is intermediate while release or other requested work remains. A session ending before the outcome (owner defers, context tier fires, worktree-pinned tail) ends with skill `handoff-prompt` as the final message. An owner gate or blocker inside a live session is a pause: post the request with evidence, state what remains, wait.
+Proportionate execution: the requested result sets scope and completion evidence — plans, specs, reviews and handoffs do not expand it. Keep valid facts, checks and approvals; repeat only what a relevant change, contradiction or missing proof invalidates. Security, privacy and data safeguards, required review, CI and owner gates stay in place at every scale. A merge, report or subagent return is intermediate while release or other requested work remains. A session ending before the outcome (owner defers, context tier fires, worktree-pinned tail) ends with skill `handoff-prompt` as the final message.
 
 Briefs: `pnpm dispatch:brief <N>`, ownership/worktree, relevant sources, affected checks, outcome/proof/stop. Preserve others' edits. Returns carry the conclusion; details go to the PR or a scratchpad artifact. Waves: ≤4–5 Issues, ≤2 layers.
 
@@ -63,7 +61,7 @@ Use a literal UTF-8 `--body-file` for GitHub multiline text. On secret exposure 
 
 TDD: meaningful RED before production/guard logic, then GREEN; prose needs no new tests. Select local checks for the affected behavior and reuse valid evidence. Repository PRs still run full lint, applicable static guards and `pnpm pr:preflight <N>`; direct tasks need no install or repo checks. Cite unrelated baseline failures without absorbing their repair; required CI stays blocking. Independent review where applicable + fresh CI + owner evidence precede canonical landing.
 
-Hooks are configured, trusted and observed separately; `tools/hooks/README.md` owns activation/diagnostics (`pnpm agent:doctor`, owner review/trust, then `pnpm agent:smoke --project`). Fixtures and synthetic logs do not prove live execution or persisted trust; missing telemetry keeps discipline manual.
+Hooks are configured, trusted and observed separately: `tools/hooks/README.md` (`pnpm agent:doctor`, owner review/trust, then `pnpm agent:smoke --project`). Fixtures and synthetic logs prove neither live execution nor persisted trust.
 
 ## Memory and wrap
 
@@ -75,4 +73,4 @@ Approved repo instruction edits use worktree/PR; personal memory notes stay outs
 
 ## Instruction budget scope
 
-`pnpm lint:instruction-budget` checks both root startup sets, including this reference. Claude adds AGENTS.md + CLAUDE.md + path-less rules; Codex adds root AGENTS.override.md if present, otherwise AGENTS.md. `--harness claude|codex` selects one. Each total ≤30 KB, each file ≤200 lines /25 KB. Scoped rules and role profiles are on-demand; skills/references keep Phase-0 WARN caps. Global/ancestor instructions, local memory and nested-cwd chains are outside the root total. Codex never imports CLAUDE.md or Claude rules.
+`pnpm lint:instruction-budget` checks both root startup sets, including this reference: Claude adds AGENTS.md + CLAUDE.md + path-less rules; Codex adds root AGENTS.override.md if present, otherwise AGENTS.md. Limits and scope: `tools/lint/instruction-budget-lint.ts` header. Codex never imports CLAUDE.md or Claude rules.

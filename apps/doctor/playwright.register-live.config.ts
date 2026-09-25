@@ -12,8 +12,9 @@ import { defineConfig, devices } from "@playwright/test";
  * inert-green on a bare CI runner and fails loudly on a half-exported env
  * (`e2e/support/live-stand-env.ts`).
  *
- * Run against a provisioned dev-stand with, e.g.:
- *   E2E_DOCTOR_URL=http://localhost:3004 IDP_ISSUER=… MAILPIT_URL=… \
+ * Run against a provisioned stand, the endpoints taken from
+ * `~/.ds-platform/.env.local` (dev-stand) or the slot (`tools/staging/README.md`):
+ *   E2E_DOCTOR_URL=… IDP_ISSUER=… MAILPIT_URL=… \
  *   pnpm --filter @ds/doctor test:e2e:register-live
  */
 export default defineConfig({
@@ -28,7 +29,10 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: process.env.E2E_DOCTOR_URL ?? "http://localhost:3004",
+    // No literal fallback: the endpoint comes from the stand env
+    // (`~/.ds-platform/.env.local`). Unset, the spec is inert; half-set, it fails
+    // loudly (`e2e/support/live-stand-env.ts`) — it never guesses a host.
+    baseURL: process.env.E2E_DOCTOR_URL,
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

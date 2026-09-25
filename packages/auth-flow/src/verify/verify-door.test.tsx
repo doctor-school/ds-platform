@@ -438,6 +438,36 @@ describe("rows 10-15: one error plate, the shared dictionary", () => {
     );
     expect(screen.queryByText(COPY.failed)).toBeNull();
   });
+
+  it("003 EARS-16: a resend withdraws the refused-code sentence, so the plate says the resend's own failure", async () => {
+    // Real time keeps flowing for the typing; the 30 s cooldown is skipped by hand.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      h.confirm.mockRejectedValue(new AuthError(400, "Bad Request"));
+      h.resendVerification.mockRejectedValue(
+        new AuthError(429, "Too Many Requests"),
+      );
+      mount();
+      await flushMount();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("textbox"));
+      await user.keyboard(CODE);
+      await flushMount();
+      expect(screen.getByTestId("verify-error")).toHaveTextContent(COPY.failed);
+
+      act(() => vi.advanceTimersByTime(30_000));
+      fireEvent.click(screen.getByTestId("verify-resend"));
+      await flushMount();
+      await flushMount();
+
+      expect(screen.getByTestId("verify-error")).toHaveTextContent(
+        resolveAuthFlowCopy(ACADEMY_FIXTURE).errors.tooManyAttempts,
+      );
+      expect(screen.queryByText(COPY.failed)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("021 EARS-2: the return-context plate on the confirmation step", () => {
@@ -453,9 +483,9 @@ describe("021 EARS-2: the return-context plate on the confirmation step", () => 
     );
     await screen.findByTestId("verify-submit");
 
-    expect(
-      screen.getByTestId("registration-return-context"),
-    ).toHaveTextContent("Вы вернётесь к этому эфиру");
+    expect(screen.getByTestId("registration-return-context")).toHaveTextContent(
+      "Вы вернётесь к этому эфиру",
+    );
   });
 
   it("021 EARS-3: no plate supplied, no frame rendered", async () => {

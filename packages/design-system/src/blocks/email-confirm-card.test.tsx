@@ -277,6 +277,19 @@ describe("#2027 <EmailConfirmCard> canvas «Подтверждение»", () =>
     }
   });
 
+  it("003 EARS-24: the hint and the resend notice are the canvas's small 13px / 1.5 text (canvas 231, 237)", () => {
+    setup({ resend: { notice: "host-notice" } });
+
+    expect(screen.getByText("copy.existingAccountHint")).toHaveClass(
+      "text-caption",
+      "leading-normal",
+    );
+    expect(screen.getByTestId("verify-resend-notice")).toHaveClass(
+      "text-caption",
+      "leading-normal",
+    );
+  });
+
   it("003 EARS-24: the already-registered actions share a wrapping row (canvas 238-241)", () => {
     setup();
 

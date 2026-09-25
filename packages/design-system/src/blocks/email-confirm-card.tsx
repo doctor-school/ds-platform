@@ -352,7 +352,8 @@ export function EmailConfirmCard({
         aria-label={copy.existingAccountHeading}
       >
         <h2 className={AUTH_EYEBROW}>{copy.existingAccountHeading}</h2>
-        <p className="text-sm leading-normal text-muted-foreground">
+        {/* Canvas 237 — 13px / 1.5, the `caption` step of the type scale. */}
+        <p className="text-caption leading-normal text-muted-foreground">
           {copy.existingAccountHint}
         </p>
         <div className="flex flex-wrap gap-3">
@@ -434,12 +435,14 @@ function EmailConfirmResend({
       </div>
       {/* #326: neutral, enumeration-safe confirmation — NOT destructive (it is a
             success ack, not an error). Identical copy in every case; the
-            account-exists fact is disclosed out-of-band by email, never here. */}
+            account-exists fact is disclosed out-of-band by email, never here.
+            Canvas 231 draws it at 12.5px / 1.5; the type scale has no 12.5px
+            step, so it takes the nearest one, `caption` (13px). */}
       {notice && (
         <p
           role="status"
           aria-live="polite"
-          className="text-sm text-muted-foreground"
+          className="text-caption leading-normal text-muted-foreground"
           data-testid={testIds.resendNotice}
         >
           {notice}

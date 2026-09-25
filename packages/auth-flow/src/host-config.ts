@@ -1,5 +1,5 @@
 import type { BotProtectionMessages } from "@ds/design-system/blocks";
-import type { OtpChannel } from "@ds/schemas";
+import type { ConsentTier, OtpChannel } from "@ds/schemas";
 
 /**
  * The DATA a host states about itself so the ONE auth flow can serve it
@@ -19,8 +19,10 @@ import type { OtpChannel } from "@ds/schemas";
  * templates, the return-context card flag and the door's copy as plain string
  * templates (the copy crosses the server-mount → client boundary, so it can hold
  * no function), and the shared auth frame's brand assets and panel copy. The
- * consent tiers arrive with PRs 1.6–1.8; a field nothing reads yet would be a
- * claim, not a contract.
+ * consent tiers arrive with PR 1.6, which adds everything the registration door
+ * reads: the consent read model, the copy of the rows a host renders around it,
+ * the registration and confirmation copy, and the two optional framing lines
+ * above the submit. A field nothing reads yet would be a claim, not a contract.
  */
 
 /** The fields the shared registration/confirmation rules know about (row 9). */
@@ -76,6 +78,14 @@ export type AuthFlowCopy = {
   };
   /** The sign-in door (rows 33–46). */
   readonly login: AuthFlowLoginCopy;
+  /**
+   * The registration door and its confirmation step (rows 47–64).
+   *
+   * Required since #2027 PR 1.6: BOTH storefronts mount the shared sign-up door
+   * now, so a host config that states no registration words is a wiring mistake
+   * the compiler can refuse outright rather than a door rendered full of blanks.
+   */
+  readonly register: AuthFlowRegisterCopy;
   /** The brand panel's value prop and closing line in the shared auth frame (row 47). */
   readonly brand: AuthFlowBrandCopy;
   /**
@@ -84,15 +94,51 @@ export type AuthFlowCopy = {
    * the challenge can run, so every host that challenges also discloses.
    */
   readonly botProtectionDisclosure: AuthFlowBotProtectionDisclosureCopy;
-  /** The return-context card beside a door (row 46) — present exactly where `returnTo.card`. */
-  readonly returnContext?: AuthFlowReturnContextCopy;
+  /**
+   * The return-context card beside a door (row 46). Its words are the
+   * package's on every host; `returnTo.card` alone decides whether the card is
+   * drawn, so a host that publishes it restates no sentence.
+   */
+  readonly returnContext: AuthFlowReturnContextCopy;
+  /**
+   * The consent rows' words, keyed by the row the door draws. WHICH rows a host
+   * asks for is the host's `consents` flags; what each row SAYS is the
+   * package's, so the same declaration cannot read two ways on two storefronts.
+   */
+  readonly consents: AuthFlowConsentsCopy;
+};
+
+/** One consent row: the control's label, the line under it, and what it reports when left ungranted. */
+export type AuthFlowConsentRowCopy = {
+  readonly label: string;
+  readonly help: string;
+  /**
+   * What the row reports UNDER ITSELF when the visitor submits without granting
+   * it (021 EARS-12); absent on a row that blocks nothing.
+   */
+  readonly unmet?: string;
+};
+
+/** The registration door's consent block (021 EARS-4/5/6/7/12). */
+export type AuthFlowConsentsCopy = {
+  /** The frame the access conditions stand in. */
+  readonly accessGroupHeading: string;
+  readonly medicalWorkerDeclaration: AuthFlowConsentRowCopy;
+  readonly partnerDataItem: AuthFlowConsentRowCopy;
+  readonly marketingOptIn: AuthFlowConsentRowCopy;
+  /** The terms sentence under the consent group, on every host (canvas 208). */
+  readonly statement: string;
 };
 
 /** The brand panel's four lines (row 47) — the canvas value prop and the panel footer. */
 export type AuthFlowBrandCopy = {
   readonly eyebrow: string;
   readonly headline: string;
-  readonly subcopy: string;
+  /**
+   * The quiet line under the headline. `null` = this host's panel has no such
+   * line — the panel draws no node for it (Academy, owner 2026-09-24).
+   */
+  readonly subcopy: string | null;
   readonly footer: string;
 };
 
@@ -139,7 +185,21 @@ export type AuthFlowBrand = {
   readonly panel: AuthFlowBrandAsset;
   /** The sign-in card's glyph. */
   readonly loginIcon: AuthFlowLoginIcon;
+  /**
+   * The registration card's glyph. Absent = `user-plus`, the Academy's shipped
+   * mark — a host that never states one keeps rendering exactly what it renders
+   * today, which is what makes the lift invisible.
+   */
+  readonly registerIcon?: AuthFlowRegisterIcon;
 };
+
+/**
+ * The registration card's glyph, named rather than passed as a node: the config
+ * crosses a server/client boundary and a component cannot travel over it.
+ * `user-plus` = lucide `UserPlus` (the Academy);
+ * `user-plus-square` = the square-capped currentColor mark (the doctor host).
+ */
+export type AuthFlowRegisterIcon = "user-plus" | "user-plus-square";
 
 /**
  * Everything the sign-in door says (rows 33–46).
@@ -162,6 +222,8 @@ export type AuthFlowLoginCopy = {
     readonly identifierLabel: string;
     readonly identifierPlaceholder: string;
     readonly passwordLabel: string;
+    /** The password input's placeholder (canvas 82 `••••••••`). */
+    readonly passwordPlaceholder: string;
     /** The empty password box on the sign-in form (the registration sentence differs). */
     readonly passwordRequired: string;
     /** The password-reveal toggle (003 EARS-38); absent = the design-system default. */
@@ -206,6 +268,85 @@ export type AuthFlowLoginCopy = {
     readonly otpRequest: string;
     readonly otpVerify: string;
   };
+};
+
+/**
+ * Everything the registration door says (rows 47–64).
+ *
+ * Strings only, on the same rule as the sign-in copy: `{destination}` and
+ * `{seconds}` are TEMPLATES the package fills on the client. The password-policy
+ * hint is NOT here — it is derived from the `@ds/schemas` FieldSpec SSOT, so the
+ * sentence a registrant reads cannot drift from the rule that rejects them.
+ */
+export type AuthFlowRegisterCopy = {
+  readonly title: string;
+  readonly description: string;
+  readonly emailLabel: string;
+  readonly emailPlaceholder: string;
+  readonly passwordLabel: string;
+  /** The password input's placeholder (canvas `auth.dc.html:151`). */
+  readonly passwordPlaceholder: string;
+  /** 003 EARS-38 — the reveal toggle's labels; absent = the primitive's defaults. */
+  readonly reveal?: {
+    readonly show: string;
+    readonly hide: string;
+    readonly showAria: string;
+    readonly hideAria: string;
+  };
+  readonly submit: string;
+  /** The promo box's words — rendered exactly where `register.promoField` is true (row 9). */
+  readonly promo?: {
+    readonly label: string;
+    readonly placeholder: string;
+  };
+  /** The partner-link plate above the promo box (canvas 177-179). */
+  readonly partnerPlate: string;
+  /** #2331 — the already-registered visitor's way out, on BOTH doors. */
+  readonly haveAccount: string;
+  /**
+   * The command's own failure sentence (021 EARS-12 / 003 EARS-16).
+   *
+   * Deliberately identical for a new and an already-registered address: the BFF
+   * answers both the same way, and a more specific line here would re-introduce
+   * the account-existence signal the contract removes.
+   */
+  readonly failed: string;
+  /**
+   * The inline confirmation step's words.
+   *
+   * Required exactly where `routes.verify` is `undefined` (rows 51, 76) — that
+   * host confirms the address on the registration door itself. A host that
+   * serves a `/verify` route of its own states none here.
+   */
+  readonly confirm?: AuthFlowRegisterConfirmCopy;
+};
+
+/** The inline «проверьте почту» step (rows 51, 76). */
+export type AuthFlowRegisterConfirmCopy = {
+  readonly title: string;
+  /** Template with `{destination}` — the address the code went to. */
+  readonly description: string;
+  readonly newAccountHeading: string;
+  readonly codeLabel: string;
+  readonly submit: string;
+  /** The accepted-code line, shown while the door navigates on. */
+  readonly codeAccepted: string;
+  readonly resend: string;
+  /** Template with `{seconds}`. */
+  readonly resendCountdown: string;
+  readonly existingAccountHeading: string;
+  readonly existingAccountHint: string;
+  readonly goToSignIn: string;
+  readonly goToReset: string;
+  /** The per-action generic for a refused code (row 11) — never «войти». */
+  readonly failed: string;
+  readonly resendFailed: string;
+  /**
+   * Template with `{destination}` — the resend acknowledgement, which states no
+   * account fact: it says what WOULD have been sent, never that an account
+   * exists (003 EARS-16).
+   */
+  readonly resendAcknowledged: string;
 };
 
 /** The return-context card's words (row 46): one eyebrow, the door forks only the line. */
@@ -319,11 +460,73 @@ export type AuthFlowReturnToConfig = {
   readonly card?: boolean;
 };
 
+/**
+ * The consent block a host renders on its registration door (rows 56–60, 62).
+ *
+ * DATA, in both halves. `tiers` is the READ MODEL — the statements that were
+ * composed and the purposes that will be recorded, from the `@ds/schemas` SSOT
+ * — and every other field is the COPY of a row the host renders around it. A
+ * row appears exactly where BOTH its read-model item and its copy are stated,
+ * so a host that shares nothing with partners renders no partner row rather
+ * than an empty one, and no flag is needed to say so.
+ *
+ * Everything but the version is optional because the two storefronts genuinely
+ * differ: the doctor storefront reads two tiers of controls, the Academy shows
+ * one read-only sentence (`statement`) and records the same purpose behind it.
+ */
+export type AuthFlowConsentsConfig = {
+  /** The composed statements and purposes this door renders as CONTROLS. */
+  readonly tiers?: readonly ConsentTier[];
+  /**
+   * 021 EARS-4 — whether this door asks for the medical-worker declaration. A
+   * DECLARATION: asking for it asks for no document. Its words are the
+   * package's (`copy.consents.medicalWorkerDeclaration`); the host states only
+   * that the row is asked for.
+   */
+  readonly medicalWorkerDeclaration?: boolean;
+  /** 021 EARS-5/12 — whether the partner-data access condition is asked for; its statement is a tier item. */
+  readonly partnerDataItem?: boolean;
+  /**
+   * 021 EARS-6 — whether the optional opt-in stands below the submit. Its
+   * optionality is carried by WHERE it stands and by its quieter tone, so no
+   * marker is drawn beside it (`design-source/auth.dc.html:217-225`).
+   */
+  readonly marketingOptIn?: boolean;
+  /** 021 EARS-19 (#1558) — the version of the WORDING every recorded consent is stamped with. */
+  readonly wordingVersion: string;
+};
+
+/**
+ * A host's copy override: any single key of {@link AuthFlowCopy}, merged over
+ * the package defaults by `resolveAuthFlowCopy` (`@ds/auth-flow/copy`).
+ *
+ * It exists for a genuinely host-specific sentence, never as a place to restate
+ * the shared wording — a field is one thing on both storefronts, and the host
+ * varies only the SET of fields (#2027). Today only the Academy sets it, for its
+ * own brand panel (owner 2026-09-24).
+ */
+export type AuthFlowCopyOverride = DeepPartial<AuthFlowCopy>;
+
+type DeepPartial<T> = T extends readonly (infer Item)[]
+  ? readonly Item[]
+  : T extends object
+    ? {
+        // `| undefined` is deliberate under `exactOptionalPropertyTypes`: a host
+        // may hand a key through whose value is absent at runtime, and the
+        // resolver reads that as «states nothing», keeping the package default.
+        readonly [K in keyof T]?: DeepPartial<T[K]> | undefined;
+      }
+    : T;
+
 export type AuthFlowHostConfig = {
   readonly api: AuthFlowApiConfig;
   readonly routes: AuthFlowRoutes;
   readonly landing: AuthFlowLandingConfig;
-  readonly copy: AuthFlowCopy;
+  /**
+   * Every word comes from the package defaults unless stated here; set a key
+   * only for a sentence that genuinely differs (today: the Academy's brand panel).
+   */
+  readonly copy?: AuthFlowCopyOverride;
   readonly brand: AuthFlowBrand;
   /**
    * The SmartCaptcha site key VALUE, not the env name.
@@ -342,7 +545,17 @@ export type AuthFlowHostConfig = {
   readonly register: {
     /** Whether the registration form carries the optional promo-code box (row 9). */
     readonly promoField: boolean;
+    /**
+     * Row 61 — the «кто платит» line above the form, the sponsored host's
+     * answer to a doctor asked for nothing. Absent = this host states none, and
+     * the slot renders nothing rather than a placeholder.
+     */
+    readonly attribution?: string;
+    /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */
+    readonly pointsPromise?: string;
   };
+  /** The consent block of the registration door; absent = this host asks for no consent here. */
+  readonly consents?: AuthFlowConsentsConfig;
   /** Absent = no parking and no return-context card (rows 29, 46). */
   readonly returnTo?: AuthFlowReturnToConfig;
 };

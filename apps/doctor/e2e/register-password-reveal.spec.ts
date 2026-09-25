@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
  * 003 EARS-38 — the show-password toggle on the doctor storefront's registration
  * password field.
  *
- * The doctor host does not wire the affordance itself: `registration-screen.tsx`
+ * The doctor host does not wire the affordance itself: the shared sign-up door
  * renders the shared `<PasswordField>` and the toggle arrives with the primitive
  * (AGENTS.md §6 «Cross-front capability reuse before invention»). That is exactly
  * what this spec is for — proving the shared control actually reaches the second

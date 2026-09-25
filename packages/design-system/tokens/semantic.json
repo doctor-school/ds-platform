@@ -58,6 +58,14 @@
       "$value": "#cfdbec",
       "$description": "Quiet supporting-copy tier ON a `primary-surface` fill — the eyebrow / value-prop / footer under a white headline (e.g. the auth brand panel). A fixed muted white (5.81:1 on blue.700, AA in BOTH themes since the surface is invariant), it REPLACES an element `opacity-*` dim on the sub-copy (#537): an opacity dim reads as translucent and is fragile to recolour, so the quiet tier is a real token, one visible weight below `primary-surface-foreground`. Pair with `bg-primary-surface`."
     },
+    "primary-surface-soft": {
+      "$value": "{color.blue.100}",
+      "$description": "The canvas pale-blue copy tier ON a `primary-surface` fill — the auth brand panel eyebrow and sub-copy (auth.dc.html 309/312 `#D3E8FD`, blue.100, both themes: the panel is invariant). Higher contrast on blue.700 than `primary-surface-muted`; it is the panel's own canvas value, so the auth panel reads it instead of the older muted tier other surfaces still use."
+    },
+    "primary-surface-footer": {
+      "$value": "rgba(255, 255, 255, 0.85)",
+      "$description": "The auth brand panel footer ink — the canvas `rgba(255,255,255,.85)` (auth.dc.html 316) on the `primary-surface` fill, same value in both themes (the panel is invariant)."
+    },
     "secondary": {
       "$value": "{color.neutral.100}",
       "$description": "Low-emphasis tonal fill (secondary buttons, subtle chips). Pair with `secondary-foreground`."
@@ -266,6 +274,10 @@
     "inline": {
       "$value": "{space.2}",
       "$description": "Gap on the inline axis — icon ↔ text, label ↔ value (canonical 8px; the source spans 6 · 8 — `gap-1.5` for the tighter pair)."
+    },
+    "panel": {
+      "$value": "clamp(2.5rem, 4vw, 4rem)",
+      "$description": "Padding INSIDE the auth brand panel — the canvas `clamp(40px,4vw,64px)` (auth.dc.html 297). Surfaced as `p-panel`."
     },
     "chip-x": {
       "$value": "1.375rem",

@@ -22,7 +22,7 @@ Four product deltas separate this surface from the sign-up form the platform has
 
 **A mandatory «I am a medical worker» checkbox** (CON-11). Advertising of prescription drugs and of devices requiring special training may only be shown to confirmed medical workers; the open circuit reachable with a confirmed email carries none of that content. The checkbox is the access mechanism the owner settled on — there is no «ask later» and no «ask only for part of the content» variant. It is not document verification: documents are never requested at the door (REQ-22), they live in the account (feature 022, storage and statuses in 037).
 
-**Purpose-separated consents, provably recorded** (REQ-34). Sharing a doctor's professional data with partners is not an optional extra of the model, so the consent to it is **mandatory** — but it is stated in plain words with its exact data composition (name, specialty, city, place of work — **no contact details**), separately from the optional marketing opt-in, and each is recorded with its date. The product deliberately offers **no self-service «withdraw consent» toggle**: a withdrawal is a whole-account case handled by a platform manager by hand. Why the exchange exists is background for the designer — the interface says only that education is free for the doctor.
+**Purpose-separated consents, provably recorded** (REQ-34). Sharing a doctor's professional data with partners is not an optional extra of the model, so the consent to it is **mandatory** — but it is stated in plain words as **the condition of education that stays free for the doctor**, separately from the optional marketing opt-in, and each is recorded with its date. The product deliberately offers **no self-service «withdraw consent» toggle**: a withdrawal is a whole-account case handled by a platform manager by hand. Why the exchange exists is background for the designer — the interface says only that education is free for the doctor.
 
 **Visible attribution** (REQ-39). A doctor who arrives on a partner's promo code or a medical representative's personal link is registered **with that attribution shown on the screen**, not silently tagged in the background. A doctor who arrived on their own sees the same form without it.
 
@@ -38,10 +38,10 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 - **US-4** — As a **doctor**, after confirming my email I land back on the exact lesson, эфир or ticket I came from, not on an account page I did not ask for.
 - **US-5** — As a **doctor arriving directly**, with nothing to return to, I still finish registration and land somewhere sensible instead of on a broken return.
 - **US-6** — As a **doctor**, I am asked to confirm I am a medical worker, and I am told plainly that this is a legal requirement for part of the materials — not left guessing why a checkbox blocks me.
-- **US-7** — As a **doctor**, the consent to share my professional data with partners states exactly what is shared and that my contact details are not, so I am agreeing to something specific rather than to a legal wall.
+- **US-7** — As a **doctor**, the consent to share my professional data with partners says in plain words what exchange it is the condition of, and the composition of the shared data is spelled out in the policy text and by the platform manager, so I am agreeing to something specific rather than to a legal wall.
 - **US-8** — As a **doctor**, the mandatory access conditions and the optional marketing opt-in are **visually distinguishable**, so I never mistake one for the other.
 - **US-9** — As a **doctor**, the newsletter opt-in is genuinely optional and I can complete registration without it.
-- **US-10** — As a **doctor**, my consents are recorded separately and with a date, and I am told how to change or withdraw them — through a platform manager, since the product offers no self-service toggle.
+- **US-10** — As a **doctor**, my consents are recorded separately and with a date, and changing or withdrawing them goes through a platform manager, since the product offers no self-service toggle.
 - **US-11** — As a **doctor who arrived on a partner's promo code or a medical representative's link**, the screen shows me who brought me here instead of tagging me invisibly.
 - **US-12** — As a **partner's medical representative**, a doctor who came through my personal link is attributed to me at the moment of registration, so my referrals are countable.
 - **US-13** — As a **doctor**, I am credited starting attention points for registering, and I am told what completing my profile adds and what it unlocks.
@@ -60,7 +60,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 **Register from a gate (US-1, US-2, US-3, US-4, US-6, US-7, US-8, US-9, US-13):**
 
 1. A guest doctor presses «Участвовать» on an event (020), or opens a gated lesson, or reaches a congress ticket → they arrive at the registration screen with the **return context carried along**.
-2. The screen states the soft terms («email and password — that is enough; no documents at the door») and shows **what they will get back to**.
+2. The screen states the soft terms in the card subtitle («free, two minutes — e-mail and password are all that is needed») and shows **what they will get back to**.
 3. They fill in email and password, optionally a promo code, then tick the **mandatory** medical-worker box and the **mandatory** partner-data consent; the **optional** newsletter box is visually set apart from both.
 4. Submit → «letter sent, confirm your email» (the state carried by the `auth` canvas).
 5. They confirm the email → the success state: **starting points credited**, a line on what completing the profile adds (certificates and НМО), and the **return to the point of interest** as the primary action; «to my account» is secondary. _(Amended 2026-09-17: the doctor now lands on that point of interest **directly** — the post-confirmation success state and its secondary «в личный кабинет» action are withdrawn, the destination unchanged. See [`021-requirements-en.md`](./021-requirements-en.md) → Amendment — 2026-09-17.)_
@@ -85,7 +85,7 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 
 **Consent lifecycle (US-10, US-21):**
 
-1. Each consent is recorded separately, by purpose, with its date, and is presented as changeable **through a platform manager**.
+1. Each consent is recorded separately, by purpose, with its date, and is changeable **through a platform manager**.
 2. A doctor who opted in to the newsletter is handed to the external mailing service with their segmentation attributes; unsubscribing there and withdrawing here stay in sync (REQ-115; mechanics in 042).
 3. Any refusal or withdrawal of the mandatory consent is a whole-account case worked by a manager by hand — the interface carries **no toggle** for it.
 
@@ -100,10 +100,10 @@ On top of that the surface **credits starting attention points** (REQ-49) and mo
 
 - The doctor storefront's registration asks for **email and password only** (optionally a promo code) and requests **no documents of any kind**; document upload exists solely in the doctor's account (022 / 037), never here.
 - A **mandatory «I am a medical worker» checkbox** is a precondition of registration, carries a plain explanation of why, and has no «ask later» form. It is a declaration, not verification — it opens the REQ-20 circuit, while content requiring confirmed medical-worker status stays gated on the verification specified elsewhere (CON-11, REQ-22).
-- A **mandatory partner-data consent** states its exact composition — name, specialty, city, place of work — and states that **contact details are not shared**.
+- A **mandatory partner-data consent** states the exchange in plain words — sharing professional data with partners is the condition of education that stays free for the doctor; the composition of the shared data lives in the **policy text and the manager path**, not inside the consent item.
 - A **separate, genuinely optional newsletter consent** exists, and registration completes without it.
 - Mandatory access conditions and the optional marketing opt-in are **visually distinguishable**, not distinguished by wording alone.
-- Consents are **separate by purpose and recorded provably with a date**; the interface presents change/withdrawal as a manager-handled request and offers **no self-service withdrawal toggle**.
+- Consents are **separate by purpose and recorded provably with a date**; change/withdrawal is a manager-handled request, and the interface offers **no self-service withdrawal toggle**.
 - No interface copy anywhere on this surface states **who pays** for the doctor's education; the surface says only that it is free for the doctor.
 - When the doctor arrived on a partner's promo code or a medical representative's personal link, the **attribution is visible on the screen** and is attached to the resulting account; without one, the same screen renders with no attribution element.
 - After email confirmation the doctor is **returned to the point of interest** they came from, with «to my account» as a secondary action; the account page is never the default outcome of registration. _(Amended 2026-09-17: the doctor now lands on that point of interest **directly** — the post-confirmation success state and its secondary «в личный кабинет» action are withdrawn, the destination unchanged. See [`021-requirements-en.md`](./021-requirements-en.md) → Amendment — 2026-09-17.)_

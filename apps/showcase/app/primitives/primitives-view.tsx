@@ -1105,6 +1105,14 @@ function FormPrimitivesSection() {
           />
         </form>
       </Form>
+      <SubRow label='FormError variant="banner" — operation-level refusal (#2027)'>
+        <div className="flex w-72 flex-col gap-3">
+          <FormError variant="banner">
+            Не удалось войти. Проверьте адрес и пароль.
+          </FormError>
+          <FormError>Не удалось войти. Проверьте адрес и пароль.</FormError>
+        </div>
+      </SubRow>
       <SubRow label='tone="on-primary" — invariant primary surface'>
         <OnPrimaryFormToneDemo />
       </SubRow>
@@ -1462,7 +1470,7 @@ function CheckboxSection() {
   return (
     <PrimitiveSection
       title="Checkbox"
-      exportsLine="Checkbox — state (real native checkbox)"
+      exportsLine="Checkbox — state (real native checkbox); aria-invalid paints the reported-unmet border"
     >
       <SubRow label="Live sample (click / tab + space)">
         <Checkbox defaultChecked>Присылать напоминания об эфирах</Checkbox>
@@ -1483,9 +1491,24 @@ function CheckboxSection() {
               <Cell label="disabled on">
                 <Checkbox disabled defaultChecked aria-label="disabled on" />
               </Cell>
+              <Cell label="invalid">
+                <Checkbox aria-invalid aria-label="invalid" />
+              </Cell>
+              <Cell label="invalid on">
+                <Checkbox aria-invalid defaultChecked aria-label="invalid on" />
+              </Cell>
             </div>
           )}
         />
+      </SubRow>
+      <SubRow label="Wrapped label — the box stays square (#2027)">
+        <div className="max-w-64">
+          <Checkbox className="items-start">
+            Согласие на передачу данных партнёрам платформы. Это условие
+            бесплатного для врача обучения: без согласия часть материалов
+            недоступна.
+          </Checkbox>
+        </div>
       </SubRow>
       <SubRow label='tone="on-primary" — enabled + disabled label'>
         <div className="flex flex-col items-start gap-3 bg-primary-surface p-4">

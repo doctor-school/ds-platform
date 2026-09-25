@@ -11,6 +11,7 @@ import { AuthError } from "@ds/auth-flow/client";
 import { authClient } from "@/lib/auth-flow-client";
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
+import { resolveAuthFlowCopy } from "@ds/auth-flow/copy";
 import { getMyProfile } from "@/lib/profile-client";
 import { setDisplayName, DisplayNameError } from "@/lib/display-name-client";
 import { initialsFromDisplayName } from "@/lib/display-name";
@@ -60,6 +61,7 @@ export function AccountProfile() {
   // The «errors» namespace is read inside the host config, which projects it
   // into the copy object the shared dictionary consumes.
   const authFlow = ACADEMY_AUTH_FLOW;
+  const authCopy = resolveAuthFlowCopy(authFlow);
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -144,7 +146,7 @@ export function AccountProfile() {
       err instanceof DisplayNameError
         ? new AuthError(err.status, err.message)
         : err;
-    return authErrorMessage(mapped, authFlow.copy.errors, t("nameError"));
+    return authErrorMessage(mapped, authCopy.errors, t("nameError"));
   }
 
   if (state.kind === "loading") {

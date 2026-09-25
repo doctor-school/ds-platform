@@ -188,7 +188,7 @@ describe("003 EARS-11/12 #1989: the doctor /reset projection", () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          "Сервис временно недоступен. Попробуйте ещё раз через минуту.",
+          "Сервис временно недоступен — попробуйте ещё раз.",
         ),
       ).toBeTruthy(),
     );

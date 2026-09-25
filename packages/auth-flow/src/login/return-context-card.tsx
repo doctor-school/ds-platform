@@ -6,6 +6,7 @@ import type {
   AuthFlowHostConfig,
   AuthFlowReturnContextCopy,
 } from "../host-config";
+import { resolveAuthFlowCopy } from "../copy";
 import type { ReturnContextEvent } from "../server/return-context";
 
 /**
@@ -29,8 +30,8 @@ import type { ReturnContextEvent } from "../server/return-context";
  * accessibility tree — the event is announced ONCE per viewport.
  *
  * DATA, NOT A HOST BRANCH. Whether a host publishes the card is
- * `config.returnTo.card`; every word comes from `config.copy.returnContext`.
- * `returnContextSlots` is the one gate: no flag, no copy or no resolvable event
+ * `config.returnTo.card`; every word comes from `copy.returnContext`.
+ * `returnContextSlots` is the one gate: no flag or no resolvable event
  * ⇒ no slot at all, never an empty frame (EARS-3).
  */
 
@@ -73,7 +74,7 @@ function PanelBody({
       data-testid="return-context-panel"
       className="hidden flex-1 flex-col justify-center gap-5 py-8 layout:flex"
     >
-      <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
+      <p className="text-eyebrow font-extrabold uppercase tracking-eyebrow text-primary-surface-soft">
         {copy.eyebrow}
       </p>
       {/* The card is LIGHT in both themes on the blue panel (canvas pins
@@ -82,7 +83,7 @@ function PanelBody({
       <div className="light max-w-xl">
         <ReturnEventCard event={event} />
       </div>
-      <p className="max-w-md text-sm leading-relaxed text-primary-surface-muted">
+      <p className="max-w-panel-assurance text-sm leading-assurance text-primary-surface-soft">
         {copy[variant]}
       </p>
     </div>
@@ -121,7 +122,7 @@ export function ReturnContextPanel({
   event: ReturnContextEvent;
   variant: ReturnContextVariant;
 }) {
-  const copy = config.copy.returnContext;
+  const copy = resolveAuthFlowCopy(config).returnContext;
   return copy ? (
     <PanelBody copy={copy} event={event} variant={variant} />
   ) : null;
@@ -135,7 +136,7 @@ export function ReturnContextPlate({
   config: CardConfig;
   event: ReturnContextEvent;
 }) {
-  const copy = config.copy.returnContext;
+  const copy = resolveAuthFlowCopy(config).returnContext;
   return copy ? <PlateBody copy={copy} event={event} /> : null;
 }
 
@@ -153,8 +154,8 @@ export function returnContextSlots({
   event: ReturnContextEvent | null;
   variant: ReturnContextVariant;
 }): { panel: ReactNode | undefined; plate: ReactNode | undefined } {
-  const copy = config.copy.returnContext;
-  if (!config.returnTo?.card || !copy || !event) {
+  const copy = resolveAuthFlowCopy(config).returnContext;
+  if (!config.returnTo?.card || !event) {
     return { panel: undefined, plate: undefined };
   }
   return {

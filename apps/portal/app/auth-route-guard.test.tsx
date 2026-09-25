@@ -28,7 +28,6 @@ vi.mock("next/headers", () => ({
   headers: async () => incoming.headers,
 }));
 
-import RegisterLayout from "./register/layout";
 import ResetLayout from "./reset/layout";
 import VerifyLayout from "./verify/layout";
 
@@ -52,15 +51,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// `/login` is NOT in this table any more: #2027 PR 1.5 retired
-// `app/login/layout.tsx`, and `LoginRoute` (`@ds/auth-flow/login/route`) now
-// runs the #675 guard for that route. Its signed-in redirect and its guest door
-// over the Academy config are pinned by 017 #1955.20 / #1955.24 in
-// `packages/auth-flow/src/login/login-route.test.tsx`.
-const closed = [
-  ["/register", RegisterLayout],
-  ["/verify", VerifyLayout],
-] as const;
+// Neither `/login` nor `/register` is in this table any more: #2027 PR 1.5
+// retired `app/login/layout.tsx` and PR 1.6 retired `app/register/layout.tsx`,
+// because `LoginRoute` / `RegisterRoute` (`@ds/auth-flow/*/route`) now run the
+// #675 guard inside the route itself — one mount deciding the guard and the
+// arrival landing in order, which two files could not do. Their signed-in
+// redirects and guest doors over the Academy config are pinned by 017
+// #1955.20 / #1955.24 in `packages/auth-flow/src/login/login-route.test.tsx`
+// and by #675 in `packages/auth-flow/src/register/register-route.test.tsx`.
+const closed = [["/verify", VerifyLayout]] as const;
 
 describe("#675 Academy auth routes, server-side signed-in guard", () => {
   it.each(closed)(

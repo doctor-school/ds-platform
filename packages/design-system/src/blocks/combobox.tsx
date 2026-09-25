@@ -211,14 +211,14 @@ export function Combobox({
           {...aria}
           className={cn(
             // Pixel-identical to `NativeSelect`'s closed control.
-            "relative flex h-11 w-full items-center border-2 bg-background px-3.5 py-3 pr-10 text-left text-sm transition-colors",
+            "relative flex h-11 w-full items-center border-2 bg-card px-3.5 py-3 pr-10 text-left text-sm transition-colors",
             selected
               ? "border-border text-foreground"
               : "border-hairline text-muted-foreground",
             "hover:border-ring active:border-primary-action active:bg-muted",
             "focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none",
             "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground",
-            "aria-invalid:border-destructive aria-invalid:bg-destructive-tint",
+            "aria-invalid:border-destructive-text aria-invalid:bg-destructive-tint",
             className,
           )}
         >
@@ -282,7 +282,7 @@ export function Combobox({
                   }}
                   aria-label={searchLabel}
                   placeholder={searchPlaceholder}
-                  className="h-11 w-full bg-background px-3.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
+                  className="h-11 w-full bg-card px-3.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
                 />
               </div>
             ) : null}

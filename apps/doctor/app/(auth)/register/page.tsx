@@ -1,162 +1,28 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import {
-  RETURN_CONTEXT_PARAM,
-  guardAuthRoute,
-  isAccountReturnTarget,
-  resolveCarriedReturnTarget,
-  resolveDirectArrivalLanding,
-  resolveReturnContext,
-  resolveReturnLandingPath,
-  resolveReturnTargetPath,
-  resolveServerAuth,
-} from "@ds/auth-flow/server";
-import { AuthShell } from "@ds/auth-flow/shell";
-import { returnContextSlots } from "@ds/auth-flow/login";
 
-import type { ConsentTier } from "@ds/schemas";
-import {
-  MARKETING_COMMUNICATIONS_PURPOSE,
-  PARTNER_DATA_COMPOSITION,
-  PARTNER_DATA_EXCLUDED,
-  PARTNER_DATA_SHARING_PURPOSE,
-  formatPartnerDataStatement,
-} from "@ds/schemas";
+import { RegisterRoute } from "@ds/auth-flow/register/route";
 
-import { RegistrationScreen } from "@/components/registration-screen";
-import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
-import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
-import { resolveRememberedSpecialty } from "@/lib/specialty-choice";
+import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
 
 /**
- * 021 EARS-1 — `#d-register`, the doctor registration route (`doctor.school/register`,
- * `access: public`).
+ * 021 EARS-1 — `#d-register`, the doctor registration route
+ * (`doctor.school/register`, `access: public`).
  *
- * The route belongs to the doctor storefront app but NOT to the storefront shell:
- * it lives under the chromeless `(auth)` route group (`app/(auth)/layout.tsx`), so
- * no header, navigation or footer renders on it. That is the canvas composition
- * (`design-source/auth.dc.html` `#d-register`) and the product decision behind it —
- * the door is a single-CTA surface, and the shell's onward links would lead the
- * doctor away from the form. The frame the canvas does draw — wordmark, brand
- * panel, card centred on the vertical axis — is `<AuthShell>`, the doctor-local
- * mirror of the Academy's auth frame (#1666 lifts the two into one).
+ * The route is a MOUNT, not a composition (#2027 wave 1, PR 1.6): everything it
+ * used to assemble by hand — the return-context resolution, the LD-4 / rule-S4
+ * landing, the #675 signed-in guard, the consent read model and the inline
+ * confirmation — is the ONE sign-up door of `@ds/auth-flow/register`, which both
+ * storefronts now mount. What stays on this side is what this host STATES about
+ * itself, and that is `DOCTOR_AUTH_FLOW` (`lib/auth-flow.host-config.ts`): its
+ * routes (no `verify` — this host confirms inline), its consent tiers, its form
+ * composition and its sentences.
  *
- * The route is what the shell's guest action cluster has been pointing at since
- * 017 shipped (`components/storefront-header.tsx` → «Регистрация»), so this slice
- * closes a link that resolved to a 404. The link crosses out of the shell, which
- * is the intended one-way step into the door.
- *
- * 021 EARS-2 (#1538) — THE RETURN CONTEXT. A doctor who pressed «Участвовать» on
- * a gated эфир arrives here carrying the CANONICAL return target in the URL
- * (`?returnTo=/webinars/<slug>` — the one vocabulary 005 EARS-2 defined, read
- * through the shared `parseReturnTarget` guard and never re-parsed locally),
- * and the route resolves it server-side against the public event read before the
- * first paint: the context is a fact about the arrival, so it must be part of the
- * document rather than something that pops in afterwards beside a form the doctor
- * is already typing into. Resolved, it fills the split's LEFT HALF through
- * `<AuthShell returnContext>` on the wide layout and stands as the background
- * plate above the form below the mobile breakpoint — the two canvas compositions
- * of variant Б, exactly one of which renders per viewport.
- *
- * Unresolvable — no param, an unknown or draft event, an api that is down — is
- * `null`, and then NOTHING is passed: the left half falls back to the brand
- * panel's value prop and the form column carries no plate. Absent from the tree,
- * never an empty frame (EARS-3, and the requirements invariant on this card).
- *
- * 021 EARS-3 (#1539) — THE DIRECT ARRIVAL. The doctor who opened the door on
- * their own is not a degraded gate arrival; they are the ordinary case. Nothing
- * stands in for the context they do not have — the left half is the brand value
- * prop, the form column carries no plate — and the one thing the surface still
- * has to decide for them is WHERE THEY LAND once registration completes, because
- * there is by construction no target to return them to. LD-4 answers it:
- * `@ds/auth-flow/server` `resolveDirectArrivalLanding` maps what 017 remembers
- * about this visitor onto
- * the 019 events feed (`/events`) or the storefront home (`/`), and never onto
- * the account page. The route publishes the answer as a server fact on the form
- * (`data-registration-landing`) — the same «the whole screen is a function of
- * the entry URL» read model the return context uses — and #1546 consumes it as
- * the success state's primary action. ONE ATTRIBUTE, ONE VOCABULARY: when a
- * return context DID resolve, that same attribute carries the context's safe
- * target, the shared guard's reconstruction and never the raw param (LD-3).
- *
- * 021 EARS-5 (#1541) — THE TWO-TIER CONSENT BLOCK. The route supplies the read
- * model (`CONSENT_TIERS` below) and the screen renders the controls; see that
- * constant for why the composition is assembled here rather than in the
- * component.
- *
- * The remaining envelope slots are still unsupplied, which is the correct state
- * of this slice and not an omission: the attribution line (#1544) and the points
- * promise (#1545) are separate EARS handlers under the honest-empty rule.
- * `RegistrationScreen` enforces it; passing nothing is how the enforcement is
- * exercised.
- *
- * The route stays registered `deferred` in `tools/lint/prod-surface-manifest.yaml`
- * against the epic tracking the full build: the form composition is real, but the
- * door does not open yet — the submit is inert pending the EARS-19 bot-protection
- * client half and the EARS-4/5 consent precondition (see the component header).
- *
- * #675 — THE DOOR IS CLOSED TO SOMEONE WHO ALREADY HAS A SESSION. Until #2027
- * PR 1.4 this route carried no such guard while the Academy's `/register` did,
- * so a signed-in doctor could re-walk the sign-up form on one storefront and not
- * the other. Both hosts now ask the ONE shared rule
- * (`@ds/auth-flow/server` `guardAuthRoute`, wave-1 gate rows 26–28) with their
- * own route table, and this route contributes only the `landing` — the same
- * value the screen would have published, so the door and the guard can never
- * disagree about where the doctor ends up.
- *
- * ONE `headers()` READ FOR THE WHOLE RENDER. The rendered screen is not
- * per-visitor — the event read behind the return context is `access: public` and
- * identical for every caller — but the session status and the LD-4 landing BOTH
- * are, so the request headers are read exactly once and forwarded through the
- * shared resolvers (`@ds/auth-flow/server`, `lib/specialty-choice.ts` →
- * `resolveRememberedSpecialty`, the same call `app/(storefront)/page.tsx` makes)
- * rather than inspected here. The route is therefore dynamic on every arrival,
- * which is the cost of deciding the guard before the first byte.
+ * The route still belongs to the doctor app but NOT to the storefront shell: it
+ * lives under the chromeless `(auth)` route group (`app/(auth)/layout.tsx`), so
+ * no header, navigation or footer renders on it — the canvas composition
+ * (`design-source/auth.dc.html` `#d-register`) and the product decision behind
+ * it, the door being a single-CTA surface.
  */
-/**
- * 021 EARS-5 — the F-021-1 «вариант Б» read model, assembled on the server from
- * the API-contract SSOT and handed to the screen as data.
- *
- * It is built HERE and not inside the component for the reason design §4 gives:
- * the statement the doctor reads and the purpose that is recorded must come
- * from one source, so the composition arrays travel with the statement they
- * produced. A component that hardcoded the sentence would let the two drift the
- * moment the shared composition changes.
- *
- * Exactly two tiers, in their rendered order: the access conditions that stand
- * above the submit, and the optional opt-in that stands below it. The
- * medical-worker declaration is an access condition too (design §4's table) but
- * is not listed here — it is a precondition of the command the screen owns and
- * is rendered unconditionally, so putting it in this list would give it two
- * homes.
- */
-const CONSENT_TIERS: readonly ConsentTier[] = [
-  {
-    tier: "access-conditions",
-    items: [
-      {
-        purpose: PARTNER_DATA_SHARING_PURPOSE,
-        required: true,
-        statement: formatPartnerDataStatement(),
-        dataComposition: [...PARTNER_DATA_COMPOSITION],
-        excluded: [...PARTNER_DATA_EXCLUDED],
-      },
-    ],
-  },
-  {
-    tier: "marketing",
-    items: [
-      {
-        purpose: MARKETING_COMMUNICATIONS_PURPOSE,
-        required: false,
-        // Canvas copy (`#d-register`, «согласия · вариант Б»). No composition
-        // to declare: the opt-in shares nothing, it subscribes.
-        statement: "Хочу получать письма о новых школах и событиях",
-      },
-    ],
-  },
-];
-
 export const metadata: Metadata = {
   title: "Регистрация — Doctor.School",
   description:
@@ -168,93 +34,5 @@ export default async function DoctorRegisterPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
-  // ONE read of the request headers, serving both per-visitor facts below.
-  const requestHeaders = await headers();
-  const raw = params[RETURN_CONTEXT_PARAM];
-  // A repeated param arrives as an array; the FIRST value wins rather than the
-  // request being rejected — a malformed return context degrades to no context,
-  // it never breaks the door.
-  const returnTo = Array.isArray(raw) ? raw[0] : raw;
-  // The guard's reconstruction of the arrival's target — the ONE vocabulary,
-  // resolved before the read so the guard output — never the raw param — is
-  // what both the context read and the landing below are derived from.
-  const safeTarget = resolveReturnTargetPath(returnTo);
-  // Rule S3 / #2258 — the value that rides ONWARD out of this door. A different
-  // question from `safeTarget`, which is the эфир-only EARS-3 context target:
-  // this one also admits the account family, so a doctor who arrived from a
-  // closed page keeps it across the confirmation screen's sideways hops.
-  const carriedTarget =
-    resolveCarriedReturnTarget(DOCTOR_AUTH_FLOW, returnTo) ?? undefined;
-  // WHERE this host takes them afterwards. Not the canonical target verbatim:
-  // the academy serves the эфир at `/webinars/<slug>` and this storefront serves
-  // it at `/events/<slug>` (020-design §1), so the landing is the doctor-host
-  // projection of the SAME guard output (#1945).
-  const landingTarget = resolveReturnLandingPath(DOCTOR_AUTH_FLOW, returnTo);
-  const returnEvent = safeTarget
-    ? await resolveReturnContext(safeTarget)
-    : null;
-
-  // #1987 / rule S4 — an account arrival resolves NO эфир, so the gate branch
-  // below would refuse it and drop the doctor on the LD-4 default, which is
-  // precisely the destination they declined by asking for «Личный кабинет». The
-  // sign-in door has answered it since #1987; the sign-up door had not, so a
-  // doctor who arrived from a closed page and chose to REGISTER instead of
-  // signing in still lost the page. The question is asked of the codec, which
-  // admits the whole family under this host's own `routes.account` and not only
-  // the cabinet index (014 EARS-6.5).
-  const accountLanding = isAccountReturnTarget(DOCTOR_AUTH_FLOW, returnTo);
-
-  // EARS-3 / LD-4 — where this arrival lands after confirmation. A gate arrival
-  // lands back on the эфир it came from; a direct arrival lands where 017's
-  // remembered specialty says, which is the only per-visitor fact on the route
-  // and the only reason it reads `headers()` (see the module header).
-  const landing =
-    landingTarget && (returnEvent || accountLanding)
-      ? landingTarget
-      : resolveDirectArrivalLanding(
-          DOCTOR_AUTH_FLOW,
-          await resolveRememberedSpecialty(requestHeaders),
-        );
-
-  // #675 — before any of the surface is composed. A guest passes straight
-  // through; a doctor who already holds a session is sent to the landing this
-  // route just resolved instead of being offered a second account.
-  const auth = await resolveServerAuth(requestHeaders);
-  guardAuthRoute({
-    authenticated: auth.status === "doctor",
-    pathname: DOCTOR_AUTH_ROUTES.register,
-    routes: DOCTOR_AUTH_ROUTES,
-    landing,
-  });
-
-  // 021 EARS-10 (#1546) — the target CARRIED THROUGH the confirmation, in the
-  // doctor-host vocabulary the confirm command's guard accepts. Present only
-  // when the эфир actually resolved: an unresolvable target is the same as no
-  // target, and sending it anyway would ask the server to name a degradation
-  // reason for a page this route already knows nothing answers.
-  const returnTarget = landingTarget && returnEvent ? landingTarget : undefined;
-
-  // Row 46's ONE gate: the card is published by the host config, worded by the
-  // host copy and filled by the resolved эфир, or neither slot renders.
-  const { panel: returnPanel, plate: returnPlate } = returnContextSlots({
-    config: DOCTOR_AUTH_FLOW,
-    event: returnEvent,
-    variant: "register",
-  });
-
-  return (
-    <AuthShell config={DOCTOR_AUTH_FLOW} returnContext={returnPanel}>
-      <RegistrationScreen
-        landing={landing}
-        {...(returnTarget ? { returnTarget } : {})}
-        // Rule S3 — what the confirmation screen's «Войти» / «Забыли пароль»
-        // hops carry onward. The CARRY vocabulary, not the эфир-only confirm
-        // intent above: an account arrival has no `returnTarget` at all.
-        {...(carriedTarget ? { carriedTarget } : {})}
-        consentTiers={CONSENT_TIERS}
-        returnContext={returnPlate}
-      />
-    </AuthShell>
-  );
+  return <RegisterRoute config={DOCTOR_AUTH_FLOW} searchParams={searchParams} />;
 }

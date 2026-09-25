@@ -19,7 +19,8 @@ import {
   PhoneField,
   type PasswordRevealLabels,
 } from "../primitives/fields";
-import { AuthCard } from "./auth-card";
+import { cn } from "../lib/utils";
+import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 import { OtpFocusScreen } from "./otp-focus-screen";
 import { maskDestination } from "./mask-destination";
 
@@ -106,6 +107,8 @@ export interface LoginCardCopy {
     identifierLabel: string;
     identifierPlaceholder: string;
     passwordLabel: string;
+    /** The password input's placeholder (canvas 82 `••••••••`); absent = none. */
+    passwordPlaceholder?: string;
     /** Localized show/hide copy for the password reveal toggle (003 EARS-38);
      * omitted leaves the design-system RU default. */
     reveal?: PasswordRevealLabels;
@@ -140,7 +143,10 @@ export interface LoginCardPasswordProps {
   resolver: Resolver<LoginCardPasswordValues>;
   /** Awaited by RHF, so it drives `isSubmitting`. Transport + EARS-16 mapping are the host's. */
   onSubmit: (values: LoginCardPasswordValues) => Promise<void> | void;
-  /** Already-localized error surfaced under the fields. */
+  /**
+   * Already-localized operation failure. Rendered by `<LoginCard>` in the card's
+   * error banner above the title (canvas 56-61), not beside the submit.
+   */
   error?: React.ReactNode;
   /** Host-side pending signal (e.g. an in-flight captcha challenge). */
   pending?: boolean;
@@ -158,15 +164,21 @@ export interface LoginCardOtpProps {
   /** Verify-step resolver. */
   verifyResolver: Resolver<LoginCardOtpVerifyValues>;
   /**
+   * The channels this host SERVES (wave-1 gate row 21). With a single channel
+   * no selector row is drawn at all and every request rides that channel —
+   * a storefront that sends no SMS never offers one.
+   */
+  channels?: readonly LoginCardOtpChannel[];
+  /**
    * Non-null once the host confirms a code was issued for it → the focus screen
    * takes over. `null` returns to the request chrome.
    */
   sentIdentifier: string | null;
   /** Bumped by the host on each SUCCESSFUL resend (#266) — restarts the cooldown. */
   resendNonce: number;
-  /** Already-localized error on the request step. */
+  /** Already-localized error on the request step — drawn in the card's error banner. */
   error?: React.ReactNode;
-  /** Already-localized error on the focus screen (action + verify failures). */
+  /** Already-localized error on the focus screen — drawn in the same banner. */
   screenError?: React.ReactNode;
   /** Host-side pending signal for the request submit. */
   pending?: boolean;
@@ -241,9 +253,20 @@ export function LoginCard({
   otpLength = LOGIN_OTP_LENGTH,
   resendCooldownSeconds = LOGIN_RESEND_COOLDOWN_SECONDS,
 }: LoginCardProps) {
+  // Canvas `auth.dc.html:56-61` — the operation-level failure of EITHER method
+  // stands above the card title. Only one can be live at a time: the host clears
+  // the other method's state in `onMethodChange`.
+  const operationError = password.error ?? otp.screenError ?? otp.error;
   return (
     <AuthCard
       icon={icon}
+      errorBanner={
+        operationError ? (
+          <FormError variant="banner" className="mb-5">
+            {operationError}
+          </FormError>
+        ) : null
+      }
       // #1033: the page title is the document's single h1 (a11y landmark).
       // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
       // so the render is pixel-identical.
@@ -272,6 +295,10 @@ export function LoginCard({
         defaultValue={defaultMethod}
         onValueChange={(value) => onMethodChange?.(value as LoginCardMethod)}
       >
+        {/* Canvas 66: the switcher's name is DRAWN above the tabs, not only
+            announced — it keeps its `aria-label` too, so the tablist is still
+            named for a screen reader that never sees the eyebrow. */}
+        <p className={cn("mb-2", AUTH_EYEBROW)}>{copy.methodSwitcherLabel}</p>
         <TabsList aria-label={copy.methodSwitcherLabel}>
           <TabsTrigger value="password" data-testid="login-method-password">
             {copy.methodPassword}
@@ -301,7 +328,6 @@ function PasswordLogin({
   copy,
   resolver,
   onSubmit,
-  error,
   pending = false,
   captchaSlot,
 }: LoginCardPasswordProps & { copy: LoginCardCopy["password"] }) {
@@ -360,12 +386,14 @@ function PasswordLogin({
               field={field}
               purpose="current"
               label={copy.passwordLabel}
+              {...(copy.passwordPlaceholder === undefined
+                ? {}
+                : { placeholder: copy.passwordPlaceholder })}
               {...(copy.reveal ? { revealLabels: copy.reveal } : {})}
             />
           )}
         />
         {captchaSlot}
-        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"
@@ -388,8 +416,7 @@ function OtpLogin({
   verifyResolver,
   sentIdentifier,
   resendNonce,
-  error,
-  screenError,
+  channels = ["email", "sms"],
   pending = false,
   captchaSlot,
   onRequest,
@@ -401,7 +428,9 @@ function OtpLogin({
   otpLength: number;
   resendCooldownSeconds: number;
 }) {
-  const [channel, setChannel] = React.useState<LoginCardOtpChannel>("email");
+  const [channel, setChannel] = React.useState<LoginCardOtpChannel>(
+    channels[0] ?? "email",
+  );
 
   // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
   // email, SMS channel requires an E.164 phone, so switching re-validates against the
@@ -415,7 +444,6 @@ function OtpLogin({
 
   return (
     <div className="space-y-4" aria-label={copy.formLabel}>
-      {captchaSlot}
       {sentIdentifier === null ? (
         <>
           <div className="space-y-1">
@@ -424,36 +452,46 @@ function OtpLogin({
           </div>
 
           {/* Channel selector — drives EARS-6 (email) vs EARS-7 (sms). Present only
-              on the request step; once a code is sent the focus-screen omits it by
-              construction (#227), and "change method" returns here. */}
-          <div
-            className="flex gap-2"
-            role="radiogroup"
-            aria-label={copy.channelGroupLabel}
-          >
-            {(["email", "sms"] as const).map((c) => (
-              <Button
-                key={c}
-                type="button"
-                variant={channel === c ? "default" : "outline"}
-                size="sm"
-                // Canvas `chBtn`: the two channels split the row into equal halves.
-                className="flex-1"
-                role="radio"
-                aria-checked={channel === c}
-                data-testid={`otp-channel-${c}`}
-                onClick={() => {
-                  setChannel(c);
-                  // Clear the identifier on channel switch so a value typed for the
-                  // previous channel (e.g. an email left in the box) does not linger
-                  // into the other channel's stricter shape (#192).
-                  requestForm.reset({ identifier: "", channel: c });
-                }}
+              on the request step, and only where this host serves BOTH channels:
+              a one-channel host has nothing to choose between, so the row is
+              absent rather than a single locked button. Once a code is sent the
+              focus-screen omits it by construction (#227), and "change method"
+              returns here. */}
+          {channels.length > 1 ? (
+            <div className="space-y-2">
+              {/* Canvas 106: the group's name is DRAWN above the buttons and
+                  still names the radiogroup for assistive technology. */}
+              <p className={AUTH_EYEBROW}>{copy.channelGroupLabel}</p>
+              <div
+                className="flex gap-2"
+                role="radiogroup"
+                aria-label={copy.channelGroupLabel}
               >
-                {c === "email" ? copy.channelEmail : copy.channelSms}
-              </Button>
-            ))}
-          </div>
+                {channels.map((c) => (
+                  <Button
+                    key={c}
+                    type="button"
+                    variant={channel === c ? "default" : "outline"}
+                    size="sm"
+                    // Canvas `chBtn`: the channels split the row into equal halves.
+                    className="flex-1"
+                    role="radio"
+                    aria-checked={channel === c}
+                    data-testid={`otp-channel-${c}`}
+                    onClick={() => {
+                      setChannel(c);
+                      // Clear the identifier on channel switch so a value typed for the
+                      // previous channel (e.g. an email left in the box) does not linger
+                      // into the other channel's stricter shape (#192).
+                      requestForm.reset({ identifier: "", channel: c });
+                    }}
+                  >
+                    {c === "email" ? copy.channelEmail : copy.channelSms}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <Form {...requestForm}>
             <form
@@ -499,7 +537,12 @@ function OtpLogin({
                   )
                 }
               />
-              <FormError>{error}</FormError>
+              {/*
+                Owner's canvas (`design-source/auth.dc.html:127-131`): the
+                challenge stands immediately ABOVE the control it protects, on
+                every auth screen — not at the head of the step.
+              */}
+              {captchaSlot}
               <Button
                 type="submit"
                 variant="secondary"
@@ -513,19 +556,21 @@ function OtpLogin({
           </Form>
         </>
       ) : (
-        <OtpVerifyForm
-          copy={copy}
-          otpLength={otpLength}
-          identifier={sentIdentifier}
-          channel={channel}
-          resolver={verifyResolver}
-          error={screenError}
-          cooldownSeconds={resendCooldownSeconds}
-          resendNonce={resendNonce}
-          onVerify={onVerify}
-          onResend={() => onResend({ identifier: sentIdentifier, channel })}
-          onChangeMethod={onChangeMethod}
-        />
+        <>
+          <OtpVerifyForm
+            copy={copy}
+            otpLength={otpLength}
+            identifier={sentIdentifier}
+            channel={channel}
+            resolver={verifyResolver}
+            captchaSlot={captchaSlot}
+            cooldownSeconds={resendCooldownSeconds}
+            resendNonce={resendNonce}
+            onVerify={onVerify}
+            onResend={() => onResend({ identifier: sentIdentifier, channel })}
+            onChangeMethod={onChangeMethod}
+          />
+        </>
       )}
     </div>
   );
@@ -549,7 +594,7 @@ function OtpVerifyForm({
   identifier,
   channel,
   resolver,
-  error,
+  captchaSlot,
   cooldownSeconds,
   resendNonce,
   onVerify,
@@ -561,7 +606,8 @@ function OtpVerifyForm({
   identifier: string;
   channel: LoginCardOtpChannel;
   resolver: Resolver<LoginCardOtpVerifyValues>;
-  error?: React.ReactNode;
+  /** The challenge, drawn INSIDE the verify form above its submit (canvas 139-143). */
+  captchaSlot?: React.ReactNode;
   cooldownSeconds: number;
   resendNonce: number;
   onVerify: (values: LoginCardOtpVerifyValues) => Promise<void> | void;
@@ -625,7 +671,7 @@ function OtpVerifyForm({
             onSubmit={submit}
             onResend={onResend}
             onChangeMethod={onChangeMethod}
-            error={error}
+            captchaSlot={captchaSlot}
             submitTestId="otp-verify"
             resendTestId="otp-resend"
             changeMethodTestId="otp-change-method"

@@ -155,10 +155,10 @@
     },
     "size": {
       "$type": "dimension",
-      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · xs 12 · caption 13 · chip 13.5 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
+      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · pill 11.5 · xs 12 · caption 13 · chip 13.5 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · title-xl 26 (auth screen title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
       "chip": {
         "$value": "0.84375rem",
-        "$description": "13.5px — the on-header chip label of the storefront chrome («Войти / Регистрация», «Личный кабинет») and the header search input; source ds-shell.dc.html lines 24/37 (13.5px/800). Between caption (13) and sm (14), and the only kegel of the navy band's controls."
+        "$description": "13.5px — the on-header chip label of the storefront chrome («Войти / Регистрация», «Личный кабинет»), the header search input and the auth consent statement (auth.dc.html 191/199/221: 13.5px/700/1.4); sources ds-shell.dc.html lines 24/37 (13.5px/800) and auth.dc.html. Between caption (13) and sm (14): ONE kegel, never a second token at the same size."
       },
       "topbar": {
         "$value": "0.5625rem",
@@ -168,6 +168,10 @@
       "eyebrow": {
         "$value": "0.6875rem",
         "$description": "11px — the uppercase plate/section eyebrow of the canvas card surfaces (webinar-card «Эфир № N» plate label; §05 section eyebrows). Sits between 2xs (10) and xs (12); source unit-event-card.dc.html."
+      },
+      "pill": {
+        "$value": "0.71875rem",
+        "$description": "11.5px — the canvas pill / segmented toggle label and the quiet in-frame note under the access conditions (auth.dc.html 204/505/510). Between eyebrow (11) and xs (12)."
       },
       "xs": { "$value": "0.75rem" },
       "caption": { "$value": "0.8125rem" },
@@ -180,9 +184,21 @@
         "$value": "1.5rem",
         "$description": "24px — the desktop listing/webinar-card title (source unit-event-card.dc.html: 24px/700/1.3/-.02em; mobile drops to lg 20px). Between xl (h3, 22) and 2xl (h2, 28)."
       },
+      "title-xl": {
+        "$value": "1.625rem",
+        "$description": "26px — the auth screen title inside the card (auth.dc.html 63: 26px/800/1.15/-.025em). Between title-lg (24) and 2xl (28): the door heading is a screen title, not the page h2."
+      },
       "2xl": { "$value": "1.75rem" },
       "3xl": { "$value": "2.5rem" },
-      "4xl": { "$value": "3.5rem" }
+      "4xl": { "$value": "3.5rem" },
+      "lead": {
+        "$value": "1.0625rem",
+        "$description": "17px — the auth brand panel sub-copy (auth.dc.html 312: 17px/400/1.55, max-width 38ch). Between base (16) and lg (20): a lead paragraph on the brand panel, not body copy."
+      },
+      "panel-headline": {
+        "$value": "clamp(1.875rem, 3.4vw, 2.875rem)",
+        "$description": "clamp(30px, 3.4vw, 46px) — the fluid auth brand panel headline (auth.dc.html 310: 800 / lh 1.05 / -.035em / max-width 16ch). Fluid on the viewport so the longest host headline stays inside the panel's right padding at every desktop width."
+      }
     },
     "weight": {
       "$type": "fontWeight",
@@ -194,10 +210,23 @@
     },
     "line-height": {
       "$type": "number",
+      "$description": "Leading by role: none 1 · title 1.15 (auth screen title, auth.dc.html 63) · tight 1.25 · snug 1.375 · label 1.4 (bold statement rows, auth.dc.html 191/199/221) · notice 1.45 (the operation-error plate copy, auth.dc.html 58) · normal 1.5 · prose 1.55 (card sub-copy and read-only statements, auth.dc.html 64/208) · relaxed 1.625.",
       "none": { "$value": 1 },
+      "title": { "$value": 1.15 },
       "tight": { "$value": 1.25 },
       "snug": { "$value": 1.375 },
+      "label": { "$value": 1.4 },
+      "notice": { "$value": 1.45 },
       "normal": { "$value": 1.5 },
+      "prose": { "$value": 1.55 },
+      "display": {
+        "$value": 1.05,
+        "$description": "1.05 — the auth brand panel headline leading (auth.dc.html 310)."
+      },
+      "assurance": {
+        "$value": 1.6,
+        "$description": "1.6 — the return-context assurance line on the auth brand panel (auth.dc.html 304 `line-height:1.6`)."
+      },
       "relaxed": { "$value": 1.625 }
     },
     "letter-spacing": {
@@ -211,7 +240,11 @@
       "normal": { "$value": "0em" },
       "wide": { "$value": "0.025em" },
       "micro": { "$value": "0.12em" },
-      "topbar": { "$value": "0.22em" }
+      "topbar": { "$value": "0.22em" },
+      "eyebrow": {
+        "$value": "0.14em",
+        "$description": "+.14em — the auth brand panel eyebrow and return-context label (auth.dc.html 302/309: 11px/800/.14em uppercase). Wider than the micro-label rung (.12em) by canvas decision."
+      }
     }
   },
 
@@ -243,6 +276,22 @@
     "search": {
       "$value": "27.5rem",
       "$description": "440px — the desktop cap of the storefront header search (`flex:1;max-width:440px`, ds-shell.dc.html line 24): it grows into free bar width but never past the cap, so the nav and the auth cluster keep their place. Surface as `max-w-search`; below the `layout` breakpoint the search re-flows to its own full-width row."
+    },
+    "panel-headline": {
+      "$value": "16ch",
+      "$description": "16ch — the measure of the auth brand panel headline (auth.dc.html 310 `max-width:16ch`). Surface as `max-w-panel-headline`."
+    },
+    "panel-lead": {
+      "$value": "38ch",
+      "$description": "38ch — the measure of the auth brand panel sub-copy (auth.dc.html 312 `max-width:38ch`). Surface as `max-w-panel-lead`."
+    },
+    "panel-assurance": {
+      "$value": "44ch",
+      "$description": "44ch — the measure of the return-context assurance line on the auth brand panel (auth.dc.html 304 `max-width:44ch`). Surface as `max-w-panel-assurance`."
+    },
+    "auth": {
+      "$value": "27.5rem",
+      "$description": "440px — the auth family's card column (`width:100%;max-width:440px`, auth.dc.html line 53 card and line 289 processing notice): the logo, the card and the notice under it share one cap. Surface as `max-w-auth`."
     }
   },
 

@@ -4,11 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import {
-  parseSameOriginReturnTarget,
-  type LoginRequest,
-  type OtpChannel,
-} from "@ds/schemas";
+import { type LoginRequest, type OtpChannel } from "@ds/schemas";
 import {
   botProtectionFailureMessage,
   BotProtectionField,
@@ -26,12 +22,15 @@ import {
 } from "@ds/design-system/blocks";
 import { OtpCodeFieldSchema } from "@ds/design-system/fields";
 
+import { resolveAuthFlowCopy } from "../copy";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
+import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig } from "../host-config";
+import { withReturnTarget } from "../return-target-href";
 import { LoginGlyph } from "./login-glyph";
 import type { ReactNode } from "react";
 
@@ -86,41 +85,12 @@ export type LoginDoorProps = {
   returnContextPlate?: ReactNode;
 };
 
-/**
- * Build a react-hook-form resolver from per-field verdicts.
- *
- * The shared block takes `Resolver`s because the guard is HOST business, and the
- * door is where host business now lives: the RULE is the package field schema
- * (`../fields`, the one identifier/ code guard of both storefronts) and the
- * SENTENCE is the host's own `copy.fields` / `copy.login` string. Neither host's
- * resolver helper is imported — a package may not import from an app — and no
- * message catalogue is consulted, because the config already carries the
- * sentences in the host's voice.
- *
- * The cast is the one every resolver factory needs: the RHF `Resolver` is generic
- * over its internal field-path machinery, which a plain record cannot express.
- */
-function makeResolver<TValues extends object, TResolver>(rules: {
-  [K in keyof TValues]?: (value: TValues[K], values: TValues) => string | null;
-}): TResolver {
-  return ((values: TValues) => {
-    const errors: Record<string, { type: string; message: string }> = {};
-    for (const key of Object.keys(rules) as (keyof TValues)[]) {
-      const message = rules[key]?.(values[key], values) ?? null;
-      if (message) errors[key as string] = { type: "validate", message };
-    }
-    return Object.keys(errors).length > 0
-      ? { values: {}, errors }
-      : { values, errors: {} };
-  }) as unknown as TResolver;
-}
-
 /** EARS-5 — the identifier box this host serves, plus the length-only password rule. */
 function passwordResolverOf(
   config: AuthFlowHostConfig,
 ): LoginCardPasswordProps["resolver"] {
   const identifier = identifierFieldSchema(config);
-  const fields = config.copy.fields;
+  const { fields, login } = resolveAuthFlowCopy(config);
   return makeResolver<
     LoginCardPasswordValues,
     LoginCardPasswordProps["resolver"]
@@ -136,7 +106,7 @@ function passwordResolverOf(
     // Length only — 003 EARS-36 owns the password policy and no surface may
     // declare a second one. The credential authority is the BFF, not this form.
     password: (value) =>
-      value?.length ? null : config.copy.login.password.passwordRequired,
+      value?.length ? null : login.password.passwordRequired,
   });
 }
 
@@ -146,8 +116,8 @@ function otpRequestResolverOf(
   channel: LoginCardOtpChannel,
 ): LoginCardOtpProps["requestResolvers"][LoginCardOtpChannel] {
   const schema = otpIdentifierFormSchema(config, channel as OtpChannel);
-  const copy =
-    channel === "email" ? config.copy.fields.email : config.copy.fields.phone;
+  const fields = resolveAuthFlowCopy(config).fields;
+  const copy = channel === "email" ? fields.email : fields.phone;
   return makeResolver<
     LoginCardOtpRequestValues,
     LoginCardOtpProps["requestResolvers"][LoginCardOtpChannel]
@@ -156,7 +126,7 @@ function otpRequestResolverOf(
       if (!value?.trim()) {
         return (
           copy.required ??
-          config.copy.fields.identifier.required ??
+          fields.identifier.required ??
           copy.invalid
         );
       }
@@ -183,7 +153,7 @@ function otpVerifyResolverOf(
     code: (value) =>
       OtpCodeFieldSchema.safeParse(value).success
         ? null
-        : config.copy.login.otp.codeInvalid,
+        : resolveAuthFlowCopy(config).login.otp.codeInvalid,
   });
 }
 
@@ -194,7 +164,7 @@ function otpVerifyResolverOf(
  * that only exists at render time.
  */
 function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
-  const copy = config.copy.login;
+  const copy = resolveAuthFlowCopy(config).login;
   return {
     title: copy.title,
     description: copy.description,
@@ -208,6 +178,7 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       identifierLabel: copy.password.identifierLabel,
       identifierPlaceholder: copy.password.identifierPlaceholder,
       passwordLabel: copy.password.passwordLabel,
+      passwordPlaceholder: copy.password.passwordPlaceholder,
       // 003 EARS-38: the reveal toggle copy rides the host catalog where the
       // host states one; ABSENT — spread, not `undefined` — leaves the
       // design-system RU default, which is a different thing from "no labels".
@@ -239,23 +210,6 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
   };
 }
 
-/**
- * Rule S3 (#2027) — decorate a footer link with the arrival context.
- *
- * The value carried onward is the same-origin guard's own RECONSTRUCTION, never
- * the visitor's raw string, so a hostile target is dropped here and cannot be
- * propagated into `/register` or `/reset` by the door that received it.
- */
-function withReturnTarget(
-  path: string,
-  rawReturnTo: string | null | undefined,
-): string {
-  const safe = parseSameOriginReturnTarget(rawReturnTo ?? null);
-  if (!safe) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}returnTo=${encodeURIComponent(safe)}`;
-}
-
 export function LoginDoor({
   config,
   landing,
@@ -264,8 +218,8 @@ export function LoginDoor({
   returnContextPlate,
 }: LoginDoorProps) {
   const router = useRouter();
-  const errors = config.copy.errors;
-  const failed = config.copy.login.failed;
+  const { errors, login } = resolveAuthFlowCopy(config);
+  const failed = login.failed;
   // One client per host config — the paths are bound once at this boundary, so
   // every call below stays path-free (rows 6–8).
   const authClient = useMemo(() => createAuthClient(config.api), [config.api]);
@@ -503,6 +457,9 @@ export function LoginDoor({
           captchaSlot: captchaSlot(passwordCaptcha.fieldProps),
         }}
         otp={{
+          // Row 21 — the channels this host serves; a one-channel host draws no
+          // channel row at all (the same list gates the identifier schema).
+          channels: config.channels,
           requestResolvers,
           verifyResolver,
           sentIdentifier,

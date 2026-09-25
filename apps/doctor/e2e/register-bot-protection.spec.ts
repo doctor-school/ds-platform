@@ -63,21 +63,22 @@ function body(request: Request): Record<string, unknown> {
 }
 
 test.describe("021 EARS-19: bot protection on the registration and resend forms", () => {
-  test("021 EARS-19.1: the challenge is mounted and the submit is LIVE once the stated conditions are met", async ({
+  test("021 EARS-19.1: the challenge is mounted and the submit is LIVE in every state", async ({
     page,
   }) => {
     await page.goto("/register");
 
     const submit = page.getByTestId("register-submit");
-    // Before the access conditions: disabled WITH its reason, unchanged EARS-12.
-    await expect(submit).toBeDisabled();
-    await expect(page.getByTestId("register-submit-reason")).toBeVisible();
+    // Canvas 490 (owner Stage-B 2026-09-22): the submit is drawn live in every
+    // state, and no reason line exists anywhere on the surface — what is unmet
+    // is said on its own row after the press (EARS-12).
+    await expect(submit).toBeEnabled();
+    await expect(page.getByTestId("register-submit-reason")).toHaveCount(0);
 
     await fillRegistration(page);
 
-    // The whole point of the clause: the door stops waiting. The challenge is
-    // invisible and runs inside the submit, so it is not a stated obstacle and
-    // the reason line is ABSENT rather than empty.
+    // The whole point of the clause: the challenge is invisible and runs inside
+    // the submit, so it is not an obstacle the doctor must clear first.
     await expect(submit).toBeEnabled();
     await expect(page.getByTestId("register-submit-reason")).toHaveCount(0);
     // The build-note reason this Issue removes must be nowhere on the surface.

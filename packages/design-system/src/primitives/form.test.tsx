@@ -86,11 +86,15 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     expect(msg).toHaveAttribute("role", "alert");
   });
 
-  it("shows the helper by default (muted, small, visible, no alert)", () => {
+  it("shows the helper by default (quiet, small, visible, no alert)", () => {
+    // #2027 canvas `design-source/auth.dc.html` — the hint under a field reads
+    // 12px/600 in the FAINT tone. It is the quietest line on the screen, a rung
+    // below the muted body copy the helper used to borrow.
     render(<Harness helper="We never share this." />);
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("We never share this.");
-    expect(msg).toHaveClass("text-xs", "text-muted-foreground");
+    expect(msg).toHaveClass("text-xs", "font-semibold", "text-faint");
+    expect(msg.className).not.toMatch(/text-muted-foreground/);
     expect(msg).not.toHaveAttribute("aria-hidden");
     expect(msg).not.toHaveAttribute("role", "alert");
   });
@@ -217,6 +221,52 @@ describe("FormError — single form-level error primitive (one error style sourc
     expect(err).toHaveClass("text-primary-surface-foreground");
     expect(err).not.toHaveClass("text-destructive-text");
   });
+
+  it("#2027: the banner variant is the canvas plate — framed, tinted, at reading size (canvas 56-61)", () => {
+    // Canvas `design-source/auth.dc.html:56-61`: an operation-level refusal is
+    // about the WHOLE screen, so it is drawn as a plate — 2px danger border on
+    // the danger tint, 12/14 padding, 10px gap — and it is READ, at 13px/700 on
+    // a 1.45 line in ink. Only the ⚠ stays danger-coloured: a whole paragraph of
+    // red is a shout, and the canvas does not shout.
+    render(
+      <FormError data-testid="ferr" variant="banner">
+        Не удалось войти.
+      </FormError>,
+    );
+
+    const err = screen.getByTestId("ferr");
+    expect(err).toHaveClass(
+      "border-2",
+      "border-destructive-text",
+      "bg-destructive-tint",
+      "px-3.5",
+      "py-3",
+      "gap-2.5",
+      "items-start",
+      "text-caption",
+      "font-bold",
+      "leading-notice",
+      "text-foreground",
+    );
+    expect(err.className).not.toMatch(/text-xs/);
+    // The plate is a non-fill danger surface: its frame shares the ⚠'s danger
+    // TEXT tone (dark #E15555, as the canvas draws both with one `danger`), never
+    // the interactive `destructive` FILL (dark #C81E1E).
+    expect(err.className.split(/\s+/)).not.toContain("border-destructive");
+    expect(err).toHaveAttribute("role", "alert");
+
+    const glyph = err.querySelector("span");
+    expect(glyph?.className ?? "").toMatch(/text-destructive-text/);
+    expect(glyph?.className ?? "").toMatch(/font-extrabold/);
+  });
+
+  it("#2027: a field-level error keeps the bare line — the plate is for the whole screen", () => {
+    render(<FormError data-testid="ferr">Не удалось войти.</FormError>);
+
+    const err = screen.getByTestId("ferr");
+    expect(err.className).not.toMatch(/bg-destructive-tint/);
+    expect(err.className).not.toMatch(/border-2/);
+  });
 });
 
 describe("FormMessage — semantic on-primary tone", () => {
@@ -293,7 +343,7 @@ describe("Input invalid state (K-3 — red border + danger tint carry the error)
     // Neo-brutalist error (#512, source §07): destructive 2px border + the pale
     // `destructive-tint` (dangerTint) fill, set by aria-invalid on the control.
     expect(inp).toHaveClass(
-      "aria-invalid:border-destructive",
+      "aria-invalid:border-destructive-text",
       "aria-invalid:bg-destructive-tint",
     );
   });

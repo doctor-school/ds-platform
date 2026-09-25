@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useForm, type RegisterOptions, type Resolver } from "react-hook-form";
 
-import { Badge } from "../primitives/badge";
 import { Button } from "../primitives/button";
 import { Checkbox } from "../primitives/checkbox";
 import {
@@ -21,7 +20,7 @@ import {
   FormMessage,
 } from "../primitives/form";
 import { Input } from "../primitives/input";
-import { AuthCard } from "./auth-card";
+import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 
 /**
  * `<RegisterCard>` (#1934) — the ONE canonical registration composition both
@@ -41,9 +40,12 @@ import { AuthCard } from "./auth-card";
  *     bound; no semantic primitive exists because the code vocabulary belongs
  *     to a campaign, not to the form),
  *   • the consent read model rendered as CONTROLS of this form, split by tier:
- *     the access items in a bordered group ABOVE the submit (021 EARS-5,
- *     F-021-1 «вариант Б») and the marketing items separately BELOW it,
- *   • the 021 EARS-12 disabled submit with its reason stated beside it,
+ *     the access items in a bordered group ABOVE the submit (021 EARS-5) with
+ *     the withdrawal note inside that frame, and the marketing opt-in
+ *     separately BELOW the submit,
+ *   • the 021 EARS-12 submit, which is LIVE in every state — an unmet access
+ *     condition is reported ON ITS OWN ROW once the visitor submits, never by
+ *     a button that refuses to be pressed (owner's canvas, 211 + 193/201),
  *   • the form-level challenge/command statements (003 EARS-17 / 021 EARS-12)
  *     on the canonical `<FormError>` tone.
  *
@@ -80,8 +82,9 @@ export interface RegisterCardConsentItem {
    * Which side of the submit the item stands on, and how it reads: `access` is a
    * PRECONDITION of the command (framed together above the submit), `marketing`
    * is an optional opt-in standing below it in the quieter tone. The two tiers
-   * are told apart by their RENDERING and not by wording alone — the whole point
-   * of F-021-1 «вариант Б».
+   * are told apart by their RENDERING and not by wording alone — the framed
+   * group carries the obligation, so no «необязательно» marker is drawn on the
+   * tier-2 statement (owner's canvas, 217-225).
    */
   tier: "access" | "marketing";
   /** The statement the visitor reads. Data, never a copy blob baked into the package. */
@@ -90,12 +93,11 @@ export interface RegisterCardConsentItem {
   help?: React.ReactNode;
   /** Defaults to true for an access item and false for a marketing one. */
   required?: boolean;
-  /** 021 EARS-12 — what the disabled submit says while THIS item is unticked. */
+  /**
+   * 021 EARS-12 — what THIS row reports, under itself, when the visitor submits
+   * without granting it. Absent → the row reports the generic RHF refusal.
+   */
   unmetMessage?: string;
-  /** The «необязательно» marker rendered inline after the statement. */
-  optionalTag?: React.ReactNode;
-  /** `data-testid` on that marker. */
-  optionalTagTestId?: string;
   /** `data-testid` on the checkbox itself. */
   testId?: string;
   /** `data-testid` on the row (`FormItem`). */
@@ -131,6 +133,8 @@ export interface RegisterCardCopy {
   emailLabel: string;
   emailPlaceholder?: string;
   passwordLabel: string;
+  /** The password input's placeholder (canvas 151 `••••••••`); absent = none. */
+  passwordPlaceholder?: string;
   /** The length baseline ONLY — 003 EARS-36 forbids a surface declaring a second password policy. */
   passwordPolicyHint?: string;
   /**
@@ -157,7 +161,6 @@ export interface RegisterCardTestIds {
   password?: string;
   promo?: string;
   submit?: string;
-  submitReason?: string;
   challengeError?: string;
   commandError?: string;
   accessGroup?: string;
@@ -178,10 +181,11 @@ export interface RegisterCardProps {
   /** 021 EARS-9 — the points promise, inside the form, above the submit group. */
   aboveSubmitSlot?: React.ReactNode;
   /**
-   * A host statement that belongs immediately UNDER the credential fields and
-   * ABOVE the consent/submit groups — the Academy `/register` consent sentence
-   * (003 EARS-20), which is a single read-only line rather than a tier-1 item and
-   * has stood in that position since it shipped. Absent → nothing renders.
+   * The host's read-only «продолжая, вы соглашаетесь…» statement (003 EARS-20) —
+   * a single line rather than a tier-1 item. The owner's canvas
+   * (`design-source/auth.dc.html:208`) stands it AFTER the access-conditions
+   * group and before the submit group, on both storefronts. Absent → nothing
+   * renders.
    */
   belowFieldsSlot?: React.ReactNode;
   /** The host bot-protection element (003 EARS-17), rendered inside the submit group. */
@@ -197,6 +201,15 @@ export interface RegisterCardProps {
   /** 021 EARS-7 — the withdrawal statement below the form. Absent → not rendered. */
   consentNote?: React.ReactNode;
   promo?: RegisterCardPromoProps;
+  /**
+   * The «регистрация по ссылке партнёра — промокод подставлен автоматически»
+   * plate that stands directly under the promo field when the visitor arrived on
+   * a partner link (`design-source/auth.dc.html:176-182`). Rendered ONLY when
+   * given, and only where the promo field itself is rendered — the plate
+   * explains that field and means nothing without it. The host owns the fact and
+   * the wording; the block owns the position.
+   */
+  partnerPlateSlot?: React.ReactNode;
   /** App-owned RHF resolver (localized messages + the `@ds/schemas` SSOT). */
   resolver?: Resolver<RegisterCardValues>;
   /**
@@ -227,37 +240,6 @@ export interface RegisterCardProps {
   /** Host-side pending signal (e.g. an in-flight captcha challenge). */
   pending?: boolean;
   /**
-   * How the pending state reads on the submit. `spinner` is the #337 loading
-   * affordance; `inert` keeps the button plainly disabled — the doctor door
-   * shipped render, where the button is already the EARS-12 disabled control and
-   * a spinner would add a second, competing busy signal.
-   */
-  pendingAffordance?: "spinner" | "inert";
-  /**
-   * The submit group composition, and the ONLY structural fork between the two
-   * hosts' shipped renders:
-   *   • `error-first` — captcha, then the statements, then the button, flowing in
-   *     the form own spacing (the Academy `/register`);
-   *   • `submit-first` — the button and its EARS-12 reason first, then the
-   *     statements, then the captcha, inside their own tight group (the doctor
-   *     door, where the reason must sit immediately under the control it explains).
-   * Neither order may change without a Stage-B re-confirmation, so the fork is an
-   * explicit prop rather than a silent pick by the block.
-   */
-  submitBlock?: "error-first" | "submit-first";
-  /**
-   * Vertical rhythm between the form rows. Exists for the same reason as
-   * `submitBlock`: the two shipped surfaces stand at different steps of the
-   * spacing scale and neither may be nudged without a Stage-B re-confirmation.
-   */
-  spacing?: "sm" | "md";
-  /**
-   * 021 EARS-12 — an unmet precondition NO rendered item covers (e.g. the
-   * partner-data consent missing from the read model entirely, which the server
-   * still refuses without). Stated once every rendered item is granted.
-   */
-  unmetPrecondition?: string | null;
-  /**
    * Extra `data-*` attributes published on the `<form>` element — the doctor
    * door 021 EARS-3 landing decision (`data-registration-landing`), resolved on
    * the server and carried as a fact rather than a hidden input.
@@ -265,11 +247,6 @@ export interface RegisterCardProps {
   formDataAttributes?: Record<string, string>;
   testIds?: RegisterCardTestIds;
 }
-
-const SPACING_CLASS: Record<"sm" | "md", string> = {
-  sm: "space-y-4",
-  md: "flex flex-col gap-4.5",
-};
 
 /** Stable empty read model — a fresh literal each render would churn the filters for nothing. */
 const EMPTY_ITEMS: readonly RegisterCardConsentItem[] = [];
@@ -297,16 +274,13 @@ export function RegisterCard({
   consentItems,
   consentNote,
   promo,
+  partnerPlateSlot,
   resolver,
   fieldRules,
   onSubmit,
   onInvalid,
   errors,
   pending = false,
-  pendingAffordance = "spinner",
-  submitBlock = "error-first",
-  spacing = "sm",
-  unmetPrecondition = null,
   formDataAttributes,
   testIds,
 }: RegisterCardProps) {
@@ -335,21 +309,7 @@ export function RegisterCard({
   });
 
   const idPrefix = React.useId();
-  const reasonId = idPrefix + "-register-submit-reason";
   const accessHeadingId = idPrefix + "-register-access-heading";
-
-  // 021 EARS-12 — the reason beside the disabled submit names the SPECIFIC unmet
-  // condition, in the order the conditions are read on screen; once every
-  // rendered one is granted the host own precondition (if any) is stated, and
-  // `null` is the enabled state — the paragraph is then ABSENT rather than empty
-  // (EARS-3 honest-empty rule, same as every other slot).
-  const grantedConsents = form.watch("consents");
-  const firstUnmet = accessItems.find(
-    (item) => (item.required ?? true) && !grantedConsents?.[item.id],
-  );
-  const submitReason = firstUnmet
-    ? (firstUnmet.unmetMessage ?? null)
-    : unmetPrecondition;
 
   const busy = form.formState.isSubmitting || pending;
 
@@ -366,6 +326,9 @@ export function RegisterCard({
   // confirmation state, and the form surroundings do not travel with it.
   if (confirmation) return root(confirmation);
 
+  // Canvas 56-61 — an operation-level failure stands ABOVE the card title, on
+  // every auth screen. The test ids travel with the statements, so what a
+  // journey asserts is the sentence, not the place it used to stand in.
   const errorStatements = (
     <>
       <FormError {...testIdProps(testIds?.challengeError)}>
@@ -377,32 +340,22 @@ export function RegisterCard({
     </>
   );
 
+  // 021 EARS-12 (owner's Stage-B verdict, 2026-09-22) — the submit is LIVE in
+  // every state, exactly as the canvas draws it (211/490): there is no disabled
+  // button on this surface, so the «no silently dead button» property holds by
+  // construction. An unmet access condition is reported under ITS OWN row when
+  // the visitor presses (canvas 193/201), which is where the fix is made — a
+  // reason parked beside the button named one condition at a time and left the
+  // visitor hunting for the row it meant.
   const submitControl = (
-    <>
-      <Button
-        type="submit"
-        className="w-full"
-        // Disabled ONLY while a stated condition is unmet — a silently dead
-        // button exists in no state (021 EARS-12).
-        disabled={
-          submitReason !== null || (pendingAffordance === "inert" && busy)
-        }
-        loading={pendingAffordance === "spinner" && busy}
-        {...(submitReason === null ? {} : { "aria-describedby": reasonId })}
-        {...testIdProps(testIds?.submit)}
-      >
-        {copy.submit}
-      </Button>
-      {submitReason ? (
-        <p
-          id={reasonId}
-          {...testIdProps(testIds?.submitReason)}
-          className="text-sm font-medium text-muted-foreground"
-        >
-          {submitReason}
-        </p>
-      ) : null}
-    </>
+    <Button
+      type="submit"
+      className="w-full"
+      loading={busy}
+      {...testIdProps(testIds?.submit)}
+    >
+      {copy.submit}
+    </Button>
   );
 
   return root(
@@ -422,6 +375,11 @@ export function RegisterCard({
         // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling.
         title={<h1>{copy.title}</h1>}
         description={copy.description}
+        errorBanner={
+          errors?.challenge || errors?.command ? (
+            <div className="mb-3">{errorStatements}</div>
+          ) : null
+        }
         footer={footer}
       >
         <Form {...form}>
@@ -432,7 +390,9 @@ export function RegisterCard({
             {...testIdProps(testIds?.form)}
             {...formDataAttributes}
             method="post"
-            className={SPACING_CLASS[spacing]}
+            // The canvas' single 18px rhythm between rows — one layout, not a
+            // per-host step of the spacing scale.
+            className="flex flex-col gap-4.5"
             noValidate
             onSubmit={form.handleSubmit(onSubmit, onInvalid)}
           >
@@ -444,7 +404,9 @@ export function RegisterCard({
                 <EmailField
                   field={field}
                   label={copy.emailLabel}
-                  {...(copy.emailPlaceholder === undefined ? {} : { placeholder: copy.emailPlaceholder })}
+                  {...(copy.emailPlaceholder === undefined
+                    ? {}
+                    : { placeholder: copy.emailPlaceholder })}
                   {...testIdProps2(testIds?.email)}
                 />
               )}
@@ -459,7 +421,12 @@ export function RegisterCard({
                   field={field}
                   purpose="new"
                   label={copy.passwordLabel}
-                  {...(copy.passwordPolicyHint === undefined ? {} : { policyHint: copy.passwordPolicyHint })}
+                  {...(copy.passwordPlaceholder === undefined
+                    ? {}
+                    : { placeholder: copy.passwordPlaceholder })}
+                  {...(copy.passwordPolicyHint === undefined
+                    ? {}
+                    : { policyHint: copy.passwordPolicyHint })}
                   {...(copy.passwordRevealLabels === undefined
                     ? {}
                     : { revealLabels: copy.passwordRevealLabels })}
@@ -509,29 +476,32 @@ export function RegisterCard({
                       />
                     </FormControl>
                     <FormMessage />
+                    {/*
+                      Canvas 176-182 — the partner-link plate belongs to the
+                      promo field it explains, so it is rendered inside that
+                      field's row rather than as a free-standing block.
+                    */}
+                    {partnerPlateSlot}
                   </FormItem>
                 )}
               />
             ) : null}
 
             {/*
-              A host line that reads with the fields it follows, not with the
-              submit group (the Academy consent sentence). Rendered bare — the
-              host owns its element, so no wrapper alters the form own rhythm.
-            */}
-            {belowFieldsSlot}
-
-            {/*
               021 EARS-5 — TIER 1, the access conditions, framed TOGETHER above
-              the submit (F-021-1 «вариант Б», the owner pick). The frame is the
-              whole point of the variant: the tiers are told apart by their
-              RENDERING, so tier 1 is a bordered group under its own heading and
-              tier 2 stands outside it, below the submit.
+              the submit (owner's canvas, 185-206). The frame is the whole point:
+              the tiers are told apart by their RENDERING, so tier 1 is a bordered
+              group under its own heading, carrying the withdrawal note, and tier
+              2 stands outside it, below the submit.
             */}
             {accessItems.length ? (
               <div
                 {...testIdProps(testIds?.accessGroup)}
-                className="border-2 border-border"
+                // Canvas 186 — ONE uniform 16px padding inside the same 2px ink
+                // frame the card itself draws. The heading is a line INSIDE that
+                // padding, not a filled bar across the top: the bar was a second
+                // piece of chrome the canvas has nowhere.
+                className="flex flex-col gap-3.5 border-2 border-border p-4"
                 role="group"
                 aria-labelledby={
                   copy.accessGroupHeading ? accessHeadingId : undefined
@@ -540,39 +510,69 @@ export function RegisterCard({
                 {copy.accessGroupHeading ? (
                   <p
                     id={accessHeadingId}
-                    className="border-b-2 border-border bg-muted px-3.5 py-2.5 text-xs font-extrabold uppercase tracking-widest"
+                    // Canvas 187 — an eyebrow: 11px/800 on the `micro`
+                    // tracking, in the FAINT tone the canvas gives every
+                    // secondary line on the door.
+                    className={AUTH_EYEBROW}
                   >
                     {copy.accessGroupHeading}
                   </p>
                 ) : null}
-                <div className="flex flex-col gap-3.5 px-3.5 py-4">
-                  {accessItems.map((item) => (
-                    <ConsentControl
-                      key={item.id}
-                      item={item}
-                      control={form.control}
-                    />
-                  ))}
-                </div>
+                {accessItems.map((item, index) => (
+                  <div
+                    key={item.id}
+                    // Canvas 196 — a hairline rule separates one access
+                    // condition from the next INSIDE the frame, so two
+                    // wrapping statements never read as one paragraph.
+                    className={
+                      index === 0
+                        ? undefined
+                        : "border-t-2 border-hairline pt-3.5"
+                    }
+                  >
+                    <ConsentControl item={item} control={form.control} />
+                  </div>
+                ))}
+                {/*
+                  021 EARS-7 — the withdrawal statement, which the canvas (204)
+                  keeps INSIDE the conditions frame: it is what this surface says
+                  about the consents standing right above it. No toggle beside
+                  it — a change is a request handled by a platform manager, and a
+                  control here would promise a mechanism this surface lacks.
+                */}
+                {consentNote ? (
+                  <p
+                    {...testIdProps(testIds?.note)}
+                    // Canvas 204 — the withdrawal sentence at the 11.5px
+                    // half-step on a 1.5 line, in the faint tone.
+                    className="text-pill leading-normal text-faint"
+                  >
+                    {consentNote}
+                  </p>
+                ) : null}
               </div>
             ) : null}
+
+            {/*
+              Canvas 208 — the read-only «продолжая, вы соглашаетесь…» statement,
+              AFTER the conditions frame and before the submit group.
+            */}
+            {belowFieldsSlot}
 
             {/* 021 EARS-9 — the promise, read from configuration by the host. */}
             {aboveSubmitSlot ? <div>{aboveSubmitSlot}</div> : null}
 
-            {submitBlock === "submit-first" ? (
-              <div className="flex flex-col gap-2.5">
-                {submitControl}
-                {errorStatements}
-                {captchaSlot}
-              </div>
-            ) : (
-              <>
-                {captchaSlot}
-                {errorStatements}
-                {submitControl}
-              </>
-            )}
+            {/*
+              Canvas 209-214 — ONE order on both storefronts: the challenge,
+              then the submit. The form-level statements stand in the card's
+              error banner above the title (canvas 56-61).
+            */}
+            {/* The invisible challenge mounts a zero-height provider node; as a
+                flex row it would add a second 18px gap above the submit. The
+                `absolute` wrapper keeps it mounted in the form while it takes
+                no place in the column's rhythm. */}
+            {captchaSlot ? <div className="absolute">{captchaSlot}</div> : null}
+            {submitControl}
 
             {/*
               021 EARS-5 — TIER 2, the optional opt-in, standing SEPARATELY below
@@ -593,15 +593,16 @@ export function RegisterCard({
             ) : null}
 
             {/*
-              021 EARS-7 — the withdrawal statement that belongs to the block, and
-              the only thing this surface says about changing a consent. No toggle
-              beside it: a change is a request handled by a platform manager, and a
-              control here would promise a mechanism this surface does not have.
+              The same 021 EARS-7 statement on a card that draws NO conditions
+              frame to hold it (a host with marketing rows only): the sentence is
+              still said rather than silently dropped.
             */}
-            {consentNote ? (
+            {!accessItems.length && consentNote ? (
               <p
                 {...testIdProps(testIds?.note)}
-                className="text-xs text-muted-foreground"
+                // Canvas 204 — the same sentence in the same voice when the
+                // host draws no conditions frame to hold it.
+                className="text-pill leading-normal text-faint"
               >
                 {consentNote}
               </p>
@@ -618,9 +619,11 @@ export function RegisterCard({
  * hand-assembled input: the box, its checked/focus/disabled states and the label
  * association are the primitive.
  *
- * A marketing statement reads in the quieter muted tone — the optionality is
- * carried by the rendering, not by wording alone — and carries no `FormMessage`,
- * because an optional control has no unmet state to report.
+ * EVERY row reads alike — the canvas words and weights the marketing opt-in
+ * exactly as it does an access condition (221-223), because a field is ONE
+ * thing; what differs between the tiers is WHERE the row stands, not how loudly
+ * it speaks. An optional row still carries no `FormMessage`: it has no unmet
+ * state to report.
  */
 function ConsentControl({
   item,
@@ -637,7 +640,7 @@ function ConsentControl({
       name={`consents.${item.id}`}
       {...(required ? { rules: { required: item.unmetMessage ?? true } } : {})}
       render={({ field }) => (
-        <FormItem {...testIdProps(item.itemTestId)}>
+        <FormItem className="gap-1.75" {...testIdProps(item.itemTestId)}>
           <FormControl>
             <Checkbox
               className="items-start"
@@ -649,29 +652,14 @@ function ConsentControl({
               onChange={(event) => field.onChange(event.target.checked)}
             >
               <span className="flex flex-col gap-1">
-                <span
-                  {...testIdProps(item.labelTestId)}
-                  className={
-                    item.tier === "marketing"
-                      ? "text-muted-foreground"
-                      : undefined
-                  }
-                >
-                  {item.label}
-                  {item.optionalTag ? (
-                    <Badge
-                      variant="label"
-                      className="ml-1.5 align-middle"
-                      {...testIdProps(item.optionalTagTestId)}
-                    >
-                      {item.optionalTag}
-                    </Badge>
-                  ) : null}
-                </span>
+                <span {...testIdProps(item.labelTestId)}>{item.label}</span>
                 {item.help ? (
                   <span
                     {...testIdProps(item.helpTestId)}
-                    className="text-sm text-muted-foreground"
+                    // Canvas 192/200/222 — the reason under the statement is
+                    // 12px on a 1.5 line in the quiet tone, a step below the
+                    // statement rather than the same size as it.
+                    className="text-xs leading-normal font-normal text-faint"
                   >
                     {item.help}
                   </span>
@@ -679,8 +667,12 @@ function ConsentControl({
               </span>
             </Checkbox>
           </FormControl>
-          {/* 021 EARS-12 — actionable, in the field where it occurred. */}
-          {required ? <FormMessage /> : null}
+          {/*
+            021 EARS-12 — actionable, in the field where it occurred: the canvas
+            (193/201) stands the warning line 7px under the row and aligned with
+            the statement column, past the 22px box and its 12px gap.
+          */}
+          {required ? <FormMessage className="ms-8.5" /> : null}
         </FormItem>
       )}
     />

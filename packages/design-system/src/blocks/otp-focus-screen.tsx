@@ -67,6 +67,7 @@ export function OtpFocusScreen<T extends FieldValues>({
   onResend,
   onChangeMethod,
   error,
+  captchaSlot,
   submitTestId,
   resendTestId,
   changeMethodTestId,
@@ -135,6 +136,12 @@ export function OtpFocusScreen<T extends FieldValues>({
 
   /** Optional error slot (already-mapped, localized message). */
   error?: React.ReactNode;
+  /**
+   * The bot-protection challenge, rendered INSIDE the form directly above the
+   * submit (canvas `auth.dc.html:139-143`) — the challenge belongs to the act
+   * of submitting the code, so it stands with the button, not above the screen.
+   */
+  captchaSlot?: React.ReactNode;
 
   submitTestId?: string;
   resendTestId?: string;
@@ -171,6 +178,8 @@ export function OtpFocusScreen<T extends FieldValues>({
         />
 
         <FormError>{error}</FormError>
+
+        {captchaSlot}
 
         <Button
           type="submit"

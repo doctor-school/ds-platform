@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { resolveAuthFlowCopy } from "./copy";
 
 import type {
   AuthFlowHostConfig,
@@ -64,16 +65,16 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
       AuthFlowLoginCopy["otp"]["resendCountdown"]
     >().toEqualTypeOf<string>();
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
-      expect(config.copy.login.otp.sentTo).toContain("{destination}");
-      expect(config.copy.login.otp.resendCountdown).toContain("{seconds}");
+      expect(resolveAuthFlowCopy(config).login.otp.sentTo).toContain("{destination}");
+      expect(resolveAuthFlowCopy(config).login.otp.resendCountdown).toContain("{seconds}");
       expect(JSON.parse(JSON.stringify(config))).toEqual(config);
     }
   });
 
   it("row 44: the field copy carries the identifier and phone entries the door resolver reads", () => {
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
-      expect(config.copy.fields.identifier.invalid).toEqual(expect.any(String));
-      expect(config.copy.fields.phone.invalid).toEqual(expect.any(String));
+      expect(resolveAuthFlowCopy(config).fields.identifier.invalid).toEqual(expect.any(String));
+      expect(resolveAuthFlowCopy(config).fields.phone.invalid).toEqual(expect.any(String));
     }
   });
 });

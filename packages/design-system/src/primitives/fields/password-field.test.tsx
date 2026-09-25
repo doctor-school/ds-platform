@@ -1,6 +1,12 @@
 import * as React from "react";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Form, FormField } from "../form";
@@ -68,7 +74,9 @@ describe("PasswordField composition (inline message)", () => {
     expect(descs).toHaveLength(1);
     const desc = descs[0]!;
     expect(desc).toHaveTextContent(POLICY);
-    expect(desc).toHaveClass("text-xs", "text-muted-foreground");
+    // #2027 canvas — the password hint is the form's quietest line: 12px/600
+    // in the faint tone, the package-wide helper voice.
+    expect(desc).toHaveClass("text-xs", "font-semibold", "text-faint");
     // Exactly one message paragraph under the field — no extra blank line.
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });
@@ -263,10 +271,7 @@ describe("PasswordField reveal toggle (003 EARS-38)", () => {
 
   it("003 EARS-38.5: the optional placeholder reaches the input", () => {
     render(<RevealHarness placeholder="••••••••" />);
-    expect(screen.getByTestId("pw")).toHaveAttribute(
-      "placeholder",
-      "••••••••",
-    );
+    expect(screen.getByTestId("pw")).toHaveAttribute("placeholder", "••••••••");
   });
 
   it("003 EARS-38.6: toggling fires no onChange / no value side effect", () => {
@@ -289,5 +294,14 @@ describe("PasswordField reveal toggle (003 EARS-38)", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(input).toHaveValue("secret1234");
     expect(input).toHaveAttribute("type", "password");
+  });
+});
+
+describe("PasswordField spacing (#2027 canvas)", () => {
+  it("#2027: the policy hint stands the canvas 7px under the control (auth.dc.html 542)", () => {
+    render(<PwHarness purpose="new" policyHint={POLICY} />);
+    const group = screen.getByText(POLICY).parentElement;
+    expect(group).toHaveClass("flex", "flex-col", "gap-1.75");
+    expect(group).toContainElement(screen.getByTestId("pw"));
   });
 });

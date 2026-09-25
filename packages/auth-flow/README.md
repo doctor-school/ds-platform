@@ -23,6 +23,11 @@ uses, so nothing can reach the whole flow through one export (PR 1.1 rework D20)
 | `@ds/auth-flow/bot-protection` | `botProtectionSiteKey`, `botProtectionMessages` read off the config.                                                                                                                                                                                                                                                                                                                                                                                                |
 | `@ds/auth-flow/fields`         | The identifier / password / promo / code rules and the RHF projection.                                                                                                                                                                                                                                                                                                                                                                                              |
 | `@ds/auth-flow/test-support`   | Host-config fixtures for host suites — test code only, never shipped.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `@ds/auth-flow/shell`          | `AuthShell` — the frame every auth screen on both storefronts sits in (#2027 PR 1.5).                                                                                                                                                                                                                                                                                                                                                                               |
+| `@ds/auth-flow/login`          | The sign-in door (#2027 PR 1.5): `LoginDoor`, `LoginGlyph`, and the return-context card (`ReturnContextPanel` / `ReturnContextPlate` / `returnContextSlots`).                                                                                                                                                                                                                                                                                                       |
+| `@ds/auth-flow/login/route`    | `LoginRoute` — the ONE server mount of that door: `guardAuthRoute`, then the door.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@ds/auth-flow/register`       | The sign-up door (#2027 PR 1.6): `RegisterDoor`, `RegistrationConfirmation` (the doctor host's inline confirmation step), `resolveConfirmLanding`, `RegisterGlyph`.                                                                                                                                                                                                                                                                                                 |
+| `@ds/auth-flow/register/route` | `RegisterRoute` — the ONE server mount of that door: `guardAuthRoute`, the confirm landing, then the door.                                                                                                                                                                                                                                                                                                                                                          |
 
 The bot-protection WIDGET, its resume-one-action orchestration
 (`useBotProtectedAction`) and the error predicates stay in
@@ -35,19 +40,23 @@ them.
 adapter list is closed and empty (gate §4.3). A divergence that fits none of
 these fields is a question for the owner, never a host-local variant.
 
-| Field                   | Why it is data                                                                                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.basePath`          | The 003 auth root — `/v1/auth` on both hosts today.                                                                                                                                                  |
-| `api.registerPath`      | `/v1/auth/register` vs the storefront registration command.                                                                                                                                          |
-| `api.confirmPath`       | `/v1/auth/verify` vs the storefront confirm command.                                                                                                                                                 |
-| `routes`                | Which paths ARE this host's auth screens, where `/account` is, and (`allowAuthenticated`) which of them a signed-in user may still complete. The doctor host states no `verify`: it confirms inline. |
-| `returnTo`              | The parking cookie (name, `maxAgeSeconds`) the middleware parks a return target in — stated only by a host whose middleware parks one.                                                               |
-| `copy.errors`           | Each host keeps its own sentences; the package keeps the branch.                                                                                                                                     |
-| `copy.botProtection`    | The four-state challenge copy the shared block's failures map onto.                                                                                                                                  |
-| `copy.fields`           | One entry per field the host SERVES; `promoCode` iff `register.promoField`.                                                                                                                          |
-| `botProtection.siteKey` | The site key VALUE — see below.                                                                                                                                                                      |
-| `channels`              | `['email']` on a host with no SMS: its identifier box refuses the phone shape.                                                                                                                       |
-| `register.promoField`   | Whether the registration form carries the optional promo box.                                                                                                                                        |
+| Field                                               | Why it is data                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api.basePath`                                      | The 003 auth root — `/v1/auth` on both hosts today.                                                                                                                                                                                                                                   |
+| `api.registerPath`                                  | `/v1/auth/register` vs the storefront registration command.                                                                                                                                                                                                                           |
+| `api.confirmPath`                                   | `/v1/auth/verify` vs the storefront confirm command.                                                                                                                                                                                                                                  |
+| `routes`                                            | Which paths ARE this host's auth screens, where `/account` is, and (`allowAuthenticated`) which of them a signed-in user may still complete. The doctor host states no `verify`: it confirms inline.                                                                                  |
+| `returnTo`                                          | The parking cookie (name, `maxAgeSeconds`) the middleware parks a return target in — stated only by a host whose middleware parks one.                                                                                                                                                |
+| `copy.errors`                                       | Each host keeps its own sentences; the package keeps the branch.                                                                                                                                                                                                                      |
+| `copy.botProtection`                                | The four-state challenge copy the shared block's failures map onto.                                                                                                                                                                                                                   |
+| `copy.fields`                                       | One entry per field the host SERVES; `promoCode` iff `register.promoField`.                                                                                                                                                                                                           |
+| `botProtection.siteKey`                             | The site key VALUE — see below.                                                                                                                                                                                                                                                       |
+| `channels`                                          | `['email']` on a host with no SMS: its identifier box refuses the phone shape.                                                                                                                                                                                                        |
+| `register.promoField`                               | Whether the registration form carries the optional promo box.                                                                                                                                                                                                                         |
+| `copy.register`                                     | The sign-up door's words — headings, field labels, the «Уже есть аккаунт? Войти» way out (#2331), and the optional `confirm` templates the doctor host's inline confirmation step renders.                                                                                            |
+| `brand.loginIcon` / `brand.registerIcon`            | Which door glyph this host shows, as a closed ENUM value rather than a component — a host states WHICH glyph, never draws its own door.                                                                                                                                               |
+| `register.attribution?` / `register.pointsPromise?` | The «кто платит» line above the form and the NMO-points promise above the submit. Honest-empty SLOTS: unfilled means the line is ABSENT, never a placeholder.                                                                                                                         |
+| `consents`                                          | The whole consent block of the sign-up door as DATA: `tiers`, `medicalWorkerDeclaration`, `partnerDataItem`, `marketingOptIn`, `wordingVersion`, `accessGroupHeading`, and the read-only `statement` a host renders instead of controls. Absent = this host asks for no consent here. |
 
 **Why `siteKey` is a value, not an env name.** Next inlines `NEXT_PUBLIC_*` only
 at a LITERAL `process.env.NEXT_PUBLIC_…` read in the app's own source. A package
@@ -132,7 +141,10 @@ calls the guard and the data decides.
 «Войти» / «Зарегистрироваться» / «Забыли пароль» / «Вернуться ко входу» links, the
 post-registration confirmation screen's two co-equal actions, and every
 `router.push` between these surfaces go through the host's carry helper
-(`withReturnTarget` on the Academy, `withReturnContext` on the doctor storefront),
+(`withReturnTarget` for the Academy shapes, `withReturnContext` for the doctor
+ones — both package modules since PR 1.6:
+`packages/auth-flow/src/return-target-href.ts` and `src/return-context-href.ts`,
+the latter re-exported by `src/server/return-context.ts`),
 never a bare `"/login"` literal. Recovery and sign-up are INTERRUPTIONS of wherever
 the visitor was going, not journeys of their own: a visitor who loses the target by
 choosing the right-hand button instead of the left one has been dropped by the app,
@@ -180,11 +192,14 @@ URL would mint the session on the wrong host — a defect no rendered screen sho
 
 ## Mounted by
 
-`apps/portal/lib/auth-flow-config.ts` and `apps/doctor/lib/auth-flow-config.ts`
-for the transport, copy and captcha values; `apps/portal/lib/auth-flow-routes.ts`
+`apps/portal/lib/auth-flow.host-config.ts` and
+`apps/doctor/lib/auth-flow.host-config.ts` for the transport, copy, consent and
+captcha VALUES; `apps/portal/lib/auth-flow-client.ts` and
+`apps/doctor/lib/auth-flow-client.ts` for the browser transport bound to them;
+`apps/portal/lib/auth-flow-routes.ts`
 and `apps/doctor/lib/auth-flow-routes.ts` for the ROUTE values, which are read by
 server code (the auth-screen guards, the Academy middleware, the doctor
-storefront layout) and so are kept out of the config module that binds the
+storefront layout) and so are kept out of the client module that binds the
 browser auth client at module scope.
 
 Both hosts also declare the dependency, list `@ds/auth-flow` in

@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { AuthFlowHostConfig } from "../host-config";
+import { resolveAuthFlowCopy } from "../copy";
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
@@ -29,6 +30,12 @@ const HOSTS = [
   ["doctor", DOCTOR_FIXTURE],
 ] as const;
 
+/** A default the fixtures keep: both state the package's own sub-copy line. */
+function stated(value: string | null): string {
+  expect(value).not.toBeNull();
+  return value ?? "";
+}
+
 function withSiteKey(
   config: AuthFlowHostConfig,
   siteKey: string | undefined,
@@ -50,7 +57,7 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       const notices = screen.getAllByTestId("smartcaptcha-disclosure");
       expect(notices).toHaveLength(1);
       expect(notices[0]).toBeVisible();
-      const disclosure = config.copy.botProtectionDisclosure;
+      const disclosure = resolveAuthFlowCopy(config).botProtectionDisclosure;
       expect(notices[0]).toHaveTextContent(
         `${disclosure.notice} ${disclosure.link}`,
       );
@@ -68,6 +75,23 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       expect(noticeLink).toHaveClass("hover:underline");
     },
   );
+
+  it("#2027: the processing notice reads as the canvas faint line under the card (canvas 289)", async () => {
+    render(
+      <AuthShell config={withSiteKey(config, "configured-client-key")}>
+        <div data-testid="auth-form">form</div>
+      </AuthShell>,
+    );
+
+    const notice = await screen.findByTestId("smartcaptcha-disclosure");
+    expect(notice).toHaveClass(
+      "mt-3.5",
+      "text-xs",
+      "leading-normal",
+      "text-faint",
+    );
+    expect(notice.className).not.toMatch(/text-center|text-muted-foreground/);
+  });
 
   it("003 EARS-17: renders no processing notice when SmartCaptcha is not configured", async () => {
     render(
@@ -96,9 +120,15 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
       "alt",
       "",
     );
-    expect(screen.getByText(config.copy.brand.headline)).toBeInTheDocument();
-    expect(screen.getByText(config.copy.brand.subcopy)).toBeInTheDocument();
-    expect(screen.getByText(config.copy.brand.footer)).toBeInTheDocument();
+    expect(
+      screen.getByText(resolveAuthFlowCopy(config).brand.headline),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(stated(resolveAuthFlowCopy(config).brand.subcopy)),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(resolveAuthFlowCopy(config).brand.footer),
+    ).toBeInTheDocument();
   });
 
   it("row 47: the return-context block takes the value prop's place when supplied", () => {
@@ -113,8 +143,34 @@ describe.each(HOSTS)("AuthShell on the %s host", (_host, config) => {
 
     expect(screen.getByTestId("return-context")).toBeInTheDocument();
     expect(
-      screen.queryByText(config.copy.brand.subcopy),
+      screen.queryByText(stated(resolveAuthFlowCopy(config).brand.subcopy)),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("#2027: the brand panel's words are host data (owner 2026-09-24)", () => {
+  it("a host that states no sub-copy line gets no sub-copy node — the rest of the panel stays", () => {
+    const config: AuthFlowHostConfig = {
+      ...ACADEMY_FIXTURE,
+      copy: {
+        brand: {
+          eyebrow: "host.eyebrow",
+          headline: "host.headline",
+          subcopy: null,
+          footer: "host.footer",
+        },
+      },
+    };
+    render(
+      <AuthShell config={config}>
+        <div>form</div>
+      </AuthShell>,
+    );
+
+    expect(screen.getByTestId("auth-brand-panel").textContent).toBe(
+      "host.eyebrowhost.headlinehost.footer",
+    );
+    expect(screen.getByText("host.headline").parentElement?.children).toHaveLength(2);
   });
 });
 

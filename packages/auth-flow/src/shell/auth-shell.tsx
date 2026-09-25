@@ -4,6 +4,7 @@ import Image from "next/image";
 import { AuthShell as AuthShellBlock } from "@ds/design-system/blocks";
 import { Link as DsLink } from "@ds/design-system/link";
 
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 
 /** The vendor's own processing notice (003 EARS-17) — the same page for every host. */
@@ -45,7 +46,8 @@ export type AuthShellProps = {
  */
 export function AuthShell({ config, returnContext, children }: AuthShellProps) {
   const { wordmark, panel } = config.brand;
-  const { brand: brandCopy, botProtectionDisclosure: disclosure } = config.copy;
+  const { brand: brandCopy, botProtectionDisclosure: disclosure } =
+    resolveAuthFlowCopy(config);
 
   return (
     <AuthShellBlock
@@ -97,7 +99,7 @@ export function AuthShell({ config, returnContext, children }: AuthShellProps) {
       {children}
       {config.botProtection.siteKey ? (
         <p
-          className="mt-3 text-center text-xs text-muted-foreground"
+          className="mt-3.5 text-xs leading-normal text-faint"
           data-testid="smartcaptcha-disclosure"
         >
           {disclosure.notice}{" "}

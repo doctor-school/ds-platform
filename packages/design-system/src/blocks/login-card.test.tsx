@@ -40,6 +40,7 @@ const copy: LoginCardCopy = {
     identifierLabel: "copy.password.identifierLabel",
     identifierPlaceholder: "copy.password.identifierPlaceholder",
     passwordLabel: "copy.password.passwordLabel",
+    passwordPlaceholder: "copy.password.passwordPlaceholder",
     reveal: {
       show: "copy.password.revealShow",
       hide: "copy.password.revealHide",
@@ -150,6 +151,34 @@ describe("<LoginCard>", () => {
     expect(screen.queryByTestId("password-login-form")).not.toBeInTheDocument();
     expect(screen.getByTestId("otp-send")).toBeInTheDocument();
     expect(screen.getByText("copy.otp.heading")).toBeInTheDocument();
+  });
+
+  it("#2027: the challenge stands directly above the control it protects, on both sign-in methods", () => {
+    // Owner's canvas (`design-source/auth.dc.html:88-95` and `:127-131`): the
+    // SmartCaptcha row is the last thing before the button on every auth screen,
+    // not a banner at the head of the step.
+    setup();
+
+    const passwordCaptcha = screen.getByTestId("password-captcha");
+    const passwordSubmit = screen.getByTestId("password-login-submit");
+    expect(
+      passwordCaptcha.compareDocumentPosition(passwordSubmit) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+
+    const otpCaptcha = screen.getByTestId("otp-captcha");
+    const identifier = screen.getByTestId("otp-identifier");
+    const send = screen.getByTestId("otp-send");
+    expect(
+      identifier.compareDocumentPosition(otpCaptcha) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      otpCaptcha.compareDocumentPosition(send) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   // The host's whole reset story hangs on this callback: the block's own state
@@ -303,5 +332,50 @@ describe("#2027 <LoginCard> pre-hydration submit", () => {
     for (const form of forms) {
       expect(form.getAttribute("method")).toBe("post");
     }
+  });
+});
+
+/**
+ * Canvas render parity (#2027, owner rule 2026-09-22 «parity is the rendering»).
+ * `design-source/auth.dc.html` draws the login door's operation-level refusal as
+ * a framed plate above the title, and names the two choice groups with the same
+ * eyebrow the register door uses for its conditions — one family, one recipe.
+ */
+describe("#2027 <LoginCard> canvas parity", () => {
+  it("#2027: a refused sign-in is the canvas plate, not a bare red line (canvas 56-61)", () => {
+    setup({ passwordError: "copy.password.error" });
+
+    const banner = screen.getByText(/copy\.password\.error/).closest("p");
+    expect(banner).toHaveClass(
+      "border-2",
+      "border-destructive-text",
+      "bg-destructive-tint",
+      "text-caption",
+      "text-foreground",
+    );
+    expect(banner).toHaveAttribute("role", "alert");
+  });
+
+  it("#2027: the password input carries the host placeholder (canvas 82, owner 2026-09-24)", () => {
+    setup();
+    expect(
+      screen.getByLabelText("copy.password.passwordLabel", { selector: "input" }),
+    ).toHaveAttribute("placeholder", "copy.password.passwordPlaceholder");
+  });
+
+  it("#2027: both choice groups are named with the family eyebrow (canvas 66/106)", () => {
+    setup();
+
+    const eyebrow = screen.getByText("copy.methodSwitcherLabel", {
+      selector: "p",
+    });
+    expect(eyebrow).toHaveClass(
+      "text-eyebrow",
+      "font-extrabold",
+      "uppercase",
+      "tracking-micro",
+      "text-faint",
+    );
+    expect(eyebrow.className).not.toMatch(/text-muted-foreground/);
   });
 });

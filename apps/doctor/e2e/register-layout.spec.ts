@@ -12,13 +12,14 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * On REQ-22 and the word «документ». The requirement (021-requirements-en §112)
  * bans the *request*: "no upload control, no file input, no document field and no
- * «прикрепите диплом» copy". It does not ban the promise — the canvas card head
- * says «Документы на входе не нужны.», which is REQ-22 being *stated to the
- * doctor*, and 021-product.md builds the whole positioning on it. So 1.3 scans
- * for request-shaped tells and asserts the promise is present, instead of
- * banning a substring. The scan stays scoped to the registration screen because
- * that is the surface the requirement governs — the scope is the contract, not a
- * workaround for neighbouring copy.
+ * «прикрепите диплом» copy". It does not ban the promise — and the owner's canvas
+ * (#2027, `design-source/auth.dc.html`) carries the soft terms in ONE sentence,
+ * the card subtitle «Бесплатно, за две минуты — нужны только e-mail и пароль.»,
+ * instead of the former second line «Документы на входе не нужны.». So 1.3 scans
+ * for request-shaped tells and asserts the subtitle that states the soft terms,
+ * instead of banning a substring. The scan stays scoped to the registration
+ * screen because that is the surface the requirement governs — the scope is the
+ * contract, not a workaround for neighbouring copy.
  *
  * Scope of this slice: layout only. The envelope's other slots (return context,
  * attribution, points promise, consent tiers — return context #1538, attribution
@@ -50,8 +51,9 @@ const DOCUMENT_REQUEST_TELLS = [
   "подтвердите квалификацию",
 ];
 
-/** The REQ-22 promise as the canvas states it in the card head. */
-const NO_DOCUMENTS_PROMISE = "Документы на входе не нужны.";
+/** The soft terms as the canvas states them in the card head (#2027). */
+const SOFT_TERMS_SUBTITLE =
+  "Бесплатно, за две минуты — нужны только e-mail и пароль.";
 
 async function assertNoDocumentRequest(page: Page, state: string) {
   // No upload affordance anywhere on the document, in any state.
@@ -95,7 +97,7 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
     await expect(page.getByTestId("registration-form-card")).toBeVisible();
     // The route owns the document's single h1 (no layout above it carries one).
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page.locator("h1")).toHaveText("Регистрация");
+    await expect(page.locator("h1")).toHaveText("Создание аккаунта");
   });
 
   test("021 EARS-1.2: exactly three inputs — email, password, optional promo", async ({
@@ -143,9 +145,10 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
   }) => {
     await page.goto("/register");
     await assertNoDocumentRequest(page, "empty");
-    // REQ-22 is not merely absent — the card head states it to the doctor.
+    // REQ-22 is not merely absent — the card head still states the soft terms
+    // the doctor is being asked to accept, in the canvas's own one sentence.
     await expect(page.getByTestId("registration-form-card")).toContainText(
-      NO_DOCUMENTS_PROMISE,
+      SOFT_TERMS_SUBTITLE,
     );
 
     await page.getByTestId("register-email").fill("doctor@clinic.ru");
@@ -201,26 +204,31 @@ test.describe("021 EARS-1: the chromeless registration route", () => {
     }
   });
 
-  test("021 EARS-1.6: the inert submit is disabled with a stated, wired reason", async ({
+  test("021 EARS-1.6: the submit is live, and what is ungranted is stated on its own row and wired to it", async ({
     page,
   }) => {
     await page.goto("/register");
 
     const submit = page.getByTestId("register-submit");
-    await expect(submit).toBeDisabled();
+    // Canvas 490: the button is live in every state, so the «silently dead
+    // button» EARS-12 forbids cannot exist here — there is no disabled button.
+    await expect(submit).toBeEnabled();
+    await expect(page.getByTestId("register-submit-reason")).toHaveCount(0);
 
-    // EARS-12: a silently dead button exists in no state of this surface.
-    const reason = page.getByTestId("register-submit-reason");
-    await expect(reason).toBeVisible();
-    await expect(reason).not.toHaveText("");
+    await submit.click();
 
-    // The reason is announced with the control, not merely painted near it.
-    const reasonId = await reason.getAttribute("id");
-    expect(reasonId, "the reason line carries an id").toBeTruthy();
-    expect(
-      (await submit.getAttribute("aria-describedby"))?.split(/\s+/) ?? [],
-      "submit aria-describedby names the reason",
-    ).toContain(reasonId);
+    // EARS-12 after the press: the unmet condition is stated where it occurred,
+    // and ANNOUNCED with its own control rather than merely painted near it.
+    const declaration = page.getByTestId("register-medworker");
+    await expect(declaration).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await declaration.getAttribute("aria-describedby");
+    expect(describedBy, "the reporting row points at its message").toBeTruthy();
+    const message = page
+      .locator(`[id="${describedBy!.split(/\s+/).at(-1)}"]`)
+      .first();
+    await expect(message, "the message exists and is visible").toBeVisible();
+    await expect(message, "the message is not empty").not.toHaveText(/^\s*$/);
+    await expect(submit, "and the button stays live").toBeEnabled();
   });
 });
 
@@ -267,7 +275,7 @@ test.describe("021 EARS-1: the vertical axis", () => {
     const mark = page.getByTestId("auth-panel-wordmark");
     const eyebrow = panel.getByText("Врачи учат врачей");
     const closing = panel.getByText(
-      "Бесплатно для врача · без бюрократии · © Doctor.School 2026",
+      "© Doctor.School. Платформа непрерывного медицинского образования.",
     );
 
     await expect(closing).toBeVisible();

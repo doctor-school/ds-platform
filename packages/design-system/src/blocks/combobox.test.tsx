@@ -69,6 +69,20 @@ const KINDS: ComboboxOption[] = [
 ];
 
 describe("<Combobox>", () => {
+  it("the canvas surface: the closed control paints bg-card, never the page background (#2027)", () => {
+    render(
+      <Combobox
+        options={KINDS}
+        onValueChange={vi.fn()}
+        placeholder="Выберите вид связи"
+        emptyLabel="Ничего не найдено"
+      />,
+    );
+    const trigger = screen.getByRole("combobox");
+    expect(trigger).toHaveClass("bg-card");
+    expect(trigger).not.toHaveClass("bg-background");
+  });
+
   it("carries the ARIA combobox contract on the closed control", () => {
     render(
       <Combobox
@@ -415,6 +429,11 @@ describe("<Combobox>", () => {
     expect(screen.getByRole("combobox")).toHaveAttribute(
       "aria-invalid",
       "true",
+    );
+    // The invalid frame takes the danger TEXT tone, as every field does (#2027 P2).
+    expect(screen.getByRole("combobox")).toHaveClass(
+      "aria-invalid:border-destructive-text",
+      "aria-invalid:bg-destructive-tint",
     );
     rerender(
       <Combobox

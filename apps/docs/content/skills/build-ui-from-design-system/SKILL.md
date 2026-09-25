@@ -32,6 +32,8 @@ Features always compose from `@ds/design-system`; bespoke is the last resort, re
 
 Before dispatch or implementation of canvas-derived UI, read [canvas-source.md](canvas-source.md) in full. Every referenced canvas must be vendored from real source bytes with provenance; verify element and interaction-state fidelity before Stage B. Missing required live design capability is a prerequisite, never a fake export or an implied approval.
 
+- **A canvas literal is not a design fork.** A canvas colour/size literal that differs from an existing DS token or primitive is a CANVAS DEFECT: code keeps the token/primitive, the PR discloses the mismatch in `render-delta:` or a canvas-defect line, and the next redraw of that canvas fixes the literal. System-wide primitive consequences of a canvas (e.g. input surface, helper tone) are lead decisions, disclosed in the changeset and the Stage-B request as INFORMATION — never as questions to the owner (owner decision 2026-09-24, #2027 Stage-B r3).
+
 ## When this applies
 
 ### Canvas-parity evidence contract (BLOCK)

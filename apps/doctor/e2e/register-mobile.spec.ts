@@ -58,12 +58,24 @@ const KNOWN_SLUG = "prp-pri-gonartroze";
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
 
-/** The composition statement the tier-1 consent label has to name (021 read model). */
-const COMPOSITION = ["ФИО", "специальность", "город", "место работы"];
+/**
+ * The tier-1 partner-data consent's words, verbatim from the package default
+ * (`packages/auth-flow/src/copy/defaults.ts` -> `consents.partnerDataItem`),
+ * which no host restates. 021 EARS-5 keeps the data composition in the policy
+ * text and with the platform manager, so the accessible name of the control is
+ * this shared wording and not an enumeration of fields.
+ */
+const PARTNER_DATA_LABEL = "Согласие на передачу данных партнёрам платформы";
 
-/** The copy the screen shows when the register command never reaches the upstream. */
-const NETWORK_FAILURE_COPY =
-  "Не удалось завершить регистрацию. Попробуйте ещё раз.";
+/**
+ * The copy the screen shows when the register command never reaches the
+ * upstream. Since #2027 PR 1.6 the sign-up door resolves a TRANSPORT failure
+ * through the shared dictionary, exactly as the sign-in door has since PR 1.5,
+ * and the sentence itself is the package default
+ * (`packages/auth-flow/src/copy/defaults.ts` -> `errors.unavailable`), which no
+ * host restates.
+ */
+const NETWORK_FAILURE_COPY = "Сервис временно недоступен — попробуйте ещё раз.";
 
 /**
  * The canonical gate hand-off URL, built the way the producer builds it
@@ -107,11 +119,6 @@ type StateSpec = {
   readonly drive: (page: Page) => Promise<void>;
   /** The control that carries the state, asserted visible and operable. */
   readonly primary: "submit" | "verify" | "success";
-  /**
-   * Whether the submit is expected to be enabled. `null` where the submit is
-   * not the state's control at all.
-   */
-  readonly submitEnabled: boolean | null;
   /** Whether the form composition (and hence the return-context slot) is on screen. */
   readonly formOnScreen: boolean;
 };
@@ -121,14 +128,12 @@ const STATES: readonly StateSpec[] = [
     name: "empty",
     drive: async () => {},
     primary: "submit",
-    submitEnabled: false,
     formOnScreen: true,
   },
   {
     name: "filled-valid",
     drive: fillValid,
     primary: "submit",
-    submitEnabled: true,
     formOnScreen: true,
   },
   {
@@ -141,7 +146,6 @@ const STATES: readonly StateSpec[] = [
       await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
     },
     primary: "submit",
-    submitEnabled: false,
     formOnScreen: true,
   },
   {
@@ -159,7 +163,6 @@ const STATES: readonly StateSpec[] = [
     primary: "submit",
     // The form is still valid and the failure is retryable — a submit the
     // doctor cannot press again would be the defect, not the expectation.
-    submitEnabled: true,
     formOnScreen: true,
   },
   {
@@ -170,7 +173,6 @@ const STATES: readonly StateSpec[] = [
       await expect(page.getByTestId("verify-submit")).toBeVisible();
     },
     primary: "verify",
-    submitEnabled: null,
     formOnScreen: false,
   },
 ];
@@ -277,21 +279,11 @@ for (const viewport of VIEWPORTS) {
             if (state.primary === "submit") {
               const submit = page.getByTestId("register-submit");
               await expect(submit, "the submit is visible").toBeVisible();
-              if (state.submitEnabled) {
-                await expect(submit, "the submit is enabled").toBeEnabled();
-                await expectFocusable(submit, "the submit");
-              } else {
-                await expect(submit, "the submit is disabled").toBeDisabled();
-                // EARS-12: a disabled control that does not say why is a dead
-                // button. Presence is asserted here; the announcement contract
-                // itself is 16.51.
-                const describedBy =
-                  await submit.getAttribute("aria-describedby");
-                expect(
-                  describedBy,
-                  "the disabled submit points at a reason",
-                ).toBeTruthy();
-              }
+              // Canvas 490: live in every state, so there is no disabled
+              // button for EARS-12's «dead button» to be about; what is unmet
+              // is reported on its own row after the press (16.51).
+              await expect(submit, "the submit is enabled").toBeEnabled();
+              await expectFocusable(submit, "the submit");
             } else if (state.primary === "verify") {
               await expect(
                 page.getByTestId("verify-submit"),
@@ -360,17 +352,17 @@ test.describe("021 EARS-16: the accessibility contracts of the route", () => {
       expect(name, "a checkbox with an empty accessible name").not.toBe("");
     }
 
-    // The tier-1 pair carries the composition statement: the doctor is told
-    // WHAT is shared, in the label of the control that shares it.
+    // The tier-1 partner-data control is named by the shared canvas wording —
+    // the accessible name a screen reader reads out is the approved sentence,
+    // not a host restatement and not a field enumeration.
     const partnerName = await page
       .getByTestId("register-partner-data")
       .locator("xpath=ancestor::label[1]")
       .innerText();
-    for (const part of COMPOSITION) {
-      expect(partnerName, `the partner-data label names "${part}"`).toContain(
-        part,
-      );
-    }
+    expect(
+      partnerName,
+      "the partner-data control is named by the package default label",
+    ).toContain(PARTNER_DATA_LABEL);
   });
 
   test("021 EARS-16.50: every field error is programmatically associated with its field", async ({
@@ -408,27 +400,33 @@ test.describe("021 EARS-16: the accessibility contracts of the route", () => {
     }
   });
 
-  test("021 EARS-16.51: the disabled submit announces its reason, and a complete form enables it", async ({
+  test("021 EARS-16.51: the refused press announces itself on the row it belongs to, and the submit stays live", async ({
     page,
   }) => {
     await page.goto("/register");
 
     const submit = page.getByTestId("register-submit");
-    await expect(submit).toBeDisabled();
+    await expect(submit, "live from the first render").toBeEnabled();
 
-    const describedBy = await submit.getAttribute("aria-describedby");
-    expect(describedBy, "the disabled submit points at a reason").toBeTruthy();
-    const reason = page.locator(`[id="${describedBy!.split(/\s+/)[0]}"]`);
+    await submit.click();
+
+    const declaration = page.getByTestId("register-medworker");
+    await expect(declaration).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await declaration.getAttribute("aria-describedby");
+    expect(describedBy, "the reporting row points at its message").toBeTruthy();
+    const message = page
+      .locator(`[id="${describedBy!.split(/\s+/).at(-1)}"]`)
+      .first();
     await expect(
-      reason,
-      "the reason element exists and is visible",
+      message,
+      "the message element exists and is visible",
     ).toBeVisible();
-    await expect(reason, "the reason is not empty").not.toHaveText(/^\s*$/);
+    await expect(message, "the message is not empty").not.toHaveText(/^\s*$/);
 
     await fillValid(page);
     await expect(
       submit,
-      "a complete, valid, consented form enables the submit",
+      "a complete, valid, consented form still presses",
     ).toBeEnabled();
   });
 

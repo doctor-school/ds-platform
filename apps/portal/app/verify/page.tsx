@@ -21,6 +21,7 @@ import {
 import { authClient } from "@/lib/auth-flow-client";
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
+import { resolveAuthFlowCopy } from "@ds/auth-flow/copy";
 import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
@@ -97,6 +98,7 @@ function PortalEmailConfirmCard() {
   const t = useTranslations("verify");
   const te = useTranslations("errors");
   const authFlow = ACADEMY_AUTH_FLOW;
+  const authCopy = resolveAuthFlowCopy(authFlow);
   const params = useSearchParams();
   const queryEmail = params.get("email") ?? undefined;
   // #904: the branded verification email's CTA points at `/verify#email=<addr>` —
@@ -146,7 +148,7 @@ function PortalEmailConfirmCard() {
       ),
     onActionError: (err) =>
       setResendError(
-        authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed")),
+        authErrorMessage(err, authCopy.errors, te("verifyResendFailed")),
       ),
   });
 
@@ -182,7 +184,7 @@ function PortalEmailConfirmCard() {
         return;
       }
       setResendError(
-        authErrorMessage(err, authFlow.copy.errors, te("verifyResendFailed")),
+        authErrorMessage(err, authCopy.errors, te("verifyResendFailed")),
       );
     },
     // Clear only resend-owned state; code-verification feedback is unrelated.
@@ -248,7 +250,7 @@ function PortalEmailConfirmCard() {
       // and the user signs in manually at /login. EARS-16: the verify/auth
       // outcome stays generic; only 429/5xx/network surface a specific message.
       setSucceeded(false);
-      setError(authErrorMessage(err, authFlow.copy.errors, te("verifyFailed")));
+      setError(authErrorMessage(err, authCopy.errors, te("verifyFailed")));
     }
   }
 

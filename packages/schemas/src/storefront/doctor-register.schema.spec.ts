@@ -9,21 +9,20 @@ import {
   MARKETING_COMMUNICATIONS_PURPOSE,
   MEDICAL_WORKER_DECLARATION_PURPOSE,
   MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
-  PARTNER_DATA_COMPOSITION,
-  PARTNER_DATA_EXCLUDED,
   PARTNER_DATA_SHARING_PURPOSE,
   PARTNER_DATA_SHARING_REQUIRED_CODE,
   REQUIRED_DOCTOR_REGISTER_CONSENT_PURPOSES,
-  formatPartnerDataStatement,
 } from "./doctor-register.schema.js";
 
 /**
  * 021 EARS-5 — the contract half of the two-tier consent block (F-021-1 «Б»).
  *
  * What is pinned here is the SSOT itself: that the partner-data consent is an
- * access condition and not a preference, and that its statement is produced
- * from the declared composition rather than transcribed as a copy blob (021
- * design §4). The command's refusal behaviour is proven in
+ * access condition and not a preference, and that a tier carries nothing but
+ * the purpose, its requiredness and the sentence the door rendered — the
+ * composition of the shared data is disclosed in the policy text and by the
+ * platform manager, never as structure inside the row (021 design §4). The
+ * command's refusal behaviour is proven in
  * `apps/api/test/storefront/doctor-register-consents.e2e-spec.ts`; the rendered
  * two tiers in `apps/doctor/e2e/register-consent-tiers.spec.ts`.
  */
@@ -57,30 +56,24 @@ describe("021 EARS-5: the two-tier consent contract", () => {
     );
   });
 
-  it("021 EARS-5.3: the statement names the exact composition and states that contacts are not shared", () => {
-    const statement = formatPartnerDataStatement();
-
-    for (const field of PARTNER_DATA_COMPOSITION) {
-      expect(statement).toContain(field);
-    }
-    expect(statement).toBe(
-      "Согласен на передачу партнёрам платформы данных: ФИО, специальность, город, место работы. Контакты не передаются.",
-    );
-    expect(PARTNER_DATA_EXCLUDED).toEqual(["контакты"]);
-  });
-
-  it("021 EARS-5.4: the statement is derived from the composition, not a copy blob", () => {
-    // Design §4: changing the shared composition changes the statement. A
-    // hardcoded sentence would fail this by construction.
-    const statement = formatPartnerDataStatement(
-      ["ФИО", "город"],
-      ["контакты", "адрес"],
-    );
-
-    expect(statement).toBe(
-      "Согласен на передачу партнёрам платформы данных: ФИО, город. Контакты, адрес не передаются.",
-    );
-    expect(statement).not.toContain("специальность");
+  it("021 EARS-5.3: a tier item carries no data composition to render", () => {
+    // Owner decision 2026-09-22: the row states the exchange; what exactly is
+    // shared is disclosed in the policy text and by the platform manager. A
+    // schema that still accepted the lists would leave the rejected
+    // enumerate-inside-the-row design one `satisfies` away from shipping.
+    expect(
+      ConsentTierSchema.safeParse({
+        tier: "access-conditions",
+        items: [
+          {
+            purpose: PARTNER_DATA_SHARING_PURPOSE,
+            required: true,
+            statement: "Согласие на передачу данных партнёрам платформы",
+            dataComposition: ["ФИО"],
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("021 EARS-5.5: exactly the two F-021-1 tiers are expressible", () => {
@@ -91,9 +84,7 @@ describe("021 EARS-5: the two-tier consent contract", () => {
           {
             purpose: PARTNER_DATA_SHARING_PURPOSE,
             required: true,
-            statement: formatPartnerDataStatement(),
-            dataComposition: [...PARTNER_DATA_COMPOSITION],
-            excluded: [...PARTNER_DATA_EXCLUDED],
+            statement: "Согласие на передачу данных партнёрам платформы",
           },
         ],
       }).success,

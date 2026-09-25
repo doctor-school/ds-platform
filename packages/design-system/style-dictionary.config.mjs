@@ -170,6 +170,14 @@ function themeVar(path, colorRoles, spaceRoles) {
       if (rest[0] === "size") return `--text-${rest.slice(1).join("-")}`;
       if (rest[0] === "weight")
         return `--font-weight-${rest.slice(1).join("-")}`;
+      // Leading ladder → the Tailwind v4 `--leading-*` namespace, so `leading-snug`
+      // and the canvas rungs the default ladder has no step for (`leading-title`
+      // 1.15, `leading-label` 1.4, `leading-notice` 1.45, `leading-prose` 1.55,
+      // auth.dc.html 58/63/64/191) both resolve to the SAME token (#2027). Before
+      // this the named rungs happened to match Tailwind's built-in numbers and the
+      // token drove nothing.
+      if (rest[0] === "line-height")
+        return `--leading-${rest.slice(1).join("-")}`;
       return null;
     case "space":
       // The numeric `space.N` PRIMITIVES surface ONLY as `:root` `--space-N` vars
@@ -323,6 +331,13 @@ async function build() {
     name: "--tracking-topbar",
     ref: "var(--font-letter-spacing-topbar)",
   });
+  // The auth brand panel tracking rungs (#2027 P1, auth.dc.html 309/310): the
+  // eyebrow at +.14em and the headline at the existing `display` −.035em — no
+  // default Tailwind rung carries either.
+  themeEntries.push(
+    { name: "--tracking-eyebrow", ref: "var(--font-letter-spacing-eyebrow)" },
+    { name: "--tracking-display", ref: "var(--font-letter-spacing-display)" },
+  );
   // The webinar-card time-plate width as a SIZING utility (`w-time-plate`, #514).
   // A named `--spacing-*` key drives the sizing utilities (`w-*` / `basis-*`) the
   // same way the §09 role keys drive gap/padding; the value lives in the component

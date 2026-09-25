@@ -76,6 +76,7 @@ function Harness({
   onResend = () => {},
   onChangeMethod = () => {},
   onComplete,
+  captchaSlot,
 }: {
   length?: number;
   cooldownSeconds?: number;
@@ -85,6 +86,7 @@ function Harness({
   onResend?: () => void;
   onChangeMethod?: () => void;
   onComplete?: () => void;
+  captchaSlot?: React.ReactNode;
 }) {
   const form = useForm<{ code: string }>({ defaultValues: { code: "" } });
   return (
@@ -112,6 +114,7 @@ function Harness({
             onSubmit={onSubmit}
             onResend={onResend}
             onChangeMethod={onChangeMethod}
+            captchaSlot={captchaSlot}
             submitTestId="otp-submit"
             resendTestId="otp-resend"
             changeMethodTestId="otp-change-method"
@@ -123,6 +126,28 @@ function Harness({
 }
 
 describe("OtpFocusScreen", () => {
+  // Canvas 139-143 (#2027): the verify step draws its challenge INSIDE the form,
+  // directly above the submit — not beside the resend links and not in the card
+  // header. A door that has no challenge to run passes nothing and the form
+  // closes up, so a host without bot protection gets no empty gap.
+  it("draws the app's challenge inside the form, directly above the submit", () => {
+    render(<Harness captchaSlot={<div data-testid="challenge" />} />);
+
+    const challenge = screen.getByTestId("challenge");
+    const submit = screen.getByTestId("otp-submit");
+    expect(challenge.closest("form")).toBe(submit.closest("form"));
+    expect(
+      challenge.compareDocumentPosition(submit) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("omits the challenge row entirely when the app passes none", () => {
+    render(<Harness />);
+
+    expect(screen.queryByTestId("challenge")).toBeNull();
+  });
+
   it("renders the masked destination passed by the app (past-tense, no raw value)", () => {
     render(<Harness />);
     expect(screen.getByTestId("otp-sent-to")).toHaveTextContent(

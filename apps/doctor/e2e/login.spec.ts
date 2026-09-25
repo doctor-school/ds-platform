@@ -23,7 +23,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 /** The RU generic the host maps a rejected credential to (`@ds/auth-flow/errors`). */
 const WRONG_PASSWORD_COPY =
-  "Не удалось войти. Проверьте почту или телефон и пароль.";
+  "Не удалось войти. Проверьте данные и попробуйте снова.";
 
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 900 };
@@ -109,13 +109,19 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
   await page.goto("/login");
 
   const form = passwordForm(page);
-  await form.getByLabel("Почта или телефон").fill("doctor@clinic.ru");
+  await form.getByLabel("Электронная почта или телефон").fill("doctor@clinic.ru");
   await form.getByLabel("Пароль", { exact: true }).fill("wrong-password-123");
   await page.getByTestId("password-login-submit").click();
 
   // `role="alert"` is the design system's `<FormError>` — the assertion is that
   // the message arrives through the BLOCK, carrying the host's RU mapping.
-  const alert = form
+  // #2027: an OPERATION-level failure is about the whole screen, so the canvas
+  // (`design-source/auth.dc.html:56-61`) states it in `AuthCard.errorBanner` —
+  // above the card title, and therefore OUTSIDE the password `<form>`. Scoped to
+  // the block's own screen root, so a doctor-local re-implementation of the
+  // element would still not satisfy it.
+  const alert = page
+    .getByTestId("login-screen")
     .getByRole("alert")
     .filter({ hasText: WRONG_PASSWORD_COPY });
   await expect(alert).toBeVisible();

@@ -70,6 +70,25 @@ describe("Checkbox — token-class contract (#513)", () => {
     );
   });
 
+  it("keeps the box square when the label wraps onto several lines", () => {
+    // #2027: the box is a flex CHILD of the label. Without `shrink-0` a long,
+    // wrapping consent statement steals width from it and the 22x22 square
+    // renders as a rectangle — the registration door's consent rows wrap by
+    // design, so the box has to refuse to shrink.
+    const { container } = render(
+      <Checkbox className="items-start">
+        <span>
+          Согласие на передачу данных партнёрам платформы. Это условие
+          бесплатного для врача обучения: без согласия часть материалов
+          недоступна и регистрация невозможна.
+        </span>
+      </Checkbox>,
+    );
+
+    const visual = container.querySelector('span[aria-hidden="true"]');
+    expect(visual).toHaveClass("size-5.5", "shrink-0");
+  });
+
   it("keeps the default label tone unchanged", () => {
     render(<Checkbox>Согласен</Checkbox>);
 
@@ -77,5 +96,41 @@ describe("Checkbox — token-class contract (#513)", () => {
       "text-foreground",
       "peer-disabled:text-muted-2",
     );
+  });
+
+  it("#2027: the statement reads at the canvas weight, 12px clear of the box", () => {
+    // Owner Stage-B 2026-09-22: parity is the RENDERING. The canvas
+    // (`design-source/auth.dc.html:191/199/221`) sets every checkbox statement
+    // at 13.5px/700 on a 1.4 line, 12px clear of the box.
+    const { container } = render(<Checkbox>Согласен</Checkbox>);
+
+    // The scale now carries that half-step as `chip` (13.5px) and the 1.4 line
+    // as `label`, so the statement names them instead of rounding up to the
+    // nearest whole rung.
+    expect(screen.getByText("Согласен")).toHaveClass(
+      "text-chip",
+      "font-bold",
+      "leading-label",
+    );
+    expect(container.querySelector("label")).toHaveClass("gap-3");
+  });
+
+  it("#2027: an invalid control carries the reported-unmet border on the box itself", () => {
+    // Canvas 497 — while the unmet statement is being reported the BOX turns
+    // danger, and it stays danger over the checked fill border.
+    const { container } = render(<Checkbox aria-invalid aria-label="x" />);
+
+    const visual = container.querySelector('span[aria-hidden="true"]');
+    expect(visual).toHaveClass("border-destructive-text");
+    expect(visual).not.toHaveClass("border-border");
+    expect(visual?.className).not.toMatch(/peer-checked:border-/);
+  });
+
+  it("#2027: a valid control keeps the resting and checked borders", () => {
+    const { container } = render(<Checkbox aria-label="x" />);
+
+    const visual = container.querySelector('span[aria-hidden="true"]');
+    expect(visual).toHaveClass("border-border", "peer-checked:border-primary-action");
+    expect(visual).not.toHaveClass("border-destructive-text");
   });
 });

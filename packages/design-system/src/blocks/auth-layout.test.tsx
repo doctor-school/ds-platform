@@ -20,10 +20,7 @@ afterEach(cleanup);
 describe("<AuthLayout>", () => {
   it("renders the form slot (children) so a surface's AuthCard is shown", () => {
     render(
-      <AuthLayout
-        logo={<span>brand-logo</span>}
-        aside={<p>brand-aside</p>}
-      >
+      <AuthLayout logo={<span>brand-logo</span>} aside={<p>brand-aside</p>}>
         <div data-testid="form-slot">the form</div>
       </AuthLayout>,
     );
@@ -81,21 +78,33 @@ describe("<AuthLayout>", () => {
         <div data-testid="form-slot">form</div>
       </AuthLayout>,
     );
-    expect(screen.getByRole("complementary").className).toContain("layout:order-1");
-    const formColumn = screen.getByTestId("form-slot").closest("div.flex.flex-col");
+    expect(screen.getByRole("complementary").className).toContain(
+      "layout:order-1",
+    );
+    const formColumn = screen
+      .getByTestId("form-slot")
+      .closest("div.flex.flex-col");
     expect(formColumn?.className).toContain("layout:order-2");
   });
 
-  it("splits the shell 50/50 by default", () => {
+  it("#2027 P1: splits the shell .95fr 1.05fr by default and pads the panel to the canvas clamp", () => {
+    // design-source/auth.dc.html: `shellCols = '.95fr 1.05fr'` (the panel is the
+    // first visual track, 684px at 1440) and the panel's own padding
+    // `clamp(40px,4vw,64px)` — the `panel` spacing role.
     const { container } = render(
       <AuthLayout logo={<span>logo</span>} aside={<p>brand-aside</p>}>
         <div>form</div>
       </AuthLayout>,
     );
-    expect(container.firstElementChild?.className).toContain("layout:grid-cols-2");
+    const shell = container.firstElementChild;
+    expect(shell?.className).toContain("layout:grid-cols-[.95fr_1.05fr]");
+    expect(shell?.className).not.toContain("layout:grid-cols-2");
+    const panel = container.querySelector("aside");
+    expect(panel?.className.split(" ")).toContain("p-panel");
+    expect(panel?.className.split(" ")).not.toContain("p-12");
   });
 
-  it("widens the brand panel to 1.1fr .9fr with split=\"wide-aside\" (021 return context)", () => {
+  it('widens the brand panel to 1.1fr .9fr with split="wide-aside" (021 return context)', () => {
     // The canvas widens the split exactly when the panel stops carrying a value
     // prop and starts carrying content the visitor came for (`shellCols =
     // gateCardOnPanel ? '1.1fr .9fr'`, design-source/auth.dc.html). The ratio is a
@@ -112,7 +121,7 @@ describe("<AuthLayout>", () => {
     );
     const shell = container.firstElementChild;
     expect(shell?.className).toContain("layout:grid-cols-[1.1fr_.9fr]");
-    expect(shell?.className).not.toContain("layout:grid-cols-2");
+    expect(shell?.className).not.toContain("layout:grid-cols-[.95fr_1.05fr]");
   });
 
   it("omits the brand panel entirely when no aside is supplied (form-only fallback)", () => {
@@ -122,5 +131,20 @@ describe("<AuthLayout>", () => {
       </AuthLayout>,
     );
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  });
+
+  it("#2027: the form column caps the logo and the card at the canvas 440px (canvas 53)", () => {
+    render(
+      <AuthLayout logo={<span data-testid="logo">brand-logo</span>}>
+        <div data-testid="form-slot">the form</div>
+      </AuthLayout>,
+    );
+    expect(screen.getByTestId("form-slot").parentElement).toHaveClass(
+      "max-w-auth",
+    );
+    expect(screen.getByTestId("logo").parentElement).toHaveClass("max-w-auth");
+    expect(
+      screen.getByTestId("form-slot").parentElement?.className ?? "",
+    ).not.toMatch(/max-w-md/);
   });
 });

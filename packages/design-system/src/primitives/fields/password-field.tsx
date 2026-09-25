@@ -228,19 +228,26 @@ export function PasswordField<T extends FieldValues>({
   return (
     <FormItem>
       <FormLabel>{label}</FormLabel>
-      <PasswordControl
-        field={field}
-        purpose={purpose}
-        {...(placeholder !== undefined ? { placeholder } : {})}
-        {...(testId !== undefined ? { testId } : {})}
-        {...(revealLabels !== undefined ? { revealLabels } : {})}
-      />
-      {/* Inline message (ADR-0013 §7, #333): the policy hint is the FormMessage's
+      {/* The message line hangs 7px under the control (canvas auth.dc.html 400/542
+          `margin-top:7px`), closer than the FormItem's 10px label→control gap,
+          which stays wide for the focus-ring clearance above the input. */}
+      <div className="flex flex-col gap-1.75">
+        <PasswordControl
+          field={field}
+          purpose={purpose}
+          {...(placeholder !== undefined ? { placeholder } : {})}
+          {...(testId !== undefined ? { testId } : {})}
+          {...(revealLabels !== undefined ? { revealLabels } : {})}
+        />
+        {/* Inline message (ADR-0013 §7, #333): the policy hint is the FormMessage's
           helper `children` (muted by default), swapped IN PLACE by the destructive
           error — one element, one id. Rendering a separate <FormDescription> would
           duplicate `formDescriptionId`. `purpose="current"` (login, no policy)
           passes no children → nothing renders until an error (no reserved line). */}
-      <FormMessage>{withPolicy && policyHint ? policyHint : undefined}</FormMessage>
+        <FormMessage>
+          {withPolicy && policyHint ? policyHint : undefined}
+        </FormMessage>
+      </div>
     </FormItem>
   );
 }

@@ -249,12 +249,16 @@ for (const [state, drive] of [
         }),
       );
       const form = page.getByTestId("password-login-form");
-      await form.getByLabel("Почта или телефон").fill("doctor@clinic.ru");
+      await form.getByLabel("Электронная почта или телефон").fill("doctor@clinic.ru");
       await form
         .getByLabel("Пароль", { exact: true })
         .fill("wrong-password-123");
       await page.getByTestId("password-login-submit").click();
-      await expect(form.getByRole("alert")).toBeVisible();
+      // #2027 — the operation-level failure stands in `AuthCard.errorBanner`
+      // above the card title (canvas `auth.dc.html:56-61`), outside the form.
+      await expect(
+        page.getByTestId("login-screen").getByRole("alert"),
+      ).toBeVisible();
     },
   ],
 ] as const) {

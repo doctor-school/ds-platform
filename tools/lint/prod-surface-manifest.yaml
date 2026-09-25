@@ -106,14 +106,15 @@ routes:
     issue: "#1430"
 
   # 021 EARS-1 — the registration route the shell's «Регистрация» cluster points
-  # at. The split composition, the three fields and their validation are REAL
-  # (canvas `auth.dc.html`, `#d-register`), and no document is requested at the
-  # door (REQ-22). The DOOR, however, does not open yet: the submit is inert
-  # because design §2 forbids a public 021 form reaching a 003 EARS-17-protected
-  # endpoint without the EARS-19 bot-protection client half `apps/doctor` has
-  # not got, and the mandatory access-condition consents (EARS-4/5) that the
-  # command validates as a precondition land in #1538. `deferred` until the
-  # registration actually completes and the route carries its Stage-B verdict.
+  # at. The DOOR IS WHOLE: `app/(auth)/register/page.tsx` mounts the shared
+  # `@ds/auth-flow/register` sign-up door (#2027 wave 1, PR 1.6), so the split
+  # composition and the three fields (canvas `auth.dc.html`, `#d-register`), the
+  # EARS-19 bot-protection client half (PR 1.3), the mandatory EARS-4/5
+  # access-condition consents and the inline confirmation are all live, and no
+  # document is requested at the door (REQ-22). `deferred` now rests on ONE
+  # thing only, the same one the rest of this host rests on: the doctor host is
+  # not publicly reachable until ADR-0015 §7's release-time cut-over, and the
+  # route carries no Stage-B verdict of its own yet.
   # 019 EARS-3 (#1518) — the day-grouped, specialty-targeted events feed. The
   # read, the targeting and the day grouping are REAL (no placeholder card, no
   # stubbed count), but the SCREEN is not whole: 017's breadcrumbs, the facet

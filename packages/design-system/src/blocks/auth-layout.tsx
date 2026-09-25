@@ -58,8 +58,9 @@ export function AuthLayout({
    *  When omitted the panel is not rendered and the form fills the screen. */
   aside?: React.ReactNode;
   /**
-   * The column ratio at `layout:` and above (#1538). `"even"` is the shipped
-   * 50/50 split every auth surface has used since #237. `"wide-aside"` widens the
+   * The column ratio at `layout:` and above (#1538). `"even"` is the canvas
+   * value-prop split `.95fr 1.05fr` (`shellCols`, auth.dc.html; the panel is the
+   * first visual track — 684px at 1440, #2027 P1). `"wide-aside"` widens the
    * brand panel to `1.1fr .9fr`, which is what the canvas does when the panel
    * stops carrying a value prop and starts carrying CONTENT the visitor came for
    * — the 021 return-context card (`design-source/auth.dc.html`: `shellCols =
@@ -78,7 +79,7 @@ export function AuthLayout({
         "grid min-h-screen",
         split === "wide-aside"
           ? "layout:grid-cols-[1.1fr_.9fr]"
-          : "layout:grid-cols-2",
+          : "layout:grid-cols-[.95fr_1.05fr]",
         className,
       )}
     >
@@ -93,11 +94,16 @@ export function AuthLayout({
           is unaffected. */}
       <div className="flex min-w-0 flex-col items-center justify-center gap-8 px-6 py-12 layout:order-2">
         {logo ? (
-          <div className={cn("w-full max-w-md", aside ? "layout:hidden" : undefined)}>
+          <div
+            className={cn(
+              "w-full max-w-auth",
+              aside ? "layout:hidden" : undefined,
+            )}
+          >
             {logo}
           </div>
         ) : null}
-        <div className="w-full max-w-md">{children}</div>
+        <div className="w-full max-w-auth">{children}</div>
       </div>
 
       {/* Brand panel — the branded surface (token fill). Hidden below the `layout`
@@ -105,7 +111,7 @@ export function AuthLayout({
           the brand. At `layout:` it takes the LEFT column (`layout:order-1`) per the
           recorded #237 decision. */}
       {aside ? (
-        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-12 text-primary-surface-foreground layout:order-1 layout:flex">
+        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-panel text-primary-surface-foreground layout:order-1 layout:flex">
           {aside}
         </aside>
       ) : null}

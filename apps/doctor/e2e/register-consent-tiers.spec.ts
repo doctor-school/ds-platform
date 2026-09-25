@@ -23,8 +23,31 @@ import { test, expect } from "@playwright/test";
  * own tier-2 render.
  */
 
-/** The composition the statement must name, from the 021 read model. */
+/**
+ * The partner-data consent's words, verbatim from the package default
+ * (`packages/auth-flow/src/copy/defaults.ts` -> `consents.partnerDataItem`),
+ * which is itself verbatim from the vendored canvas `design-source/auth.dc.html`.
+ * No host restates them, so what the doctor reads here IS the approved wording.
+ */
+const PARTNER_DATA_LABEL = "Согласие на передачу данных партнёрам платформы";
+const PARTNER_DATA_HELP =
+  "Это условие бесплатного для врача обучения: без согласия часть материалов недоступна.";
+
+/**
+ * The data composition is disclosed in the policy text and by the platform
+ * manager, never enumerated inside the consent row (021 EARS-5). These are the
+ * field names the superseded sentence used to list; the row must carry none.
+ */
 const COMPOSITION = ["ФИО", "специальность", "город", "место работы"];
+
+/**
+ * The package's own words for an ungranted access condition — the text the
+ * canvas (193/201) stands under the row it belongs to, after the press.
+ */
+const DECLARATION_UNMET =
+  "Отметьте, что вы медицинский работник — без этого регистрация невозможна.";
+const PARTNER_UNMET =
+  "Отметьте согласие на передачу данных партнёрам — без него регистрация невозможна.";
 
 test.describe("021 EARS-5: the two-tier consent block", () => {
   test("021 EARS-5.1: two tiers in the F-021-1 geometry — access conditions framed above the submit, marketing below it", async ({
@@ -88,29 +111,42 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     expect(unframed, "tier 2 stands outside that group").toBe(0);
   });
 
-  test("021 EARS-5.2: the partner-data statement names the exact composition and says contacts are not shared", async ({
+  test("021 EARS-5.2: the partner-data row carries the canvas wording, and the composition is not enumerated in it", async ({
     page,
   }) => {
     await page.goto("/register");
 
+    // The row is RENDERED, in the shared words: label above, help line below,
+    // both byte-identical to the package default no host overrides.
     const statement = page.getByTestId("register-partner-data-statement");
     await expect(statement).toHaveCount(1);
+    await expect(statement).toBeVisible();
+    expect((await statement.textContent())?.trim()).toBe(PARTNER_DATA_LABEL);
 
-    const text = (await statement.textContent()) ?? "";
+    const help = page.getByTestId("register-partner-data-help");
+    await expect(help).toHaveCount(1);
+    await expect(help).toBeVisible();
+    expect((await help.textContent())?.trim()).toBe(PARTNER_DATA_HELP);
+
+    // The composition belongs to the policy text and to the platform manager,
+    // never to the consent row — the superseded sentence is structurally gone,
+    // not merely reworded.
+    const tier1Text = (await page
+      .getByTestId("registration-consent-access")
+      .textContent()) ?? "";
     for (const field of COMPOSITION) {
-      expect(text, `the statement names ${field}`).toContain(field);
+      expect(
+        tier1Text,
+        `the access tier does not enumerate ${field}`,
+      ).not.toContain(field);
     }
-    // The exclusion is STATED, not implied by omission.
-    expect(text).toContain("Контакты не передаются");
-    expect(text).toBe(
-      "Согласен на передачу партнёрам платформы данных: ФИО, специальность, город, место работы. Контакты не передаются.",
-    );
+    expect(tier1Text).not.toContain("Контакты не передаются");
 
-    // EARS-7 — a change or withdrawal is a manager request, and there is no
-    // self-service control anywhere on the surface.
+    // EARS-7 — withdrawal is a manager-side case: the surface carries no
+    // self-service control and no withdrawal sentence (owner 2026-09-24).
     await expect(
       page.getByTestId("registration-consent-manager-note"),
-    ).toContainText("через менеджера платформы");
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /отозвать|отзыв/i }),
       "no self-service withdrawal control",
@@ -152,7 +188,7 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     await expect(tier2.locator('input[type="checkbox"]')).toHaveCount(1);
   });
 
-  test("021 EARS-5.4: neither consent is pre-ticked, and the reason line names whichever access condition is unmet", async ({
+  test("021 EARS-5.4: neither consent is pre-ticked, and each unmet access condition is reported on its own row", async ({
     page,
   }) => {
     await page.goto("/register");
@@ -167,22 +203,31 @@ test.describe("021 EARS-5: the two-tier consent block", () => {
     await expect(partnerData).not.toBeChecked();
     await expect(marketing).not.toBeChecked();
 
-    const reason = page.getByTestId("register-submit-reason");
-    await expect(reason).toContainText("медицинский работник");
+    // Nothing is said before the press — the canvas shows the warning lines
+    // only in its `submitted` state (369/193/201).
+    const declarationItem = page.getByTestId("register-medworker-item");
+    const partnerItem = page.getByTestId("register-partner-data-item");
+    await expect(declarationItem).not.toContainText(DECLARATION_UNMET);
+    await expect(partnerItem).not.toContainText(PARTNER_UNMET);
+    await expect(page.getByTestId("register-submit")).toBeEnabled();
 
-    // With the declaration granted, the stated obstacle moves to the second
-    // access condition — the real unmet one, named in the doctor's words.
+    // Pressed with both ungranted: BOTH rows report, each in its own words,
+    // rather than one line beside the button naming one condition at a time.
+    await page.getByTestId("register-submit").click();
+    await expect(declarationItem).toContainText(DECLARATION_UNMET);
+    await expect(partnerItem).toContainText(PARTNER_UNMET);
+
+    // Granting one clears ONLY its own report; the other still stands.
     await declaration.locator("xpath=ancestor::label[1]").click();
     await expect(declaration).toBeChecked();
-    await expect(reason).toContainText("передачу данных партнёрам");
+    await expect(declarationItem).not.toContainText(DECLARATION_UNMET);
+    await expect(partnerItem).toContainText(PARTNER_UNMET);
 
-    // With BOTH granted, nothing is left to state: 021 EARS-19 (#1558) wired the
-    // command behind an INVISIBLE challenge that runs inside the submit, so the
-    // challenge is not an obstacle the doctor must clear first. The reason line
-    // is ABSENT rather than re-worded, and the door opens.
+    // With BOTH granted nothing is left to report, and the submit — live the
+    // whole time, exactly as the canvas draws it — opens the door.
     await partnerData.locator("xpath=ancestor::label[1]").click();
     await expect(partnerData).toBeChecked();
-    await expect(reason).toHaveCount(0);
+    await expect(partnerItem).not.toContainText(PARTNER_UNMET);
     await expect(page.getByTestId("register-submit")).toBeEnabled();
   });
 });

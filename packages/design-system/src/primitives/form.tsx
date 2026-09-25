@@ -164,7 +164,20 @@ const FORM_MESSAGE_TEXT = "text-xs";
 // text rides its own role (light #C81E1E / dark red.400 #E15555, 4.75:1 on the
 // dark card), which keeps the message legible in both themes.
 const FORM_ERROR_TONE = "font-bold text-destructive-text";
-const FORM_HELPER_TONE = "text-muted-foreground";
+// #2027 canvas `design-source/auth.dc.html:56-61` — the operation-level plate.
+// The frame and the tint carry the alarm, so the sentence itself stays ink and
+// readable; an all-red paragraph is a shout the canvas never makes. The plate is
+// a NON-fill danger surface, so its frame and its ⚠ share the danger TEXT tone
+// (`destructive-text`: light #C81E1E / dark #E15555 — the canvas draws both with
+// one `danger`), like the `Checkbox` invalid box; `destructive` stays the
+// interactive-FILL role (dark #C81E1E would frame the plate darker than its ⚠).
+const FORM_ERROR_BANNER =
+  "border-2 border-destructive-text bg-destructive-tint px-3.5 py-3 text-caption font-bold leading-notice text-foreground";
+// #2027 canvas `design-source/auth.dc.html` — the hint under a field is the
+// quietest line on the screen: 12px weight 600 in the FAINT tone, a rung below
+// the muted body copy. A field is ONE thing, so this is the package default for
+// every helper, not an auth-only override.
+const FORM_HELPER_TONE = "font-semibold text-faint";
 const FORM_ON_PRIMARY_TONE = "text-primary-surface-foreground";
 // Success tone (#529, source §07 «Формы и валидация» — the `Success` cell): the
 // confirmation reads 12px **weight 700** in the success role with a leading `✓`, the
@@ -177,9 +190,9 @@ const FORM_SUCCESS_TONE = "font-bold text-success-text";
 
 /** The `⚠` glyph that leads a neo-brutalist inline/summary error (source §07),
  * decorative — the message text carries the meaning, so it is `aria-hidden`. */
-function ErrorGlyph() {
+function ErrorGlyph({ className }: { className?: string } = {}) {
   return (
-    <span aria-hidden className="flex-none">
+    <span aria-hidden className={cn("flex-none", className)}>
       ⚠
     </span>
   );
@@ -309,29 +322,52 @@ FormMessage.displayName = "FormMessage";
  */
 const FormError = React.forwardRef<
   HTMLParagraphElement,
-  React.ComponentProps<"p"> & { tone?: "default" | "on-primary" }
->(({ className, children, tone = "default", ...props }, ref) => {
-  const hasBody = children != null && children !== false && children !== "";
-  if (!hasBody) return null;
-  return (
-    <p
-      ref={ref}
-      role="alert"
-      className={cn(
-        FORM_MESSAGE_TEXT,
-        tone === "on-primary"
-          ? cn("font-bold", FORM_ON_PRIMARY_TONE)
-          : FORM_ERROR_TONE,
-        "flex items-center gap-1.5",
-        className,
-      )}
-      {...props}
-    >
-      <ErrorGlyph />
-      {children}
-    </p>
-  );
-});
+  React.ComponentProps<"p"> & {
+    tone?: "default" | "on-primary";
+    /**
+     * `inline` (default) — the bare ⚠ line a field-level failure uses.
+     * `banner` — the canvas plate (`design-source/auth.dc.html:56-61`) an
+     * OPERATION-level refusal is drawn as: a 2px danger-text-tone frame
+     * (`destructive-text`, the ⚠'s own tone) on the danger tint, standing where the eye enters the screen. Its body is READ rather
+     * than shouted, so the copy sits at 13px/700 on a 1.45 line in ink and only
+     * the ⚠ keeps the danger colour.
+     */
+    variant?: "inline" | "banner";
+  }
+>(
+  (
+    { className, children, tone = "default", variant = "inline", ...props },
+    ref,
+  ) => {
+    const hasBody = children != null && children !== false && children !== "";
+    if (!hasBody) return null;
+    const isBanner = variant === "banner" && tone !== "on-primary";
+    return (
+      <p
+        ref={ref}
+        role="alert"
+        className={cn(
+          isBanner
+            ? FORM_ERROR_BANNER
+            : cn(
+                FORM_MESSAGE_TEXT,
+                tone === "on-primary"
+                  ? cn("font-bold", FORM_ON_PRIMARY_TONE)
+                  : FORM_ERROR_TONE,
+              ),
+          isBanner ? "flex items-start gap-2.5" : "flex items-center gap-1.5",
+          className,
+        )}
+        {...props}
+      >
+        <ErrorGlyph
+          className={isBanner ? "font-extrabold text-destructive-text" : ""}
+        />
+        {children}
+      </p>
+    );
+  },
+);
 FormError.displayName = "FormError";
 
 export interface FormErrorSummaryItem {

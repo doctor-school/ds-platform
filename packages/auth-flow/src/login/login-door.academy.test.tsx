@@ -91,6 +91,7 @@ vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
 }));
 
 import { AuthError } from "../client/auth-client";
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import { ACADEMY_FIXTURE } from "../test-support/host-config-fixtures";
 import { LoginDoor } from "./login-door";
@@ -110,7 +111,7 @@ const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
 
 /** The Academy's own sentences, read off the config the door is handed. */
-const COPY = ACADEMY_FIXTURE.copy.login;
+const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).login;
 
 function renderDoor(
   config: AuthFlowHostConfig = ACADEMY_FIXTURE,

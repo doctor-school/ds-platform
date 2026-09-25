@@ -94,11 +94,11 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             onChange?.(event);
           }}
           className={cn(
-            "flex min-h-24 w-full border-2 border-hairline bg-background px-3.5 py-3 text-sm text-foreground transition-colors",
+            "flex min-h-24 w-full border-2 border-hairline bg-card px-3.5 py-3 text-sm text-foreground transition-colors",
             "hover:border-ring active:border-primary-action active:bg-muted",
             "focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none",
             "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-hairline disabled:active:border-hairline",
-            "aria-invalid:border-destructive aria-invalid:bg-destructive-tint aria-invalid:hover:border-destructive aria-invalid:active:border-destructive aria-invalid:active:bg-destructive-tint",
+            "aria-invalid:border-destructive-text aria-invalid:bg-destructive-tint aria-invalid:hover:border-destructive-text aria-invalid:active:border-destructive-text aria-invalid:active:bg-destructive-tint",
             className,
           )}
           {...props}

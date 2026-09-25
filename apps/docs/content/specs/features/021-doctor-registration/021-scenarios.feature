@@ -33,7 +33,8 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     # release-1 half of EARS-9: points deferred to wave 2 (#1545), no placeholder
     And the form makes no points promise and renders no placeholder in its place
     And the medical-worker declaration and the partner-data consent are framed together above the submit button
-    And the partner-data consent names имя, специальность, город, место работы and states that contact details are not shared
+    And the partner-data consent carries the shared wording «Согласие на передачу данных партнёрам платформы» with its help line naming the condition of free-for-the-doctor education
+    And it does not enumerate the composition of the shared data
     And the marketing opt-in stands separately below the submit button and is not pre-ticked
     When the doctor fills a valid email and an eight-character password
     And ticks both access-condition consents
@@ -113,17 +114,24 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     And code entry, «Войти» and «Восстановить пароль» are offered as co-equal actions
     And no string anywhere states that the email is already taken
 
+  # Amended 2026-09-22 (see 021-requirements-en.md → Amendment — 2026-09-22): the canvas is the
+  # decision — the submit is live in every state and an unmet mandatory condition is stated on the
+  # row it belongs to, after the press. The «no silently dead button» property holds structurally.
   @EARS-12 @EARS-11 @failure
-  Scenario: A missing consent disables the button with its reason, and errors say what to do
+  Scenario: A missing consent is reported on its own row after the press, and errors say what to do
     Given a guest doctor on the registration screen
     When the doctor enters «not-an-email» in the email field
     Then the email field states what to correct, in Russian, tied to that field
     When the doctor enters a five-character password
     Then the error restates «Не менее 8 символов» in that field's single message slot
-    When the doctor leaves the medical-worker declaration unticked
-    Then the submit control is disabled
-    And the reason naming that specific unticked condition is rendered beside it
-    And no state of this screen has a disabled button without a stated reason
+    When the doctor leaves the medical-worker declaration unticked and presses the submit control
+    Then the submit control stays live and no reason line stands beside it
+    And the statement naming that specific unticked condition is rendered under its own checkbox
+    And that statement is tied to the checkbox it belongs to
+    And the optional marketing opt-in states nothing
+    And no registration command is sent
+    When the doctor ticks the medical-worker declaration
+    Then only that row's statement is cleared
 
   @EARS-14 @failure
   Scenario: A failed submission preserves everything the doctor typed
@@ -169,7 +177,7 @@ Feature: A doctor stopped by a gate registers in a short honest form and comes b
     Given a doctor completed registration
     When any state of the registration surface is scanned
     Then no withdrawal toggle or «отозвать согласие» control exists
-    And the interface states that a change or withdrawal is a request handled by a platform manager
+    And no withdrawal sentence is rendered
 
   @EARS-18 @process
   Scenario: The surface is composed from the auth canvas and the design system, never hand-assembled

@@ -66,6 +66,7 @@ vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
 }));
 
 import { AuthError } from "../client/auth-client";
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import { ACADEMY_FIXTURE } from "../test-support/host-config-fixtures";
 import { LoginDoor } from "./login-door";
@@ -75,7 +76,7 @@ const CONFIG: AuthFlowHostConfig = {
   ...ACADEMY_FIXTURE,
   botProtection: { siteKey: "academy-site-key" },
 };
-const COPY = ACADEMY_FIXTURE.copy.login;
+const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).login;
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
 

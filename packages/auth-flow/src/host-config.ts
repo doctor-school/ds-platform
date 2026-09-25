@@ -86,6 +86,8 @@ export type AuthFlowCopy = {
    * the compiler can refuse outright rather than a door rendered full of blanks.
    */
   readonly register: AuthFlowRegisterCopy;
+  /** The confirmation step, wherever a host runs it (rows 65–77). */
+  readonly verify: AuthFlowVerifyCopy;
   /** The brand panel's value prop and closing line in the shared auth frame (row 47). */
   readonly brand: AuthFlowBrandCopy;
   /**
@@ -311,18 +313,15 @@ export type AuthFlowRegisterCopy = {
    * the account-existence signal the contract removes.
    */
   readonly failed: string;
-  /**
-   * The inline confirmation step's words.
-   *
-   * Required exactly where `routes.verify` is `undefined` (rows 51, 76) — that
-   * host confirms the address on the registration door itself. A host that
-   * serves a `/verify` route of its own states none here.
-   */
-  readonly confirm?: AuthFlowRegisterConfirmCopy;
 };
 
-/** The inline «проверьте почту» step (rows 51, 76). */
-export type AuthFlowRegisterConfirmCopy = {
+/**
+ * The confirmation step's words (rows 65–77) — the canvas «Подтверждение»
+ * screen, one dictionary on every host: the Academy's `/verify` route and the
+ * doctor storefront's inline step read the same sentences, and a host varies
+ * only WHETHER a line is drawn, never its words.
+ */
+export type AuthFlowVerifyCopy = {
   readonly title: string;
   /** Template with `{destination}` — the address the code went to. */
   readonly description: string;
@@ -347,6 +346,14 @@ export type AuthFlowRegisterConfirmCopy = {
    * exists (003 EARS-16).
    */
   readonly resendAcknowledged: string;
+  /**
+   * The code went to an address this surface cannot name — a bare `/verify`
+   * opened with neither `?email=` nor the mail's `#email=` (003 EARS-24, #904).
+   * A submit there is never a silent no-op: this line says why nothing happened.
+   */
+  readonly missingIdentifier: string;
+  /** What the description names in place of the masked address when none is known. */
+  readonly fallbackDestination: string;
 };
 
 /** The return-context card's words (row 46): one eyebrow, the door forks only the line. */
@@ -553,6 +560,17 @@ export type AuthFlowHostConfig = {
     readonly attribution?: string;
     /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */
     readonly pointsPromise?: string;
+  };
+  /** The confirmation step (rows 65–77, 76). */
+  readonly verify: {
+    /**
+     * Whether the verification MAIL links into a confirmation surface of this
+     * host cold — `/verify#email=<addr>`, the address riding the fragment the
+     * browser never sends (003 EARS-24, #904). `true` on a host that serves
+     * `routes.verify`; `false` on a host that confirms inline on the
+     * registration door, where the address is the one just typed.
+     */
+    readonly deepLinkEntry: boolean;
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;

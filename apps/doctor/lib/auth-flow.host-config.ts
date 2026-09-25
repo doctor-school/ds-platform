@@ -118,6 +118,9 @@ export const DOCTOR_AUTH_FLOW = {
   register: {
     promoField: true,
   },
+  // 021 EARS-19 — the address is confirmed inline on the registration door, on
+  // the address just typed; no mail links into a confirmation surface here.
+  verify: { deepLinkEntry: false },
   /**
    * 021 EARS-5 — the F-021-1 «вариант Б» consent read model, stated by the
    * host and rendered by the shared door.

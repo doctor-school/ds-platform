@@ -17,7 +17,9 @@
     "./login": "./src/login/index.ts",
     "./login/route": "./src/login/login-route.tsx",
     "./register": "./src/register/index.ts",
-    "./register/route": "./src/register/register-route.tsx"
+    "./register/route": "./src/register/register-route.tsx",
+    "./verify": "./src/verify/index.ts",
+    "./verify/route": "./src/verify/verify-route.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

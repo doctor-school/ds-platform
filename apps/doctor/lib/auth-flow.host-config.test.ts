@@ -47,7 +47,8 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
 describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
   it("EARS-1: confirmation has no route of its own — this host confirms INLINE", () => {
     expect(DOCTOR_AUTH_FLOW.routes).not.toHaveProperty("verify");
-    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).register.confirm?.title).toBe(
+    expect(DOCTOR_AUTH_FLOW.verify.deepLinkEntry).toBe(false);
+    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).verify.title).toBe(
       "Проверьте почту",
     );
   });
@@ -58,7 +59,8 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
       headline: "Медицинское образование для врачей",
       subcopy:
         "Учебные программы и сертификация от ведущих экспертов отрасли — в едином пространстве Doctor.School.",
-      footer: "© Doctor.School. Платформа непрерывного медицинского образования.",
+      footer:
+        "© Doctor.School. Платформа непрерывного медицинского образования.",
     });
   });
 

@@ -59,10 +59,12 @@ export {
   EmailConfirmCard,
   EMAIL_CONFIRM_OTP_LENGTH,
   EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
+  EMAIL_CONFIRM_TEST_IDS,
 } from "./email-confirm-card";
 export type {
   EmailConfirmCardProps,
   EmailConfirmCardCopy,
+  EmailConfirmCardTestIds,
   EmailConfirmResendProps,
   EmailConfirmValues,
 } from "./email-confirm-card";
@@ -282,7 +284,11 @@ export type {
 // 028 EARS-7/11/14 (#1966) — the ONE legal-document reading surface both
 // storefronts mount (canvas `design-source/document.dc.html`, tocVariant А).
 // The hosts add a route and the neighbour list; neither owns a copy of it.
-export { LegalDocument, LEGAL_DOCUMENT_COPY, formatEditionLine } from "./legal-document";
+export {
+  LegalDocument,
+  LEGAL_DOCUMENT_COPY,
+  formatEditionLine,
+} from "./legal-document";
 export type {
   LegalDocumentProps,
   LegalDocumentState,

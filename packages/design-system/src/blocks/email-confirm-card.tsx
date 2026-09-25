@@ -7,7 +7,7 @@ import { Alert } from "../primitives/alert";
 import { Button } from "../primitives/button";
 import { Form, FormField, FormError } from "../primitives/form";
 import { OtpField } from "../primitives/fields";
-import { AuthCard } from "./auth-card";
+import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 import { useResendCountdown } from "./use-resend-countdown";
 
 /**
@@ -137,7 +137,39 @@ export interface EmailConfirmCardProps {
   otpLength?: number;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;
+  /**
+   * The `data-testid` map (#2027 PR 1.7). Every key defaults to the id this block
+   * has always shipped, so a host that passes nothing keeps its journeys; a host
+   * that renames one does it here, in one map, rather than around the block.
+   */
+  testIds?: Partial<EmailConfirmCardTestIds> | undefined;
 }
+
+/** The block's addressable parts — see `EMAIL_CONFIRM_TEST_IDS` for the shipped ids. */
+export interface EmailConfirmCardTestIds {
+  /** The card frame; unnamed by default. */
+  root: string | undefined;
+  /** The one operation-failure plate above the title (canvas 53-56). */
+  error: string;
+  succeeded: string;
+  submit: string;
+  resend: string;
+  resendNotice: string;
+  goToLogin: string;
+  goToReset: string;
+}
+
+/** The ids the block shipped with (#1666) — the defaults of `testIds`. */
+export const EMAIL_CONFIRM_TEST_IDS: EmailConfirmCardTestIds = {
+  root: undefined,
+  error: "verify-error",
+  succeeded: "verify-succeeded",
+  submit: "verify-submit",
+  resend: "verify-resend",
+  resendNotice: "verify-resend-notice",
+  goToLogin: "verify-go-to-login",
+  goToReset: "verify-go-to-reset",
+};
 
 const defaultRenderLink = ({
   href,
@@ -162,6 +194,7 @@ export function EmailConfirmCard({
   resend,
   otpLength = EMAIL_CONFIRM_OTP_LENGTH,
   resendCooldownSeconds = EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
+  testIds,
 }: EmailConfirmCardProps) {
   const form = useForm<EmailConfirmValues>({
     resolver,
@@ -205,23 +238,41 @@ export function EmailConfirmCard({
     void submit();
   }, [form.formState.isSubmitting, submit]);
 
+  const ids = { ...EMAIL_CONFIRM_TEST_IDS, ...testIds };
+  // Canvas 53-56 — ONE operation-level plate above the title on every auth
+  // screen: a refused code and a refused resend (`errText()` «повтор») are both
+  // said there, never in two places at once. The code failure wins while both
+  // are live, because it is the one the visitor just acted on.
+  const operationError = error ?? resend?.error;
+
   return (
     <AuthCard
+      {...(ids.root ? { "data-testid": ids.root } : {})}
       icon={icon}
+      errorBanner={
+        operationError ? (
+          <FormError variant="banner" className="mb-5" data-testid={ids.error}>
+            {operationError}
+          </FormError>
+        ) : null
+      }
       // #1035: the page title is the document's single h1 (a11y landmark) — same
       // root cause + fix as #1033/#1034 on /login /register /reset. Bare h1 —
       // Tailwind preflight makes it inherit the CardTitle styling, so the render is
       // pixel-identical.
       title={<h1>{copy.title}</h1>}
       description={copy.description(destination)}
-      contentClassName="space-y-6"
+      // Canvas 213 — 24px between the code group and the already-registered rule.
+      contentClassName="flex flex-col gap-6"
     >
       {/* (a) New-registrant path — enter the email code (unchanged auto-submit
-            + post-verify auto-login). A co-equal affordance, not the only one. */}
-      <section className="space-y-3" aria-label={copy.newAccountHeading}>
-        <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
-          {copy.newAccountHeading}
-        </h2>
+            + post-verify auto-login). A co-equal affordance, not the only one.
+            Canvas 214 — one 16px column: eyebrow, field, banner, submit, resend. */}
+      <section
+        className="flex flex-col gap-4"
+        aria-label={copy.newAccountHeading}
+      >
+        <h2 className={AUTH_EYEBROW}>{copy.newAccountHeading}</h2>
         <Form {...form}>
           {/* Same pre-hydration rule as `<LoginCard>`: a native submit before
               the bundle loads must POST, never GET the one-time code into the
@@ -229,7 +280,7 @@ export function EmailConfirmCard({
           <form
             method="post"
             onSubmit={submit}
-            className="space-y-4"
+            className="flex flex-col gap-4"
             noValidate
           >
             <FormField
@@ -250,16 +301,15 @@ export function EmailConfirmCard({
                   replay completes. Adopts the DS `Alert` success variant (✓ +
                   success-tint frame, role=status) — no bespoke callout. */}
             {succeeded ? (
-              <Alert variant="success" data-testid="verify-succeeded">
+              <Alert variant="success" data-testid={ids.succeeded}>
                 {copy.codeAccepted}
               </Alert>
             ) : null}
-            <FormError>{error}</FormError>
             <Button
               type="submit"
               className="w-full"
               loading={form.formState.isSubmitting}
-              data-testid="verify-submit"
+              data-testid={ids.submit}
             >
               {copy.submit}
             </Button>
@@ -275,6 +325,7 @@ export function EmailConfirmCard({
           <EmailConfirmResend
             copy={copy}
             cooldownSeconds={resendCooldownSeconds}
+            testIds={ids}
             {...resend}
           />
         ) : null}
@@ -283,31 +334,30 @@ export function EmailConfirmCard({
       {/* (b) Already-registered owner's path — prominent, co-equal sign-in /
             reset actions (NOT a footnote link). The screen never branches on
             account existence; the owner's path is also reinforced out-of-band by
-            the EARS-23 notice email. */}
+            the EARS-23 notice email. Canvas 236-241: a 2px hairline rule, 22px
+            above a 14px column, the two actions sharing one wrapping row. */}
       <section
-        className="space-y-3 border-t pt-6"
+        className="flex flex-col gap-3.5 border-t-2 border-hairline pt-5.5"
         aria-label={copy.existingAccountHeading}
       >
-        <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
-          {copy.existingAccountHeading}
-        </h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className={AUTH_EYEBROW}>{copy.existingAccountHeading}</h2>
+        <p className="text-sm leading-normal text-muted-foreground">
           {copy.existingAccountHint}
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-wrap gap-3">
           <Button
             asChild
             variant="default"
-            className="flex-1"
-            data-testid="verify-go-to-login"
+            className="min-w-35 flex-1"
+            data-testid={ids.goToLogin}
           >
             {renderLink({ href: links.login, children: copy.goToSignIn })}
           </Button>
           <Button
             asChild
             variant="outline"
-            className="flex-1"
-            data-testid="verify-go-to-reset"
+            className="min-w-35 flex-1"
+            data-testid={ids.goToReset}
           >
             {renderLink({ href: links.reset, children: copy.goToReset })}
           </Button>
@@ -317,27 +367,30 @@ export function EmailConfirmCard({
   );
 }
 
-/** The #267 resend row: shared cooldown timer, captcha slot, error and #326 ack. */
+/**
+ * The #267 resend row: shared cooldown timer, captcha slot and #326 ack. Its
+ * failure is said in the card's one operation plate (canvas 53-56), not here.
+ */
 function EmailConfirmResend({
   copy,
   cooldownSeconds,
+  testIds,
   nonce,
   onResend,
-  error,
   pending = false,
   notice,
   captchaSlot,
 }: EmailConfirmResendProps & {
   copy: EmailConfirmCardCopy;
   cooldownSeconds: number;
+  testIds: EmailConfirmCardTestIds;
 }) {
   const remaining = useResendCountdown(cooldownSeconds, nonce);
   const resendDisabled = remaining > 0;
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {captchaSlot}
-      <FormError>{error}</FormError>
       <div className="flex justify-end">
         <Button
           type="button"
@@ -346,7 +399,7 @@ function EmailConfirmResend({
           disabled={resendDisabled || pending}
           loading={pending}
           onClick={onResend}
-          data-testid="verify-resend"
+          data-testid={testIds.resend}
           // `tabular-nums` — fixed-width digits so the countdown label does not
           // jitter as the seconds tick down (#227/#267 owner finding). `min-w-0` +
           // `whitespace-normal` override the Button base `whitespace-nowrap` so the
@@ -364,7 +417,7 @@ function EmailConfirmResend({
           role="status"
           aria-live="polite"
           className="text-sm text-muted-foreground"
-          data-testid="verify-resend-notice"
+          data-testid={testIds.resendNotice}
         >
           {notice}
         </p>

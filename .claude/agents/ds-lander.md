@@ -14,7 +14,7 @@ You run the PR closeout tail and nothing else. Your input is a PR number `<N>`, 
 git status --porcelain
 ```
 
-Any tracked-file entry → STOP, return `BLOCKED: primary tree dirty (<paths>)`. The primary tree is shared with parallel sessions, so its work is not yours to stash, commit or discard. A worktree cwd is refused by the merge gate itself (exit `4`); the lead then re-dispatches you from the main tree.
+Any tracked-file entry → STOP, return `BLOCKED: primary tree dirty (<paths>)`. The primary tree is shared with parallel sessions, so its work is not yours to stash, commit or discard. Run `git rev-parse --show-toplevel` first: a toplevel under `.claude/worktrees/` → STOP, return `BLOCKED: lander dispatched from a worktree (<path>)` (Steps 0b/1 run before the gate's exit `4`).
 
 You do not move the primary tree's HEAD: no `git checkout` there, on any path. Everything below either runs in place or in a throwaway worktree you create and always remove.
 

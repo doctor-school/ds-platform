@@ -346,7 +346,11 @@ export function EmailConfirmCard({
             reset actions (NOT a footnote link). The screen never branches on
             account existence; the owner's path is also reinforced out-of-band by
             the EARS-23 notice email. Canvas 236-241: a 2px hairline rule, 22px
-            above a 14px column, the two actions sharing one wrapping row. */}
+            above a 14px column, the two actions sharing one wrapping row. At
+            390px the canvas keeps them in ONE row (147px each) and wraps the
+            longer label inside its button; the shell's 24px mobile gutter leaves
+            this row 290px (canvas 306px), so the floor is `min-w-32` (128px)
+            rather than the canvas 140px — the row, not the label, stays put. */}
       <section
         className="flex flex-col gap-3.5 border-t-2 border-hairline pt-5.5"
         aria-label={copy.existingAccountHeading}
@@ -360,7 +364,7 @@ export function EmailConfirmCard({
           <Button
             asChild
             variant="default"
-            className="min-w-35 flex-1"
+            className="min-w-32 flex-1 whitespace-normal"
             data-testid={ids.goToLogin}
           >
             {renderLink({ href: links.login, children: copy.goToSignIn })}
@@ -368,7 +372,7 @@ export function EmailConfirmCard({
           <Button
             asChild
             variant="outline"
-            className="min-w-35 flex-1"
+            className="min-w-32 flex-1 whitespace-normal"
             data-testid={ids.goToReset}
           >
             {renderLink({ href: links.reset, children: copy.goToReset })}

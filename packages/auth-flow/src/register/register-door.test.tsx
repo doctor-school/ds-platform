@@ -655,8 +655,7 @@ describe("021 EARS-2: the gate context beside the form", () => {
 
 describe("rows 51 + 76: the confirmation step a host with no /verify route runs", () => {
   it("021 EARS-19: an accepted registration on the doctor door replaces the form with the code step for the address just registered", async () => {
-    const confirmCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).register.confirm;
-    if (!confirmCopy) throw new Error("fixture states no confirmation copy");
+    const confirmCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
     await submitForm(DOCTOR_FIXTURE);
 
     // The host serves no `/verify` route, so the accepted command does not hop:
@@ -676,7 +675,7 @@ describe("rows 51 + 76: the confirmation step a host with no /verify route runs"
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(
       screen.queryByLabelText(
-        resolveAuthFlowCopy(DOCTOR_FIXTURE).register.confirm?.codeLabel ?? "",
+        resolveAuthFlowCopy(DOCTOR_FIXTURE).verify.codeLabel,
       ),
     ).toBeNull();
   });

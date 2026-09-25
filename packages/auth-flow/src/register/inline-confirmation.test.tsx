@@ -36,11 +36,12 @@ const h = vi.hoisted(() => ({
   registerForEvent: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
+  refresh: vi.fn(),
   calls: [] as string[],
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: h.push, replace: h.replace }),
+  useRouter: () => ({ push: h.push, replace: h.replace, refresh: h.refresh }),
 }));
 
 vi.mock("../client/auth-client", async (importOriginal) => ({
@@ -97,11 +98,8 @@ const RETURN_TARGET = "/events/kardio";
 /** Rule S3 — what the ROUTE carries onward, in the canonical vocabulary. */
 const CARRIED_TARGET = "/webinars/kardio";
 
-const REGISTER_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).register;
-if (!REGISTER_COPY?.confirm) {
-  throw new Error("DOCTOR_FIXTURE must state the inline confirmation copy");
-}
-const CONFIRM_COPY = REGISTER_COPY.confirm;
+/** The ONE confirmation dictionary (#2027 PR 1.7) — the same words on every host. */
+const CONFIRM_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
 
 beforeEach(() => {
   h.calls.length = 0;
@@ -422,7 +420,9 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
 
     await submitCode(user);
 
-    await screen.findByText(resolveAuthFlowCopy(DOCTOR_FIXTURE).errors.tooManyAttempts);
+    await screen.findByText(
+      resolveAuthFlowCopy(DOCTOR_FIXTURE).errors.tooManyAttempts,
+    );
     expect(screen.queryByText(CONFIRM_COPY.failed)).toBeNull();
   });
 });

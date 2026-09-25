@@ -246,8 +246,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/portal/app/register/page.tsx`                     | `@ds/auth-flow`                                                                                          | mounted        |
 | `apps/portal/app/reset/layout.tsx`                      | `@ds/auth-flow`                                                                                          | wave 1 (#2027) |
 | `apps/portal/app/reset/page.tsx`                        | `@ds/auth-flow`                                                                                          | wave 1 (#2027) |
-| `apps/portal/app/verify/layout.tsx`                     | `@ds/auth-flow`                                                                                          | wave 1 (#2027) |
-| `apps/portal/app/verify/page.tsx`                       | `@ds/auth-flow`                                                                                          | wave 1 (#2027) |
+| `apps/portal/app/verify/page.tsx`                       | `@ds/auth-flow`                                                                                          | mounted        |
 | `apps/portal/app/webinars/[slug]/page.tsx`              | `@ds/event-page`                                                                                         | wave 3 (#2072) |
 | `apps/portal/app/webinars/[slug]/room/page.tsx`         | `@ds/room`                                                                                               | wave 4 (#2073) |
 | `apps/portal/app/webinars/page.tsx`                     | `@ds/events-storefront`                                                                                  | wave 2 (#2028) |

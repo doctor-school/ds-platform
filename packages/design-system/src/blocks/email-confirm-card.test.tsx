@@ -227,3 +227,79 @@ describe("#2027 <EmailConfirmCard> pre-hydration submit", () => {
     }
   });
 });
+
+/**
+ * #2027 PR 1.7 — the block drawn to the canvas «Подтверждение» screen
+ * (`design-source/auth.dc.html` 53-56, 212-244).
+ */
+describe("#2027 <EmailConfirmCard> canvas «Подтверждение»", () => {
+  it("003 EARS-16: an operation failure is ONE banner above the title, the code and the resend alike", () => {
+    const { rerender } = setup({ error: "host-error" });
+
+    const banner = screen.getByTestId("verify-error");
+    expect(banner).toHaveTextContent("host-error");
+    // Canvas 53-56: the plate stands where the eye enters, before the <h1>.
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(
+      banner.compareDocumentPosition(heading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // `повтор` — the refused resend reads in the SAME plate, not a second one.
+    rerender(
+      <EmailConfirmCard
+        copy={copy}
+        email="doc@example.com"
+        destination="d•••@e•••.com"
+        resolver={passthrough<EmailConfirmValues>()}
+        onSubmit={vi.fn()}
+        links={{ login: "/login", reset: "/reset" }}
+        resend={{ nonce: 0, onResend: vi.fn(), error: "host-resend-error" }}
+      />,
+    );
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByTestId("verify-error")).toHaveTextContent(
+      "host-resend-error",
+    );
+  });
+
+  it("003 EARS-24: both eyebrows are the auth family's faint 11px/800 label", () => {
+    setup();
+
+    for (const name of [
+      "copy.newAccountHeading",
+      "copy.existingAccountHeading",
+    ]) {
+      expect(screen.getByRole("heading", { name })).toHaveClass(
+        "text-eyebrow",
+        "text-faint",
+      );
+    }
+  });
+
+  it("003 EARS-24: the already-registered actions share a wrapping row (canvas 238-241)", () => {
+    setup();
+
+    const row = screen.getByTestId("verify-go-to-login").parentElement;
+    expect(row).toHaveClass("flex", "flex-wrap", "gap-3");
+    expect(row).not.toHaveClass("flex-col");
+  });
+
+  it("#2027: a host may rename the test ids through one map, the shipped ids staying the defaults", () => {
+    render(
+      <EmailConfirmCard
+        copy={copy}
+        email="doc@example.com"
+        destination="d•••@e•••.com"
+        resolver={passthrough<EmailConfirmValues>()}
+        onSubmit={vi.fn()}
+        links={{ login: "/login", reset: "/reset" }}
+        testIds={{ root: "verify-screen", submit: "confirm-submit" }}
+      />,
+    );
+
+    expect(screen.getByTestId("verify-screen")).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-submit")).toBeInTheDocument();
+    expect(screen.getByTestId("verify-go-to-login")).toBeInTheDocument();
+  });
+});

@@ -86,9 +86,9 @@ afterEach(() => {
 });
 
 describe("lead-context-budget thresholds", () => {
-  it("owner-decided constants (2026-08-31, #1693): 120K soft / 160K hard", () => {
-    expect(SOFT_THRESHOLD).toBe(120_000);
-    expect(HARD_THRESHOLD).toBe(160_000);
+  it("owner-decided constants (2026-09-25, #2373): 250K soft / 400K hard", () => {
+    expect(SOFT_THRESHOLD).toBe(250_000);
+    expect(HARD_THRESHOLD).toBe(400_000);
   });
 
   it("the override marker is the documented repo-relative path", () => {
@@ -103,33 +103,52 @@ describe("lead-context-budget thresholds", () => {
 
 describe("lead-context-budget decide()", () => {
   it("below the soft cap → silent (override or not)", () => {
-    expect(decide({ contextTokens: 119_999, override: false }).action).toBe(
+    expect(decide({ contextTokens: 249_999, override: false }).action).toBe(
       "silent",
     );
     expect(decide({ contextTokens: 0, override: true }).action).toBe("silent");
   });
 
-  it("soft band 120K–159K → soft warning", () => {
-    for (const ctx of [120_000, 140_000, 159_999]) {
+  it("soft band 250K–399K → soft warning", () => {
+    for (const ctx of [250_000, 300_000, 399_999]) {
       expect(decide({ contextTokens: ctx, override: false }).action).toBe(
         "soft",
       );
     }
   });
 
-  it("≥160K → deny", () => {
-    for (const ctx of [160_000, 208_000, 325_000]) {
+  it("≥400K → deny", () => {
+    for (const ctx of [400_000, 420_000, 525_000]) {
       expect(decide({ contextTokens: ctx, override: false }).action).toBe(
         "deny",
       );
     }
   });
 
+  it("≥400K a ds-reviewer / ds-lander dispatch is allowed with an advisory (closing the wave frees context)", () => {
+    for (const subagentType of ["ds-reviewer", "ds-lander"]) {
+      expect(
+        decide({ contextTokens: 420_000, override: false, subagentType })
+          .action,
+      ).toBe("closeout");
+    }
+    for (const subagentType of [
+      "ds-implementer",
+      "general-purpose",
+      undefined,
+    ]) {
+      expect(
+        decide({ contextTokens: 420_000, override: false, subagentType })
+          .action,
+      ).toBe("deny");
+    }
+  });
+
   it("the override marker lifts BOTH tiers, loudly", () => {
-    expect(decide({ contextTokens: 130_000, override: true }).action).toBe(
+    expect(decide({ contextTokens: 300_000, override: true }).action).toBe(
       "override",
     );
-    expect(decide({ contextTokens: 325_000, override: true }).action).toBe(
+    expect(decide({ contextTokens: 525_000, override: true }).action).toBe(
       "override",
     );
   });
@@ -158,22 +177,22 @@ describe("lead-context-budget overrideActive()", () => {
 
 describe("lead-context-budget messages", () => {
   it("the soft warning names the measured size and the wave contract", () => {
-    const msg = softMessage(140_000);
-    expect(msg).toContain("140K");
-    expect(msg).toContain("120K");
+    const msg = softMessage(300_000);
+    expect(msg).toContain("300K");
+    expect(msg).toContain("250K");
     expect(msg).toContain("/wrap");
   });
 
   it("the deny message names the size, the cap and the override hatch", () => {
-    const msg = hardMessage(208_000);
-    expect(msg).toContain("208K");
-    expect(msg).toContain("160K");
+    const msg = hardMessage(420_000);
+    expect(msg).toContain("420K");
+    expect(msg).toContain("400K");
     expect(msg).toContain(OVERRIDE_REL);
   });
 
   it("the override message announces the override rather than hiding it", () => {
-    const msg = overrideMessage(325_000);
-    expect(msg).toContain("325K");
+    const msg = overrideMessage(525_000);
+    expect(msg).toContain("525K");
     expect(msg).toContain("OVERRIDE");
     expect(msg).toContain(OVERRIDE_REL);
   });
@@ -201,31 +220,59 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
           session_id: "sess-1",
           tool_name: "Agent",
           tool_input: {},
-          transcript_path: leadTranscript(140_000),
+          transcript_path: leadTranscript(300_000),
         },
         { CLAUDE_PROJECT_DIR: projectDir(false) },
       ),
     );
     expect(json.hookSpecificOutput.hookEventName).toBe("PreToolUse");
-    expect(json.hookSpecificOutput.additionalContext).toContain("140K");
+    expect(json.hookSpecificOutput.additionalContext).toContain("300K");
     expect(json.hookSpecificOutput.permissionDecision).toBeUndefined();
   });
 
-  it("≥160K → deny with the wrap/handoff reason", () => {
+  it("≥400K → deny with the wrap/handoff reason", () => {
     const json = JSON.parse(
       runHook(
         {
           session_id: "sess-1",
           tool_name: "Task",
           tool_input: {},
-          transcript_path: leadTranscript(208_000),
+          transcript_path: leadTranscript(420_000),
         },
         { CLAUDE_PROJECT_DIR: projectDir(false) },
       ),
     );
     expect(json.hookSpecificOutput.permissionDecision).toBe("deny");
     expect(json.hookSpecificOutput.permissionDecisionReason).toContain("/wrap");
-    expect(json.systemMessage).toContain("208K");
+    expect(json.systemMessage).toContain("420K");
+  });
+
+  it("≥400K a ds-lander dispatch passes with an advisory, a ds-implementer is denied", () => {
+    const lander = JSON.parse(
+      runHook(
+        {
+          session_id: "sess-1",
+          tool_name: "Agent",
+          tool_input: { subagent_type: "ds-lander" },
+          transcript_path: leadTranscript(420_000),
+        },
+        { CLAUDE_PROJECT_DIR: projectDir(false) },
+      ),
+    );
+    expect(lander.hookSpecificOutput.permissionDecision).toBeUndefined();
+    expect(lander.hookSpecificOutput.additionalContext).toContain("ds-lander");
+    const impl = JSON.parse(
+      runHook(
+        {
+          session_id: "sess-1",
+          tool_name: "Agent",
+          tool_input: { subagent_type: "ds-implementer" },
+          transcript_path: leadTranscript(420_000),
+        },
+        { CLAUDE_PROJECT_DIR: projectDir(false) },
+      ),
+    );
+    expect(impl.hookSpecificOutput.permissionDecision).toBe("deny");
   });
 
   it("the override marker turns the deny into a loud allow", () => {
@@ -235,7 +282,7 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
           session_id: "sess-1",
           tool_name: "Agent",
           tool_input: {},
-          transcript_path: leadTranscript(208_000),
+          transcript_path: leadTranscript(420_000),
         },
         { CLAUDE_PROJECT_DIR: projectDir(true) },
       ),
@@ -244,7 +291,7 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
     expect(json.hookSpecificOutput.additionalContext).toContain("OVERRIDE");
   });
 
-  it("a SUBAGENT dispatch (agent_id present) is silent even at 325K", () => {
+  it("a SUBAGENT dispatch (agent_id present) is silent even at 525K", () => {
     expect(
       runHook(
         {
@@ -252,7 +299,7 @@ describe("lead-context-budget end-to-end (real hook process)", () => {
           agent_id: "a1",
           tool_name: "Agent",
           tool_input: {},
-          transcript_path: leadTranscript(325_000),
+          transcript_path: leadTranscript(525_000),
         },
         { CLAUDE_PROJECT_DIR: projectDir(false) },
       ),

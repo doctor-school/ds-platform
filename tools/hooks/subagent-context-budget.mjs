@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** PreToolUse child budget. Claude retains 150K/200K and +25K cadence.
+/** PreToolUse child budget. Claude uses 250K/350K and +25K cadence.
  * Codex uses 70%/85% of its own reported effective model window. A Codex
  * child transcript must identify that agent; never charge the parent's usage.
  * Missing identity/usage/window is unavailable, not zero. Hard-cap recovery
@@ -32,12 +32,12 @@ import {
 import { codexSessionMetadata } from "../agent/session-activity.mjs";
 
 /** Soft cap: the subagent is told to checkpoint and hand back (ROTATE).
- * Owner-tunable (owner decision 2026-08-18: 150K). */
-export const SOFT_THRESHOLD = 150_000;
+ * Owner-tunable (owner decision 2026-09-25, #2373: 250K). */
+export const SOFT_THRESHOLD = 250_000;
 
 /** Hard cap: every tool call is DENIED except the checkpoint/hand-back
- * allow-list. Owner-tunable (owner decision 2026-08-18: 200K). */
-export const HARD_THRESHOLD = 200_000;
+ * allow-list. Owner-tunable (owner decision 2026-09-25, #2373: 350K). */
+export const HARD_THRESHOLD = 350_000;
 
 /** After the first soft directive, re-emit once per this much extra context. */
 export const SOFT_REPEAT_STEP = 25_000;
@@ -170,7 +170,7 @@ export function readTail(path, maxBytes = TAIL_BYTES) {
 /**
  * The ONLY tools a subagent may still run above the hard cap: git (WIP-commit,
  * push, inspect) and writing its own checkpoint file. Everything else is
- * denied — at 200K every further turn re-reads the whole context.
+ * denied — at 350K every further turn re-reads the whole context.
  */
 export function isAllowedUnderHardCap(toolName, toolInput, agentId = null) {
   if (toolName === "Bash" || toolName === "exec_command") {

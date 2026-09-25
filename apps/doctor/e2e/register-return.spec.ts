@@ -162,27 +162,22 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     await expect(header.getByRole("link", { name: "Войти" })).toHaveCount(0);
   });
 
-  test("021 EARS-15.5: a replay the login refuses lands on the sign-in door with the return context, never on a success card", async ({
+  test("021 EARS-15.3: a replay the login refuses keeps the doctor on the confirmation step with the generic error, no routing", async ({
     page,
   }) => {
-    // The whole point of the Academy rule (003 EARS-39), driven end to end: the
-    // credential in the slot is not the one the IdP holds, so the replay is
-    // refused. The email IS verified — but there is no session, and landing
-    // them on the эфир here would walk them in as a guest and «Участвовать»
-    // would send them back through the door: the #1996 loop, one attempt later.
+    // Owner decision 2026-09-15 (tech spec §5 Q1, «Как в Академии»), driven end
+    // to end: the credential in the slot is not the one the IdP holds, so the
+    // replay is refused. The email IS verified but there is no session, so the
+    // doctor is neither walked onto the эфир as a guest (the #1996 loop) nor
+    // routed anywhere: they stay on the step with the generic 003 EARS-16
+    // sentence, the one post-throw exit both hosts share.
     await registerAndConfirm(page, arrival(LIVE), REFUSED_PASSWORD);
 
-    // Rule S3 (#2027) — the door is handed the CANONICAL `/webinars/<slug>`
-    // vocabulary every arrival on this host carries (line 49 above), because the
-    // seam now builds the hop with the shared carry helper instead of spelling
-    // the doctor-host projection into a `returnTo`. The projection is the
-    // LANDING's job, and the assertion below proves the door still resolves the
-    // carried value into the same эфир.
-    await expect(page).toHaveURL(
-      `/login?returnTo=${encodeURIComponent(`/webinars/${LIVE}`)}`,
-    );
-    // Not a dead end: the door they land on still shows them what they are
-    // coming back to (#1939's return-context card).
-    await expect(page.getByTestId("return-context-panel")).toBeVisible();
+    await expect(page.getByText("Код не подошёл. Попробуйте ещё раз.")).toBeVisible();
+    // Still the confirmation step, on the door route, with its co-equal
+    // sign-in action carrying the return context (rule S3).
+    await expect(page).toHaveURL(/\/register\?/);
+    await expect(page.getByTestId("verify-submit")).toBeVisible();
+    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
   });
 });

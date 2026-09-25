@@ -21,8 +21,9 @@ says «Введите код.»; the doctor storefront shows «Код приня
 code is accepted and refreshes the page after landing, as the Academy did.
 The code stays six characters with a letter-capable keyboard.
 
-`<EmailConfirmCard>` follows the owner's canvas: canvas eyebrows and gaps, a
-hairline rule above the already-registered block, the two actions sharing one
+`<EmailConfirmCard>` follows the owner's canvas: canvas eyebrows and gaps, the
+hint and the resend notice at the 13px `caption` step, a hairline rule above the
+already-registered block, the two actions sharing one
 wrapping row, and the error plate above the title. New, additive: a `testIds`
 prop (defaults are the ids the block shipped with) and the exported
 `EMAIL_CONFIRM_TEST_IDS` / `EmailConfirmCardTestIds`.

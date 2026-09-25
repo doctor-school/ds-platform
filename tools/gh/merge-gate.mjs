@@ -650,8 +650,9 @@ function git(args) {
  *     ignores merge commits, so a branch updated via GitHub's «Update branch»
  *     button (a merge, not a rebase) would otherwise read as a pure rebase.
  *
- * NOTE (scope): this escape covers the merge gate's own Mode-a verdict only.
- * A PR on the `ui-parity: N/A (no render delta)` route keeps a head-pinned
+ * NOTE (scope): this escape covers the merge gate's own Mode-a verdict and,
+ * since #2373, the pre-merge Stage-B record head (`tools/lint/stage-b-lint.ts`
+ * reuses this probe). A PR on the `ui-parity: N/A (no render delta)` route keeps a head-pinned
  * certification in the `ui-parity` CI guard (BLOCK), which cannot see the
  * pre-rebase head — such a PR still needs a fresh delta-only verdict.
  *
@@ -659,7 +660,7 @@ function git(args) {
  * @param {string} headSha      current head
  * @returns {{accepted: boolean, reason: string, equal?: number, total?: number}}
  */
-function checkRebaseEquivalence(approvedSha, headSha) {
+export function checkRebaseEquivalence(approvedSha, headSha) {
   if (!approvedSha || !headSha)
     return { accepted: false, reason: "the approved head SHA is unknown" };
   for (const sha of [approvedSha, headSha]) {

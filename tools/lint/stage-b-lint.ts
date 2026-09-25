@@ -13,6 +13,9 @@ import {
   stageBField,
   type StageBRecord,
 } from "./lib/stage-b-evidence";
+// #2373: the Mode (a) rebase carry-over probe (#1865), reused — never
+// re-implemented. `merge-gate.mjs` guards its own entry point.
+import { checkRebaseEquivalence } from "../gh/merge-gate.mjs";
 
 const TAG = "[stage-b]";
 
@@ -164,6 +167,7 @@ async function main(): Promise<void> {
     pr.headRefOid ?? "",
     renderable,
     gates,
+    checkRebaseEquivalence,
   );
   if (!verdict.ok) fail(`PR #${pr.number}: ${verdict.reason}`);
   // URL-backed sources are fetched; relays remain explicit session/message

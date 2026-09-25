@@ -121,8 +121,9 @@ Determine whether the rule itself was necessary and correctly scoped before reco
 A big historical corpus exceeds one context window (the audit: ~2.8 MB / 65
 transcripts). Fan out: split the time-sorted transcript list into N batches
 **balanced by byte size** (not count — some sessions are 10–20× larger),
-dispatch one reviewer-grade subagent per batch with this SKILL.md + its manifest, then
-**consolidate** (de-duplicate theme recurrences, keep the strongest quote).
+≤250 KB per analyst; dispatch one reviewer-grade subagent per batch with this SKILL.md +
+its manifest; each writes its findings to `findings-batch-N.json` and returns that path
+plus a digest; then **consolidate** (de-duplicate theme recurrences, keep the strongest quote).
 Single-session mode never needs fan-out.
 
 ---

@@ -2,9 +2,7 @@
 
 Universal AI-agent constitution for the DS Platform monorepo. At session entry read [portable agent discipline](apps/docs/content/agent-discipline.md): session plan, tool/model mappings, dispatch/context, authorization and memory policy. Claude-only bindings: `CLAUDE.md`; Codex roles: `.codex/agents/`.
 
-<!-- Startup budget: each file ≤200 lines/25 KB, each harness total ≤30 KB including portable discipline (`pnpm lint:instruction-budget`). Codex loads AGENTS.md; Claude adds CLAUDE.md. Scoped .claude/rules references are on-demand via §0, never implicitly imported by Codex. -->
-
-On-demand conventions and dev-stand rules: §0; task procedure: §3. Use established evidence per portable discipline.
+On-demand conventions and dev-stand rules: §0; task procedure: §3.
 
 ---
 
@@ -12,19 +10,8 @@ On-demand conventions and dev-stand rules: §0; task procedure: §3. Use establi
 
 Read the indexed reference in full before its action, once per session and after compaction; these scoped rules hold gates and load on demand only.
 
-| Before action                                  | Read reference / section                          |
-| ---------------------------------------------- | ------------------------------------------------- |
-| Branch naming, closure, `pr:land`              | `repo-conventions.md` → Branches                  |
-| PR creation, changesets, preflight, merge gate | → Commits, versioning, PRs                        |
-| Prod deploy/release                            | → Release train; skill `run-prod-deploy`          |
-| Dependency bumps                               | → Dependency bumps                                |
-| Issues, claims, dependencies, resume checks    | → Issue conventions                               |
-| ADR/spec/PRD placement                         | → ADRs & specs                                    |
-| `dev:*` or stand endpoints                     | `dev-stand.md` → Endpoints, DX commands           |
-| Migration                                      | → Snapshot before migrate                         |
-| DB/volume operations, stand-capable brief      | → Shared-stand discipline                         |
-| Ports, listeners, branch DB                    | → Parallel sessions                               |
-| Browser/live UI/Stage-B handback, staging slot | → Rules for agents; `build-ui-from-design-system` |
+- `.claude/rules/repo-conventions.md`: Branches (branch naming, closure, `pr:land`); Commits, versioning, PRs (PR creation, changesets, preflight, merge gate); Release train + skill `run-prod-deploy` (prod deploy/release); Dependency bumps; Issue conventions (Issues, claims, dependencies, resume checks); ADRs & specs (ADR/spec/PRD placement).
+- `.claude/rules/dev-stand.md`: Endpoints, DX commands (`dev:*`, stand endpoints); Snapshot before migrate (migration); Shared-stand discipline (DB/volume operations, stand-capable brief); Parallel sessions (ports, listeners, branch DB); Rules for agents + `build-ui-from-design-system` (browser/live UI/Stage-B handback, staging slot).
 
 ---
 
@@ -32,21 +19,21 @@ Read the indexed reference in full before its action, once per session and after
 
 Medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). ADRs 0001–0008 accepted.
 
-**Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs (static prose rots).
+**Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs.
 
 Stack (ADR-0002–0006 in `apps/docs/content/adr/` + `README.md`): NestJS + Zod + REST + openapi-typescript SDK; Postgres 17 + Drizzle + pgvector; Next.js 15 + Refine (promo/portal/admin/cms-Payload-v3); React Native + Expo + WatermelonDB; Fumadocs + glossary.
 
 ---
 
-## 2. Repository conventions (detail: `.claude/rules/repo-conventions.md`)
+## 2. Repository conventions
 
-Monorepo pnpm 10 + Turborepo; trunk-based `<prefix>/<N>-<slug>`, Conventional Commits, squash/delete on merge. Read `repo-conventions.md` before branch/Issue/PR/version/release actions: required fields, changesets, native technical dependency links, board Done and canonical landing are mandatory. New feature specs land before implementation; corrections to approved behavior/docs may share its code PR (repo-conventions → ADRs & specs). Prod ships only through `pnpm deploy:prod` and its release-readiness/authorization policy.
+Monorepo pnpm 10 + Turborepo; trunk-based `<prefix>/<N>-<slug>`, Conventional Commits, squash/delete on merge. `.claude/rules/repo-conventions.md` holds the mandatory required fields, changesets, native technical dependency links, board Done and canonical landing. New feature specs land before implementation; corrections to approved behavior/docs may share its code PR (repo-conventions → ADRs & specs). Prod ships only through `pnpm deploy:prod` and its release-readiness/authorization policy.
 
 ---
 
 ## 3. Work protocol
 
-Every session: identify the requested outcome and apply portable discipline’s proportionate path; repository changes use the task-kind procedure below.
+Repository changes follow the task-kind procedure below; other requests follow portable discipline.
 
 ### 3.1 Identify task kind
 
@@ -62,15 +49,15 @@ Answers, analysis, exports and authorized standard operations → direct executi
 
 ### 3.2 Open with the session plan
 
-For repository-changing work, first reply opens with the «План сессии» block (format: `apps/docs/content/agent-discipline.md` → Session plan), then: kind, track (`track:*`), active artifact (Issue #N / spec path / ADR section), skill dispatched.
+For repository-changing work, first reply opens with the «План сессии» block (format: agent-discipline → Session plan), then: kind, track (`track:*`), active artifact (Issue #N / spec path / ADR section), skill dispatched.
 
 ### 3.3 Load the skill
 
-`Read` `apps/docs/content/skills/<name>/SKILL.md` directly. No vendor auto-discovery — the path is the contract.
+`Read` `apps/docs/content/skills/<name>/SKILL.md` directly — the path is the contract; no vendor auto-discovery.
 
 ### 3.4 Vendor skill packs are off
 
-Project execution uses only `apps/docs/content/skills/`; vendor packs are disabled. The vendored `brainstorming` is a scoped step of the project orchestrators, never a replacement. The SDD triplet is the plan (ADR-0007 §2.4); do not chain into a global plan-writing skill.
+Project execution uses only `apps/docs/content/skills/`. The vendored `brainstorming` is a scoped step of the project orchestrators, never a replacement. The SDD triplet is the plan (ADR-0007 §2.4); do not chain into a global plan-writing skill.
 
 ### 3.5 Bootstrap
 
@@ -78,11 +65,11 @@ Project execution uses only `apps/docs/content/skills/`; vendor packs are disabl
 
 ### 3.6 Permission-mode disclosure
 
-State the actual harness permission mode when relevant; never imply Claude flags govern Codex. Configured hooks are not proof of trusted or observed enforcement. Follow `apps/docs/content/agent-discipline.md` and `tools/hooks/README.md`; missing telemetry is unavailable, never zero.
+State the actual harness permission mode when relevant (Claude flags never govern Codex); hook enforcement and telemetry: `tools/hooks/README.md`.
 
 ### 3.7 Plane lifecycle entry (if applicable)
 
-Plane work-item (DSP-XXX / DSO-XXX) → first action after identifying kind: `In Progress` + a start comment with the planned approach, before any edit (§6 Plane lifecycle owns the completion counterpart). Reads AND writes via `plane-pp-cli` (`projects issues …`); Plane MCP is an equivalent alternative.
+Plane work-item (DSP-XXX / DSO-XXX) → first action after identifying kind: `In Progress` + a start comment with the planned approach, before any edit (§6 Plane lifecycle owns the completion counterpart). Reads and writes via `plane-pp-cli` (`projects issues …`); Plane MCP is an equivalent alternative.
 
 ### 3.8 Engineering-task discipline (no orchestration skill)
 
@@ -98,7 +85,7 @@ The §6 discipline gates still apply, run by the lead:
 
 Per ADR-0007 §2.10. Mode (a) — same-session subagent dispatch via `request-mode-a-review` (structured APPROVE / REQUEST_CHANGES verdict). Mode (b) — parallel Codex CLI session. Mode (c) — pure human review. LLM credentials live in the human's terminal, not CI; no automated reviewer-bot.
 
-**Merge gate.** Positive Mode (a)/(b) verdict + green CI suffices; human-merge not required (Mode (c) stays human). **Close out from the MAIN tree, never from a worktree**: the `ds-lander` agent runs `pnpm pr:land <N>` — the single entry point for the complete tail (the lead by hand only after resolving a reason the lander returned); `pnpm merge:when-green <N>` only when that tail is intentionally completed separately. Refusal (exit `4`), recovery and exceptions: repo-conventions → Branches; procedure: `request-mode-a-review` + `merge-when-green` (never `--auto`).
+**Merge gate.** Positive Mode (a)/(b) verdict + green CI suffices; human-merge not required (Mode (c) stays human). Close out from the MAIN tree, never from a worktree: the `ds-lander` agent runs `pnpm pr:land <N>` — the single entry point for the complete tail (the lead by hand only after resolving a reason the lander returned); `pnpm merge:when-green <N>` only when that tail is intentionally completed separately. Refusal (exit `4`), recovery and exceptions: repo-conventions → Branches; procedure: `request-mode-a-review` + `merge-when-green` (never `--auto`).
 
 ---
 
@@ -110,26 +97,23 @@ Guards surface as PR Checks. Authoritative list/severity: `.github/workflows/ci.
 
 ## 6. Hard rules
 
-- **SDD.** New feature behavior requires an approved spec at `apps/docs/content/specs/features/NNN-<slug>/`; absent → `author-feature-spec` first. Maintenance/hotfixes restoring approved behavior need no new spec; update existing docs in the same PR. New product/architecture decisions retain prior approval/spec gates.
-- **Vertical slices over horizontal layers (F-22).** Every feature declares `surface: backend-only | user-facing` in requirements frontmatter. Any UI deliverable/trigger requires `user-facing` with UI and backend in one WBS; backend-first needs a named tracked spec deferral. Backend-only uses Vitest e2e; user-facing owns browser verification. Enforced by `author-ears-spec`, `open-ears-issues` 3a and checklist item 12.
-- **No untracked seam / scaffold (F-22).** A stub/fake/fail-closed seam replacing a deliverable is decision-debt; a comment is not tracking. Open an Issue only when it blocks a product deliverable, is user-visible/prod-risk, must precede release, or blinds a CI guard; otherwise use DEBT.md. The real dependency must be delivered and wired to close it. Canon: `open-ears-issues` 3a.
-- **Proportionate execution.** Follow portable discipline’s outcome, reuse, minimum-solution, risk and stop principles: design to the stated requirement, start a new environment or operation from the running production mechanism, and add a component when a named requirement needs it. Implement bounded work inline when handoffs cost more than they help; delegate independent or context-heavy work when useful. Required independent review remains separate from authorship.
-- **Subagent context budget.** Use observed effective input/window and the active adapter tiers, not cumulative usage or fabricated `<subagent_tokens>`. On ROTATE return a checkpoint and re-dispatch a fresh agent. One wave ≤4–5 independent Issues, ≤2 dispatch layers, returns ≤30 lines. Model routing, measured tiers and checkpoint contract: `apps/docs/content/agent-discipline.md` → Dispatch, models and context.
-- **No workarounds, no patches, no temporary hacks.** Fix the responsible mechanism; never mask failures with manual data, stand-ins, bypasses or weakened checks. Solve the requested task fully and reliably; one-off actions need no new subsystem or automation. A blocker must prevent acceptance or leave a concrete material risk; a WARN or adjacent improvement is not automatically one. Resolve genuine prerequisites before dependent work; track separately with `blocked_by` only when they need separate delivery. Reversible diagnosis may precede the fix; final verification uses real behavior on committed code.
+- New feature behavior requires an approved spec at `apps/docs/content/specs/features/NNN-<slug>/` (SDD); absent → `author-feature-spec` first. Maintenance/hotfixes restoring approved behavior need no new spec; update existing docs in the same PR. New product/architecture decisions keep their approval/spec gates.
+- Vertical slices over horizontal layers (F-22): every feature declares `surface: backend-only | user-facing` in requirements frontmatter. A UI deliverable/trigger requires `user-facing` with UI and backend in one WBS; backend-first needs a named tracked spec deferral. Backend-only uses Vitest e2e; user-facing owns browser verification. Enforced by `author-ears-spec`, `open-ears-issues` 3a and checklist item 12.
+- No untracked seam / scaffold (F-22): a stub/fake/fail-closed seam replacing a deliverable is decision-debt; a comment is not tracking. Open an Issue only when it blocks a product deliverable, is user-visible/prod-risk, must precede release, or blinds a CI guard; otherwise use DEBT.md. Closing it means delivering and wiring the real dependency. Canon: `open-ears-issues` 3a.
+- The lead authors briefs and reviews and dispatches implementation, small hotfixes included; it does not author inline. Start a new environment or operation from the running production mechanism; add a component only when a named requirement needs it. Scope, reuse, context budget and returns: agent-discipline → Dispatch, models and context; return the conclusion, details go to the PR or scratchpad.
+- No workarounds, patches or temporary hacks: fix the responsible mechanism; never mask failures with manual data, stand-ins, bypasses or weakened checks. One-off actions need no new subsystem or automation. A blocker must prevent acceptance or leave a concrete material risk; a WARN or adjacent improvement is not one. Resolve genuine prerequisites before dependent work; track them with `blocked_by` only when they need separate delivery. Reversible diagnosis may precede the fix; final verification uses real behavior on committed code.
 - **Live-infra destructive actions — pre-flight, don't thrash.** On live paid infra, before ANY irreversible/destructive provider call (reinstall/replace/delete/network change/write-`action` API): (1) confirm action + params in provider docs/schema first — firing an unknown action to read the error is banned; (2) exclude the prior hypothesis with read-only evidence before the next state-change — a reboot/reinstall/recreate is not a free probe; (3) blast radius = the failing resource only — a "fix" that also mutates a working box is a stop-and-confirm signal; (4) anything irreversible needs an explicit owner "go" — a rhetorical owner question is not consent; an owner/vendor recommendation is binding and deviation needs sign-off.
-- **UI from the design system — adopt before bespoke.** All UI from `@ds/design-system`: tokens-only styling (arbitrary Tailwind values lint-blocked, §5), interactive elements and their states from its primitives, never hand-assembled. Anything bespoke runs the `build-ui-from-design-system` gate first (inventory → approved whitelist → report; bespoke = recorded last resort); canvas-derived UI is vendored into `design-source/` and built from those files, never from issue prose. Licensing, whitelist, canvas + parity procedure: ADR-0013 + the skill.
-- **Cross-front capability reuse before invention.** One canonical shared-package core per cross-front behavior (feed/card/calendar/filter/query/live/room). Apps add only thin defaults/authz/envelope/route/copy projections. No app-to-app imports, copied state/query logic or fork UI. Canon: ADR-0013 A1; registry `specs/product/two-site-ia/capability-ownership.md`; Issue `Reuse:` + cross-front-reuse guard.
-- **UI is approved, then driven by the agent, then re-confirmed live by the owner.** `user-facing` look + behavior (emails/SMS too) are product decisions, not lead calls. Stage A: reuse a valid recorded approval; anything new/unresolved needs research + options + an owner choice before implementation. DRIVE any UI-checkable feature live (Playwright); build/typecheck/lint/Mode-a are necessary, not sufficient. Cover journeys + dependent states, reject + accept, error language/timing; a user-facing dev placeholder is a banned stub. Stage B: a per-PR slot (§9), never localhost, raised ONLY with a Stage-B request (PR comment + same chat message, never a handoff prompt), kept until the verdict — unanswered BLOCKS the merge; deferral ⇒ down now + «re-raise after X»; new head ⇒ a NEW request. Only the exact batched/behavioral-self-cert routes in `build-ui-from-design-system` apply; markers: repo-conventions → pre-merge gates.
-- **Complete the requested outcome.** Finish the PR tail: required review → green CI → canonical merge (§4) → Issue/board Done → re-sweep. Continue any remaining authorized release/other requested work; merging or reporting does not finish it. Status questions steer, not cancel. Real blockers follow portable discipline’s partial-progress/wait rule. Read `report-task-outcome` at report time. Stage B still gates user-facing merge and stand teardown.
-- **TDD.** No production code without a failing test. `it('EARS-N: ...')`; flat numbering per ADR-0006 §4; nested `N.M` only for a handler with multiple shall-clauses.
-- **Trackers.** Code-level → GitHub Issues here; strategic/cross-team → Plane `doctor-school`. Never both.
-- **Plane lifecycle.** `In Progress` + start comment before work; on completion `Done` + result comment (artifacts, what was done, open questions, what is unblocked); incomplete → a "where we stopped / what remains" comment, never silent.
-- **Roles, not names** in any spec / ADR / design doc.
-- **Worktree-per-session when parallel.** Every branch lives in its own worktree (`pnpm task:worktree <N>`; `pnpm install` before its first commit); the main tree stays on `main` and takes changes only through the §4 merge command. Workers isolate themselves as their first code/doc action, reads included; the lead keeps its own cwd in the main tree all session and authors inside `.claude/worktrees/<N>` through absolute paths and `git -C`. Why, closeout and teardown: repo-conventions → Closeout, `merge-when-green`.
-- **Project skill catalog.** Only `apps/docs/content/skills/` (§3.3 — the path is the contract).
-- **Discipline gates.** Record applicable checklist evidence (inline or dispatched per its skill); preserve independent review where required by `request-mode-a-review` §Scope. Required verdicts and green CI cannot be bypassed (ADR-0007 §2.4).
-- **Decision-debt.** Silent deviation from documented convention MUST surface via `surface-decision-debt` before the summary/result comment; route by the significance threshold — Issue (one `source:*` label) or `DEBT.md` line.
-- **Amendment vs inline rewrite.** A decision not yet running in production gets NO amendment block in ADR/spec/design docs — amendments only once it is live in production. Everywhere else: inline rewrite, the body reading as if the current decision were always the decision; history lives in `git log`. Applies to these instruction files too: replace a section, don't append.
+- UI comes from `@ds/design-system`, adopted before bespoke: tokens-only styling (arbitrary Tailwind values lint-blocked, §5), interactive elements and their states from its primitives. Anything bespoke runs the `build-ui-from-design-system` gate first (inventory → approved whitelist → report; bespoke = recorded last resort); canvas-derived UI is vendored into `design-source/` and built from those files, not from issue prose. Licensing, whitelist, canvas + parity procedure: ADR-0013 + the skill.
+- Cross-front capability reuse before invention: one canonical shared-package core per cross-front behavior (feed/card/calendar/filter/query/live/room). Apps add only thin defaults/authz/envelope/route/copy projections — no app-to-app imports, copied state/query logic or fork UI. Canon: ADR-0013 A1; registry `specs/product/two-site-ia/capability-ownership.md`; Issue `Reuse:` + cross-front-reuse guard.
+- UI is approved, then driven by the agent, then re-confirmed live by the owner. `user-facing` look + behavior (emails/SMS too) are product decisions, not lead calls. Stage A: reuse a valid recorded approval; anything new/unresolved needs research + options + an owner choice before implementation. Drive any UI-checkable feature live (Playwright; build/typecheck/lint/Mode-a are not sufficient): journeys + dependent states, reject + accept, error language/timing; a user-facing dev placeholder is a banned stub. Stage B: a per-PR slot (§9), never localhost, raised only with a Stage-B request (PR comment + same chat message, not a handoff prompt), kept until the verdict; unanswered, it blocks the merge; deferral ⇒ down now + «re-raise after X»; new head ⇒ a new request. Only the batched/behavioral-self-cert routes in `build-ui-from-design-system` apply; markers: repo-conventions → pre-merge gates.
+- Finish the PR tail — required review → green CI → canonical merge (§4) → Issue/board Done → re-sweep — then any remaining authorized work; report per `report-task-outcome`. Stage B still gates user-facing merge and stand teardown; blocker and pause rules: agent-discipline.
+- TDD: no production code without a failing test. `it('EARS-N: ...')`; flat numbering per ADR-0006 §4; nested `N.M` only for a handler with multiple shall-clauses.
+- Trackers: code-level → GitHub Issues here; strategic/cross-team → Plane `doctor-school`; never both. Plane lifecycle: `In Progress` + start comment before work; on completion `Done` + result comment (artifacts, what was done, open questions, what is unblocked); incomplete → a "where we stopped / what remains" comment.
+- Roles, not names, in any spec / ADR / design doc.
+- Worktree-per-session when parallel: every branch lives in its own worktree (`pnpm task:worktree <N>`; `pnpm install` before its first commit); the main tree stays on `main` and takes changes only through the §4 merge command. Workers isolate themselves as their first code/doc action, reads included; the lead keeps its cwd in the main tree and dispatches into `.claude/worktrees/<N>`, reaching it via absolute paths and `git -C`. Why, closeout and teardown: repo-conventions → Closeout, `merge-when-green`.
+- Discipline gates: record applicable checklist evidence (inline or dispatched per its skill); keep independent review where `request-mode-a-review` §Scope requires it. Required verdicts and green CI cannot be bypassed (ADR-0007 §2.4).
+- Decision-debt: silent deviation from documented convention surfaces via `surface-decision-debt` before the summary/result comment, routed by the significance threshold — Issue (one `source:*` label) or `DEBT.md` line.
+- Amendment vs inline rewrite: a decision not yet running in production gets no amendment block in ADR/spec/design docs — amendments only once it is live in production. Everywhere else, including these instruction files, rewrite inline so the body reads as if the current decision were always the decision; history lives in `git log`.
 
 ---
 

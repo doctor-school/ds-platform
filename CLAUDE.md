@@ -2,11 +2,11 @@
 
 # CLAUDE.md — Claude Code bindings
 
-Read [portable agent discipline](apps/docs/content/agent-discipline.md) at entry/after compaction. All shared rules live there and in AGENTS.md; Codex does not import this overlay.
+Shared rules: AGENTS.md + [portable agent discipline](apps/docs/content/agent-discipline.md) (read at entry/after compaction). Codex does not import this overlay.
 
 ## Runtime and context
 
-`.claude/settings.json` supplies `pnpm bootstrap` via SessionStart `additionalContext`; it is a derived snapshot, not board ground truth. Hook diagnostics live in `tools/hooks/README.md`.
+`.claude/settings.json` supplies `pnpm bootstrap` via SessionStart `additionalContext`; it is a derived snapshot, not board ground truth.
 
 `/wrap` is owner-entered only. Claude `context-budget` advisory and `lead-context-budget` dispatch tiers are 250K/400K; at 400K only `ds-reviewer`/`ds-lander` dispatch. The owner-only `.claude/lead-budget-override` is removed by wrap. Child hooks ROTATE at 250K and deny non-git tools at 350K; rotate before rework once lagging notification usage hits 250K. Claude-only constants; Codex uses observed effective input/window bands in portable discipline.
 

@@ -49,6 +49,8 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   botProtection: { siteKey: undefined },
   channels: ["email", "sms"],
   register: { promoField: false },
+  // The verification mail opens `/verify#email=…` cold (003 EARS-24).
+  verify: { deepLinkEntry: true },
   // One required consent, read as ONE read-only sentence rather than a control
   // (this host's shipped render): the statement is what the visitor reads, the
   // tier item is what gets recorded, and both name the same purpose.
@@ -118,6 +120,8 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   register: {
     promoField: true,
   },
+  // Confirmation is inline on the registration door: no surface to link into.
+  verify: { deepLinkEntry: false },
   // The two shipped tiers with the rows drawn around them: the declaration and
   // the partner-data access condition above the submit, the marketing opt-in
   // below it. Each statement is composed from the copy the door RENDERS for

@@ -124,26 +124,33 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       "Регистрация по ссылке партнёра — промокод подставлен автоматически.",
     haveAccount: "Уже есть аккаунт? Войти",
     failed: "Не удалось завершить регистрацию. Проверьте введённые данные.",
-    confirm: {
-      title: "Проверьте почту",
-      description:
-        "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
-      newAccountHeading: "Новый аккаунт — введите код",
-      codeLabel: "Код из письма",
-      submit: "Подтвердить",
-      codeAccepted: "Код принят — входим…",
-      resend: "Отправить снова",
-      resendCountdown: "Отправить снова · {seconds} с",
-      existingAccountHeading: "Уже регистрировались?",
-      existingAccountHint:
-        "Войдите в существующий аккаунт или сбросьте пароль.",
-      goToSignIn: "Войти",
-      goToReset: "Сбросить пароль",
-      failed: "Код не подошёл. Попробуйте ещё раз.",
-      resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
-      resendAcknowledged:
-        "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
-    },
+  },
+  // Canvas «Подтверждение» (`design-source/auth.dc.html` 212-244, 405-443):
+  // title/description `titles.verify`, the eyebrows, the resend label and its
+  // notice, the success banner and the verify-screen `errText()` branches.
+  verify: {
+    title: "Проверьте почту",
+    description:
+      "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
+    newAccountHeading: "Новый аккаунт — введите код",
+    codeLabel: "Код из письма",
+    submit: "Подтвердить",
+    codeAccepted: "Код принят — входим…",
+    resend: "Отправить снова",
+    resendCountdown: "Отправить снова · {seconds} с",
+    existingAccountHeading: "Уже регистрировались?",
+    existingAccountHint: "Войдите в существующий аккаунт или сбросьте пароль.",
+    goToSignIn: "Войти",
+    goToReset: "Сбросить пароль",
+    failed: "Код не подошёл. Попробуйте ещё раз.",
+    resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
+    resendAcknowledged:
+      "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
+    missingIdentifier:
+      "Не удалось определить аккаунт. Зарегистрируйтесь заново, чтобы получить новый код, или войдите в существующий аккаунт.",
+    // Not a canvas string (the canvas always has an address): the shipped
+    // Academy catalogue line for a bare deep-link.
+    fallbackDestination: "ваш аккаунт",
   },
   consents: {
     accessGroupHeading: "Условия доступа",

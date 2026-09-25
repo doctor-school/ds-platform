@@ -93,6 +93,8 @@ export type RegisterConfirmationProps = {
   landing: string;
   returnTarget?: string | null;
   carriedTarget?: string | null;
+  /** 021 EARS-2 — the arrival plate the form stood under; the step keeps it. */
+  returnContextPlate?: ReactNode;
 };
 
 /** The declaration's own key: a DECLARATION is not a consent purpose (021 EARS-4). */
@@ -460,6 +462,7 @@ export function RegisterDoor({
             landing={landing}
             returnTarget={returnTarget}
             carriedTarget={carriedTarget}
+            returnContextPlate={returnContextPlate}
           />
         ) : null
       }

@@ -28,8 +28,11 @@ vi.mock("next/headers", () => ({
   headers: async () => incoming.headers,
 }));
 
+import { VerifyRoute } from "@ds/auth-flow/verify/route";
+
+import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
+
 import ResetLayout from "./reset/layout";
-import VerifyLayout from "./verify/layout";
 
 const SIGNED_IN = new Headers({ cookie: "__Host-ds_session=abc" });
 const GUEST = new Headers();
@@ -51,35 +54,36 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// Neither `/login` nor `/register` is in this table any more: #2027 PR 1.5
-// retired `app/login/layout.tsx` and PR 1.6 retired `app/register/layout.tsx`,
-// because `LoginRoute` / `RegisterRoute` (`@ds/auth-flow/*/route`) now run the
-// #675 guard inside the route itself — one mount deciding the guard and the
-// arrival landing in order, which two files could not do. Their signed-in
-// redirects and guest doors over the Academy config are pinned by 017
-// #1955.20 / #1955.24 in `packages/auth-flow/src/login/login-route.test.tsx`
-// and by #675 in `packages/auth-flow/src/register/register-route.test.tsx`.
-const closed = [["/verify", VerifyLayout]] as const;
+// `/login`, `/register` and `/verify` have no layout any more: #2027 PR 1.5,
+// 1.6 and 1.7 retired them, because `LoginRoute` / `RegisterRoute` /
+// `VerifyRoute` (`@ds/auth-flow/*/route`) run the #675 guard inside the route
+// itself. `/verify` stays in this table as the MOUNT the page renders, over the
+// shipped `ACADEMY_AUTH_FLOW`, so the wiring (this host's own pathname against
+// its own route table) is still proved at this tier; the login and register
+// mounts are pinned by 017 #1955.20 / #1955.24 in
+// `packages/auth-flow/src/login/login-route.test.tsx` and by #675 in
+// `packages/auth-flow/src/register/register-route.test.tsx`.
+const verifyMount = () =>
+  VerifyRoute({ config: ACADEMY_AUTH_FLOW, searchParams: Promise.resolve({}) });
+const closed = [["/verify", verifyMount]] as const;
 
 describe("#675 Academy auth routes, server-side signed-in guard", () => {
   it.each(closed)(
     "#675: a signed-in visitor on %s is redirected to /account before the surface renders",
-    async (_path, Layout) => {
+    async (_path, mount) => {
       incoming.headers = SIGNED_IN;
 
-      await expect(Layout({ children: null })).rejects.toThrow(
-        "NEXT_REDIRECT:/account",
-      );
+      await expect(mount()).rejects.toThrow("NEXT_REDIRECT:/account");
       expect(redirect).toHaveBeenCalledWith("/account");
     },
   );
 
   it.each(closed)(
     "#675: a guest on %s is served the surface and never redirected",
-    async (_path, Layout) => {
+    async (_path, mount) => {
       incoming.headers = GUEST;
 
-      await Layout({ children: null });
+      await mount();
       expect(redirect).not.toHaveBeenCalled();
       // Row 24 — no session cookie means guest with NO upstream read at all.
       expect(fetchMock).not.toHaveBeenCalled();

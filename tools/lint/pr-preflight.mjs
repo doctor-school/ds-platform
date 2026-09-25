@@ -123,7 +123,13 @@ export const STATIC_GUARDS = [
   { name: "module-readme", file: "module-readme-lint.ts" },
   { name: "glossary-mdx", file: "glossary-mdx-lint.ts" },
   { name: "glossary-roundtrip", file: "glossary-roundtrip-lint.ts" },
-  { name: "instruction-budget", file: "instruction-budget-lint.ts" },
+  // A landing gate judges only the PR (#2373): the machine-local MEMORY.md is
+  // advisory here; the repo-file budgets stay hard (and in CI).
+  {
+    name: "instruction-budget",
+    file: "instruction-budget-lint.ts",
+    env: { INSTRUCTION_BUDGET_LOCAL_MEMORY: "advisory" },
+  },
   { name: "migration-index", file: "migration-index-lint.ts" },
   { name: "tsc-version", file: "tsc-version-lint.ts" },
   { name: "audit-coverage", file: "audit-coverage-lint.ts" },

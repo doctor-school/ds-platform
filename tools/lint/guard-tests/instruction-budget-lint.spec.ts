@@ -223,6 +223,32 @@ describe("instruction-budget-lint", () => {
     expect(stderr).toContain("> 200");
   });
 
+  it("#2373: with INSTRUCTION_BUDGET_LOCAL_MEMORY=advisory an over-budget MEMORY.md WARNs, exit 0", () => {
+    const { code, stdout, stderr } = runGuard(
+      GUARD,
+      caseDir("instruction-budget", "red-memory-over-budget"),
+      {
+        env: {
+          LINT_MEMORY_FILE: memoryFile("red-memory-over-budget"),
+          INSTRUCTION_BUDGET_LOCAL_MEMORY: "advisory",
+        },
+      },
+    );
+    expect(code).toBe(0);
+    expect(stderr).toContain("WARN MEMORY.md");
+    expect(stdout).toContain("PASS");
+  });
+
+  it("#2373: the advisory switch leaves repo-file budgets hard → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("instruction-budget", "red-over-budget"),
+      { env: { INSTRUCTION_BUDGET_LOCAL_MEMORY: "advisory" } },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("AGENTS.md");
+  });
+
   it("skills: an over-budget SKILL.md WARNs but does NOT fail the run (Phase-0 #416)", () => {
     const { code, stdout, stderr } = runGuard(
       GUARD,

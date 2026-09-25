@@ -7,7 +7,8 @@
  * reference: a manual mandatory read consumes the same context as an import.
  * Scoped rules and role definitions keep per-file caps; catalog skills and
  * their reference docs are on-demand WARN-only. Local Claude MEMORY keeps its
- * per-file cap, excluded from deterministic repo totals. Global/ancestor files,
+ * per-file cap, excluded from deterministic repo totals (advisory under the
+ * pr:preflight / pr:land gate, which judges only the PR). Global/ancestor files,
  * nested cwd chains and actual model usage are outside this root-only report.
  * Optional --harness all|claude|codex; default all. Unknown options fail closed.
  */
@@ -85,8 +86,12 @@ const targets: Target[] = [
   // always-on total (#1680): it lives outside git, so counting it would make the
   // total verdict machine-dependent — green in CI, red on one developer's box —
   // and its own 200-line / 25 KB auto-load cutoff already bounds it.
+  // A PR gate (`pr:preflight` / `pr:land`, #2373) judges only the PR: it sets
+  // INSTRUCTION_BUDGET_LOCAL_MEMORY=advisory so the machine-local MEMORY.md
+  // WARNs instead of failing. The standalone `pnpm lint:instruction-budget`
+  // keeps it hard.
   ...(memPath
-    ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true, offTotal: true, sessionStart: true } as Target]
+    ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true, offTotal: true, sessionStart: true, warnOnly: process.env.INSTRUCTION_BUDGET_LOCAL_MEMORY === "advisory" } as Target]
     : []),
 ];
 

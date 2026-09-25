@@ -72,9 +72,10 @@ export function owningRoot(target, roots) {
 }
 
 /**
- * Verdict for ONE write path issued from a worktree-pinned session:
+ * Verdict for ONE write path:
  *
- * - `ok` — inside the session's own worktree (or outside the repo entirely).
+ * - `ok` — inside the session's own worktree (or outside the repo entirely),
+ *   or — from a main-tree session — inside any registered worktree (#2373).
  * - `wrong-worktree` (#1453) — inside a DIFFERENT registered checkout. This is
  *   NOT a main-tree escape: the usual cause is a subagent dispatched against
  *   worktree A while its env cwd was inherited from the lead's stale worktree
@@ -95,11 +96,24 @@ export function classifyWritePath({ target, mainRoot, worktreeRoot, roots }) {
   if (!owner) return { verdict: "ok" };
   if (norm(owner) === norm(worktreeRoot)) return { verdict: "ok" };
   if (norm(owner) === norm(mainRoot)) return { verdict: "main-tree-escape" };
-  return {
-    verdict: "wrong-worktree",
-    targetRoot: owner,
-    registered: known.some((r) => norm(r) === norm(owner)),
-  };
+  const registered = known.some((r) => norm(r) === norm(owner));
+  if (registered && mainTreeSessionMayWrite({ owner, mainRoot, worktreeRoot }))
+    return { verdict: "ok" };
+  return { verdict: "wrong-worktree", targetRoot: owner, registered };
+}
+
+/**
+ * #2373: a session whose cwd is the MAIN tree may write under any linked,
+ * git-registered worktree root. A dispatched subagent runs with its cwd
+ * pinned to the repo root and cannot `EnterWorktree`, so refusing these
+ * writes pushed agents into python/heredoc write workarounds. `owner` must
+ * already be a registered root; a worktree-pinned session keeps the
+ * `wrong-worktree` verdict for any other checkout.
+ */
+export function mainTreeSessionMayWrite({ owner, mainRoot, worktreeRoot }) {
+  return (
+    norm(worktreeRoot) === norm(mainRoot) && norm(owner) !== norm(mainRoot)
+  );
 }
 
 /** `EnterWorktree path:` argument for a checkout root — the repo-relative
@@ -234,7 +248,11 @@ function main() {
     for (const target of filePaths) {
       const p = canonicalPath(target);
       const owner = owningRoot(p, roots);
-      if (owner && norm(owner) !== norm(worktreeRoot)) {
+      if (
+        owner &&
+        norm(owner) !== norm(worktreeRoot) &&
+        !mainTreeSessionMayWrite({ owner, mainRoot, worktreeRoot })
+      ) {
         process.stderr.write(
           norm(owner) === norm(mainRoot)
             ? mainTreeEscapeMessage(p, mainRoot, worktreeRoot)

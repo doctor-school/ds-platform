@@ -5,7 +5,9 @@ import {
   NotFoundException,
   Param,
   Query,
+  Req,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import {
@@ -15,7 +17,8 @@ import {
   CONGRESS_ROSTER_PAGE_SIZE_MAX,
   CONGRESS_ROSTER_SEARCH_MAX,
 } from "@ds/schemas";
-import { Authz } from "../authz/index.js";
+import type { AdminSessionPrincipal } from "../auth/admin-session/admin-session.service.js";
+import { Authz, EventGrantPolicy } from "../authz/index.js";
 import {
   RegistrationEventNotFoundError,
   RegistrationService,
@@ -45,10 +48,21 @@ export class CongressRosterListDto extends createZodDto(
  * the posture of admin MUTATIONS (#1304), and this is a read that changes
  * nothing. EARS-24 fixes that the roster exposes no mutation at all, so there is
  * no sibling write on this controller to be inconsistent with.
+ *
+ * 044 EARS-38 (#2384): the role is necessary, not sufficient. Every route here
+ * is a `check: "policy"` row without `objectAttrs`, and its handler runs
+ * {@link EventGrantPolicy.assertEventAccess} — the registrar reaches only the
+ * event its `event_role_grants` row binds it to; the platform administrator is
+ * not limited. A future desk route on this family (card, attendance, manual
+ * registration) takes the same step; the denial-set suite's EARS-38.6 sweep
+ * fails any registrar-reachable route classified `fast-path`.
  */
 @Controller({ path: "admin/events", version: "1" })
 export class EventRosterAdminController {
-  constructor(private readonly registrations: RegistrationService) {}
+  constructor(
+    private readonly registrations: RegistrationService,
+    private readonly grants: EventGrantPolicy,
+  ) {}
 
   /**
    * 044 EARS-18 — one page of the roster of `:idOrSlug`, for the registrar and
@@ -57,6 +71,8 @@ export class EventRosterAdminController {
    * An unknown event is a 404 (the same mapping the 007 admin reads make for a
    * missing event), never an empty page: «этого события нет» and «на это событие
    * никто не записан» are different answers and the desk must not confuse them.
+   * That 404 is the administrator's answer: for a registrar an unknown event is
+   * «not the bound event» and is refused by the binding step first (EARS-38).
    */
   @Get(":idOrSlug/roster")
   @ApiQuery({
@@ -79,15 +95,22 @@ export class EventRosterAdminController {
   @Authz({
     access: "authenticated",
     roles: ["platform_admin", "event-registrar"],
-    check: "fast-path",
+    check: "policy",
     audit: "low-stakes",
     revalidate: "none",
-    tests: ["EARS-18"],
+    tests: ["EARS-18", "EARS-38"],
   })
   async roster(
+    @Req() req: FastifyRequest,
     @Param("idOrSlug") idOrSlug: string,
     @Query() rawQuery: Record<string, string>,
   ): Promise<CongressRosterList> {
+    // EARS-38 — the event-binding step runs BEFORE the query is parsed or the
+    // event resolved, so a refused registrar learns nothing from a 400 or 404.
+    const eventKey = await this.grants.assertEventAccess(
+      (req as { user?: AdminSessionPrincipal }).user,
+      idOrSlug,
+    );
     const parsed = CongressRosterQuerySchema.safeParse(rawQuery);
     if (!parsed.success) {
       throw new BadRequestException({
@@ -96,7 +119,7 @@ export class EventRosterAdminController {
       });
     }
     try {
-      return await this.registrations.eventRosterPage(idOrSlug, parsed.data);
+      return await this.registrations.eventRosterPage(eventKey, parsed.data);
     } catch (err) {
       if (err instanceof RegistrationEventNotFoundError) {
         throw new NotFoundException("event not found");

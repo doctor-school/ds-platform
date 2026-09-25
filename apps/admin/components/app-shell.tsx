@@ -1,10 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useLogout } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Button, Link as DsLink } from "@ds/design-system";
+import {
+  adminNavItems,
+  canAccessPath,
+  landingRedirect,
+} from "@/lib/admin-access";
+import { useAdminAccess } from "@/lib/use-admin-access";
 
 /**
  * The thin admin chrome — brand eyebrow + a sign-out affordance — wrapping every
@@ -13,10 +20,31 @@ import { Button, Link as DsLink } from "@ds/design-system";
  * Refine `useLogout` binding → `authProvider.logout` → the 011 admin-tier
  * `POST /v1/admin/auth/logout` (which clears ONLY the admin cookie pair — a
  * concurrent doctor-portal session is deliberately untouched, EARS-2).
+ *
+ * 044 EARS-20: the navigation AND the page body are a projection of the
+ * principal's own session read (`roles` + `eventGrants`, `lib/admin-access.ts`).
+ * A route the principal may not open — every route but its bound roster, for a
+ * congress registrar — renders the existing refusal copy in place of the page;
+ * the server refuses that page's data regardless (EARS-19/38), so this gate only
+ * keeps the screen honest, it never replaces the refusal. A principal with
+ * exactly one link who lands on an admin landing it may not open (every sign-in
+ * lands on `/events`) is sent to that link instead (`landingRedirect`).
+ *
+ * Until the session read answers, the chrome renders without nav links and the
+ * page body stays empty — no placeholder copy, nothing drawn on a guess.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const t = useTranslations();
   const { mutate: logout } = useLogout();
+  const pathname = usePathname();
+  const access = useAdminAccess();
+  const navItems = access ? adminNavItems(access) : [];
+  const router = useRouter();
+  const landing = access ? landingRedirect(access, pathname) : null;
+
+  useEffect(() => {
+    if (landing) router.replace(landing);
+  }, [landing, router]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -60,60 +88,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             {/* Resource navigation. Added with the second resource (#1283): with
                 only events there was nowhere to navigate TO, and a one-item nav
-                would have been chrome without a function. */}
+                would have been chrome without a function. Since 044 EARS-20 the
+                links are drawn from the principal's role AND event binding
+                (`lib/admin-access.ts`): a platform administrator gets every
+                section, a congress registrar exactly its bound event's roster.
+                Nothing is drawn until the session read answers, so a registrar
+                never sees a flash of sections it cannot open. */}
             <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-              <DsLink asChild variant="standalone">
-                <Link href="/events" data-testid="nav-events">
-                  {t("app.nav.events")}
-                </Link>
-              </DsLink>
-              <DsLink asChild variant="standalone">
-                <Link href="/projects" data-testid="nav-projects">
-                  {t("app.nav.projects")}
-                </Link>
-              </DsLink>
-              <DsLink asChild variant="standalone">
-                <Link href="/experts" data-testid="nav-experts">
-                  {t("app.nav.experts")}
-                </Link>
-              </DsLink>
-              <DsLink asChild variant="standalone">
-                <Link href="/partners" data-testid="nav-partners">
-                  {t("app.nav.partners")}
-                </Link>
-              </DsLink>
-              <DsLink asChild variant="standalone">
-                <Link href="/directions" data-testid="nav-directions">
-                  {t("app.nav.directions")}
-                </Link>
-              </DsLink>
-              {/* The two #1483 relation books sit next to the directions they
-                  relate, because that is the only entity either of them is about
-                  — a link has no meaning apart from its endpoints. */}
-              <DsLink asChild variant="standalone">
-                <Link
-                  href="/direction-specialties"
-                  data-testid="nav-direction-specialties"
-                >
-                  {t("app.nav.directionSpecialties")}
-                </Link>
-              </DsLink>
-              <DsLink asChild variant="standalone">
-                <Link
-                  href="/direction-adjacency"
-                  data-testid="nav-direction-adjacency"
-                >
-                  {t("app.nav.directionAdjacency")}
-                </Link>
-              </DsLink>
-              {/* The Минздрав book (017 EARS-19) closes the row: it is the
-                  vocabulary the specialty links are drawn FROM, read-only, so it
-                  sits after the books that consume it. */}
-              <DsLink asChild variant="standalone">
-                <Link href="/specialties" data-testid="nav-specialties">
-                  {t("app.nav.specialties")}
-                </Link>
-              </DsLink>
+              {navItems.map((item) => (
+                <DsLink key={item.href} asChild variant="standalone">
+                  <Link href={item.href} data-testid={item.testId}>
+                    {t(item.labelKey)}
+                  </Link>
+                </DsLink>
+              ))}
             </nav>
           </div>
           <Button
@@ -127,7 +115,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-7xl px-6 py-8">
+        {!access || landing ? null : canAccessPath(access, pathname) ? (
+          children
+        ) : (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="access-refused"
+          >
+            {t("login.errorForbidden")}
+          </p>
+        )}
+      </main>
     </div>
   );
 }

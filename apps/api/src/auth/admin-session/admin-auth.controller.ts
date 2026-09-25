@@ -23,7 +23,7 @@ import type {
   AdminMfaVerifyResponse,
   AdminSessionResponse,
 } from "@ds/schemas";
-import { Authz, Public } from "../../authz/index.js";
+import { Authz, EventGrantPolicy, Public } from "../../authz/index.js";
 import { IdpUnavailableError } from "../idp/idp.types.js";
 import { RateLimited } from "../rate-limit/index.js";
 import { TimingEqualized } from "../timing/index.js";
@@ -110,7 +110,10 @@ const GENERIC_ADMIN_THROTTLED = "too many requests, please try again later";
  */
 @Controller({ path: "admin/auth", version: "1" })
 export class AdminAuthController {
-  constructor(private readonly admin: AdminSessionService) {}
+  constructor(
+    private readonly admin: AdminSessionService,
+    private readonly grants: EventGrantPolicy,
+  ) {}
 
   /**
    * EARS-3 — `StartAdminLogin`. Primary password authentication at the admin
@@ -391,6 +394,13 @@ export class AdminAuthController {
    * The client-side nav is a PROJECTION of this read. A registrar who types
    * another section's URL is refused by the server (EARS-19); this route decides
    * only what the admin draws.
+   *
+   * 044 EARS-38 (#2384): it also carries the principal's event bindings
+   * (`eventGrants`: role, event id, event slug) from `event_role_grants`, so the
+   * nav can draw the bound event's roster and nothing for an unbound registrar.
+   * It is a field here rather than a second route because it is the same
+   * question — «what may I be shown?» — asked by the same caller at the same
+   * moment, and a second read would only add a window where the two disagree.
    */
   @Get("session")
   @HttpCode(200)
@@ -404,14 +414,18 @@ export class AdminAuthController {
     revalidate: "none",
     tests: ["EARS-19"],
   })
-  readSession(@Req() req: FastifyRequest): AdminSessionResponse {
+  async readSession(@Req() req: FastifyRequest): Promise<AdminSessionResponse> {
     // The hook resolved the principal from `__Host-ds_admin_session` before the
     // guard admitted this route, so `user` is present by construction; the
     // fallback is a fail-empty, never an invented role. The principal type is
     // the hook's own (`AdminSessionPrincipal`), so this read cannot describe a
     // shape the admin tier does not actually attach.
     const principal = (req as { user?: AdminSessionPrincipal }).user;
-    return { roles: principal?.roles ?? [] };
+    if (!principal) return { roles: [], eventGrants: [] };
+    return {
+      roles: principal.roles,
+      eventGrants: await this.grants.bindingsOf(principal.sub),
+    };
   }
 
   /**
@@ -474,10 +488,7 @@ export class AdminAuthController {
     // The admin session pair, plus the clearing of the pending cookie the
     // upgrade consumed — a pending reference never coexists with the session it
     // became (design §8).
-    reply.header("set-cookie", [
-      ...outcome.cookies,
-      this.admin.clearPending(),
-    ]);
+    reply.header("set-cookie", [...outcome.cookies, this.admin.clearPending()]);
   }
 
   /**

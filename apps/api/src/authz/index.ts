@@ -4,3 +4,4 @@ export * from "./authz.guard.js";
 export * from "./authz.module.js";
 export * from "./authz.matrix.js";
 export * from "./authz.discovery.js";
+export * from "./event-grant.policy.js";

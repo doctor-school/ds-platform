@@ -208,6 +208,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(rows[0]).toBeDefined();
       await fake.grantProjectRole(rows[0]!.zitadel_sub, "event-registrar");
+      // 044 EARS-38: the role alone reads nothing — the registrar is bound to
+      // this suite's congress, as the tech lead binds one until #2378.
+      await pool.query(
+        `INSERT INTO event_role_grants (user_id, role, event_id)
+         SELECT id, 'event-registrar', $2 FROM users WHERE zitadel_sub = $1`,
+        [rows[0]!.zitadel_sub, eventId],
+      );
       const registrar = await establishAdminSession(app, {
         identifier: email,
         password,
@@ -528,7 +535,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const page = CongressRosterListSchema.parse(res.json());
 
       const row = page.items.find((r) => r.email === platformRow.email);
-      expect(row, "the platform-origin registration must be on the roster").toBeDefined();
+      expect(
+        row,
+        "the platform-origin registration must be on the roster",
+      ).toBeDefined();
 
       // Read from `users`, because this registration carries NO answers at all.
       expect(row!.fullName).toBe(platformRow.displayName);
@@ -557,7 +567,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("044 EARS-18.4: an unknown event is a 404, never an empty roster page", async () => {
-      const cookie = await registrarCookie();
+      // The administrator's answer. A bound registrar asking for any event but
+      // its own — an unknown one included — is refused instead (EARS-38.2), so
+      // the desk learns nothing about which other events exist.
+      const cookie = await platformAdminCookie();
       const res = await roster(
         cookie,
         `/v1/admin/events/no-such-congress-${randomUUID().slice(0, 8)}/roster`,

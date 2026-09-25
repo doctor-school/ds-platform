@@ -1,5 +1,6 @@
 import { Logger, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { EventGrantPolicy } from "../../authz/event-grant.policy.js";
 import { Redis } from "ioredis";
 import { loadEnv } from "../../config/env.schema.js";
 import { MailerModule } from "../../mailer/mailer.module.js";
@@ -59,6 +60,9 @@ import { AdminUsersController } from "./admin-users.controller.js";
   // rather than the caller-scoped `/v1/admin/auth` namespace.
   controllers: [AdminAuthController, AdminUsersController],
   providers: [
+    // 044 EARS-38: `GET /v1/admin/auth/session` projects the principal's event
+    // bindings (stateless; reads `event_role_grants` via the @Global DRIZZLE_DB).
+    EventGrantPolicy,
     {
       provide: ADMIN_SESSION_STORE,
       useFactory: (): AdminSessionStore => {

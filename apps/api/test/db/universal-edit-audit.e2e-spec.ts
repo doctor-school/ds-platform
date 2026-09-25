@@ -32,6 +32,9 @@ const AUDITED_TABLES = [
   // decides which person the public speaker projection shows, so it is domain
   // truth and carries the capture trigger like any authored row.
   "event_experts",
+  // 044 EARS-38 (#2384) — an event-scoped role binding is an authorization
+  // fact; who bound whom to which event is exactly what the ledger answers.
+  "event_role_grants",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */

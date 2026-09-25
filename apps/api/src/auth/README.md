@@ -113,7 +113,8 @@ The tier has **two** tenants, and they are two different questions.
   omits the role and `AuthzGuard` refuses it (044 EARS-19).
 
 `GET /v1/admin/auth/session` reads back the roles of the principal behind an
-ACTIVE session, and nothing else. It is separate from `state` on purpose: `state`
+ACTIVE session and its event bindings (`eventGrants`: role, event id, event slug
+from `event_role_grants`, 044 EARS-38), and nothing else. It is separate from `state` on purpose: `state`
 answers a caller who has at most passed primary auth, so carrying roles there
 would hand a stolen-password attacker a role oracle BEFORE the second factor.
 The role-aware admin navigation (044 EARS-20) is a projection of this read — it

@@ -6,6 +6,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
+import { AuthError } from "@ds/auth-flow/client";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -461,7 +462,7 @@ describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
     );
   });
 
-  it("routes a cold verify (no held password) to /login", async () => {
+  it("003 EARS-39: a cold verify (no held password: reload, restored tab, expired hold) routes to /login", async () => {
     searchParams = new URLSearchParams();
     window.history.replaceState(null, "", "/verify#email=doc%40example.com");
     heldRegistration = null; // cold open — no held credential in this fresh tab.
@@ -474,6 +475,24 @@ describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
     expect(login).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-39: a login replay the IdP refuses keeps the registrant on the verification step with the generic error, no routing", async () => {
+    // Owner decision 2026-09-15 (tech spec §5 Q1): the one post-throw exit both
+    // hosts share. The held password is consumed by the take either way; the
+    // outcome stays 003 EARS-16-generic (i18n is passthrough, so the KEY renders).
+    heldRegistration = { identifier: EMAIL, password: "Sup3r$ecretPw!9" };
+    login.mockRejectedValueOnce(new AuthError(401, "Unauthorized"));
+    const user = userEvent.setup();
+    await renderVerify();
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard(VERIFY_CODE);
+
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("verifyFailed")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 
   it("surfaces a VISIBLE error (never a silent no-op) when a submit is blocked with no identifier", async () => {

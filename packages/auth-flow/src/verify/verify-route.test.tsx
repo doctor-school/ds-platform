@@ -62,6 +62,7 @@ type EntryProps = {
   email?: string;
   landing: string;
   returnTo: string | null;
+  returnContextPlate?: unknown;
 };
 type ShellProps = {
   children: ReactElement<EntryProps>;
@@ -105,6 +106,7 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     // A host that publishes no return-context card never pays for the read.
     expect(resolveReturnContext).not.toHaveBeenCalled();
     expect(shell.props.returnContext ?? null).toBe(null);
+    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
   });
 
   it("021 EARS-3: a host that publishes the card shows the carried эфир beside the confirmation", async () => {
@@ -116,6 +118,8 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     });
 
     expect(shell.props.returnContext).toBeTruthy();
+    // The mobile plate above the card, as the registration door draws it.
+    expect(shell.props.children.props.returnContextPlate).toBeTruthy();
   });
 
   it("rows 51, 76: a host with no /verify route cannot mount it — a wiring mistake reads as one", async () => {

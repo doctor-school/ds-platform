@@ -439,3 +439,27 @@ describe("rows 10-15: one error plate, the shared dictionary", () => {
     expect(screen.queryByText(COPY.failed)).toBeNull();
   });
 });
+
+describe("021 EARS-2: the return-context plate on the confirmation step", () => {
+  it("021 EARS-2: draws the plate the registration door drew, above the card, under the register door's test id", async () => {
+    render(
+      <VerifyEntry
+        config={ACADEMY_FIXTURE}
+        email={EMAIL}
+        landing="/webinars"
+        returnTo="/events/e1"
+        returnContextPlate={<p>Вы вернётесь к этому эфиру</p>}
+      />,
+    );
+    await screen.findByTestId("verify-submit");
+
+    expect(
+      screen.getByTestId("registration-return-context"),
+    ).toHaveTextContent("Вы вернётесь к этому эфиру");
+  });
+
+  it("021 EARS-3: no plate supplied, no frame rendered", async () => {
+    await mountSettled();
+    expect(screen.queryByTestId("registration-return-context")).toBeNull();
+  });
+});

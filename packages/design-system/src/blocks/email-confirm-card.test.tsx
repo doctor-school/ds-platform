@@ -302,4 +302,35 @@ describe("#2027 <EmailConfirmCard> canvas «Подтверждение»", () =>
     expect(screen.getByTestId("confirm-submit")).toBeInTheDocument();
     expect(screen.getByTestId("verify-go-to-login")).toBeInTheDocument();
   });
+
+  it("021 EARS-2 / EARS-3: the return-context plate stands above the card only when supplied, as on the registration door", () => {
+    const props = {
+      copy,
+      email: "doc@example.com",
+      destination: "d•••@e•••.com",
+      resolver: passthrough<EmailConfirmValues>(),
+      onSubmit: vi.fn(),
+      links: { login: "/login", reset: "/reset" },
+    };
+    render(
+      <EmailConfirmCard {...props} testIds={{ returnContext: "plate" }} />,
+    );
+    expect(screen.queryByTestId("plate")).toBeNull();
+
+    cleanup();
+    render(
+      <EmailConfirmCard
+        {...props}
+        returnContextSlot={<span>back to the webinar</span>}
+        testIds={{ returnContext: "plate" }}
+      />,
+    );
+    const plate = screen.getByTestId("plate");
+    expect(plate).toHaveTextContent("back to the webinar");
+    // Above the card: the plate precedes the page title in document order.
+    const title = screen.getByRole("heading", { level: 1 });
+    expect(
+      plate.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });

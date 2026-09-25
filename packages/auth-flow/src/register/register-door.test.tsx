@@ -666,6 +666,18 @@ describe("rows 51 + 76: the confirmation step a host with no /verify route runs"
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("021 EARS-2: the inline code step keeps the arrival plate the form stood under", async () => {
+    const confirmCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
+    await submitForm(DOCTOR_FIXTURE, {
+      returnContextPlate: <p>Вы вернётесь к этому эфиру</p>,
+    });
+
+    await screen.findByLabelText(confirmCopy.codeLabel);
+    expect(screen.getByTestId("registration-return-context")).toHaveTextContent(
+      "Вы вернётесь к этому эфиру",
+    );
+  });
+
   it("021 EARS-19: the Academy door never reaches the inline step — its own /verify route owns it", async () => {
     // The words of the code step are the package's on every host; WHERE the
     // step runs is the host's, and this one states a `/verify` route of its own.

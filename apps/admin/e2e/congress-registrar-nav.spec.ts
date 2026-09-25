@@ -22,7 +22,9 @@ import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
  *   IDP_PROJECT_ID=… DATABASE_URL=… pnpm --filter @ds/admin exec playwright test \
  *     --config=playwright.flows.config.ts e2e/congress-registrar-nav.spec.ts
  *
- * `E2E_SHOT_DIR` opts into the evidence screenshots.
+ * `E2E_SHOT_DIR` opts into the evidence screenshots: the approved-non-canvas
+ * `responsive-web` set of the registrar shell (desktop/mobile × light/dark, dark
+ * = `prefers-color-scheme: dark` emulation) and the refusal state.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 
@@ -98,9 +100,10 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
     deskContext = await browser.newContext({ baseURL: ADMIN_ORIGIN });
     desk = await deskContext.newPage();
     await desk.setViewportSize({ width: 1440, height: 900 });
-    // The admin-tier landing is `/events`, which a registrar may not open: the
-    // chrome answers it with the refusal, and the nav still offers the roster.
+    // Every sign-in lands on `/events`, which a registrar may not open: with one
+    // link to its name, the chrome sends it straight to that roster.
     await signInAsAdmin(desk, registrar);
+    await desk.waitForURL(new RegExp(`/events/${eventA}/roster$`));
 
     // Exactly one link: the bound event's roster. No events list, no section.
     await expect(headerLinks(desk)).toHaveCount(1);
@@ -108,8 +111,6 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
     await expect(roster).toHaveText("Реестр участников");
     await expect(roster).toHaveAttribute("href", `/events/${eventA}/roster`);
 
-    await roster.click();
-    await desk.waitForURL(new RegExp(`/events/${eventA}/roster$`));
     await expect(desk.getByRole("heading", { level: 1 })).toHaveText(
       "Реестр участников",
     );
@@ -118,19 +119,47 @@ test.describe("044 EARS-20 / EARS-38 — the registrar's admin is its event's ro
     await expect(headerLinks(desk)).toHaveCount(1);
     // No way back to the event detail either — no event link anywhere on the page.
     await expect(desk.locator("main a")).toHaveCount(0);
-    await shot(desk, "registrar-nav-roster");
+
+    // The `responsive-web` evidence set of the approved shell state.
+    for (const { name, width, height } of [
+      { name: "desktop", width: 1440, height: 900 },
+      { name: "mobile", width: 390, height: 844 },
+    ]) {
+      await desk.setViewportSize({ width, height });
+      for (const colorScheme of ["light", "dark"] as const) {
+        await desk.emulateMedia({ colorScheme });
+        await expect(headerLinks(desk)).toHaveCount(1);
+        await shot(desk, `registrar-nav-${name}-${colorScheme}`);
+      }
+    }
+    await desk.emulateMedia({ colorScheme: "light" });
+    await desk.setViewportSize({ width: 1440, height: 900 });
   });
 
   test("044 EARS-38.7: every other admin route shows the refusal and the server refuses its data", async () => {
     test.setTimeout(120_000);
 
-    for (const route of ["/events", `/events/${eventB}/roster`, "/projects"]) {
+    // The admin landings are not a refusal for a one-link principal: they lead
+    // to its roster (EARS-20), however they are reached.
+    for (const landing of ["/", "/events"]) {
+      await desk.goto(landing);
+      await desk.waitForURL(new RegExp(`/events/${eventA}/roster$`));
+      await expect(desk.getByTestId("access-refused")).toHaveCount(0);
+    }
+
+    // Any other route reached directly keeps the refusal.
+    for (const route of [
+      `/events/${eventB}/roster`,
+      `/events/${eventB}`,
+      "/projects",
+    ]) {
       await desk.goto(route);
       await expect(desk.getByTestId("access-refused")).toHaveText(
         "У этой учётной записи нет прав администратора.",
       );
       await expect(headerLinks(desk)).toHaveCount(1);
-      if (route === "/events") await shot(desk, "registrar-refused-events");
+      expect(new URL(desk.url()).pathname).toBe(route);
+      if (route === "/projects") await shot(desk, "registrar-refusal");
     }
 
     // The drawn refusal is a projection; the server is the authority.

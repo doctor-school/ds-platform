@@ -2,7 +2,7 @@
 
 import type { AccessControlProvider } from "@refinedev/core";
 import { adminAccess, canAccessResource } from "@/lib/admin-access";
-import { readAdminSession } from "@/lib/admin-auth";
+import { fetchAdminSession } from "@/lib/admin-session-cache";
 
 /**
  * Refine access-control provider (ADR-0004 §5 — generic `accessControlProvider`
@@ -17,12 +17,13 @@ import { readAdminSession } from "@/lib/admin-auth";
  * 044 added `event-registrar`, which holds an admin session too but may reach
  * exactly one event's roster, so the answer now comes from the principal's own
  * `GET /v1/admin/auth/session` read (`roles` + `eventGrants`), projected by
- * `lib/admin-access.ts`: `platform_admin` → everything; a registrar → only the
+ * `lib/admin-access.ts` — the same cached read the chrome draws from
+ * (`lib/admin-session-cache.ts`): `platform_admin` → everything; a registrar → only the
  * `congress-roster` resource of its bound event; anything unreadable → nothing.
  */
 export const accessControlProvider: AccessControlProvider = {
   can: async ({ resource, params }) => {
-    const access = adminAccess(await readAdminSession());
+    const access = adminAccess(await fetchAdminSession());
     return canAccessResource(access, resource, params)
       ? { can: true }
       : { can: false, reason: "login.errorForbidden" };

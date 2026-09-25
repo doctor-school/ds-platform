@@ -6,6 +6,7 @@ import {
   adminNavItems,
   canAccessPath,
   canAccessResource,
+  landingRedirect,
 } from "./admin-access";
 
 /**
@@ -101,5 +102,25 @@ describe("044 EARS-20 admin access projection", () => {
     expect(adminNavItems(access)).toEqual([]);
     expect(canAccessPath(access, "/events")).toBe(false);
     expect(canAccessResource(access, "events")).toBe(false);
+  });
+
+  it("044 EARS-20.6: a single-link principal lands on that link; direct refused routes keep the refusal", () => {
+    const access = adminAccess(registrarBoundToA);
+    const roster = `/events/${EVENT_A}/roster`;
+
+    // The sign-in landings resolve to the one roster.
+    expect(landingRedirect(access, "/events")).toBe(roster);
+    expect(landingRedirect(access, "/")).toBe(roster);
+    // Any other refused route is a direct navigation: the refusal stays.
+    expect(landingRedirect(access, "/projects")).toBeNull();
+    expect(landingRedirect(access, `/events/${EVENT_B}/roster`)).toBeNull();
+    // The roster itself is open — nothing to redirect.
+    expect(landingRedirect(access, roster)).toBeNull();
+    // Zero links (unbound, unreadable) or the full set: never redirected.
+    expect(
+      landingRedirect(adminAccess(registrarUnbound), "/events"),
+    ).toBeNull();
+    expect(landingRedirect(adminAccess(null), "/events")).toBeNull();
+    expect(landingRedirect(adminAccess(platformAdmin), "/events")).toBeNull();
   });
 });

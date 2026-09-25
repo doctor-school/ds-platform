@@ -120,3 +120,29 @@ export function canAccessResource(
     boundTo(access, params?.id === undefined ? undefined : String(params.id))
   );
 }
+
+/**
+ * The admin-tier landings: `/` (redirects to `/events`) and `/events`, where
+ * every sign-in lands (`app/login`, `app/mfa/*`).
+ */
+const LANDING_PATHS = new Set(["/", "/events", "/events/"]);
+
+/**
+ * 044 EARS-20: where a principal whose access yields exactly ONE link lands.
+ *
+ * A registrar reaching an admin landing it may not open (the sign-in always
+ * lands on `/events`) is sent straight to its one roster instead of a refusal
+ * with one link to click. Any other refused route — a direct navigation — keeps
+ * the refusal (EARS-38.7), and a principal with zero or several links is never
+ * redirected: there is no single place that is obviously theirs.
+ */
+export function landingRedirect(
+  access: AdminAccess,
+  pathname: string,
+): string | null {
+  if (canAccessPath(access, pathname) || !LANDING_PATHS.has(pathname)) {
+    return null;
+  }
+  const items = adminNavItems(access);
+  return items.length === 1 ? items[0]!.href : null;
+}

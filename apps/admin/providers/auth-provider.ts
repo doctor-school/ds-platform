@@ -1,11 +1,8 @@
 "use client";
 
 import type { AuthProvider } from "@refinedev/core";
-import {
-  adminLogin,
-  adminLogout,
-  readAdminAuthState,
-} from "@/lib/admin-auth";
+import { adminLogin, adminLogout, readAdminAuthState } from "@/lib/admin-auth";
+import { clearAdminSession } from "@/lib/admin-session-cache";
 import { loginFailureMessage } from "@/lib/login-failure";
 
 /**
@@ -43,6 +40,8 @@ const CHALLENGE_PATH = "/mfa/challenge";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }: { email?: string; password?: string }) => {
+    // 044 EARS-20: a new sign-in is a new principal — never draw the last one's nav.
+    clearAdminSession();
     const result = await adminLogin(email ?? "", password ?? "");
     if (!result.ok) {
       return {
@@ -77,6 +76,9 @@ export const authProvider: AuthProvider = {
 
   logout: async () => {
     await adminLogout();
+    // 044 EARS-20: the cached session read (nav + `can`) belongs to the principal
+    // who just left; the next sign-in in this tab re-reads its own.
+    clearAdminSession();
     return { success: true, redirectTo: LOGIN_PATH };
   },
 

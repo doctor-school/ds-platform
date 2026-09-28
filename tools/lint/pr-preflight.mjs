@@ -154,6 +154,9 @@ export const STATIC_GUARDS = [
   { name: "retained-data", file: "retained-data-lint.ts" },
   { name: "host-allowlist", file: "host-allowlist-lint.ts" },
   { name: "route-mount", file: "route-mount-lint.ts" },
+  // Vendored-canvas provenance (#2389): every design-source/**/*.dc.html
+  // matches its design-source/manifest.json sha256 — BLOCK.
+  { name: "canvas-provenance", file: "canvas-provenance-lint.ts" },
   // Both regression-contour guards (#2067) take their PR context from the local
   // git diff against `origin/main` (tools/lint/lib/diff.ts) and, for the
   // quarantine check, the local `gh` — no PR number, so they belong here.

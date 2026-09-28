@@ -1309,7 +1309,11 @@
       "phone": "Телефон",
       "email": "Email",
       "registeredAt": "Дата регистрации",
-      "confirmationMailStatus": "Статус письма"
+      "confirmationMailStatus": "Статус письма",
+      "attendance": "Присутствие"
+    },
+    "attendance": {
+      "dayLabel": "Присутствие {day}"
     },
     "mailStatuses": {
       "sent": "Отправлено",
@@ -1317,10 +1321,23 @@
     },
     "filters": {
       "search": "Поиск участника",
-      "searchPlaceholder": "ФИО, email, телефон, город…"
+      "searchPlaceholder": "ФИО, email, телефон, город…",
+      "attendanceDay": "День конгресса",
+      "attendanceDayAny": "—",
+      "presence": {
+        "label": "Присутствие",
+        "any": "Все",
+        "marked": "Присутствовал",
+        "unmarked": "Не отмечен"
+      }
     },
     "errors": {
-      "listFailed": "Не удалось загрузить реестр участников."
+      "listFailed": "Не удалось загрузить реестр участников.",
+      "attendance": {
+        "forbidden": "Нет доступа к отметке присутствия.",
+        "unavailable": "Сервис временно недоступен. Повторите отметку.",
+        "failed": "Не удалось сохранить отметку."
+      }
     }
   }
 }

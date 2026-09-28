@@ -7,7 +7,7 @@
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(107,177,247,.5)}[data-btn]{transition:all .15s}[data-btn="primary"]:hover{background:var(--btn-hover)!important;border-color:var(--btn-hover)!important;box-shadow:2px 2px 0 var(--border)!important;transform:translate(2px,2px)}[data-btn="primary"]:active{box-shadow:none!important;transform:translate(4px,4px)}[data-btn="primary"]:focus-visible{box-shadow:4px 4px 0 var(--border),0 0 0 3px rgba(107,177,247,.5)!important}[data-btn="secondary"]:hover{background:var(--tint)!important;border-color:var(--primary)!important;box-shadow:2px 2px 0 var(--elev)!important;transform:translate(2px,2px)}[data-btn="secondary"]:active{box-shadow:none!important;transform:translate(4px,4px)}[data-btn="secondary"]:focus-visible{box-shadow:4px 4px 0 var(--elev),0 0 0 3px rgba(107,177,247,.5)!important}[data-btn]:disabled{opacity:.4;transform:none;box-shadow:none!important;pointer-events:none}[data-tab="false"]:hover{background:var(--tint)!important;color:var(--tint-fg)!important}[data-check]:hover{border-color:var(--primary)!important}a{color:#114D9E;font-weight:700;text-decoration:none;text-underline-offset:4px}a:hover{text-decoration:underline}a:active{opacity:.8}[data-link]:hover,button[style*="text-underline-offset:4px"]:hover{text-decoration:underline!important}[data-link]:active,button[style*="text-underline-offset:4px"]:active{opacity:.8!important}[data-ghost]:hover,button[style*="--tint-fg"]:hover{background:var(--tint)!important;color:var(--tint-fg)!important}</style></helmet>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(107,177,247,.5)}input[id^="code-"]:focus{position:relative!important;z-index:10!important;border-color:#6BB1F7!important;box-shadow:0 0 0 3px rgba(107,177,247,.5)}[data-btn]{transition:all .15s}[data-btn="primary"]:hover{background:var(--btn-hover)!important;border-color:var(--btn-hover)!important;box-shadow:2px 2px 0 var(--border)!important;transform:translate(2px,2px)}[data-btn="primary"]:active{box-shadow:none!important;transform:translate(4px,4px)}[data-btn="primary"]:focus-visible{box-shadow:4px 4px 0 var(--border),0 0 0 3px rgba(107,177,247,.5)!important}[data-btn="secondary"]:hover{background:var(--tint)!important;border-color:var(--primary)!important;box-shadow:2px 2px 0 var(--elev)!important;transform:translate(2px,2px)}[data-btn="secondary"]:active{box-shadow:none!important;transform:translate(4px,4px)}[data-btn="secondary"]:focus-visible{box-shadow:4px 4px 0 var(--elev),0 0 0 3px rgba(107,177,247,.5)!important}[data-btn]:disabled{opacity:.4;transform:none;box-shadow:none!important;pointer-events:none}[data-tab="false"]:hover{background:var(--tint)!important;color:var(--tint-fg)!important}[data-check]:hover{border-color:var(--primary)!important}a{color:#114D9E;font-weight:700;text-decoration:none;text-underline-offset:4px}a:hover{text-decoration:underline}a:active{opacity:.8}[data-link]:hover,button[style*="text-underline-offset:4px"]:hover{text-decoration:underline!important}[data-link]:active,button[style*="text-underline-offset:4px"]:active{opacity:.8!important}[data-ghost]:hover,button[style*="--tint-fg"]:hover{background:var(--tint)!important;color:var(--tint-fg)!important}</style></helmet>
 
 <div style="--tint:{{ tint }};--tint-fg:{{ tintFg }};--btn-hover:{{ btnHover }};--border:{{ border }};--primary:{{ accent }};--elev:{{ shadowSm }};min-height:100vh;background:{{ page }};display:flex;flex-direction:column">
   <!-- Превью-панель: экраны, витрина, тема, демо-состояния -->
@@ -84,7 +84,7 @@
                   </div>
                   <div style="{{ fLoginPw.errStyle }}">⚠ {{ fLoginPw.error }}</div>
                 </div>
-                <button onClick="{{ submit }}" data-btn="primary" style="{{ primaryBtn }}">{{ loginBtnLabel }}</button>
+                <button onClick="{{ submit }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ loginBtnLabel }}</button>
               </div>
             </sc-if>
 
@@ -122,7 +122,7 @@
                       <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
                     </div>
                   </div>
-                  <button onClick="{{ submit }}" data-btn="primary" style="{{ primaryBtn }}">{{ otpBtnLabel }}</button>
+                  <button onClick="{{ submit }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ otpBtnLabel }}</button>
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
                     <button onClick="{{ otpBack }}" data-ghost style="--tint:{{ tint }};--tint-fg:{{ tintFg }};font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:transparent;border:0;cursor:pointer;padding:6px 8px;margin:-6px -8px">← Изменить способ</button>
                     <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
@@ -190,7 +190,7 @@
               </sc-if>
 
               <p style="margin:0;font-size:12px;line-height:1.55;color:{{ inkFaint }}">Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.</p>
-              <button onClick="{{ submit }}" data-btn="primary" style="{{ primaryBtn }}">{{ regBtnLabel }}</button>
+              <button onClick="{{ submit }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ regBtnLabel }}</button>
 
               <!-- Рассылка — не условие доступа, под кнопкой -->
               <sc-if value="{{ isDoctor }}" hint-placeholder-val="{{ false }}">
@@ -216,13 +216,13 @@
                 <div>
                   <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из письма</label>
                   <div style="display:flex">
-                    <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
+                    <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
                   </div>
                 </div>
                 <sc-if value="{{ verified }}" hint-placeholder-val="{{ false }}">
                   <div style="border:2px solid {{ success }};background:{{ successTint }};padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:13px;font-weight:700;color:{{ ink }}"><span style="color:{{ success }}">✓</span>Код принят — входим…</div>
                 </sc-if>
-                <button onClick="{{ submit }}" data-btn="primary" style="{{ primaryBtn }}">{{ verifyBtnLabel }}</button>
+                <button onClick="{{ submit }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ verifyBtnLabel }}</button>
                 <div style="display:flex;flex-direction:column;gap:8px">
                   <div style="display:flex;justify-content:flex-end">
                     <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
@@ -252,7 +252,7 @@
                   <input type="text" value="{{ fResetId.value }}" onChange="{{ fResetId.onChange }}" onBlur="{{ fResetId.onBlur }}" placeholder="{{ fResetId.placeholder }}" style="{{ fResetId.inputStyle }}">
                   <div style="{{ fResetId.errStyle }}">⚠ {{ fResetId.error }}</div>
                 </div>
-                <button onClick="{{ resetSend }}" data-btn="primary" style="{{ primaryBtn }}">{{ resetSendLabel }}</button>
+                <button onClick="{{ resetSend }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ resetSendLabel }}</button>
               </div>
             </sc-if>
             <sc-if value="{{ resetComplete }}" hint-placeholder-val="{{ false }}">
@@ -272,7 +272,7 @@
                   <div style="{{ fResetPwHint }}">Не менее 8 символов.</div>
                   <div style="{{ fResetPw.errStyle }}">⚠ {{ fResetPw.error }}</div>
                 </div>
-                <button onClick="{{ submit }}" data-btn="primary" style="{{ primaryBtn }}">{{ resetPwBtnLabel }}</button>
+                <button onClick="{{ submit }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ resetPwBtnLabel }}</button>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
                   <button onClick="{{ resetRestart }}" data-ghost style="--tint:{{ tint }};--tint-fg:{{ tintFg }};font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:transparent;border:0;cursor:pointer;padding:6px 8px;margin:-6px -8px">Начать заново</button>
                   <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
@@ -403,7 +403,7 @@ class Component extends DCLogic {
     };
 
     const resendLabel = s.cooldown > 0 ? ('Отправить снова · ' + s.cooldown + ' с') : 'Отправить снова';
-    const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + linkColor + ';opacity:' + (s.cooldown > 0 ? '.4' : '1') + ';text-underline-offset:4px';
+    const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;padding:8px 16px;min-height:35px;line-height:19px;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + linkColor + ';opacity:' + (s.cooldown > 0 ? '.4' : '1') + ';text-underline-offset:4px';
 
     const dest = s.values['otpId'] || s.values['resetId'] || s.values['regEmail'] || 'anna@nmic.ru';
     const maskedDest = dest.includes('@') ? dest.replace(/^(.).*(@.).*(\..*)$/, '$1•••$2•••$3') : dest.replace(/\d(?=\d{2})/g, '•');
@@ -419,7 +419,7 @@ class Component extends DCLogic {
     const titles = {
       login: ['Вход', 'Доступ к вашему аккаунту Doctor.School.'],
       register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль.'],
-      verify: ['Проверьте почту', 'Мы отправили код на ' + maskedDest + '. Введите его, чтобы завершить регистрацию.'],
+      verify: ['Проверьте почту', R('span', null, 'Мы отправили код на ', R('strong', null, maskedDest), '. Введите его, чтобы завершить регистрацию.')],
       reset: s.resetStage === 'request'
         ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
         : ['Новый пароль', 'Код отправлен на ' + maskedDest + '. Введите его и задайте новый пароль.']
@@ -442,7 +442,9 @@ class Component extends DCLogic {
       return s.resetStage === 'request' ? 'Не удалось начать сброс. Попробуйте ещё раз.' : 'Код не подошёл или пароль отклонён.';
     };
 
-    const primaryBtn = 'font:inherit;width:100%;font-size:15px;font-weight:800;color:' + btnFg + ';background:' + btnBg + ';border:2px solid ' + btnBg + ';padding:14px;cursor:pointer;box-shadow:4px 4px 0 ' + border;
+    // Занятое основное действие — состояние loading общего Button: подпись остаётся, спиннер 16px слева (gap 8px), aria-busy, disabled-вид (opacity .4, без тени).
+    const primaryBusy = s.sending === ({ login: 'login', register: 'reg', verify: 'verify', reset: 'reset' })[s.screen];
+    const primaryBtn = 'font:inherit;width:100%;font-size:15px;font-weight:800;color:' + btnFg + ';background:' + btnBg + ';border:2px solid ' + btnBg + ';padding:14px;' + (primaryBusy ? 'cursor:default;opacity:.4;box-shadow:none' : 'cursor:pointer;box-shadow:4px 4px 0 ' + border);
     const secondaryBtn = 'font:inherit;width:100%;font-size:15px;font-weight:700;color:' + ink + ';background:' + surface + ';border:2px solid ' + border + ';padding:14px;cursor:pointer;box-shadow:4px 4px 0 ' + shadowSm;
     const linkBtn = 'font:inherit;font-size:13px;font-weight:700;color:' + linkColor + ';background:transparent;border:0;cursor:pointer;text-underline-offset:4px';
 
@@ -463,7 +465,12 @@ class Component extends DCLogic {
     const errTab = (name, first) => ({ name, onClick: () => this.setState({ errOv: name }), style: pill(errKey === name, first) });
     const toggle = (name, on, onClick) => ({ name, onClick, style: 'font:inherit;font-size:11.5px;font-weight:' + (on ? 800 : 700) + ';padding:8px 11px;cursor:pointer;white-space:nowrap;border:2px solid ' + (on ? btnBg : hairline) + ';color:' + (on ? btnFg : ink) + ';background:' + (on ? btnBg : surface) });
 
-    const busy = (key, label) => s.sending === key ? 'Отправка…' : label;
+    const spinner = R('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true', style: 'flex:none' },
+      R('g', null,
+        R('circle', { cx: 12, cy: 12, r: 10, stroke: 'currentColor', strokeWidth: 4, opacity: .25 }),
+        R('path', { d: 'M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z', fill: 'currentColor', opacity: .75 }),
+        R('animateTransform', { attributeName: 'transform', type: 'rotate', from: '0 12 12', to: '360 12 12', dur: '1s', repeatCount: 'indefinite' })));
+    const busy = (key, label) => s.sending === key ? R('span', { style: 'display:inline-flex;align-items:center;justify-content:center;gap:8px' }, spinner, label) : label;
 
     // Контекст возврата — карточка события на обеих витринах, на входе и регистрации
     const gateCardOn = s.returnCtx && (s.screen === 'login' || s.screen === 'register' || s.screen === 'verify');
@@ -472,7 +479,8 @@ class Component extends DCLogic {
       : 'После подтверждения почты вы вернётесь сюда же — место за вами.';
 
     // Слоты кода — по одному квадрату на символ
-    const codeLen = 8;
+    const codeLen = s.screen === 'verify' ? 6 : 8;
+    const cellPx = s.screen === 'verify' ? 40 : 48;
     const slotInput = (i, e) => {
       const ch = (e.target.value || '').replace(/\s/g, '').slice(-1);
       const otp = s.otp.slice(); otp[i] = ch;
@@ -483,7 +491,7 @@ class Component extends DCLogic {
     const codeSlots = Array.from({ length: codeLen }, (_, i) => ({
       id: 'code-' + i, value: s.otp[i] || '',
       onChange: (e) => slotInput(i, e), onKeyDown: (e) => slotKey(i, e),
-      style: 'width:48px;height:48px;box-sizing:border-box;text-align:center;font:inherit;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;text-transform:uppercase;border:2px solid ' + (s.otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none' + (i > 0 ? ';margin-left:-2px' : '') + (s.otp[i] ? ';position:relative;z-index:1' : '')
+      style: 'width:' + cellPx + 'px;height:' + cellPx + 'px;box-sizing:border-box;text-align:center;font:inherit;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;text-transform:uppercase;border:2px solid ' + (s.otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none' + (i > 0 ? ';margin-left:-2px' : '') + (s.otp[i] ? ';position:relative;z-index:1' : '')
     }));
 
     return {
@@ -502,7 +510,7 @@ class Component extends DCLogic {
       gateNum: 'Эфир № 057', gateTime: '19:00', gateTimeSub: '28 августа · чт',
       gateSchool: 'Школа ортобиологии', gateTitle: 'PRP при гонартрозе: показания, протоколы, ошибки',
       gateSpeakers: [{ name: 'Анна Крылова', org: 'НМИЦ травматологии' }],
-      primaryBtn, secondaryBtn, linkBtn,
+      primaryBtn, primaryBusyAttr: primaryBusy ? 'true' : 'false', secondaryBtn, linkBtn,
       shellCols: m ? '1fr' : (gateCardOn ? '1.1fr .9fr' : '.95fr 1.05fr'),
       isLight: !d, isDark: d,
       screenTabs: [scrTab('Вход', 'login'), scrTab('Регистрация', 'register'), scrTab('Подтверждение', 'verify'), scrTab('Сброс', 'reset')],

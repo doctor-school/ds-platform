@@ -403,7 +403,7 @@ class Component extends DCLogic {
     };
 
     const resendLabel = s.cooldown > 0 ? ('Отправить снова · ' + s.cooldown + ' с') : 'Отправить снова';
-    const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;padding:8px 6px;min-height:35px;line-height:19px;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + linkColor + ';opacity:' + (s.cooldown > 0 ? '.4' : '1') + ';text-underline-offset:4px';
+    const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;padding:8px 16px;min-height:35px;line-height:19px;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + linkColor + ';opacity:' + (s.cooldown > 0 ? '.4' : '1') + ';text-underline-offset:4px';
 
     const dest = s.values['otpId'] || s.values['resetId'] || s.values['regEmail'] || 'anna@nmic.ru';
     const maskedDest = dest.includes('@') ? dest.replace(/^(.).*(@.).*(\..*)$/, '$1•••$2•••$3') : dest.replace(/\d(?=\d{2})/g, '•');
@@ -491,7 +491,7 @@ class Component extends DCLogic {
     const codeSlots = Array.from({ length: codeLen }, (_, i) => ({
       id: 'code-' + i, value: s.otp[i] || '',
       onChange: (e) => slotInput(i, e), onKeyDown: (e) => slotKey(i, e),
-      style: 'width:' + cellPx + 'px;height:' + cellPx + 'px;box-sizing:border-box;text-align:center;font:inherit;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;text-transform:uppercase;border:2px solid ' + (s.otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none' + (i > 0 ? ';margin-left:-2px' : '') + (s.otp[i] ? ';position:relative;z-index:1' : '')
+      style: 'width:' + cellPx + 'px;height:' + cellPx + 'px;box-sizing:border-box;text-align:center;font:inherit;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;text-transform:uppercase;border:2px solid ' + (s.otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none' + (i > 0 ? ';margin-left:-2px' : '') + (s.otp[i] ? ';position:relative;z-index:1' : '')
     }));
 
     return {

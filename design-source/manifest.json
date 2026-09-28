@@ -105,10 +105,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "4705884b7999c1e83cf5f682ea581f688ac9cb89ded4c96a6f86e2d3056502e2",
-      "pulledAt": "2026-09-15",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "f817b2b5b7518de3d2d1ccc849bf6b94b62db46861f15cc931cb58119465edf1",
+      "pulledAt": "2026-09-28T07:02:30.850Z",
+      "remotePath": "auth.dc.html",
+      "note": "re-pulled by the lead via DesignSync 2026-09-28, SAME (#2393/#2398)"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

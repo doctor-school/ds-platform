@@ -16,7 +16,8 @@ import {
   checkProvenance,
   vendorCanvases,
 } from "../../design/vendor-canvas.mjs";
-import { runGuard } from "./run-guard";
+import { REPO_ROOT, runGuard } from "./run-guard";
+import { spawnSync } from "node:child_process";
 
 /**
  * #2389 D3–D5: every vendored `design-source/**\/*.dc.html` carries a manifest
@@ -216,5 +217,17 @@ describe("canvas-provenance guard (BLOCK)", () => {
     );
     expect(code).toBe(1);
     expect(stderr).toContain("design-source/auth.dc.html: sha256 mismatch");
+  });
+});
+
+describe("vendored canvas bytes survive git (#2389 review)", () => {
+  it("design-source canvases are -text: git never EOL-normalises the recorded bytes", () => {
+    const attr = spawnSync(
+      "git",
+      ["check-attr", "text", "--", "design-source/auth.dc.html", "design-source/archive/archive-auth-v1.dc.html"],
+      { cwd: REPO_ROOT, encoding: "utf8" },
+    ).stdout;
+    expect(attr).toContain("design-source/auth.dc.html: text: unset");
+    expect(attr).toContain("design-source/archive/archive-auth-v1.dc.html: text: unset");
   });
 });

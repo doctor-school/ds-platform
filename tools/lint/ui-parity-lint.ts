@@ -76,7 +76,7 @@ function baseRefName(): string {
 }
 
 export const CANVAS_NOT_ON_BASE =
-  "canvas not vendored on main yet — land the vendoring PR first";
+  "canvas not vendored on main yet — land the vendoring PR first (a stale local checkout: `git fetch origin`)";
 
 /**
  * The cited canvas is read from the BASE ref git object (`origin/<base>`), never
@@ -86,8 +86,10 @@ export const CANVAS_NOT_ON_BASE =
  * blind by construction. A canvas a PR introduces is therefore not a reference
  * until its design-source-only vendoring PR lands. The git-object read keeps the
  * #2164 property — `pr:land` from the main checkout and CI from the PR tree
- * agree — and a tree that has not fetched the base ref is covered by one
- * best-effort `git fetch` of that branch.
+ * agree. The base branch is refreshed by one best-effort `git fetch` BEFORE
+ * the read, so a local `pr:preflight <N>` right after a vendoring PR landed
+ * never judges against a stale `origin/<base>`; offline, the read falls back
+ * to whatever `origin/<base>` the tree already has.
  */
 function canvasBlob(source: string, repoRoot: string): string | null {
   if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source)) return null;
@@ -103,20 +105,17 @@ function canvasBlob(source: string, repoRoot: string): string | null {
       cwd: repoRoot,
       encoding: "utf8",
     });
-  let result = show();
-  if (result.status !== 0) {
-    spawnSync(
-      "git",
-      [
-        "fetch",
-        "--quiet",
-        "origin",
-        `+refs/heads/${base}:refs/remotes/origin/${base}`,
-      ],
-      { cwd: repoRoot, encoding: "utf8" },
-    );
-    result = show();
-  }
+  spawnSync(
+    "git",
+    [
+      "fetch",
+      "--quiet",
+      "origin",
+      `+refs/heads/${base}:refs/remotes/origin/${base}`,
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  const result = show();
   return result.status === 0 ? result.stdout : null;
 }
 function canvasDeclaresState(html: string, state: string): boolean {

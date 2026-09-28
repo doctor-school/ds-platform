@@ -350,6 +350,42 @@ describe("ui-parity body evidence", () => {
     expect(verdict(canvasBody).ok).toBe(true);
   });
 
+  it("green: #2389 a stale local origin/main is refreshed before the canvas read (a vendoring PR that just landed)", () => {
+    const upstream = mkdtempSync(join(tmpdir(), "ui-parity-upstream-"));
+    const clone = mkdtempSync(join(tmpdir(), "ui-parity-clone-"));
+    tmpDirs.push(upstream, clone);
+    git(upstream, ["init", "-q", "-b", "main"]);
+    mkdirSync(join(upstream, "design-source"), { recursive: true });
+    writeFileSync(
+      join(upstream, canvasFile),
+      "<script>const state = { mode: 'past' };</script>\n",
+      "utf8",
+    );
+    commit(upstream, "vendored", [canvasFile]);
+    git(clone, ["clone", "-q", upstream, "."]);
+    // The vendoring PR lands upstream AFTER the local clone last fetched.
+    writeFileSync(
+      join(upstream, canvasFile),
+      "<script>const state = { mode: 'landed' };</script>\n",
+      "utf8",
+    );
+    commit(upstream, "re-vendored", [canvasFile]);
+    const previous = process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_BASE_REF;
+    try {
+      expect(
+        bodyEvidenceVerdict(
+          canvasBody.replace("mode=past", "mode=landed"),
+          clone,
+          [approvedFile],
+          approvedManifest,
+        ).ok,
+      ).toBe(true);
+    } finally {
+      if (previous !== undefined) process.env.GITHUB_BASE_REF = previous;
+    }
+  });
+
   it("green: #2389 the base ref follows GITHUB_BASE_REF (same rule as the approved-sources manifest)", () => {
     const previous = process.env.GITHUB_BASE_REF;
     process.env.GITHUB_BASE_REF = "release";

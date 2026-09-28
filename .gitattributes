@@ -2,3 +2,6 @@
 *.{cmd,[cC][mM][dD]} text eol=crlf
 *.{bat,[bB][aA][tT]} text eol=crlf
 *.{png,jpg,gif,ico,webp,avif,woff,woff2,ttf,otf,pdf} binary
+# Vendored Claude Design canvases are recorded byte-exact (sha256 in
+# design-source/manifest.json, #2389): git must never EOL-normalise them.
+design-source/**/*.dc.html -text

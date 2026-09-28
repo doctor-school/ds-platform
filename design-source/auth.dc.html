@@ -354,7 +354,9 @@ class Component extends DCLogic {
     const s = this.state, d = s.dark, m = s.isMobile, R = React.createElement;
     const host = s.hostOv || (this.props.host === 'витрина врача' ? 'doctor' : 'academy');
     const isDoctor = host === 'doctor';
-    const errKey = s.errOv || this.props.error || 'нет';
+    // На «Подтверждении» нет общей ошибки: шаг без адреса не показывается (003 EARS-40) — «ошибка» здесь = «нет».
+    const errKeyRaw = s.errOv || this.props.error || 'нет';
+    const errKey = s.screen === 'verify' && errKeyRaw === 'ошибка' ? 'нет' : errKeyRaw;
 
     const page = d ? 'oklch(.16 .02 250)' : '#fff';
     const surface = d ? 'oklch(.21 .02 250)' : '#fff';
@@ -438,7 +440,6 @@ class Component extends DCLogic {
       }
       if (s.screen === 'login') return s.loginTab === 'otp' && !s.otpSent ? 'Не удалось отправить код. Попробуйте ещё раз.' : 'Не удалось войти. Проверьте данные и попробуйте снова.';
       if (s.screen === 'register') return 'Не удалось завершить регистрацию. Проверьте введённые данные.';
-      if (s.screen === 'verify') return 'Не удалось определить аккаунт. Зарегистрируйтесь заново, чтобы получить новый код, или войдите в существующий аккаунт.';
       return s.resetStage === 'request' ? 'Не удалось начать сброс. Попробуйте ещё раз.' : 'Код не подошёл или пароль отклонён.';
     };
 
@@ -515,7 +516,7 @@ class Component extends DCLogic {
       isLight: !d, isDark: d,
       screenTabs: [scrTab('Вход', 'login'), scrTab('Регистрация', 'register'), scrTab('Подтверждение', 'verify'), scrTab('Сброс', 'reset')],
       hostTabs: [hostTab('Академия', 'academy', true), hostTab('Витрина врача', 'doctor', false)],
-      errTabs: [errTab('нет', true), errTab('429'), errTab('5xx'), errTab('ошибка'), errTab('код'), errTab('повтор')],
+      errTabs: [errTab('нет', true), errTab('429'), errTab('5xx')].concat(s.screen === 'verify' ? [] : [errTab('ошибка')], [errTab('код'), errTab('повтор')]),
       docToggles: [
         toggle('партнёрская ссылка', s.partnerLink, () => this.setState(st => ({ partnerLink: !st.partnerLink, values: Object.assign({}, st.values, { promo: st.partnerLink ? '' : 'MEDREP-2026' }) }))),
         toggle('контекст возврата', s.returnCtx, () => this.setState(st => ({ returnCtx: !st.returnCtx })))

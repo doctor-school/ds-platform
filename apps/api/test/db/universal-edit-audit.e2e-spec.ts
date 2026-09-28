@@ -35,6 +35,9 @@ const AUDITED_TABLES = [
   // 044 EARS-38 (#2384) — an event-scoped role binding is an authorization
   // fact; who bound whom to which event is exactly what the ledger answers.
   "event_role_grants",
+  // 044 EARS-34 (#2381) — a per-day attendance mark; who marked the participant
+  // present, and when, is the ledger's answer (the table has no author column).
+  "registration_attendance",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */

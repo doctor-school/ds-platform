@@ -788,6 +788,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/events/{idOrSlug}/registrations/{registrationId}/attendance/{day}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["AttendanceAdminController_mark"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/events/{idOrSlug}/roster": {
         parameters: {
             query?: never;
@@ -1943,6 +1959,16 @@ export interface components {
             /** @enum {string} */
             provider: "rutube" | "youtube" | "vk" | "cdnvideo";
         };
+        CongressAttendanceRequestDto: {
+            present: boolean;
+        };
+        CongressAttendanceResponseDto: {
+            /** Format: date */
+            day: string;
+            present: boolean;
+            /** Format: uuid */
+            registrationId: string;
+        };
         CongressDeskRegistrationRequestDto: {
             city: string;
             contactPhone: string;
@@ -1965,6 +1991,7 @@ export interface components {
             status: "accepted" | "existing";
         };
         CongressRosterListDto: {
+            congressDays: string[];
             event: {
                 /** Format: uuid */
                 id: string;
@@ -1974,6 +2001,11 @@ export interface components {
                 title: string;
             };
             items: {
+                attendance: {
+                    /** Format: date */
+                    day: string;
+                    present: boolean;
+                }[];
                 city: string | null;
                 confirmationMailStatus: ("sent" | "failed") | null;
                 email: string | null;
@@ -3562,11 +3594,40 @@ export interface operations {
             };
         };
     };
+    AttendanceAdminController_mark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day: string;
+                idOrSlug: string;
+                registrationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CongressAttendanceRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressAttendanceResponseDto"];
+                };
+            };
+        };
+    };
     EventRosterAdminController_roster: {
         parameters: {
             query?: {
+                attendanceDay?: string;
                 page?: number;
                 pageSize?: number;
+                present?: "marked" | "unmarked";
                 q?: string;
             };
             header?: never;

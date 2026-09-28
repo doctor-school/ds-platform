@@ -61,6 +61,9 @@ const REGISTRAR_ALLOW_SET: ReadonlySet<string> = new Set([
   // registration mutations the 2026-09-25 amendment gives the registrar
   // (EARS-24 narrowed); bound to one event by EARS-38 like the roster.
   "POST /v1/admin/events/:idOrSlug/registrations",
+  // 044 EARS-34 (#2381) — the per-day attendance mark, the other registration
+  // mutation of the amendment; bound to one event by EARS-38 like the roster.
+  "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day",
   // Holding a session at the admin origin.
   "POST /v1/admin/auth/login",
   "GET /v1/admin/auth/state",

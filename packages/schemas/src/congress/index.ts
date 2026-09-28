@@ -1,5 +1,6 @@
 export * from "./congress-consent.js";
 export * from "./congress-desk-registration.schema.js";
+export * from "./congress-attendance.schema.js";
 export * from "./congress-roster.schema.js";
 export * from "./congress-signup.response.schema.js";
 export * from "./congress-signup.schema.js";

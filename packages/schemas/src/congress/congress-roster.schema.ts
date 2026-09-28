@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  CongressDayAttendanceSchema,
+  CongressDaySchema,
+} from "./congress-attendance.schema.js";
 
 /**
  * 044 EARS-18 — the contract of the admin roster read
@@ -35,25 +39,42 @@ export const CONGRESS_ROSTER_PAGE_SIZE_DEFAULT = 20;
  * The list query, parsed from the raw query string (every value arrives as a
  * string), mirroring `EventAdminListQuerySchema`'s coercion posture.
  */
-export const CongressRosterQuerySchema = z.object({
-  /**
-   * Instant search — a case-insensitive «contains» over the identifying text of
-   * the row: ФИО, email, телефон, место работы, город, область, специальность —
-   * and the NORMALISED contact phone (EARS-29), which is searched although it is
-   * never rendered, so a digits-only term finds a formatted number. One term
-   * over several columns rather than a per-column parameter, because that is
-   * what the `AdminDataList` search box is (EARS-21); per-column filtering is
-   * EARS-23.
-   */
-  q: z.string().trim().max(CONGRESS_ROSTER_SEARCH_MAX).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(CONGRESS_ROSTER_PAGE_SIZE_MAX)
-    .default(CONGRESS_ROSTER_PAGE_SIZE_DEFAULT),
-});
+export const CongressRosterQuerySchema = z
+  .object({
+    /**
+     * Instant search — a case-insensitive «contains» over the identifying text of
+     * the row: ФИО, email, телефон, место работы, город, область, специальность —
+     * and the NORMALISED contact phone (EARS-29), which is searched although it is
+     * never rendered, so a digits-only term finds a formatted number. One term
+     * over several columns rather than a per-column parameter, because that is
+     * what the `AdminDataList` search box is (EARS-21); per-column filtering is
+     * EARS-23.
+     */
+    q: z.string().trim().max(CONGRESS_ROSTER_SEARCH_MAX).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(CONGRESS_ROSTER_PAGE_SIZE_MAX)
+      .default(CONGRESS_ROSTER_PAGE_SIZE_DEFAULT),
+    /**
+     * 044 EARS-34 — the presence filter: the congress day it asks about. Must be
+     * one of the configured congress days; the service refuses any other date
+     * (422 `CONGRESS_DAY_UNKNOWN`), because the configuration lives there.
+     */
+    attendanceDay: CongressDaySchema.optional(),
+    /**
+     * 044 EARS-34 — `marked`: rows marked present on `attendanceDay`;
+     * `unmarked`: every other row (no mark, or a cleared one). Meaningless
+     * without a day, so it is refused without one.
+     */
+    present: z.enum(["marked", "unmarked"]).optional(),
+  })
+  .refine((q) => q.present === undefined || q.attendanceDay !== undefined, {
+    message: "present requires attendanceDay",
+    path: ["present"],
+  });
 export type CongressRosterQuery = z.infer<typeof CongressRosterQuerySchema>;
 
 /**
@@ -81,6 +102,11 @@ export const CongressRosterRowSchema = z.object({
   registeredAt: z.iso.datetime(),
   /** 044 EARS-27 — the confirmation-letter outcome; `null` before any attempt. */
   confirmationMailStatus: z.enum(["sent", "failed"]).nullable(),
+  /**
+   * 044 EARS-34 — one entry per configured congress day, in day order; a day
+   * nobody marked reads `present: false`.
+   */
+  attendance: z.array(CongressDayAttendanceSchema),
 });
 export type CongressRosterRow = z.infer<typeof CongressRosterRowSchema>;
 
@@ -101,5 +127,10 @@ export const CongressRosterListSchema = z.object({
   /** Rows matching `q` across the WHOLE event — the pager's denominator. */
   total: z.number().int().min(0),
   event: CongressRosterEventSchema,
+  /**
+   * 044 EARS-34 — the configured congress days (ascending), so the screen can
+   * render one attendance box per day without a second call.
+   */
+  congressDays: z.array(CongressDaySchema),
 });
 export type CongressRosterList = z.infer<typeof CongressRosterListSchema>;

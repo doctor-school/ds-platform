@@ -7,6 +7,10 @@ import {
   CongressRosterQuerySchema,
   CongressRosterRowSchema,
 } from "./congress-roster.schema.js";
+import {
+  CongressAttendanceParamsSchema,
+  CongressAttendanceRequestSchema,
+} from "./congress-attendance.schema.js";
 
 /**
  * 044 EARS-18 — the contract of the admin roster read, asserted where it is
@@ -27,6 +31,10 @@ const ROW = {
   email: "a@ds.test",
   registeredAt: "2026-11-01T07:00:00.000Z",
   confirmationMailStatus: "sent" as const,
+  attendance: [
+    { day: "2027-04-23", present: true },
+    { day: "2027-04-24", present: false },
+  ],
 };
 
 describe("CongressRosterQuerySchema", () => {
@@ -133,6 +141,7 @@ describe("CongressRosterListSchema", () => {
         title: "Конгресс-2027",
         startsAt: "2026-11-20T09:00:00.000Z",
       },
+      congressDays: ["2027-04-23", "2027-04-24"],
     };
     expect(CongressRosterListSchema.parse(list)).toEqual(list);
   });
@@ -149,6 +158,7 @@ describe("CongressRosterListSchema", () => {
         title: "Конгресс-2027",
         startsAt: "2026-11-20T09:00:00.000Z",
       },
+      congressDays: ["2027-04-23", "2027-04-24"],
     });
     expect(parsed.items).toEqual([]);
     expect(parsed.total).toBe(0);
@@ -167,6 +177,74 @@ describe("CongressRosterListSchema", () => {
           title: "Конгресс-2027",
           startsAt: "2026-11-20T09:00:00.000Z",
         },
+        congressDays: [],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("044 EARS-34 — attendance on the roster contract", () => {
+  it("044 EARS-34.9: the query takes attendanceDay + present, and present alone is refused", () => {
+    expect(
+      CongressRosterQuerySchema.parse({
+        attendanceDay: "2027-04-23",
+        present: "marked",
+      }),
+    ).toMatchObject({ attendanceDay: "2027-04-23", present: "marked" });
+    expect(
+      CongressRosterQuerySchema.parse({ attendanceDay: "2027-04-23" }),
+    ).toMatchObject({ attendanceDay: "2027-04-23" });
+    expect(
+      CongressRosterQuerySchema.safeParse({ present: "unmarked" }).success,
+    ).toBe(false);
+    expect(
+      CongressRosterQuerySchema.safeParse({
+        attendanceDay: "2027-04-23",
+        present: "yes",
+      }).success,
+    ).toBe(false);
+    expect(
+      CongressRosterQuerySchema.safeParse({ attendanceDay: "23.04.2027" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("044 EARS-34.10: a row's attendance is a list of { day, present } — a non-date day is refused", () => {
+    expect(
+      CongressRosterRowSchema.safeParse({
+        ...ROW,
+        attendance: [{ day: "2027-04-31", present: true }],
+      }).success,
+    ).toBe(false);
+    expect(
+      CongressRosterRowSchema.safeParse({ ...ROW, attendance: undefined })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("044 EARS-34 — the attendance mark contract", () => {
+  it("044 EARS-34.11: the body is exactly { present: boolean } and the path day is an ISO date", () => {
+    expect(CongressAttendanceRequestSchema.parse({ present: false })).toEqual({
+      present: false,
+    });
+    expect(
+      CongressAttendanceRequestSchema.safeParse({ present: "true" }).success,
+    ).toBe(false);
+    expect(
+      CongressAttendanceRequestSchema.safeParse({ present: true, day: "x" })
+        .success,
+    ).toBe(false);
+    expect(
+      CongressAttendanceParamsSchema.safeParse({
+        registrationId: ROW.registrationId,
+        day: "2027-04-23",
+      }).success,
+    ).toBe(true);
+    expect(
+      CongressAttendanceParamsSchema.safeParse({
+        registrationId: ROW.registrationId,
+        day: "2027-04-23T00:00:00Z",
       }).success,
     ).toBe(false);
   });

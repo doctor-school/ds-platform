@@ -117,6 +117,18 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "congress/desk-registration.e2e: 044 EARS-35.1 a registrar bound to the event enters a walk-in — one auth.register row for the new account, and the registration's data-ledger row names the registrar",
     },
+    // 044 EARS-34 (#2381) — the registrar's per-day attendance mark. It is not
+    // an auth event: WHO marked the participant present, and when, is the 010
+    // data ledger's `data.registration_attendance.*` row (actor = the
+    // registrar, source = admin-ui), asserted by attendance.e2e EARS-34.1/.2,
+    // and a no-op write appends none (EARS-34.3).
+    "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day": {
+      noneBySpec: {
+        reason:
+          "The attendance mark changes no identity, session or credential, so it owes no AuthAuditEvent; its trail is the 010 universal-edit-audit row the registration_attendance trigger appends, attributed to the acting registrar.",
+        spec: "044 EARS-34 (who/when is the 010 ledger's job; no author/time columns)",
+      },
+    },
     "POST /v1/storefront/doctor/confirm": {
       // 021 EARS-10 (#1546): the doctor-host confirm command delegates the
       // verification itself to the 003 `AuthService.verify` command site

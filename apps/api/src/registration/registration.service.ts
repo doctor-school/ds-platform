@@ -206,12 +206,14 @@ export class RegistrationService {
   async eventRosterPage(
     idOrSlug: string,
     query: CongressRosterQuery,
+    congressDays: readonly string[],
   ): Promise<CongressRosterList> {
     const event = await this.repo.findEventHeader(idOrSlug);
     if (!event) throw new RegistrationEventNotFoundError(idOrSlug);
     const { items, total } = await this.repo.findEventRosterPage(
       event.id,
       query,
+      congressDays,
     );
     return {
       items,
@@ -224,6 +226,7 @@ export class RegistrationService {
         title: event.title,
         startsAt: event.startsAt.toISOString(),
       },
+      congressDays: [...congressDays],
     };
   }
 

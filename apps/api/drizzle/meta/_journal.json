@@ -288,6 +288,13 @@
       "when": 1790569828226,
       "tag": "0040_desk_registration_origins",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790577458721,
+      "tag": "0041_registration_attendance",
+      "breakpoints": true
     }
   ]
 }

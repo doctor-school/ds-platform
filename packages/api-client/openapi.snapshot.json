@@ -52,6 +52,35 @@
         "required": ["provider", "embedRef"],
         "type": "object"
       },
+      "CongressAttendanceRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "present": {
+            "type": "boolean"
+          }
+        },
+        "required": ["present"],
+        "type": "object"
+      },
+      "CongressAttendanceResponseDto": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "registrationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": ["registrationId", "day", "present"],
+        "type": "object"
+      },
       "CongressDeskRegistrationRequestDto": {
         "properties": {
           "city": {
@@ -136,6 +165,14 @@
       },
       "CongressRosterListDto": {
         "properties": {
+          "congressDays": {
+            "items": {
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "event": {
             "properties": {
               "id": {
@@ -161,6 +198,23 @@
           "items": {
             "items": {
               "properties": {
+                "attendance": {
+                  "items": {
+                    "properties": {
+                      "day": {
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                        "type": "string"
+                      },
+                      "present": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["day", "present"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
                 "city": {
                   "anyOf": [
                     {
@@ -256,7 +310,8 @@
                 "phone",
                 "email",
                 "registeredAt",
-                "confirmationMailStatus"
+                "confirmationMailStatus",
+                "attendance"
               ],
               "type": "object"
             },
@@ -278,7 +333,14 @@
             "type": "integer"
           }
         },
-        "required": ["items", "page", "pageSize", "total", "event"],
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total",
+          "event",
+          "congressDays"
+        ],
         "type": "object"
       },
       "CongressSignUpRequestDto": {
@@ -3442,6 +3504,60 @@
         "tags": ["DeskRegistrationAdmin"]
       }
     },
+    "/v1/admin/events/{idOrSlug}/registrations/{registrationId}/attendance/{day}": {
+      "put": {
+        "operationId": "AttendanceAdminController_mark",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "registrationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CongressAttendanceRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CongressAttendanceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["AttendanceAdmin"]
+      }
+    },
     "/v1/admin/events/{idOrSlug}/roster": {
       "get": {
         "operationId": "EventRosterAdminController_roster",
@@ -3450,6 +3566,23 @@
             "in": "path",
             "name": "idOrSlug",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "present",
+            "required": false,
+            "schema": {
+              "enum": ["marked", "unmarked"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attendanceDay",
+            "required": false,
             "schema": {
               "type": "string"
             }

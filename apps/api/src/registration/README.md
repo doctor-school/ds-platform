@@ -157,6 +157,38 @@ never a widening of the one above:
     and account rows to the acting registrar (`actor_sub`) with source
     `admin-ui`; the desk writes no author column of its own.
 
+- `PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day`
+  (`AttendanceAdminController` → `CongressAttendanceService.mark`, 044 EARS-34)
+  — the registrar marks one participant present on one congress day, or clears
+  the mark. Body `{ present: boolean }`; response
+  `{ registrationId, day, present }` (`CongressAttendance*Schema`).
+  - **Storage.** `registration_attendance(registration_id, day, present)`,
+    PK `(registration_id, day)` — 23 April and 24 April are independent rows,
+    and a day nobody marked has no row (it reads «not present»). No author or
+    time column: who marked it, and when, is the 010 ledger's
+    `data.registration_attendance.insert|update` row (actor = the registrar,
+    source `admin-ui`), appended by the table's `audit_row_change()` trigger.
+  - **Idempotent; a no-op writes no ledger row.** `present: true` is an upsert
+    whose `DO UPDATE` fires only when the stored value differs;
+    `present: false` updates only an existing `true` row. Writing the value the
+    day already holds answers 200 and touches nothing — so the ledger records
+    changes, not clicks.
+  - **Days source.** The allowed days are the deployment's
+    `CONGRESS_SIGNUP_EVENT_DAYS` (read per call through the congress module's
+    env reader, `apps/api/src/congress/README.md`), not a DB CHECK. Any other
+    date is 422 `CONGRESS_DAY_UNKNOWN`; a malformed date, id or body is 400; the
+    key unset or malformed is 503 `CONGRESS_DAYS_UNCONFIGURED` (server log
+    names the reason).
+  - **Scope.** The registration must belong to the route's event — another
+    event's registration (or an unknown id / event) is 404, never revealed.
+    Authorization is the desk registration's row: `check: "policy"` +
+    `assertEventAccess` first, `audit: "high-stakes"`, `revalidate: "live"`.
+  - **Roster.** `GET …/roster` returns `congressDays` (the configured days) and
+    each row's `attendance: [{ day, present }]` for those days, and filters by
+    `attendanceDay=<day>&present=marked|unmarked` — an `EXISTS` over
+    `registration_attendance` composed with `q` and paging. `present` without
+    `attendanceDay` is 400; a non-congress `attendanceDay` is 422.
+
 ### Binding a registrar to an event (runbook, until #2378)
 
 There is no grants screen yet (#2378). On the product owner's request the tech

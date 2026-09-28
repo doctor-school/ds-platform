@@ -88,6 +88,8 @@ export type AuthFlowCopy = {
   readonly register: AuthFlowRegisterCopy;
   /** The confirmation step, wherever a host runs it (rows 65–77). */
   readonly verify: AuthFlowVerifyCopy;
+  /** Password recovery, both stages (rows 78–85). */
+  readonly reset: AuthFlowResetCopy;
   /** The brand panel's value prop and closing line in the shared auth frame (row 47). */
   readonly brand: AuthFlowBrandCopy;
   /**
@@ -344,6 +346,50 @@ export type AuthFlowVerifyCopy = {
    * Template with `{destination}` — the resend acknowledgement, which states no
    * account fact: it says what WOULD have been sent, never that an account
    * exists (003 EARS-16).
+   */
+  readonly resendAcknowledged: string;
+};
+
+/**
+ * Password recovery's words (rows 78–85) — the canvas «Сброс» screen, one
+ * dictionary on every host: both storefronts mount the same door, and a host
+ * varies only the SET of fields it asks for, never these sentences.
+ */
+export type AuthFlowResetCopy = {
+  /** Request stage (canvas `titles.reset`, request branch). */
+  readonly title: string;
+  readonly description: string;
+  readonly identifierLabel: string;
+  readonly identifierPlaceholder: string;
+  readonly submit: string;
+  /** Complete stage (canvas `titles.reset`, complete branch). */
+  readonly completeTitle: string;
+  /** Template with `{destination}` — the masked address the code went to. */
+  readonly completeDescription: string;
+  readonly codeLabel: string;
+  readonly newPasswordLabel: string;
+  /** The persistent length hint under the new-password field. */
+  readonly passwordHint: string;
+  /** 003 EARS-38 — the reveal toggle on the new-password field. */
+  readonly reveal: {
+    readonly show: string;
+    readonly hide: string;
+    readonly showAria: string;
+    readonly hideAria: string;
+  };
+  readonly completeSubmit: string;
+  readonly startOver: string;
+  readonly resend: string;
+  /** Template with `{seconds}`. */
+  readonly resendCountdown: string;
+  readonly backToSignIn: string;
+  /** The per-action generics for a refused initiate / completion / resend (row 84). */
+  readonly requestFailed: string;
+  readonly completeFailed: string;
+  readonly resendFailed: string;
+  /**
+   * Template with `{destination}` — the resend acknowledgement, phrased
+   * conditionally so it states no account fact (003 EARS-16, #326).
    */
   readonly resendAcknowledged: string;
 };

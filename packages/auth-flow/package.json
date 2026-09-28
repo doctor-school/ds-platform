@@ -19,7 +19,9 @@
     "./register": "./src/register/index.ts",
     "./register/route": "./src/register/register-route.tsx",
     "./verify": "./src/verify/index.ts",
-    "./verify/route": "./src/verify/verify-route.tsx"
+    "./verify/route": "./src/verify/verify-route.tsx",
+    "./reset": "./src/reset/index.ts",
+    "./reset/route": "./src/reset/reset-route.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

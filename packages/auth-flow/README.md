@@ -29,6 +29,8 @@ uses, so nothing can reach the whole flow through one export (PR 1.1 rework D20)
 | `@ds/auth-flow/register`       | The sign-up door (#2027 PR 1.6): `RegisterDoor`, `RegistrationConfirmation` (the doctor host's inline mount of `VerifyDoor`), `resolveConfirmLanding`, `RegisterGlyph`.                                                                                                                                                                                                                                                                                             |
 | `@ds/auth-flow/verify`         | The confirmation step (#2027 PR 1.7), one body on both hosts — the canvas «Подтверждение» screen: `VerifyDoor`, `VerifyEntry` / `VerifyAddressGate` + `VerifyStep` (the `?email=` / `#email=` seed, `verify.deepLinkEntry`; with neither, a replace onto `/register` carrying `returnTo`, nothing painted — 003 EARS-40), `VerifyGlyph`, `VERIFY_TEST_IDS`.                                                                                                         |
 | `@ds/auth-flow/verify/route`   | `VerifyRoute` — the ONE server mount of that step for a host that serves `routes.verify`: `guardAuthRoute`, the landing, the return-context panel, then the step.                                                                                                                                                                                                                                                                                                   |
+| `@ds/auth-flow/reset`          | The password-recovery flow (#2027 PR 1.8), one body on both hosts — the canvas «Сброс» screen: `ResetDoor` (both stages over `PasswordRecoveryCard`), `ResetGlyph`.                                                                                                                                                                                                                                                                                                 |
+| `@ds/auth-flow/reset/route`    | `ResetRoute` — the ONE server mount of recovery: `guardAuthRoute` (let through by `routes.allowAuthenticated`), the carried exit and the post-reset landing, then the door.                                                                                                                                                                                                                                                                                         |
 | `@ds/auth-flow/register/route` | `RegisterRoute` — the ONE server mount of that door: `guardAuthRoute`, the confirm landing, then the door.                                                                                                                                                                                                                                                                                                                                                          |
 
 The bot-protection WIDGET, its resume-one-action orchestration
@@ -162,8 +164,9 @@ not one of the two. The host's default landing applies exactly when the arrival
 carried nothing, or carried something the guards refuse. On the Academy that
 resolver is `completeReturnTarget` (it also completes a carried 005 registration
 intent); on the doctor storefront it is `resolveReturnLandingPath`. `/reset` keeps
-`/account` as its own no-target default (#221), which is why the raw value is
-screened before the shared rule is asked.
+`routes.account` as its own no-target default (#221): `ResetRoute` projects the
+arrival through `resolveReturnLandingPath` on both hosts, and only a target that
+survives is completed through the shared rule.
 
 **S5 — a confirmation that yields a session NAVIGATES; it does not paint a screen.**
 When an email confirmation (or any verify step) completes and the visitor holds a

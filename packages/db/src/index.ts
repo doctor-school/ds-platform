@@ -9,3 +9,5 @@ export type {
   AuditSource,
   AuditTransactionConfig,
 } from "./audit-context.js";
+export { findEventGrant, listEventGrantsBySub } from "./event-grants.js";
+export type { EventGrantBinding } from "./event-grants.js";

@@ -1,9 +1,11 @@
 "use client";
 
-import type {
-  AdminAuthState,
-  AdminAuthStateResponse,
-  AdminEnrollmentOffer,
+import {
+  AdminSessionResponseSchema,
+  type AdminAuthState,
+  type AdminAuthStateResponse,
+  type AdminEnrollmentOffer,
+  type AdminSessionResponse,
 } from "@ds/schemas";
 
 /**
@@ -75,10 +77,12 @@ function refusal(res: Response): {
  */
 export function adminCsrfHeaders(): Record<string, string> {
   if (typeof document === "undefined") return {};
-  const match = new RegExp(
-    `(?:^|; )${ADMIN_CSRF_COOKIE_NAME}=([^;]*)`,
-  ).exec(document.cookie);
-  return match?.[1] ? { [ADMIN_CSRF_HEADER]: decodeURIComponent(match[1]) } : {};
+  const match = new RegExp(`(?:^|; )${ADMIN_CSRF_COOKIE_NAME}=([^;]*)`).exec(
+    document.cookie,
+  );
+  return match?.[1]
+    ? { [ADMIN_CSRF_HEADER]: decodeURIComponent(match[1]) }
+    : {};
 }
 
 /**
@@ -107,6 +111,29 @@ export async function readAdminAuthState(): Promise<AdminAuthState> {
 }
 
 /**
+ * 044 EARS-20: the signed-in principal's own roles and event bindings
+ * (`GET /v1/admin/auth/session`, reachable only with a live admin session).
+ *
+ * The admin chrome draws its navigation from this read (`lib/admin-access.ts`);
+ * the server refusal (EARS-19/38) stays the authority. Any transport fault, a
+ * non-2xx answer or a body outside the contract resolves `null` — the fail-closed
+ * answer, which draws no section at all rather than guessing one.
+ */
+export async function readAdminSession(): Promise<AdminSessionResponse | null> {
+  try {
+    const res = await fetch(`${ADMIN_AUTH_BASE}/session`, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const parsed = AdminSessionResponseSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 011 EARS-3: primary password authentication at the admin origin.
  *
  * It issues **no session** — success means a short-lived pending authentication
@@ -118,10 +145,7 @@ export async function adminLogin(
   password: string,
 ): Promise<
   AdminAuthResult<
-    Extract<
-      AdminAuthState,
-      "mfa_pending_enrollment" | "mfa_pending_challenge"
-    >
+    Extract<AdminAuthState, "mfa_pending_enrollment" | "mfa_pending_challenge">
   >
 > {
   const res = await fetch(`${ADMIN_AUTH_BASE}/login`, {

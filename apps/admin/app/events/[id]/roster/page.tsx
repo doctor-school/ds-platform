@@ -19,6 +19,7 @@ import {
   type CongressRosterCells,
 } from "@/lib/congress-roster";
 import { formatMskDateTime } from "@/lib/msk";
+import { useAdminAccess } from "@/lib/use-admin-access";
 import { congressRosterUrl } from "@/providers/data-provider";
 
 /**
@@ -42,6 +43,7 @@ export default function CongressRosterPage() {
   const t = useTranslations();
   const params = useParams();
   const eventId = String(params.id);
+  const access = useAdminAccess();
   const [query, setQuery] = useState<AdminDataListQueryState<never>>(
     ADMIN_DATA_LIST_INITIAL_QUERY,
   );
@@ -98,10 +100,15 @@ export default function CongressRosterPage() {
     <Authenticated key="congress-roster" redirectOnFail="/login">
       <AppShell>
         <div className="flex flex-col gap-6">
-          <BackToList
-            href={`/events/${eventId}`}
-            label={t("congressRoster.backToEvent")}
-          />
+          {/* 044 EARS-20: the way back to the event detail exists only for a
+              principal who may open that detail — a congress registrar may not,
+              and its admin offers no event link at all. */}
+          {access?.full ? (
+            <BackToList
+              href={`/events/${eventId}`}
+              label={t("congressRoster.backToEvent")}
+            />
+          ) : null}
           <AdminDataList<Row, never>
             title={t("congressRoster.listTitle")}
             description={

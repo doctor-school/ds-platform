@@ -25,7 +25,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 /** The coarse congress role (044 EARS-17) whose reach this suite fences. */
 const REGISTRAR = "event-registrar";
@@ -124,6 +127,27 @@ describe("044 EARS-19 — the event-registrar denial set (route classification)"
     const discovered = new Set(rows.map((r) => r.endpoint));
     const missing = SESSION_HOLD_ROUTES.filter((e) => !discovered.has(e));
     expect(missing).toEqual([]);
+  });
+
+  it("044 EARS-38.6: every registrar-reachable route outside the session-hold set is a resource-scoped policy row — the role alone never admits a desk route", () => {
+    // EARS-38 makes the role necessary but not sufficient: each desk route
+    // must run the event-binding step. The matrix records that shape as
+    // `auth_check: policy` WITHOUT `object_attrs` (044-design «Authorization
+    // boundary», amendment 2026-09-25). A future desk route classified
+    // `fast-path` would admit a registrar of ANY event — this sweep is the
+    // structural fence against it.
+    const sessionHold = new Set(SESSION_HOLD_ROUTES);
+    const desk = rows.filter(
+      (r) => rolesOf(r).includes(REGISTRAR) && !sessionHold.has(r.endpoint),
+    );
+    // Anti-vacuity: the roster route is real and is in this set.
+    expect(desk.map((r) => r.endpoint)).toContain(
+      "GET /v1/admin/events/:idOrSlug/roster",
+    );
+    for (const row of desk) {
+      expect(row.meta.check, row.endpoint).toBe("policy");
+      expect(row.meta.objectAttrs ?? [], row.endpoint).toEqual([]);
+    }
   });
 });
 
@@ -365,7 +389,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         headers: sessionHeaders,
       });
       expect(session.statusCode).toBe(200);
-      expect(session.json()).toEqual({ roles: [REGISTRAR] });
+      // No binding row → the grant list is empty (EARS-38), never absent.
+      expect(session.json()).toEqual({ roles: [REGISTRAR], eventGrants: [] });
 
       const logout = await app.inject({
         method: "POST",
@@ -382,6 +407,165 @@ describe.skipIf(!process.env.DATABASE_URL)(
         headers: sessionHeaders,
       });
       expect([401, 403]).toContain(after.statusCode);
+    }, 30_000);
+
+    // ── 044 EARS-38 — the registrar is bound to ONE event (V-28) ──────────────
+
+    const createdEvents: string[] = [];
+
+    afterEach(async () => {
+      for (const id of createdEvents.splice(0))
+        await deleteEventFixture(pool, id);
+    });
+
+    /** A congress event fixture; the roster reads it in any lifecycle state. */
+    async function insertEvent(label: string): Promise<{
+      id: string;
+      slug: string;
+    }> {
+      const id = randomUUID();
+      const slug = `ears38-${label}-${id.slice(0, 8)}`;
+      await pool.query(
+        `INSERT INTO events
+           (id, slug, title, school, starts_at, duration_min, description,
+            specialties, partner_ref, program_pdf_ref, state,
+            participation_format)
+         VALUES ($1,$2,$3,'Конгресс','2026-11-20T09:00:00.000Z',480,
+                 'Конгресс.', ARRAY['cardiology'], 'sponsor:congress', NULL,
+                 'published', 'offline')`,
+        [id, slug, `Конгресс ${label}`],
+      );
+      createdEvents.push(id);
+      return { id, slug };
+    }
+
+    /**
+     * The grant as the tech lead inserts it until #2378: a plain row, written
+     * outside any API request (so 010 records it as `db-direct`).
+     */
+    async function grant(sub: string, eventId: string): Promise<void> {
+      await pool.query(
+        `INSERT INTO event_role_grants (user_id, role, event_id)
+         SELECT id, 'event-registrar', $2 FROM users WHERE zitadel_sub = $1`,
+        [sub, eventId],
+      );
+    }
+
+    async function registrarSession(
+      prefix: string,
+      boundTo?: string,
+    ): Promise<Record<string, string>> {
+      const { email, sub } = await registerRegistrar(prefix);
+      if (boundTo) await grant(sub, boundTo);
+      const admin = await establishAdminSession(app, {
+        identifier: email,
+        password,
+        device: ADMIN_DEVICE,
+      });
+      return admin.headers;
+    }
+
+    async function get(
+      headers: Record<string, string>,
+      url: string,
+    ): Promise<{ statusCode: number; json: () => unknown }> {
+      return app.inject({ method: "GET", url, headers });
+    }
+
+    it("044 EARS-38.1: a registrar with the role but no binding row is refused every roster, the events list included, and keeps only its session", async () => {
+      const a = await insertEvent("a");
+      const headers = await registrarSession("grantless");
+
+      for (const url of [
+        `/v1/admin/events/${a.slug}/roster`,
+        `/v1/admin/events/${a.id}/roster`,
+        "/v1/admin/events",
+      ]) {
+        expect((await get(headers, url)).statusCode, url).toBe(403);
+      }
+      // The session endpoints stay reachable — the principal can still hold,
+      // read back and end its session.
+      const session = await get(headers, "/v1/admin/auth/session");
+      expect(session.statusCode).toBe(200);
+      expect(session.json()).toEqual({ roles: [REGISTRAR], eventGrants: [] });
+    }, 30_000);
+
+    it("044 EARS-38.2: a registrar bound to event A is refused the roster of event B, an unknown event and the events list", async () => {
+      const a = await insertEvent("a");
+      const b = await insertEvent("b");
+      const headers = await registrarSession("other-event", a.id);
+
+      for (const url of [
+        `/v1/admin/events/${b.slug}/roster`,
+        `/v1/admin/events/${b.id}/roster`,
+        // An event that does not exist is refused exactly like another one: the
+        // registrar learns nothing about which other events exist.
+        `/v1/admin/events/no-such-congress-${randomUUID().slice(0, 8)}/roster`,
+        "/v1/admin/events",
+      ]) {
+        expect((await get(headers, url)).statusCode, url).toBe(403);
+      }
+    }, 30_000);
+
+    it("044 EARS-38.3: a registrar bound to event A reads the roster of A, by slug and by id (V-28)", async () => {
+      const a = await insertEvent("a");
+      const headers = await registrarSession("bound", a.id);
+
+      for (const key of [a.slug, a.id]) {
+        const res = await get(headers, `/v1/admin/events/${key}/roster`);
+        expect(res.statusCode, key).toBe(200);
+        const body = res.json() as { event: { id: string }; total: number };
+        expect(body.event.id).toBe(a.id);
+        expect(body.total).toBe(0);
+      }
+    }, 30_000);
+
+    it("044 EARS-38.4: the platform administrator is not limited by any binding — it reads the roster of any event", async () => {
+      const a = await insertEvent("a");
+      const b = await insertEvent("b");
+      const email = uniqueEmail("admin");
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const { rows } = await pool.query<{ zitadel_sub: string }>(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
+      const admin = await establishAdminSession(app, {
+        identifier: email,
+        password,
+        device: ADMIN_DEVICE,
+      });
+
+      for (const e of [a, b]) {
+        const res = await get(
+          admin.headers,
+          `/v1/admin/events/${e.slug}/roster`,
+        );
+        expect(res.statusCode, e.slug).toBe(200);
+      }
+      // …and an unknown event stays the honest 404 for the administrator.
+      const unknown = await get(
+        admin.headers,
+        `/v1/admin/events/no-such-congress-${randomUUID().slice(0, 8)}/roster`,
+      );
+      expect(unknown.statusCode).toBe(404);
+    }, 30_000);
+
+    it("044 EARS-38.5: the admin session read carries the principal's event binding — role, event id and slug — for the admin navigation", async () => {
+      const a = await insertEvent("a");
+      const headers = await registrarSession("session-grant", a.id);
+
+      const session = await get(headers, "/v1/admin/auth/session");
+      expect(session.statusCode).toBe(200);
+      expect(session.json()).toEqual({
+        roles: [REGISTRAR],
+        eventGrants: [{ role: REGISTRAR, eventId: a.id, eventSlug: a.slug }],
+      });
     }, 30_000);
   },
 );

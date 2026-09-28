@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  readAdminSession,
   startMfaEnrollment,
   verifyMfaChallenge,
   verifyMfaEnrollment,
@@ -110,5 +111,32 @@ describe("MFA enrollment start — refusal mapping", () => {
     });
     const result = await startMfaEnrollment();
     expect(result).toMatchObject({ ok: true });
+  });
+});
+
+describe("044 EARS-20 session read — the navigation's input", () => {
+  it("044 EARS-20.5: a contract-shaped answer is read back; a refusal or an off-contract body fails closed", async () => {
+    const session = {
+      roles: ["event-registrar"],
+      eventGrants: [
+        {
+          role: "event-registrar",
+          eventId: "0b5f7c1e-4c1a-4e7e-9a55-0a4f2d9b1a0a",
+          eventSlug: "congress-a",
+        },
+      ],
+    };
+    const stub = respondWith(200, session);
+    expect(await readAdminSession()).toEqual(session);
+    expect(stub).toHaveBeenCalledWith(
+      "/v1/admin/auth/session",
+      expect.objectContaining({ credentials: "include" }),
+    );
+
+    respondWith(401);
+    expect(await readAdminSession()).toBeNull();
+
+    respondWith(200, { roles: ["platform_admin"] });
+    expect(await readAdminSession()).toBeNull();
   });
 });

@@ -21,6 +21,7 @@
     "./input-otp": "./src/primitives/input-otp.tsx",
     "./tabs": "./src/primitives/tabs.tsx",
     "./dialog": "./src/primitives/dialog.tsx",
+    "./sheet": "./src/primitives/sheet.tsx",
     "./alert-dialog": "./src/primitives/alert-dialog.tsx",
     "./textarea": "./src/primitives/textarea.tsx",
     "./media-dropzone": "./src/primitives/media-dropzone.tsx",

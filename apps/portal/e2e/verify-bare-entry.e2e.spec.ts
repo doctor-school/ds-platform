@@ -34,13 +34,15 @@ test.describe("003 EARS-40 — /verify without an address goes to /register", ()
     ).toBeLessThanOrEqual(2);
   });
 
-  test("EARS-40: the server HTML of a bare /verify carries no step to flash", async ({
+  test("EARS-40: the server HTML of a bare /verify carries no step and no shell to flash", async ({
     request,
   }) => {
     const html = await (await request.get("/verify")).text();
 
     expect(html).not.toContain('data-testid="verify-card"');
     expect(html).not.toContain("ваш аккаунт");
+    // Nor the frame: the shell (its wordmark) sits inside the client gate.
+    expect(html).not.toContain('data-testid="auth-wordmark"');
   });
 
   test("EARS-40: a bare /verify carries its returnTo onward to /register", async ({
@@ -73,6 +75,7 @@ test.describe("003 EARS-40 — /verify without an address goes to /register", ()
       await page.request.get("/verify?email=doc%40example.com")
     ).text();
     expect(html).toContain('data-testid="verify-card"');
+    expect(html).toContain('data-testid="auth-wordmark"');
 
     await page.goto("/verify?email=doc%40example.com");
 

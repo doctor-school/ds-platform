@@ -1,43 +1,49 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
 import { VerifyDoor } from "./verify-door";
 
+/** The resolved address, handed from the gate to the step inside the shell. */
+const VerifyAddressContext = createContext<string | null>(null);
+
 /**
- * The client half of `VerifyRoute` — where the confirmation surface learns
+ * The client gate of `VerifyRoute` — where the confirmation surface learns
  * WHICH address it confirms (003 EARS-24, #904).
  *
  * The same-tab hop from the registration door carries `?email=`, read by the
- * server mount. The verification MAIL's button opens `/verify#email=<addr>`
- * instead: the address rides the URL FRAGMENT, which the browser never sends to
- * the server (the #869 scanner-prefetch invariant), so a cold open is seeded
- * here, after mount, and only on a host whose mail links in
+ * server mount. The `/verify#email=<addr>` deep link carries the address in the
+ * URL FRAGMENT, which the browser never sends to the server, so a cold open is
+ * seeded here, after mount, and only on a host that serves deep-link entry
  * (`verify.deepLinkEntry`). The query wins when both are present.
  *
  * 003 EARS-40 (#2394) — with neither there is nothing to confirm: the visitor
  * is REPLACED onto the registration door, carrying a same-origin `returnTo`
- * onward. Only the browser can see the fragment, so this decision is taken
- * here, once the seed is read; until then the step renders nothing, so no
- * address-less card is ever painted.
+ * onward. Only the browser can see the fragment, so the decision is taken
+ * here, once the fragment has been read. The gate wraps the WHOLE route frame
+ * (the shell and its return-context panel included), and renders nothing until
+ * an address is known — a bare `/verify` paints no page before it leaves.
  */
-export function VerifyEntry({
+export function VerifyAddressGate({
   config,
   email,
-  landing,
   returnTo,
-  returnContextPlate,
+  children,
 }: {
   config: AuthFlowHostConfig;
   email?: string | undefined;
-  landing: string;
-  /** The RAW arrival `returnTo`; guarded at every consumption point. */
+  /** The RAW arrival `returnTo`; guarded by `withReturnTarget`. */
   returnTo: string | null;
-  /** 021 EARS-2 — the mobile plate the server mount resolved; passed through. */
-  returnContextPlate?: ReactNode;
+  children: ReactNode;
 }) {
   const router = useRouter();
   const deepLinkEntry = config.verify.deepLinkEntry;
@@ -56,7 +62,33 @@ export function VerifyEntry({
 
   const address = email ?? fragmentEmail;
   if (!address) return null;
+  return (
+    <VerifyAddressContext.Provider value={address}>
+      {children}
+    </VerifyAddressContext.Provider>
+  );
+}
 
+/**
+ * The confirmation step inside the gate's frame: the `VerifyDoor` over the
+ * address the gate resolved. Outside a gate it renders nothing — there is no
+ * address-less step (003 EARS-40).
+ */
+export function VerifyStep({
+  config,
+  landing,
+  returnTo,
+  returnContextPlate,
+}: {
+  config: AuthFlowHostConfig;
+  landing: string;
+  /** The RAW arrival `returnTo`; guarded at every consumption point. */
+  returnTo: string | null;
+  /** 021 EARS-2 — the mobile plate the server mount resolved; passed through. */
+  returnContextPlate?: ReactNode;
+}) {
+  const address = useContext(VerifyAddressContext);
+  if (!address) return null;
   return (
     <VerifyDoor
       config={config}
@@ -72,7 +104,33 @@ export function VerifyEntry({
   );
 }
 
-/** The mail's `#email=<addr>` fragment, or `undefined` when it carries none. */
+/** The gate and the step with no frame between them — the step on its own. */
+export function VerifyEntry({
+  config,
+  email,
+  landing,
+  returnTo,
+  returnContextPlate,
+}: {
+  config: AuthFlowHostConfig;
+  email?: string | undefined;
+  landing: string;
+  returnTo: string | null;
+  returnContextPlate?: ReactNode;
+}) {
+  return (
+    <VerifyAddressGate config={config} email={email} returnTo={returnTo}>
+      <VerifyStep
+        config={config}
+        landing={landing}
+        returnTo={returnTo}
+        returnContextPlate={returnContextPlate}
+      />
+    </VerifyAddressGate>
+  );
+}
+
+/** The `#email=<addr>` fragment, or `undefined` when it carries none. */
 function fragmentAddress(): string | undefined {
   const hash = window.location.hash;
   if (!hash.startsWith("#")) return undefined;

@@ -448,5 +448,70 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         { day: DAY_2, present: true },
       ]);
     });
+
+    it("044 EARS-34.9: the presence filter pages — a second page under attendanceDay + present carries the remaining marked row and the filtered total", async () => {
+      // State: both Иванова and Петров are marked on 24 April.
+      const first = CongressRosterListSchema.parse(
+        (
+          await roster(
+            registrarA.headers,
+            `attendanceDay=${DAY_2}&present=marked&page=1&pageSize=1`,
+          )
+        ).json(),
+      );
+      const second = CongressRosterListSchema.parse(
+        (
+          await roster(
+            registrarA.headers,
+            `attendanceDay=${DAY_2}&present=marked&page=2&pageSize=1`,
+          )
+        ).json(),
+      );
+
+      expect(first.total).toBe(2);
+      expect(second.total).toBe(2);
+      expect(first.items).toHaveLength(1);
+      expect(second.items).toHaveLength(1);
+      expect(second.page).toBe(2);
+      expect(
+        [first.items[0]!.registrationId, second.items[0]!.registrationId].sort(),
+      ).toEqual([ivanova, petrov].sort());
+
+      const beyond = CongressRosterListSchema.parse(
+        (
+          await roster(
+            registrarA.headers,
+            `attendanceDay=${DAY_2}&present=marked&page=3&pageSize=1`,
+          )
+        ).json(),
+      );
+      expect(beyond.items).toEqual([]);
+      expect(beyond.total).toBe(2);
+    });
+
+    it("044 EARS-34.10: with CONGRESS_SIGNUP_EVENT_DAYS unset the roster and the attendance mark both answer 503 CONGRESS_DAYS_UNCONFIGURED, and nothing is written", async () => {
+      const configured = process.env.CONGRESS_SIGNUP_EVENT_DAYS;
+      const before = await attendanceRows(petrov);
+      const ledgerBefore = await ledgerRows(petrov);
+      delete process.env.CONGRESS_SIGNUP_EVENT_DAYS;
+      try {
+        const rosterRes = await roster(registrarA.headers, "");
+        expect(rosterRes.statusCode, rosterRes.body).toBe(503);
+        expect(rosterRes.json()).toMatchObject({
+          code: "CONGRESS_DAYS_UNCONFIGURED",
+        });
+
+        const markRes = await mark(registrarA.headers, slugA, petrov, DAY_1, false);
+        expect(markRes.statusCode, markRes.body).toBe(503);
+        expect(markRes.json()).toMatchObject({
+          code: "CONGRESS_DAYS_UNCONFIGURED",
+        });
+      } finally {
+        process.env.CONGRESS_SIGNUP_EVENT_DAYS = configured;
+      }
+
+      expect(await attendanceRows(petrov)).toEqual(before);
+      expect(await ledgerRows(petrov)).toEqual(ledgerBefore);
+    });
   },
 );

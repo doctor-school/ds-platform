@@ -163,7 +163,8 @@ Everything below that a wave does not close on its way is owned by **#2075** (st
 
 **Code.**
 
-- [ ] Twin files retired by wave 1: `auth-client`, `auth-error-message`, `bot-protection`, `theme`, `theme-toggle`, `auth-shell`.
+- [ ] Twin files retired by wave 1: `auth-client`, `auth-error-message`, `bot-protection`, `theme-toggle`, `auth-shell`.
+- The `theme` store twin (`apps/{portal,doctor}/lib/theme.ts`, `apps/portal/components/theme-watcher.tsx`) belongs to no wave and no stage-3 item: its owner is the `DEBT.md` line «2026-09-11 PR for #2180 — the theme STORE is a three-copy twin», whose `promote-when` opens the Issue that retires it.
 - [ ] `escapeLike` ×6 in `apps/api` — one helper (#1644), independent of the waves.
 - [ ] `apps/doctor/e2e/support/live-stand-env.ts` twin — one helper under `packages/` or `tools/`.
 - [ ] After wave 4: `apps/doctor/lib` and `apps/portal/lib` contain only allowlisted files; `grep mirror-of` empty.

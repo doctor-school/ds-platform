@@ -147,6 +147,40 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     resendAcknowledged:
       "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
   },
+  // Canvas «Сброс» (`design-source/auth.dc.html` 246-289, 405-443): the two
+  // `titles.reset` branches, the `fResetId` / `fResetPw` labels, the busy
+  // labels, the footer, the notice and the reset `errText()` branches. The
+  // countdown, the failed-resend line and the reveal labels are the canvas
+  // strings the other screens draw; nothing here is host-owned.
+  reset: {
+    title: "Сброс пароля",
+    description: "Укажите e-mail или телефон — пришлём код для сброса.",
+    identifierLabel: "Электронная почта или телефон",
+    identifierPlaceholder: "doctor@example.com или +7…",
+    submit: "Отправить код сброса",
+    completeTitle: "Новый пароль",
+    completeDescription:
+      "Код отправлен на {destination}. Введите его и задайте новый пароль.",
+    codeLabel: "Код из сообщения",
+    newPasswordLabel: "Новый пароль",
+    passwordHint: `Не менее ${PASSWORD_MIN_LENGTH} символов.`,
+    reveal: {
+      show: "Показать",
+      hide: "Скрыть",
+      showAria: "Показать пароль",
+      hideAria: "Скрыть пароль",
+    },
+    completeSubmit: "Задать новый пароль",
+    startOver: "Начать заново",
+    resend: "Отправить снова",
+    resendCountdown: "Отправить снова · {seconds} с",
+    backToSignIn: "← Вернуться ко входу",
+    requestFailed: "Не удалось начать сброс. Попробуйте ещё раз.",
+    completeFailed: "Код не подошёл или пароль отклонён.",
+    resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
+    resendAcknowledged:
+      "Если для {destination} есть аккаунт, мы повторно отправили код.",
+  },
   consents: {
     accessGroupHeading: "Условия доступа",
     medicalWorkerDeclaration: {

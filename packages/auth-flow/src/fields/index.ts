@@ -8,15 +8,12 @@ import {
   type LoginRequest,
   type OtpChannel,
   type OtpRequest,
-  type PasswordResetCompleteRequest,
-  type PasswordResetRequest,
   type RegisterRequest,
 } from "@ds/schemas";
 import type { RegisterCardValues } from "@ds/design-system/blocks";
 import {
   IdentifierFieldSchema,
   NewPasswordFieldSchema,
-  OtpCodeFieldSchema,
   maskPhoneInput,
 } from "@ds/design-system/fields";
 
@@ -72,20 +69,6 @@ export function loginIdentifierFormSchema(
     password: z.string().min(8).max(256),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<LoginRequest, LoginRequest>;
-}
-
-/**
- * 003 EARS-11 password-reset initiate. The same identifier box as sign-in: the
- * reset step resolves the identifier through the same authority, so a value the
- * login box refuses cannot be a recoverable account here either (#196).
- */
-export function resetIdentifierFormSchema(
-  config: AuthFlowHostConfig,
-): z.ZodType<PasswordResetRequest, PasswordResetRequest> {
-  return z.object({
-    identifier: identifierFieldSchema(config),
-    captchaToken: z.string().optional(),
-  }) as unknown as z.ZodType<PasswordResetRequest, PasswordResetRequest>;
 }
 
 /**
@@ -159,22 +142,6 @@ export function registerCardFormSchema(
     consents: z.record(z.string(), z.boolean()).optional(),
   }) as unknown as z.ZodType<RegisterCardValues, RegisterCardValues>;
 }
-
-/**
- * 003 EARS-12 password-reset COMPLETE. Channel-free by contract: this step is
- * reached with the identifier the request step already accepted, so it re-uses
- * the union box rather than re-deciding the channel, and composes `newPassword`
- * from the message-less {@link NewPasswordFieldSchema} (→ RU copy, #200) and
- * `code` from {@link OtpCodeFieldSchema}.
- */
-export const ResetCompleteFormSchema = z.object({
-  identifier: IdentifierFieldSchema,
-  code: OtpCodeFieldSchema,
-  newPassword: NewPasswordFieldSchema,
-}) as unknown as z.ZodType<
-  PasswordResetCompleteRequest,
-  PasswordResetCompleteRequest
->;
 
 /** The react-hook-form `rules` object one registration field binds. */
 export interface RegisterFieldRules {

@@ -20,8 +20,9 @@ import {
  * resolves the identifier itself (003 design §2). This file reuses the EXACT
  * `z.email()` / `E164` shapes from `@ds/schemas` so the portal agrees with the
  * server, but applies them only as the form guard, exactly as the prior
- * `lib/identifier-validation.ts` did. The localized resolver
- * (`lib/use-localized-resolver.ts`) maps these issues to RU copy by code/shape.
+ * `lib/identifier-validation.ts` did. The consuming form resolver (the
+ * `@ds/auth-flow` field rules, the admin's `lib/use-localized-resolver.ts`) maps
+ * these issues to RU copy.
  */
 
 /** Email field shape — the `z.email()` SSOT (EARS-22 email-shape rule). */
@@ -61,7 +62,7 @@ export const OtpCodeFieldSchema = z.string().min(1);
  * and, crucially, with NO message on the bound (#200).
  *
  * Why message-less and NOT `= NewPasswordSchema`: in zod v4 a schema-level message
- * outranks the contextual error map that `useLocalizedResolver` installs, so reusing
+ * outranks the contextual error map a localized resolver installs, so reusing
  * `NewPasswordSchema` (which carries the generic English DTO message) leaked that
  * English onto `/register` and `/reset` instead of the RU catalog copy. Omitting the
  * message lets the resulting `too_small` issue fall through to the resolver's error

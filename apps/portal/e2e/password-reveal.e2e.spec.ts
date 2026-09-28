@@ -127,4 +127,38 @@ test.describe("003 EARS-38 — show-password toggle", () => {
       "false",
     );
   });
+  test("EARS-38.4: /reset — the new-password field of the complete step carries the same toggle, masked on arrival", async ({
+    page,
+  }) => {
+    // The complete step mounts only after the initiate is acknowledged. The ack
+    // is identical for every identifier (003 EARS-16), so it is stubbed here: the
+    // subject of this case is the field, not the recovery round trip, which the
+    // live-gated `auth-journeys.e2e.spec.ts` drives against the real BFF.
+    await page.route("**/v1/auth/password/reset", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({}),
+      }),
+    );
+    await openAnonymous(page, "/reset");
+    await page
+      .locator('input[autocomplete="username"]')
+      .fill("doc@example.com");
+    await page.getByTestId("reset-request-submit").click();
+
+    const input = page.locator('input[autocomplete="new-password"]');
+    await expect(input).toBeVisible();
+    await input.fill(PASSWORD);
+    await expect(input).toHaveAttribute("type", "password");
+
+    await toggle(page).click();
+    await expect(input).toHaveAttribute("type", "text");
+    await expect(input).toHaveValue(PASSWORD);
+    await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+
+    await toggle(page).click();
+    await expect(input).toHaveAttribute("type", "password");
+    await expect(input).toHaveValue(PASSWORD);
+  });
 });

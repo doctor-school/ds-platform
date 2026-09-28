@@ -118,7 +118,7 @@ export interface PasswordRecoveryRequestProps {
    * success (EARS-16 — the ack is identical whether or not the identifier exists).
    */
   onSubmit: (values: PasswordRecoveryRequestValues) => void;
-  /** Already-localized error surfaced under the field. */
+  /** Already-localized request failure — said in the card's one operation plate. */
   error?: React.ReactNode | undefined;
   /** Host-side pending signal (e.g. an in-flight captcha challenge). */
   pending?: boolean | undefined;
@@ -132,9 +132,9 @@ export interface PasswordRecoveryCompleteProps {
   resolver: Resolver<PasswordRecoveryCompleteValues>;
   /** Awaited by RHF, so it drives `isSubmitting`. Transport + routing are the host's. */
   onSubmit: (values: PasswordRecoveryCompleteValues) => Promise<void> | void;
-  /** Already-localized completion error. */
+  /** Already-localized completion failure — said in the card's one operation plate. */
   error?: React.ReactNode | undefined;
-  /** Already-localized resend/captcha error (its own slot, in the resend footer). */
+  /** Already-localized resend/captcha failure — the same plate; the completion failure wins. */
   resendError?: React.ReactNode | undefined;
   /** Host-side pending signal for the resend control. */
   resendPending?: boolean | undefined;
@@ -199,9 +199,29 @@ export function PasswordRecoveryCard({
   otpLength = PASSWORD_RECOVERY_OTP_LENGTH,
   resendCooldownSeconds = PASSWORD_RECOVERY_RESEND_COOLDOWN_SECONDS,
 }: PasswordRecoveryCardProps) {
+  // Canvas 53-56 / `errText()` screen=reset — ONE operation-level plate above the
+  // glyph on every auth screen: the refused request, the refused completion and a
+  // refused resend («повтор») are all said there, never above a button. On the
+  // complete step the completion failure wins while both are live, because it is
+  // the one the visitor just acted on (the email-confirm card's rule).
+  const operationError =
+    stage === "request"
+      ? request.error
+      : (complete.error ?? complete.resendError);
   return (
     <AuthCard
       icon={icon}
+      errorBanner={
+        operationError ? (
+          <FormError
+            variant="banner"
+            className="mb-5"
+            data-testid="reset-error"
+          >
+            {operationError}
+          </FormError>
+        ) : null
+      }
       // Canvas: the title tracks the stage — «Сброс пароля» on the request step,
       // «Новый пароль» once the code + new-password step is showing.
       // #1033: rendered as the document's single h1 (a11y landmark) — a bare h1
@@ -245,7 +265,6 @@ function RecoveryRequestForm({
   copy,
   resolver,
   onSubmit,
-  error,
   pending = false,
   captchaSlot,
 }: PasswordRecoveryRequestProps & {
@@ -295,7 +314,6 @@ function RecoveryRequestForm({
           )}
         />
         {captchaSlot}
-        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"
@@ -326,8 +344,6 @@ function RecoveryCompleteForm({
   cooldownSeconds,
   resolver,
   onSubmit,
-  error,
-  resendError,
   resendPending = false,
   resendNonce,
   onResend,
@@ -416,7 +432,6 @@ function RecoveryCompleteForm({
             />
           )}
         />
-        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"
@@ -433,7 +448,6 @@ function RecoveryCompleteForm({
           step submits the code together with a new password. */}
       <div className="mt-6 space-y-3 border-t pt-4">
         {captchaSlot}
-        <FormError>{resendError}</FormError>
         <div className="flex items-center justify-between gap-2">
           <Button
             type="button"
@@ -459,7 +473,9 @@ function RecoveryCompleteForm({
             // (#227/#267 owner finding). `min-w-0` + `whitespace-normal` override the
             // Button base `whitespace-nowrap` so the cooldown label WRAPS instead of
             // overflowing the card frame at any width (#542 — the owner-reported bug).
-            className="min-w-0 whitespace-normal text-right tabular-nums"
+            // `font-extrabold` — the canvas draws the resend label at 800 (the
+            // shared `resendStyle` of `auth.dc.html`, as on the verify step).
+            className="min-w-0 whitespace-normal text-right font-extrabold tabular-nums"
           >
             {resendDisabled ? copy.resendCountdown(remaining) : copy.resend}
           </Button>

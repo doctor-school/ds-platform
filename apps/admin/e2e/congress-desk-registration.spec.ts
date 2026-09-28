@@ -147,7 +147,7 @@ async function pickSpecialty(page: Page) {
 async function fillWalkIn(
   page: Page,
   email: string,
-  place: "directory" | "unlisted" = "directory",
+  place: "directory" | "unlisted" | "later" = "directory",
 ) {
   const panel = page.getByTestId("desk-entry-panel");
   await panel.getByTestId("desk-surname").fill("Сидорова");
@@ -157,6 +157,16 @@ async function fillWalkIn(
   await panel.getByTestId("desk-contactPhone").fill("+7 (999) 123-45-67");
   await pickSpecialty(page);
   await panel.getByTestId("desk-workplace").fill("ГКБ №1");
+  await fillPlace(page, place);
+}
+
+/** «Населённый пункт»: a directory pick, an unlisted place, or left empty. */
+async function fillPlace(
+  page: Page,
+  place: "directory" | "unlisted" | "later",
+) {
+  const panel = page.getByTestId("desk-entry-panel");
+  if (place === "later") return;
   if (place === "directory") {
     // A directory place fills the region silently and shows it as the hint.
     await pickFromCombobox(
@@ -394,7 +404,14 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
 
     await desk.getByTestId("desk-entry-open").click();
     const panel = desk.getByTestId("desk-entry-panel");
-    await fillWalkIn(desk, uniqueEmail(), "unlisted");
+
+    // Focus-on-first-error reaches a Combobox: every field before «Населённый
+    // пункт» is filled, so the refused submit lands the focus on its control.
+    await fillWalkIn(desk, uniqueEmail(), "later");
+    await panel.getByTestId("desk-entry-submit").click();
+    await expect(panel.getByTestId("desk-city")).toBeFocused();
+
+    await fillPlace(desk, "unlisted");
     await panel.getByTestId("desk-entry-submit").click();
 
     // `desk-entry-refused-no-consent` — the box's own refusal; no request left.

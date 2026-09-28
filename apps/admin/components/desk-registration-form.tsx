@@ -444,9 +444,8 @@ function SpecialtyField({
           <FormLabel htmlFor="desk-specialtyId">
             {t("congressRoster.deskEntry.fields.specialty")}
           </FormLabel>
-          <FormControl>
+          <FormControl ref={field.ref}>
             <Combobox
-              ref={field.ref}
               id="desk-specialtyId"
               data-testid="desk-specialtyId"
               options={specialties.options}
@@ -551,9 +550,8 @@ function SettlementFields({ form }: { form: DeskForm }) {
             <FormLabel htmlFor="desk-city">
               {t("congressRoster.deskEntry.fields.city")}
             </FormLabel>
-            <FormControl>
+            <FormControl ref={field.ref}>
               <Combobox
-                ref={field.ref}
                 id="desk-city"
                 data-testid="desk-city"
                 options={options}

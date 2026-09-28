@@ -1,4 +1,3 @@
-import * as React from "react";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -97,20 +96,6 @@ describe("<Combobox>", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(trigger).toHaveAttribute("aria-controls");
     expect(trigger).toHaveTextContent("Выберите вид связи");
-  });
-
-  it("hands its ref to the closed control, so a form can move focus to it (#2382)", () => {
-    const ref = React.createRef<HTMLButtonElement>();
-    render(
-      <Combobox
-        ref={ref}
-        options={KINDS}
-        onValueChange={vi.fn()}
-        placeholder="Выберите вид связи"
-        emptyLabel="Ничего не найдено"
-      />,
-    );
-    expect(ref.current).toBe(screen.getByRole("combobox"));
   });
 
   /**

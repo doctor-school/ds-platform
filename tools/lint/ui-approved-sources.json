@@ -93,6 +93,36 @@
         "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5863364577"
       ]
     },
+    "feature-044-attendance-mark-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/[id]/roster/page.tsx",
+        "apps/admin/components/attendance-cell.tsx",
+        "apps/admin/lib/congress-roster.ts",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": ["attendance-cell", "attendance-filter"],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5864685824"
+      ]
+    },
+    "feature-044-participant-card-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/[id]/roster/page.tsx",
+        "apps/admin/components/participant-card-panel.tsx",
+        "apps/admin/lib/congress-roster.ts",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "participant-card-panel",
+        "participant-card-attendance",
+        "roster-seven-columns"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5864702497"
+      ]
+    },
     "admin-event-and-direction-pages-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

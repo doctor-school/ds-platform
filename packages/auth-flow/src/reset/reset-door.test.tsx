@@ -322,6 +322,36 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
       }
     });
 
+    it("003 EARS-16 (1.7 rule): a resend withdraws the standing code refusal — the plate speaks for the last action", async () => {
+      // `shouldAdvanceTime` keeps userEvent's own waits alive under fake timers;
+      // the 30 s cooldown is then crossed explicitly.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        h.completePasswordReset.mockRejectedValue(
+          new AuthError(400, "invalid code"),
+        );
+        mount();
+        const user = await requestCode();
+        await completeReset(user);
+        await waitFor(() =>
+          expect(screen.getByTestId("reset-error")).toHaveTextContent(
+            copy.completeFailed,
+          ),
+        );
+
+        act(() => vi.advanceTimersByTime(30_000));
+        fireEvent.click(screen.getByTestId("reset-resend"));
+        await act(async () => Promise.resolve());
+
+        expect(h.requestPasswordReset).toHaveBeenCalledTimes(2);
+        expect(screen.getByTestId("reset-resend-notice")).toBeTruthy();
+        expect(screen.queryByText(copy.completeFailed)).toBeNull();
+        expect(screen.queryByTestId("reset-error")).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("#326: the resend confirmation is the SAME regardless of the identifier (no existence branch)", async () => {
       async function noticeTextFor(idValue: string): Promise<string> {
         vi.useFakeTimers();

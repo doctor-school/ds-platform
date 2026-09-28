@@ -153,8 +153,11 @@ export function ResetDoor({
       }
       setResendError(authErrorMessage(error, errors, copy.resendFailed));
     },
-    // Only resend-owned state: completion feedback answers another question.
+    // The card's one plate says the failure of the operation just performed
+    // (canvas 53-56, the 1.7 verify rule): a resend withdraws a stale refused
+    // completion along with its own previous outcome.
     onBeforeResend: () => {
+      setCompleteError(null);
       setResendError(null);
       setNotice(null);
     },

@@ -84,6 +84,7 @@ function setup(
       stage={overrides.stage ?? "request"}
       identifier={overrides.identifier ?? ""}
       links={{ login: "/login" }}
+      icon={<span data-testid="glyph" />}
       request={{
         resolver: passthrough<PasswordRecoveryRequestValues>(),
         onSubmit: overrides.onRequest ?? vi.fn(),
@@ -220,15 +221,69 @@ describe("<PasswordRecoveryCard>", () => {
     }
   });
 
-  it("renders the host's resend error and the #326 neutral acknowledgement in their own slots", () => {
+  describe("canvas 53-56 — ONE operation-level plate above the glyph", () => {
+    /** The plate stands before the glyph tile in document order, and only once. */
+    function expectPlate(text: string) {
+      const plates = screen.getAllByTestId("reset-error");
+      expect(plates).toHaveLength(1);
+      const plate = plates[0]!;
+      expect(plate).toHaveTextContent(text);
+      expect(plate).toHaveAttribute("role", "alert");
+      expect(
+        plate.compareDocumentPosition(screen.getByTestId("glyph")) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // Said once, never also inside the form (errText() is one sentence per screen).
+      expect(screen.getAllByText(text)).toHaveLength(1);
+    }
+
+    it("says the request failure in the plate", () => {
+      setup({ requestError: "host-request-error" });
+      expectPlate("host-request-error");
+    });
+
+    it("says the completion failure in the plate, not above the submit", () => {
+      setup({
+        stage: "complete",
+        identifier: "doc@example.com",
+        completeError: "host-complete-error",
+      });
+      expectPlate("host-complete-error");
+    });
+
+    it("says a refused resend in the same plate", () => {
+      setup({
+        stage: "complete",
+        identifier: "doc@example.com",
+        resendError: "host-resend-error",
+      });
+      expectPlate("host-resend-error");
+    });
+
+    it("lets the completion failure win while both are live", () => {
+      setup({
+        stage: "complete",
+        identifier: "doc@example.com",
+        completeError: "host-complete-error",
+        resendError: "host-resend-error",
+      });
+      expectPlate("host-complete-error");
+      expect(screen.queryByText("host-resend-error")).not.toBeInTheDocument();
+    });
+
+    it("draws no plate when nothing failed", () => {
+      setup({ stage: "complete", identifier: "doc@example.com" });
+      expect(screen.queryByTestId("reset-error")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders the resend captcha slot and the #326 neutral acknowledgement in its own slot", () => {
     setup({
       stage: "complete",
       identifier: "doc@example.com",
-      resendError: "host-resend-error",
       notice: "host-notice",
     });
 
-    expect(screen.getByText("host-resend-error")).toBeInTheDocument();
     expect(screen.getByTestId("resend-captcha")).toBeInTheDocument();
     const notice = screen.getByTestId("reset-resend-notice");
     expect(notice).toHaveTextContent("host-notice");

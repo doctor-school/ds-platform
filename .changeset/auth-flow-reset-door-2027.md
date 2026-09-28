@@ -1,5 +1,6 @@
 ---
 "@ds/auth-flow": patch
+"@ds/design-system": patch
 "@ds/portal": patch
 "@ds/doctor": patch
 ---
@@ -23,3 +24,7 @@ gains the show-password toggle the Academy already had; and a reset that
 started from an эфир on the doctor storefront now completes that registration
 before landing, as sign-in does. The doctor storefront, which serves no SMS,
 accepts an email address in the identifier box. The code field is unchanged.
+A refused request, a refused code or password and a refused resend are now
+said in the one error plate above the key glyph, as on the other sign-in
+screens; asking for a new code withdraws a standing «Код не подошёл или пароль
+отклонён.».

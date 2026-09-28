@@ -105,14 +105,14 @@ export default function CongressRosterPage() {
   });
 
   const columns: DataTableColumn<Row>[] = [
-    column("fullName", "15%"),
-    column("specialtyName", "11%"),
-    column("workplace", "12%"),
-    column("city", "8%"),
-    column("region", "9%"),
-    column("phone", "10%"),
-    column("email", "12%"),
-    column("registeredAt", "10%"),
+    column("fullName", "14%"),
+    column("specialtyName", "10%"),
+    column("workplace", "10%"),
+    column("city", "7%"),
+    column("region", "8%"),
+    column("phone", "9%"),
+    column("email", "10%"),
+    column("registeredAt", "9%"),
     column("confirmationMailStatus", "8%"),
     {
       key: "attendance",

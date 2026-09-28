@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "designSyncProject": "8cc2f39a-d58e-4491-b539-4337881ced4f",
+  "files": {
+    "academy-apply.dc.html": {
+      "sha256": "936c1ceb8cc3f3ce682ef8d3ce6206198243d47df57f0dbf0f5b4cd9e9452965",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-docs.dc.html": {
+      "sha256": "5ff373829ab415781795eabcc91e96928ff2e5bb33d9a9c258e30a0d2f20f5f0",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-expert.dc.html": {
+      "sha256": "39ebabcecbbdab3d01eaca36fa773a9222068c73d7f52199389eb0597a8ca624",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-experts.dc.html": {
+      "sha256": "662bb9f769835f703c44e8e18fb230995800fc58df323e0a20a121eef1436f5f",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-home.dc.html": {
+      "sha256": "0fa0cdee00a7e7cda1d3ec85bbdba3077949c0a46286d33bd4f083f5aa9ff999",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-index-demo.dc.html": {
+      "sha256": "28b808314511664f5b11481bc10af332788f4ad28919e340901ec180f29b6b12",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-invest.dc.html": {
+      "sha256": "d3d48dd18385a626ac3dc19818a3a4f652e6b07c44fffb10c9da7603e576e6fe",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-investor-cabinet.dc.html": {
+      "sha256": "ef0d002177204c6e9c8503d8b43deee4f6440d24e2bd5f424ad3861066884d7f",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-partner.dc.html": {
+      "sha256": "575b2f4540ed4ad0d5651ab7432de377a951908ac986ece93fdceea9fbc92099",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-partners.dc.html": {
+      "sha256": "3315d03b7d03fc3904696cd0cd0d5a645805aa5919bf7f1de4aefb511acd52b6",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-project.dc.html": {
+      "sha256": "5f155d9f2a4d1cc236d985815b24757594f8aaed2be2fa944394c66724b8bdb6",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "academy-projects.dc.html": {
+      "sha256": "0c86f4ff1d7d205e5dfb25d9dea14c5de6680aa2d0ab0c396b377e83a10bb610",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "account-my-events.dc.html": {
+      "sha256": "450211de03f083a56d30018508c8b1129799c54c987962433c92759ea6026434",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "account-profile.dc.html": {
+      "sha256": "1626cb2723b8932a0ea544e4afad6411661acbcc18ee7d6c1e5e86fa7e2bf2d9",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "archive/archive-auth-v1.dc.html": {
+      "sha256": "1bdd6860724481d8461e0c72c21f84076ba24d7cc627e3664b420749d2337def",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "archive/archive-event-page-variant-a.dc.html": {
+      "sha256": "22656fad2325d1c012ffe490418521b977b490fff9e0b053a94fe3b2287b568d",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "archive/archive-room-v1.dc.html": {
+      "sha256": "722fe8de71dd9633fae20256b58bd402971d3732b39cdcb48a19c7364505c7cc",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "auth.dc.html": {
+      "sha256": "f817b2b5b7518de3d2d1ccc849bf6b94b62db46861f15cc931cb58119465edf1",
+      "pulledAt": "2026-09-28T07:02:30.850Z",
+      "remotePath": "auth.dc.html",
+      "note": "re-pulled by the lead via DesignSync 2026-09-28, SAME (#2393/#2398)"
+    },
+    "doctor-cabinet.dc.html": {
+      "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-community.dc.html": {
+      "sha256": "b80f040bffe656cdb3325ae629241528ffb7031ca52c473c1e737184eb4b98a2",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-congress.dc.html": {
+      "sha256": "a34518e52f98479ce957c2fa21ba9183c8f3c8cfb9116ae84efedf3ff406ed10",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-docs.dc.html": {
+      "sha256": "157aa3ebacc91b2d9d8d1997b9f07c2201406e1650db8a50dc18b83d50d0ebeb",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-events.dc.html": {
+      "sha256": "8b275063f1d43f0a9750f50dc8e5a6595db1fc29f040336d2488a8274698d2cb",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-feed.dc.html": {
+      "sha256": "cba7a9f77a308e33e2105b2f99dedcc2520940a79f9527933fedea03d04f3b27",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-home.dc.html": {
+      "sha256": "20500d7c02b78f21ff7d5f54f5e346cc4e22034edc99e5ad5e530120431ed005",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-lesson.dc.html": {
+      "sha256": "c52bde85414d104f7d574393ede3cf445a44f954a53cee919922b7b9e50d80ee",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "doctor-school.dc.html": {
+      "sha256": "d0485c508da4d87c1a7c9edeec2309f954c1752b2dab0f078f771b6879ed6abf",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "document.dc.html": {
+      "sha256": "ece5facfc299c344485e552e35e4c7cedc41256ca9301673add622be96c7b7cc",
+      "pulledAt": "2026-09-06",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "ds-foundation.dc.html": {
+      "sha256": "e8a671146c0402964e4d92e9815cd3af28bd619937c1941f6729ffa22c8973d5",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "ds-shell.dc.html": {
+      "sha256": "5dc95bb73644afa83aadde1b64b531c0df799e4a08b766b625d0601fbc2e19f9",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "event-page-recording.dc.html": {
+      "sha256": "04e1509122edb4defae95d84d99c4af6af6380032b284b25f577bacaaaee8156",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "event-page.dc.html": {
+      "sha256": "3185a40db5db81b8fdf1de041383010495c6dad39279433f3371d9b193dede6d",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "events-feed-month.dc.html": {
+      "sha256": "0b5d3ef6b6ea0e7b367b24bc7fa6cb0574830f64dc79c0021003e3633a8f295a",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "events-feed.dc.html": {
+      "sha256": "11b0713c6c16ba97bf38ee6c797c31f7f3960dca290486787ee5bebbfe7f5edf",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "room.dc.html": {
+      "sha256": "c4412357fe81a2c26782d3835da3731e6cc4c3492ec8d5ea090b5be7a18abd63",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-chat-column.dc.html": {
+      "sha256": "1e888d5f45bc1d1e2afa077b03ae1d77cd2cfbe809139946886eaa74dedeedc5",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-content-card.dc.html": {
+      "sha256": "28f18197d3dd17123531bca08450d7e5781b9674e20bd4bbc5b05d5e9a036409",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-event-card.dc.html": {
+      "sha256": "afd76d9a3fbc1300d46893d90fcf4a0c17ce200d4507273f645a9c8f53ac1b44",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-events-filter.dc.html": {
+      "sha256": "52f9bbf8c36e9ce722bc4a409251f62a923795c83963eb2644a1471b067dd3cf",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-expert-card.dc.html": {
+      "sha256": "c386edab8a42451d4a7e7f25f04f957464c5e89a54d7b40e523682abe7845464",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-project-card.dc.html": {
+      "sha256": "7ed3560988e487cb129c8a9a19cb85c878bbe114d1acc38c75ae5875d86116ef",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "unit-room-frame.dc.html": {
+      "sha256": "0366525103046d0f8bb1b18686703fd02adcd95cb4a915efd9cfdd5f5fa7c5f2",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    }
+  }
+}

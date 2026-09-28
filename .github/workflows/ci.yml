@@ -650,6 +650,18 @@ jobs:
       - name: scenario-step
         run: pnpm lint:scenario-step
 
+      # canvas-provenance — every vendored Claude Design canvas
+      # (`design-source/**/*.dc.html`, archive included) carries a
+      # `design-source/manifest.json` entry whose sha256 equals its bytes, and
+      # every entry names an existing file (Issue #2389). The one writer is
+      # `pnpm design:vendor` on a DesignSync pull. POSTURE: BLOCK, a plain step —
+      # a deterministic hash comparison with no false-positive class. Honest
+      # limit: it proves manifest and bytes agree and that the vendoring was a
+      # recorded act, not that the bytes came from Claude Design; the structural
+      # control is ui-parity's co-edit BLOCK + base-ref canvas read.
+      - name: canvas-provenance
+        run: pnpm lint:canvas-provenance
+
       # scenario-coverage — every `EARS-N` handler declared by a `user-facing`
       # feature spec must be tagged on a live scenario in its
       # `NNN-scenarios.feature` (tech spec §6.4 + §6.5, Issue #2067); coverage was

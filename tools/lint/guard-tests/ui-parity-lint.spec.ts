@@ -19,13 +19,19 @@ import {
 import { caseDir, ghDir, runGuard } from "./run-guard";
 
 const canvasFile = "design-source/ds-foundation.dc.html";
+const authCanvas = "design-source/auth.dc.html";
+const freshCanvas = "design-source/fresh.dc.html";
+/** The #2338 shape: one shared-package UI file edited next to its own canvas. */
+const authUiFile = "packages/auth-flow/src/ui/brand-panel.tsx";
 /**
- * A real throwaway git repo whose MAIN commit lacks the cited canvas and whose
- * branch commit adds it — the #2164 shape: `pr:land` runs the guard from a main
- * checkout that never contains a canvas the PR head introduces.
+ * A real throwaway git repo (#2164 → #2389). `origin/main` (a remote-tracking
+ * ref) carries the vendored canvases; a PR-head branch EDITS them (a new state,
+ * the #2338 sub-copy line) and adds a canvas main has never seen; the checkout
+ * the guard runs from is a third branch that deleted the canvases from disk.
+ * The canvas reference is read from the BASE ref object — never from the PR
+ * head (a PR cannot be its own reference) and never from the local tree.
  */
 let canvasRepo = "";
-let canvasHead = "";
 let canvasGhDir = "";
 const tmpDirs: string[] = [];
 
@@ -184,36 +190,110 @@ ui-evidence-profile: native-mobile, responsive-web
 ${webEvidence.replace("ui-evidence-profile: responsive-web\n", "")}
 ${nativeEvidence.replace("ui-evidence-profile: native-mobile\n", "")}`;
 
+const pullRequest = (number: number, body: string, files: string[]) =>
+  JSON.stringify({
+    number,
+    headRefOid: "0000000000000000000000000000000000002389",
+    body,
+    files: files.map((path) => ({ path })),
+    reviews: [],
+  });
+const authBody = `
+ui-source-kind: canvas
+ui-source: ${authCanvas}
+ui-source-state: host=academy
+${webEvidence}`;
+
 beforeAll(() => {
   canvasRepo = mkdtempSync(join(tmpdir(), "ui-parity-canvas-"));
   canvasGhDir = mkdtempSync(join(tmpdir(), "ui-parity-gh-"));
   tmpDirs.push(canvasRepo, canvasGhDir);
-  git(canvasRepo, ["init", "-q"]);
-  writeFileSync(join(canvasRepo, "README.md"), "stale main\n", "utf8");
-  commit(canvasRepo, "base", ["README.md"]);
-  const mainRef = git(canvasRepo, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  git(canvasRepo, ["checkout", "-q", "-b", "canvas-head"]);
+  git(canvasRepo, ["init", "-q", "-b", "trunk"]);
   mkdirSync(join(canvasRepo, "design-source"), { recursive: true });
   writeFileSync(
     join(canvasRepo, canvasFile),
     "<script>const state = { mode: 'past' };</script>\n",
     "utf8",
   );
-  commit(canvasRepo, "add canvas", [canvasFile]);
-  canvasHead = git(canvasRepo, ["rev-parse", "HEAD"]);
-  // Back to the canvas-less checkout: the guard must never read the local tree.
-  git(canvasRepo, ["checkout", "-q", mainRef]);
   writeFileSync(
-    join(canvasGhDir, "pr-view-2164.json"),
-    JSON.stringify({
-      number: 2164,
-      headRefOid: canvasHead,
-      body: canvasBody,
-      files: [{ path: webFile }],
-      reviews: [],
-    }),
+    join(canvasRepo, authCanvas),
+    "<script>const props = { host: 'academy' };</script>\n",
     "utf8",
   );
+  commit(canvasRepo, "base: vendored canvases", [canvasFile, authCanvas]);
+  git(canvasRepo, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+
+  // A second base branch, so the GITHUB_BASE_REF selection is observable.
+  git(canvasRepo, ["checkout", "-q", "-b", "release"]);
+  writeFileSync(
+    join(canvasRepo, canvasFile),
+    "<script>const state = { mode: 'release' };</script>\n",
+    "utf8",
+  );
+  commit(canvasRepo, "release canvas", [canvasFile]);
+  git(canvasRepo, ["update-ref", "refs/remotes/origin/release", "HEAD"]);
+
+  // The PR head: edits both canvases in place and adds one main lacks.
+  git(canvasRepo, ["checkout", "-q", "-b", "pr-head", "trunk"]);
+  writeFileSync(
+    join(canvasRepo, canvasFile),
+    "<script>const state = { mode: 'future' };</script>\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(canvasRepo, authCanvas),
+    "<script>const props = { host: 'academy' };</script>\n<p>Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.</p>\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(canvasRepo, freshCanvas),
+    "<script>const state = { mode: 'fresh' };</script>\n",
+    "utf8",
+  );
+  commit(canvasRepo, "pr head: edit + add canvases", [
+    canvasFile,
+    authCanvas,
+    freshCanvas,
+  ]);
+
+  // The checkout the guard runs from has no canvas on disk at all.
+  git(canvasRepo, ["checkout", "-q", "-b", "stale", "trunk"]);
+  git(canvasRepo, ["rm", "-q", "-r", "design-source"]);
+  git(canvasRepo, [
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "-m",
+    "stale checkout",
+  ]);
+
+  const fixtures: Record<number, string> = {
+    // green: the cited canvas exists on origin/main only (not on disk).
+    2164: pullRequest(2164, canvasBody, [webFile]),
+    // red: a canvas the PR head adds is not a reference until it lands.
+    2390: pullRequest(
+      2390,
+      canvasBody
+        .replace("ds-foundation.dc.html", "fresh.dc.html")
+        .replace("mode=past", "mode=fresh"),
+      [webFile],
+    ),
+    // red AC4: the #2338 shape — a string added to the vendored canvas in the
+    // same PR as the shared-package UI that renders it.
+    2338: pullRequest(2338, authBody, [authCanvas, authUiFile]),
+    // red: the co-edit is blocked even when the body cites another source.
+    2339: pullRequest(2339, approvedBody, [authCanvas, approvedFile]),
+    // green: a vendoring PR (canvas + manifest only) is not a UI PR.
+    2340: pullRequest(2340, "vendoring pass", [
+      authCanvas,
+      "design-source/manifest.json",
+    ]),
+  };
+  for (const [number, json] of Object.entries(fixtures))
+    writeFileSync(join(canvasGhDir, `pr-view-${number}.json`), json, "utf8");
 });
 
 afterAll(() => {
@@ -224,36 +304,100 @@ const verdict = (
   body: string,
   paths = [approvedFile],
   manifest = approvedManifest,
-  head: string | undefined = canvasHead,
-) => bodyEvidenceVerdict(body, canvasRepo, paths, manifest, head);
+) => bodyEvidenceVerdict(body, canvasRepo, paths, manifest);
+const runCanvasGuard = (prNumber: number) =>
+  runGuard("ui-parity-lint.ts", canvasRepo, {
+    env: {
+      GITHUB_EVENT_NAME: "pull_request",
+      GITHUB_BASE_REF: "main",
+      PR_NUMBER: String(prNumber),
+      LINT_GH_FIXTURE_DIR: canvasGhDir,
+    },
+  });
 
 describe("ui-parity body evidence", () => {
   it("red: #1625 inspected wording is not evidence", () => {
     expect(verdict("desktop/mobile x light/dark inspected").ok).toBe(false);
   });
 
-  it("red: #2164 a canvas absent at the PR head fails even so", () => {
+  it("red: #2389 a canvas absent on the base ref fails — not vendored on main yet", () => {
     const missing = verdict(
       canvasBody.replace("ds-foundation.dc.html", "absent.dc.html"),
     );
     expect(missing.ok).toBe(false);
-    expect(missing.missing.join("; ")).toContain("existing exact ui-source");
+    expect(missing.missing.join("; ")).toContain(
+      "canvas not vendored on main yet — land the vendoring PR first",
+    );
   });
 
-  it("red: #2164 the key=value state is read from the head blob, not the disk", () => {
-    expect(verdict(canvasBody.replace("mode=past", "mode=nope")).ok).toBe(
+  it("red: #2389 a canvas only the PR head adds is not a reference until it lands", () => {
+    const fresh = verdict(
+      canvasBody
+        .replace("ds-foundation.dc.html", "fresh.dc.html")
+        .replace("mode=past", "mode=fresh"),
+    );
+    expect(fresh.ok).toBe(false);
+    expect(fresh.missing.join("; ")).toContain("not vendored on main yet");
+  });
+
+  it("red: #2389 a state only the PR head's canvas edit declares fails — the base blob is the reference", () => {
+    expect(verdict(canvasBody.replace("mode=past", "mode=future")).ok).toBe(
       false,
     );
   });
 
-  it("red: #2164 without a resolved PR head the canvas cannot be verified", () => {
-    const noHead = verdict(canvasBody, [approvedFile], approvedManifest, "");
-    expect(noHead.ok).toBe(false);
-    expect(noHead.missing.join("; ")).toContain("at PR head");
+  it("green: #2389 the base-ref canvas passes from a checkout where the file is absent on disk", () => {
+    expect(verdict(canvasBody).ok).toBe(true);
   });
 
-  it("green: #2164 a canvas added by the PR head passes from a checkout without it", () => {
-    expect(verdict(canvasBody).ok).toBe(true);
+  it("green: #2389 a stale local origin/main is refreshed before the canvas read (a vendoring PR that just landed)", () => {
+    const upstream = mkdtempSync(join(tmpdir(), "ui-parity-upstream-"));
+    const clone = mkdtempSync(join(tmpdir(), "ui-parity-clone-"));
+    tmpDirs.push(upstream, clone);
+    git(upstream, ["init", "-q", "-b", "main"]);
+    mkdirSync(join(upstream, "design-source"), { recursive: true });
+    writeFileSync(
+      join(upstream, canvasFile),
+      "<script>const state = { mode: 'past' };</script>\n",
+      "utf8",
+    );
+    commit(upstream, "vendored", [canvasFile]);
+    git(clone, ["clone", "-q", upstream, "."]);
+    // The vendoring PR lands upstream AFTER the local clone last fetched.
+    writeFileSync(
+      join(upstream, canvasFile),
+      "<script>const state = { mode: 'landed' };</script>\n",
+      "utf8",
+    );
+    commit(upstream, "re-vendored", [canvasFile]);
+    const previous = process.env.GITHUB_BASE_REF;
+    delete process.env.GITHUB_BASE_REF;
+    try {
+      expect(
+        bodyEvidenceVerdict(
+          canvasBody.replace("mode=past", "mode=landed"),
+          clone,
+          [approvedFile],
+          approvedManifest,
+        ).ok,
+      ).toBe(true);
+    } finally {
+      if (previous !== undefined) process.env.GITHUB_BASE_REF = previous;
+    }
+  });
+
+  it("green: #2389 the base ref follows GITHUB_BASE_REF (same rule as the approved-sources manifest)", () => {
+    const previous = process.env.GITHUB_BASE_REF;
+    process.env.GITHUB_BASE_REF = "release";
+    try {
+      expect(verdict(canvasBody.replace("mode=past", "mode=release")).ok).toBe(
+        true,
+      );
+      expect(verdict(canvasBody).ok).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_BASE_REF;
+      else process.env.GITHUB_BASE_REF = previous;
+    }
   });
 
   it("green: exact owner-comment base-approved manifest source passes", () => {
@@ -642,16 +786,38 @@ describe("ui-parity guard integration", () => {
     expect(stderr).toContain("lacks approved-source parity evidence");
   });
 
-  it("green fixture: #2164 the guard exits 0 from a checkout where the cited canvas exists only at the PR head", () => {
-    const { code, stdout, stderr } = runGuard("ui-parity-lint.ts", canvasRepo, {
-      env: {
-        GITHUB_EVENT_NAME: "pull_request",
-        PR_NUMBER: "2164",
-        LINT_GH_FIXTURE_DIR: canvasGhDir,
-      },
-    });
-    expect(stderr).not.toContain("existing exact ui-source");
+  it("green fixture: #2164/#2389 the guard exits 0 from a checkout where the cited canvas exists only on origin/main", () => {
+    const { code, stdout, stderr } = runCanvasGuard(2164);
+    expect(stderr).not.toContain("not vendored on main yet");
     expect(code).toBe(0);
     expect(stdout).toContain("parity body evidence OK");
+  });
+
+  it("red fixture: #2389 a canvas the PR itself adds cannot be its own reference", () => {
+    const { code, stderr } = runCanvasGuard(2390);
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "canvas not vendored on main yet — land the vendoring PR first",
+    );
+  });
+
+  it("red fixture: #2389 AC4 — the #2338 shape (string added to the vendored canvas + auth-flow UI in one PR) fails", () => {
+    const { code, stderr } = runCanvasGuard(2338);
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "canvas co-edit: design-source/auth.dc.html is a vendored canvas; canvas changes happen in Claude Design → DesignSync pull → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.",
+    );
+  });
+
+  it("red fixture: #2389 the co-edit fails even when the canvas is not the declared ui-source", () => {
+    const { code, stderr } = runCanvasGuard(2339);
+    expect(code).toBe(1);
+    expect(stderr).toContain("canvas co-edit: design-source/auth.dc.html");
+  });
+
+  it("green fixture: #2389 a design-source-only vendoring PR is outside the UI rule", () => {
+    const { code, stdout } = runCanvasGuard(2340);
+    expect(code).toBe(0);
+    expect(stdout).toContain("touches no render-capable UI source");
   });
 });

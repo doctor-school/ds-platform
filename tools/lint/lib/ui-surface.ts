@@ -57,3 +57,26 @@ export function evidenceProfilesForPaths(paths: string[]): UiEvidenceProfile[] {
   }
   return [...profiles].sort();
 }
+
+/** A vendored Claude Design canvas, archive included (#2389). */
+const VENDORED_CANVAS_RE = /^design-source\/(?:.+\/)?[^/]+\.dc\.html$/;
+
+export function isVendoredCanvasPath(path: string): boolean {
+  return VENDORED_CANVAS_RE.test(path);
+}
+
+/**
+ * Split a PR's changed paths into its vendored canvases and its render-capable
+ * UI (#2389). Both halves non-empty = a canvas co-edit: the PR would set its own
+ * parity reference, so the ui-parity guard BLOCKs it — canvas changes land only
+ * through a design-source-only vendoring PR.
+ */
+export function classifyCanvasCoEdit(paths: string[]): {
+  canvases: string[];
+  ui: string[];
+} {
+  return {
+    canvases: paths.filter(isVendoredCanvasPath),
+    ui: paths.filter(isUiSourcePath),
+  };
+}

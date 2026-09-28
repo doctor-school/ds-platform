@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { evidenceProfilesForPaths, isUiSourcePath } from "../lib/ui-surface";
+import {
+  classifyCanvasCoEdit,
+  evidenceProfilesForPaths,
+  isUiSourcePath,
+} from "../lib/ui-surface";
 
 describe("rendered UI source classification", () => {
   it.each([
@@ -139,5 +143,47 @@ describe("ui-surface: shared-package UI is the `src/ui/**` convention (#1907)", 
     // `packages/room/src/room-shell.tsx` is the composed room screen itself; the
     // convention must not silently drop it when the name match goes away.
     expect(isUiSourcePath("packages/room/src/room-shell.tsx")).toBe(true);
+  });
+});
+
+/**
+ * #2389 D1: a vendored canvas and render-capable UI in one PR is a co-edit —
+ * the PR would set its own parity reference. The classifier only splits the
+ * changed-path list; the BLOCK decision lives in the ui-parity guard.
+ */
+describe("canvas co-edit classification (#2389)", () => {
+  const canvas = "design-source/auth.dc.html";
+  const archived = "design-source/archive/archive-auth-v1.dc.html";
+  const ui = "packages/auth-flow/src/ui/brand-panel.tsx";
+
+  it("canvas + UI: both halves are reported", () => {
+    expect(classifyCanvasCoEdit([canvas, ui, "README.md"])).toEqual({
+      canvases: [canvas],
+      ui: [ui],
+    });
+  });
+
+  it("an archived canvas under design-source/archive/ is a canvas too", () => {
+    expect(classifyCanvasCoEdit([archived, ui]).canvases).toEqual([archived]);
+  });
+
+  it("canvas-only (a vendoring PR): no UI half", () => {
+    expect(
+      classifyCanvasCoEdit([canvas, "design-source/manifest.json"]),
+    ).toEqual({ canvases: [canvas], ui: [] });
+  });
+
+  it("UI-only: no canvas half", () => {
+    expect(classifyCanvasCoEdit([ui])).toEqual({ canvases: [], ui: [ui] });
+  });
+
+  it("design-source/README.md and the manifest are not canvases", () => {
+    expect(
+      classifyCanvasCoEdit([
+        "design-source/README.md",
+        "design-source/manifest.json",
+        ui,
+      ]).canvases,
+    ).toEqual([]);
   });
 });

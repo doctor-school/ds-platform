@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { ghViewJson } from "./lib/gh";
 import {
+  classifyCanvasCoEdit,
   evidenceProfilesForPaths,
   isUiSourcePath,
   type UiEvidenceProfile,
@@ -67,39 +68,54 @@ function isArtifactLink(value: string | null): boolean {
   return Boolean(value && /https?:\/\/\S+/i.test(value));
 }
 /**
- * The cited canvas is read from the PR HEAD git object, never from the local
- * tree (Issue #2164): the pre-merge stages (`pr:land` / `pr:preflight
- * --pre-merge`) run from the MAIN checkout, where a canvas the PR itself adds
- * or renames does not exist, while CI runs from the PR tree — the two verdicts
- * must agree. A CI checkout of the merge ref, or any tree that has not seen the
- * head commit, is covered by the single best-effort `git fetch origin <sha>`.
+ * The base ref every "what is already approved" read resolves against: the PR's
+ * target branch in Actions (`GITHUB_BASE_REF`), `main` locally.
  */
-function canvasBlob(
-  source: string,
-  repoRoot: string,
-  headRefOid: string | undefined,
-): string | null {
+function baseRefName(): string {
+  return process.env.GITHUB_BASE_REF || "main";
+}
+
+export const CANVAS_NOT_ON_BASE =
+  "canvas not vendored on main yet — land the vendoring PR first (a stale local checkout: `git fetch origin`)";
+
+/**
+ * The cited canvas is read from the BASE ref git object (`origin/<base>`), never
+ * from the PR head and never from the local tree (#2389, after #2164). A PR can
+ * never be its own reference: #2338 rewrote `design-source/auth.dc.html` in the
+ * same PR as the UI it was compared against, so a head read made the guard
+ * blind by construction. A canvas a PR introduces is therefore not a reference
+ * until its design-source-only vendoring PR lands. The git-object read keeps the
+ * #2164 property — `pr:land` from the main checkout and CI from the PR tree
+ * agree. The base branch is refreshed by one best-effort `git fetch` BEFORE
+ * the read, so a local `pr:preflight <N>` right after a vendoring PR landed
+ * never judges against a stale `origin/<base>`; offline, the read falls back
+ * to whatever `origin/<base>` the tree already has.
+ */
+function canvasBlob(source: string, repoRoot: string): string | null {
   if (!/^design-source\/[A-Za-z0-9._/-]+\.dc\.html$/i.test(source)) return null;
   const inside = relative(
     resolve(repoRoot, "design-source"),
     resolve(repoRoot, source),
   );
   if (!inside || inside.startsWith("..")) return null;
-  if (!headRefOid) return null;
+  const base = baseRefName();
   const show = (): { status: number | null; stdout: string } =>
     // `cat-file blob` (not `-p`) fails closed when the path resolves to a tree.
-    spawnSync("git", ["cat-file", "blob", `${headRefOid}:${source}`], {
+    spawnSync("git", ["cat-file", "blob", `origin/${base}:${source}`], {
       cwd: repoRoot,
       encoding: "utf8",
     });
-  let result = show();
-  if (result.status !== 0) {
-    spawnSync("git", ["fetch", "--quiet", "origin", headRefOid], {
-      cwd: repoRoot,
-      encoding: "utf8",
-    });
-    result = show();
-  }
+  spawnSync(
+    "git",
+    [
+      "fetch",
+      "--quiet",
+      "origin",
+      `+refs/heads/${base}:refs/remotes/origin/${base}`,
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  const result = show();
   return result.status === 0 ? result.stdout : null;
 }
 function canvasDeclaresState(html: string, state: string): boolean {
@@ -146,13 +162,14 @@ export function readBaseApprovedSources(
     return JSON.parse(
       readFileSync(resolve(fixture), "utf8"),
     ) as ApprovedSourceManifest;
-  const base = process.env.GITHUB_BASE_REF
-    ? `origin/${process.env.GITHUB_BASE_REF}`
-    : "origin/main";
-  const result = spawnSync("git", ["show", `${base}:${MANIFEST_PATH}`], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
+  const result = spawnSync(
+    "git",
+    ["show", `origin/${baseRefName()}:${MANIFEST_PATH}`],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+    },
+  );
   if (result.status !== 0) return { version: 1, sources: {} };
   return JSON.parse(result.stdout) as ApprovedSourceManifest;
 }
@@ -184,7 +201,6 @@ export function bodyEvidenceVerdict(
   repoRoot = REPO_ROOT,
   changedPaths: string[] = [],
   baseManifest?: ApprovedSourceManifest,
-  headRefOid?: string,
 ): Verdict {
   const missing: string[] = [];
   const uiPaths = changedPaths.filter(isUiSourcePath);
@@ -197,10 +213,10 @@ export function bodyEvidenceVerdict(
   const source = marker(body, "ui-source");
   const state = marker(body, "ui-source-state");
   if (kind === "canvas") {
-    const html = source ? canvasBlob(source, repoRoot, headRefOid) : null;
+    const html = source ? canvasBlob(source, repoRoot) : null;
     if (html === null)
       missing.push(
-        "existing exact ui-source: design-source/*.dc.html at PR head",
+        `existing exact ui-source: design-source/*.dc.html on origin/${baseRefName()} (${CANVAS_NOT_ON_BASE})`,
       );
     else if (!state || !canvasDeclaresState(html, state))
       missing.push(
@@ -392,6 +408,18 @@ export async function runUiParityGuard(): Promise<void> {
   if (!response.ok) fail(`could not fetch PR #${prNumber}: ${response.error}`);
   const pr = response.data;
   const paths = (pr.files ?? []).map((file) => file.path);
+  // #2389 D1: a vendored canvas and the UI built against it never share a PR —
+  // whatever the body declares, and before any N/A path can apply.
+  const coEdit = classifyCanvasCoEdit(paths);
+  if (coEdit.canvases.length && coEdit.ui.length)
+    fail(
+      coEdit.canvases
+        .map(
+          (file) =>
+            `canvas co-edit: ${file} is a vendored canvas; canvas changes happen in Claude Design → DesignSync pull → a design-source-only vendoring PR (AGENTS.md §6, #2389). Split this PR.`,
+        )
+        .join("\n"),
+    );
   if (!paths.some(isUiSourcePath))
     return info(
       `PR #${pr.number} touches no render-capable UI source; rule does not apply`,
@@ -406,13 +434,7 @@ export async function runUiParityGuard(): Promise<void> {
       `PR #${pr.number} ui-parity N/A certified by the latest head-pinned Mode (a) review (render-delta: none)`,
     );
   }
-  const bodyVerdict = bodyEvidenceVerdict(
-    pr.body ?? "",
-    REPO_ROOT,
-    paths,
-    undefined,
-    pr.headRefOid,
-  );
+  const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "", REPO_ROOT, paths);
   if (!bodyVerdict.ok)
     fail(
       `PR #${pr.number} lacks approved-source parity evidence: ${bodyVerdict.missing.join("; ")}`,

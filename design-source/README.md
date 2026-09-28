@@ -6,6 +6,8 @@ This folder holds the **actual design source** for the Doctor.School neo-brutali
 >
 > **Vendor EVERY canvas the surface renders — not only the headline one.** If a demo/composition renders a unit whose spec lives in a separate canvas (a card, a block, a screen fragment), that canvas must land here BEFORE building. The #514 rhythm demo repeated the founding error one layer down: its event card was built from §09 prose while `unit-event-card.dc.html` sat unimported.
 
+> **Provenance manifest — never edit `design-source/` in a UI PR (#2389).** Every `.dc.html` here (archive included) has an entry in [`manifest.json`](manifest.json) — `sha256` of its bytes, `pulledAt`, the DesignSync `remotePath` — written only by `pnpm design:vendor <pulled-file>… [--remote <path>]` on the bytes of a DesignSync `get_file` pull (it prints `NEW|SAME|CHANGED <file> <bytes>`). A canvas change travels Claude Design → pull → `pnpm design:vendor` → a design-source-only vendoring PR; the `canvas-provenance` guard (BLOCK) fails bytes that differ from the manifest, and `ui-parity` fails a PR that changes a canvas together with UI code and compares UI against the canvas on the base branch, never the PR head.
+
 ## Naming convention
 
 **The canvas title in Claude Design IS the vendored file name** — kebab-case English, no extension (title `event-page` → `design-source/event-page.dc.html`). There is no name map and no transliteration step: if the two ever disagree, the canvas title is renamed, never the file.

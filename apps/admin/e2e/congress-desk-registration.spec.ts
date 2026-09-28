@@ -122,7 +122,9 @@ async function pickFromCombobox(
  */
 async function pickSpecialty(page: Page) {
   await page.getByTestId("desk-specialtyId").click();
-  const first = page.getByRole("option").first();
+  // Scoped to the panel's listbox: the roster's own filter bar holds native
+  // `<select>` options (the EARS-34 presence filter) that share the role.
+  const first = page.getByRole("listbox").getByRole("option").first();
   await expect(first).toBeVisible();
   const name = (await first.innerText()).trim();
   const query = name.slice(0, 4);
@@ -135,7 +137,10 @@ async function pickSpecialty(page: Page) {
     .getByRole("combobox", { name: "Поиск специальности", exact: true })
     .fill(query);
   await searched;
-  await page.getByRole("option", { name, exact: true }).click();
+  await page
+    .getByRole("listbox")
+    .getByRole("option", { name, exact: true })
+    .click();
   await expect(page.getByTestId("desk-specialtyId")).toContainText(name);
 }
 
@@ -181,6 +186,10 @@ async function fillWalkIn(
     await expect(region).toHaveValue("");
     await expect(panel).toContainText(
       "Этого населённого пункта нет в списке — укажите регион или страну.",
+    );
+    // The revealed field is announced through the polite status line.
+    await expect(panel.getByTestId("desk-region-status")).toHaveText(
+      "Добавлено поле «Регион». Этого населённого пункта нет в списке — укажите регион или страну.",
     );
     await region.fill("Беларусь");
   }
@@ -276,6 +285,21 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
       }
     }
     await setPalette(desk, "light");
+
+    // A settlement pick at phone width (390), where the panel covers the page.
+    await desk.setViewportSize({ width: 390, height: 844 });
+    await pickFromCombobox(
+      desk,
+      "desk-city",
+      "Поиск населённого пункта",
+      "Химки",
+      /^Химки/,
+    );
+    await expect(panel.getByTestId("desk-city")).toContainText("Химки");
+    await expect(panel.getByTestId("desk-city-hint")).toHaveText(
+      "Московская область",
+    );
+    await expect(panel.getByTestId("desk-region-status")).toHaveText("");
     await desk.setViewportSize({ width: 1440, height: 900 });
 
     await fillWalkIn(desk, email);
@@ -312,15 +336,35 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
     await tickPaperConsent(desk);
     await panel.getByTestId("desk-entry-submit").click();
 
-    // `desk-entry-existing` — the panel stays open and says so; nothing about
-    // whether the account existed before.
+    // `desk-entry-existing` — the panel stays open and an info notice at the
+    // top of the body says so explicitly (owner Stage-B round 2), taking the
+    // focus; nothing about whether the account existed before.
     const existing = panel.getByTestId("desk-entry-existing");
+    await expect(existing).toHaveAttribute("role", "status");
+    await expect(existing).toBeFocused();
+    await expect(existing.getByTestId("desk-entry-existing-title")).toHaveText(
+      "Участник уже зарегистрирован",
+    );
     await expect(existing).toContainText(
-      "Участник с этой почтой уже зарегистрирован на это мероприятие.",
+      `Участник с почтой ${email} уже есть в реестре этого мероприятия. Новая запись не создана.`,
+    );
+    await expect(existing.locator("b", { hasText: email })).toHaveCount(1);
+    await expect(existing.getByTestId("desk-entry-open-existing")).toHaveText(
+      "Открыть запись",
+    );
+    await expect(panel.getByTestId("desk-email")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
     );
     await expect(panel).not.toContainText("аккаунт");
-    await existing.scrollIntoViewIfNeeded();
     await shot(desk, "desk-entry-existing");
+
+    // The notice stops being true once the address changes.
+    await panel.getByTestId("desk-email").fill(`x${email}`);
+    await expect(existing).toHaveCount(0);
+    await panel.getByTestId("desk-email").fill(email);
+    await panel.getByTestId("desk-entry-submit").click();
+    await expect(existing).toBeFocused();
 
     await existing.getByTestId("desk-entry-open-existing").click();
     await expect(panel).toHaveCount(0);

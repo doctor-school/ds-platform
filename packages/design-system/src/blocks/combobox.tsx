@@ -125,6 +125,11 @@ export interface ComboboxProps {
    */
   "aria-label"?: string;
   className?: string;
+  /**
+   * The closed control (React 19 ref-as-prop), so a form library can move focus
+   * to it — `react-hook-form` focuses the first invalid field through it.
+   */
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export function Combobox({
@@ -151,6 +156,7 @@ export function Combobox({
   className,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
+  ref,
   ...aria
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
@@ -200,6 +206,7 @@ export function Combobox({
     >
       <PopoverPrimitive.Trigger asChild>
         <button
+          ref={ref}
           id={id}
           type="button"
           role="combobox"

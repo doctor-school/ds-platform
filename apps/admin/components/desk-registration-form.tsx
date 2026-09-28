@@ -7,6 +7,7 @@ import { useCustomMutation } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
 import {
+  Alert,
   Button,
   Checkbox,
   Input,
@@ -82,8 +83,11 @@ const FORM_ID = "desk-entry-form";
  *  - `desk-entry-accepted` — the panel closes and the page refetches the roster
  *    and names the added participant (`onAccepted`).
  *  - `desk-entry-existing` — this email is already registered for the event
- *    (EARS-8): the panel stays open, says so and links to that registration's
- *    row. It never says whether the ACCOUNT existed — the response cannot say it.
+ *    (EARS-8): the panel stays open and an info `Alert` at the top of the body
+ *    (focused, so it scrolls into view) names the address, says no new record
+ *    was made and links to that registration's
+ *    row; it clears when the email changes or the panel closes. It never says
+ *    whether the ACCOUNT existed — the response cannot say it.
  *  - `desk-entry-refused-no-consent` — the unticked paper-consent box: the
  *    field's own message, and no request is sent.
  *
@@ -133,6 +137,21 @@ export function DeskRegistrationForm({
       paperConsent: false,
     },
   });
+
+  // The «already registered» notice is the answer to the submit: it takes the
+  // focus (and so scrolls into view at the top of the body) the moment it
+  // appears, and it stops being true once the registrar edits the address.
+  const existingNotice = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!existingEmail) return;
+    existingNotice.current?.focus();
+    const watcher = form.watch((values, { name }) => {
+      if (name === "email" && values.email !== existingEmail) {
+        setExistingEmail(null);
+      }
+    });
+    return () => watcher.unsubscribe();
+  }, [existingEmail, form]);
 
   function changeOpen(next: boolean) {
     setOpen(next);
@@ -257,6 +276,34 @@ export function DeskRegistrationForm({
           </SheetDescription>
         </SheetHeader>
         <SheetBody>
+          {existingEmail ? (
+            <Alert
+              ref={existingNotice}
+              variant="info"
+              className="mb-6"
+              tabIndex={-1}
+              data-testid="desk-entry-existing"
+            >
+              <p data-testid="desk-entry-existing-title">
+                <b>{t("congressRoster.deskEntry.existingTitle")}</b>
+              </p>
+              <p>
+                {t.rich("congressRoster.deskEntry.existing", {
+                  email: existingEmail,
+                  b: (chunks) => <b>{chunks}</b>,
+                })}{" "}
+                <DsLink asChild variant="inline">
+                  <Link
+                    href={`/events/${encodeURIComponent(eventId)}/roster?q=${encodeURIComponent(existingEmail)}`}
+                    data-testid="desk-entry-open-existing"
+                    onClick={() => changeOpen(false)}
+                  >
+                    {t("congressRoster.deskEntry.openExisting")}
+                  </Link>
+                </DsLink>
+              </p>
+            </Alert>
+          ) : null}
           <Form {...form}>
             <form
               id={FORM_ID}
@@ -335,24 +382,6 @@ export function DeskRegistrationForm({
               {refusal ? (
                 <FormError data-testid="desk-entry-error">{refusal}</FormError>
               ) : null}
-              {existingEmail ? (
-                <p
-                  className="text-sm text-muted-foreground"
-                  data-testid="desk-entry-existing"
-                  role="status"
-                >
-                  {t("congressRoster.deskEntry.existing")}{" "}
-                  <DsLink asChild variant="inline">
-                    <Link
-                      href={`/events/${encodeURIComponent(eventId)}/roster?q=${encodeURIComponent(existingEmail)}`}
-                      data-testid="desk-entry-open-existing"
-                      onClick={() => changeOpen(false)}
-                    >
-                      {t("congressRoster.deskEntry.openExisting")}
-                    </Link>
-                  </DsLink>
-                </p>
-              ) : null}
             </form>
           </Form>
         </SheetBody>
@@ -417,6 +446,7 @@ function SpecialtyField({
           </FormLabel>
           <FormControl>
             <Combobox
+              ref={field.ref}
               id="desk-specialtyId"
               data-testid="desk-specialtyId"
               options={specialties.options}
@@ -516,13 +546,14 @@ function SettlementFields({ form }: { form: DeskForm }) {
       <FormField
         control={form.control}
         name="city"
-        render={({ fieldState }) => (
+        render={({ field, fieldState }) => (
           <FormItem>
             <FormLabel htmlFor="desk-city">
               {t("congressRoster.deskEntry.fields.city")}
             </FormLabel>
             <FormControl>
               <Combobox
+                ref={field.ref}
                 id="desk-city"
                 data-testid="desk-city"
                 options={options}
@@ -578,6 +609,18 @@ function SettlementFields({ form }: { form: DeskForm }) {
           )}
         />
       ) : null}
+      {/* The «Регион» field appears silently for a screen reader; this line
+          is announced (the congress site's own reveal copy). */}
+      <p className="sr-only" role="status" data-testid="desk-region-status">
+        {regionReason
+          ? t("congressRoster.deskEntry.fields.regionAdded", {
+              hint:
+                regionReason === "ambiguous"
+                  ? t("congressRoster.deskEntry.fields.regionHintAmbiguous")
+                  : t("congressRoster.deskEntry.fields.regionHintUnknown"),
+            })
+          : ""}
+      </p>
     </>
   );
 }

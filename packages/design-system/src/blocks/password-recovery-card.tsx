@@ -473,7 +473,9 @@ function RecoveryCompleteForm({
             // (#227/#267 owner finding). `min-w-0` + `whitespace-normal` override the
             // Button base `whitespace-nowrap` so the cooldown label WRAPS instead of
             // overflowing the card frame at any width (#542 — the owner-reported bug).
-            className="min-w-0 whitespace-normal text-right tabular-nums"
+            // `font-extrabold` — the canvas draws the resend label at 800 (the
+            // shared `resendStyle` of `auth.dc.html`, as on the verify step).
+            className="min-w-0 whitespace-normal text-right font-extrabold tabular-nums"
           >
             {resendDisabled ? copy.resendCountdown(remaining) : copy.resend}
           </Button>

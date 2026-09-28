@@ -200,6 +200,11 @@ describe("<PasswordRecoveryCard>", () => {
     expect(onRestart).toHaveBeenCalledTimes(1);
   });
 
+  it("draws the resend label at the canvas weight (auth.dc.html resendStyle, 800) — the verify step's resend", () => {
+    setup({ stage: "complete", identifier: "doc@example.com" });
+    expect(screen.getByTestId("reset-resend")).toHaveClass("font-extrabold");
+  });
+
   it("disables resend while the cooldown runs, then re-enables it and calls the host", () => {
     vi.useFakeTimers();
     try {

@@ -322,6 +322,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(ledger.rows).toEqual([
         { subject_id: registrar.sub, source: "admin-ui" },
       ]);
+      // The auth-audit accounting the high-stakes registry declares for this
+      // route: the new account's one `auth.register` row, appended by the
+      // delegated account-creation command site.
+      const authRows = await pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM audit_ledger
+          WHERE event_type = 'auth.register' AND subject_id = $1`,
+        [state.sub],
+      );
+      expect(authRows.rows[0]!.n).toBe(1);
 
       walkIn = { email, registrationId: body.registrationId };
     });
@@ -357,6 +366,28 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       await new Promise((r) => setTimeout(r, 200));
       expect(confirmationsFor(email)).toHaveLength(0);
+    });
+
+    it("044 EARS-38: a bound registrar whose role the IdP has since withdrawn is refused live on the desk write and nothing is written (#1304)", async () => {
+      const revoked = await adminPrincipal(
+        "desk-revoked",
+        "event-registrar",
+        eventA,
+      );
+      await fake.revokeProjectRole(revoked.sub, "event-registrar");
+      const email = uniqueEmail("desk-revoked-entry");
+
+      const res = await desk(revoked.headers, slugA, entry(email));
+
+      expect(res.statusCode).toBe(403);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "EVENT_REGISTRAR_REQUIRED",
+      );
+      expect(await snapshot(email)).toEqual({
+        users: 0,
+        registrations: [],
+        consents: [],
+      });
     });
 
     it("044 EARS-38: the registrar bound to event A is refused on event B and nothing is written", async () => {
@@ -442,9 +473,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("044 EARS-35.6: migration 0040's backfill reads 'site' for a registration carrying answers and 'platform' for one without", async () => {
       // No migration-test harness exists in this repo, so the backfill
-      // statement is read from the committed migration file and run against
-      // pre-migration-shaped rows (intake_origin NULL) inside a transaction
-      // that is rolled back — the branch database keeps no trace.
+      // statement is read VERBATIM from the committed migration file and run
+      // against pre-migration-shaped rows (intake_origin NULL). No DDL touches
+      // the real `registrations` table (it would take an ACCESS EXCLUSIVE lock
+      // that stalls other e2e files sharing this database): the rows live in a
+      // session TEMP table of the same name. `pg_temp` is searched before
+      // `public`, so the migration's unqualified `"registrations"` resolves to
+      // the scratch table; `ON COMMIT DROP` + ROLLBACK leave no trace.
       const sql = readFileSync(
         new URL(
           "../../drizzle/0040_desk_registration_origins.sql",
@@ -464,47 +499,35 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         .find((s) => s.startsWith("UPDATE"));
       expect(backfill).toBeDefined();
 
-      const eventC = randomUUID();
-      const users = await pool.query<{ id: string }>(
-        "SELECT id FROM users WHERE zitadel_sub = ANY($1) ORDER BY id",
-        [[registrar.sub, admin.sub]],
-      );
-      expect(users.rows).toHaveLength(2);
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
         await client.query(
-          `INSERT INTO events
-             (id, slug, title, school, starts_at, duration_min, description,
-              specialties, partner_ref, program_pdf_ref, state)
-           VALUES ($1,$2,'C','Конгресс','2027-04-23T09:00:00Z',60,'d',
-                   ARRAY['cardiology'],'sponsor:congress',NULL,'published')`,
-          [eventC, `congress-desk-c-${eventC.slice(0, 8)}`],
+          `CREATE TEMP TABLE registrations
+             (id int PRIMARY KEY, answers jsonb, intake_origin text)
+           ON COMMIT DROP`,
         );
+        // The scratch table really is the one the statement will hit.
+        const resolved = await client.query<{ temp: boolean }>(
+          `SELECT n.nspname LIKE 'pg_temp%' AS temp
+             FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.oid = '"registrations"'::regclass`,
+        );
+        expect(resolved.rows[0]?.temp).toBe(true);
         await client.query(
-          `ALTER TABLE registrations ALTER COLUMN intake_origin DROP NOT NULL`,
-        );
-        const [withAnswers, withoutAnswers] = users.rows;
-        const a = await client.query<{ id: string }>(
-          `INSERT INTO registrations (user_id, event_id, answers, intake_origin)
-           VALUES ($1, $2, '{"surname":"Иванова"}'::jsonb, NULL) RETURNING id`,
-          [withAnswers!.id, eventC],
-        );
-        const b = await client.query<{ id: string }>(
-          `INSERT INTO registrations (user_id, event_id, answers, intake_origin)
-           VALUES ($1, $2, NULL, NULL) RETURNING id`,
-          [withoutAnswers!.id, eventC],
+          `INSERT INTO registrations (id, answers, intake_origin) VALUES
+             (1, '{"surname":"Иванова"}'::jsonb, NULL),
+             (2, NULL, NULL)`,
         );
         await client.query(backfill!);
         const { rows } = await client.query<{
-          id: string;
+          id: number;
           intake_origin: string;
-        }>("SELECT id, intake_origin FROM registrations WHERE event_id = $1", [
-          eventC,
+        }>("SELECT id, intake_origin FROM registrations ORDER BY id");
+        expect(rows).toEqual([
+          { id: 1, intake_origin: "site" },
+          { id: 2, intake_origin: "platform" },
         ]);
-        const origin = new Map(rows.map((r) => [r.id, r.intake_origin]));
-        expect(origin.get(a.rows[0]!.id)).toBe("site");
-        expect(origin.get(b.rows[0]!.id)).toBe("platform");
       } finally {
         await client.query("ROLLBACK");
         client.release();

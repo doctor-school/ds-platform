@@ -79,6 +79,10 @@ export class DeskRegistrationAdminController {
     roles: ["platform_admin", "event-registrar"],
     check: "policy",
     audit: "high-stakes",
+    // #1304: a WRITE that creates accounts and registrations re-checks the
+    // principal against the IdP on every call. The roster's `revalidate:
+    // "none"` is a read-only carve-out and does not extend to this route.
+    revalidate: "live",
     tests: ["EARS-35", "EARS-38"],
   })
   async register(

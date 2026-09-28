@@ -283,12 +283,16 @@ export type EmailLoginOutcome = "challenge" | "verification" | "none";
 /**
  * #1304: the roles a high-stakes admin mutation may be revalidated against.
  *
- * Deliberately a closed pair rather than the whole {@link Role} vocabulary: live
+ * Deliberately a closed set rather than the whole {@link Role} vocabulary: live
  * revalidation is the *high-stakes* instrument (a taxonomy mutation, an ADR-0009
- * erasure-plan approval), and widening it to every role would turn an IdP
- * round-trip into an ambient cost on ordinary reads.
+ * erasure-plan approval, the 044 desk registration), and widening it to every
+ * role would turn an IdP round-trip into an ambient cost on ordinary reads.
+ * `event-registrar` is here because the 044 desk registration (EARS-35) is a
+ * WRITE that role reaches: a registrar acting there is revalidated against the
+ * grant it acts under, not against a `platform_admin` it never held.
  */
-export type AdminAuthorityRole = "platform_admin" | "pd_officer";
+export type AdminAuthorityRole =
+  "platform_admin" | "pd_officer" | "event-registrar";
 
 /** Input to {@link IdpClient.revalidateAdminAuthority} (#1304). */
 export interface RevalidateAdminAuthorityInput {

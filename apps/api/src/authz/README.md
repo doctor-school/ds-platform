@@ -115,12 +115,17 @@ is also stale — a stale-MFA `401` must never be the answer to someone who is n
 longer an admin. Refusals precede all validation / idempotency / upload /
 domain / audit work.
 
-| Verdict                | Refusal                                                   |
-| ---------------------- | --------------------------------------------------------- |
-| session inactive       | `401 ADMIN_SESSION_REQUIRED`                              |
-| role no longer held    | `403 PLATFORM_ADMIN_REQUIRED` / `403 PD_OFFICER_REQUIRED` |
-| elevation absent/stale | `401 STEP_UP_REQUIRED` + `stepUpUrl`                      |
-| IdP unavailable        | `503 IDP_REVALIDATION_UNAVAILABLE`                        |
+| Verdict                | Refusal                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| session inactive       | `401 ADMIN_SESSION_REQUIRED`                                                               |
+| role no longer held    | `403 PLATFORM_ADMIN_REQUIRED` / `403 PD_OFFICER_REQUIRED` / `403 EVENT_REGISTRAR_REQUIRED` |
+| elevation absent/stale | `401 STEP_UP_REQUIRED` + `stepUpUrl`                                                       |
+| IdP unavailable        | `503 IDP_REVALIDATION_UNAVAILABLE`                                                         |
+
+The grant asked about is the one the principal acts under: `pd_officer` on a
+row naming it; on a row that also admits `event-registrar` (044 desk
+registration), `event-registrar` for a registrar-only session and
+`platform_admin` for a session carrying it; `platform_admin` otherwise.
 
 The `503` is **not** a credential denial — an outage must never read as "you
 are not an admin"; see [`../auth/idp/README.md`](../auth/idp/README.md).

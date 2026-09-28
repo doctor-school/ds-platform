@@ -105,6 +105,18 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "congress/sign-up.e2e: EARS-1 when a new email submits inside the window, system shall accept it and create account, registration and consent in one cascade (the row is emitted by the delegated 003 command site)",
     },
+    // 044 EARS-35 (#2382) — the registrar's desk entry. It runs the SAME
+    // congress intake use-case as the public route above, so its accounting is
+    // the same: a new account's one `Registered` row is appended by the
+    // delegated 003 command site, and an entry attached to an existing account
+    // appends none. WHO made the entry is not an auth event: the 010 data
+    // ledger's `data.registrations.insert` row names the registrar as subject
+    // with `source = admin-ui` (asserted by the same `it`).
+    "POST /v1/admin/events/:idOrSlug/registrations": {
+      emits: ["Registered"],
+      coveredBy:
+        "congress/desk-registration.e2e: 044 EARS-35.1 a registrar bound to the event enters a walk-in — one auth.register row for the new account, and the registration's data-ledger row names the registrar",
+    },
     "POST /v1/storefront/doctor/confirm": {
       // 021 EARS-10 (#1546): the doctor-host confirm command delegates the
       // verification itself to the 003 `AuthService.verify` command site

@@ -108,9 +108,6 @@ describe("#2027 PR 1.7 host config — the confirmation step", () => {
       expect(copy.newAccountHeading).toBe("Новый аккаунт — введите код");
       expect(copy.codeAccepted).toBe("Код принят — входим…");
       expect(copy.failed).toBe("Код не подошёл. Попробуйте ещё раз.");
-      expect(copy.missingIdentifier).toBe(
-        "Не удалось определить аккаунт. Зарегистрируйтесь заново, чтобы получить новый код, или войдите в существующий аккаунт.",
-      );
       expect(copy.resendAcknowledged).toContain("{destination}");
     }
   });

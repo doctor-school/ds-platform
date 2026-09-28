@@ -232,6 +232,16 @@ Because the BFF returns the identical `pending_verification` for a new and an al
 
 The screen never inspects or infers account existence; the existing owner's path is reinforced **out-of-band** by the EARS-23 notice email. This is the on-screen half of the duplicate-registration fix (#207): the form leads everyone to the same honest place, and the per-case routing happens privately — in the inbox (EARS-23) or by the user's own choice of the co-equal sign-in affordance — never by the form disclosing existence. All copy is sourced from the §8.1 message catalog (RU).
 
+**Entry: the address seed, else the registration door (EARS-24, EARS-40).** The step always names the address the code went to, so the `/verify` route resolves it before the step is shown, in this order:
+
+| Order | Source                                                                                              | Where it is read                             | Outcome                                                                                  |
+| ----- | --------------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1     | `?email=` query — the same-tab hop from the registration door                                       | server mount (`VerifyRoute`)                 | the step renders with the masked address, server-side                                    |
+| 2     | `#email=` deep-link fragment (#904), on a host that serves deep-link entry (`verify.deepLinkEntry`) | client half (`VerifyEntry`), after mount     | the step renders with the masked address                                                 |
+| 3     | neither                                                                                             | client half, once the fragment has been read | `router.replace` onto `/register`, carrying a same-origin `returnTo`; no step is painted |
+
+A URL fragment is never sent to the server, so a server-side 3xx cannot tell a deep link from a bare URL: a redirect there would also swallow every `/verify#email=…` arrival, because the browser re-attaches the fragment to the redirect target. The decision therefore lives where the fragment is readable, and the route renders nothing until it is taken. There is no address-less step, so there is no generic-identifier description, no address-less submit error and no address-less resend.
+
 ## 9. Decision-debt for ADR-0001 (separate adr-revision follow-up)
 
 Surfaced per AGENTS.md §6; **not** changed inside this spec-authoring:

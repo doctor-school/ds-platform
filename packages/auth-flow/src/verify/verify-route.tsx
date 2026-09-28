@@ -24,7 +24,9 @@ import { VerifyEntry } from "./verify-entry";
  * return-context panel on a host that publishes one — «после подтверждения
  * почты вы вернётесь сюда же» (canvas 469-472). The address and the carried
  * target are handed to the client half, which alone can read the mail's
- * `#email=` fragment.
+ * `#email=` fragment — and so alone decides that an arrival with no address at
+ * all goes to the registration door (003 EARS-40): a 3xx here could not tell a
+ * bare `/verify` from a fragment deep link, which the browser would carry along.
  *
  * A host whose `routes.verify` is `undefined` confirms inline on the
  * registration door (rows 51, 76); mounting this route there is a wiring

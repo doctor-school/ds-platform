@@ -118,6 +118,45 @@ never a widening of the one above:
   pager's denominator — and, for the administrator, an unknown event is a 404,
   never an empty page.
 
+- `POST /v1/admin/events/:idOrSlug/registrations`
+  (`DeskRegistrationAdminController` → `CongressSignUpService.signUp` with
+  `{ origin: "desk", eventKey, consentOrigin: "paper" }`, 044 EARS-35) — the
+  registrar enters a walk-in participant at the congress desk. The body is the
+  congress-site answer set (`CongressDeskRegistrationRequestSchema`, composed
+  from the public request) with `paperConsent: true` instead of the online
+  acceptance and no captcha token; a body without the tick is a 400 from the
+  Zod pipe before any write or email.
+  - **One intake, not two.** The handler calls the congress intake use-case
+    itself, so the desk gets the site form's rules by construction: one
+    credential-less account per email, one registration per (account, event),
+    one consent row per published version, the same confirmation email with
+    its outcome recorded. The registration carries
+    `registrations.intake_origin = 'desk'` (the site form writes `site`, the
+    signed-in platform path takes the default `platform`), and a NEW consent
+    row carries `consent_records.origin = 'paper'` (online consents are `NULL`).
+    A participant whose account already accepted the current version online
+    gets no second consent row.
+  - **No captcha, no rate limit, no timing floor, no window.** Those defend the
+    UNAUTHENTICATED public door against bots, floods and the «is this email
+    known?» oracle. This route sits behind an MFA admin session bound to one
+    event, and the registration window is the public form's — walk-ins arrive
+    on the congress days, after it has shut.
+  - **Response.** `{ status: "accepted", registrationId }` for a new
+    registration, `{ status: "existing", registrationId }` when the participant
+    was already registered for this event (EARS-8: nothing new is written, no
+    second email) — so the registrar can open the card. Nothing in it says
+    whether the ACCOUNT existed before (`account_created_by_intake` stays on
+    the row).
+  - **Authorization** exactly as the roster: `check: "policy"`, roles
+    `platform_admin` / `event-registrar`, the handler runs
+    `EventGrantPolicy.assertEventAccess` before the use-case (a registrar bound
+    to another event gets 403 and nothing is looked up or written). An unknown
+    event is the administrator's 404; a non-registrable one is the intake's
+    generic 422.
+  - **Who did it.** The 010 interceptor attributes the registration, consent
+    and account rows to the acting registrar (`actor_sub`) with source
+    `admin-ui`; the desk writes no author column of its own.
+
 ### Binding a registrar to an event (runbook, until #2378)
 
 There is no grants screen yet (#2378). On the product owner's request the tech

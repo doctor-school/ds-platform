@@ -7,7 +7,7 @@ import { HttpException } from "@nestjs/common";
  * purpose: they are auth-tier verdicts about the *principal*, not outcomes of a
  * taxonomy command, and every `revalidate: "live"` route — today the 012 admin
  * mutations, tomorrow the ADR-0009 erasure-plan approval — must answer with the
- * same five codes regardless of which slice owns the handler. Two of them
+ * same codes regardless of which slice owns the handler. Two of them
  * (`ADMIN_SESSION_REQUIRED`, `PLATFORM_ADMIN_REQUIRED`) are deliberately the
  * SAME strings 012 already publishes, so a client that learned the 012 contract
  * sees no new shape when the refusal starts coming from the guard instead of the
@@ -17,6 +17,7 @@ export type AdminAuthorityErrorCode =
   | "ADMIN_SESSION_REQUIRED"
   | "PLATFORM_ADMIN_REQUIRED"
   | "PD_OFFICER_REQUIRED"
+  | "EVENT_REGISTRAR_REQUIRED"
   | "STEP_UP_REQUIRED"
   | "IDP_REVALIDATION_UNAVAILABLE";
 
@@ -27,20 +28,21 @@ export const ADMIN_AUTHORITY_STATUS: Readonly<
   ADMIN_SESSION_REQUIRED: 401,
   PLATFORM_ADMIN_REQUIRED: 403,
   PD_OFFICER_REQUIRED: 403,
+  EVENT_REGISTRAR_REQUIRED: 403,
   STEP_UP_REQUIRED: 401,
   IDP_REVALIDATION_UNAVAILABLE: 503,
 };
 
 /** Stable, non-disclosing titles — never echo a subject, session id or role list. */
-const ADMIN_AUTHORITY_TITLE: Readonly<
-  Record<AdminAuthorityErrorCode, string>
-> = {
-  ADMIN_SESSION_REQUIRED: "Admin session required",
-  PLATFORM_ADMIN_REQUIRED: "platform_admin required",
-  PD_OFFICER_REQUIRED: "pd_officer required",
-  STEP_UP_REQUIRED: "Fresh step-up verification required",
-  IDP_REVALIDATION_UNAVAILABLE: "Identity provider unavailable",
-};
+const ADMIN_AUTHORITY_TITLE: Readonly<Record<AdminAuthorityErrorCode, string>> =
+  {
+    ADMIN_SESSION_REQUIRED: "Admin session required",
+    PLATFORM_ADMIN_REQUIRED: "platform_admin required",
+    PD_OFFICER_REQUIRED: "pd_officer required",
+    EVENT_REGISTRAR_REQUIRED: "event-registrar required",
+    STEP_UP_REQUIRED: "Fresh step-up verification required",
+    IDP_REVALIDATION_UNAVAILABLE: "Identity provider unavailable",
+  };
 
 /** The RFC 7807 `type` URI namespace — the same docs anchor 012 publishes under. */
 export const PROBLEM_TYPE_BASE = "https://docs.doctor.school/errors";

@@ -2,19 +2,24 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { and, desc, eq, sql } from "drizzle-orm";
-import type { DrizzleHandle, RegistrationAnswers } from "@ds/db";
+import { and, desc, eq, or, sql } from "drizzle-orm";
+import type {
+  ConsentOrigin,
+  DrizzleHandle,
+  IntakeOrigin,
+  RegistrationAnswers,
+} from "@ds/db";
 import { consentRecords, events, registrations } from "@ds/db";
 import {
   CONGRESS_PERSONAL_DATA_PURPOSE,
   isRegistrable,
   toCongressSignUpAnswers,
-  type CongressSignUpAccepted,
   type CongressSignUpAnswers,
   type CongressSignUpConsentPurpose,
-  type CongressSignUpRequest,
+  type CongressSignUpSubmittedAnswers,
   type CongressSignUpWindowRefusal,
   type EventLifecycleState,
 } from "@ds/schemas";
@@ -73,6 +78,42 @@ export const CONGRESS_SIGN_UP_UNAVAILABLE = {
   message: "Заявка сейчас не может быть принята.",
 } as const;
 
+/** Canonical UUID shape — decides whether a desk event key can match `events.id`. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 044 EARS-35 — which door a congress submission came through. It is a
+ * PARAMETER of the one intake, never a second intake: both doors run the same
+ * account, registration, consent and confirmation-email steps below.
+ *
+ * - `site` — the public congress-site form (EARS-1): inside the configured
+ *   window, for the configured event, an online consent.
+ * - `desk` — a registrar's manual entry (EARS-35): no window (walk-ins arrive
+ *   on the congress days, after the form has shut), for the event of the admin
+ *   route (`eventKey`, id or slug — already admitted by the EARS-38 binding
+ *   step), a consent captured on `paper`.
+ *
+ * The signed-in platform path (005 / 044 EARS-16) is not a door of this
+ * use-case and writes no origin: it takes the column default `platform`.
+ */
+export type CongressIntake =
+  | { origin: "site" }
+  | { origin: "desk"; eventKey: string; consentOrigin: ConsentOrigin };
+
+/**
+ * What one intake did: the registration of the (account, event) pair, and
+ * whether THIS call created it (`false` — the pair was already registered and
+ * nothing was written, EARS-8). Whether the ACCOUNT existed before is
+ * deliberately absent: it is recorded on the row (`account_created_by_intake`)
+ * and answered to nobody — the public door answers one success state (EARS-7),
+ * the desk names the registration and nothing more (EARS-35).
+ */
+export interface CongressIntakeOutcome {
+  registrationId: string;
+  created: boolean;
+}
+
 /** The human text of each window refusal (044 EARS-28). */
 const WINDOW_REFUSAL_MESSAGES = {
   "not-yet-open": "Регистрация на конгресс ещё не открыта.",
@@ -116,10 +157,14 @@ export class CongressSignUpService {
     private readonly auth: AuthService,
   ) {}
 
-  /** 044 EARS-1 — take one public congress submission. */
+  /**
+   * 044 EARS-1 / EARS-35 — take one congress submission through the door
+   * `intake` names (see {@link CongressIntake}).
+   */
   async signUp(
-    request: CongressSignUpRequest,
-  ): Promise<CongressSignUpAccepted> {
+    request: CongressSignUpSubmittedAnswers,
+    intake: CongressIntake,
+  ): Promise<CongressIntakeOutcome> {
     // EARS-28 — the settings come FIRST because the window is one of them: the
     // window cannot be decided before the configuration that states it is
     // readable. A broken configuration therefore answers the one generic
@@ -127,9 +172,21 @@ export class CongressSignUpService {
     // не открыта» would tell the submitter a date the deployment does not
     // actually have. Both still refuse before any side effect, which is what
     // EARS-28 requires of the window check.
+    //
+    // EARS-35 — the desk still reads the settings (the consent version it
+    // stamps and the venue the letter names), but the window is the PUBLIC
+    // form's and is not asked, and the event is the admin route's, not the
+    // configured one.
     const settings = this.settingsOrRefuse();
-    this.assertInsideWindow(settings);
-    const event = await this.loadRegistrableEvent(settings.eventId);
+    if (intake.origin === "site") this.assertInsideWindow(settings);
+    const event =
+      intake.origin === "site"
+        ? await this.loadRegistrableEvent(settings.eventId)
+        : await this.loadDeskEvent(intake.eventKey);
+    const intakeOrigin: IntakeOrigin = intake.origin;
+    const consentOrigin: ConsentOrigin | null =
+      intake.origin === "desk" ? intake.consentOrigin : null;
+    let outcome: CongressIntakeOutcome | undefined;
 
     const consent: {
       purpose: CongressSignUpConsentPurpose;
@@ -166,21 +223,36 @@ export class CongressSignUpService {
         // FIRST submission is the one that registered the participant — a repeat
         // must not silently rewrite the answers an organiser is already reading
         // off the roster, nor move the registration instant.
-        await tx
+        const [inserted] = await tx
           .insert(registrations)
           .values({
             userId,
-            eventId: settings.eventId,
+            eventId: event.id,
             answers: toCongressSignUpAnswers(request),
             // Audit: the account path of the FIRST submission, kept by
             // `ON CONFLICT DO NOTHING` below; read by the roster, never by the
             // confirmation email (#2369).
             accountCreatedByIntake: !alreadyExisted,
+            // EARS-35: the door of the FIRST submission, frozen with the rest
+            // of the row by the same `ON CONFLICT DO NOTHING`.
+            intakeOrigin,
           })
           .onConflictDoNothing({
             target: [registrations.userId, registrations.eventId],
-          });
-        await this.recordConsentIfNewVersion(tx, userId, consent);
+          })
+          .returning({ id: registrations.id });
+        // EARS-8 — the pair was already registered: nothing was inserted, and
+        // the existing row is the one the desk names (EARS-35).
+        const registrationId =
+          inserted?.id ??
+          (await this.existingRegistrationId(tx, userId, event.id));
+        outcome = { registrationId, created: inserted !== undefined };
+        await this.recordConsentIfNewVersion(
+          tx,
+          userId,
+          consent,
+          consentOrigin,
+        );
       },
     );
 
@@ -190,14 +262,35 @@ export class CongressSignUpService {
     // never be turned into a refusal by it.
     this.dispatchConfirmationEmail({
       userId: account.userId,
-      eventId: settings.eventId,
+      eventId: event.id,
       email: request.email,
       eventTitle: event.title,
       eventStartsAt: event.startsAt,
       eventVenue: settings.eventVenue,
     });
 
-    return { status: "accepted" };
+    if (!outcome) throw new Error("intake transaction produced no outcome");
+    return outcome;
+  }
+
+  /** EARS-8 — the id of the registration the pair already has. */
+  private async existingRegistrationId(
+    tx: AccountTransaction,
+    userId: string,
+    eventId: string,
+  ): Promise<string> {
+    const [row] = await tx
+      .select({ id: registrations.id })
+      .from(registrations)
+      .where(
+        and(
+          eq(registrations.userId, userId),
+          eq(registrations.eventId, eventId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new Error("registration conflict without a registration");
+    return row.id;
   }
 
   /**
@@ -346,6 +439,11 @@ export class CongressSignUpService {
       purpose: CongressSignUpConsentPurpose;
       version: string;
     }[],
+    // EARS-35 — `paper` for a desk-recorded consent, `null` (the column's
+    // «online») for the site form. It marks HOW a new acceptance row was
+    // captured; it is not part of the «same version already recorded?» rule —
+    // one consent per version, whichever way it was captured.
+    origin: ConsentOrigin | null,
   ): Promise<void> {
     for (const c of consent) {
       const [latest] = await tx
@@ -366,6 +464,7 @@ export class CongressSignUpService {
         userId,
         purpose: c.purpose,
         version: c.version,
+        origin,
       });
     }
   }
@@ -416,9 +515,10 @@ export class CongressSignUpService {
    */
   private async loadRegistrableEvent(
     eventId: string,
-  ): Promise<{ title: string; startsAt: Date }> {
+  ): Promise<{ id: string; title: string; startsAt: Date }> {
     const [event] = await this.db
       .select({
+        id: events.id,
         state: events.state,
         title: events.title,
         startsAt: events.startsAt,
@@ -436,6 +536,28 @@ export class CongressSignUpService {
       throw new UnprocessableEntityException(CONGRESS_SIGN_UP_UNAVAILABLE);
     }
 
-    return { title: event.title, startsAt: event.startsAt };
+    return { id: event.id, title: event.title, startsAt: event.startsAt };
+  }
+
+  /**
+   * EARS-35 — the desk's event: the admin route's `:idOrSlug`, already
+   * admitted by the EARS-38 binding step. An unknown event is the admin
+   * surface's 404 (the roster route's mapping); a known one that is not
+   * registrable refuses exactly as the site intake does, before any account.
+   */
+  private async loadDeskEvent(
+    eventKey: string,
+  ): Promise<{ id: string; title: string; startsAt: Date }> {
+    const [found] = await this.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        UUID_RE.test(eventKey)
+          ? or(eq(events.id, eventKey), eq(events.slug, eventKey))
+          : eq(events.slug, eventKey),
+      )
+      .limit(1);
+    if (!found) throw new NotFoundException("event not found");
+    return this.loadRegistrableEvent(found.id);
   }
 }

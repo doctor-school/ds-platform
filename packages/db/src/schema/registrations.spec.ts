@@ -34,7 +34,7 @@ describe("044 EARS-5: registrations.answers", () => {
   });
 
   it("044 EARS-5.9: the registration column list is exactly the pinned set", () => {
-    // The 005 columns plus the three 044 adds and nothing else. The mail trio
+    // The 005 columns plus the 044 adds and nothing else. The mail trio
     // (`confirmation_mail_status`, `confirmation_mail_at`,
     // `account_created_by_intake`) is listed here rather than left to the
     // migration diff for the same reason `answers` is: each of the three is
@@ -48,10 +48,19 @@ describe("044 EARS-5: registrations.answers", () => {
       "deleted_at",
       "event_id",
       "id",
+      "intake_origin",
       "record_status",
       "registered_at",
       "user_id",
     ]);
+  });
+
+  it("044 EARS-35: intake_origin is NOT NULL, defaults to 'platform' and is checked to site | desk | platform", () => {
+    const origin = columns.find((column) => column.name === "intake_origin");
+    expect(origin?.notNull).toBe(true);
+    expect(origin?.default).toBe("platform");
+    const checks = getTableConfig(registrations).checks.map((c) => c.name);
+    expect(checks).toContain("registrations_intake_origin_check");
   });
 
   it("044 EARS-5.10: the answers payload is PD-masked in the edit-audit ledger", () => {

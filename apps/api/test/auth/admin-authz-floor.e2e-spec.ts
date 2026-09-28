@@ -87,10 +87,16 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // Holding a session: reading back one's own roles, and ending the session.
   "GET /v1/admin/auth/session": ["platform_admin", "event-registrar"],
   "POST /v1/admin/auth/logout": ["platform_admin", "event-registrar"],
-  // 044 EARS-18 — the congress roster read, the one working surface the role
-  // exists for. It is the registrar's whole reach into admin data: a read of
-  // one event's roster, with no sibling write on its controller (EARS-24).
+  // 044 EARS-18 — the congress roster read, the working surface the role
+  // exists for: a read of one event's roster.
   "GET /v1/admin/events/:idOrSlug/roster": [
+    "platform_admin",
+    "event-registrar",
+  ],
+  // 044 EARS-35 — the desk entry of a walk-in into that same event, the one
+  // write the 2026-09-25 amendment admits the registrar to (EARS-24 narrowed
+  // to EARS-34/35); the binding to one event is the policy check (EARS-38).
+  "POST /v1/admin/events/:idOrSlug/registrations": [
     "platform_admin",
     "event-registrar",
   ],
@@ -210,6 +216,26 @@ const FLOOR_ROUTES: {
     endpoint: "GET /v1/admin/events/:idOrSlug/roster",
     method: "GET",
     url: `/v1/admin/events/${ABSENT_ID}/roster`,
+  },
+  // 044 EARS-35 — the desk registration, excluded from the EARS-11.7 count for
+  // the same reason as the roster. The body is well-formed so an admitted
+  // principal reaches the absent-event 404, never a validation 400: the floor
+  // rows exercise authorization, not the Zod pipe.
+  {
+    endpoint: "POST /v1/admin/events/:idOrSlug/registrations",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/registrations`,
+    payload: {
+      surname: "Кузнецова",
+      firstName: "Анна",
+      email: "floor-desk@ds.test",
+      specialtyId: ABSENT_ID,
+      workplace: "ГКБ №1",
+      city: "Москва",
+      region: "Москва",
+      contactPhone: "+7 (900) 765-43-21",
+      paperConsent: true,
+    },
   },
   // 012 EARS-1/EARS-16 (#1283) — the taxonomy project routes sit on the same
   // raised floor as every other admin route: the guard refuses before validation,
@@ -1029,15 +1055,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // must keep that shape too. (`POST /v1/admin/legacy-broadcasts` is the
       // creation entry and hangs off its own path, so it is asserted by the
       // floor-table rows above rather than counted here.)
-      // 044 EARS-18's roster read is excluded for the same reason as the
-      // recordings routes: it shares the path prefix but is a different
-      // feature with its own EARS coverage (and its own role set), and the
-      // floor-table rows above assert it.
+      // 044 EARS-18's roster read and EARS-35's desk registration are excluded
+      // for the same reason as the recordings routes: they share the path
+      // prefix but are a different feature with its own EARS coverage (and its
+      // own role set), and the floor-table rows above assert them.
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&
           !r.endpoint.includes("/recordings") &&
-          !r.endpoint.endsWith("/roster"),
+          !r.endpoint.endsWith("/roster") &&
+          !r.endpoint.endsWith("/:idOrSlug/registrations"),
       );
       expect(events.length).toBe(12);
       for (const row of events) {

@@ -39,5 +39,8 @@ import {
       useValue: (() => loadEnv()) satisfies CongressSignUpEnvReader,
     },
   ],
+  // 044 EARS-35: the registrar's desk route (`registration/`) enters walk-ins
+  // through THIS intake use-case, never through a second one.
+  exports: [CongressSignUpService],
 })
 export class CongressModule {}

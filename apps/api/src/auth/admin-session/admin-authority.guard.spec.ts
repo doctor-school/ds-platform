@@ -56,7 +56,9 @@ function metaOf(over: Partial<AuthzMeta> = {}): AuthzMeta {
  * the guard must fail closed on it, so the helper can express it exactly rather
  * than approximating it with `0`.
  */
-function recordOf(opts: { mfaVerifiedAtMs?: number | null } = {}): AdminSessionRecord {
+function recordOf(
+  opts: { mfaVerifiedAtMs?: number | null } = {},
+): AdminSessionRecord {
   const base = { sid: SID, sub: SUB, zitadelSessionId: ZITADEL_SESSION_ID };
   if (opts.mfaVerifiedAtMs === null) return base as AdminSessionRecord;
   return {
@@ -75,7 +77,7 @@ interface Harness {
 
 interface HarnessOptions {
   meta?: AuthzMeta | undefined;
-  principal?: { sid?: string } | undefined;
+  principal?: { sid?: string; roles?: string[] } | undefined;
   record?: AdminSessionRecord | null | undefined;
   verdict?: AdminAuthorityVerdict | undefined;
 }
@@ -237,6 +239,73 @@ describe("AdminAuthorityGuard (#1304)", () => {
       );
     });
 
+    // 044 EARS-35/EARS-38 (#2382): the desk registration is a live-revalidated
+    // WRITE that admits `platform_admin` OR `event-registrar`. The IdP is asked
+    // about the grant the principal is ACTING under — the one its reach rests
+    // on — never about a role it does not claim.
+    const DESK_ROLES: AuthzMeta["roles"] = [
+      "platform_admin",
+      "event-registrar",
+    ];
+
+    it("044 EARS-38: a registrar-only principal on a registrar-admitting row is revalidated against event-registrar", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DESK_ROLES }),
+        principal: { sid: SID, roles: ["event-registrar"] },
+        verdict: { outcome: "active", sub: SUB, roles: ["event-registrar"] },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith({
+        zitadelSessionId: ZITADEL_SESSION_ID,
+        sub: SUB,
+        requiredRole: "event-registrar",
+      });
+    });
+
+    it("044 EARS-38: a platform_admin on the same row is revalidated against platform_admin — the unrestricted reach it acts under", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DESK_ROLES }),
+        principal: { sid: SID, roles: ["platform_admin", "event-registrar"] },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
+    it("044 EARS-38: 403 EVENT_REGISTRAR_REQUIRED — the registrar grant was revoked at the IdP", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DESK_ROLES }),
+        principal: { sid: SID, roles: ["event-registrar"] },
+        verdict: { outcome: "role_revoked", roles: [] },
+      });
+      await expectRefusal(h, "EVENT_REGISTRAR_REQUIRED", 403);
+    });
+
+    it("044 EARS-38: a registrar-only principal on an admin-only live row is asked about platform_admin and refused — revalidation never widens reach", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: ["platform_admin"] }),
+        principal: { sid: SID, roles: ["event-registrar"] },
+        verdict: { outcome: "role_revoked", roles: ["event-registrar"] },
+      });
+      await expectRefusal(h, "PLATFORM_ADMIN_REQUIRED", 403);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
+    it("044 EARS-38: a both-roles principal whose platform_admin was revoked is refused PLATFORM_ADMIN_REQUIRED even though the registrar grant survives", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DESK_ROLES }),
+        principal: { sid: SID, roles: ["platform_admin", "event-registrar"] },
+        verdict: { outcome: "role_revoked", roles: ["event-registrar"] },
+      });
+      await expectRefusal(h, "PLATFORM_ADMIN_REQUIRED", 403);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
     it("#1304: 503 IDP_REVALIDATION_UNAVAILABLE — a provider fault is never a credential denial", async () => {
       const h = harness({
         meta: metaOf({ revalidate: "live" }),
@@ -256,9 +325,9 @@ describe("AdminAuthorityGuard (#1304)", () => {
       });
       const refusal = await expectRefusal(h, "STEP_UP_REQUIRED", 401);
       expect(refusal.stepUpUrl).toBe(STEP_UP_URL);
-      expect(
-        (refusal.getResponse() as { stepUpUrl?: string }).stepUpUrl,
-      ).toBe(STEP_UP_URL);
+      expect((refusal.getResponse() as { stepUpUrl?: string }).stepUpUrl).toBe(
+        STEP_UP_URL,
+      );
     });
 
     it("#1304: 401 STEP_UP_REQUIRED — the elevation is older than the window", async () => {

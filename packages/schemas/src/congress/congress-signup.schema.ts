@@ -126,6 +126,18 @@ export const CongressSignUpRequestSchema = z.object({
 export type CongressSignUpRequest = z.infer<typeof CongressSignUpRequestSchema>;
 
 /**
+ * 044 EARS-35 — the answer set ONE congress intake takes, whichever door it
+ * came through: the public request minus the two keys that belong to that door
+ * (the online acceptance and the captcha token). The desk request carries the
+ * same set with its own paper attestation instead, so both reach the use-case
+ * and {@link toCongressSignUpAnswers} as this one type.
+ */
+export type CongressSignUpSubmittedAnswers = Omit<
+  CongressSignUpRequest,
+  "personalDataConsent" | "captchaToken"
+>;
+
+/**
  * 044 EARS-5 — the STORED shape of `registrations.answers` (044 design
  * §«Data model»).
  *
@@ -163,7 +175,7 @@ export type CongressSignUpAnswers = z.infer<typeof CongressSignUpAnswersSchema>;
  * and hands the result here.
  */
 export function toCongressSignUpAnswers(
-  request: CongressSignUpRequest,
+  request: CongressSignUpSubmittedAnswers,
 ): CongressSignUpAnswers {
   return {
     surname: request.surname,

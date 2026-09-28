@@ -1,4 +1,9 @@
-import { Inject, Injectable, type CanActivate, type ExecutionContext } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  type CanActivate,
+  type ExecutionContext,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import {
   AUTHZ_KEY,
@@ -11,8 +16,14 @@ import {
   type AdminAuthorityRole,
   type IdpClient,
 } from "../idp/idp.types.js";
-import { AdminAuthorityException } from "./admin-authority.problem.js";
-import { AdminSessionService, type AdminSessionPrincipal } from "./admin-session.service.js";
+import {
+  AdminAuthorityException,
+  type AdminAuthorityErrorCode,
+} from "./admin-authority.problem.js";
+import {
+  AdminSessionService,
+  type AdminSessionPrincipal,
+} from "./admin-session.service.js";
 
 /**
  * #1304 — live IdP authority revalidation and step-up freshness for the
@@ -102,7 +113,7 @@ export class AdminAuthorityGuard implements CanActivate {
     }
 
     if (needsRevalidation) {
-      const requiredRole = requiredAuthorityRole(meta);
+      const requiredRole = requiredAuthorityRole(meta, principal);
       const verdict = await this.idp.revalidateAdminAuthority({
         zitadelSessionId: record.zitadelSessionId,
         sub: record.sub,
@@ -115,11 +126,7 @@ export class AdminAuthorityGuard implements CanActivate {
           // disabled — the credential itself no longer stands.
           throw new AdminAuthorityException("ADMIN_SESSION_REQUIRED");
         case "role_revoked":
-          throw new AdminAuthorityException(
-            requiredRole === "pd_officer"
-              ? "PD_OFFICER_REQUIRED"
-              : "PLATFORM_ADMIN_REQUIRED",
-          );
+          throw new AdminAuthorityException(REVOKED_CODE[requiredRole]);
         case "unavailable":
           throw new AdminAuthorityException("IDP_REVALIDATION_UNAVAILABLE");
         case "active":
@@ -150,10 +157,38 @@ export class AdminAuthorityGuard implements CanActivate {
  * `platform_admin` there would let a stripped officer through on the strength of
  * a role the route does not actually rely on.
  *
+ * 044 EARS-35/EARS-38: a row that admits `event-registrar` beside
+ * `platform_admin` (the desk registration) is revalidated against the grant the
+ * principal ACTS under. A registrar-only principal is asked about
+ * `event-registrar` — the grant its bound reach rests on — rather than refused
+ * for lacking a `platform_admin` it never claimed. A principal whose session
+ * carries `platform_admin` is asked about THAT grant, because its reach there is
+ * the administrator's unrestricted one; if the IdP withdrew it, the unrestricted
+ * reach must go with it even when a registrar grant remains.
+ *
  * The matrix validator already refuses a `revalidate: "live"` row that names
- * neither role, so the `platform_admin` fallback is reached only by rows that
- * genuinely require it.
+ * neither `platform_admin` nor `pd_officer`, so the `platform_admin` fallback is
+ * reached only by rows that genuinely require it.
  */
-function requiredAuthorityRole(meta: AuthzMeta): AdminAuthorityRole {
-  return meta.roles?.includes("pd_officer") ? "pd_officer" : "platform_admin";
+function requiredAuthorityRole(
+  meta: AuthzMeta,
+  principal: AdminSessionPrincipal,
+): AdminAuthorityRole {
+  if (meta.roles?.includes("pd_officer")) return "pd_officer";
+  if (
+    meta.roles?.includes("event-registrar") &&
+    !principal.roles?.includes("platform_admin")
+  ) {
+    return "event-registrar";
+  }
+  return "platform_admin";
 }
+
+/** The 403 each revalidated grant answers with once the IdP has withdrawn it. */
+const REVOKED_CODE: Readonly<
+  Record<AdminAuthorityRole, AdminAuthorityErrorCode>
+> = {
+  platform_admin: "PLATFORM_ADMIN_REQUIRED",
+  pd_officer: "PD_OFFICER_REQUIRED",
+  "event-registrar": "EVENT_REGISTRAR_REQUIRED",
+};

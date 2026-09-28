@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
+import { CongressModule } from "../congress/congress.module.js";
 import { RecordingsModule } from "../recordings/recordings.module.js";
+import { DeskRegistrationAdminController } from "./desk-registration.admin.controller.js";
 import { EventRosterAdminController } from "./event-roster.admin.controller.js";
 import { EventGrantPolicy } from "../authz/event-grant.policy.js";
 import { MyEventsController } from "./my-events.controller.js";
@@ -21,7 +23,9 @@ import { RegistrationService } from "./registration.service.js";
   // 014's OWN canonical recording projection (#1340) rather than re-deriving the
   // edited-over-raw rule here — so the badge on a doctor's row and the badge on
   // the public card have one implementation.
-  imports: [RecordingsModule],
+  // 044 EARS-35: the desk route enters walk-ins through the congress intake
+  // use-case itself (`CongressSignUpService`), never through a copy of it.
+  imports: [RecordingsModule, CongressModule],
   // 044 EARS-18: the registrar's roster route is the third controller of this
   // module — the read model it serves is owned here, so the route lives beside
   // it rather than on the 007 `platform_admin` events surface (its own file
@@ -30,6 +34,7 @@ import { RegistrationService } from "./registration.service.js";
     RegistrationController,
     MyEventsController,
     EventRosterAdminController,
+    DeskRegistrationAdminController,
   ],
   // 044 EARS-38: the event-binding step every desk route runs (stateless; it
   // reads `event_role_grants` through the @Global DRIZZLE_DB).

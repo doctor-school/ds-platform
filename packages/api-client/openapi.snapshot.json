@@ -52,6 +52,88 @@
         "required": ["provider", "embedRef"],
         "type": "object"
       },
+      "CongressDeskRegistrationRequestDto": {
+        "properties": {
+          "city": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "contactPhone": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "maxLength": 200,
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "firstName": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "paperConsent": {
+            "const": true,
+            "type": "boolean"
+          },
+          "patronymic": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "region": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "specialtyId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "surname": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workplace": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "surname",
+          "firstName",
+          "email",
+          "specialtyId",
+          "workplace",
+          "city",
+          "region",
+          "contactPhone",
+          "paperConsent"
+        ],
+        "type": "object"
+      },
+      "CongressDeskRegistrationResponseDto": {
+        "additionalProperties": false,
+        "properties": {
+          "registrationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "status": {
+            "enum": ["accepted", "existing"],
+            "type": "string"
+          }
+        },
+        "required": ["status", "registrationId"],
+        "type": "object"
+      },
       "CongressRosterListDto": {
         "properties": {
           "event": {
@@ -3320,6 +3402,44 @@
           }
         },
         "tags": ["EventsAdmin"]
+      }
+    },
+    "/v1/admin/events/{idOrSlug}/registrations": {
+      "post": {
+        "operationId": "DeskRegistrationAdminController_register",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idOrSlug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CongressDeskRegistrationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CongressDeskRegistrationResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["DeskRegistrationAdmin"]
       }
     },
     "/v1/admin/events/{idOrSlug}/roster": {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Checkbox } from "@ds/design-system";
+import { FormError } from "@ds/design-system/form";
 import {
   attendanceFailureKind,
   congressDayLongLabel,
@@ -100,13 +101,9 @@ export function AttendanceCell({
         ))}
       </div>
       {failure ? (
-        <p
-          role="alert"
-          className="text-xs text-destructive-text"
-          data-testid="attendance-error"
-        >
+        <FormError data-testid="attendance-error">
           {t(`errors.attendance.${failure.kind}`)}
-        </p>
+        </FormError>
       ) : null}
     </div>
   );

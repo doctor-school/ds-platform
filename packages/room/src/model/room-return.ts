@@ -9,7 +9,7 @@ import { parseAcademyEventReturnTarget } from "@ds/schemas";
  * on login (or signup) success the doctor lands on the room again and the
  * server-side gate RE-RUNS — "re-evaluated on return" (EARS-6). This is a DISTINCT
  * shape from the 005 registration-intent (`/webinars/:slug`, `registration-handoff`
- * / `registration-resume`): the room return carries the trailing `/room` segment
+ * / `@ds/auth-flow/client` `return-completion`): the room return carries the trailing `/room` segment
  * and, on completion, fires NO `RegisterForEvent` — the gate simply re-evaluates
  * (an unauthenticated visitor is never silently joined to the roster; an
  * unregistered doctor is then guided to register by the re-evaluation).

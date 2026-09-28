@@ -17,8 +17,8 @@ import { resolveReturnTarget } from "./return-target-store";
 
 /**
  * 005 EARS-2 / 014 EARS-6 / wave-1 gate row 39 - the CARRIED-TARGET resolver:
- * where a visitor lands once the door is passed (#2027 PR 1.5; was the Academy
- * host lib/registration-resume.ts).
+ * where a visitor lands once the door is passed (#2027 PR 1.5; this module is the
+ * one projection both hosts mount, the Academy host helper having been deleted).
  *
  * The completion rule itself - room return before event intent, best-effort
  * `RegisterForEvent`, any other safe same-origin page honoured as-is, default

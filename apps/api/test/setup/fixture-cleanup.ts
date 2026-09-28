@@ -54,6 +54,14 @@ export async function deleteEventFixture(
   pool: pg.Pool,
   eventId: string,
 ): Promise<void> {
+  // 044 EARS-34 (#2381) — attendance marks hang off a registration (FK
+  // `ON DELETE RESTRICT`), not off the event, so they go before the event's
+  // registrations do.
+  await pool.query(
+    `DELETE FROM registration_attendance WHERE registration_id IN
+       (SELECT id FROM registrations WHERE event_id = $1)`,
+    [eventId],
+  );
   for (const table of EVENT_CHILDREN)
     await pool.query(`DELETE FROM ${table} WHERE event_id = $1`, [eventId]);
   await pool.query("DELETE FROM events WHERE id = $1", [eventId]);
@@ -73,6 +81,12 @@ export async function deleteUserFixture(
     [value],
   );
   for (const row of rows) {
+    // 044 EARS-34 — a registration's attendance marks go before it does.
+    await pool.query(
+      `DELETE FROM registration_attendance WHERE registration_id IN
+         (SELECT id FROM registrations WHERE user_id = $1)`,
+      [row.id],
+    );
     for (const table of USER_CHILDREN)
       await pool.query(`DELETE FROM ${table} WHERE user_id = $1`, [row.id]);
     await pool.query("DELETE FROM users WHERE id = $1", [row.id]);

@@ -5,6 +5,7 @@ import {
   eventDirections,
   eventRecordings,
   events,
+  registrationAttendance,
   registrations,
   users,
 } from "@ds/db";
@@ -93,12 +94,21 @@ describe("golden seed re-pinning (#2262)", () => {
             },
           ])
           .returning();
-        // No inbound FK can cascade-delete non-golden child data. If the schema
-        // grows such a relation, revisiting this staging replacement is required.
+        // No inbound FK can cascade-delete non-golden child data. Exactly one
+        // child references `registrations`: the per-day attendance marks of
+        // 044 EARS-34 (#2381), `ON DELETE RESTRICT` (#1278), which the plan
+        // declares as the replacement's ordered child cleanup
+        // (`volumeNamespaceChildren`). Any further relation requires
+        // revisiting this staging replacement.
         const inbound = await tx.execute(
-          sql`select conname from pg_constraint where contype = 'f' and confrelid = 'registrations'::regclass`,
+          sql`select conname, confdeltype from pg_constraint where contype = 'f' and confrelid = 'registrations'::regclass`,
         );
-        expect(inbound.rows).toEqual([]);
+        expect(inbound.rows).toEqual([
+          {
+            conname: "registration_attendance_registration_id_registrations_id_fk",
+            confdeltype: "r",
+          },
+        ]);
         const before = await tx
           .select()
           .from(registrations)
@@ -150,6 +160,17 @@ describe("golden seed re-pinning (#2262)", () => {
           userId: golden.doctors.mfaEnrolled.id,
           eventId: golden.events.hidden.id,
         });
+        // #2381 — an attendance mark on a replaced golden registration goes
+        // with it (ordered child cleanup, not a restrict failure); a mark on a
+        // product-created registration survives the re-seed untouched.
+        await tx.insert(registrationAttendance).values([
+          {
+            registrationId: goldenUuid(GOLDEN_GROUP.registrations, 9999),
+            day: "2027-04-23",
+            present: true,
+          },
+          { registrationId: ordinary[0]!.id, day: "2027-04-23", present: true },
+        ]);
         // The prior pin changes which pair each ordinal holds: the old executor
         // fails here with registrations_user_id_event_id_unique (SQLSTATE 23505).
         const result = await seedGolden(tx, {
@@ -169,6 +190,9 @@ describe("golden seed re-pinning (#2262)", () => {
         expect(
           (await tx.select().from(users).where(eq(users.id, unrelatedUser)))[0],
         ).toEqual(userBefore);
+        expect(await tx.select().from(registrationAttendance)).toEqual([
+          { registrationId: ordinary[0]!.id, day: "2027-04-23", present: true },
+        ]);
         const [live] = await tx
           .select()
           .from(events)

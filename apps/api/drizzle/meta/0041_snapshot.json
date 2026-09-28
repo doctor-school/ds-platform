@@ -3291,7 +3291,7 @@
           "tableTo": "registrations",
           "columnsFrom": ["registration_id"],
           "columnsTo": ["id"],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

@@ -4,7 +4,7 @@
 // referential soundness) lives in `plan.ts` and is unit-tested without a
 // database; what remains here is the part that genuinely needs Postgres.
 
-import { and, getTableColumns, gte, lte, sql } from "drizzle-orm";
+import { and, getTableColumns, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { goldenUuid } from "./ids.js";
 import { GOLDEN_VOLUME_ORDINAL_BASE } from "./volume.js";
@@ -92,14 +92,27 @@ async function clearVolumeNamespace(
       `${step.name}: declares a volume namespace but has no "id" column`,
     );
   }
-  await tx
-    .delete(step.table)
-    .where(
-      and(
-        gte(id, goldenUuid(group, GOLDEN_VOLUME_ORDINAL_BASE)),
-        lte(id, goldenUuid(group, 0xffff_ffff_ffff)),
-      ),
-    );
+  const range = and(
+    gte(id, goldenUuid(group, GOLDEN_VOLUME_ORDINAL_BASE)),
+    lte(id, goldenUuid(group, 0xffff_ffff_ffff)),
+  );
+  // Declared children first, in plan order: they reference the range
+  // `ON DELETE RESTRICT` (#1278), so the parent delete below would otherwise
+  // abort the whole seed transaction.
+  for (const child of step.volumeNamespaceChildren ?? []) {
+    const parentColumn = getTableColumns(child.table)[child.parentKey];
+    if (!parentColumn) {
+      throw new GoldenPlanError(
+        `${step.name}: child ${child.name} has no "${child.parentKey}" column`,
+      );
+    }
+    await tx
+      .delete(child.table)
+      .where(
+        inArray(parentColumn, tx.select({ id }).from(step.table).where(range)),
+      );
+  }
+  await tx.delete(step.table).where(range);
 }
 
 /** Executes one planned step as an idempotent upsert. */

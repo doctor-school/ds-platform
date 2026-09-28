@@ -14,6 +14,7 @@ import { doctorSpecialties } from "../../schema/doctor-specialties.js";
 import { eventRecordings } from "../../schema/event-recordings.js";
 import { events, streamConfig } from "../../schema/events.js";
 import { consentRecords } from "../../schema/consent-records.js";
+import { registrationAttendance } from "../../schema/registration-attendance.js";
 import { registrations } from "../../schema/registrations.js";
 import {
   directionAdjacency,
@@ -74,11 +75,36 @@ export interface GoldenSeedStep {
    *
    * Deliberately NOT a blanket policy. Named catalogue rows sit BELOW the
    * volume base and keep their identity through the upsert, product-created
-   * rows carry no golden uuid at all, and a step may declare it only while no
-   * other table references its rows — a child FK would turn the replacement
-   * into a cascade or a `restrict` failure.
+   * rows carry no golden uuid at all, and a step may declare it only while
+   * every table that references its rows is named in
+   * {@link volumeNamespaceChildren} — an undeclared child FK would turn the
+   * replacement into a cascade or a `restrict` failure.
    */
   replacesVolumeNamespace?: number;
+  /**
+   * Child tables whose rows reference the replaced range, cleared in this
+   * order BEFORE the range itself (inside the same seed transaction).
+   *
+   * Retained children reference their parent `ON DELETE RESTRICT` (#1278), so
+   * replacing a volume range they point at is an ordered child cleanup the plan
+   * names, never a physical cascade. A child is listed here only when it hangs
+   * off the replaced rows alone and carries no meaning without them — today the
+   * per-day attendance marks of a registration (044 EARS-34, #2381), which a
+   * registrar may set on a staging golden registration and which go with the
+   * registration the re-pin replaces. `parentKey` is the Drizzle property name
+   * of the child's FK column.
+   */
+  volumeNamespaceChildren?: GoldenVolumeChild[];
+}
+
+/** One child table cleared before a volume namespace replacement. */
+export interface GoldenVolumeChild {
+  /** Physical table name — used in logs and in the plan assertion. */
+  name: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- heterogeneous table set; the executor narrows per step
+  table: any;
+  /** Drizzle property name of the child column referencing the step's `id`. */
+  parentKey: string;
 }
 
 /**
@@ -203,6 +229,13 @@ export function buildGoldenSeedPlan(
     }),
     step("registrations", registrations, dataset.registrations, ["id"], {
       replacesVolumeNamespace: GOLDEN_GROUP.registrations,
+      volumeNamespaceChildren: [
+        {
+          name: "registration_attendance",
+          table: registrationAttendance,
+          parentKey: "registrationId",
+        },
+      ],
     }),
     step("event_recordings", eventRecordings, dataset.eventRecordings, ["id"], {
       replacesVolumeNamespace: GOLDEN_GROUP.eventRecordings,
@@ -261,7 +294,10 @@ function step(
   table: unknown,
   rows: readonly Record<string, unknown>[],
   conflictKeys: string[],
-  options: { replacesVolumeNamespace?: number } = {},
+  options: {
+    replacesVolumeNamespace?: number;
+    volumeNamespaceChildren?: GoldenVolumeChild[];
+  } = {},
 ): GoldenSeedStep {
   const keys = new Set<string>();
   for (const row of rows) for (const key of Object.keys(row)) keys.add(key);
@@ -273,6 +309,9 @@ function step(
     ...(options.replacesVolumeNamespace === undefined
       ? {}
       : { replacesVolumeNamespace: options.replacesVolumeNamespace }),
+    ...(options.volumeNamespaceChildren === undefined
+      ? {}
+      : { volumeNamespaceChildren: options.volumeNamespaceChildren }),
     // A re-run refreshes every non-key column it wrote, minus the set-once
     // publication instants. Columns the dataset never sets are left alone
     // rather than reset to a default: the seed owns what it writes, not the

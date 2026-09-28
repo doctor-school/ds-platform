@@ -20,15 +20,17 @@ import { registrations } from "./registrations.js";
  * The set of allowed days is NOT a CHECK: it is per-deployment configuration
  * (`CONGRESS_SIGNUP_EVENT_DAYS`), validated by the service before the write.
  *
- * `ON DELETE cascade`: an attendance mark has no meaning without the
- * registration it marks, and the ledger keeps the trail of both.
+ * `ON DELETE restrict`, like every retained child of `registrations` (#1278):
+ * application data is retained logically, never swept by a physical cascade,
+ * and an attendance mark is exactly the kind of fact the congress report reads
+ * back after the event.
  */
 export const registrationAttendance = pgTable(
   "registration_attendance",
   {
     registrationId: uuid("registration_id")
       .notNull()
-      .references(() => registrations.id, { onDelete: "cascade" }),
+      .references(() => registrations.id, { onDelete: "restrict" }),
     day: date("day", { mode: "string" }).notNull(),
     present: boolean("present").notNull(),
   },

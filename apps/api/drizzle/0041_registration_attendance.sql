@@ -9,7 +9,7 @@ CREATE TABLE "registration_attendance" (
 	CONSTRAINT "registration_attendance_registration_id_day_pk" PRIMARY KEY("registration_id","day")
 );
 --> statement-breakpoint
-ALTER TABLE "registration_attendance" ADD CONSTRAINT "registration_attendance_registration_id_registrations_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "registration_attendance" ADD CONSTRAINT "registration_attendance_registration_id_registrations_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 -- feature-010 universal-edit-audit attachment: every mark / unmark is an
 -- audited mutation attributed to the acting registrar (source admin-ui). No PD
 -- column: the row holds an id, a date and a flag, so no audit_pd_columns entry.

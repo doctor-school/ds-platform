@@ -119,6 +119,7 @@ export {
   resolveDirectionSpecialtyRows,
   resolveDoctorSpecialtyRows,
   type GoldenSeedStep,
+  type GoldenVolumeChild,
 } from "./plan.js";
 export {
   applyGoldenStep,

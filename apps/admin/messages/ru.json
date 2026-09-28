@@ -1313,7 +1313,7 @@
       "attendance": "Присутствие"
     },
     "attendance": {
-      "dayLabel": "Присутствие {day}"
+      "dayLabel": "{short} — присутствие {day}"
     },
     "mailStatuses": {
       "sent": "Отправлено",

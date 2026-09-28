@@ -14,7 +14,8 @@ import { putCongressAttendance } from "@/providers/data-provider";
 
 /**
  * 044 EARS-34 — the roster's «Присутствие» cell: one `Checkbox` per congress
- * day, visible label «23.04», accessible name «Присутствие 23 апреля». A click
+ * day, visible label «23.04», accessible name «23.04 — присутствие 23 апреля»
+ * (the visible text leads the name — WCAG 2.5.3 label-in-name). A click
  * is the whole act — no save button: the box flips at once, the PUT follows,
  * and the box stays disabled while it is in flight. A refused mark reverts the
  * box and says so on the control (`aria-invalid`) and in one short line:
@@ -22,8 +23,11 @@ import { putCongressAttendance } from "@/providers/data-provider";
  *   list, whose own refusal then replaces the roster (`onForbidden`);
  * - `unavailable` (IdP revalidation / network down) — retryable copy;
  * - `failed` — anything else.
- * A successful mark calls `onMarked`, so a page with an active presence filter
- * can re-read the list and the row leaves or joins the filtered set.
+ * A successful mark re-asserts the confirmed value (a list re-read landing
+ * mid-flight cannot leave the box stale) and calls `onMarked`: the page
+ * re-reads its list after every mark, so the other render of the same row
+ * (`DataTable` draws the table and the phone cards) adopts it too, and under a
+ * presence filter the row leaves or joins the filtered set.
  */
 export function AttendanceCell({
   eventId,
@@ -72,6 +76,7 @@ export function AttendanceCell({
     );
     setPending((current) => ({ ...current, [day]: false }));
     if (result.ok) {
+      setMarks((current) => ({ ...current, [day]: present }));
       onMarked();
       return;
     }
@@ -90,13 +95,14 @@ export function AttendanceCell({
             checked={marks[day] ?? false}
             disabled={pending[day] ?? false}
             aria-label={t("attendance.dayLabel", {
+              short: congressDayShortLabel(day),
               day: congressDayLongLabel(day),
             })}
             aria-invalid={failure?.day === day ? true : undefined}
             data-testid={`attendance-${day}`}
             onChange={(event) => void toggle(day, event.target.checked)}
           >
-            <span className="text-sm">{congressDayShortLabel(day)}</span>
+            {congressDayShortLabel(day)}
           </Checkbox>
         ))}
       </div>

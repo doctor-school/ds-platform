@@ -37,8 +37,8 @@ const SHOT_DIR = process.env.E2E_SHOT_DIR;
 const DAY_1 = "2027-04-23";
 const DAY_2 = "2027-04-24";
 
-const DAY_1_LABEL = "Присутствие 23 апреля";
-const DAY_2_LABEL = "Присутствие 24 апреля";
+const DAY_1_LABEL = "23.04 — присутствие 23 апреля";
+const DAY_2_LABEL = "24.04 — присутствие 24 апреля";
 
 const MARKED = "Абрамова Анна Ильинична";
 const OTHERS = ["Борисова Вера Павловна", "Власова Галина Олеговна"];
@@ -152,6 +152,12 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     await expect(dayBox(desk, DAY_1_LABEL)).toBeChecked();
     await expect(dayBox(desk, DAY_2_LABEL)).not.toBeChecked();
     await expect(desk.getByTestId("attendance-error")).toHaveCount(0);
+
+    // Both renders of the row (table + phone cards) carry the confirmed mark:
+    // crossing the md breakpoint without a reload shows it on the phone card.
+    await desk.setViewportSize({ width: 390, height: 844 });
+    await expect(dayBox(desk, DAY_1_LABEL)).toBeChecked();
+    await desk.setViewportSize({ width: 1440, height: 900 });
 
     // The mark is the server's: a fresh read shows 23.04 set, 24.04 untouched.
     await desk.reload();

@@ -48,7 +48,8 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * EARS-34 — the one write on this screen: the «Присутствие» column carries a
  * box per congress day (`AttendanceCell`), and the server-side presence filter
  * (day + «Присутствовал» / «Не отмечен») sits in the same filter bar, composing
- * with search and paging. Per-day SORT is not here (EARS-22 is not built).
+ * with search and paging. The per-day attendance sort → #2316 (EARS-22/EARS-37
+ * server sort; tracked in its AC since 2026-09-28).
  */
 export default function CongressRosterPage() {
   const t = useTranslations();
@@ -124,10 +125,10 @@ export default function CongressRosterPage() {
           registrationId={row.registrationId}
           days={congressDays}
           attendance={row.attendance}
-          // Only a filtered list can lose or gain the row on a mark.
-          onMarked={() => {
-            if (attendanceFilter.presence) void request.refetch();
-          }}
+          // Every mark re-reads the list: the table and the phone-card render
+          // of the row share the server truth, and a filtered list loses or
+          // gains the row.
+          onMarked={() => void request.refetch()}
           // The grant is gone: re-read the list, whose own refusal replaces
           // the roster — the mark itself is never retried.
           onForbidden={() => void request.refetch()}

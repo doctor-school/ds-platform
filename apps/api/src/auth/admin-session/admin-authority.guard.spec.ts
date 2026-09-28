@@ -282,6 +282,30 @@ describe("AdminAuthorityGuard (#1304)", () => {
       await expectRefusal(h, "EVENT_REGISTRAR_REQUIRED", 403);
     });
 
+    it("044 EARS-38: a registrar-only principal on an admin-only live row is asked about platform_admin and refused — revalidation never widens reach", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: ["platform_admin"] }),
+        principal: { sid: SID, roles: ["event-registrar"] },
+        verdict: { outcome: "role_revoked", roles: ["event-registrar"] },
+      });
+      await expectRefusal(h, "PLATFORM_ADMIN_REQUIRED", 403);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
+    it("044 EARS-38: a both-roles principal whose platform_admin was revoked is refused PLATFORM_ADMIN_REQUIRED even though the registrar grant survives", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: DESK_ROLES }),
+        principal: { sid: SID, roles: ["platform_admin", "event-registrar"] },
+        verdict: { outcome: "role_revoked", roles: ["event-registrar"] },
+      });
+      await expectRefusal(h, "PLATFORM_ADMIN_REQUIRED", 403);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
     it("#1304: 503 IDP_REVALIDATION_UNAVAILABLE — a provider fault is never a credential denial", async () => {
       const h = harness({
         meta: metaOf({ revalidate: "live" }),

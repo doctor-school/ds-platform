@@ -144,21 +144,21 @@ Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31
 
 ### 10. Live authority revalidation and step-up for high-risk actions
 
-The base session issued after primary login (§6) carries a single security level, uniform across read and write operations of any kind, and it is a *cached* statement about the principal: it was true at login and is replayed unchanged until it expires. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), the ADR-0009 erasure-plan approval, account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that cached, uniform level is insufficient on two independent axes:
+The base session issued after primary login (§6) carries a single security level, uniform across read and write operations of any kind, and it is a _cached_ statement about the principal: it was true at login and is replayed unchanged until it expires. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), the ADR-0009 erasure-plan approval, account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that cached, uniform level is insufficient on two independent axes:
 
 - **Authority may have lapsed.** The account could have been disabled or the `platform_admin` grant revoked at the IdP seconds ago; the session says nothing about it until it expires.
 - **Presence may be stale.** An attacker holding a stolen long-lived session MUST NOT be able to execute a catastrophic action without fresh re-authentication.
 
-The two are answered by two independent declarations on the endpoint, both carried by the **endpoint-authorization-matrix** and both enforced by one global guard (`AdminAuthorityGuard`) rather than per-handler code — the completeness claim is that no handler *can* bypass them, which a convention cannot give.
+The two are answered by two independent declarations on the endpoint, both carried by the **endpoint-authorization-matrix** and both enforced by one global guard (`AdminAuthorityGuard`) rather than per-handler code — the completeness claim is that no handler _can_ bypass them, which a convention cannot give.
 
 **Authority: `@Authz({ revalidate: "live" })` (matrix column `revalidate`).** Before the handler runs, the backend asks the IdP whether this principal still holds the required grant, using its own SERVICE credential over the wrapped IdP session id. No user access or refresh token is read or stored — the admin session is token-free by construction (§6.1), and this check preserves that. The verdict is one of four, and the mapping is normative:
 
-| verdict                    | response                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| active, grant present      | the handler proceeds                                                            |
-| session gone / inactive    | `401` `errorCode: ADMIN_SESSION_REQUIRED`                                       |
-| grant revoked              | `403` `errorCode: PLATFORM_ADMIN_REQUIRED` (or `PD_OFFICER_REQUIRED`)           |
-| provider unavailable       | `503` `errorCode: IDP_REVALIDATION_UNAVAILABLE`                                 |
+| verdict                 | response                                                              |
+| ----------------------- | --------------------------------------------------------------------- |
+| active, grant present   | the handler proceeds                                                  |
+| session gone / inactive | `401` `errorCode: ADMIN_SESSION_REQUIRED`                             |
+| grant revoked           | `403` `errorCode: PLATFORM_ADMIN_REQUIRED` (or `PD_OFFICER_REQUIRED`) |
+| provider unavailable    | `503` `errorCode: IDP_REVALIDATION_UNAVAILABLE`                       |
 
 The `unavailable` row is load-bearing, not defensive boilerplate. Every provider fault — transport error, timeout, `429`, `5xx`, rejected service token, missing config, malformed payload — MUST arrive as `503`, never as a credential denial. An implementation that collapsed those into `401` would turn a brief IdP blip into "your session expired" for every administrator simultaneously, and would train operators to re-authenticate in response to an outage.
 
@@ -182,6 +182,26 @@ The `unavailable` row is load-bearing, not defensive boilerplate. Every provider
 - **identity-auth-rbac-design** — the elevation mechanism and the refusal contract (§7.1).
 - **backend-core-design** — the middleware stack (a CI-enforced coverage check asserting that every admin mutation either declares `revalidate: "live"` or appears in a written exemption registry).
 - **ADR-0009 §2.4** — audit class registration for step-up events.
+
+### A1 — Live revalidation checks the grant the caller acts under; `403 EVENT_REGISTRAR_REQUIRED` (2026-09-28, PR #2395)
+
+**Context.** §10 is running in production (#1304): every `revalidate: "live"` route asks the IdP about `platform_admin` (or `pd_officer`), and the verdict table lists only those two `403` codes. Feature 044 adds the first live write a registrar can reach — manual registration from the admin desk (044 EARS-35), bound to one event (044 EARS-38) — and a registrar-only session holds no `platform_admin`. Asking the IdP about `platform_admin` there would refuse every registrar; skipping revalidation would leave a withdrawn registrar grant working until the session expires.
+
+**Decision.**
+
+- **Which grant is revalidated.** The IdP is asked about the grant the caller acts under: `pd_officer` on a row naming it; on a row that also admits `event-registrar`, `event-registrar` for a session without `platform_admin` and `platform_admin` for a session that holds it; `platform_admin` on every other row.
+- **New verdict-table row.** Grant revoked, `event-registrar` case → `403` `errorCode: EVENT_REGISTRAR_REQUIRED`, beside `PLATFORM_ADMIN_REQUIRED` and `PD_OFFICER_REQUIRED`.
+- **Revalidation never widens reach.** It only chooses which grant the IdP is asked about; it admits nobody. The route `roles` check and the event binding (`EventGrantPolicy.assertEventAccess` over `event_role_grants`, 044 EARS-38) still decide admission. A registrar-only session on a row that does not admit `event-registrar` is asked about `platform_admin` and refused.
+- **Both roles, `platform_admin` withdrawn.** A session holding both roles is always asked about `platform_admin`; when the IdP has withdrawn it, the answer is `403 PLATFORM_ADMIN_REQUIRED` even where the registrar grant survives. This is fail-closed: a fresh login yields a registrar-only session with the registrar's bound reach.
+- **Unchanged.** The `401 ADMIN_SESSION_REQUIRED` and `503 IDP_REVALIDATION_UNAVAILABLE` rows stay role-independent, and the order stays authority before presence (step-up).
+
+**Consequences.** Registrars get live revalidation on the desk write at no widening of access. The admin console MUST treat `403 EVENT_REGISTRAR_REQUIRED` as a credential refusal (no-access), never as a retry; this binds the admin desk registration form.
+
+**Why now.** PR #2395 (#2382) ships the desk registration route with `revalidate: "live"`, the first registrar-reachable live write, so the normative table above would otherwise contradict running code.
+
+**Open follow-up.** The admin desk form (the next layer of #2382) maps `403 EVENT_REGISTRAR_REQUIRED` to no-access and `503 IDP_REVALIDATION_UNAVAILABLE` to retry.
+
+**Affects.** 044 EARS-35 / EARS-38; #1304; spec 011 admin session, design §9 (Endpoint-authz — the raised floor); `apps/api/src/authz/README.md` (live revalidation table); `apps/api/docs/endpoint-authz-matrix.md` (`revalidate` column).
 
 ## Consequences
 

@@ -40,6 +40,17 @@ import {
   DialogTrigger,
 } from "@ds/design-system/dialog";
 import {
+  Sheet,
+  SheetBody,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  type SheetNavigateDirection,
+} from "@ds/design-system/sheet";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -1730,8 +1741,9 @@ function ContactChipSection() {
       <SubRow label="Destination decides the opener — the one thing the chip owns">
         <p className="max-w-2xl text-sm text-muted-foreground">
           An <code className="font-mono text-xs">https:</code> destination is
-          off-platform, so the chip opens it in a new tab with the opener severed
-          (<code className="font-mono text-xs">
+          off-platform, so the chip opens it in a new tab with the opener
+          severed (
+          <code className="font-mono text-xs">
             rel=&quot;noopener noreferrer&quot;
           </code>
           ). A <code className="font-mono text-xs">mailto:</code> or{" "}
@@ -1739,9 +1751,8 @@ function ContactChipSection() {
           operating system and stays in place — a{" "}
           <code className="font-mono text-xs">target=&quot;_blank&quot;</code>{" "}
           there would leave the reader on a blank tab. The channel mark is
-          decorative (
-          <code className="font-mono text-xs">aria-hidden</code>): the label
-          already names the channel.
+          decorative (<code className="font-mono text-xs">aria-hidden</code>):
+          the label already names the channel.
         </p>
       </SubRow>
     </PrimitiveSection>
@@ -1925,15 +1936,15 @@ function EventsFilterSection() {
         019 EARS-7, fork F-019-1 Б (source{" "}
         <code className="font-mono text-xs">doctor-events.dc.html</code>): the
         ONE shared facet panel the doctor feed mounts as a desktop sidebar —
-        format, тип события, специальность (по умолчанию «моя и смежные»),
-        город для офлайн-событий, «НМО», «цена в Pul» и поиск по названию.
-        Каждый фасет — закрытый селект в языке канваса: подпись капсом над
-        текущим значением, а список значений раскрывается листом под кнопкой
-        («НМО» и «цена в Pul» переключаются одним кликом). Every applied facet
-        stays visible as its own removable chip under the controls, the applied
-        count is stated, and one «Сбросить фильтры» returns to the default
-        scope. The panel is presentational — values in, the next applied set
-        out; the URL codec is its own unit.
+        format, тип события, специальность (по умолчанию «моя и смежные»), город
+        для офлайн-событий, «НМО», «цена в Pul» и поиск по названию. Каждый
+        фасет — закрытый селект в языке канваса: подпись капсом над текущим
+        значением, а список значений раскрывается листом под кнопкой («НМО» и
+        «цена в Pul» переключаются одним кликом). Every applied facet stays
+        visible as its own removable chip under the controls, the applied count
+        is stated, and one «Сбросить фильтры» returns to the default scope. The
+        panel is presentational — values in, the next applied set out; the URL
+        codec is its own unit.
       </p>
       <p className="text-sm text-muted-foreground">
         The three <span className="font-medium text-foreground">D-1 fill</span>{" "}
@@ -1957,7 +1968,7 @@ function EventsFilterSection() {
           <ThemePair render={() => <EventsFilterDemo fill={variant.fill} />} />
         </SubRow>
       ))}
-      <SubRow label="fill=&quot;full&quot; — применённые фасеты, счётчик и сброс">
+      <SubRow label='fill="full" — применённые фасеты, счётчик и сброс'>
         <ThemePair
           render={() => (
             <EventsFilterDemo
@@ -2320,16 +2331,17 @@ function WebinarRecordingPlaqueSection() {
     >
       <p className="text-sm text-muted-foreground">
         The post-live «запись готовится» plaque (source{" "}
-        <code className="font-mono text-xs">event-page-recording.dc.html</code>, 014
-        EARS-7): what occupies the player position while nothing is published
-        yet. The{" "}
-        <span className="font-medium text-foreground">dated</span> render carries
-        the operator&apos;s committed readiness day; the{" "}
-        <span className="font-medium text-foreground">undated</span> render omits
-        the time-plate value entirely (hide-until-content) and lets the body
-        carry the honest date-free line — the plaque never invents an estimate.
-        It has NO CTA slot by design: readiness notifications are a declared 014
-        non-goal, so a «Напомнить на почту» button would be a dead affordance.
+        <code className="font-mono text-xs">event-page-recording.dc.html</code>,
+        014 EARS-7): what occupies the player position while nothing is
+        published yet. The{" "}
+        <span className="font-medium text-foreground">dated</span> render
+        carries the operator&apos;s committed readiness day; the{" "}
+        <span className="font-medium text-foreground">undated</span> render
+        omits the time-plate value entirely (hide-until-content) and lets the
+        body carry the honest date-free line — the plaque never invents an
+        estimate. It has NO CTA slot by design: readiness notifications are a
+        declared 014 non-goal, so a «Напомнить на почту» button would be a dead
+        affordance.
       </p>
       {states.map((s) => (
         <SubRow key={s.key} label={`expectedBy="${s.key}"`}>
@@ -2360,8 +2372,8 @@ function RecordingSpoilerSection() {
       <p className="text-sm text-muted-foreground">
         The secondary-cut disclosure that sits under the post-live player when
         an эфир published BOTH cuts (source{" "}
-        <code className="font-mono text-xs">event-page-recording.dc.html</code>, 014
-        EARS-8). It is a native{" "}
+        <code className="font-mono text-xs">event-page-recording.dc.html</code>,
+        014 EARS-8). It is a native{" "}
         <code className="font-mono text-xs">
           &lt;details&gt;/&lt;summary&gt;
         </code>{" "}
@@ -2625,6 +2637,245 @@ function DialogSection() {
   );
 }
 
+/** Neutral mock roster for the Sheet specimens — numbered entries, no persons. */
+const SHEET_RECORDS = [
+  { no: 1041, specialty: "Терапия", city: "Казань", status: "Подтверждена" },
+  { no: 1042, specialty: "Кардиология", city: "Пермь", status: "Ожидает" },
+  { no: 1043, specialty: "Неврология", city: "Томск", status: "Подтверждена" },
+  { no: 1044, specialty: "Педиатрия", city: "Самара", status: "Отменена" },
+  { no: 1045, specialty: "Эндокринология", city: "Омск", status: "Ожидает" },
+  { no: 1046, specialty: "Хирургия", city: "Уфа", status: "Подтверждена" },
+  { no: 1047, specialty: "Терапия", city: "Тула", status: "Подтверждена" },
+  { no: 1048, specialty: "Кардиология", city: "Орёл", status: "Ожидает" },
+  { no: 1049, specialty: "Неврология", city: "Курск", status: "Подтверждена" },
+  { no: 1050, specialty: "Педиатрия", city: "Псков", status: "Ожидает" },
+  { no: 1051, specialty: "Эндокринология", city: "Тверь", status: "Отменена" },
+  { no: 1052, specialty: "Хирургия", city: "Киров", status: "Подтверждена" },
+] as const;
+
+/**
+ * A bounded stage the Sheet portals into. `transform-gpu` makes the stage the
+ * containing block of the sheet's `position: fixed` panel and scrim, so the
+ * specimen docks to the STAGE edge (with the roster behind it) instead of
+ * covering the whole catalogue. Modality still follows the real viewport: at
+ * >= lg the panel is the non-modal inspector, below lg the modal full cover.
+ */
+function SheetStage({
+  label,
+  onStage,
+  children,
+}: {
+  label: string;
+  onStage: (node: HTMLElement | null) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2" data-sheet-stage={label}>
+      <span className="font-mono text-xs text-muted-foreground">{label}</span>
+      <div
+        ref={onStage}
+        className="relative h-120 transform-gpu overflow-hidden border-2 border-border bg-background"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Read card: roster behind, click a row to inspect, ↑/↓ pages the records. */
+function SheetInspectorDemo() {
+  const [stage, setStage] = useState<HTMLElement | null>(null);
+  const [index, setIndex] = useState<number | null>(null);
+  const record = index === null ? null : SHEET_RECORDS[index];
+
+  function navigate(direction: SheetNavigateDirection) {
+    setIndex((i) => {
+      if (i === null) return i;
+      const next = direction === "next" ? i + 1 : i - 1;
+      return Math.min(Math.max(next, 0), SHEET_RECORDS.length - 1);
+    });
+  }
+
+  return (
+    <SheetStage
+      label="inspector — read card, ↑/↓ between records"
+      onStage={setStage}
+    >
+      <div className="h-full overflow-y-auto">
+        <table className="w-full border-collapse text-sm text-foreground">
+          <thead>
+            <tr className="border-b-2 border-border text-left">
+              <th className="p-3 font-semibold">Заявка</th>
+              <th className="p-3 font-semibold">Специальность</th>
+              <th className="p-3 font-semibold">Город</th>
+              <th className="p-3 font-semibold">Статус</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SHEET_RECORDS.map((r, i) => (
+              <tr
+                key={r.no}
+                data-selected={i === index ? "true" : undefined}
+                className="border-b border-border data-selected:bg-tint data-selected:text-tint-foreground"
+              >
+                <td className="p-3">
+                  <Button variant="link" onClick={() => setIndex(i)}>
+                    {`Заявка №${r.no}`}
+                  </Button>
+                </td>
+                <td className="p-3">{r.specialty}</td>
+                <td className="p-3">{r.city}</td>
+                <td className="p-3">{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Sheet
+        open={record !== null}
+        onOpenChange={(open) => {
+          if (!open) setIndex(null);
+        }}
+      >
+        <SheetContent container={stage} onNavigate={navigate}>
+          <SheetHeader>
+            <SheetTitle>{record ? `Заявка №${record.no}` : ""}</SheetTitle>
+            <SheetDescription>
+              ↑/↓ — соседняя заявка, Escape или × — закрыть.
+            </SheetDescription>
+          </SheetHeader>
+          <SheetBody>
+            {record ? (
+              <dl className="flex flex-col gap-4 text-sm">
+                {[
+                  ["Специальность", record.specialty],
+                  ["Город", record.city],
+                  ["Статус", record.status],
+                  ["Источник", "Форма на сайте конгресса"],
+                  ["Дни участия", "Первый и второй день"],
+                  [
+                    "Комментарий",
+                    "Длинное поле, чтобы показать: прокручивается только тело карточки, шапка остаётся на месте. ".repeat(
+                      6,
+                    ),
+                  ],
+                ].map(([term, value]) => (
+                  <div key={term} className="flex flex-col gap-1">
+                    <dt className="text-muted-foreground">{term}</dt>
+                    <dd className="text-foreground">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
+    </SheetStage>
+  );
+}
+
+/** Entry form: fields in SheetBody, Отмена/Сохранить pinned in SheetFooter. */
+function SheetFormDemo() {
+  const [stage, setStage] = useState<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<"right" | "left">("right");
+  const [size, setSize] = useState<"md" | "lg">("md");
+  const id = useId();
+
+  function openWith(nextSide: "right" | "left", nextSize: "md" | "lg") {
+    setSide(nextSide);
+    setSize(nextSize);
+    setOpen(true);
+  }
+
+  return (
+    <SheetStage
+      label="form — body + footer actions; side / size"
+      onStage={setStage}
+    >
+      <div className="flex flex-wrap items-start gap-3 p-6">
+        <Button onClick={() => openWith("right", "md")}>Новая заявка</Button>
+        <Button variant="outline" onClick={() => openWith("right", "lg")}>
+          Справа, lg
+        </Button>
+        <Button variant="outline" onClick={() => openWith("left", "md")}>
+          Слева, md
+        </Button>
+      </div>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent container={stage} side={side} size={size}>
+          <SheetHeader>
+            <SheetTitle>Новая заявка</SheetTitle>
+            <SheetDescription>
+              Регистрация участника за стойкой. Поля — в теле, действия — внизу.
+            </SheetDescription>
+          </SheetHeader>
+          <SheetBody>
+            <form
+              id={`${id}-form`}
+              className="flex flex-col gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setOpen(false);
+              }}
+            >
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-specialty`}>Специальность</Label>
+                <Input id={`${id}-specialty`} defaultValue="Терапия" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-city`}>Город</Label>
+                <Input id={`${id}-city`} defaultValue="Казань" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-email`}>Эл. почта</Label>
+                <Input
+                  id={`${id}-email`}
+                  type="email"
+                  placeholder="name@example.org"
+                />
+              </div>
+            </form>
+          </SheetBody>
+          <SheetFooter>
+            <SheetClose asChild>
+              <Button variant="outline">Отмена</Button>
+            </SheetClose>
+            <Button type="submit" form={`${id}-form`}>
+              Сохранить
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </SheetStage>
+  );
+}
+
+function SheetSection() {
+  return (
+    <PrimitiveSection
+      title="Sheet"
+      exportsLine="Sheet · SheetTrigger · SheetContent · SheetHeader · SheetBody · SheetFooter · SheetTitle · SheetDescription · SheetClose"
+    >
+      <p className="text-sm text-muted-foreground">
+        The official shadcn/ui sheet on the Radix Dialog substrate, re-skinned
+        to the DS tokens — the side panel for a record card or an entry form.
+        From <code className="font-mono text-xs">lg</code> it is a non-modal
+        inspector docked to the edge: the list behind stays visible, scrollable
+        and clickable, and choosing another row keeps the panel open. Below{" "}
+        <code className="font-mono text-xs">lg</code> it becomes a modal full
+        cover with a scrim. Escape or × closes it;{" "}
+        <code className="font-mono text-xs">onNavigate</code> pages records on
+        ↑/↓. Only <code className="font-mono text-xs">SheetBody</code> scrolls.
+        Each stage is its own positioning frame, so the specimen docks to the
+        stage, not the window; it follows the page theme toggle.
+      </p>
+      <SheetInspectorDemo />
+      <SheetFormDemo />
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -2638,6 +2889,7 @@ export function PrimitivesView() {
       <CardSection />
       <TabsSection />
       <DialogSection />
+      <SheetSection />
       <OtpSection />
       <FormPrimitivesSection />
       <FieldsSection />

@@ -68,6 +68,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // contract the viewer is expected to show side by side.
   { id: "dialog", section: "primitives" },
   { id: "alert-dialog", section: "primitives" },
+  // Side panel / record inspector (#2396; owner decision #2377 — adopted official
+  // shadcn/ui `sheet`, MIT, on the same Radix Dialog substrate). One unit: the
+  // modality switch (inspector >= lg, full cover below) is one behaviour.
+  { id: "sheet", section: "primitives" },
 
   // ── New-language primitives (spec §3.2, #513) — single-file primitive subpaths.
   { id: "filter-chip", section: "primitives" },

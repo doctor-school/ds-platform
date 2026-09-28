@@ -133,6 +133,14 @@ describe("#2396 Sheet — open / close", () => {
     expect(sheet.className).not.toMatch(/overflow-y-auto/);
     await dismiss(user);
   });
+
+  it("the scrolling body is keyboard-reachable — a read card with no fields still scrolls from the keyboard (axe scrollable-region-focusable)", async () => {
+    const { user } = await openSheet();
+    const body = screen.getByTestId("sheet-body");
+    expect(body).toHaveAttribute("tabindex", "0");
+    expect(body.className).toMatch(/focus-visible:shadow-focus/);
+    await dismiss(user);
+  });
 });
 
 describe("#2396 Sheet — modality follows the lg breakpoint", () => {

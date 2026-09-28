@@ -292,14 +292,25 @@ function SheetHeader({
 }
 SheetHeader.displayName = "SheetHeader";
 
-/** The ONLY scrolling region: header and footer (the actions) never scroll away. */
+/**
+ * The ONLY scrolling region: header and footer (the actions) never scroll away.
+ * It is a tab stop (`tabIndex=0`) because a read card often has no field or
+ * link inside it — without one, keyboard users could not scroll a long body
+ * (WCAG 2.1.1; axe `scrollable-region-focusable`). Space / PageUp / PageDown /
+ * Home / End scroll it; ↑/↓ stay record paging when `onNavigate` is set.
+ */
 function SheetBody({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("min-h-0 flex-1 overflow-y-auto p-6", className)}
+      tabIndex={0}
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto p-6",
+        "focus-visible:outline-none focus-visible:shadow-focus",
+        className,
+      )}
       {...props}
     />
   );

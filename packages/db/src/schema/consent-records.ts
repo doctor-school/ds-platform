@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { users } from "./users.js";
 
@@ -23,17 +24,40 @@ import { users } from "./users.js";
 // ADR-0009 value erasure on the `users` mirror, orthogonal to row retention
 // (§3.6 rule 6); the consent row itself stores only an opaque user id, a purpose
 // and a version — no PD.
-export const consentRecords = pgTable("consent_records", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "restrict" }),
-  purpose: text("purpose").notNull(),
-  version: text("version").notNull(),
-  capturedAt: timestamp("captured_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+/**
+ * 044 EARS-35 — how a consent was captured. `paper` is a consent the registrar
+ * recorded from a signed paper form at the congress desk; an online consent the
+ * subject gave themselves carries `NULL` (every row written before 0040).
+ */
+export const CONSENT_ORIGINS = ["paper"] as const;
+export type ConsentOrigin = (typeof CONSENT_ORIGINS)[number];
+
+export const consentRecords = pgTable(
+  "consent_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    purpose: text("purpose").notNull(),
+    version: text("version").notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /**
+     * 044 EARS-35 — {@link ConsentOrigin}, or `NULL` for an online consent. The
+     * purpose and version are unchanged by it: a paper consent is the same
+     * accepted text, only captured differently.
+     */
+    origin: text("origin").$type<ConsentOrigin>(),
+  },
+  (table) => [
+    check(
+      "consent_records_origin_check",
+      sql`${table.origin} IS NULL OR ${table.origin} = 'paper'`,
+    ),
+  ],
+);
 
 export type ConsentRecord = typeof consentRecords.$inferSelect;
 export type NewConsentRecord = typeof consentRecords.$inferInsert;

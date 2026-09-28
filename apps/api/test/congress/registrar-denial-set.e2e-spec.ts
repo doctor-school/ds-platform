@@ -57,6 +57,10 @@ const REGISTRAR_ALLOW_SET: ReadonlySet<string> = new Set([
   // one lands it joins this set explicitly — a new route that carries the role
   // without being enumerated here is exactly what the sweep must fail on.
   "GET /v1/admin/events/:idOrSlug/roster",
+  // 044 EARS-35 (#2382) — the manual desk registration, the second of the two
+  // registration mutations the 2026-09-25 amendment gives the registrar
+  // (EARS-24 narrowed); bound to one event by EARS-38 like the roster.
+  "POST /v1/admin/events/:idOrSlug/registrations",
   // Holding a session at the admin origin.
   "POST /v1/admin/auth/login",
   "GET /v1/admin/auth/state",

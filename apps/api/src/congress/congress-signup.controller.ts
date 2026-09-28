@@ -62,9 +62,12 @@ export class CongressSignUpController {
     audit: "high-stakes",
     tests: ["EARS-1"],
   })
-  signUp(
+  async signUp(
     @Body() dto: CongressSignUpRequestDto,
   ): Promise<CongressSignUpAccepted> {
-    return this.signUpService.signUp(dto);
+    // EARS-7: one success state whatever the intake did — the registration id
+    // and whether it was new are the desk's to name (EARS-35), never this door's.
+    await this.signUpService.signUp(dto, { origin: "site" });
+    return { status: "accepted" };
   }
 }

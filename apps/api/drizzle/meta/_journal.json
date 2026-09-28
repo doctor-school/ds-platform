@@ -281,6 +281,13 @@
       "when": 1790319928326,
       "tag": "0039_event_role_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790569828226,
+      "tag": "0040_desk_registration_origins",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  text,
   timestamp,
   unique,
   uuid,
@@ -98,6 +99,17 @@ export const confirmationMailStatus = pgEnum("confirmation_mail_status", [
   "sent",
   "failed",
 ]);
+
+/**
+ * 044 EARS-35 — where a registration came from (044 design §Data model).
+ *
+ * `site` — the congress-site form; `desk` — a registrar's manual entry at the
+ * congress desk; `platform` — a signed-in doctor registering from the feed
+ * (EARS-16), which writes nothing and takes the column default. Both `site` and
+ * `desk` are written by the ONE congress intake use-case, never by two.
+ */
+export const INTAKE_ORIGINS = ["site", "desk", "platform"] as const;
+export type IntakeOrigin = (typeof INTAKE_ORIGINS)[number];
 
 export const registrations = pgTable(
   "registrations",
@@ -192,6 +204,21 @@ export const registrations = pgTable(
      * answers and the registration instant.
      */
     accountCreatedByIntake: boolean("account_created_by_intake"),
+    /**
+     * 044 EARS-35 — the origin of this registration ({@link IntakeOrigin}).
+     *
+     * `NOT NULL DEFAULT 'platform'`: the signed-in platform path (EARS-16) writes
+     * nothing and takes the default; the congress intake writes `site` or
+     * `desk`. `NULL` is not a state — migration 0040 backfilled every older row
+     * (`site` where `answers IS NOT NULL`, since only the site intake has ever
+     * written answers, `platform` for the rest) before the constraint was set.
+     * Frozen with the rest of the row by `ON CONFLICT DO NOTHING` (EARS-8): the
+     * FIRST intake that registered the pair is its origin.
+     */
+    intakeOrigin: text("intake_origin")
+      .$type<IntakeOrigin>()
+      .notNull()
+      .default("platform"),
   },
   (table) => [
     // The one-registration invariant (EARS-3, ADR-0003 §5): at most one
@@ -211,6 +238,10 @@ export const registrations = pgTable(
     // reader must use for the planner to pick the index up (a `deleted_at IS
     // NULL` predicate is equivalent only through the CHECK, which the planner
     // does not consult).
+    check(
+      "registrations_intake_origin_check",
+      sql`${table.intakeOrigin} IN ('site', 'desk', 'platform')`,
+    ),
     index("registrations_active_event_idx")
       .on(table.eventId)
       .where(sql`${table.recordStatus} = 'active'`),

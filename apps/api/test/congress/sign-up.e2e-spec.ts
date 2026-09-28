@@ -252,6 +252,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ]);
       expect(registration.rowCount).toBe(1);
       expect(registration.rows[0]!.event_id).toBe(eventId);
+      // 044 EARS-35 — the congress-site door stamps its origin on the row.
+      const origin = await pool.query<{ intake_origin: string }>(
+        `SELECT intake_origin FROM registrations WHERE user_id = $1`,
+        [row.id],
+      );
+      expect(origin.rows[0]!.intake_origin).toBe("site");
       expect(registration.rows[0]!.answers).toMatchObject({
         surname: "Иванова",
         firstName: "Мария",

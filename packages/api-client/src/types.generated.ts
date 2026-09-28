@@ -772,6 +772,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/events/{idOrSlug}/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DeskRegistrationAdminController_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/events/{idOrSlug}/roster": {
         parameters: {
             query?: never;
@@ -1926,6 +1942,27 @@ export interface components {
             embedRef: string;
             /** @enum {string} */
             provider: "rutube" | "youtube" | "vk" | "cdnvideo";
+        };
+        CongressDeskRegistrationRequestDto: {
+            city: string;
+            contactPhone: string;
+            /** Format: email */
+            email: string;
+            firstName: string;
+            /** @constant */
+            paperConsent: true;
+            patronymic?: string;
+            region: string;
+            /** Format: uuid */
+            specialtyId: string;
+            surname: string;
+            workplace: string;
+        };
+        CongressDeskRegistrationResponseDto: {
+            /** Format: uuid */
+            registrationId: string;
+            /** @enum {string} */
+            status: "accepted" | "existing";
         };
         CongressRosterListDto: {
             event: {
@@ -3497,6 +3534,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    DeskRegistrationAdminController_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CongressDeskRegistrationRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressDeskRegistrationResponseDto"];
+                };
             };
         };
     };

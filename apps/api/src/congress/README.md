@@ -13,7 +13,7 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 | File                         | Role                                                                                                                                             |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `congress-signup.controller` | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`).   |
-| `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in.                                                                     |
+| `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in — for both doors (`site`, and the registrar's `desk`, EARS-35).      |
 | `congress-signup.config`     | Every configured setting the intake needs — the event, the consent version, the venue, the registration window and the timing floor — validated. |
 | `congress-signup.tokens`     | The injected clock and the per-request configuration reader.                                                                                     |
 | `congress-signup.dto`        | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                              |
@@ -67,6 +67,21 @@ NOT through a window refusal, because a deployment with no opening instant
 cannot honestly announce one. There is still no admin screen and no settings
 row; making the window admin-editable is tracked separately (`DEBT.md`,
 2026-09-21).
+
+## Two doors, one intake (044 EARS-35)
+
+`CongressSignUpService.signUp(request, intake)` takes the door as a parameter:
+`{ origin: "site" }` from this module's public route, and
+`{ origin: "desk", eventKey, consentOrigin: "paper" }` from the registrar's
+`POST /v1/admin/events/:idOrSlug/registrations` in `registration/` (its
+README has the route). The desk skips only the registration window and takes
+the event from the admin route instead of `CONGRESS_SIGNUP_EVENT_ID`; the
+account, registration, consent and confirmation-email steps are the same code.
+The door is stamped on `registrations.intake_origin` (`site` | `desk`; the
+signed-in platform path takes the default `platform`) and a new desk consent
+row on `consent_records.origin = 'paper'`. The use-case returns the
+registration id and whether this call created it; the public route still
+answers the one `accepted` state (EARS-7), the desk names the registration.
 
 ## Slice state
 

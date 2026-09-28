@@ -12,8 +12,9 @@ toggle, the resend with its neutral notice, «Начать заново» and th
 sign-in — and both hosts mount it from their `/reset` route through
 `@ds/auth-flow/reset/route`. A signed-in doctor can still open `/reset` (the
 cabinet «Сменить пароль» entry), and a completed reset still lands signed in on
-the carried page, or on the account page when the visitor arrived carrying
-nothing.
+this host's account page — or on the account or эфир page the visitor arrived
+carrying; any other carried page, an эфир room included, lands on the account
+page.
 
 What a visitor can notice: the words now follow the owner's canvas on both
 hosts — «Сброс пароля» / «Новый пароль», «Отправить код сброса», «Задать новый

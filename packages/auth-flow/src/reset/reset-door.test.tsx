@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type CaptchaProps = {
   requestKey: number | null;
   onToken: (token?: string) => void;
+  onError: (failure: "expired" | "unavailable" | "incomplete") => void;
 };
 
 const h = vi.hoisted(() => ({
@@ -88,6 +89,7 @@ vi.mock("@ds/design-system/blocks", async () => {
   };
 });
 
+import { botProtectionMessages } from "../bot-protection";
 import { AuthError } from "../client/auth-client";
 import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
@@ -347,6 +349,37 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
         expect(screen.getByTestId("reset-resend-notice")).toBeTruthy();
         expect(screen.queryByText(copy.completeFailed)).toBeNull();
         expect(screen.queryByTestId("reset-error")).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("003 EARS-16 (1.7 rule): a resend whose challenge fails withdraws the standing code refusal and says its own failure in the one plate", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        h.completePasswordReset.mockRejectedValue(
+          new AuthError(400, "invalid code"),
+        );
+        mount();
+        const user = await requestCode();
+        await completeReset(user);
+        await waitFor(() =>
+          expect(screen.getByTestId("reset-error")).toHaveTextContent(
+            copy.completeFailed,
+          ),
+        );
+
+        h.captchaMode = "manual";
+        act(() => vi.advanceTimersByTime(30_000));
+        fireEvent.click(screen.getByTestId("reset-resend"));
+        act(() => h.captchaProps?.onError("unavailable"));
+        await act(async () => Promise.resolve());
+
+        expect(h.requestPasswordReset).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(copy.completeFailed)).toBeNull();
+        expect(screen.getByTestId("reset-error")).toHaveTextContent(
+          botProtectionMessages(config).unavailable,
+        );
       } finally {
         vi.useRealTimers();
       }

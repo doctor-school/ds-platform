@@ -129,11 +129,23 @@ export function ResetDoor({
     },
   });
 
+  // The card's one plate says the failure of the operation just performed
+  // (canvas 53-56, the 1.7 verify rule): a resend — whether it sends or its
+  // challenge fails first — withdraws a stale refused completion along with its
+  // own previous outcome.
+  function withdrawStaleOutcomes() {
+    setCompleteError(null);
+    setResendError(null);
+    setNotice(null);
+  }
+
   // The resend is its own protected action: every resend mints its own token.
   const resendCaptcha = useBotProtectedAction({
     onVerified: () => setResendCaptchaError(null),
-    onChallengeError: (failure) =>
-      setResendCaptchaError(botProtectionFailureMessage(failure, captchaCopy)),
+    onChallengeError: (failure) => {
+      withdrawStaleOutcomes();
+      setResendCaptchaError(botProtectionFailureMessage(failure, captchaCopy));
+    },
     onActionError: (error) =>
       setResendError(authErrorMessage(error, errors, copy.resendFailed)),
   });
@@ -153,14 +165,7 @@ export function ResetDoor({
       }
       setResendError(authErrorMessage(error, errors, copy.resendFailed));
     },
-    // The card's one plate says the failure of the operation just performed
-    // (canvas 53-56, the 1.7 verify rule): a resend withdraws a stale refused
-    // completion along with its own previous outcome.
-    onBeforeResend: () => {
-      setCompleteError(null);
-      setResendError(null);
-      setNotice(null);
-    },
+    onBeforeResend: withdrawStaleOutcomes,
     onSuccess: () =>
       setNotice(
         fillTemplate(

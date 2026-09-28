@@ -72,6 +72,7 @@ focus-visible / disabled / loading / invalid / empty …>
 | Link / navigation                   | researched                | `Link`                                         | [↓](#link--navigation)                      |
 | Menu / dropdown                     | on-demand                 | —                                              | populated on first use                      |
 | Modal / popover / dialog            | on-demand                 | —                                              | populated on first use                      |
+| Side panel / record inspector       | researched                | `Sheet`                                        | [↓](#side-panel--record-inspector)          |
 | Image / media                       | on-demand                 | —                                              | populated on first use                      |
 | Motion / transition                 | researched (async-submit) | `Button.loading`                               | [↓](#motion--transition)                    |
 | Elevation / shadow                  | on-demand                 | —                                              | populated on first use                      |
@@ -390,3 +391,23 @@ the standard focus ring. Product pages do not override link child classes.
 **Rendered contract.** Showcase → Primitives → Button (loading state).
 
 **Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guard `submit-pending` (#337).
+
+## Side panel / record inspector
+
+**status: researched** — Issue #2396; driver = the owner decision on #2377 (participant card opens as a side panel over the roster) and the Stage-B remark on PR #2399 (the desk entry form lives in the same panel).
+
+**Unit & states.** One panel docked to a viewport edge: header (title + description + ×) → the only scrolling body → optional action footer. States: `closed` / `open` (slide-in) / `open, form` (footer actions) × `side` (right default, left) × `size` (`md` ≈ ⅓ viewport, min 360px; `lg` ≈ ½) × viewport (`≥ lg` inspector, `< lg` full cover); plus the × `hover` / `focus-visible` states of the Dialog close affordance.
+
+**Best-practice principle.** An inspector that sits beside a list is a **non-modal** dialog: the list stays visible and usable, and the user walks records without closing and reopening (Linear peek: arrows move to the adjacent issue while the preview updates, Esc closes). Interrupting modality is reserved for work that must block (NN/g), so at ≥ lg there is no scrim, no focus trap, no `aria-modal`, and an outside press does not dismiss. Where the panel covers the page (< lg, Primer's narrow-viewport sheet switch) it becomes a true modal: everything behind is inert, focus is contained, `aria-modal="true"`, focus returns to the invoker on close (WAI-ARIA APG). Both modes close on Esc and carry a visible close button (APG). ↑/↓ page records only when focus is not in a control that owns its arrows, so a form field keeps its caret and option keys. Actions sit in a fixed footer below a scrolling body (Stripe FocusView: primary/secondary actions in the drawer footer, `small`/`large` sizes). The scrolling body is itself a tab stop: a read card often holds no field or link, and without one a keyboard user could not scroll a long body (WCAG 2.1.1, axe `scrollable-region-focusable`).
+
+**Citations.** [WAI-ARIA APG — dialog (modal)](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/) · [NN/g — modal vs. nonmodal dialogs](https://www.nngroup.com/articles/modal-nonmodal-dialog/) · [GitHub Primer — Dialog (side sheet position, narrow-viewport switch)](https://primer.style/product/components/dialog/) · [Linear — issue peek](https://linear.app/docs/peek) · [Stripe Apps — FocusView drawer](https://docs.stripe.com/stripe-apps/components/focusview) · [Radix — Dialog (`modal` prop)](https://www.radix-ui.com/primitives/docs/components/dialog) · [shadcn/ui — Sheet](https://ui.shadcn.com/docs/components/sheet).
+
+**Adopted from.** Official **shadcn/ui `sheet`** (MIT) on `@radix-ui/react-dialog` — the substrate `Dialog`/`AlertDialog` already use, so no new runtime dependency. Kept: Radix focus management, labelling, Esc, focus return. Changed: `top`/`bottom` sides dropped (no consumer), `size` and `onNavigate` added, breakpoint-owned modality, RU-named ×, token re-skin, enter slide via `@starting-style`. Intent UI / JollyUI (React-Aria `Modal`/`Sheet`) rejected on weight — the whole `react-aria-components` runtime for a surface Radix already covers in-package.
+
+**Rendered options + owner pick.** The owner fixed the interaction on #2377 (right-hand panel over the roster, roster visible, ↑/↓ between records, Esc closes, record id in the URL — the URL is the consumer's job) and the form-in-panel on PR #2399. The look reuses the Dialog re-skin (square, 2px structural edge, `card` surface, `shadow-lg` from lg); the showcase renders it for the Stage-B confirmation.
+
+**Token / primitive mapping.** `Sheet` / `SheetContent` / `SheetHeader` / `SheetBody` / `SheetFooter` / `SheetTitle` / `SheetDescription` / `SheetClose` in `@ds/design-system` → `packages/design-system/README.md` → _Component set_. Surface `card` / `card-foreground`, edge `border` at 2px, scrim `black/50` (theme-invariant, modal mode only), close ring `shadow-focus`, breakpoint `--breakpoint-lg`.
+
+**Rendered contract.** Showcase → Primitives → Sheet: read card and entry form, both sides and sizes, inspector (≥ lg) and full cover (< lg), both themes.
+
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md) layers 1–4; `sheet.test.tsx` pins modality per breakpoint (`aria-modal`, scrim, outside content live vs hidden, focus trap), Esc/× close, ↑/↓ paging and its field exemption, the scroll region and the variants; guards `primitives-first`, `interaction-states`, `no-primitive-style-override`, `playwright-axe`, `registry-research`.

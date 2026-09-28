@@ -70,6 +70,25 @@ export {
   AlertDialogAction,
   AlertDialogCancel,
 } from "./primitives/alert-dialog";
+// ── Side panel / record inspector (#2396, owner decision on #2377) — adopted
+//    from official shadcn/ui `sheet` (MIT) on the same Radix Dialog substrate.
+//    Non-modal inspector at ≥ lg, modal full cover below; ↑/↓ record paging.
+export {
+  Sheet,
+  SheetPortal,
+  SheetOverlay,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetBody,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+  type SheetProps,
+  type SheetContentProps,
+  type SheetNavigateDirection,
+} from "./primitives/sheet";
 // ── 012 authoring controls (#1283, Stage A #1282) ─────────────────────────────
 export { Textarea, type TextareaProps } from "./primitives/textarea";
 export {

@@ -192,7 +192,6 @@ This table is the checked-in answer key for every `apps/portal` / `apps/doctor` 
 | `apps/portal/lib/shell-auth.ts`                    | host brand/config — the Academy projection of the `@ds/auth-flow/server` session (+ one self-profile read for the initials chip) onto the `@ds/storefront-shell` `auth` prop (#2281)        | permanent      |
 | `apps/portal/lib/shell-config.ts`                  | host brand/config — the `@ds/storefront-shell` host-config VALUES (#2180)                                                                                                                   | permanent      |
 | `apps/portal/lib/theme.ts`                         | wave 1 source — the shared store is `@ds/storefront-shell/theme` (#2180); this copy survives only for the root-layout FOUC guard and `theme-watcher.tsx`²                                   | wave 1         |
-| `apps/portal/lib/use-localized-resolver.ts`        | host-only surface (Academy `next-intl` resolver wrapper)                                                                                                                                    | permanent      |
 | `apps/portal/lib/webinars-url.ts`                  | host-only surface (Academy `/webinars` route hrefs)                                                                                                                                         | permanent      |
 
 ## Route-file registry

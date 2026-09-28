@@ -65,6 +65,25 @@
         "https://github.com/doctor-school/ds-platform/issues/1578#issuecomment-5435209906"
       ]
     },
+    "ds-sheet-primitive-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "packages/design-system/src/primitives/sheet.tsx",
+        "packages/design-system/src/index.ts",
+        "apps/showcase/app/primitives/primitives-view.tsx",
+        "apps/showcase/app/lib/registry.ts"
+      ],
+      "states": [
+        "sheet-open-desktop-nonmodal",
+        "sheet-open-mobile-modal",
+        "sheet-with-form-footer",
+        "sheet-record-navigation"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5864702497",
+        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5865818943"
+      ]
+    },
     "feature-044-registrar-desk-shell-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [
@@ -87,10 +106,12 @@
         "desk-entry-form",
         "desk-entry-accepted",
         "desk-entry-existing",
-        "desk-entry-refused-no-consent"
+        "desk-entry-refused-no-consent",
+        "desk-entry-panel"
       ],
       "approvalProvenance": [
-        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5863364577"
+        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5863364577",
+        "https://github.com/doctor-school/ds-platform/issues/2377#issuecomment-5865818943"
       ]
     },
     "feature-044-attendance-mark-v1": {

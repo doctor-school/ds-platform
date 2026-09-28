@@ -903,10 +903,58 @@ export const directionAdjacencyUrl = {
 export const congressRosterUrl = {
   list: (
     eventIdOrSlug: string,
-    query: { q: string; page: number; pageSize: number },
+    query: {
+      q: string;
+      page: number;
+      pageSize: number;
+      // 044 EARS-34 — the presence filter; `present` only with its day.
+      attendanceDay?: string;
+      present?: "marked" | "unmarked";
+    },
   ) =>
     `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/roster?${relationQuery(query)}`,
 };
+
+/** 044 EARS-34 — one registration's presence mark for one congress day. */
+export function congressAttendanceUrl(
+  eventIdOrSlug: string,
+  registrationId: string,
+  day: string,
+): string {
+  return `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/registrations/${encodeURIComponent(registrationId)}/attendance/${day}`;
+}
+
+/**
+ * 044 EARS-34 — the ONE write behind the roster's attendance boxes:
+ * `PUT …/attendance/:day { present }` (idempotent; the server re-checks the
+ * registrar's grant live, EARS-38). Resolves `{ ok: true }` or the refusal's
+ * HTTP status (`0` when no answer arrived) — the caller classifies it.
+ */
+export async function putCongressAttendance(
+  eventIdOrSlug: string,
+  registrationId: string,
+  day: string,
+  present: boolean,
+): Promise<{ ok: true } | { ok: false; status: number }> {
+  try {
+    const res = await fetch(
+      congressAttendanceUrl(eventIdOrSlug, registrationId, day),
+      {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey(),
+          ...adminCsrfHeaders(),
+        },
+        body: JSON.stringify({ present }),
+      },
+    );
+    return res.ok ? { ok: true } : { ok: false, status: res.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
 
 /**
  * The publish command of the three remaining taxonomy entities (012 EARS-5,

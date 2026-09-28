@@ -25,7 +25,7 @@ import { visible } from "./support/visible";
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 
-/** EARS-25, exactly — № first, статус письма last. */
+/** EARS-25, exactly — № first, статус письма — then EARS-34's «Присутствие». */
 const COLUMNS = [
   "№",
   "ФИО",
@@ -37,6 +37,7 @@ const COLUMNS = [
   "Email",
   "Дата регистрации",
   "Статус письма",
+  "Присутствие",
 ];
 
 const PEOPLE = [

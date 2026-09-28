@@ -12,3 +12,4 @@ export * from "./media-cleanup-jobs.js";
 export * from "./specialties.js";
 export * from "./doctor-specialties.js";
 export * from "./event-role-grants.js";
+export * from "./registration-attendance.js";

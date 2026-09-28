@@ -100,6 +100,12 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
     "platform_admin",
     "event-registrar",
   ],
+  // 044 EARS-34 — the per-day attendance mark on that same event's roster, the
+  // other registrar write the amendment admits; bound by EARS-38 likewise.
+  "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day": [
+    "platform_admin",
+    "event-registrar",
+  ],
 };
 
 /** A path-parameterised id that resolves to nothing — the floor is about authz, not existence. */
@@ -236,6 +242,15 @@ const FLOOR_ROUTES: {
       contactPhone: "+7 (900) 765-43-21",
       paperConsent: true,
     },
+  },
+  // 044 EARS-34 — the attendance mark, excluded from the EARS-11.7 count for
+  // the same reason. A well-formed body and a configured congress day, so an
+  // admitted principal reaches the absent-event 404, never a 400 or a 422.
+  {
+    endpoint: "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day",
+    method: "PUT",
+    url: `/v1/admin/events/${ABSENT_ID}/registrations/${ABSENT_ID}/attendance/2027-04-23`,
+    payload: { present: true },
   },
   // 012 EARS-1/EARS-16 (#1283) — the taxonomy project routes sit on the same
   // raised floor as every other admin route: the guard refuses before validation,
@@ -1055,7 +1070,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // must keep that shape too. (`POST /v1/admin/legacy-broadcasts` is the
       // creation entry and hangs off its own path, so it is asserted by the
       // floor-table rows above rather than counted here.)
-      // 044 EARS-18's roster read and EARS-35's desk registration are excluded
+      // 044 EARS-18's roster read, EARS-35's desk registration and EARS-34's
+      // attendance mark are excluded
       // for the same reason as the recordings routes: they share the path
       // prefix but are a different feature with its own EARS coverage (and its
       // own role set), and the floor-table rows above assert them.
@@ -1064,7 +1080,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           r.endpoint.includes(" /v1/admin/events") &&
           !r.endpoint.includes("/recordings") &&
           !r.endpoint.endsWith("/roster") &&
-          !r.endpoint.endsWith("/:idOrSlug/registrations"),
+          !r.endpoint.endsWith("/:idOrSlug/registrations") &&
+          !r.endpoint.endsWith("/attendance/:day"),
       );
       expect(events.length).toBe(12);
       for (const row of events) {

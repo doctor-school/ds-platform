@@ -41,6 +41,8 @@ import {
   ],
   // 044 EARS-35: the registrar's desk route (`registration/`) enters walk-ins
   // through THIS intake use-case, never through a second one.
-  exports: [CongressSignUpService],
+  // 044 EARS-34: the desk's attendance mark reads the congress DAYS through
+  // this module's own configuration reader, never through a second one.
+  exports: [CongressSignUpService, CONGRESS_SIGN_UP_ENV],
 })
 export class CongressModule {}

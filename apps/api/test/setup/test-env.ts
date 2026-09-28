@@ -32,3 +32,8 @@ process.env["CONGRESS_SIGNUP_WINDOW_OPENS_AT"] ??=
   "2026-10-01T00:00:00.000+03:00";
 process.env["CONGRESS_SIGNUP_WINDOW_CLOSES_AT"] ??=
   "2027-01-01T00:00:00.000+03:00";
+
+// 044 EARS-34: the congress days are a required key too (the intake refuses
+// without them, and the desk's attendance mark validates against them). The
+// runner supplies the congress's own two days; the attendance suite pins them.
+process.env["CONGRESS_SIGNUP_EVENT_DAYS"] ??= "2027-04-23,2027-04-24";

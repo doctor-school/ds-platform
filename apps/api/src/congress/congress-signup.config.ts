@@ -95,6 +95,13 @@ export interface CongressSignUpSettings {
    */
   windowOpensAt: string;
   windowClosesAt: string;
+  /**
+   * 044 EARS-34 — the congress days, ascending ISO `YYYY-MM-DD` dates. The
+   * registrar marks attendance per day, and only on these days: a mark for any
+   * other date is refused. Configuration rather than an `events` column for the
+   * venue's reason — the catalogue's other events are single-session webinars.
+   */
+  eventDays: readonly string[];
 }
 
 /** Why the congress configuration cannot be used, for the server log only. */
@@ -109,7 +116,20 @@ export type CongressSignUpConfigProblem =
   | "window-closes-at-unset"
   | "window-closes-at-malformed"
   | "window-not-ordered"
-  | "timing-floor-malformed";
+  | "timing-floor-malformed"
+  | CongressEventDaysProblem;
+
+/** Why the configured congress days cannot be used (044 EARS-34). */
+export type CongressEventDaysProblem =
+  | "event-days-unset"
+  | "event-days-malformed"
+  | "event-days-duplicate"
+  | "event-days-unsorted";
+
+/** 044 EARS-34 — the resolved congress days, or why they are unusable. */
+export type CongressEventDaysResult =
+  | { ok: true; days: readonly string[] }
+  | { ok: false; reason: CongressEventDaysProblem };
 
 export type CongressSignUpConfigResult =
   | { ok: true; settings: CongressSignUpSettings }
@@ -124,6 +144,7 @@ export type CongressSignUpEnv = Pick<
   | "CONGRESS_SIGNUP_WINDOW_OPENS_AT"
   | "CONGRESS_SIGNUP_WINDOW_CLOSES_AT"
   | "CONGRESS_SIGNUP_TIMING_FLOOR_MS"
+  | "CONGRESS_SIGNUP_EVENT_DAYS"
 >;
 
 /** 044 EARS-7 — the resolved timing floor, or why the configured one is unusable. */
@@ -208,8 +229,51 @@ function readWindowInstant(raw: string | undefined): WindowInstantResult {
   return { ok: true, value };
 }
 
+/** An ISO calendar date, nothing more: no time, no offset. */
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * 044 EARS-5 / EARS-9 / EARS-28 — read and validate the configured settings.
+ * 044 EARS-34 — read `CONGRESS_SIGNUP_EVENT_DAYS`: a comma-separated list of
+ * ISO calendar dates (`2027-04-23,2027-04-24`), at least one.
+ *
+ * Every day must be a REAL date — the pattern alone would admit `2027-02-30`,
+ * so the parsed date has to print back as the same string. Duplicates and a
+ * descending order are refused rather than silently normalised: the list is
+ * echoed to the roster as the order of its day columns, and an operator who
+ * typed the days out of order most likely typed a wrong day.
+ */
+export function resolveCongressEventDays(
+  raw: string | undefined,
+): CongressEventDaysResult {
+  if (raw == null || raw.trim() === "") {
+    return { ok: false, reason: "event-days-unset" };
+  }
+  const days = raw.split(",").map((day) => day.trim());
+  for (const day of days) {
+    if (!ISO_DATE_PATTERN.test(day)) {
+      return { ok: false, reason: "event-days-malformed" };
+    }
+    const parsed = new Date(`${day}T00:00:00.000Z`);
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== day
+    ) {
+      return { ok: false, reason: "event-days-malformed" };
+    }
+  }
+  if (new Set(days).size !== days.length) {
+    return { ok: false, reason: "event-days-duplicate" };
+  }
+  for (let i = 1; i < days.length; i += 1) {
+    if (days[i]! < days[i - 1]!) {
+      return { ok: false, reason: "event-days-unsorted" };
+    }
+  }
+  return { ok: true, days };
+}
+
+/**
+ * 044 EARS-5 / EARS-9 / EARS-28 / EARS-34 — read and validate the configured settings.
  *
  * Returns a result rather than throwing, and the `reason` is deliberately NOT
  * something the caller may put on the wire: every configuration problem must
@@ -272,6 +336,11 @@ export function resolveCongressSignUpSettings(
   const timingFloor = resolveCongressSignUpTimingFloorMs(env);
   if (!timingFloor.ok) return { ok: false, reason: timingFloor.reason };
 
+  // EARS-34 — required like the venue: a deployment that forgot the congress
+  // days would accept registrations it could never mark present at the desk.
+  const eventDays = resolveCongressEventDays(env.CONGRESS_SIGNUP_EVENT_DAYS);
+  if (!eventDays.ok) return { ok: false, reason: eventDays.reason };
+
   return {
     ok: true,
     settings: {
@@ -280,6 +349,7 @@ export function resolveCongressSignUpSettings(
       eventVenue,
       windowOpensAt: opensAt.value,
       windowClosesAt: closesAt.value,
+      eventDays: eventDays.days,
     },
   };
 }

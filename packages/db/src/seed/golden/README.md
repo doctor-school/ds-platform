@@ -416,8 +416,14 @@ Named catalogue ids sit BELOW ordinal 1000 and all non-golden rows carry no
 golden UUID, so neither is inside the replaced range — product-created rows for
 golden doctors survive a re-seed untouched. A conflicting non-golden pair fails
 the transaction rather than overwriting it. A step may declare the property only
-while nothing references its rows: a child FK would turn the replacement into a
-cascade or a `restrict` failure, which is what the e2e regression asserts with a
+while every table referencing its rows is named in its `volumeNamespaceChildren`:
+those children are deleted first, in plan order, for the replaced range alone
+(retained children reference their parent `ON DELETE RESTRICT`, #1278). Today
+the one declared child is `registration_attendance` under `registrations` — the
+044 per-day attendance marks (#2381), meaningless without the registration the
+re-pin replaces; marks on product-created registrations are untouched. An
+undeclared child FK would turn the replacement into a cascade or a `restrict`
+failure, which is what the e2e regression asserts with a
 `pg_constraint` query per table.
 
 A second run under the same `GOLDEN_NOW` changes no dataset values. A later run

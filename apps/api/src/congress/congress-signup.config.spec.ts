@@ -6,6 +6,7 @@ import {
   resolveCongressSignUpTimingFloorMs,
   readCongressSignUpTimingFloorMs,
   resolveCongressSignUpWindow,
+  resolveCongressEventDays,
 } from "./congress-signup.config.js";
 
 const EVENT_ID = "6f1c0a2e-6a7b-4d2f-9b1e-0c3d4e5f6a7b";
@@ -22,12 +23,16 @@ const CLOSES_AT = "2027-01-01T00:00:00.000+03:00";
 const WINDOW_ENV = {
   CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
   CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+  // 044 EARS-34 — the congress days are required too, and validated LAST, so
+  // every case that reaches a positive result has to carry them.
+  CONGRESS_SIGNUP_EVENT_DAYS: "2027-04-23,2027-04-24",
 } as const;
 
-/** The same two instants as they appear on the resolved settings. */
+/** The same two instants (and the days) as they appear on the resolved settings. */
 const WINDOW_SETTINGS = {
   windowOpensAt: OPENS_AT,
   windowClosesAt: CLOSES_AT,
+  eventDays: ["2027-04-23", "2027-04-24"],
 } as const;
 
 describe("044 congress sign-up — server configuration", () => {
@@ -296,6 +301,7 @@ describe("044 congress sign-up — server configuration", () => {
         CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_WINDOW_OPENS_AT: OPENS_AT,
         CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+        CONGRESS_SIGNUP_EVENT_DAYS: WINDOW_ENV.CONGRESS_SIGNUP_EVENT_DAYS,
       }),
     ).toEqual({
       ok: true,
@@ -305,6 +311,7 @@ describe("044 congress sign-up — server configuration", () => {
         eventVenue: VENUE,
         windowOpensAt: OPENS_AT,
         windowClosesAt: CLOSES_AT,
+        eventDays: WINDOW_SETTINGS.eventDays,
       },
     });
   });
@@ -378,6 +385,7 @@ describe("044 congress sign-up — server configuration", () => {
         CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
         CONGRESS_SIGNUP_WINDOW_OPENS_AT: "2026-09-30T21:00:00Z",
         CONGRESS_SIGNUP_WINDOW_CLOSES_AT: CLOSES_AT,
+        CONGRESS_SIGNUP_EVENT_DAYS: WINDOW_ENV.CONGRESS_SIGNUP_EVENT_DAYS,
       }),
     ).toEqual({
       ok: true,
@@ -387,6 +395,7 @@ describe("044 congress sign-up — server configuration", () => {
         eventVenue: VENUE,
         windowOpensAt: "2026-09-30T21:00:00Z",
         windowClosesAt: CLOSES_AT,
+        eventDays: WINDOW_SETTINGS.eventDays,
       },
     });
   });
@@ -406,5 +415,75 @@ describe("044 congress sign-up — server configuration", () => {
         }),
       ).toEqual({ ok: false, reason: "window-not-ordered" });
     }
+  });
+
+  describe("044 EARS-34 — the congress days (CONGRESS_SIGNUP_EVENT_DAYS)", () => {
+    const BASE = {
+      ...WINDOW_ENV,
+      CONGRESS_SIGNUP_EVENT_ID: EVENT_ID,
+      CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
+      CONGRESS_SIGNUP_EVENT_VENUE: VENUE,
+    };
+
+    it("044 EARS-34: when the days are configured as ascending ISO dates, system shall resolve them in order, trimmed", () => {
+      expect(resolveCongressEventDays(" 2027-04-23 , 2027-04-24 ")).toEqual({
+        ok: true,
+        days: ["2027-04-23", "2027-04-24"],
+      });
+      expect(resolveCongressEventDays("2027-04-23")).toEqual({
+        ok: true,
+        days: ["2027-04-23"],
+      });
+    });
+
+    it("044 EARS-34: when the days are unset or blank, system shall report the configuration unusable", () => {
+      for (const missing of [undefined, "", "  "]) {
+        expect(resolveCongressEventDays(missing)).toEqual({
+          ok: false,
+          reason: "event-days-unset",
+        });
+      }
+      const { CONGRESS_SIGNUP_EVENT_DAYS: _omitted, ...withoutDays } = BASE;
+      expect(resolveCongressSignUpSettings(withoutDays)).toEqual({
+        ok: false,
+        reason: "event-days-unset",
+      });
+    });
+
+    it("044 EARS-34: when a day is not a real ISO calendar date, system shall report the days malformed", () => {
+      for (const bad of [
+        "2027-04-23,",
+        "2027-4-23",
+        "23.04.2027",
+        "2027-02-30",
+        "2027-04-23T00:00:00Z",
+        "2027-04-23;2027-04-24",
+      ]) {
+        expect(resolveCongressEventDays(bad), bad).toEqual({
+          ok: false,
+          reason: "event-days-malformed",
+        });
+      }
+      expect(
+        resolveCongressSignUpSettings({
+          ...BASE,
+          CONGRESS_SIGNUP_EVENT_DAYS: "2027-02-30",
+        }),
+      ).toEqual({ ok: false, reason: "event-days-malformed" });
+    });
+
+    it("044 EARS-34: when a day repeats, system shall report the days duplicated", () => {
+      expect(resolveCongressEventDays("2027-04-23,2027-04-23")).toEqual({
+        ok: false,
+        reason: "event-days-duplicate",
+      });
+    });
+
+    it("044 EARS-34: when the days are not in ascending order, system shall report them unsorted", () => {
+      expect(resolveCongressEventDays("2027-04-24,2027-04-23")).toEqual({
+        ok: false,
+        reason: "event-days-unsorted",
+      });
+    });
   });
 });

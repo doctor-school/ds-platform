@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { CongressModule } from "../congress/congress.module.js";
 import { RecordingsModule } from "../recordings/recordings.module.js";
+import { AttendanceAdminController } from "./attendance.admin.controller.js";
+import { CongressAttendanceService } from "./congress-attendance.service.js";
 import { DeskRegistrationAdminController } from "./desk-registration.admin.controller.js";
 import { EventRosterAdminController } from "./event-roster.admin.controller.js";
 import { EventGrantPolicy } from "../authz/event-grant.policy.js";
@@ -35,10 +37,17 @@ import { RegistrationService } from "./registration.service.js";
     MyEventsController,
     EventRosterAdminController,
     DeskRegistrationAdminController,
+    // 044 EARS-34: the per-day attendance mark, on the same desk-route family.
+    AttendanceAdminController,
   ],
   // 044 EARS-38: the event-binding step every desk route runs (stateless; it
   // reads `event_role_grants` through the @Global DRIZZLE_DB).
-  providers: [RegistrationService, RegistrationRepository, EventGrantPolicy],
+  providers: [
+    RegistrationService,
+    RegistrationRepository,
+    EventGrantPolicy,
+    CongressAttendanceService,
+  ],
   exports: [RegistrationService],
 })
 export class RegistrationModule {}

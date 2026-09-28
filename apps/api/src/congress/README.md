@@ -33,17 +33,18 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## Configuration
 
-All six keys are validated at request time and a missing or malformed value
+All seven keys are validated at request time and a missing or malformed value
 refuses the intake generically — the endpoint never runs with a half-configured meaning.
 
-| Env key                            | Meaning                                                                                                                                                                                                                                             |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONGRESS_SIGNUP_EVENT_ID`         | The uuid of the congress event every submission is registered for.                                                                                                                                                                                  |
-| `CONGRESS_SIGNUP_CONSENT_VERSION`  | `YYYY-MM-DD.sha256-<64 hex>` — publication date + digest of the published personal-data text (ADR-0009 §2.1). Stamped by the server; never taken from the caller.                                                                                   |
-| `CONGRESS_SIGNUP_EVENT_VENUE`      | The venue the confirmation email names («{место}», EARS-13). REQUIRED: a missing or blank value refuses every submission. There is no venue column on `events` — the venue is a constant of THIS congress.                                          |
-| `CONGRESS_SIGNUP_WINDOW_OPENS_AT`  | REQUIRED (EARS-28). The instant the intake starts accepting submissions, ISO-8601 with an explicit offset (`2026-10-01T00:00:00.000+03:00` or `…Z`). An offset-less value is refused, never guessed. Echoed verbatim in the `not-yet-open` refusal. |
-| `CONGRESS_SIGNUP_WINDOW_CLOSES_AT` | REQUIRED (EARS-28). The instant it stops, same format, strictly after the open. The closing instant is OUTSIDE the window (half-open interval).                                                                                                     |
-| `CONGRESS_SIGNUP_TIMING_FLOOR_MS`  | Optional. Whole milliseconds the intake response is padded to, so the new-account and existing-account branches take the same time on the wire (EARS-7). Unset ⇒ the conservative default `1000`.                                                   |
+| Env key                            | Meaning                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONGRESS_SIGNUP_EVENT_ID`         | The uuid of the congress event every submission is registered for.                                                                                                                                                                                                     |
+| `CONGRESS_SIGNUP_CONSENT_VERSION`  | `YYYY-MM-DD.sha256-<64 hex>` — publication date + digest of the published personal-data text (ADR-0009 §2.1). Stamped by the server; never taken from the caller.                                                                                                      |
+| `CONGRESS_SIGNUP_EVENT_VENUE`      | The venue the confirmation email names («{место}», EARS-13). REQUIRED: a missing or blank value refuses every submission. There is no venue column on `events` — the venue is a constant of THIS congress.                                                             |
+| `CONGRESS_SIGNUP_WINDOW_OPENS_AT`  | REQUIRED (EARS-28). The instant the intake starts accepting submissions, ISO-8601 with an explicit offset (`2026-10-01T00:00:00.000+03:00` or `…Z`). An offset-less value is refused, never guessed. Echoed verbatim in the `not-yet-open` refusal.                    |
+| `CONGRESS_SIGNUP_WINDOW_CLOSES_AT` | REQUIRED (EARS-28). The instant it stops, same format, strictly after the open. The closing instant is OUTSIDE the window (half-open interval).                                                                                                                        |
+| `CONGRESS_SIGNUP_EVENT_DAYS`       | REQUIRED (EARS-34). The congress days, comma-separated ascending ISO dates without repeats (`2027-04-23,2027-04-24`). The registrar's desk marks attendance on these days only (`registration/README.md`); unset or malformed also refuses the intake, like the venue. |
+| `CONGRESS_SIGNUP_TIMING_FLOOR_MS`  | Optional. Whole milliseconds the intake response is padded to, so the new-account and existing-account branches take the same time on the wire (EARS-7). Unset ⇒ the conservative default `1000`.                                                                      |
 
 **Calibrating the timing floor.** The floor only equalises the two branches if it
 exceeds the SLOWER one — the new-account path, which creates a user in the IdP

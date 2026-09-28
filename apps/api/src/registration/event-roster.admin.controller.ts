@@ -19,6 +19,7 @@ import {
 } from "@ds/schemas";
 import type { AdminSessionPrincipal } from "../auth/admin-session/admin-session.service.js";
 import { Authz, EventGrantPolicy } from "../authz/index.js";
+import { CongressAttendanceService } from "./congress-attendance.service.js";
 import {
   RegistrationEventNotFoundError,
   RegistrationService,
@@ -62,6 +63,7 @@ export class EventRosterAdminController {
   constructor(
     private readonly registrations: RegistrationService,
     private readonly grants: EventGrantPolicy,
+    private readonly attendance: CongressAttendanceService,
   ) {}
 
   /**
@@ -88,6 +90,12 @@ export class EventRosterAdminController {
     type: Number,
     minimum: 1,
     maximum: CONGRESS_ROSTER_PAGE_SIZE_MAX,
+  })
+  @ApiQuery({ name: "attendanceDay", required: false, type: String })
+  @ApiQuery({
+    name: "present",
+    required: false,
+    enum: ["marked", "unmarked"],
   })
   @ApiOkResponse({ type: CongressRosterListDto })
   // `audit: low-stakes` — a read that writes no domain state owes no terminal
@@ -118,8 +126,20 @@ export class EventRosterAdminController {
         issues: parsed.error.issues,
       });
     }
+    // EARS-34 — the presence filter asks about a configured congress day only.
+    const congressDays = this.attendance.congressDays();
+    if (parsed.data.attendanceDay !== undefined) {
+      this.attendance.assertCongressDay(
+        parsed.data.attendanceDay,
+        congressDays,
+      );
+    }
     try {
-      return await this.registrations.eventRosterPage(eventKey, parsed.data);
+      return await this.registrations.eventRosterPage(
+        eventKey,
+        parsed.data,
+        congressDays,
+      );
     } catch (err) {
       if (err instanceof RegistrationEventNotFoundError) {
         throw new NotFoundException("event not found");

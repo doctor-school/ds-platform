@@ -1544,6 +1544,19 @@ jobs:
           RATE_LIMIT_PER_IP_15MIN: "100000"
           RATE_LIMIT_PER_USER_15MIN: "100000"
           RATE_LIMIT_PER_ASN_1H: "1000000"
+          # 044 — the congress settings, the same set and values the Vitest
+          # runner supplies (apps/api/test/setup/test-env.ts). EARS-34: the
+          # roster of every event carries the congress day columns, and the
+          # roster answers 503 CONGRESS_DAYS_UNCONFIGURED without
+          # CONGRESS_SIGNUP_EVENT_DAYS, so this tier cannot read a roster
+          # without it. The others mirror the runner defaults; the event id and
+          # the consent version stay unset because this tier never drives the
+          # public intake.
+          CONGRESS_SIGNUP_TIMING_FLOOR_MS: "5"
+          CONGRESS_SIGNUP_EVENT_VENUE: Москва, тестовая площадка
+          CONGRESS_SIGNUP_WINDOW_OPENS_AT: 2026-10-01T00:00:00.000+03:00
+          CONGRESS_SIGNUP_WINDOW_CLOSES_AT: 2027-01-01T00:00:00.000+03:00
+          CONGRESS_SIGNUP_EVENT_DAYS: 2027-04-23,2027-04-24
         run: |
           pnpm --filter @ds/api start > api.log 2>&1 &
           echo $! > api.pid

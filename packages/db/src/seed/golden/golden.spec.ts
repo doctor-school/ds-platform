@@ -372,6 +372,24 @@ describe("#2063 golden seed plan", () => {
     }
   });
 
+  it("#2381: the registrations volume replacement clears its attendance marks first", () => {
+    // `registration_attendance` references `registrations` ON DELETE RESTRICT
+    // (#1278), so the replaced range's marks are an ordered child cleanup the
+    // plan declares — never a cascade and never a restrict failure mid-seed.
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    const registrationsStep = plan.find((s) => s.name === "registrations");
+    expect(
+      registrationsStep?.volumeNamespaceChildren?.map((child) => [
+        child.name,
+        child.parentKey,
+      ]),
+    ).toEqual([["registration_attendance", "registrationId"]]);
+    for (const step of plan) {
+      if (step.name === "registrations") continue;
+      expect(step.volumeNamespaceChildren).toBeUndefined();
+    }
+  });
+
   it("keys stream_config on its event, not on a surrogate id", () => {
     const step = buildGoldenSeedPlan(dataset, specialtyIdByName).find(
       (s) => s.name === "stream_config",

@@ -5,11 +5,13 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   auditLedger,
   events,
+  registrationAttendance,
   registrations,
   specialtiesMinzdrav,
   users,
 } from "@ds/db";
 import {
+  type CongressDayAttendance,
   type CongressRosterQuery,
   type CongressRosterRow,
   type EventLifecycleState,
@@ -350,6 +352,7 @@ export class RegistrationRepository {
   async findEventRosterPage(
     eventId: string,
     query: CongressRosterQuery,
+    congressDays: readonly string[],
   ): Promise<{ items: CongressRosterRow[]; total: number }> {
     // The answers payload is the primary source; the account mirror is the
     // EARS-16 fallback. `nullif(trim(...), '')` turns «nothing to show» into a
@@ -407,6 +410,7 @@ export class RegistrationRepository {
         },
         phoneNormalised,
       ),
+      this.rosterAttendancePredicate(query),
     );
 
     const pageSize = query.pageSize;
@@ -440,6 +444,10 @@ export class RegistrationRepository {
       .leftJoin(specialtiesMinzdrav, specialtyJoin)
       .where(where);
 
+    const marks = await this.findAttendanceMarks(
+      rows.map((r) => r.registrationId),
+    );
+
     return {
       items: rows.map((r) => ({
         registrationId: r.registrationId,
@@ -452,9 +460,127 @@ export class RegistrationRepository {
         email: r.email ?? null,
         registeredAt: r.registeredAt.toISOString(),
         confirmationMailStatus: r.confirmationMailStatus ?? null,
+        attendance: congressDays.map(
+          (day): CongressDayAttendance => ({
+            day,
+            present: marks.get(r.registrationId)?.has(day) ?? false,
+          }),
+        ),
       })),
       total: counted?.total ?? 0,
     };
+  }
+
+  /**
+   * 044 EARS-34 — the presence filter as an `EXISTS` over
+   * `registration_attendance`: `marked` keeps the rows marked present on the
+   * day, `unmarked` every other row (never marked, or cleared). It is one more
+   * conjunct of the roster's WHERE, so it composes with the search, the paging
+   * and the count by construction. The day itself was checked against the
+   * configured congress days by the service.
+   */
+  private rosterAttendancePredicate(
+    query: CongressRosterQuery,
+  ): SQL | undefined {
+    if (query.attendanceDay === undefined || query.present === undefined) {
+      return undefined;
+    }
+    const markedPresent = sql`exists (
+      select 1 from ${registrationAttendance}
+       where ${registrationAttendance.registrationId} = ${registrations.id}
+         and ${registrationAttendance.day} = ${query.attendanceDay}
+         and ${registrationAttendance.present} = true
+    )`;
+    return query.present === "marked" ? markedPresent : sql`not ${markedPresent}`;
+  }
+
+  /** The days each of `registrationIds` is marked present on (EARS-34). */
+  private async findAttendanceMarks(
+    registrationIds: readonly string[],
+  ): Promise<Map<string, Set<string>>> {
+    const marks = new Map<string, Set<string>>();
+    if (registrationIds.length === 0) return marks;
+    const rows = await this.db
+      .select({
+        registrationId: registrationAttendance.registrationId,
+        day: registrationAttendance.day,
+      })
+      .from(registrationAttendance)
+      .where(
+        and(
+          inArray(registrationAttendance.registrationId, [...registrationIds]),
+          eq(registrationAttendance.present, true),
+        ),
+      );
+    for (const row of rows) {
+      const days = marks.get(row.registrationId) ?? new Set<string>();
+      days.add(row.day);
+      marks.set(row.registrationId, days);
+    }
+    return marks;
+  }
+
+  /**
+   * 044 EARS-34 — set one registration's attendance on one congress day, inside
+   * the request audit context so the 010 trigger attributes the change to the
+   * acting registrar (source `admin-ui`).
+   *
+   * Returns `false` — and writes nothing — when the registration is not a
+   * registration OF `eventId`: the route never reveals, let alone mutates,
+   * another event's row.
+   *
+   * A write that would not change the stored value touches no row, so the
+   * ledger records changes, not touches:
+   * - `present = true` is an upsert whose `DO UPDATE` only fires when the stored
+   *   value differs (`IS DISTINCT FROM`);
+   * - `present = false` only UPDATEs an existing `true` row — a day nobody
+   *   marked already reads «not present», so clearing it inserts nothing.
+   */
+  async setAttendance(
+    eventId: string,
+    registrationId: string,
+    day: string,
+    present: boolean,
+  ): Promise<boolean> {
+    return withRequestAuditContext(this.db, async (tx) => {
+      const [owned] = await tx
+        .select({ id: registrations.id })
+        .from(registrations)
+        .where(
+          and(
+            eq(registrations.id, registrationId),
+            eq(registrations.eventId, eventId),
+          ),
+        )
+        .limit(1);
+      if (!owned) return false;
+
+      if (present) {
+        await tx
+          .insert(registrationAttendance)
+          .values({ registrationId, day, present: true })
+          .onConflictDoUpdate({
+            target: [
+              registrationAttendance.registrationId,
+              registrationAttendance.day,
+            ],
+            set: { present: true },
+            setWhere: sql`${registrationAttendance.present} is distinct from excluded.present`,
+          });
+      } else {
+        await tx
+          .update(registrationAttendance)
+          .set({ present: false })
+          .where(
+            and(
+              eq(registrationAttendance.registrationId, registrationId),
+              eq(registrationAttendance.day, day),
+              eq(registrationAttendance.present, true),
+            ),
+          );
+      }
+      return true;
+    });
   }
 
   /**

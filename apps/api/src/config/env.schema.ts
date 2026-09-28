@@ -277,6 +277,12 @@ export const ApiEnvSchema = z.looseObject({
   // event id produces, before any side effect.
   CONGRESS_SIGNUP_EVENT_VENUE: z.string().optional(),
 
+  // 044 EARS-34 — the congress DAYS the registrar marks attendance on, as
+  // comma-separated ascending ISO dates (`2027-04-23,2027-04-24`). Optional
+  // here for the venue's reason; the intake refuses every submission without
+  // it, and the desk's attendance mark and roster refuse to run on it unset.
+  CONGRESS_SIGNUP_EVENT_DAYS: z.string().optional(),
+
   CONGRESS_SIGNUP_TIMING_FLOOR_MS: z.string().optional(),
 
   // 044 EARS-28 — the registration window: the instant the public congress

@@ -8,6 +8,7 @@ import {
   congressDayShortLabel,
   congressRosterCells,
   congressRosterRowNumber,
+  deskEntryFailure,
 } from "./congress-roster";
 import { congressAttendanceUrl, congressRosterUrl } from "@/providers/data-provider";
 
@@ -159,5 +160,66 @@ describe("044 EARS-34 attendance per congress day", () => {
     expect(attendanceFailureKind(404)).toBe("failed");
     expect(attendanceFailureKind(422)).toBe("failed");
     expect(attendanceFailureKind(500)).toBe("failed");
+  });
+});
+
+
+describe("044 EARS-35 — the desk entry's refusal classes", () => {
+  it("EARS-35: builds the desk route in the one url map", () => {
+    expect(congressRosterUrl.deskRegistration("kongress-2026")).toBe(
+      "/v1/admin/events/kongress-2026/registrations",
+    );
+  });
+
+  it("EARS-35: a 403 grant refusal is a withdrawn grant — never retried", () => {
+    for (const errorCode of [
+      "EVENT_REGISTRAR_REQUIRED",
+      "PLATFORM_ADMIN_REQUIRED",
+    ]) {
+      expect(
+        deskEntryFailure({ statusCode: 403, errorCode, message: "x" }),
+      ).toBe("grantWithdrawn");
+    }
+  });
+
+  it("EARS-35: a 403 EVENT_BINDING_REQUIRED (the event binding withdrawn or re-pointed, EARS-38) is a withdrawn grant — never retried", () => {
+    for (const errorCode of ["EVENT_BINDING_REQUIRED"]) {
+      expect(
+        deskEntryFailure({ statusCode: 403, errorCode, message: "x" }),
+      ).toBe("grantWithdrawn");
+    }
+  });
+
+  it("EARS-35: a 503 revalidation outage is retryable, with its own sentence", () => {
+    expect(
+      deskEntryFailure({
+        statusCode: 503,
+        errorCode: "IDP_REVALIDATION_UNAVAILABLE",
+        message: "x",
+      }),
+    ).toBe("revalidationUnavailable");
+  });
+
+  it("EARS-35: a server refusal of the missing paper consent names the consent", () => {
+    expect(
+      deskEntryFailure({
+        statusCode: 400,
+        message: "x",
+        fieldErrors: [{ path: "paperConsent", message: "Invalid input" }],
+      }),
+    ).toBe("noConsent");
+  });
+
+  it("EARS-35: unknown event, closed event, other 403 and network faults are the generic refusal", () => {
+    expect(deskEntryFailure({ statusCode: 404, message: "x" })).toBe("generic");
+    expect(deskEntryFailure({ statusCode: 422, message: "x" })).toBe("generic");
+    expect(
+      deskEntryFailure({
+        statusCode: 403,
+        errorCode: "CSRF_INVALID",
+        message: "x",
+      }),
+    ).toBe("generic");
+    expect(deskEntryFailure(new TypeError("Failed to fetch"))).toBe("generic");
   });
 });

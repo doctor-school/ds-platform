@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Label, NativeSelect } from "@ds/design-system";
@@ -10,6 +10,7 @@ import type { CongressRosterList, CongressRosterRow } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { AttendanceCell } from "@/components/attendance-cell";
 import { BackToList } from "@/components/back-to-list";
+import { DeskRegistrationForm } from "@/components/desk-registration-form";
 import {
   ADMIN_DATA_LIST_INITIAL_QUERY,
   AdminDataList,
@@ -24,6 +25,11 @@ import {
   type AttendanceFilter,
   type CongressRosterCells,
 } from "@/lib/congress-roster";
+import { canAccessResource } from "@/lib/admin-access";
+import {
+  ADMIN_SESSION_QUERY_KEY,
+  adminQueryClient,
+} from "@/lib/admin-session-cache";
 import { formatMskDateTime } from "@/lib/msk";
 import { useAdminAccess } from "@/lib/use-admin-access";
 import { congressRosterUrl } from "@/providers/data-provider";
@@ -38,14 +44,18 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * it, so nothing is sliced here. The query lives in component state exactly as
  * on the baseline lists (specialties, directions) — no address-bar sync.
  *
- * View-only by spec (EARS-24): no create button, no row link, no row action, and
- * no lifecycle facet — a registration has no «опубликовано / снято» state to
- * filter by. Columns follow EARS-25; the table's record column (always first in
+ * No create button, no row link, no row action (EARS-24), and no lifecycle
+ * facet — a registration has no «опубликовано / снято» state to filter by. One
+ * write on this screen is the registrar's desk entry (EARS-35), a side panel
+ * opened from the page's own toolbar row: it is not a resource create (the entry goes
+ * through the congress intake, not a CRUD route), so it is not the list's
+ * `createHref`. A `?q=` in the address seeds the search — that is how the desk's
+ * «Открыть запись» lands on an already-registered participant's row. Columns follow EARS-25; the table's record column (always first in
  * `DataTable`) is the № counter, so ФИО is the first declared column and the
  * order reads №, ФИО, … exactly. Sort (EARS-22), column filters (EARS-23) and
  * print (EARS-26) are their own handlers.
  *
- * EARS-34 — the one write on this screen: the «Присутствие» column carries a
+ * EARS-34 — the other write on this screen: the «Присутствие» column carries a
  * box per congress day (`AttendanceCell`), and the server-side presence filter
  * (day + «Присутствовал» / «Не отмечен») sits in the same filter bar, composing
  * with search and paging. The per-day attendance sort → #2316 (EARS-22/EARS-37
@@ -56,9 +66,23 @@ export default function CongressRosterPage() {
   const params = useParams();
   const eventId = String(params.id);
   const access = useAdminAccess();
-  const [query, setQuery] = useState<AdminDataListQueryState<never>>(
-    ADMIN_DATA_LIST_INITIAL_QUERY,
-  );
+  const searchParams = useSearchParams();
+  const addressQ = searchParams.get("q");
+  const [query, setQuery] = useState<AdminDataListQueryState<never>>(() => ({
+    ...ADMIN_DATA_LIST_INITIAL_QUERY,
+    q: addressQ ?? ADMIN_DATA_LIST_INITIAL_QUERY.q,
+  }));
+  useEffect(() => {
+    if (addressQ !== null) {
+      setQuery((current) => ({ ...current, q: addressQ, page: 1 }));
+    }
+  }, [addressQ]);
+  const [accepted, setAccepted] = useState<string | null>(null);
+  // 044 EARS-35 / ADR-0001 A1: the desk route re-checks the grant live; a 403
+  // there means it was withdrawn since this page loaded. The screen then says
+  // what the shell says for a roster it may not open, and re-reads the session
+  // so the navigation follows.
+  const [grantWithdrawn, setGrantWithdrawn] = useState(false);
   const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>(
     ATTENDANCE_FILTER_INITIAL,
   );
@@ -199,19 +223,69 @@ export default function CongressRosterPage() {
         },
       ]
     : [];
+  const mayEnter = access
+    ? canAccessResource(access, "congress-roster", { id: eventId })
+    : false;
+
+  if (grantWithdrawn) {
+    return (
+      <Authenticated key="congress-roster" redirectOnFail="/login">
+        <AppShell>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="access-refused"
+          >
+            {t("login.errorForbidden")}
+          </p>
+        </AppShell>
+      </Authenticated>
+    );
+  }
 
   return (
     <Authenticated key="congress-roster" redirectOnFail="/login">
       <AppShell>
         <div className="flex flex-col gap-6">
-          {/* 044 EARS-20: the way back to the event detail exists only for a
-              principal who may open that detail — a congress registrar may not,
-              and its admin offers no event link at all. */}
-          {access?.full ? (
-            <BackToList
-              href={`/events/${eventId}`}
-              label={t("congressRoster.backToEvent")}
-            />
+          <div
+            className={
+              access?.full
+                ? "flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between"
+                : "flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-end"
+            }
+          >
+            {/* 044 EARS-20: the way back to the event detail exists only for a
+                principal who may open that detail — a congress registrar may
+                not, and its admin offers no event link at all. */}
+            {access?.full ? (
+              <BackToList
+                href={`/events/${eventId}`}
+                label={t("congressRoster.backToEvent")}
+              />
+            ) : null}
+            {mayEnter ? (
+              <DeskRegistrationForm
+                eventId={eventId}
+                onAccepted={(name) => {
+                  setAccepted(name);
+                  void request.refetch();
+                }}
+                onGrantWithdrawn={() => {
+                  setGrantWithdrawn(true);
+                  void adminQueryClient.invalidateQueries({
+                    queryKey: ADMIN_SESSION_QUERY_KEY,
+                  });
+                }}
+              />
+            ) : null}
+          </div>
+          {accepted ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="desk-entry-accepted"
+              role="status"
+            >
+              {t("congressRoster.deskEntry.accepted", { name: accepted })}
+            </p>
           ) : null}
           <AdminDataList<Row, never>
             title={t("congressRoster.listTitle")}

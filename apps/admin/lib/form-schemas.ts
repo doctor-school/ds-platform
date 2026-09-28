@@ -30,6 +30,7 @@ import {
   refineEmbedRefForProvider,
   type StreamProvider,
   StreamProviderSchema,
+  CongressDeskRegistrationRequestSchema,
 } from "@ds/schemas";
 import {
   CurrentPasswordFieldSchema,
@@ -596,4 +597,33 @@ export interface DirectionAdjacencyFormFields {
    * defaulted to whichever option happened to be listed first.
    */
   kind: DirectionAdjacencyKind | "";
+}
+
+/**
+ * 044 EARS-35 — the desk entry form. It IS the SSOT desk request
+ * (`CongressDeskRegistrationRequestSchema`, which is itself the public intake
+ * request with the paper consent in place of the screen consent), so the browser
+ * refuses exactly what the API refuses. The one adaptation is the box, not the
+ * rule: an empty «Отчество» box is «no patronymic» (EARS-3 — the one optional
+ * answer), which the request expresses as an ABSENT key, not an empty string.
+ */
+export const DeskRegistrationFormSchema = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null) return value;
+  const { patronymic, ...rest } = value as Record<string, unknown>;
+  return typeof patronymic === "string" && patronymic.trim() === ""
+    ? rest
+    : value;
+}, CongressDeskRegistrationRequestSchema);
+
+export interface DeskRegistrationFormFields {
+  surname: string;
+  firstName: string;
+  patronymic: string;
+  email: string;
+  specialtyId: string;
+  workplace: string;
+  city: string;
+  region: string;
+  contactPhone: string;
+  paperConsent: boolean;
 }

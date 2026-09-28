@@ -7,6 +7,7 @@ import {
   users,
 } from "@ds/db";
 import { eq } from "drizzle-orm";
+import { AdminAuthorityException } from "../auth/admin-session/admin-authority.problem.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 type Db = DrizzleHandle["db"];
@@ -33,6 +34,10 @@ export interface EventGrantSubject {
  *   the bound one (by id or slug). Anything else — another event, an event that
  *   does not exist — is the same 403, so the desk learns nothing about which
  *   other events exist.
+ * - Every binding refusal carries the stable problem code
+ *   `EVENT_BINDING_REQUIRED` (403): a binding withdrawn or re-pointed since
+ *   the page loaded is a credential refusal the console shows as no-access,
+ *   never as a retryable error.
  *
  * The binding is platform data read in the request (ADR-0001 §1 hybrid RBAC):
  * the role comes from the IdP claim on the session, the event from the table.
@@ -58,10 +63,10 @@ export class EventGrantPolicy {
     }
     const grant = await this.registrarGrant(subject.sub);
     if (!grant) {
-      throw new ForbiddenException("no event binding");
+      throw new AdminAuthorityException("EVENT_BINDING_REQUIRED");
     }
     if (idOrSlug !== grant.eventId && idOrSlug !== grant.eventSlug) {
-      throw new ForbiddenException("event outside the binding");
+      throw new AdminAuthorityException("EVENT_BINDING_REQUIRED");
     }
     return grant.eventId;
   }

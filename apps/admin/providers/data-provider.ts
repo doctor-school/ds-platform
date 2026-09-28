@@ -913,6 +913,12 @@ export const congressRosterUrl = {
     },
   ) =>
     `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/roster?${relationQuery(query)}`,
+  /**
+   * 044 EARS-35 — the desk entry (`POST`), sent through the `custom` transport,
+   * which owns the Idempotency-Key and CSRF headers a command owes.
+   */
+  deskRegistration: (eventIdOrSlug: string) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/registrations`,
 };
 
 /** 044 EARS-34 — one registration's presence mark for one congress day. */

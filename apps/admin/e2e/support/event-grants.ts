@@ -41,3 +41,34 @@ export async function bindRegistrarToEvent(
     await client.end();
   }
 }
+
+/**
+ * 044 EARS-38 — the inverse runbook step: withdraw a registrar's event binding
+ * the way the tech lead does until #2378 (`DELETE` the `event_role_grants` row,
+ * README «Binding a registrar to an event»). Deleting nothing fails loudly, so a
+ * test that means to prove the withdrawn-binding refusal never runs against a
+ * registrar that is still bound.
+ */
+export async function unbindRegistrar(registrarEmail: string): Promise<void> {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("E2E requires DATABASE_URL in the environment");
+  }
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    const result = await client.query(
+      `DELETE FROM event_role_grants
+       WHERE role = 'event-registrar'
+         AND user_id = (SELECT id FROM users WHERE email = $1)`,
+      [registrarEmail],
+    );
+    if (result.rowCount !== 1) {
+      throw new Error(
+        `could not unbind ${registrarEmail}: ${result.rowCount} grant rows deleted`,
+      );
+    }
+  } finally {
+    await client.end();
+  }
+}

@@ -19,3 +19,6 @@ packages/design-system/src/styles/allowed-tokens.json
 
 # Imported Claude Design canvas — keep bytes verbatim
 design-source/
+# 044 EARS-35 — a byte-for-byte copy of the orthobio-site generated ОКТМО
+# directory (see apps/admin/lib/settlements.ts); never reformatted here.
+apps/admin/lib/settlements.json

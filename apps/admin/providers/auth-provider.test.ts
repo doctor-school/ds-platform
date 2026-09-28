@@ -71,3 +71,32 @@ describe("authProvider.login — refusal mapping", () => {
     });
   });
 });
+
+describe("authProvider.onError — which refusal ends the session", () => {
+  it("044 EARS-38: a 401 (session gone) signs the operator out and routes to /login", async () => {
+    const error = { statusCode: 401, message: "x" };
+    await expect(authProvider.onError(error)).resolves.toEqual({
+      logout: true,
+      redirectTo: "/login",
+      error,
+    });
+  });
+
+  it("044 EARS-38: a 403 (a live session refused this action) keeps the session and surfaces the error to the screen", async () => {
+    const error = {
+      statusCode: 403,
+      errorCode: "EVENT_BINDING_REQUIRED",
+      message: "x",
+    };
+    const verdict = await authProvider.onError(error);
+    expect(verdict).toEqual({ error });
+    expect(verdict).not.toHaveProperty("logout");
+    expect(verdict).not.toHaveProperty("redirectTo");
+  });
+
+  it("044 EARS-38: any other failure is left to the screen", async () => {
+    await expect(
+      authProvider.onError({ statusCode: 503, message: "x" }),
+    ).resolves.toEqual({});
+  });
+});

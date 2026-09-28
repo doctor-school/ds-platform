@@ -13,7 +13,7 @@ import type { RoomCopyStrings } from "@ds/room";
  *   is read by the EVENT page, never by the room, so it is NOT mapped here).
  * - `errors.validation` — the four display-name validation strings (D18). The
  *   prompt's messages come from the academy's shared validation catalogue, the
- *   same source `use-localized-resolver` reads for every other portal form, so
+ *   single academy source for validation wording, so
  *   the room prompt does not fork its own error wording.
  *
  * Only the SERIALIZABLE half lives here (D14). The four ICU-parameterised values

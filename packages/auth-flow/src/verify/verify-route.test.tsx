@@ -57,23 +57,32 @@ const EVENT = {
 };
 
 type Params = Record<string, string | string[] | undefined>;
-type EntryProps = {
+type StepProps = {
   config: AuthFlowHostConfig;
-  email?: string;
   landing: string;
   returnTo: string | null;
   returnContextPlate?: unknown;
 };
 type ShellProps = {
-  children: ReactElement<EntryProps>;
+  children: ReactElement<StepProps>;
   returnContext?: unknown;
 };
+type GateProps = {
+  config: AuthFlowHostConfig;
+  email?: string;
+  returnTo: string | null;
+  children: ReactElement<ShellProps>;
+};
 
-async function shellOf(config: AuthFlowHostConfig, params: Params) {
+async function gateOf(config: AuthFlowHostConfig, params: Params) {
   return (await VerifyRoute({
     config,
     searchParams: Promise.resolve(params),
-  })) as ReactElement<ShellProps>;
+  })) as ReactElement<GateProps>;
+}
+
+async function shellOf(config: AuthFlowHostConfig, params: Params) {
+  return (await gateOf(config, params)).props.children;
 }
 
 beforeEach(() => {
@@ -92,14 +101,19 @@ describe("#2027 PR 1.7: the /verify mount", () => {
   });
 
   it("003 EARS-24: the same-tab hop's ?email= and the RAW returnTo reach the client body with the LD landing", async () => {
-    const shell = await shellOf(ACADEMY_FIXTURE, {
+    const gate = await gateOf(ACADEMY_FIXTURE, {
       email: ["doc@example.com", "other@example.com"],
       returnTo: "/webinars/ahilles-042",
     });
+    const shell = gate.props.children;
 
-    expect(shell.props.children.props).toMatchObject({
+    expect(gate.props).toMatchObject({
       config: ACADEMY_FIXTURE,
       email: "doc@example.com",
+      returnTo: "/webinars/ahilles-042",
+    });
+    expect(shell.props.children.props).toMatchObject({
+      config: ACADEMY_FIXTURE,
       landing: "/webinars",
       returnTo: "/webinars/ahilles-042",
     });
@@ -120,6 +134,19 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     expect(shell.props.returnContext).toBeTruthy();
     // The mobile plate above the card, as the registration door draws it.
     expect(shell.props.children.props.returnContextPlate).toBeTruthy();
+  });
+
+  it("003 EARS-40: a bare arrival hands the client gate no address, and the gate wraps the WHOLE frame (shell and panel)", async () => {
+    resolveReturnContext.mockResolvedValue(EVENT);
+    const withCard = { ...ACADEMY_FIXTURE, returnTo: { card: true } };
+
+    const gate = await gateOf(withCard, { returnTo: "/webinars/ahilles-042" });
+
+    expect(gate.props.email).toBeUndefined();
+    expect(gate.props.returnTo).toBe("/webinars/ahilles-042");
+    // The shell with its return-context panel is INSIDE the gate, so nothing
+    // of the frame paints while the gate decides (it renders null until then).
+    expect(gate.props.children.props.returnContext).toBeTruthy();
   });
 
   it("rows 51, 76: a host with no /verify route cannot mount it — a wiring mistake reads as one", async () => {

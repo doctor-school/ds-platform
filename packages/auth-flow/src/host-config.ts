@@ -346,14 +346,6 @@ export type AuthFlowVerifyCopy = {
    * exists (003 EARS-16).
    */
   readonly resendAcknowledged: string;
-  /**
-   * The code went to an address this surface cannot name — a bare `/verify`
-   * opened with neither `?email=` nor the mail's `#email=` (003 EARS-24, #904).
-   * A submit there is never a silent no-op: this line says why nothing happened.
-   */
-  readonly missingIdentifier: string;
-  /** What the description names in place of the masked address when none is known. */
-  readonly fallbackDestination: string;
 };
 
 /** The return-context card's words (row 46): one eyebrow, the door forks only the line. */

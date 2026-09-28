@@ -59,11 +59,10 @@ import { VerifyGlyph } from "./verify-glyph";
 export type VerifyDoorProps = {
   config: AuthFlowHostConfig;
   /**
-   * The address the code went to. `undefined` on a bare deep-link (#904): the
-   * card still renders, the resend is hidden and a submit says why nothing
-   * happened instead of firing an empty command.
+   * The address the code went to — always known: a `/verify` arrival with none
+   * is sent to the registration door before the step is shown (003 EARS-40).
    */
-  email?: string | undefined;
+  email: string;
   /** Where a visitor with no honoured target lands — decided server-side by the mount. */
   landing: string;
   /**
@@ -118,7 +117,7 @@ export function VerifyDoor({
   const authClient = useMemo(() => createAuthClient(config.api), [config.api]);
   const cardCopy = useMemo(() => cardCopyOf(copy), [copy]);
   const resolver = useMemo(() => codeResolver(config), [config]);
-  const destination = email ? maskDestination(email) : copy.fallbackDestination;
+  const destination = maskDestination(email);
 
   const [error, setError] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
@@ -141,10 +140,7 @@ export function VerifyDoor({
   // #267 / 003 EARS-25 — the dedicated resend endpoint, never a re-`register`.
   const { resendNonce, onResend } = useResendCooldown({
     resend: async (captchaToken) => {
-      await authClient.resendVerification(
-        { identifier: email ?? "" },
-        captchaToken,
-      );
+      await authClient.resendVerification({ identifier: email }, captchaToken);
     },
     onError: (err) => {
       if (isBotProtectionRejected(err)) {
@@ -175,11 +171,6 @@ export function VerifyDoor({
 
   async function onSubmit(values: EmailConfirmValues) {
     setError(null);
-    if (!email) {
-      // #904 — the code went to an address this surface cannot name.
-      setError(copy.missingIdentifier);
-      return;
-    }
     let confirmed: unknown;
     try {
       // `returnTo` rides the SAME command as the code where the host's command
@@ -243,13 +234,9 @@ export function VerifyDoor({
       destination={destination}
       resolver={resolver}
       onSubmit={onSubmit}
-      // A blocked submit is never a silent no-op (#904): with no address the
-      // reason is the address, otherwise the code the FieldSpec rule refused.
-      onInvalid={() =>
-        setError(
-          email ? resolvedCopy.fields.code.invalid : copy.missingIdentifier,
-        )
-      }
+      // A blocked submit is never a silent no-op (#904): it names the code the
+      // FieldSpec rule refused.
+      onInvalid={() => setError(resolvedCopy.fields.code.invalid)}
       error={error}
       succeeded={succeeded}
       // Same-site and relative, with the arrival target carried onward (rule S3).
@@ -258,24 +245,19 @@ export function VerifyDoor({
         reset: withReturnTarget(config.routes.reset, carriedTarget),
       }}
       renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
-      // Only where an address is known: a bare deep-link has nothing to resend to.
-      resend={
-        email
-          ? {
-              nonce: resendNonce,
-              onResend: () => captcha.request(onResend),
-              error: captchaError ?? resendError,
-              pending: captcha.pending,
-              notice,
-              captchaSlot: (
-                <BotProtectionField
-                  sitekey={botProtectionSiteKey(config)}
-                  {...captcha.fieldProps}
-                />
-              ),
-            }
-          : undefined
-      }
+      resend={{
+        nonce: resendNonce,
+        onResend: () => captcha.request(onResend),
+        error: captchaError ?? resendError,
+        pending: captcha.pending,
+        notice,
+        captchaSlot: (
+          <BotProtectionField
+            sitekey={botProtectionSiteKey(config)}
+            {...captcha.fieldProps}
+          />
+        ),
+      }}
       testIds={VERIFY_TEST_IDS}
       returnContextSlot={returnContextPlate}
     />

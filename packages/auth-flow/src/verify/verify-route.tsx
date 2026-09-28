@@ -11,7 +11,7 @@ import {
   resolveServerAuth,
 } from "../server";
 import { AuthShell } from "../shell";
-import { VerifyEntry } from "./verify-entry";
+import { VerifyAddressGate, VerifyStep } from "./verify-entry";
 
 /**
  * `<VerifyRoute>` — the ONE server mount of the confirmation step for a host
@@ -24,7 +24,9 @@ import { VerifyEntry } from "./verify-entry";
  * return-context panel on a host that publishes one — «после подтверждения
  * почты вы вернётесь сюда же» (canvas 469-472). The address and the carried
  * target are handed to the client half, which alone can read the mail's
- * `#email=` fragment.
+ * `#email=` fragment — and so alone decides that an arrival with no address at
+ * all goes to the registration door (003 EARS-40): a 3xx here could not tell a
+ * bare `/verify` from a fragment deep link, which the browser would carry along.
  *
  * A host whose `routes.verify` is `undefined` confirms inline on the
  * registration door (rows 51, 76); mounting this route there is a wiring
@@ -74,16 +76,23 @@ export async function VerifyRoute({
   });
 
   return (
-    <AuthShell config={config} returnContext={panel}>
-      <VerifyEntry
-        config={config}
-        {...(email ? { email } : {})}
-        landing={landing}
-        returnTo={returnTo}
-        // The mobile plate above the card, as the registration door draws it.
-        returnContextPlate={plate}
-      />
-    </AuthShell>
+    // 003 EARS-40 — the gate wraps the whole frame: a bare `/verify` renders
+    // no shell and no panel before the client replaces it onto `/register`.
+    <VerifyAddressGate
+      config={config}
+      {...(email ? { email } : {})}
+      returnTo={returnTo}
+    >
+      <AuthShell config={config} returnContext={panel}>
+        <VerifyStep
+          config={config}
+          landing={landing}
+          returnTo={returnTo}
+          // The mobile plate above the card, as the registration door draws it.
+          returnContextPlate={plate}
+        />
+      </AuthShell>
+    </VerifyAddressGate>
   );
 }
 

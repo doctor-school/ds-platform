@@ -594,3 +594,11 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given a registrant moving from /register to /verify
     When the password hold is inspected on every path including reload and abandonment
     Then the password is absent from the URL, localStorage, sessionStorage, and cookies
+
+  @EARS-40 @failure
+  Scenario: A /verify opened with no address goes to the registration door
+    Given a visitor opens /verify with neither an ?email= query nor an #email= fragment
+    When the route has read the fragment
+    Then the visitor is taken to /register in place of the address-less /verify
+    And a same-origin returnTo on the arrival is carried onward to /register
+    And no verification step without an address is ever shown

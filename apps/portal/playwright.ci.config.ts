@@ -73,7 +73,7 @@ process.env.ACADEMY_SUBMISSIONS_DIR = ACADEMY_SUBMISSIONS_DIR;
 
 export default defineConfig({
   testDir: "./e2e",
-  // Only the backend-free axe, Academy and password-reveal specs run in CI; live-Zitadel journeys
+  // Only the backend-free axe, Academy, password-reveal and verify-entry specs run in CI; live-Zitadel journeys
   // and the dev-stand-gated `e2e/a11y/` suite (`test:axe`) stay out. Anchored regex,
   // not a bare-basename glob: `e2e/a11y/a11y-axe.e2e.spec.ts` (the dev-stand
   // tier) shares the basename and a glob would drag its env-skipped tests in.
@@ -81,6 +81,9 @@ export default defineConfig({
     /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
     /[\\/]e2e[\\/]academy-home\.e2e\.spec\.ts$/,
     /[\\/]e2e[\\/]password-reveal\.e2e\.spec\.ts$/,
+    // 003 EARS-40: a cold /verify with no address redirects client-side and
+    // reads no upstream, so it is hermetic in exactly this tier.
+    /[\\/]e2e[\\/]verify-bare-entry\.e2e\.spec\.ts$/,
     // 028 V-4: the documents surface reads a workspace package from disk and
     // issues no api call, so it is hermetic in exactly this tier.
     /[\\/]e2e[\\/]documents\.spec\.ts$/,

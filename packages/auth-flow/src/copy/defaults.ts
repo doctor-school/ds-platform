@@ -146,11 +146,6 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
     resendAcknowledged:
       "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
-    missingIdentifier:
-      "Не удалось определить аккаунт. Зарегистрируйтесь заново, чтобы получить новый код, или войдите в существующий аккаунт.",
-    // Not a canvas string (the canvas always has an address): the shipped
-    // Academy catalogue line for a bare deep-link.
-    fallbackDestination: "ваш аккаунт",
   },
   consents: {
     accessGroupHeading: "Условия доступа",

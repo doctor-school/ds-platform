@@ -261,17 +261,6 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     );
   });
 
-  it("003 EARS-24: hides resend when there is no address to target (bare deep-link)", async () => {
-    await mountSettled({});
-
-    expect(screen.queryByTestId("verify-resend")).not.toBeInTheDocument();
-    expect(screen.getByTestId("verify-submit")).toBeInTheDocument();
-    expect(screen.getByTestId("verify-go-to-login")).toBeInTheDocument();
-    expect(
-      screen.getByText(COPY.fallbackDestination, { exact: false }),
-    ).toBeInTheDocument();
-  });
-
   it("003 EARS-3: auto-submits the fixed-length code (no manual click) and confirms it", async () => {
     await enterCode();
 
@@ -379,20 +368,6 @@ describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
     expect(h.confirm).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
   });
 
-  it("003 EARS-24: a host with no deep-link entry never reads the fragment", async () => {
-    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
-    render(
-      <VerifyEntry
-        config={{ ...ACADEMY_FIXTURE, verify: { deepLinkEntry: false } }}
-        landing="/webinars"
-        returnTo={null}
-      />,
-    );
-    await screen.findByTestId("verify-submit");
-
-    expect(screen.queryByTestId("verify-resend")).not.toBeInTheDocument();
-  });
-
   it("003 EARS-39: a cold verify (no held password: reload, restored tab, expired hold) routes to /login", async () => {
     window.history.replaceState(null, "", "/verify#email=doc%40example.com");
     await enterCode({});
@@ -413,18 +388,76 @@ describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
     expect(screen.queryByTestId("verify-succeeded")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
+});
 
-  it("003 EARS-24: surfaces a VISIBLE error (never a silent no-op) when a submit is blocked with no identifier", async () => {
+describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () => {
+  it("003 EARS-40: a bare entry (no ?email=, no #email=) replaces onto /register and never shows the step", async () => {
     window.history.replaceState(null, "", "/verify");
-    const user = userEvent.setup();
+    mount({});
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
+    expect(h.replace).toHaveBeenCalledTimes(1);
+    expect(h.push).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("verify-card")).not.toBeInTheDocument();
+    expect(screen.queryByText("ваш аккаунт", { exact: false })).toBeNull();
+  });
+
+  it("003 EARS-40: a bare entry carries a same-origin returnTo onward to /register", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/verify?returnTo=%2Fwebinars%2Fahilles-042",
+    );
+    mount({ returnTo: "/webinars/ahilles-042" });
+
+    await waitFor(() =>
+      expect(h.replace).toHaveBeenCalledWith(
+        "/register?returnTo=%2Fwebinars%2Fahilles-042",
+      ),
+    );
+    expect(screen.queryByTestId("verify-card")).not.toBeInTheDocument();
+  });
+
+  it("003 EARS-40: a cross-origin returnTo is dropped at the hop, never propagated into /register", async () => {
+    window.history.replaceState(null, "", "/verify");
+    mount({ returnTo: "https://evil.example/phish" });
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
+  });
+
+  it("003 EARS-40: the ?email= seed renders the step with the masked address and its resend, no redirect", async () => {
+    await mountSettled({ email: EMAIL });
+
+    expect(screen.getByTestId("verify-card")).toHaveTextContent(
+      "d•••@e•••.com",
+    );
+    expect(screen.getByTestId("verify-resend")).toBeInTheDocument();
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-40: the mail's #email= seed renders the step with the masked address, no redirect", async () => {
+    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
     await mountSettled({});
 
-    await user.click(screen.getByTestId("verify-submit"));
-
-    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
-      COPY.missingIdentifier,
+    expect(screen.getByTestId("verify-card")).toHaveTextContent(
+      "d•••@e•••.com",
     );
-    expect(h.confirm).not.toHaveBeenCalled();
+    expect(screen.getByTestId("verify-resend")).toBeInTheDocument();
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-40: a host with no deep-link entry never reads the fragment — a bare query goes to /register", async () => {
+    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
+    render(
+      <VerifyEntry
+        config={{ ...ACADEMY_FIXTURE, verify: { deepLinkEntry: false } }}
+        landing="/webinars"
+        returnTo={null}
+      />,
+    );
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
+    expect(screen.queryByTestId("verify-card")).not.toBeInTheDocument();
   });
 });
 

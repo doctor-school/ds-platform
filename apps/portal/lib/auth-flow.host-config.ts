@@ -114,6 +114,9 @@ export const ACADEMY_AUTH_FLOW = {
   // is the email-or-E.164 union.
   channels: ["email", "sms"],
   register: { promoField: false },
+  // 003 EARS-24 (#904) — the verification mail's button opens `/verify#email=…`
+  // cold, so the confirmation surface seeds the address from the fragment.
+  verify: { deepLinkEntry: true },
   /**
    * 003 EARS-20 — what the Academy records at sign-up, and what it SHOWS.
    *

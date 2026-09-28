@@ -574,14 +574,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And revealing emitted no network request, log entry, or storage write
 
   @EARS-39 @happy
-  Scenario: Reloading the verify screen keeps the registrant on the verification step
-    Given a registrant who has submitted the registration form and is on the /verify screen
-    When the registrant hard-reloads the page so the in-memory password hold is lost
-    Then the verification step is still shown with the code field and the resend control
-    And the registrant is not bounced to /login
+  Scenario: A cold verification step verifies and then routes to sign-in with the return target
+    Given a registrant who has submitted the registration form and is on the verification step
+    And the in-memory password hold is lost to a hard reload, a restored tab, or an expired hold
     When the registrant submits a valid verification code
     Then the verification completes
-    And the registrant is routed to sign-in with explicit copy naming the password they just created
+    And the registrant is routed to /login carrying the return target onward
+
+  @EARS-39 @failure
+  Scenario: A refused auto-login replay keeps the registrant on the verification step
+    Given a registrant on the verification step whose held password the IdP does not accept
+    When the registrant submits a valid verification code
+    Then the verification completes but the auto-login replay is refused
+    And the registrant stays on the verification step with the generic error
+    And the registrant is not routed anywhere
 
   @EARS-39 @failure
   Scenario: The held registration password is never persisted anywhere

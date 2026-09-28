@@ -65,16 +65,53 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
       AuthFlowLoginCopy["otp"]["resendCountdown"]
     >().toEqualTypeOf<string>();
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
-      expect(resolveAuthFlowCopy(config).login.otp.sentTo).toContain("{destination}");
-      expect(resolveAuthFlowCopy(config).login.otp.resendCountdown).toContain("{seconds}");
+      expect(resolveAuthFlowCopy(config).login.otp.sentTo).toContain(
+        "{destination}",
+      );
+      expect(resolveAuthFlowCopy(config).login.otp.resendCountdown).toContain(
+        "{seconds}",
+      );
       expect(JSON.parse(JSON.stringify(config))).toEqual(config);
     }
   });
 
   it("row 44: the field copy carries the identifier and phone entries the door resolver reads", () => {
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
-      expect(resolveAuthFlowCopy(config).fields.identifier.invalid).toEqual(expect.any(String));
-      expect(resolveAuthFlowCopy(config).fields.phone.invalid).toEqual(expect.any(String));
+      expect(resolveAuthFlowCopy(config).fields.identifier.invalid).toEqual(
+        expect.any(String),
+      );
+      expect(resolveAuthFlowCopy(config).fields.phone.invalid).toEqual(
+        expect.any(String),
+      );
+    }
+  });
+});
+
+describe("#2027 PR 1.7 host config — the confirmation step", () => {
+  it("row 76: a host states whether the verification mail links into a surface of its own", () => {
+    expectTypeOf<
+      AuthFlowHostConfig["verify"]["deepLinkEntry"]
+    >().toEqualTypeOf<boolean>();
+    // The Academy's mail opens `/verify#email=…` cold; the doctor host confirms
+    // inline on the registration door and has no such entry.
+    expect(ACADEMY_FIXTURE.verify.deepLinkEntry).toBe(true);
+    expect(DOCTOR_FIXTURE.verify.deepLinkEntry).toBe(false);
+  });
+
+  it("rows 65-77: the confirmation words are the canvas «Подтверждение» screen on every host", () => {
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      const copy = resolveAuthFlowCopy(config).verify;
+      expect(copy.title).toBe("Проверьте почту");
+      expect(copy.description).toBe(
+        "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
+      );
+      expect(copy.newAccountHeading).toBe("Новый аккаунт — введите код");
+      expect(copy.codeAccepted).toBe("Код принят — входим…");
+      expect(copy.failed).toBe("Код не подошёл. Попробуйте ещё раз.");
+      expect(copy.missingIdentifier).toBe(
+        "Не удалось определить аккаунт. Зарегистрируйтесь заново, чтобы получить новый код, или войдите в существующий аккаунт.",
+      );
+      expect(copy.resendAcknowledged).toContain("{destination}");
     }
   });
 });

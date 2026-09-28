@@ -36,11 +36,12 @@ const h = vi.hoisted(() => ({
   registerForEvent: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
+  refresh: vi.fn(),
   calls: [] as string[],
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: h.push, replace: h.replace }),
+  useRouter: () => ({ push: h.push, replace: h.replace, refresh: h.refresh }),
 }));
 
 vi.mock("../client/auth-client", async (importOriginal) => ({
@@ -78,6 +79,7 @@ vi.mock("@ds/design-system/blocks", async () => {
 });
 
 import {
+  PENDING_TTL_MS,
   clearPendingRegistration,
   setPendingRegistration,
   takePendingRegistration,
@@ -96,11 +98,8 @@ const RETURN_TARGET = "/events/kardio";
 /** Rule S3 — what the ROUTE carries onward, in the canonical vocabulary. */
 const CARRIED_TARGET = "/webinars/kardio";
 
-const REGISTER_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).register;
-if (!REGISTER_COPY?.confirm) {
-  throw new Error("DOCTOR_FIXTURE must state the inline confirmation copy");
-}
-const CONFIRM_COPY = REGISTER_COPY.confirm;
+/** The ONE confirmation dictionary (#2027 PR 1.7) — the same words on every host. */
+const CONFIRM_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
 
 beforeEach(() => {
   h.calls.length = 0;
@@ -284,27 +283,50 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     expect(h.replace).not.toHaveBeenCalled();
   });
 
-  it("021 EARS-15.3: a replay the login refuses routes to the same sign-in door, with the slot wiped and no onward hop", async () => {
+  it("021 EARS-15.2: a hold past its TTL (reload, restored tab, expired hold) routes to the sign-in door exactly as no hold at all", async () => {
+    // Row 70 (owner decision 2026-09-15, tech spec §5 Q2): a cold confirmation
+    // step on the doctor host is the Academy's cold `/verify` — the credential
+    // was set, but by the time the code arrives the hold has expired, so the
+    // take returns nothing and the confirmed doctor signs in by hand.
+    const user = setupUser();
+    renderPanel();
+    const expired = Date.now() + PENDING_TTL_MS + 1;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(expired);
+    try {
+      await submitCode(user);
+
+      await waitFor(() =>
+        expect(h.push).toHaveBeenCalledWith(
+          `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
+        ),
+      );
+      expect(h.login).not.toHaveBeenCalled();
+      expect(h.calls).toEqual(["confirm"]);
+      expect(h.replace).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("021 EARS-15.3: a replay the login refuses keeps the doctor on the confirmation step with the generic error, with the slot wiped and no routing", async () => {
     // The concrete journey: the doctor re-registered the same email with a
     // SECOND password, 003 EARS-16 answered identically, and the IdP still holds
-    // the first one — so the replay is refused with the generic 401 and there is
-    // no session, exactly as if nothing had been held.
-    h.login.mockRejectedValue(new Error("invalid credentials"));
+    // the first one — so the replay is refused with the generic 401. Owner
+    // decision 2026-09-15 (tech spec §5 Q1, «Как в Академии»): the ONE
+    // post-throw exit of both hosts is to stay on the step with the generic
+    // 003 EARS-16 sentence — no sign-in door, no onward hop.
+    h.login.mockRejectedValue(new AuthError(401, "Unauthorized"));
     const user = setupUser();
     renderPanel();
 
     await submitCode(user);
 
     await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(h.push).toHaveBeenCalledWith(
-        `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
-      ),
-    );
-    // Not a failed CONFIRMATION — the code was accepted, so the doctor is never
-    // told to type it again.
-    expect(screen.queryByText(CONFIRM_COPY.failed)).toBeNull();
+    expect(await screen.findByText(CONFIRM_COPY.failed)).toBeTruthy();
+    expect(h.push).not.toHaveBeenCalled();
     expect(h.replace).not.toHaveBeenCalled();
+    // Still the confirmation step: the code field is on screen.
+    expect(screen.getByLabelText(CONFIRM_COPY.codeLabel)).toBeTruthy();
     // The take consumes; it does not roll back on error.
     expect(takePendingRegistration(EMAIL)).toBeNull();
   });
@@ -398,7 +420,9 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
 
     await submitCode(user);
 
-    await screen.findByText(resolveAuthFlowCopy(DOCTOR_FIXTURE).errors.tooManyAttempts);
+    await screen.findByText(
+      resolveAuthFlowCopy(DOCTOR_FIXTURE).errors.tooManyAttempts,
+    );
     expect(screen.queryByText(CONFIRM_COPY.failed)).toBeNull();
   });
 });

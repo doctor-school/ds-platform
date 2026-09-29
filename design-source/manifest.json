@@ -105,10 +105,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "d5288ddcaecf7e997beed42a3f25da7b43a8727ed5333e079662b7fb6b837ea6",
-      "pulledAt": "2026-09-29T04:57:44.770Z",
+      "sha256": "fb846ab9a8371a171d273687aa344ac80006b3dcce904a830b584b108e459eb2",
+      "pulledAt": "2026-09-29T08:34:10.170Z",
       "remotePath": "auth.dc.html",
-      "note": "re-pulled by the lead via DesignSync 2026-09-29 after the #2411 redraw: identifier wording host-switched (Витрина email-only, Академия email-or-phone), Канал кода row hidden on the doctor host, reset code cells 6 upper-alnum; login-by-code keeps 8 digits"
+      "note": "re-pulled by the lead via DesignSync 2026-09-29: host switches from #2429 reverted on owner decision (storefronts identical); kept reset code cells 6 upper-alnum and login cell hint 8"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

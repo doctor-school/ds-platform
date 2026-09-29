@@ -93,9 +93,8 @@
                 <div style="display:flex;flex-direction:column;gap:18px">
                   <div>
                     <div style="font-size:14px;font-weight:700;color:{{ ink }};margin-bottom:4px">Вход по одноразовому коду</div>
-                    <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }}">{{ otpIntro }}</div>
+                    <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }}">Пришлём код на почту или телефон — пароль не нужен.</div>
                   </div>
-                  <sc-if value="{{ otpChannelRow }}" hint-placeholder-val="{{ true }}">
                   <div>
                     <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Канал кода</div>
                     <div style="display:flex;gap:8px">
@@ -103,7 +102,6 @@
                       <button onClick="{{ chSms }}" data-tab="{{ chSmsOn }}" style="{{ chSmsStyle }}">SMS</button>
                     </div>
                   </div>
-                  </sc-if>
                   <div>
                     <label style="{{ fOtpId.labelStyle }}">{{ fOtpId.label }}</label>
                     <input type="text" value="{{ fOtpId.value }}" onChange="{{ fOtpId.onChange }}" onBlur="{{ fOtpId.onBlur }}" placeholder="{{ fOtpId.placeholder }}" style="{{ fOtpId.inputStyle }}">
@@ -425,7 +423,7 @@ class Component extends DCLogic {
       register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль.'],
       verify: ['Проверьте почту', R('span', null, 'Мы отправили код на ', R('strong', null, maskedDest), '. Введите его, чтобы завершить регистрацию.')],
       reset: s.resetStage === 'request'
-        ? ['Сброс пароля', isDoctor ? 'Укажите электронную почту — пришлём код для сброса.' : 'Укажите e-mail или телефон — пришлём код для сброса.']
+        ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
         : ['Новый пароль', 'Код отправлен на ' + maskedDest + '. Введите его и задайте новый пароль.']
     };
 
@@ -532,22 +530,18 @@ class Component extends DCLogic {
       tabPwOn: s.loginTab === 'password', tabOtpOn: s.loginTab === 'otp',
       tabPwStyle: segTab(s.loginTab === 'password'), tabOtpStyle: segTab(s.loginTab === 'otp') + ';border-left:2px solid ' + border,
       otpNotSent: !s.otpSent, otpSent: s.otpSent,
-      otpChannelRow: !isDoctor,
       chEmail: () => this.setState({ otpChannel: 'email' }), chSms: () => this.setState({ otpChannel: 'sms' }),
       chEmailOn: s.otpChannel === 'email', chSmsOn: s.otpChannel === 'sms',
       chEmailStyle: chBtn(s.otpChannel === 'email'), chSmsStyle: chBtn(s.otpChannel === 'sms'),
       sendOtp: () => {
         this.setState({ touched: Object.assign({}, s.touched, { otpId: true }) });
-        const v = s.values['otpId'] || ''; const ok = (isDoctor || s.otpChannel === 'email') ? emailOk(v) : phoneOk(v);
+        const v = s.values['otpId'] || ''; const ok = s.otpChannel === 'email' ? emailOk(v) : phoneOk(v);
         if (ok) { this.flash('otp'); setTimeout(() => this.setState({ otpSent: true, verified: false }), 300); this.startCd(); }
       },
       otpBack: () => this.setState({ otpSent: false, verified: false, cooldown: 0, otp: Array(8).fill(''), values: Object.assign({}, s.values, { code: '' }) }),
-      fLoginId: isDoctor
-        ? mkField('loginId', 'Электронная почта', 'doctor@example.com', vEmail, 'Заполните это поле.')
-        : mkField('loginId', 'Электронная почта или телефон', 'doctor@example.com или +7…', vIdent, 'Заполните это поле.'),
-      otpIntro: isDoctor ? 'Пришлём код на почту — пароль не нужен.' : 'Пришлём код на почту или телефон — пароль не нужен.',
+      fLoginId: mkField('loginId', 'Электронная почта или телефон', 'doctor@example.com или +7…', vIdent, 'Заполните это поле.'),
       fLoginPw: mkField('loginPw', 'Пароль', '', null, 'Заполните это поле.'),
-      fOtpId: (isDoctor || s.otpChannel === 'email')
+      fOtpId: s.otpChannel === 'email'
         ? mkField('otpId', 'Электронная почта', 'doctor@example.com', vEmail, 'Заполните это поле.')
         : mkField('otpId', 'Телефон', '+79991234567', vPhone, 'Заполните это поле.'),
       fCode: mkField('code', 'Введите код', '12345678', vCode, 'Введите код.'),
@@ -577,9 +571,7 @@ class Component extends DCLogic {
       resend: () => { if (s.cooldown > 0) return; this.setState({ notice: true, verified: false, otp: Array(8).fill(''), values: Object.assign({}, s.values, { code: '' }) }); this.startCd(); },
       // сброс
       resetRequest: s.resetStage === 'request', resetComplete: s.resetStage === 'complete',
-      fResetId: isDoctor
-        ? mkField('resetId', 'Электронная почта', 'doctor@example.com', vEmail, 'Заполните это поле.')
-        : mkField('resetId', 'Электронная почта или телефон', 'doctor@example.com или +7…', vIdent, 'Заполните это поле.'),
+      fResetId: mkField('resetId', 'Электронная почта или телефон', 'doctor@example.com или +7…', vIdent, 'Заполните это поле.'),
       fResetPw: mkField('resetPw', 'Новый пароль', '', vPw, 'Заполните это поле.'),
       fResetPwHint: (s.touched['resetPw'] && s.values['resetPw'] && vPw(s.values['resetPw'])) ? 'display:none' : 'font-size:12px;font-weight:600;color:' + inkFaint + ';margin-top:7px',
       resetSend: () => {

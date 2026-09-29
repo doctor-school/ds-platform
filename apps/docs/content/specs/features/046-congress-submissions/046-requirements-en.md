@@ -50,7 +50,7 @@ lang: en
 - The «Подать материалы» section on orthobio.ru and the button on its «Заявка принята» card — `doctor-school/orthobio-site#99` in that repository (WBS dependency in `046-design.md`); this spec owns only the addresses the site links to.
 - A congress questionnaire on the platform and any change to the login or registration mechanics of `@ds/auth-flow`.
 - The screen for granting event-bound roles — #2378; until it ships the tech lead inserts `event_role_grants` rows on the product owner's request, as for the 044 registrar.
-- Co-author accounts, invitations or co-author confirmation; a per-organisation limit (the organisers set none).
+- Co-author accounts, invitations or co-author confirmation; a per-organisation limit does not apply: participants register as individuals, there are no organisation accounts, and «Организация / место работы» is plain text in the profile and the submission that nothing is counted or limited by (organisation accounts, if they appear, are a separate decision).
 - A retry queue for letters; exporting the registry to a file; submission statistics (the organisers have no past-year data yet).
 
 ## Constraints

@@ -23,7 +23,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 **Kinds.**
 
 - **Oral talk** — title, authors (each: surname, first name, patronymic if any, workplace; one marked as the presenter), educational goal, summary. The talk is given in person.
-- **Poster** — title, authors, goal, content. Posters are for participants younger than 40 on the first day of the congress (23 April 2027); the platform asks for the birth date once and remembers it. Poster files and their layout rules come later from the organisers.
+- **Poster** — title, authors, goal, content. Posters are for participants strictly younger than 40 on the congress start date (23 April 2027 for the 2027 congress), confirmed by the organisers; the platform asks for the birth date once and remembers it. Poster files and their layout rules come later from the organisers.
 - **Abstracts** — title, authors and five sections «Актуальность», «Цель», «Материалы и методы», «Результаты и обсуждение», «Выводы», together no more than 5000 characters including spaces, with one counter for the whole text. Plain text only — tables, formulas, figures and photos cannot be inserted. When sending, the author gives consent to publication in РИНЦ and confirms that there are no incorrect borrowings and no trade names. Abstracts are not a talk application; on a talk or poster the author can press «Подать тезисы по этой работе» to start abstracts with the same title and authors.
 
 **Statuses.** Черновик → Отправлена → На рассмотрении → Принята / Отклонена / На доработке. The author sees the status in the section and receives a letter when the submission is sent, accepted, rejected or returned for revision; for a rejection and a revision request the committee writes a comment, which the author reads in the letter and in the section. Before a deadline the platform reminds authors who still have unsent drafts.
@@ -100,7 +100,7 @@ No approved mockup yet. There is no canvas for the section, the three forms, the
 - Poster files and their layout rules.
 - Publishing abstracts on the congress pages, scoring, assigning submissions to reviewers.
 - A congress questionnaire on the platform or any change to login and registration.
-- Co-author accounts or confirmations; a limit per organisation (the organisers set none).
+- Co-author accounts or confirmations; a per-organisation limit does not apply: participants register as individuals, there are no organisation accounts, and «Организация / место работы» is plain text in the profile and the submission that nothing is counted or limited by (organisation accounts, if they appear, are a separate decision).
 - Exporting the list to a file; resending a failed letter; statistics of past congresses (the organisers have no data yet).
 
 ## Open questions

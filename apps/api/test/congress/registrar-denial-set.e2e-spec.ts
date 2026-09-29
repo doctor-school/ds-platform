@@ -64,6 +64,9 @@ const REGISTRAR_ALLOW_SET: ReadonlySet<string> = new Set([
   // 044 EARS-34 (#2381) — the per-day attendance mark, the other registration
   // mutation of the amendment; bound to one event by EARS-38 like the roster.
   "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day",
+  // 044 EARS-36 (#2383) — the participant card read; bound to one event by
+  // EARS-38 like the roster.
+  "GET /v1/admin/events/:idOrSlug/registrations/:registrationId",
   // Holding a session at the admin origin.
   "POST /v1/admin/auth/login",
   "GET /v1/admin/auth/state",

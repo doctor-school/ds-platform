@@ -788,6 +788,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/events/{idOrSlug}/registrations/{registrationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventRosterAdminController_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/events/{idOrSlug}/registrations/{registrationId}/attendance/{day}": {
         parameters: {
             query?: never;
@@ -1989,6 +2005,48 @@ export interface components {
             registrationId: string;
             /** @enum {string} */
             status: "accepted" | "existing";
+        };
+        CongressParticipantCardDto: {
+            attendance: {
+                /** Format: date */
+                day: string;
+                history: {
+                    actor: string | null;
+                    /** Format: date-time */
+                    at: string;
+                    present: boolean;
+                    source: string;
+                }[];
+                present: boolean | null;
+            }[];
+            city: string | null;
+            confirmationMail: {
+                at: string | null;
+                status: ("sent" | "failed") | null;
+            };
+            consents: {
+                /** Format: date-time */
+                capturedAt: string;
+                origin: "paper" | null;
+                purpose: string;
+                version: string;
+            }[];
+            email: string | null;
+            firstName: string | null;
+            fullName: string;
+            /** @enum {string} */
+            intakeOrigin: "site" | "desk" | "platform";
+            patronymic: string | null;
+            phone: string | null;
+            possibleDuplicate: boolean;
+            region: string | null;
+            /** Format: date-time */
+            registeredAt: string;
+            /** Format: uuid */
+            registrationId: string;
+            specialtyName: string | null;
+            surname: string | null;
+            workplace: string | null;
         };
         CongressRosterListDto: {
             congressDays: string[];
@@ -3590,6 +3648,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CongressDeskRegistrationResponseDto"];
+                };
+            };
+        };
+    };
+    EventRosterAdminController_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+                registrationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressParticipantCardDto"];
                 };
             };
         };

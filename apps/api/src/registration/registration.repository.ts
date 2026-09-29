@@ -4,6 +4,7 @@ import type { DrizzleHandle } from "@ds/db";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   auditLedger,
+  consentRecords,
   events,
   registrationAttendance,
   registrations,
@@ -11,7 +12,11 @@ import {
   users,
 } from "@ds/db";
 import {
+  CONGRESS_SIGN_UP_CONSENT_PURPOSES,
+  type CongressAttendanceHistoryEntry,
   type CongressDayAttendance,
+  type CongressParticipantCard,
+  type CongressParticipantDay,
   type CongressRosterQuery,
   type CongressRosterRow,
   type EventLifecycleState,
@@ -82,6 +87,77 @@ function tabMembership(tab: MyEventsTab, cutoff: Date): SQL {
     )!;
   }
   return eq(events.state, "ended");
+}
+
+/**
+ * 044 EARS-30 — the «возможный дубль» derivation: a window count over the
+ * normalised contact phone (EARS-29) across the rows of the enclosing query.
+ * The caller scopes that query to ONE event (`WHERE event_id = …` runs before
+ * the window), so the partition is the event's registrations. A NULL/empty key
+ * (an answer-less platform-origin row, EARS-16) is forced to `false`: SQL
+ * partitions all NULLs together, so without the guard every answer-less row on
+ * an event would mark every other one. Shared by the PII-free roster fact and
+ * the participant card so the two can never disagree.
+ */
+function possibleDuplicateOverScope() {
+  const phoneKey = sql`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
+  return sql<boolean>`case
+    when ${phoneKey} is null then false
+    else count(*) over (partition by ${phoneKey}) > 1
+  end`.as("possible_duplicate");
+}
+
+/**
+ * The registration's answer-derived cells, with the EARS-16 account fallback
+ * (`users` joined on `registrations.user_id`). One definition for the roster
+ * row and the participant card, so a field reads the same in both.
+ */
+function registrationCells() {
+  return {
+    // `nullif(trim(...), '')` turns «nothing to show» into a NULL cell, so the
+    // screen renders an empty cell rather than a stray space.
+    fullName: sql<string>`coalesce(
+      nullif(trim(concat_ws(' ',
+        ${registrations.answers}->>'surname',
+        ${registrations.answers}->>'firstName',
+        ${registrations.answers}->>'patronymic'
+      )), ''),
+      nullif(trim(${users.displayName}), ''),
+      ''
+    )`,
+    email: sql<
+      string | null
+    >`coalesce(nullif(${registrations.answers}->>'email', ''), ${users.email})`,
+    // EARS-16 applies to the phone exactly as it does to the name and the
+    // email: `users.phone` is one of «the account's own profile values», so a
+    // platform-origin row renders it rather than an empty cell. EARS-29 forbids
+    // WRITING a congress phone into `users.phone`; reading the account's own
+    // number back is not that write.
+    phone: sql<string | null>`coalesce(
+      nullif(${registrations.answers}->>'contactPhone', ''),
+      nullif(trim(${users.phone}), '')
+    )`,
+    workplace: sql<
+      string | null
+    >`nullif(${registrations.answers}->>'workplace', '')`,
+    city: sql<string | null>`nullif(${registrations.answers}->>'city', '')`,
+    region: sql<string | null>`nullif(${registrations.answers}->>'region', '')`,
+  };
+}
+
+/** The `specialties_minzdrav` join by the id the answers carry (EARS-25). */
+const specialtyJoin = sql`${specialtiesMinzdrav.id} = nullif(${registrations.answers}->>'specialtyId', '')::uuid`;
+
+/**
+ * «This registration is one of this event's» — the predicate every desk route
+ * that names a registration id applies (EARS-38): the attendance write and the
+ * participant card both read nothing of another event's row.
+ */
+function registrationOfEvent(eventId: string, registrationId: string): SQL {
+  return and(
+    eq(registrations.id, registrationId),
+    eq(registrations.eventId, eventId),
+  )!;
 }
 
 /** The registration-gating view of an event: its id + the single lifecycle state. */
@@ -302,16 +378,12 @@ export class RegistrationRepository {
    * guard every answer-less row on an event would mark every other one.
    */
   async findEventRoster(eventId: string): Promise<EventRosterEntry[]> {
-    const phoneKey = sql`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
     const rows = await this.db
       .select({
         userId: registrations.userId,
         eventId: registrations.eventId,
         registeredAt: registrations.registeredAt,
-        possibleDuplicate: sql<boolean>`case
-          when ${phoneKey} is null then false
-          else count(*) over (partition by ${phoneKey}) > 1
-        end`.as("possible_duplicate"),
+        possibleDuplicate: possibleDuplicateOverScope(),
       })
       .from(registrations)
       .where(eq(registrations.eventId, eventId))
@@ -355,46 +427,16 @@ export class RegistrationRepository {
     congressDays: readonly string[],
   ): Promise<{ items: CongressRosterRow[]; total: number }> {
     // The answers payload is the primary source; the account mirror is the
-    // EARS-16 fallback. `nullif(trim(...), '')` turns «nothing to show» into a
-    // NULL cell, so the screen renders an empty cell rather than a stray space.
-    const fullName = sql<string>`coalesce(
-      nullif(trim(concat_ws(' ',
-        ${registrations.answers}->>'surname',
-        ${registrations.answers}->>'firstName',
-        ${registrations.answers}->>'patronymic'
-      )), ''),
-      nullif(trim(${users.displayName}), ''),
-      ''
-    )`;
-    const email = sql<
-      string | null
-    >`coalesce(nullif(${registrations.answers}->>'email', ''), ${users.email})`;
-    // EARS-16 applies to the phone exactly as it does to the name and the
-    // email: `users.phone` is one of «the account's own profile values», so a
-    // platform-origin row renders it rather than an empty cell. EARS-29 forbids
-    // WRITING a congress phone into `users.phone`; reading the account's own
-    // number back is not that write.
-    const phone = sql<string | null>`coalesce(
-      nullif(${registrations.answers}->>'contactPhone', ''),
-      nullif(trim(${users.phone}), '')
-    )`;
+    // EARS-16 fallback.
+    const { fullName, email, phone, workplace, city, region } =
+      registrationCells();
     // Never rendered — searched only. The normalised form exists for comparison
     // (EARS-29), so a registrar typing `89001112233` finds the row that renders
     // `+7 (900) 111-22-33`.
     const phoneNormalised = sql<
       string | null
     >`nullif(${registrations.answers}->>'contactPhoneNormalised', '')`;
-    const workplace = sql<
-      string | null
-    >`nullif(${registrations.answers}->>'workplace', '')`;
-    const city = sql<
-      string | null
-    >`nullif(${registrations.answers}->>'city', '')`;
-    const region = sql<
-      string | null
-    >`nullif(${registrations.answers}->>'region', '')`;
 
-    const specialtyJoin = sql`${specialtiesMinzdrav.id} = nullif(${registrations.answers}->>'specialtyId', '')::uuid`;
     const where = and(
       eq(registrations.eventId, eventId),
       this.rosterSearchPredicate(
@@ -521,6 +563,185 @@ export class RegistrationRepository {
   }
 
   /**
+   * 044 EARS-36 — the participant card of one registration OF `eventId`, or
+   * `undefined` when the registration is not one of that event's (EARS-38: a
+   * guessed id of another event reads nothing).
+   *
+   * - The answers and the account fallback are {@link registrationCells}, the
+   *   roster's own definitions; the name parts are the answers alone (the
+   *   account has only a display name, which `fullName` already falls back to).
+   * - «возможный дубль» is {@link possibleDuplicateOverScope} computed over the
+   *   event's rows in a subquery, THEN narrowed to this registration — the
+   *   window has to see the whole event to count a shared phone.
+   * - Consents are the participant's congress sign-up consent rows.
+   * - Attendance is the current `registration_attendance` value per configured
+   *   day (`null` = never marked) plus the day's 010 audit history
+   *   ({@link findAttendanceHistory}).
+   *
+   * `account_created_by_intake` is deliberately never selected (EARS-36).
+   */
+  async findParticipantCard(
+    eventId: string,
+    registrationId: string,
+    congressDays: readonly string[],
+  ): Promise<CongressParticipantCard | undefined> {
+    const cells = registrationCells();
+    const duplicates = this.db
+      .select({
+        id: registrations.id,
+        possibleDuplicate: possibleDuplicateOverScope(),
+      })
+      .from(registrations)
+      .where(eq(registrations.eventId, eventId))
+      .as("duplicates");
+    const [row] = await this.db
+      .select({
+        registrationId: registrations.id,
+        userId: registrations.userId,
+        surname: sql<
+          string | null
+        >`nullif(${registrations.answers}->>'surname', '')`,
+        firstName: sql<
+          string | null
+        >`nullif(${registrations.answers}->>'firstName', '')`,
+        patronymic: sql<
+          string | null
+        >`nullif(${registrations.answers}->>'patronymic', '')`,
+        ...cells,
+        specialtyName: specialtiesMinzdrav.name,
+        registeredAt: registrations.registeredAt,
+        intakeOrigin: registrations.intakeOrigin,
+        confirmationMailStatus: registrations.confirmationMailStatus,
+        confirmationMailAt: registrations.confirmationMailAt,
+        possibleDuplicate: duplicates.possibleDuplicate,
+      })
+      .from(registrations)
+      .innerJoin(duplicates, eq(duplicates.id, registrations.id))
+      .leftJoin(users, eq(users.id, registrations.userId))
+      .leftJoin(specialtiesMinzdrav, specialtyJoin)
+      .where(registrationOfEvent(eventId, registrationId))
+      .limit(1);
+    if (!row) return undefined;
+
+    const consents = await this.db
+      .select({
+        purpose: consentRecords.purpose,
+        version: consentRecords.version,
+        capturedAt: consentRecords.capturedAt,
+        origin: consentRecords.origin,
+      })
+      .from(consentRecords)
+      .where(
+        and(
+          eq(consentRecords.userId, row.userId),
+          inArray(consentRecords.purpose, [
+            ...CONGRESS_SIGN_UP_CONSENT_PURPOSES,
+          ]),
+        ),
+      )
+      .orderBy(asc(consentRecords.capturedAt), asc(consentRecords.id));
+
+    const current = await this.db
+      .select({
+        day: registrationAttendance.day,
+        present: registrationAttendance.present,
+      })
+      .from(registrationAttendance)
+      .where(eq(registrationAttendance.registrationId, registrationId));
+    const currentByDay = new Map(current.map((c) => [c.day, c.present]));
+    const history = await this.findAttendanceHistory(
+      registrationId,
+      row.registeredAt,
+    );
+
+    return {
+      registrationId: row.registrationId,
+      surname: row.surname ?? null,
+      firstName: row.firstName ?? null,
+      patronymic: row.patronymic ?? null,
+      fullName: row.fullName,
+      specialtyName: row.specialtyName ?? null,
+      workplace: row.workplace ?? null,
+      city: row.city ?? null,
+      region: row.region ?? null,
+      phone: row.phone ?? null,
+      email: row.email ?? null,
+      registeredAt: row.registeredAt.toISOString(),
+      intakeOrigin: row.intakeOrigin,
+      consents: consents.map((c) => ({
+        purpose: c.purpose,
+        version: c.version,
+        capturedAt: c.capturedAt.toISOString(),
+        origin: c.origin ?? null,
+      })),
+      confirmationMail: {
+        status: row.confirmationMailStatus ?? null,
+        at: row.confirmationMailAt?.toISOString() ?? null,
+      },
+      possibleDuplicate: row.possibleDuplicate,
+      attendance: congressDays.map(
+        (day): CongressParticipantDay => ({
+          day,
+          present: currentByDay.get(day) ?? null,
+          history: history.get(day) ?? [],
+        }),
+      ),
+    };
+  }
+
+  /**
+   * 044 EARS-36 — the history of one registration's attendance marks, per day,
+   * oldest first, read from the 010 change audit: the `audit_row_change()`
+   * rows the trigger on `registration_attendance` appended (`metadata.table`,
+   * `metadata.pk` = the row key, `metadata.diff.present.new` = the value after
+   * the change; a DELETE leaves no mark, i.e. `false`).
+   *
+   * This is the first reader of `audit_ledger`, so it stays narrow: one table,
+   * one registration's row keys. `created_at >= registeredAt` lets Postgres
+   * prune the monthly partitions older than the registration itself — no
+   * attendance row can predate its registration. The actor is the ledger's
+   * `subject_id` resolved to the matching `users` display name, else the raw
+   * `sub`; the source is the label as stored.
+   */
+  private async findAttendanceHistory(
+    registrationId: string,
+    since: Date,
+  ): Promise<Map<string, CongressAttendanceHistoryEntry[]>> {
+    const rows = await this.db
+      .select({
+        day: sql<string>`${auditLedger.metadata}->'pk'->>'day'`,
+        present: sql<boolean>`coalesce((${auditLedger.metadata}->'diff'->'present'->>'new')::boolean, false)`,
+        at: auditLedger.createdAt,
+        actor: sql<
+          string | null
+        >`coalesce(nullif(trim(${users.displayName}), ''), ${auditLedger.subjectId})`,
+        source: sql<string>`coalesce(${auditLedger.metadata}->>'source', 'db-direct')`,
+      })
+      .from(auditLedger)
+      .leftJoin(users, eq(users.zitadelSub, auditLedger.subjectId))
+      .where(
+        and(
+          sql`${auditLedger.metadata}->>'table' = 'registration_attendance'`,
+          sql`${auditLedger.metadata}->'pk'->>'registration_id' = ${registrationId}`,
+          gte(auditLedger.createdAt, since),
+        ),
+      )
+      .orderBy(asc(auditLedger.createdAt), asc(auditLedger.id));
+    const byDay = new Map<string, CongressAttendanceHistoryEntry[]>();
+    for (const r of rows) {
+      const entries = byDay.get(r.day) ?? [];
+      entries.push({
+        present: r.present,
+        at: r.at.toISOString(),
+        actor: r.actor ?? null,
+        source: r.source,
+      });
+      byDay.set(r.day, entries);
+    }
+    return byDay;
+  }
+
+  /**
    * 044 EARS-34 — set one registration's attendance on one congress day, inside
    * the request audit context so the 010 trigger attributes the change to the
    * acting registrar (source `admin-ui`).
@@ -546,12 +767,7 @@ export class RegistrationRepository {
       const [owned] = await tx
         .select({ id: registrations.id })
         .from(registrations)
-        .where(
-          and(
-            eq(registrations.id, registrationId),
-            eq(registrations.eventId, eventId),
-          ),
-        )
+        .where(registrationOfEvent(eventId, registrationId))
         .limit(1);
       if (!owned) return false;
 

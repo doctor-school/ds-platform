@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { provisionDoctorCreds } from "./support/doctor-session";
+import { narrowGrantToPlatformAdmin } from "./support/zitadel-admin";
 
 /**
  * 005 EARS-4 — the event page reflects the AUTHENTICATED doctor's true
@@ -281,5 +283,95 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
       "href",
       `/register?returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}`)}`,
     );
+  });
+});
+
+/**
+ * #2232 — a signed-in session whose role holds no doctor registration (a
+ * `platform_admin`) opens `/webinars/<slug>`. The api refuses the doctor-only
+ * registration read with 403 `insufficient role`; the shared SSR read used to
+ * throw on it and the whole page became a server error. It must render as for a
+ * guest: 200, the «Участвовать» door, no one-tap. A `doctor_guest` session is
+ * unchanged — it still gets the in-place one-tap.
+ *
+ * Needs, beyond the file's gate, `IDP_ISSUER` + `IDP_SERVICE_TOKEN` +
+ * `IDP_PROJECT_ID` (the admin's grant is narrowed on the IdP) and `MAILPIT_URL`
+ * (the account is minted through the real 003 register + verify). `SLUG` must be
+ * an upcoming event the fresh accounts are not registered for.
+ */
+const ADMIN_TIER =
+  !!process.env.IDP_ISSUER &&
+  !!process.env.IDP_SERVICE_TOKEN &&
+  !!process.env.IDP_PROJECT_ID &&
+  !!process.env.MAILPIT_URL;
+
+/**
+ * Sign in on the portal origin (in-page, through the `/v1/*` rewrite, so the
+ * cookie carries the page's fingerprint) and return the status the api gives
+ * THIS session for the per-user registration read.
+ */
+async function signInAndReadRegistration(
+  page: Page,
+  account: { email: string; password: string },
+): Promise<number> {
+  await page.context().clearCookies();
+  await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
+  return page.evaluate(
+    async ([identifier, password, slug]) => {
+      const login = await fetch("/v1/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+      if (login.status !== 200) return -login.status;
+      const read = await fetch(
+        `/v1/events/${encodeURIComponent(slug)}/registration`,
+        { credentials: "include" },
+      );
+      return read.status;
+    },
+    [account.email, account.password, SLUG!] as const,
+  );
+}
+
+test.describe("#2232 a non-doctor session on the Academy webinar page", () => {
+  test.skip(!ADMIN_TIER, "requires the IdP service token + project id + Mailpit");
+  test.setTimeout(180_000);
+
+  test("#2232: a platform_admin session gets /webinars/<slug> rendered as for a guest — 200, the «Участвовать» door, no server error", async ({
+    page,
+  }) => {
+    const admin = await provisionDoctorCreds(page);
+    await narrowGrantToPlatformAdmin(admin.email);
+
+    // The precondition, proven against the live api: THIS session is refused
+    // the doctor-only read with 403 (retried while the role projection lags).
+    await expect
+      .poll(() => signInAndReadRegistration(page, admin), {
+        timeout: 90_000,
+        intervals: [3_000],
+      })
+      .toBe(403);
+
+    const response = await page.goto(`${BASE}/webinars/${SLUG}`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Участвовать", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
+    await expect(page.getByText("Вы записаны", { exact: false })).toHaveCount(0);
+  });
+
+  test("#2232: a doctor_guest session is unchanged — 200 and the in-place one-tap", async ({
+    page,
+  }) => {
+    const doctor = await provisionDoctorCreds(page);
+    expect(await signInAndReadRegistration(page, doctor)).toBe(200);
+
+    const response = await page.goto(`${BASE}/webinars/${SLUG}`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
   });
 });

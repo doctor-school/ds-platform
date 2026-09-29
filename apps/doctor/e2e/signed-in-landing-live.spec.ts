@@ -32,7 +32,9 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * own — the browser context that then signs in never sees those cookies.
  *
  * ENV SET (`playwright.register-live.config.ts`): `E2E_DOCTOR_URL`,
- * `MAILPIT_URL`, `IDP_ISSUER`, and `E2E_LANDING_EVENT_SLUG` — a PUBLISHED seeded
+ * `MAILPIT_URL`, `IDP_ISSUER`, `IDP_SERVICE_TOKEN` + `IDP_PROJECT_ID` (the #2232
+ * describe narrows an account's project grant to `platform_admin` on the IdP),
+ * and `E2E_LANDING_EVENT_SLUG` — a PUBLISHED seeded
  * event slug on the stand's DB (`pnpm --filter @ds/api seed:events`). Bare CI →
  * inert green; a HALF-exported env fails loudly by variable name
  * (`support/live-stand-env.ts`), whose stand preconditions apply (raised
@@ -54,6 +56,8 @@ requireLiveStandEnv([
   "E2E_DOCTOR_URL",
   "MAILPIT_URL",
   "IDP_ISSUER",
+  "IDP_SERVICE_TOKEN",
+  "IDP_PROJECT_ID",
   "E2E_LANDING_EVENT_SLUG",
 ]);
 
@@ -214,5 +218,139 @@ test.describe("021 EARS-3: the landing after sign-in on the doctor storefront", 
     // Leaves the door, then settles on the front page.
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page).toHaveURL(new RegExp(`^${DOCTOR_URL}/$`));
+  });
+});
+
+/**
+ * #2232 — a signed-in session whose role holds no doctor registration (a
+ * `platform_admin`) opens the event page. The api answers the per-user
+ * registration read with 403 `insufficient role` (the read is `doctor_guest`
+ * only), and the shared SSR read used to throw on it, turning the whole page into
+ * a server error. The page must render exactly as for a guest instead: 200, the
+ * server-resolved «Участвовать» door, no one-tap. A `doctor_guest` session is
+ * unchanged — it still gets the one-tap.
+ *
+ * The admin is provisioned through the same doctor-host commands as the tests
+ * above, then its project grant is NARROWED to `platform_admin` alone on the IdP
+ * (the management API the BFF itself uses) — a grant that still carried
+ * `doctor_guest` would pass the role check and prove nothing. The role
+ * projection lags the grant write, so the sign-in is repeated until the api
+ * itself answers the registration read with 403: the precondition is asserted
+ * against the live api, never assumed.
+ */
+const IDP_BASE = (process.env.IDP_ISSUER ?? "").replace(/\/$/, "");
+
+function idpHeaders(): Record<string, string> {
+  return {
+    authorization: `Bearer ${process.env.IDP_SERVICE_TOKEN ?? ""}`,
+    "content-type": "application/json",
+  };
+}
+
+/** Replace the account's project grant with `platform_admin` only. */
+async function narrowGrantToPlatformAdmin(email: string): Promise<void> {
+  const projectId = process.env.IDP_PROJECT_ID ?? "";
+  type Grant = { id: string; projectId?: string };
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1000));
+    const users = await fetch(`${IDP_BASE}/management/v1/users/_search`, {
+      method: "POST",
+      headers: idpHeaders(),
+      body: JSON.stringify({ queries: [{ emailQuery: { emailAddress: email } }] }),
+    });
+    if (!users.ok) continue;
+    const sub = ((await users.json()) as { result?: { id: string }[] })
+      .result?.[0]?.id;
+    if (!sub) continue;
+    const search = await fetch(`${IDP_BASE}/management/v1/users/grants/_search`, {
+      method: "POST",
+      headers: idpHeaders(),
+      body: JSON.stringify({ queries: [{ userIdQuery: { userId: sub } }] }),
+    });
+    if (!search.ok) continue;
+    const grant = (((await search.json()) as { result?: Grant[] }).result ?? [])
+      .find((g) => g.projectId === projectId);
+    if (!grant) continue;
+    const update = await fetch(
+      `${IDP_BASE}/management/v1/users/${sub}/grants/${grant.id}`,
+      {
+        method: "PUT",
+        headers: idpHeaders(),
+        body: JSON.stringify({ roleKeys: ["platform_admin"] }),
+      },
+    );
+    expect(update.ok, `IdP grant update → ${update.status}`).toBe(true);
+    return;
+  }
+  throw new Error(`no project grant surfaced on the IdP for ${email}`);
+}
+
+/**
+ * Sign in on the doctor origin (the in-page login through the host's `/v1/*`
+ * rewrite, so the cookie carries the page's own fingerprint) and return the
+ * status the api gives THIS session for the per-user registration read.
+ */
+async function signInAndReadRegistration(
+  page: Page,
+  account: { email: string; password: string },
+): Promise<number> {
+  await page.context().clearCookies();
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  return page.evaluate(
+    async ([identifier, password, slug]) => {
+      const login = await fetch("/v1/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+      if (login.status !== 200) return -login.status;
+      const read = await fetch(
+        `/v1/events/${encodeURIComponent(slug)}/registration`,
+        { credentials: "include" },
+      );
+      return read.status;
+    },
+    [account.email, account.password, EVENT_SLUG] as const,
+  );
+}
+
+test.describe("#2232 a non-doctor session on the doctor event page", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test.setTimeout(180_000);
+
+  test("#2232: a platform_admin session gets the event page rendered as for a guest — 200, the «Участвовать» door, no server error", async ({
+    page,
+  }) => {
+    const admin = await provisionDoctor();
+    await narrowGrantToPlatformAdmin(admin.email);
+
+    // The precondition, proven against the live api: THIS session is refused
+    // the doctor-only read with 403 (retried while the role projection lags).
+    await expect
+      .poll(() => signInAndReadRegistration(page, admin), {
+        timeout: 90_000,
+        intervals: [3_000],
+      })
+      .toBe(403);
+
+    const response = await page.goto(`/events/${EVENT_SLUG}`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toBeVisible();
+    await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
+    await expect(page.getByText("Вы записаны")).toHaveCount(0);
+  });
+
+  test("#2232: a doctor_guest session is unchanged — 200 and the in-place one-tap", async ({
+    page,
+  }) => {
+    const doctor = await provisionDoctor();
+    expect(await signInAndReadRegistration(page, doctor)).toBe(200);
+
+    const response = await page.goto(`/events/${EVENT_SLUG}`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(0);
   });
 });

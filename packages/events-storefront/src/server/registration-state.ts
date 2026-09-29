@@ -139,7 +139,9 @@ export function forwardedHeaders(
  * resolves + re-derives the `__Host-` session server-side. Returns:
  *   • `{ registered, registeredAt? }` for an authenticated caller;
  *   • `null` when the caller is unauthenticated (401 — a guest / a fingerprint
- *     mismatch), the cookie header is empty, or the event is not found (404) —
+ *     mismatch), the session's role holds no doctor registration (403 — e.g. a
+ *     platform_admin, #2232), the cookie header is empty, or the event is not
+ *     found (404) —
  *     every "no per-user state to compose" case collapses to `null`, and the page
  *     falls back to 004's public render.
  *
@@ -166,9 +168,11 @@ export async function fetchEventRegistrationState(
       cache: "no-store",
     },
   );
-  // 401 (guest / expired), 404 (unknown event) → no state to compose; fall back
-  // to the public render rather than surfacing an error on the public page.
-  if (res.status === 401 || res.status === 404) return null;
+  // 401 (guest / expired), 403 (a signed-in session whose role holds no doctor
+  // registration, e.g. platform_admin — #2232), 404 (unknown event) → no state
+  // to compose; fall back to the public render rather than surfacing an error
+  // on the public page. A 5xx / network failure still throws below.
+  if (res.status === 401 || res.status === 403 || res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`registration state fetch failed (${res.status})`);
   }

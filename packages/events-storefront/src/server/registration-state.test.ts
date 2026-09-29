@@ -77,6 +77,33 @@ describe("005 EARS-4 per-user event registration state", () => {
 });
 
 /**
+ * #2232 — a signed-in session whose role holds no doctor registration (e.g. a
+ * platform_admin) gets 403 `insufficient role` from the doctor_guest-only read.
+ * That is "no per-user state to compose" for this session, NOT a broken api: the
+ * page must render as for a guest instead of turning into a server error. A 5xx
+ * still throws.
+ */
+describe("#2232 non-doctor session on the storefront event page", () => {
+  it("#2232.1: a 403 (session role holds no doctor registration) collapses to null — the page renders as for a guest", async () => {
+    fetchImpl.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ code: "FORBIDDEN", message: "insufficient role" }),
+    });
+    await expect(
+      fetchEventRegistrationState("ahilles-042", SESSION, fetchImpl),
+    ).resolves.toBeNull();
+  });
+
+  it("#2232.2: a 500 still throws — only the role mismatch is a guest render", async () => {
+    fetchImpl.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    await expect(
+      fetchEventRegistrationState("ahilles-042", SESSION, fetchImpl),
+    ).rejects.toThrow("registration state fetch failed (500)");
+  });
+});
+
+/**
  * #2054 — the fourth fingerprint input. Since #1655 the api derives `request.ip`
  * from `x-forwarded-for` when the peer is trusted, so the client `/24` bound at
  * login is the BROWSER's, not the Next container's. An SSR hop that presents

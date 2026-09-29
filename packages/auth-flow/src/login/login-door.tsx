@@ -26,6 +26,7 @@ import { resolveAuthFlowCopy } from "../copy";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
+import { landingAfterSignIn } from "../client/signed-in-landing";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
 import { makeResolver } from "../form-resolver";
@@ -67,6 +68,13 @@ export type LoginDoorProps = {
    * readable rather than recomputed here.
    */
   landing: string;
+  /**
+   * #2333 — the mount's server action that decides the landing AGAIN once the
+   * sign-in has set a session (`landing` was decided at guest render, when a
+   * profile specialty is invisible). Absent when that decision cannot change;
+   * a failed call keeps `landing`.
+   */
+  resolveSignedInLanding?: () => Promise<string>;
   /**
    * The RAW carried `returnTo` param, for the footer LINKS only. Guarded here by
    * the same-origin rule before it decorates anything, so a hostile value is
@@ -213,6 +221,7 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
 export function LoginDoor({
   config,
   landing,
+  resolveSignedInLanding,
   returnTo = null,
   returnTarget = null,
   returnContextPlate,
@@ -248,6 +257,17 @@ export function LoginDoor({
     },
   });
 
+  // #2333 — the session exists now: the landing is decided again for it (the
+  // guest-render one could not see a profile specialty), then the carried
+  // target, if any, is completed over it exactly as before.
+  async function completeAfterSignIn(): Promise<string> {
+    return completeReturnTarget(
+      config,
+      returnTarget,
+      await landingAfterSignIn(landing, resolveSignedInLanding),
+    );
+  }
+
   async function finishLogin(values: LoginRequest, captchaToken?: string) {
     // Row 18: the captcha token travels as the `x-smartcaptcha-token` HEADER the
     // package sets, never as a body field — one carrier on both storefronts.
@@ -259,7 +279,7 @@ export function LoginDoor({
     // MOUNT resolved (a host may decide it per visitor) and the door honours.
     // #1004: the navigation renders the persistent header on the server again,
     // which reads the new session — the avatar appears without a hard reload.
-    router.push(await completeReturnTarget(config, returnTarget, landing));
+    router.push(await completeAfterSignIn());
     // 008 EARS-5 (#2281): pages seen as a guest sit in the client Router Cache
     // with the guest `@chrome` header, and browser Back replays them. Dropping
     // the cache makes Back re-read the header from the server.
@@ -368,7 +388,7 @@ export function LoginDoor({
       });
       // 005 EARS-2: complete the carried registration (if any) now the session
       // exists, landing on the event page — else the resolved landing.
-      router.push(await completeReturnTarget(config, returnTarget, landing));
+      router.push(await completeAfterSignIn());
       router.refresh();
     } catch (err) {
       setOtpVerifyError(authErrorMessage(err, errors, failed.otpVerify));

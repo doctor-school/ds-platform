@@ -12,15 +12,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * (`resolveServerAuth`, `resolveReturnContext`). The guard, the landing rule and
  * the return-target codec stay the real shared ones.
  */
-const { redirect, resolveServerAuth, resolveReturnContext } = vi.hoisted(
-  () => ({
+const { redirect, resolveServerAuth, resolveReturnContext, specialtyFetch } =
+  vi.hoisted(() => ({
     redirect: vi.fn((path: string) => {
       throw new Error(`NEXT_REDIRECT:${path}`);
     }),
     resolveServerAuth: vi.fn(),
     resolveReturnContext: vi.fn(),
-  }),
-);
+    specialtyFetch: vi.fn(),
+  }));
 
 vi.mock("next/navigation", () => ({
   redirect,
@@ -29,11 +29,20 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "__Host-ds_session=x" }),
 }));
-vi.mock("../server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../server")>()),
-  resolveServerAuth,
-  resolveReturnContext,
-}));
+// `resolveArrivalLanding` keeps its real LD-4 rule, bound to a doubled `fetch`:
+// what is stubbed is the specialty READ, never the decision.
+vi.mock("../server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server")>();
+  return {
+    ...actual,
+    resolveServerAuth,
+    resolveReturnContext,
+    resolveArrivalLanding: (
+      host: Parameters<typeof actual.resolveArrivalLanding>[0],
+      requestHeaders: Headers,
+    ) => actual.resolveArrivalLanding(host, requestHeaders, specialtyFetch),
+  };
+});
 
 import type { AuthFlowHostConfig } from "../host-config";
 import {
@@ -89,6 +98,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resolveServerAuth.mockResolvedValue({ status: "guest" });
   resolveReturnContext.mockResolvedValue(null);
+  specialtyFetch.mockResolvedValue({ ok: false, status: 404 } as Response);
 });
 
 describe("#2027 PR 1.7: the /verify mount", () => {
@@ -151,5 +161,48 @@ describe("#2027 PR 1.7: the /verify mount", () => {
 
   it("rows 51, 76: a host with no /verify route cannot mount it — a wiring mistake reads as one", async () => {
     await expect(shellOf(DOCTOR_FIXTURE, {})).rejects.toThrow(/verify/);
+  });
+});
+
+/**
+ * #2333 — the confirmation mount mirrors the login and registration mounts: the
+ * signed-in re-decision is handed to the step only where it can change the
+ * landing — a specialty-aware host whose landing is the LD-4 arrival decision.
+ * A validated carried target is final (005 EARS-2), so it gets none.
+ */
+describe("021 EARS-3 (#2333): the /verify step gets the signed-in re-decision where it can change", () => {
+  // No shipped specialty-aware host serves `/verify` (the doctor storefront
+  // confirms inline); the package mount still owns the decision for one that does.
+  const SPECIALTY_AWARE_WITH_VERIFY: AuthFlowHostConfig = {
+    ...DOCTOR_FIXTURE,
+    routes: { ...DOCTOR_FIXTURE.routes, verify: "/verify" },
+  };
+  type ActionProps = { resolveSignedInLanding?: () => Promise<string> };
+
+  async function actionOf(config: AuthFlowHostConfig, params: Params) {
+    const shell = await shellOf(config, params);
+    return (shell.props.children as unknown as ReactElement<ActionProps>).props
+      .resolveSignedInLanding;
+  }
+
+  it("021 EARS-3: a direct arrival on a specialty-aware host carries the re-decision", async () => {
+    expect(await actionOf(SPECIALTY_AWARE_WITH_VERIFY, {})).toBeTypeOf(
+      "function",
+    );
+  });
+
+  it("005 EARS-2: a carried validated returnTo is the landing — nothing to re-decide", async () => {
+    expect(
+      await actionOf(SPECIALTY_AWARE_WITH_VERIFY, {
+        returnTo: "/events/prp-pri-gonartroze",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {
+    expect(await actionOf(ACADEMY_FIXTURE, {})).toBeUndefined();
+    expect(
+      await actionOf(ACADEMY_FIXTURE, { returnTo: "/webinars/ahilles-042" }),
+    ).toBeUndefined();
   });
 });

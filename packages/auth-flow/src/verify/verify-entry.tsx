@@ -77,11 +77,14 @@ export function VerifyAddressGate({
 export function VerifyStep({
   config,
   landing,
+  resolveSignedInLanding,
   returnTo,
   returnContextPlate,
 }: {
   config: AuthFlowHostConfig;
   landing: string;
+  /** #2333 — the mount's signed-in re-decision of `landing`; passed through. */
+  resolveSignedInLanding?: () => Promise<string>;
   /** The RAW arrival `returnTo`; guarded at every consumption point. */
   returnTo: string | null;
   /** 021 EARS-2 — the mobile plate the server mount resolved; passed through. */
@@ -94,6 +97,7 @@ export function VerifyStep({
       config={config}
       email={address}
       landing={landing}
+      {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
       // The Academy's 003 verify command takes no target: the carried value is
       // COMPLETED after sign-in (005 EARS-2 — on a cold open the parked one,
       // 014 EARS-6) and carried by the sideways hops (rule S3).

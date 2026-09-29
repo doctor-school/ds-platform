@@ -44,6 +44,7 @@ vi.mock("../client/auth-client", async (importOriginal) => ({
   createAuthClient: () => ({ login, requestOtp, loginWithOtp }),
 }));
 
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
@@ -159,6 +160,7 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
 async function signIn(props?: {
   returnTarget?: string | null;
   landing?: string;
+  resolveSignedInLanding?: () => Promise<string>;
 }) {
   const user = userEvent.setup();
   render(<LoginDoor config={DOCTOR_FIXTURE} landing="/events" {...props} />);
@@ -198,5 +200,87 @@ describe("005 EARS-2: the doctor sign-in completes the carried эфир intent",
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/events"));
     expect(registerForEvent).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * #2333 — the landing the door was handed is the GUEST-render decision. Once
+ * the session exists the door asks the mount's server action to decide it again
+ * for the signed-in doctor (the same LD-4 rule, now reading the profile), and
+ * falls back to the guest-time value if that ask fails.
+ */
+describe("021 EARS-3 (#2333): the post-sign-in landing is re-decided for the new session", () => {
+  const COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).login;
+
+  async function signInWith(props: {
+    resolveSignedInLanding?: () => Promise<string>;
+    returnTarget?: string | null;
+  }) {
+    await signIn({ landing: "/", ...props });
+  }
+
+  it("021 EARS-3: no remembered guest choice + a profile specialty — password sign-in lands on the feed", async () => {
+    const resolveSignedInLanding = vi.fn().mockResolvedValue("/events");
+
+    await signInWith({ resolveSignedInLanding });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/events"));
+    expect(push).not.toHaveBeenCalledWith("/");
+    expect(resolveSignedInLanding).toHaveBeenCalledTimes(1);
+    // Asked only AFTER the session exists.
+    expect(login.mock.invocationCallOrder[0]!).toBeLessThan(
+      resolveSignedInLanding.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("021 EARS-3: the OTP sign-in re-decides the landing the same way", async () => {
+    const resolveSignedInLanding = vi.fn().mockResolvedValue("/events");
+    const user = userEvent.setup();
+    render(
+      <LoginDoor
+        config={DOCTOR_FIXTURE}
+        landing="/"
+        resolveSignedInLanding={resolveSignedInLanding}
+      />,
+    );
+    await user.click(screen.getByTestId("login-method-otp"));
+    await user.type(screen.getByLabelText(COPY.otp.emailLabel), "doc@clinic.ru");
+    await user.click(screen.getByTestId("otp-send"));
+    await screen.findByTestId("otp-verify");
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("12345678");
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/events"));
+    expect(loginWithOtp).toHaveBeenCalledTimes(1);
+  });
+
+  it("021 EARS-3: a remembered specialty still lands on the feed", async () => {
+    // The guest render already knew; the signed-in re-read agrees.
+    await signIn({
+      landing: "/events",
+      resolveSignedInLanding: vi.fn().mockResolvedValue("/events"),
+    });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/events"));
+  });
+
+  it("005 EARS-2: a carried validated target still wins over the re-decided landing", async () => {
+    await signInWith({
+      returnTarget: "/events/cardio-live",
+      resolveSignedInLanding: vi.fn().mockResolvedValue("/events"),
+    });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/events/cardio-live"),
+    );
+    expect(registerForEvent).toHaveBeenCalledWith("cardio-live");
+  });
+
+  it("021 EARS-3: a failed re-decision falls back to the guest-time landing, never blocks the sign-in", async () => {
+    await signInWith({
+      resolveSignedInLanding: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
   });
 });

@@ -28,6 +28,7 @@ import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowVerifyCopy } from "../host-config";
+import { landingAfterSignIn } from "../client/signed-in-landing";
 import { resolveConfirmLanding } from "../register/confirm-landing";
 import { withReturnTarget } from "../return-target-href";
 import { VerifyGlyph } from "./verify-glyph";
@@ -65,6 +66,11 @@ export type VerifyDoorProps = {
   email: string;
   /** Where a visitor with no honoured target lands — decided server-side by the mount. */
   landing: string;
+  /**
+   * #2333 — the mount's server action that decides the landing AGAIN once the
+   * confirmed doctor is signed in; absent where it cannot change.
+   */
+  resolveSignedInLanding?: () => Promise<string>;
   /**
    * The эфир intent the CONFIRM COMMAND re-validates with the code (021 EARS-19)
    * — supplied only by a host whose confirm command takes one (the doctor
@@ -104,6 +110,7 @@ export function VerifyDoor({
   config,
   email,
   landing,
+  resolveSignedInLanding,
   returnTarget = null,
   completionTarget = null,
   carriedTarget = null,
@@ -201,18 +208,24 @@ export function VerifyDoor({
         identifier: held.identifier,
         password: held.password,
       });
+      // #2333 — the session exists now, so the landing is decided again for
+      // it: the guest-render one could not see a profile specialty.
+      const signedInLanding = await landingAfterSignIn(
+        landing,
+        resolveSignedInLanding,
+      );
       // 005 EARS-2 — the session exists now, so the carried эфир is COMPLETED
       // before the visitor is sent anywhere. Best-effort by the rule's contract.
       const completed = await completeReturnTarget(
         config,
         completionTarget,
-        landing,
+        signedInLanding,
       );
       // 021 EARS-10 — a confirm command that NAMES a destination produced it in
       // the round trip that just re-validated the target, so it wins; the 003
       // command names none, and the completion's landing stands.
       destinationHref = isNamedLanding(confirmed)
-        ? resolveConfirmLanding(confirmed, landing)
+        ? resolveConfirmLanding(confirmed, signedInLanding)
         : completed;
     } catch (err) {
       // Q1 — a refused replay stays on this step, generic (003 EARS-16).

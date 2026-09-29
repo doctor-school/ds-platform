@@ -391,3 +391,36 @@ describe("017 #1955 (Academy): the same rules over the other host config", () =>
     expect(resolveReturnContext).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * #2333 — the guest render decides the landing with NO session, so the mount
+ * also hands the door the server action that decides it again once the sign-in
+ * has set one. Only where that decision can change: a specialty-aware host, and
+ * a landing that is the LD-4 arrival decision rather than a carried target.
+ */
+describe("021 EARS-3 (#2333): the door gets the signed-in re-decision where it can change", () => {
+  type DoorProps = { resolveSignedInLanding?: () => Promise<string> };
+
+  async function actionOf(config: AuthFlowHostConfig, params: Params) {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    const door = (await doorOf(config, params)) as unknown as ReactElement<DoorProps>;
+    return door.props.resolveSignedInLanding;
+  }
+
+  it("021 EARS-3: a guest direct arrival on the doctor storefront carries the re-decision", async () => {
+    expect(await actionOf(DOCTOR_FIXTURE, {})).toBeTypeOf("function");
+  });
+
+  it("005 EARS-2: a carried validated target is the landing — nothing to re-decide", async () => {
+    resolveReturnContext.mockResolvedValue(EVENT);
+
+    expect(
+      await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
+    ).toBeUndefined();
+    expect(await actionOf(DOCTOR_FIXTURE, { returnTo: "/account" })).toBeUndefined();
+  });
+
+  it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {
+    expect(await actionOf(ACADEMY_FIXTURE, {})).toBeUndefined();
+  });
+});

@@ -139,6 +139,7 @@ function setupUser() {
 
 type PanelProps = {
   landing?: string;
+  resolveSignedInLanding?: () => Promise<string>;
   returnTarget?: string | null;
   carriedTarget?: string | null;
 };
@@ -153,6 +154,9 @@ function renderPanel(props: PanelProps = {}, options?: { held?: boolean }) {
       config={DOCTOR_FIXTURE}
       email={EMAIL}
       landing={props.landing ?? "/events"}
+      {...(props.resolveSignedInLanding
+        ? { resolveSignedInLanding: props.resolveSignedInLanding }
+        : {})}
       returnTarget={
         props.returnTarget === undefined ? RETURN_TARGET : props.returnTarget
       }
@@ -483,4 +487,61 @@ describe("rows 51 + 76: the panel's words and hops are the host's data", () => {
       expect(href).not.toContain(encodeURIComponent(hostile));
     },
   );
+});
+
+describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NEW session", () => {
+  const LANDING_ANSWER = {
+    status: "verified",
+    credited: null,
+    profileCompletion: null,
+    primaryAction: { kind: "landing", href: "/events" },
+    secondaryAction: { href: "/account" },
+  } as const;
+
+  it("021 EARS-3: a cold arrival re-decides the landing once the replay signed the doctor in", async () => {
+    h.confirm.mockResolvedValue(LANDING_ANSWER);
+    const resolveSignedInLanding = vi.fn(async () => {
+      h.calls.push("re-decide");
+      return "/events";
+    });
+    const user = setupUser();
+    renderPanel({
+      landing: "/",
+      returnTarget: null,
+      carriedTarget: null,
+      resolveSignedInLanding,
+    });
+
+    await submitCode(user);
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/events"));
+    // Decided with the session the replay just created, never before it.
+    expect(h.calls.indexOf("login")).toBeLessThan(h.calls.indexOf("re-decide"));
+  });
+
+  it("021 EARS-3: a failed re-decision falls back to the guest-time landing", async () => {
+    h.confirm.mockResolvedValue(LANDING_ANSWER);
+    const user = setupUser();
+    renderPanel({
+      landing: "/",
+      returnTarget: null,
+      carriedTarget: null,
+      resolveSignedInLanding: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+
+    await submitCode(user);
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/"));
+  });
+
+  it("005 EARS-2: a carried эфир the server honoured still wins over the re-decided landing", async () => {
+    const user = setupUser();
+    renderPanel({ resolveSignedInLanding: vi.fn().mockResolvedValue("/events") });
+
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
+    );
+  });
 });

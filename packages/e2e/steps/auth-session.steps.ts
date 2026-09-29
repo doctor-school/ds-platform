@@ -148,7 +148,7 @@ Then(
 Then("the refused login sets no BFF session cookie", async ({ page }) => {
   const response = refusedLoginResponses.get(page);
   expect(response, "wrong-password login response was captured").toBeDefined();
-  expect(await response!.headerValue("set-cookie")).not.toContain(
+  expect((await response!.headerValue("set-cookie")) ?? "").not.toContain(
     `${SESSION_COOKIE}=`,
   );
   expect(await page.context().cookies()).not.toEqual(

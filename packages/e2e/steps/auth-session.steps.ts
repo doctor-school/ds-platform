@@ -1,4 +1,9 @@
-import { expect, type Page, type Response } from "@playwright/test";
+import {
+  expect,
+  type BrowserContext,
+  type Page,
+  type Response,
+} from "@playwright/test";
 
 import { goldenDoctorPassword, resolveGoldenDoctor } from "../lib/golden.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
@@ -10,6 +15,9 @@ const GENERIC_PASSWORD_ERROR =
   "Не удалось войти. Проверьте данные и попробуйте снова.";
 const loginResponses = new WeakMap<Page, Response>();
 const refusedLoginResponses = new WeakMap<Page, Response>();
+type SessionCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
+const preLogoutCookies = new WeakMap<Page, SessionCookie>();
+const logoutResponses = new WeakMap<Page, Response>();
 
 Given(
   'the golden doctor "verified-cardiologist" is available for password sign-in',
@@ -170,5 +178,80 @@ Then(
       return response.status;
     });
     expect(status).toBe(401);
+  },
+);
+
+Given(
+  "the doctor has an active Academy profile and session cookie",
+  async ({ page, world }) => {
+    expect(world.host.id).toBe("academy");
+    await page.goto(`${world.hostBaseUrl}/account`);
+    await expect(page.getByTestId("profile-email")).toHaveText(
+      resolveGoldenDoctor(world.signedInAs ?? "").email,
+    );
+    const session = (await page.context().cookies()).find(
+      (cookie) => cookie.name === SESSION_COOKIE,
+    );
+    expect(session, "active BFF session cookie before logout").toBeDefined();
+    preLogoutCookies.set(page, session!);
+  },
+);
+
+When("the doctor logs out from the Academy account", async ({ page }) => {
+  const logoutResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/v1/auth/logout" &&
+      response.request().method() === "POST",
+  );
+  await page.getByTestId("logout").click();
+  logoutResponses.set(page, await logoutResponse);
+});
+
+Then("the Academy returns to the sign-in page", async ({ page, world }) => {
+  expect(logoutResponses.get(page)?.status(), "logout succeeded").toBe(200);
+  await expect(page).toHaveURL(new RegExp(`${world.host.loginPath}(?:\\?|$)`));
+});
+
+Then(
+  "the logout response clears the __Host-ds_session cookie",
+  async ({ page }) => {
+    const response = logoutResponses.get(page);
+    expect(response, "logout response was captured").toBeDefined();
+    const setCookie = await response!.headerValue("set-cookie");
+    expect(setCookie, "BFF sends an expired session cookie").toContain(
+      `${SESSION_COOKIE}=`,
+    );
+    expect(setCookie).toMatch(/(?:^|;)\s*Max-Age=0(?:;|$)/i);
+    expect(
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === SESSION_COOKIE,
+      ),
+    ).toBe(false);
+  },
+);
+
+Then(
+  "the old session cookie cannot read the doctor's private profile",
+  async ({ page }) => {
+    const oldCookie = preLogoutCookies.get(page);
+    expect(oldCookie, "pre-logout cookie was captured").toBeDefined();
+    // Reinsert the original cookie into the same browser context, retaining its
+    // user agent and fingerprint. A mere browser cookie clear would still leave
+    // the profile readable; 401 also proves the server revoked this session.
+    await page.context().addCookies([oldCookie!]);
+    try {
+      const status = await page.evaluate(async () => {
+        const response = await fetch("/v1/me/profile", {
+          headers: { accept: "application/json" },
+          credentials: "include",
+        });
+        return response.status;
+      });
+      expect(status, "the original session must be revoked server-side").toBe(
+        401,
+      );
+    } finally {
+      await page.context().clearCookies();
+    }
   },
 );

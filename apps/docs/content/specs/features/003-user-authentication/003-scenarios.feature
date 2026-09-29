@@ -226,11 +226,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-10 @happy
   Scenario: Logout revokes the session
-    Given an authenticated doctor_guest session
-    When the user requests logout
-    Then the server-side session is deleted
-    And the __Host- cookie is cleared
-    And a SessionRevoked event is recorded
+    Given the golden doctor "verified-cardiologist" is signed in
+    And the doctor has an active Academy profile and session cookie
+    When the doctor logs out from the Academy account
+    Then the Academy returns to the sign-in page
+    And the logout response clears the __Host-ds_session cookie
+    And the old session cookie cannot read the doctor's private profile
 
   @EARS-11 @EARS-16 @happy
   Scenario: Password reset request is enumeration-resistant

@@ -256,6 +256,7 @@ You CANNOT \`EnterWorktree\` (cwd is pinned to the repo root; the tool refuses t
 EDIT-FIRST: ≤15 tool calls before your first file edit. Recon facts below are DONE — do not re-verify handed facts. Hitting the cap without editing = STOP + return a partial verdict + what blocked you.
 CONTEXT BUDGET: hook rotates you at 250K (write the checkpoint, return \`ROTATE: <path>\` line 1) and denies non-git tools at 350K — plan the slice to finish under 250K.
 SPEC ANCHORS: read only the line ranges / anchors named in Recon facts — never a whole NNN-design.md.
+CODE COMMENTS: a claim read from a code comment (not a handed Recon fact) is a hypothesis — verify it against the spec, a test or live behaviour before relying on it (#2457).
 
 ## Recon facts (authoritative — do not re-verify)
 - <fill: the DONE facts the subagent needs — sibling scripts to mirror, exact file locations, wiring points. Hand these as facts; never write "re-read the cited files yourself".>

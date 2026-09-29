@@ -927,6 +927,16 @@ export const congressRosterUrl = {
     `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/registrations/${encodeURIComponent(registrationId)}`,
 };
 
+/**
+ * 046 EARS-2 (#2432) — one event's congress intake settings: `GET` reads them
+ * (the product defaults with `configured: false` for an event without a row),
+ * `PUT` saves the whole set through the `custom` transport, which owns the
+ * Idempotency-Key and CSRF headers a command owes. Platform administrator only.
+ */
+export function congressIntakeSettingsUrl(eventId: string): string {
+  return `${ADMIN_BASE}/events/${encodeURIComponent(eventId)}/congress-intake-settings`;
+}
+
 /** 044 EARS-34 — one registration's presence mark for one congress day. */
 export function congressAttendanceUrl(
   eventIdOrSlug: string,

@@ -397,6 +397,59 @@ describe("#2063 golden seed plan", () => {
     expect(step?.conflictKeys).toEqual(["eventId"]);
   });
 
+  it("046 EARS-1 (#2432): keys the congress intake settings on the event, and each kind on (event, kind)", () => {
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    expect(
+      plan.find((s) => s.name === "congress_submission_settings")?.conflictKeys,
+    ).toEqual(["eventId"]);
+    expect(
+      plan.find((s) => s.name === "congress_submission_kind_settings")
+        ?.conflictKeys,
+    ).toEqual(["eventId", "kind"]);
+  });
+
+  it("046 EARS-1 (#2432): the upcoming эфир is a configured congress — open oral and poster, abstracts announced, all on Moscow day boundaries", () => {
+    const eventId = golden.events.upcoming.id;
+    expect(dataset.congressSubmissionSettings).toEqual([
+      expect.objectContaining({
+        eventId,
+        registrationUrl: expect.stringMatching(/^https:\/\//),
+        firstAuthorCounts: false,
+      }),
+    ]);
+    const kinds = dataset.congressSubmissionKindSettings;
+    expect(kinds.map((k) => [k.eventId, k.kind])).toEqual([
+      [eventId, "oral"],
+      [eventId, "poster"],
+      [eventId, "abstract"],
+    ]);
+    const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const onMskMidnight = (d: unknown) =>
+      ((d as Date).getTime() + MSK_OFFSET_MS) % DAY_MS === 0;
+    const settings = dataset.congressSubmissionSettings[0]!;
+    expect(onMskMidnight(settings.revisionClosesAt)).toBe(true);
+    for (const kind of kinds) {
+      expect(onMskMidnight(kind.opensAt)).toBe(true);
+      expect(onMskMidnight(kind.closesAt)).toBe(true);
+      expect((kind.closesAt as Date).getTime()).toBeGreaterThan(
+        (kind.opensAt as Date).getTime(),
+      );
+    }
+    const byKind = new Map(kinds.map((k) => [k.kind, k]));
+    const isOpen = (k: (typeof kinds)[number]) =>
+      now.getTime() >= (k.opensAt as Date).getTime() &&
+      now.getTime() < (k.closesAt as Date).getTime();
+    expect(isOpen(byKind.get("oral")!)).toBe(true);
+    expect(isOpen(byKind.get("poster")!)).toBe(true);
+    expect(isOpen(byKind.get("abstract")!)).toBe(false);
+    // The product defaults (EARS-2) where the golden sets nothing else.
+    expect(byKind.get("poster")?.maxAgeYears).toBe(40);
+    expect(byKind.get("abstract")?.submitLimit).toBe(3);
+    expect(byKind.get("oral")?.submitLimit).toBeNull();
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+  });
+
   it("resolves doctor specialties through the seeded book", () => {
     const rows = resolveDoctorSpecialtyRows(
       dataset.doctorSpecialties,

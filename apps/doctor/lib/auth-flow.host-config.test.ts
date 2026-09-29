@@ -5,11 +5,7 @@ import {
   PARTNER_DATA_SHARING_PURPOSE,
 } from "@ds/schemas";
 
-import {
-  DEFAULT_AUTH_FLOW_COPY,
-  consentStatementOf,
-  resolveAuthFlowCopy,
-} from "@ds/auth-flow/copy";
+import { consentStatementOf, resolveAuthFlowCopy } from "@ds/auth-flow/copy";
 
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
@@ -73,7 +69,31 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
 
   it("#2027: the host restates no auth wording — every sentence is the package's", () => {
     expect(DOCTOR_AUTH_FLOW.copy).toBeUndefined();
-    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW)).toBe(DEFAULT_AUTH_FLOW_COPY);
+    // #2411: the package projects its email-only identifier wording for a host
+    // without SMS — the host states only its channel set, never the words.
+    expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW)).toEqual(
+      resolveAuthFlowCopy({ channels: ["email"] }),
+    );
+  });
+
+  it("#2411: an email-only host promises no phone on the sign-in and reset doors", () => {
+    const copy = resolveAuthFlowCopy(DOCTOR_AUTH_FLOW);
+
+    expect(copy.login.password.identifierLabel).toBe("Электронная почта");
+    expect(copy.login.password.identifierPlaceholder).toBe(
+      "doctor@example.com",
+    );
+    expect(copy.login.otp.description).toBe(
+      "Пришлём код на почту — пароль не нужен.",
+    );
+    expect(copy.reset.identifierLabel).toBe("Электронная почта");
+    expect(copy.reset.identifierPlaceholder).toBe("doctor@example.com");
+    expect(copy.reset.description).toBe(
+      "Укажите электронную почту — пришлём код для сброса.",
+    );
+    expect(copy.fields.identifier?.invalid).toBe(
+      "Введите корректный адрес электронной почты.",
+    );
   });
 
   it("021 EARS-7: every recorded statement is the sentence the door renders for that row", () => {

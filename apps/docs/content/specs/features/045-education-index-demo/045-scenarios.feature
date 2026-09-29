@@ -1,4 +1,4 @@
-@feature:045 @track:academy
+@feature:045 @track:academy @host:academy
 Feature: 045 — Education index demo
   As a potential partner and the Academy owner
   I want two temporary public demo pages showing the education index and a partner cabinet

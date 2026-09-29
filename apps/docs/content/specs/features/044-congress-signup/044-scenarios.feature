@@ -1,4 +1,4 @@
-@feature:044 @track:platform
+@feature:044 @track:platform @host:admin
 Feature: 044 — Congress sign-up
   As a congress participant, an event registrar and the platform
   I want a sign-up on the congress site to become a Doctor.School account and a registration

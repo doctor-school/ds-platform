@@ -124,16 +124,10 @@ any paint, to THIS host's login route with `returnTo=<the visitor's own path>`
 built by the shared carry helper. Never a client «Загружаем…» frame followed by a
 `router.replace` — that flash is the visitor watching the app change its mind.
 Applies to `/account`, `/account/events`, `/webinars/[slug]/room` on the Academy
-and `/account` on the doctor storefront.
-
-_The one declared exception_ is the doctor room `/events/[slug]/room`, whose `auth`
-refusal lands on the EVENT page rather than a login (020 §6.1, ADR-0015 §4 REQ-24).
-That is a spec-owned product decision, not a route that forgot the rule; it is
-declared in `apps/doctor/app/(room)/events/[slug]/room/room-routes.ts`. Its
-original premise — that this host had no login of its own — stopped being true with
-#1933, so whether it should still hold is tracked in
-[#2265](https://github.com/doctor-school/ds-platform/issues/2265) rather than
-decided here.
+and `/account`, `/events/[slug]/room` on the doctor storefront. The two rooms carry
+the room return built by `buildRoomReturnHref` from each host's `routes.room`
+template, so the door lands the guest back in the room and the room gate re-runs
+(020 EARS-7 / §6.1).
 
 **S2 — a signed-in visitor on an auth FORM is turned around on the server too.**
 `guardAuthRoute` runs on `/login`, `/register` and `/verify` on both hosts, so a

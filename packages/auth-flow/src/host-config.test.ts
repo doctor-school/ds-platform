@@ -47,7 +47,7 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     expect(ACADEMY_FIXTURE.routes.eventPathTemplate).toBe("/webinars/:slug");
     expect(ACADEMY_FIXTURE.routes.room).toBe("/webinars/:slug/room");
     expect(DOCTOR_FIXTURE.routes.eventPathTemplate).toBe("/events/:slug");
-    expect(DOCTOR_FIXTURE.routes.room).toBeUndefined();
+    expect(DOCTOR_FIXTURE.routes.room).toBe("/events/:slug/room");
   });
 
   it("rows 29, 46: parking is optional inside returnTo, and the card is a flag", () => {

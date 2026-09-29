@@ -31,7 +31,7 @@ import { serverApiBase, type ForwardedSession } from "@ds/auth-flow/server";
  *
  * The four refusals stay the shared unit's discriminated `RoomAccess`; this host
  * maps them to its OWN route table in `app/(room)/events/[slug]/room/room-routes.ts`
- * (D10), never to the academy's flows.
+ * — this host's own login and event page, never the academy's flows.
  */
 export function fetchDoctorRoomConfig(
   slug: string,

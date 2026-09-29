@@ -13,6 +13,7 @@ import {
 
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
+import { DOCTOR_ROOM_RETURN_ROUTES } from "./room-config";
 
 /**
  * 017 US-7 / 003 EARS-28 — the doctor host config states its auth routes as
@@ -29,6 +30,12 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
 
   it("EARS-1: the account route equals the navigation model's account destination", () => {
     expect(DOCTOR_AUTH_FLOW.routes.account).toBe(doctorNav.account.href);
+  });
+
+  it("006 EARS-6: the room route equals the room table's return template, so a guest bounced to login lands back in the room", () => {
+    // 020 EARS-7 — the room sends a guest to `/login?returnTo=/events/<slug>/room`;
+    // the door completes that return only if this host states the same template.
+    expect(DOCTOR_AUTH_FLOW.routes.room).toBe(DOCTOR_ROOM_RETURN_ROUTES.room);
   });
 });
 

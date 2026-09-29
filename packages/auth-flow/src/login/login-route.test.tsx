@@ -271,6 +271,69 @@ describe("#1987: an /account arrival comes back to /account", () => {
 });
 
 /**
+ * 006 EARS-6 · 020 EARS-7 — a guest the room sent to sign in comes back to the
+ * ROOM. The room return is a landing in its own right, like the account family:
+ * it resolves no эфир card, and the doctor host parks nothing in a cookie, so the
+ * mount itself must hand the room back as the landing — otherwise the door drops
+ * the doctor on the LD-4 default. Asked of the shared room codec with this host's
+ * own `routes.room`, never a host-local parser.
+ */
+describe("006 EARS-6: a room arrival comes back to the room", () => {
+  it("006 EARS-6: a guest arriving with returnTo=<doctor room> signs in INTO the room", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await guestLandingOf(DOCTOR_FIXTURE, {
+        returnTo: "/events/cardio-live/room",
+      }),
+    ).toBe("/events/cardio-live/room");
+    // A room return resolves no эфир card — the public event read is not paid.
+    expect(resolveReturnContext).not.toHaveBeenCalled();
+  });
+
+  it("006 EARS-6: a signed-in doctor arriving with a room return is sent straight to the room", async () => {
+    resolveServerAuth.mockResolvedValue(DOCTOR);
+
+    expect(
+      await landingOf(DOCTOR_FIXTURE, { returnTo: "/events/cardio-live/room" }),
+    ).toBe("/events/cardio-live/room");
+  });
+
+  it("006 EARS-6: an Academy guest arriving with returnTo=<Academy room> signs in INTO the room", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await guestLandingOf(ACADEMY_FIXTURE, {
+        returnTo: "/webinars/cardio-live/room",
+      }),
+    ).toBe("/webinars/cardio-live/room");
+    expect(resolveReturnContext).not.toHaveBeenCalled();
+  });
+
+  it("006 EARS-6: another host's room is not this host's room — the LD-4 landing stands", async () => {
+    resolveServerAuth.mockResolvedValue(DOCTOR);
+
+    expect(
+      await landingOf(DOCTOR_FIXTURE, {
+        returnTo: "/webinars/cardio-live/room",
+      }),
+    ).toBe("/");
+  });
+
+  it("006 EARS-6: the room return is carried across the hop into /register", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await linkHrefOf(
+        DOCTOR_FIXTURE,
+        { returnTo: "/events/cardio-live/room" },
+        "Создать аккаунт",
+      ),
+    ).toBe("/register?returnTo=%2Fevents%2Fcardio-live%2Froom");
+  });
+});
+
+/**
  * #2258 / rule S3 — the hop into `/register` does not drop the target.
  *
  * `/register` is a co-equal auth path, so a doctor who pressed
@@ -418,6 +481,15 @@ describe("021 EARS-3 (#2333): the door gets the signed-in re-decision where it c
       await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
     ).toBeUndefined();
     expect(await actionOf(DOCTOR_FIXTURE, { returnTo: "/account" })).toBeUndefined();
+  });
+
+  it("006 EARS-6: a doctor-room return is a carried target — no re-decision, the door lands in the room", async () => {
+    const door = (await doorOf(DOCTOR_FIXTURE, {
+      returnTo: "/events/cardio-live/room",
+    })) as unknown as ReactElement<DoorProps & { landing: string }>;
+
+    expect(door.props.resolveSignedInLanding).toBeUndefined();
+    expect(door.props.landing).toBe("/events/cardio-live/room");
   });
 
   it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {

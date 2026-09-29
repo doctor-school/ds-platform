@@ -70,9 +70,11 @@ export const DOCTOR_AUTH_FLOW = {
     // 003 EARS-28 — the `/account` change-password action hands off to the
     // reset flow, so a signed-in doctor must still be able to complete `/reset`.
     allowAuthenticated: ["/reset"],
-    // 020 — the storefront event page a carried intent lands on. No `room`:
-    // this storefront serves no room route.
+    // 020 — the storefront event page a carried intent lands on.
     eventPathTemplate: "/events/:slug",
+    // 006 EARS-6 / 020 EARS-7 — the room a guest bounced to `/login` returns to
+    // (the same literal `lib/room-config.ts` states; pinned by the test).
+    room: "/events/:slug/room",
   },
   // No parking cookie: this storefront carries the target on the canonical
   // `returnTo` param (wave-1 gate row 29). It does publish the return context

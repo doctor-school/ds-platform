@@ -29,6 +29,11 @@ const ACADEMY_ROOM_ROUTES = {
   room: "/webinars/:slug/room",
 } as const satisfies RoomReturnRoutes;
 
+/** The doctor storefront's template, as `apps/doctor/lib/room-config.ts` states it. */
+const DOCTOR_ROOM_ROUTES = {
+  room: "/events/:slug/room",
+} as const satisfies RoomReturnRoutes;
+
 describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
   it("EARS-6: accepts a canonical `/webinars/<slug>/room` and reconstructs the canonical room path", () => {
     const target = parseRoomReturnTarget(
@@ -100,12 +105,55 @@ describe("006 EARS-6 room-return target guard (parseRoomReturnTarget)", () => {
 
   it("EARS-6: a host that serves no room admits no room return — an otherwise canonical target is refused", () => {
     // `undefined` is how a host states it serves no room route (gate §2.1 row 1).
-    // The codec is shared; the ROUTE is not, so the doctor storefront — which has
-    // no room today — can never be handed an academy path by this parser.
+    // The codec is shared; the ROUTE is not.
     expect(
       parseRoomReturnTarget("/webinars/ahilles-042/room", undefined),
     ).toBeNull();
     expect(parseRoomReturnTarget("/webinars/ahilles-042/room", {})).toBeNull();
+  });
+
+  it("EARS-6: the doctor host's `/events/<slug>/room` is a room return there, and only there — the event guard follows the host template", () => {
+    // 020 EARS-7 — the doctor storefront sends a guest from its room to its own
+    // `/login` carrying `/events/<slug>/room`. The codec validates the event half
+    // with the parser for the template's OWN shape (`/events/<slug>` on this
+    // host), never the union: an academy room is not a doctor room and vice versa.
+    expect(
+      parseRoomReturnTarget("/events/cardio-live/room", DOCTOR_ROOM_ROUTES),
+    ).toEqual({
+      eventSlug: "cardio-live",
+      returnTo: "/events/cardio-live/room",
+    });
+    expect(buildRoomReturnHref("cardio-live", DOCTOR_ROOM_ROUTES)).toBe(
+      "/events/cardio-live/room",
+    );
+    expect(
+      parseRoomReturnTarget("/webinars/cardio-live/room", DOCTOR_ROOM_ROUTES),
+    ).toBeNull();
+    expect(
+      parseRoomReturnTarget("/events/cardio-live/room", ACADEMY_ROOM_ROUTES),
+    ).toBeNull();
+    for (const evil of [
+      "/events?tense=upcoming&resume=abc/room",
+      "/events/room",
+      "/events/a/b/room",
+      "/events/../account/room",
+      "//evil.example/events/x/room",
+      "https://evil.example/events/x/room",
+      "/events/cardio-live",
+    ]) {
+      expect(
+        parseRoomReturnTarget(evil, DOCTOR_ROOM_ROUTES),
+        `must reject: ${evil}`,
+      ).toBeNull();
+    }
+  });
+
+  it("EARS-6: a template whose shape no event guard serves admits no room return — fail closed rather than widen", () => {
+    expect(
+      parseRoomReturnTarget("/rooms/cardio-live/room", {
+        room: "/rooms/:slug/room",
+      }),
+    ).toBeNull();
   });
 
   it("EARS-6: refuses a malformed host template — `:slug` must be the template's ONE placeholder, with a suffix after it", () => {

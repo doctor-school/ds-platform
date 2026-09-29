@@ -257,6 +257,25 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
     expect(door.carriedTarget).toBe("/account");
   });
 
+  it("006 EARS-6: a doctor-room arrival lands back in the room and carries onward, naming no эфир to complete", async () => {
+    const door = await doorOf(DOCTOR_FIXTURE, {
+      returnTo: "/events/cardio-live/room",
+    });
+
+    expect(door.landing).toBe("/events/cardio-live/room");
+    expect(door.returnTarget ?? null).toBe(null);
+    expect(door.carriedTarget).toBe("/events/cardio-live/room");
+  });
+
+  it("006 EARS-6: an Academy-room arrival lands back in the room, naming no эфир to complete", async () => {
+    const door = await doorOf(ACADEMY_FIXTURE, {
+      returnTo: "/webinars/cardio-live/room",
+    });
+
+    expect(door.landing).toBe("/webinars/cardio-live/room");
+    expect(door.returnTarget ?? null).toBe(null);
+  });
+
   it("#2258 S3: a cross-origin target is dropped at the hop, never propagated", async () => {
     const door = await doorOf(DOCTOR_FIXTURE, {
       returnTo: "https://evil.example/account",
@@ -347,6 +366,16 @@ describe("021 EARS-3 (#2333): the sign-up door gets the signed-in re-decision wh
     expect(
       await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
     ).toBeUndefined();
+  });
+
+  it("006 EARS-6: a doctor-room return is a carried target — no re-decision, the door lands in the room", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    const door = await doorOf(DOCTOR_FIXTURE, {
+      returnTo: "/events/cardio-live/room",
+    });
+
+    expect(door.resolveSignedInLanding).toBeUndefined();
+    expect(door.landing).toBe("/events/cardio-live/room");
   });
 
   it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {

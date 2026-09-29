@@ -11,8 +11,8 @@ import type { RoomConfig } from "@ds/schemas";
  * only verification was `apps/portal/e2e/room-access-branches.spec.ts` — a
  * dev-stand-gated spec that is inert in CI. Lifting it into a pure function is
  * what makes the four refusals assertable, and asserting it over BOTH host route
- * tables is what proves the doctor storefront never routes a doctor to an Academy
- * login (D10 / ADR-0015 §4 REQ-24).
+ * tables is what proves each storefront routes a guest to its OWN login carrying
+ * its own room, never to the other host's login (020 EARS-7 / ADR-0015 §4 REQ-24).
  */
 
 const SLUG = "kardio-2026";
@@ -24,9 +24,9 @@ const ACADEMY: RoomEntryRoutes = {
   notLive: `/webinars/${SLUG}`,
 };
 
-/** The doctor storefront's table — D10: the auth branch is the event page. */
+/** The doctor storefront's table — its own `/login`, carrying its own room. */
 const DOCTOR: RoomEntryRoutes = {
-  auth: `/events/${SLUG}`,
+  auth: `/login?returnTo=${encodeURIComponent(`/events/${SLUG}/room`)}`,
   register: `/events/${SLUG}?from=room`,
   notLive: `/events/${SLUG}`,
 };
@@ -46,12 +46,15 @@ describe("006 EARS-6: room entry resolution", () => {
     });
   });
 
-  it("006 EARS-6.1: an unauthenticated caller on the doctor host is routed to the doctor event page, never to an academy login", () => {
+  it("006 EARS-6.1: an unauthenticated caller on the doctor host is routed to the doctor's own /login with the doctor room returnTo, never to an academy login", () => {
     const outcome = resolveRoomEntry({ kind: "auth" }, DOCTOR);
-    expect(outcome).toEqual({ kind: "redirect", href: `/events/${SLUG}` });
-    // The whole point of D10: no cross-origin bounce into the Academy's auth flow.
-    expect(JSON.stringify(outcome)).not.toContain("login");
+    expect(outcome).toEqual({
+      kind: "redirect",
+      href: `/login?returnTo=${encodeURIComponent(`/events/${SLUG}/room`)}`,
+    });
+    // Same-origin: no cross-origin bounce into the Academy's auth flow.
     expect(JSON.stringify(outcome)).not.toContain("academy");
+    expect(JSON.stringify(outcome)).not.toContain("webinars");
   });
 
   it("006 EARS-6.2: an unregistered caller is routed to the academy event page with from=room", () => {

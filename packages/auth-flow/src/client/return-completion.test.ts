@@ -101,6 +101,18 @@ describe("013 EARS-15: the server-resolved default landing (doctor specialty fee
     expect(registerForEvent).toHaveBeenCalledWith("cardio-live");
   });
 
+  it("006 EARS-6: a guest bounced from the doctor room lands back in the room after sign-in and registers nothing", async () => {
+    // 020 EARS-7 — the doctor room sends a guest to `/login?returnTo=/events/<slug>/room`.
+    await expect(
+      completeReturnTarget(
+        DOCTOR_FIXTURE,
+        "/events/cardio-live/room",
+        "/events",
+      ),
+    ).resolves.toBe("/events/cardio-live/room");
+    expect(registerForEvent).not.toHaveBeenCalled();
+  });
+
   it("013 EARS-15: without a supplied default the host's own `landing.afterLogin` stands", async () => {
     await expect(completeReturnTarget(DOCTOR_FIXTURE, null)).resolves.toBe("/");
   });

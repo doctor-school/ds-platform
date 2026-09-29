@@ -6,7 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
  * The doctor storefront mounts the shared `@ds/room` unit at
  * `/events/:slug/room`; slice 3 shipped that mount, and this tier is the browser
  * proof that the mount behaves on a REAL stand — the same tier the academy owns
- * in `apps/portal/e2e/room.spec.ts`, retargeted at this host's route table (D10)
+ * in `apps/portal/e2e/room.spec.ts`, retargeted at this host's route table
  * and its own chrome.
  *
  * Like `playwright.event-page.config.ts` this config starts NOTHING: the

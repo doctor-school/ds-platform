@@ -92,6 +92,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     account: "/account",
     allowAuthenticated: ["/reset"],
     eventPathTemplate: "/events/:slug",
+    room: "/events/:slug/room",
   },
   landing: {
     afterLogin: "/",

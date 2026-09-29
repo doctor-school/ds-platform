@@ -38,6 +38,7 @@ export {
   formatMskDateLabel,
   formatMskTime,
   isAccountReturnTarget,
+  isRoomReturnTarget,
   resolveCarriedReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,

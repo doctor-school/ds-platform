@@ -1,4 +1,5 @@
 import { parseReturnTarget } from "@ds/schemas";
+import { parseRoomReturnTarget } from "@ds/room/room-return";
 
 import type { AuthFlowHostConfig } from "./host-config";
 import { parseAccountReturnTarget } from "./return-target";
@@ -22,9 +23,26 @@ export type ReturnContextHost = Pick<AuthFlowHostConfig, "routes">;
 export const RETURN_CONTEXT_PARAM = "returnTo";
 
 /**
+ * 006 EARS-6 - this host's ROOM return (`routes.room`, e.g. `/events/<slug>/room`),
+ * reconstructed by the shared `@ds/room` codec, or `null`. A host that serves no
+ * room admits none. Room first, because the room path also ends in an event slug
+ * segment the эфир vocabulary must not claim.
+ */
+export function resolveRoomReturnTarget(
+  host: ReturnContextHost,
+  returnTo: string | undefined,
+): string | null {
+  const { room } = host.routes;
+  return room
+    ? (parseRoomReturnTarget(returnTo, { room })?.returnTo ?? null)
+    : null;
+}
+
+/**
  * #2258 / rule S3 - the value that rides ONWARD across an auth hop, covering
- * both shapes a visitor may legitimately be coming back to: this host account
- * family (`routes.account`, segment boundary enforced) and the эфир vocabulary.
+ * every shape a visitor may legitimately be coming back to: this host account
+ * family (`routes.account`, segment boundary enforced), this host room
+ * (`routes.room`) and the эфир vocabulary.
  * Deliberately NOT `resolveReturnTargetPath`, which must stay эфир-only.
  */
 export function resolveCarriedReturnTarget(
@@ -33,6 +51,9 @@ export function resolveCarriedReturnTarget(
 ): string | null {
   const account = parseAccountReturnTarget(returnTo, host.routes.account);
   if (account) return account;
+
+  const room = resolveRoomReturnTarget(host, returnTo);
+  if (room) return room;
 
   return parseReturnTarget(returnTo)?.returnTo ?? null;
 }

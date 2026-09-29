@@ -200,17 +200,15 @@ Before step 1, §1.1 is verified against repository reality and the `build-ui-fr
 
 Room entry is decided by ONE pure function shared by both hosts, `resolveRoomEntry(access, routes)`, exported from `packages/room` (`@ds/room`) on its `./server` subpath. Its outcome set is closed — `render` · `redirect(href)` · `not-found` — and it is table-driven: each host supplies only its own `{ auth, register, notLive }` route table, so neither host carries a branch of its own.
 
-| Outcome                      | Academy host (`apps/portal`, `/webinars/[slug]/room`)       | Doctor host (`apps/doctor`, `/events/[slug]/room`) |
-| ---------------------------- | ----------------------------------------------------------- | -------------------------------------------------- |
-| Registered viewer, room open | `render`                                                    | `render`                                           |
-| Not signed in (`auth`)       | `redirect` `/login?returnTo=<encoded /webinars/:slug/room>` | `redirect` `/events/:slug`                         |
-| Signed in, not registered    | `redirect` `/webinars/:slug?from=room`                      | `redirect` `/events/:slug?from=room`               |
-| Event not live (`notLive`)   | `redirect` `/webinars/:slug`                                | `redirect` `/events/:slug`                         |
-| Unknown slug                 | `not-found`                                                 | `not-found`                                        |
+| Outcome                      | Academy host (`apps/portal`, `/webinars/[slug]/room`)       | Doctor host (`apps/doctor`, `/events/[slug]/room`)        |
+| ---------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- |
+| Registered viewer, room open | `render`                                                    | `render`                                                  |
+| Not signed in (`auth`)       | `redirect` `/login?returnTo=<encoded /webinars/:slug/room>` | `redirect` `/login?returnTo=<encoded /events/:slug/room>` |
+| Signed in, not registered    | `redirect` `/webinars/:slug?from=room`                      | `redirect` `/events/:slug?from=room`                      |
+| Event not live (`notLive`)   | `redirect` `/webinars/:slug`                                | `redirect` `/events/:slug`                                |
+| Unknown slug                 | `not-found`                                                 | `not-found`                                               |
 
-The doctor `auth` cell is the one host-shaped product decision: an unauthenticated caller who opens the doctor room URL lands on the doctor **event page** `/events/:slug`, which already carries 020's sign-in/registration CTA, and is never bounced to the Academy login. Two constraints force it. ADR-0015 §4 REQ-24 caps `doctor.school` at exactly one Academy trace, and an Academy login bounce would be a second one. And a cross-origin `returnTo` pointing at `doctor.school` would be rejected by the Academy's same-origin `parseReturnTarget` regardless, so the bounce could not even return the doctor to the room.
-
-This branch is recorded as a **decision pending owner confirmation (Stage-B of [#1722](https://github.com/doctor-school/ds-platform/issues/1722) / gate [#1790](https://github.com/doctor-school/ds-platform/issues/1790))** — it is not owner-approved yet, and the implementing slice may not treat it as settled before that verdict.
+The two hosts differ only in their paths. A caller who is not signed in is sent to **that host's own** `/login` with a same-origin `returnTo` to the room URL, built by the shared `buildRoomReturnHref` from the host's room template (`@ds/room`); the shared auth door completes that return back to the room without registering anyone, and the room gate re-runs. The doctor host never bounces to the Academy login: ADR-0015 §4 REQ-24 caps `doctor.school` at exactly one Academy trace, and a cross-origin `returnTo` pointing at `doctor.school` would be rejected by the Academy's same-origin guard regardless. A signed-in caller without a registration is the one the event page's participation card serves, so that branch lands there with `?from=room`.
 
 ## 7. What release 3 deliberately does not draw (LD-8)
 

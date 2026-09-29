@@ -10,6 +10,11 @@ import {
   consentStatementOf,
   resolveAuthFlowCopy,
 } from "@ds/auth-flow/copy";
+import {
+  identifierFieldSchema,
+  loginIdentifierFormSchema,
+  otpIdentifierFormSchema,
+} from "@ds/auth-flow/fields";
 
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
@@ -130,5 +135,43 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
     expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).register.haveAccount).toBe(
       "Уже есть аккаунт? Войти",
     );
+  });
+});
+
+/**
+ * #2411 — the storefront signs in over the SAME channels as the Academy.
+ *
+ * Sign-in is one capability of `@ds/auth-flow` mounted by both storefronts; the
+ * owner approved no divergence between them (2026-09-29). Registration stays
+ * email-only on both hosts (021 LD-9) and is not what this suite pins.
+ */
+describe("DOCTOR_AUTH_FLOW: the sign-in door's channels", () => {
+  it("003 EARS-7: the host serves sign-in codes over e-mail AND SMS, like the Academy", () => {
+    expect(DOCTOR_AUTH_FLOW.channels).toEqual(["email", "sms"]);
+  });
+
+  it("003 EARS-5: the identifier box accepts an E.164 phone as well as an address", () => {
+    expect(
+      identifierFieldSchema(DOCTOR_AUTH_FLOW).safeParse("+79991234567").success,
+    ).toBe(true);
+    expect(
+      identifierFieldSchema(DOCTOR_AUTH_FLOW).safeParse("doctor@example.ru")
+        .success,
+    ).toBe(true);
+    expect(
+      loginIdentifierFormSchema(DOCTOR_AUTH_FLOW).safeParse({
+        identifier: "+79991234567",
+        password: "correct-horse-battery",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("003 EARS-7: the SMS sign-in-code request can be built on this host", () => {
+    expect(
+      otpIdentifierFormSchema(DOCTOR_AUTH_FLOW, "sms").safeParse({
+        identifier: "+79991234567",
+        channel: "sms",
+      }).success,
+    ).toBe(true);
   });
 });

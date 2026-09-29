@@ -252,36 +252,6 @@ function findEvent(key) {
   return EVENTS.find((event) => event.slug === key || event.id === key) ?? null;
 }
 
-/**
- * 021 EARS-10 (#1546) — the layer-1 landing table, answered by the target the
- * client carried.
- *
- * The double reproduces the SERVER's decision, never the client's: the browser
- * tier has to see a `return`, a degraded `landing` with a reason and a bare
- * `landing` come back from the wire, because the whole point of the clause is
- * that the client re-derives none of them.
- */
-function confirmAnswer(returnTo) {
-  const base = {
-    status: "verified",
-    credited: null,
-    profileCompletion: null,
-    secondaryAction: { kind: "cabinet", href: "/account" },
-  };
-  if (returnTo === `/events/${EVENT.slug}`) {
-    return { ...base, primaryAction: { kind: "return", href: returnTo } };
-  }
-  if (returnTo === `/events/${ENDED_EVENT.slug}`) {
-    return {
-      ...base,
-      primaryAction: { kind: "landing", href: returnTo, reason: "ended" },
-    };
-  }
-  // Absent, unparseable or hostile — one answer, exactly as the guard treats
-  // them: nothing was carried, so the landing is the api's own default.
-  return { ...base, primaryAction: { kind: "landing", href: "/events" } };
-}
-
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
@@ -293,9 +263,10 @@ const server = createServer((request, response) => {
   if (url.pathname === "/health")
     return json(response, 200, { ok: true, double: "return-context-api" });
 
-  // The three write commands the registration journey makes (021 EARS-10,
-  // #1546). The register and resend answers are the enumeration-safe constants
-  // the contract declares; the confirm answer is the landing table above.
+  // The write commands the registration journey makes. The register, resend
+  // and confirm answers are the constants the contracts declare: the confirm
+  // command is the one 003 `/v1/auth/verify` on both storefronts (#2455) and
+  // names no destination — the landing is decided by the client resolution.
   if (request.method === "POST") {
     if (url.pathname === "/v1/storefront/doctor/register") {
       return readJson(request, () =>
@@ -336,10 +307,8 @@ const server = createServer((request, response) => {
             ),
       );
     }
-    if (url.pathname === "/v1/storefront/doctor/confirm") {
-      return readJson(request, (body) =>
-        json(response, 200, confirmAnswer(body.returnTo)),
-      );
+    if (url.pathname === "/v1/auth/verify") {
+      return readJson(request, () => json(response, 200, { status: "verified" }));
     }
   }
 

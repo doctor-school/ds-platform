@@ -71,7 +71,6 @@ import {
 } from "@ds/schemas";
 import {
   clearPendingRegistration,
-  maskDestination,
   setPendingRegistration,
   takePendingRegistration,
 } from "@ds/design-system/blocks";
@@ -318,11 +317,14 @@ describe("005 EARS-2 / gate row 51: where an accepted registration goes next", (
     );
   });
 
-  it("gate row 51: a host with NO /verify route never navigates — it confirms on the door itself", async () => {
+  it("003 EARS-24 (#2455): the doctor door hands the address and the arrival context to its /verify route exactly as the Academy door does", async () => {
     await submitForm(DOCTOR_FIXTURE, { returnTo: SAFE_TARGET });
 
-    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
-    expect(push).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        `/verify?email=${encodeURIComponent(EMAIL)}&returnTo=${encodeURIComponent(SAFE_TARGET)}`,
+      ),
+    );
     expect(replace).not.toHaveBeenCalled();
   });
 });
@@ -653,42 +655,21 @@ describe("021 EARS-2: the gate context beside the form", () => {
   });
 });
 
-describe("rows 51 + 76: the confirmation step a host with no /verify route runs", () => {
-  it("021 EARS-19: an accepted registration on the doctor door replaces the form with the code step for the address just registered", async () => {
-    const confirmCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
-    await submitForm(DOCTOR_FIXTURE);
+describe("003 EARS-24 (#2455): one confirmation mechanism — the door never becomes the code step", () => {
+  it("003 EARS-24: on either host an accepted registration leaves the form for /verify and never renders a code field in place", async () => {
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      push.mockReset();
+      await submitForm(config);
 
-    // The host serves no `/verify` route, so the accepted command does not hop:
-    // the panel opens in place, naming the address the visitor just gave.
-    await screen.findByLabelText(confirmCopy.codeLabel);
-    expect(screen.getByText(maskDestination(EMAIL))).toBeTruthy();
-    expect(screen.queryByTestId("registration-form")).toBeNull();
-    expect(push).not.toHaveBeenCalled();
-  });
-
-  it("021 EARS-2: the inline code step keeps the arrival plate the form stood under", async () => {
-    const confirmCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
-    await submitForm(DOCTOR_FIXTURE, {
-      returnContextPlate: <p>Вы вернётесь к этому эфиру</p>,
-    });
-
-    await screen.findByLabelText(confirmCopy.codeLabel);
-    expect(screen.getByTestId("registration-return-context")).toHaveTextContent(
-      "Вы вернётесь к этому эфиру",
-    );
-  });
-
-  it("021 EARS-19: the Academy door never reaches the inline step — its own /verify route owns it", async () => {
-    // The words of the code step are the package's on every host; WHERE the
-    // step runs is the host's, and this one states a `/verify` route of its own.
-    expect(ACADEMY_FIXTURE.routes.verify).toBe("/verify");
-    await submitForm(ACADEMY_FIXTURE);
-
-    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
-    expect(
-      screen.queryByLabelText(
-        resolveAuthFlowCopy(DOCTOR_FIXTURE).verify.codeLabel,
-      ),
-    ).toBeNull();
+      await waitFor(() =>
+        expect(push).toHaveBeenCalledWith(
+          `/verify?email=${encodeURIComponent(EMAIL)}`,
+        ),
+      );
+      expect(
+        screen.queryByLabelText(resolveAuthFlowCopy(config).verify.codeLabel),
+      ).toBeNull();
+      cleanup();
+    }
   });
 });

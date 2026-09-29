@@ -1,36 +1,38 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * 021 EARS-10 (#1546, amended 2026-09-17) — where a confirmed doctor lands.
+ * 021 EARS-10 (#1546, amended 2026-09-17 and 2026-09-29) — where a confirmed
+ * doctor lands.
  *
  * The browser tier of the clause, and the only tier that can prove what it
  * claims. Four things have to hold together, and none of them is observable
  * from a unit test of either half:
  *
- *   1. the target the doctor carried into the door SURVIVES the confirmation
- *      hop — the register route projects the canonical academy
- *      `?returnTo=/webinars/<slug>` into the doctor-host `/events/<slug>`
- *      (#1945), the confirm command carries THAT value, and the server
- *      re-validates it;
- *   2. the accepted code lands the doctor ON that target — no interstitial, no
- *      second tap, the same rule the Academy `/verify` runs;
- *   3. a target that went stale lands on the nearest honest destination the
- *      server picked (LD-8) rather than on a dead эфир;
- *   4. a direct arrival lands on the LD-4 landing the DOOR decided, which the
- *      confirm API cannot know — so the promise made on the door is the
- *      promise that is kept.
+ *   1. the target the doctor carried into the door SURVIVES the hop onto this
+ *      host's own `/verify` route (003 EARS-24, #2455) — the canonical academy
+ *      `?returnTo=/webinars/<slug>` rides its query and the route projects it
+ *      into the doctor-host `/events/<slug>` (#1945) on the SERVER;
+ *   2. the accepted code (the one 003 `/v1/auth/verify` command, as on the
+ *      Academy) lands the doctor ON that target — no interstitial, no second
+ *      tap;
+ *   3. owner decision Б (2026-09-29): an эфир that ended still lands on its own
+ *      page, which states that itself, and one that no longer exists lands on
+ *      the LD-4 default;
+ *   4. a direct arrival lands on the LD-4 landing the route decided.
  *
  * The tier boots the app against `e2e/support/return-context-api.mjs`
  * (`playwright.return-context.config.ts`) because the projection happens on the
- * SERVER, before the first byte of HTML, and because the confirm answer is a
- * decision of the upstream — a browser-level route interception would let the
- * tier assert its own fixture instead of the journey.
+ * SERVER, before the first byte of HTML, against the upstream's public event
+ * read — a browser-level route interception would let the tier assert its own
+ * fixture instead of the journey.
  */
 
 /** The live эфир the double answers for — a return that is still honourable. */
 const LIVE = "prp-pri-gonartroze";
-/** The эфир that already ended — the LD-8 degraded branch. */
+/** The эфир that already ended — its page still exists (owner decision Б). */
 const ENDED = "ended-vedenie-hronicheskoy-boli";
+/** An эфир the upstream's public read does not know — it no longer exists. */
+const GONE = "udalennyy-efir";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
@@ -46,8 +48,8 @@ const REFUSED_PASSWORD = "the second password the idp never took";
 /**
  * The canonical gate hand-off URL, built the way the producer builds it
  * (`apps/api/src/events/participation-cta.resolver.ts` → `cta.href`): the
- * ACADEMY shape under `returnTo`. The doctor-host projection of it is what has
- * to reach the confirm command, and that projection is exactly what this tier
+ * ACADEMY shape under `returnTo`. The doctor-host projection of it is where the
+ * confirmed doctor has to land, and that projection is exactly what this tier
  * is here to observe.
  */
 function arrival(slug: string): string {
@@ -73,6 +75,11 @@ async function registerAndConfirm(
   await tick(page, "register-partner-data");
   await page.getByTestId("register-submit").click();
 
+  // 003 EARS-24 (#2455) — the confirmation is this host's own `/verify` step,
+  // the address and the carried target in its query, as on the Academy.
+  await expect(page).toHaveURL(/\/verify\?/);
+  const step = new URL(page.url());
+  expect(step.searchParams.get("email")).toBe(EMAIL);
   await expect(page.getByTestId("verify-submit")).toBeVisible();
   // The slotted OTP field auto-submits on completion (#175), so filling it IS
   // the submit. The code itself is never checked here — the double delegates
@@ -102,11 +109,22 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-10.1: a live carried target IS the landing — the accepted code opens the эфир itself", async ({
     page,
   }) => {
+    // 003 EARS-3 (#2455) — the one confirm command both storefronts post: the
+    // address and the code, no target and no named destination.
+    const verify = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/v1/auth/verify",
+    );
     await registerAndConfirmLandingOn(
       page,
       arrival(LIVE),
       new RegExp(`/events/${LIVE}$`),
     );
+    expect((await verify).postDataJSON()).toEqual({
+      email: EMAIL,
+      code: "ABC123",
+    });
 
     // The owner's objection, as an assertion: no acknowledgement screen stands
     // between the code and the эфир, and nothing on the way asks for a tap.
@@ -117,9 +135,8 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-10.3: a target that already ended lands on the эфир page anyway", async ({
     page,
   }) => {
-    // LD-8 — the server knew WHY the target could not be honoured and named the
-    // nearest honest destination; the doctor is taken there. The эфир page
-    // itself is what states that it has ended, so no second surface repeats it.
+    // Owner decision Б (2026-09-29) — the эфир page still exists, so it is the
+    // landing; the page itself states that the эфир has ended.
     await registerAndConfirmLandingOn(
       page,
       arrival(ENDED),
@@ -127,12 +144,18 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     );
   });
 
+  test("021 EARS-10.5: a target whose эфир no longer exists lands on the default landing", async ({
+    page,
+  }) => {
+    // Owner decision Б (2026-09-29) — nothing answers for the эфир, so there is
+    // no page to land on: the LD-4 storefront home (no remembered specialty).
+    await registerAndConfirmLandingOn(page, arrival(GONE), /\/$/);
+  });
+
   test("021 EARS-10.4: a direct arrival lands where the DOOR decided", async ({
     page,
   }) => {
-    // No `returnTo` and no remembered specialty: the LD-4 storefront home. The
-    // confirm API answers `/events` because it cannot read the 017 cookie —
-    // the answer of the door is the one that reaches the doctor.
+    // No `returnTo` and no remembered specialty: the LD-4 storefront home.
     await registerAndConfirmLandingOn(page, "/register", /\/$/);
   });
 
@@ -140,7 +163,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     page,
   }) => {
     // The defect this test exists to catch (#1996, owner Stage-B withdrawal):
-    // `/v1/storefront/doctor/confirm` verifies the email and mints NO session,
+    // the confirm command verifies the email and mints NO session,
     // so a doctor who typed the code still arrived on the эфир as a guest and
     // «Участвовать» sent them back to the door they had just walked through.
     // The fix is the Academy's own mechanism — the held password replayed
@@ -174,9 +197,9 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     await registerAndConfirm(page, arrival(LIVE), REFUSED_PASSWORD);
 
     await expect(page.getByText("Код не подошёл. Попробуйте ещё раз.")).toBeVisible();
-    // Still the confirmation step, on the door route, with its co-equal
+    // Still the confirmation step, on the `/verify` route, with its co-equal
     // sign-in action carrying the return context (rule S3).
-    await expect(page).toHaveURL(/\/register\?/);
+    await expect(page).toHaveURL(/\/verify\?/);
     await expect(page.getByTestId("verify-submit")).toBeVisible();
     await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
   });

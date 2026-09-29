@@ -319,8 +319,8 @@ export type AuthFlowRegisterCopy = {
 
 /**
  * The confirmation step's words (rows 65–77) — the canvas «Подтверждение»
- * screen, one dictionary on every host: the Academy's `/verify` route and the
- * doctor storefront's inline step read the same sentences, and a host varies
+ * screen, one dictionary on every host: both storefronts' `/verify` routes read
+ * the same sentences, and a host varies
  * only WHETHER a line is drawn, never its words.
  */
 export type AuthFlowVerifyCopy = {
@@ -416,8 +416,6 @@ export type AuthFlowApiConfig = {
   readonly basePath: string;
   /** `/v1/auth/register` on the Academy, the storefront command on the doctor host. */
   readonly registerPath: string;
-  /** `/v1/auth/verify` on the Academy, the storefront confirm command on the doctor host. */
-  readonly confirmPath: string;
 };
 
 /**
@@ -430,8 +428,11 @@ export type AuthFlowApiConfig = {
 export type AuthFlowRoutes = {
   readonly login: string;
   readonly register: string;
-  /** `undefined` = the confirmation is an inline step on this host (rows 51, 76). */
-  readonly verify?: string;
+  /**
+   * The confirmation route (003 EARS-24, rows 51, 76) — every host confirms a
+   * new address on a route of its own, which the registration door hops to.
+   */
+  readonly verify: string;
   readonly reset: string;
   /** #1987 — the account path the return-target codec admits as a shape (row 32). */
   readonly account: string;
@@ -598,17 +599,6 @@ export type AuthFlowHostConfig = {
     readonly attribution?: string;
     /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */
     readonly pointsPromise?: string;
-  };
-  /** The confirmation step (rows 65–77, 76). */
-  readonly verify: {
-    /**
-     * Whether the verification MAIL links into a confirmation surface of this
-     * host cold — `/verify#email=<addr>`, the address riding the fragment the
-     * browser never sends (003 EARS-24, #904). `true` on a host that serves
-     * `routes.verify`; `false` on a host that confirms inline on the
-     * registration door, where the address is the one just typed.
-     */
-    readonly deepLinkEntry: boolean;
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;

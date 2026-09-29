@@ -2,24 +2,10 @@ import { headers } from "next/headers";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import { returnContextSlots } from "../login/return-context-card";
-import {
-  RETURN_CONTEXT_PARAM,
-  guardAuthRoute,
-  isAccountReturnTarget,
-  isRoomReturnTarget,
-  resolveArrivalLanding,
-  resolveCarriedReturnTarget,
-  resolveReturnContext,
-  resolveReturnLandingPath,
-  resolveReturnTargetPath,
-  resolveServerAuth,
-} from "../server";
-// Deliberately NOT through the `../server` barrel: that barrel also reaches
-// client components and the host proxy, where an inline server action may not
-// be defined. Only these server mounts build the action.
-import { signedInLandingAction } from "../server/signed-in-landing";
+import { RETURN_CONTEXT_PARAM } from "../server";
 import { AuthShell } from "../shell";
 import { RegisterDoor } from "./register-door";
+import { resolveRegistrationArrival } from "./registration-arrival";
 
 /**
  * `<RegisterRoute>` — the ONE server mount of the sign-up door, hosted by both
@@ -58,80 +44,14 @@ export async function RegisterRoute({
   // request being rejected — a malformed return context degrades to no context,
   // it never breaks the door.
   const returnTo = Array.isArray(raw) ? raw[0] : raw;
-  // The guard reconstruction of the эфир arrival target — the ONE vocabulary,
-  // resolved before any read, and the raw param never stands in for it.
-  const safeTarget = resolveReturnTargetPath(returnTo);
-  // Rule S3 / #2258 — the value that rides ONWARD out of this door. A different
-  // question from `safeTarget`, which is the эфир-only EARS-3 context target:
-  // this one also admits the account family, so a doctor who arrived from a
-  // closed page keeps it across the confirmation step's sideways hops.
-  const carriedTarget = resolveCarriedReturnTarget(config, returnTo) ?? null;
-  // WHERE THIS host takes them afterwards: the same guard output projected onto
-  // this storefront's own paths (#1945), so `/webinars/<slug>` and
-  // `/events/<slug>` are one arrival seen from two hosts.
-  const landingTarget = resolveReturnLandingPath(config, returnTo);
-  // ONE read of the request headers, serving both per-visitor facts below.
-  const requestHeaders = await headers();
 
-  // #675 — a doctor who already holds a session is not offered a second
-  // account. Taken before the upstream эфир read, because a NON-gate arrival's
-  // landing is decided by the arrival rule alone and that round-trip would
-  // answer a question nobody asks. A gate arrival genuinely needs both facts
-  // and pays for both.
-  const auth = await resolveServerAuth(requestHeaders);
-  const authenticated = auth.status === "doctor";
-  if (authenticated && !landingTarget) {
-    guardAuthRoute({
-      authenticated,
-      pathname: config.routes.register,
-      routes: config.routes,
-      landing: await resolveArrivalLanding(config, requestHeaders),
-    });
-  }
-
-  // 021 EARS-3 — the эфир READ exists to fill the return-context CARD, so a
-  // host that publishes none never pays for it. The gate is then kept on the
-  // guard reconstruction alone, which stands on its own.
-  const returnEvent =
-    config.returnTo?.card && safeTarget
-      ? await resolveReturnContext(safeTarget)
-      : null;
-  const gateResolved = config.returnTo?.card
-    ? returnEvent !== null
-    : Boolean(safeTarget);
-
-  // #1987 / rule S4 — an account arrival resolves NO эфир, so the gate branch
-  // would refuse it and drop the doctor on the LD-4 default, which is precisely
-  // the destination they declined by asking for «Личный кабинет». The sign-in
-  // door has answered it since #1987; the sign-up door does now too. Asked of
-  // the codec, which admits the whole family under this host's own
-  // `routes.account`, not just the cabinet index (014 EARS-6.5).
-  const accountLanding = isAccountReturnTarget(config, returnTo);
-  // 006 EARS-6 · 020 EARS-7 — a room arrival is the same kind of landing: no эфир
-  // card, and a host with no parking cookie (the doctor storefront) has no other
-  // carrier, so without it the door would drop a guest the room sent here on the
-  // default landing instead of back in the room.
-  const roomLanding = isRoomReturnTarget(config, returnTo);
-
-  const landsOnCarriedTarget = Boolean(
-    landingTarget && (gateResolved || accountLanding || roomLanding),
-  );
-  const landing =
-    landsOnCarriedTarget && landingTarget
-      ? landingTarget
-      : await resolveArrivalLanding(config, requestHeaders);
-  // #2333 — `landing` above was decided for a GUEST (no session, so a profile
-  // specialty is invisible). When it is the LD-4 arrival decision on a
-  // specialty-aware host, the door also gets the server action that decides it
-  // again once the sign-in has set the session; a carried target is final.
-  const resolveSignedInLanding =
-    landsOnCarriedTarget ? undefined : signedInLandingAction(config);
-
-  guardAuthRoute({
-    authenticated,
+  // The #675 guard, the landing decision and the return-context read — the
+  // same decision the `/verify` step takes from the same arrival.
+  const { landing, returnEvent } = await resolveRegistrationArrival({
+    config,
+    returnTo,
+    requestHeaders: await headers(),
     pathname: config.routes.register,
-    routes: config.routes,
-    landing,
   });
 
   const { panel, plate } = returnContextSlots({
@@ -145,21 +65,10 @@ export async function RegisterRoute({
       <RegisterDoor
         config={config}
         landing={landing}
-        {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
         // The RAW arrival value: the door's shared carry helper answers both the
         // эфир and the account shape and re-appends only what the guards
         // reconstructed, so a hostile param is dropped at the hop (#2258 / S3).
         returnTo={returnTo ?? null}
-        // 021 EARS-10 — the эфир intent to COMPLETE after sign-up, in this
-        // host's vocabulary, supplied only when the arrival actually resolved.
-        // An unresolvable target is the same as no target, and sending it anyway
-        // would ask the confirm command to name a degradation reason for a page
-        // this route already knows nothing answers.
-        returnTarget={landingTarget && gateResolved ? landingTarget : null}
-        // Rule S3 — what the confirmation step's «Войти» / «Забыли пароль» hops
-        // carry onward. The CARRY vocabulary, not the эфир-only confirm intent
-        // above: an account arrival has no `returnTarget` at all.
-        carriedTarget={carriedTarget}
         returnContextPlate={plate}
       />
     </AuthShell>

@@ -18,9 +18,8 @@ import { test, expect, devices, type Page, type Request } from "@playwright/test
  * assertable — the code that leaves the browser, not the glyphs on screen.
  */
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
-// #1546 — the code now rides the STOREFRONT confirm command (same 003 engine,
-// plus the 021 success state), so this is the request the browser makes.
-const CONFIRM_ROUTE = "**/v1/storefront/doctor/confirm";
+// #2455 — the code rides the one 003 confirm command both storefronts post.
+const CONFIRM_ROUTE = "**/v1/auth/verify";
 // 021 EARS-15 (#1996) — the sign-in the confirmation replays.
 const LOGIN_ROUTE = "**/v1/auth/login";
 
@@ -182,13 +181,7 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          status: "verified",
-          credited: null,
-          profileCompletion: null,
-          primaryAction: { kind: "landing", href: "/events" },
-          secondaryAction: { kind: "cabinet", href: "/account" },
-        }),
+        body: JSON.stringify({ status: "verified" }),
       }),
     );
 

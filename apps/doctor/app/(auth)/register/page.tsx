@@ -10,11 +10,11 @@ import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
  *
  * The route is a MOUNT, not a composition (#2027 wave 1, PR 1.6): everything it
  * used to assemble by hand — the return-context resolution, the LD-4 / rule-S4
- * landing, the #675 signed-in guard, the consent read model and the inline
- * confirmation — is the ONE sign-up door of `@ds/auth-flow/register`, which both
- * storefronts now mount. What stays on this side is what this host STATES about
- * itself, and that is `DOCTOR_AUTH_FLOW` (`lib/auth-flow.host-config.ts`): its
- * routes (no `verify` — this host confirms inline), its consent tiers, its form
+ * landing, the #675 signed-in guard and the consent read model — is the ONE
+ * sign-up door of `@ds/auth-flow/register`, which both storefronts now mount; an
+ * accepted registration hops to this host's `/verify` route (003 EARS-24). What
+ * stays on this side is what this host STATES about itself, and that is
+ * `DOCTOR_AUTH_FLOW` (`lib/auth-flow.host-config.ts`): its routes, its consent tiers, its form
  * composition and its sentences.
  *
  * The route still belongs to the doctor app but NOT to the storefront shell: it

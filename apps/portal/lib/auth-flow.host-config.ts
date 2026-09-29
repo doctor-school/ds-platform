@@ -16,14 +16,12 @@ import ru from "../messages/ru.json";
  */
 
 /**
- * The Academy proxies the shipped 003 routes directly — registration and
- * confirmation are the same `/v1/auth/*` commands the api has always exposed,
- * unlike the doctor storefront, which posts its own storefront commands.
+ * The Academy registers on the shipped 003 command; confirmation is the one
+ * 003 command both storefronts post, a package constant.
  */
 export const ACADEMY_AUTH_FLOW_API: AuthFlowApiConfig = {
   basePath: "/v1/auth",
   registerPath: "/v1/auth/register",
-  confirmPath: "/v1/auth/verify",
 };
 
 /** The Academy's catalogue, read as DATA — this host is single-locale RU (`i18n/request.ts`). */
@@ -48,8 +46,6 @@ export const ACADEMY_AUTH_FLOW = {
   routes: {
     login: "/login",
     register: "/register",
-    // The Academy's confirmation is a standalone surface the verification mail
-    // links into, so it has a path (the doctor storefront confirms inline).
     verify: "/verify",
     reset: "/reset",
     account: "/account",
@@ -64,10 +60,9 @@ export const ACADEMY_AUTH_FLOW = {
   },
   /**
    * 014 EARS-6 — the Academy parks the carried return target in a short-lived
-   * same-origin cookie, because its registration branch leaves the browser for
-   * the verification mail and comes back on a cold `/verify#email=…` with no
-   * query at all. The name and the lifetime are host values; the parking RULE
-   * lives in `@ds/auth-flow/server`.
+   * same-origin cookie, so an auth hop that arrives with no `returnTo` query
+   * still completes it. The name and the lifetime are host values; the parking
+   * RULE lives in `@ds/auth-flow/server`.
    */
   returnTo: {
     parkingCookie: {
@@ -114,9 +109,6 @@ export const ACADEMY_AUTH_FLOW = {
   // is the email-or-E.164 union.
   channels: ["email", "sms"],
   register: { promoField: false },
-  // 003 EARS-24 (#904) — the verification mail's button opens `/verify#email=…`
-  // cold, so the confirmation surface seeds the address from the fragment.
-  verify: { deepLinkEntry: true },
   /**
    * 003 EARS-20 — what the Academy records at sign-up, and what it SHOWS.
    *

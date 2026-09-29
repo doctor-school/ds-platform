@@ -17,7 +17,7 @@ import { serverApiBase } from "./session";
 
 /**
  * The carry-vocabulary helpers live one level up, in a module with no server
- * import in its graph: the inline confirmation step is a CLIENT component and
+ * import in its graph: the confirmation step is a CLIENT component and
  * hops through the same rule S3 value. Re-exported here so `@ds/auth-flow/server`
  * keeps its shipped surface - one implementation, two entry points.
  */

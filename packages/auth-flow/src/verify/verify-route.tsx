@@ -2,39 +2,29 @@ import { headers } from "next/headers";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import { returnContextSlots } from "../login/return-context-card";
-import {
-  RETURN_CONTEXT_PARAM,
-  guardAuthRoute,
-  resolveArrivalLanding,
-  resolveReturnContext,
-  resolveReturnTargetPath,
-  resolveServerAuth,
-} from "../server";
-// Deliberately NOT through the `../server` barrel: that barrel also reaches
-// client components and the host proxy, where an inline server action may not
-// be defined. Only these server mounts build the action.
-import { signedInLandingAction } from "../server/signed-in-landing";
+import { resolveRegistrationArrival } from "../register/registration-arrival";
+import { RETURN_CONTEXT_PARAM } from "../server";
 import { AuthShell } from "../shell";
 import { VerifyAddressGate, VerifyStep } from "./verify-entry";
 
 /**
- * `<VerifyRoute>` — the ONE server mount of the confirmation step for a host
- * that serves `routes.verify` (#2027 PR 1.7; ADR-0013 A1 cross-front reuse), the
- * sibling of `RegisterRoute`. The host route file is a MOUNT naming its own
- * `AuthFlowHostConfig`; everything below is host-neutral.
+ * `<VerifyRoute>` — the ONE server mount of the confirmation step (#2027 PR
+ * 1.7; ADR-0013 A1 cross-front reuse), the sibling of `RegisterRoute`. Every
+ * host confirms a new address here (003 EARS-24, #2455): the registration door
+ * hops to `routes.verify` with `?email=` and the arrival `returnTo`, so the
+ * step survives a reload or a new tab. The host route file is a MOUNT naming
+ * its own `AuthFlowHostConfig`; everything below is host-neutral.
  *
- * Server-side, before the first byte of HTML: the #675 signed-in guard (a doctor
- * who holds a session has nothing to confirm here), the LD landing, and the
- * return-context panel on a host that publishes one — «после подтверждения
- * почты вы вернётесь сюда же» (canvas 469-472). The address and the carried
- * target are handed to the client half, which alone can read the mail's
- * `#email=` fragment — and so alone decides that an arrival with no address at
- * all goes to the registration door (003 EARS-40): a 3xx here could not tell a
- * bare `/verify` from a fragment deep link, which the browser would carry along.
+ * Server-side, before the first byte of HTML, it takes the SAME decision the
+ * registration door took from the same arrival (`resolveRegistrationArrival`):
+ * the #675 signed-in guard (a doctor who holds a session has nothing to confirm
+ * here), the landing, the эфир intent the confirmation completes (021 EARS-10),
+ * the rule S3 carry, and the return-context panel on a host that publishes one
+ * — «после подтверждения почты вы вернётесь сюда же» (canvas 469-472).
  *
- * A host whose `routes.verify` is `undefined` confirms inline on the
- * registration door (rows 51, 76); mounting this route there is a wiring
- * mistake and fails loudly instead of guarding a path the host does not serve.
+ * The address is handed to the client gate, which sends an arrival with none to
+ * the registration door (003 EARS-40) by a client `replace`, the way every
+ * other in-journey hop of this step navigates.
  */
 export async function VerifyRoute({
   config,
@@ -43,47 +33,22 @@ export async function VerifyRoute({
   config: AuthFlowHostConfig;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const verifyPath = config.routes.verify;
-  if (!verifyPath) {
-    throw new Error(
-      "auth-flow: this host confirms inline and serves no /verify",
-    );
-  }
   const params = await searchParams;
   // A repeated param arrives as an array; the FIRST value wins, the way the
   // other auth mounts read theirs.
   const returnTo = firstOf(params[RETURN_CONTEXT_PARAM]) ?? null;
   const email = firstOf(params.email);
-  const requestHeaders = await headers();
 
-  // #675 — the same guard the retired `app/verify/layout.tsx` ran, now inside
-  // the mount (the retirement `/login` and `/register` had before it).
-  const auth = await resolveServerAuth(requestHeaders);
-  guardAuthRoute({
-    authenticated: auth.status === "doctor",
-    pathname: verifyPath,
-    routes: config.routes,
+  const arrival = await resolveRegistrationArrival({
+    config,
+    returnTo: returnTo ?? undefined,
+    requestHeaders: await headers(),
+    pathname: config.routes.verify,
   });
-
-  const landing = await resolveArrivalLanding(config, requestHeaders);
-  const safeTarget = resolveReturnTargetPath(returnTo ?? undefined);
-  // #2333 — `landing` was decided for a GUEST. As on the login and registration
-  // mounts, the step gets the server action that decides it again once the
-  // confirmed doctor is signed in only where that can change the destination:
-  // a specialty-aware host with no validated carried target (a carried target
-  // is final, 005 EARS-2).
-  const resolveSignedInLanding = safeTarget
-    ? undefined
-    : signedInLandingAction(config);
-  // 021 EARS-3 — the эфир read fills the card, so a host with none never pays.
-  const returnEvent =
-    config.returnTo?.card && safeTarget
-      ? await resolveReturnContext(safeTarget)
-      : null;
   // The registration variant: its line is the confirmation's promise.
   const { panel, plate } = returnContextSlots({
     config,
-    event: returnEvent,
+    event: arrival.returnEvent,
     variant: "register",
   });
 
@@ -98,9 +63,12 @@ export async function VerifyRoute({
       <AuthShell config={config} returnContext={panel}>
         <VerifyStep
           config={config}
-          landing={landing}
-          {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
-          returnTo={returnTo}
+          landing={arrival.landing}
+          {...(arrival.resolveSignedInLanding
+            ? { resolveSignedInLanding: arrival.resolveSignedInLanding }
+            : {})}
+          returnTarget={arrival.returnTarget}
+          carriedTarget={arrival.carriedTarget}
           // The mobile plate above the card, as the registration door draws it.
           returnContextPlate={plate}
         />

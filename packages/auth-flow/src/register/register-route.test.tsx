@@ -62,6 +62,7 @@ import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
+import { VerifyRoute } from "../verify/verify-route";
 import { RegisterRoute } from "./register-route";
 
 /** The signed-in branch of `ServerAuth` — the claims ride along with it. */
@@ -132,6 +133,23 @@ async function doorOf(
   params: Params,
 ): Promise<DoorProps> {
   return (await shellOf(config, params)).props.children.props;
+}
+
+/**
+ * Every prop the `/verify` mount hands the confirmation step for the SAME
+ * arrival, after the door's hop (`?email=` added) — the half of the journey
+ * decision that is consumed past the accepted command (003 EARS-24, #2455):
+ * the эфир to complete, the carry and the signed-in re-decision.
+ */
+async function stepOf(
+  config: AuthFlowHostConfig,
+  params: Params,
+): Promise<DoorProps> {
+  const gate = (await VerifyRoute({
+    config,
+    searchParams: Promise.resolve({ ...params, email: "doc@example.com" }),
+  })) as ReactElement<{ children: ReactElement<ShellProps> }>;
+  return gate.props.children.props.children.props;
 }
 
 beforeEach(() => {
@@ -235,55 +253,60 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
     expect(door.landing).toBe("/events/prp-pri-gonartroze");
   });
 
-  it("#2027 PR 1.6: the эфир arrival carries landing, raw returnTo, returnTarget and carriedTarget", async () => {
+  it("#2027 PR 1.6: the эфир arrival carries landing and raw returnTo to the door, returnTarget and carriedTarget to its /verify step", async () => {
     resolveReturnContext.mockResolvedValue(EVENT);
+    const params = { returnTo: "/webinars/prp-pri-gonartroze" };
 
-    const door = await doorOf(DOCTOR_FIXTURE, {
-      returnTo: "/webinars/prp-pri-gonartroze",
-    });
+    const door = await doorOf(DOCTOR_FIXTURE, params);
     expect(door.landing).toBe("/events/prp-pri-gonartroze");
     expect(door.returnTo).toBe("/webinars/prp-pri-gonartroze");
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.landing).toBe(door.landing);
     // 021 EARS-10 — the эфир intent to COMPLETE, in THIS host's vocabulary.
-    expect(door.returnTarget).toBe("/events/prp-pri-gonartroze");
+    expect(step.returnTarget).toBe("/events/prp-pri-gonartroze");
     // Rule S3 — the CARRY vocabulary of the sideways hops, the canonical target.
-    expect(door.carriedTarget).toBe("/webinars/prp-pri-gonartroze");
+    expect(step.carriedTarget).toBe("/webinars/prp-pri-gonartroze");
   });
 
   it("#2258 S3: an account arrival carries onward but names no эфир to complete", async () => {
-    const door = await doorOf(DOCTOR_FIXTURE, { returnTo: "/account" });
+    const params = { returnTo: "/account" };
 
-    expect(door.landing).toBe("/account");
-    expect(door.returnTarget ?? null).toBe(null);
-    expect(door.carriedTarget).toBe("/account");
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe("/account");
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.landing).toBe("/account");
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget).toBe("/account");
   });
 
   it("006 EARS-6: a doctor-room arrival lands back in the room and carries onward, naming no эфир to complete", async () => {
-    const door = await doorOf(DOCTOR_FIXTURE, {
-      returnTo: "/events/cardio-live/room",
-    });
+    const params = { returnTo: "/events/cardio-live/room" };
 
-    expect(door.landing).toBe("/events/cardio-live/room");
-    expect(door.returnTarget ?? null).toBe(null);
-    expect(door.carriedTarget).toBe("/events/cardio-live/room");
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe(
+      "/events/cardio-live/room",
+    );
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget).toBe("/events/cardio-live/room");
   });
 
   it("006 EARS-6: an Academy-room arrival lands back in the room, naming no эфир to complete", async () => {
-    const door = await doorOf(ACADEMY_FIXTURE, {
-      returnTo: "/webinars/cardio-live/room",
-    });
+    const params = { returnTo: "/webinars/cardio-live/room" };
 
-    expect(door.landing).toBe("/webinars/cardio-live/room");
-    expect(door.returnTarget ?? null).toBe(null);
+    expect((await doorOf(ACADEMY_FIXTURE, params)).landing).toBe(
+      "/webinars/cardio-live/room",
+    );
+    expect((await stepOf(ACADEMY_FIXTURE, params)).returnTarget ?? null).toBe(
+      null,
+    );
   });
 
   it("#2258 S3: a cross-origin target is dropped at the hop, never propagated", async () => {
-    const door = await doorOf(DOCTOR_FIXTURE, {
-      returnTo: "https://evil.example/account",
-    });
+    const params = { returnTo: "https://evil.example/account" };
 
-    expect(door.landing).toBe("/");
-    expect(door.returnTarget ?? null).toBe(null);
-    expect(door.carriedTarget ?? null).toBe(null);
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe("/");
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget ?? null).toBe(null);
   });
 
   it("021 EARS-2: a doctor-host gate arrival fills BOTH return-context slots", async () => {
@@ -333,27 +356,29 @@ describe("#2027 PR 1.6 (Academy): the same mount over the other host config", ()
     ).toBe("/webinars");
   });
 
-  it("021 EARS-3: a host that publishes no return-context card never pays for the эфир read", async () => {
+  it("021 EARS-10 (#2455): a host that publishes no return-context card asks whether the эфир exists, and draws no card", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
+    resolveReturnContext.mockResolvedValue(EVENT);
 
-    const shell = await shellOf(ACADEMY_FIXTURE, {
-      returnTo: "/webinars/prp-pri-gonartroze",
-    });
-    // The эфир still COMPLETES after sign-up — the guard reconstruction stands
-    // on its own; only the card, which this host does not publish, needed the read.
-    expect(shell.props.children.props.returnTarget).toBe(
+    const params = { returnTo: "/webinars/prp-pri-gonartroze" };
+    const shell = await shellOf(ACADEMY_FIXTURE, params);
+    // The эфир still exists, so it COMPLETES after sign-up; the card is only
+    // drawn by a host that publishes it.
+    expect((await stepOf(ACADEMY_FIXTURE, params)).returnTarget).toBe(
       "/webinars/prp-pri-gonartroze",
     );
     expect(shell.props.returnContext ?? null).toBe(null);
     expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(resolveReturnContext).toHaveBeenCalledWith(
+      "/webinars/prp-pri-gonartroze",
+    );
   });
 });
 
-describe("021 EARS-3 (#2333): the sign-up door gets the signed-in re-decision where it can change", () => {
+describe("021 EARS-3 (#2333): the confirmation after the sign-up door gets the signed-in re-decision where it can change", () => {
   async function actionOf(config: AuthFlowHostConfig, params: Params) {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
-    return (await doorOf(config, params)).resolveSignedInLanding;
+    return (await stepOf(config, params)).resolveSignedInLanding;
   }
 
   it("021 EARS-3: a guest direct arrival on the doctor storefront carries the re-decision", async () => {
@@ -370,12 +395,12 @@ describe("021 EARS-3 (#2333): the sign-up door gets the signed-in re-decision wh
 
   it("006 EARS-6: a doctor-room return is a carried target — no re-decision, the door lands in the room", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
-    const door = await doorOf(DOCTOR_FIXTURE, {
+    const step = await stepOf(DOCTOR_FIXTURE, {
       returnTo: "/events/cardio-live/room",
     });
 
-    expect(door.resolveSignedInLanding).toBeUndefined();
-    expect(door.landing).toBe("/events/cardio-live/room");
+    expect(step.resolveSignedInLanding).toBeUndefined();
+    expect(step.landing).toBe("/events/cardio-live/room");
   });
 
   it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {

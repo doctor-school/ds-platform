@@ -10,8 +10,9 @@ import type { AuthFlowReturnToConfig } from "../host-config";
  * 014 EARS-6 / design S6 is the behaviour. A gated surface links into the auth
  * entry with `?returnTo=<same-origin path>` and the query carries it onward
  * through the flow. The one hop the query CANNOT survive is the registration
- * branch trip through the inbox: the verification mail lands the visitor on a
- * cold `/verify#email=...` in a fresh navigation with no query at all. So the
+ * branch trip through the inbox: the visitor who leaves for the mail may come
+ * back on a cold `/verify?email=...` in a fresh navigation with no `returnTo`
+ * at all (the mail itself is link-free, 003 EARS-29). So the
  * moment a visitor reaches an auth entry with a target, the target is validated
  * through the `@ds/schemas` same-origin guard and the CANONICAL result is parked
  * in a short-lived cookie; the client consumption point

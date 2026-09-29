@@ -16,6 +16,8 @@ import type {
   SetDisplayNameRequest,
   VerifyResendRequest,
   VerifyResendResponse,
+  VerifyRequest,
+  VerifyResponse,
 } from "@ds/schemas";
 
 import type { AuthFlowApiConfig } from "../host-config";
@@ -205,11 +207,13 @@ export function createAuthClient(api: AuthFlowApiConfig) {
       postJson<TReq, TRes>(api.registerPath, body, captchaToken),
 
     /**
-     * The host's confirmation command. Deliberately takes NO token (row 20):
-     * the confirmation submit is not a bot-protected route on either host, and
-     * sending a spent token there would fail a check nothing asked for.
+     * 003 EARS-3 — confirm the registration code; the one command on both
+     * hosts (#2455). Deliberately takes NO token (row 20): the confirmation
+     * submit is not a bot-protected route, and sending a spent token there
+     * would fail a check nothing asked for.
      */
-    confirm: <TReq, TRes>(body: TReq) => postJson<TReq, TRes>(api.confirmPath, body),
+    verify: (body: VerifyRequest) =>
+      postJson<VerifyRequest, VerifyResponse>(auth("verify"), body),
 
     /** 003 EARS-25 — re-issue the registration code. `@BotProtected("verify-resend")`. */
     resendVerification: (body: VerifyResendRequest, captchaToken?: string) =>

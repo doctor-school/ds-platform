@@ -9,8 +9,8 @@ import { parkReturnTarget } from "./return-target-parking";
  * 29-31, #2027 PR 1.4).
  *
  * 014 EARS-6 is the behaviour: the query carries the target through the flow,
- * but NOT through the verification mail, which lands the visitor on a cold
- * `/verify#email=...` with no query at all. So a guard-clean target is parked in
+ * but NOT through the trip to the inbox, from which the visitor may come back
+ * on a cold `/verify?email=...` with no `returnTo`. So a guard-clean target is parked in
  * a short-lived same-origin cookie the moment the visitor enters the auth flow.
  *
  * Row 29 is why this is a rule and not a middleware: the doctor storefront parks

@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useState,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -18,20 +17,14 @@ const VerifyAddressContext = createContext<string | null>(null);
 
 /**
  * The client gate of `VerifyRoute` — where the confirmation surface learns
- * WHICH address it confirms (003 EARS-24, #904).
+ * WHICH address it confirms (003 EARS-24): the `?email=` the registration door's
+ * hop carries, read by the server mount.
  *
- * The same-tab hop from the registration door carries `?email=`, read by the
- * server mount. The `/verify#email=<addr>` deep link carries the address in the
- * URL FRAGMENT, which the browser never sends to the server, so a cold open is
- * seeded here, after mount, and only on a host that serves deep-link entry
- * (`verify.deepLinkEntry`). The query wins when both are present.
- *
- * 003 EARS-40 (#2394) — with neither there is nothing to confirm: the visitor
- * is REPLACED onto the registration door, carrying a same-origin `returnTo`
- * onward. Only the browser can see the fragment, so the decision is taken
- * here, once the fragment has been read. The gate wraps the WHOLE route frame
- * (the shell and its return-context panel included), and renders nothing until
- * an address is known — a bare `/verify` paints no page before it leaves.
+ * 003 EARS-40 (#2394) — with no address there is nothing to confirm: the
+ * visitor is REPLACED onto the registration door, carrying a same-origin
+ * `returnTo` onward. The gate wraps the WHOLE route frame (the shell and its
+ * return-context panel included) and renders nothing without an address — a
+ * bare `/verify` paints no page before it leaves.
  */
 export function VerifyAddressGate({
   config,
@@ -46,28 +39,31 @@ export function VerifyAddressGate({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const deepLinkEntry = config.verify.deepLinkEntry;
   const registerPath = config.routes.register;
-  const [fragmentEmail, setFragmentEmail] = useState<string | undefined>();
   useEffect(() => {
     if (email) return;
-    const seeded = deepLinkEntry ? fragmentAddress() : undefined;
-    if (seeded) {
-      setFragmentEmail(seeded);
-      return;
-    }
     // `replace`: an address-less `/verify` must not sit behind a back gesture.
     router.replace(withReturnTarget(registerPath, returnTo));
-  }, [email, deepLinkEntry, registerPath, returnTo, router]);
+  }, [email, registerPath, returnTo, router]);
 
-  const address = email ?? fragmentEmail;
-  if (!address) return null;
+  if (!email) return null;
   return (
-    <VerifyAddressContext.Provider value={address}>
+    <VerifyAddressContext.Provider value={email}>
       {children}
     </VerifyAddressContext.Provider>
   );
 }
+
+/** The targets the server mount resolved from the arrival, passed through. */
+type VerifyTargets = {
+  /**
+   * 021 EARS-10 — the эфир intent to complete after sign-up, in this host's
+   * vocabulary, or `null` when the arrival resolved none.
+   */
+  returnTarget?: string | null;
+  /** Rule S3 — what the sideways hops and the cold exit carry onward. */
+  carriedTarget?: string | null;
+};
 
 /**
  * The confirmation step inside the gate's frame: the `VerifyDoor` over the
@@ -78,15 +74,14 @@ export function VerifyStep({
   config,
   landing,
   resolveSignedInLanding,
-  returnTo,
+  returnTarget = null,
+  carriedTarget = null,
   returnContextPlate,
-}: {
+}: VerifyTargets & {
   config: AuthFlowHostConfig;
   landing: string;
   /** #2333 — the mount's signed-in re-decision of `landing`; passed through. */
   resolveSignedInLanding?: () => Promise<string>;
-  /** The RAW arrival `returnTo`; guarded at every consumption point. */
-  returnTo: string | null;
   /** 021 EARS-2 — the mobile plate the server mount resolved; passed through. */
   returnContextPlate?: ReactNode;
 }) {
@@ -98,11 +93,8 @@ export function VerifyStep({
       email={address}
       landing={landing}
       {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
-      // The Academy's 003 verify command takes no target: the carried value is
-      // COMPLETED after sign-in (005 EARS-2 — on a cold open the parked one,
-      // 014 EARS-6) and carried by the sideways hops (rule S3).
-      completionTarget={returnTo}
-      carriedTarget={returnTo}
+      returnTarget={returnTarget}
+      carriedTarget={carriedTarget}
       returnContextPlate={returnContextPlate}
     />
   );
@@ -113,12 +105,17 @@ export function VerifyEntry({
   config,
   email,
   landing,
+  resolveSignedInLanding,
   returnTo,
+  returnTarget = null,
+  carriedTarget = null,
   returnContextPlate,
-}: {
+}: VerifyTargets & {
   config: AuthFlowHostConfig;
   email?: string | undefined;
   landing: string;
+  resolveSignedInLanding?: () => Promise<string>;
+  /** The RAW arrival `returnTo`, for the bare-arrival hop to `/register`. */
   returnTo: string | null;
   returnContextPlate?: ReactNode;
 }) {
@@ -127,16 +124,11 @@ export function VerifyEntry({
       <VerifyStep
         config={config}
         landing={landing}
-        returnTo={returnTo}
+        {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
+        returnTarget={returnTarget}
+        carriedTarget={carriedTarget}
         returnContextPlate={returnContextPlate}
       />
     </VerifyAddressGate>
   );
-}
-
-/** The `#email=<addr>` fragment, or `undefined` when it carries none. */
-function fragmentAddress(): string | undefined {
-  const hash = window.location.hash;
-  if (!hash.startsWith("#")) return undefined;
-  return new URLSearchParams(hash.slice(1)).get("email") || undefined;
 }

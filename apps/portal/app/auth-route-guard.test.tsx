@@ -67,12 +67,14 @@ const closed = [["/verify", verifyMount]] as const;
 
 describe("#675 Academy auth routes, server-side signed-in guard", () => {
   it.each(closed)(
-    "#675: a signed-in visitor on %s is redirected to /account before the surface renders",
+    "#675 (#2455): a signed-in visitor on %s is redirected to the landing the registration door would send them to, before the surface renders",
     async (_path, mount) => {
       incoming.headers = SIGNED_IN;
 
-      await expect(mount()).rejects.toThrow("NEXT_REDIRECT:/account");
-      expect(redirect).toHaveBeenCalledWith("/account");
+      // `/verify` is the registration journey's second step and takes the
+      // registration door's arrival decision: the LD-4 landing, not the cabinet.
+      await expect(mount()).rejects.toThrow("NEXT_REDIRECT:/webinars");
+      expect(redirect).toHaveBeenCalledWith("/webinars");
     },
   );
 

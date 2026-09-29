@@ -195,7 +195,11 @@ const ARRIVALS = [
  * a child that overflows a clipping ancestor leaves the document width intact
  * while still being unreachable.
  */
-async function expectNoHorizontalOverflow(page: Page, width: number) {
+async function expectNoHorizontalOverflow(
+  page: Page,
+  width: number,
+  root: string,
+) {
   const measured = await page.evaluate(() => ({
     scrollWidth: document.scrollingElement?.scrollWidth ?? 0,
     innerWidth: window.innerWidth,
@@ -205,11 +209,11 @@ async function expectNoHorizontalOverflow(page: Page, width: number) {
     `document scrollWidth (${measured.scrollWidth}) exceeds the viewport (${measured.innerWidth})`,
   ).toBeLessThanOrEqual(measured.innerWidth);
 
-  const box = await page.getByTestId("registration-screen").boundingBox();
-  expect(box, "registration-screen has a box").not.toBeNull();
+  const box = await page.getByTestId(root).boundingBox();
+  expect(box, `${root} has a box`).not.toBeNull();
   expect(
     Math.round(box!.x + box!.width),
-    "registration-screen reaches past the viewport's right edge",
+    `${root} reaches past the viewport's right edge`,
   ).toBeLessThanOrEqual(width);
 }
 
@@ -273,7 +277,13 @@ for (const viewport of VIEWPORTS) {
             await state.drive(page);
 
             // (b) nothing is pushed off the side at either width.
-            await expectNoHorizontalOverflow(page, viewport.width);
+            // The letter-sent state is this host's own `/verify` route (003
+            // EARS-24, #2455), whose root is the confirmation card.
+            await expectNoHorizontalOverflow(
+              page,
+              viewport.width,
+              state.primary === "verify" ? "verify-card" : "registration-screen",
+            );
 
             // (c) the state's own control is visible and operable.
             if (state.primary === "submit") {

@@ -53,13 +53,13 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
  * door's own branches are pinned in the package against `DOCTOR_FIXTURE`; this
  * suite pins the other half — that the SHIPPED config still states what the
  * doctor storefront's sign-up surface was accepted with, so a silent drop
- * (a tier, the inline confirmation copy, the submit-first form) fails here
+ * (a tier, the confirmation copy, the submit-first form) fails here
  * rather than on the stand.
  */
 describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
-  it("EARS-1: confirmation has no route of its own — this host confirms INLINE", () => {
-    expect(DOCTOR_AUTH_FLOW.routes).not.toHaveProperty("verify");
-    expect(DOCTOR_AUTH_FLOW.verify.deepLinkEntry).toBe(false);
+  it("003 EARS-24 (#2455): confirmation is the /verify route on the one 003 command, as on the Academy", () => {
+    expect(DOCTOR_AUTH_FLOW.routes.verify).toBe("/verify");
+    expect(DOCTOR_AUTH_FLOW.api).not.toHaveProperty("confirmPath");
     expect(resolveAuthFlowCopy(DOCTOR_AUTH_FLOW).verify.title).toBe(
       "Проверьте почту",
     );

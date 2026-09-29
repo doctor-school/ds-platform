@@ -126,3 +126,59 @@ export async function registerDoctorThroughPlatform(
   }
   return { email };
 }
+
+/**
+ * 044 EARS-35 — one walk-in through the registrar's desk entry panel on the
+ * roster screen (the production desk route; origin `desk`, paper consent).
+ * The phone is typed as given, so two entries can carry one phone in two
+ * spellings (EARS-29/30 — the «возможный дубль» pair). Returns the desk
+ * route's answer status (`accepted` / `existing`).
+ */
+export async function addDeskParticipant(
+  page: Page,
+  person: {
+    surname: string;
+    firstName: string;
+    patronymic: string;
+    email: string;
+    phone: string;
+  },
+): Promise<"accepted" | "existing"> {
+  await page.getByTestId("desk-entry-open").click();
+  const panel = page.getByTestId("desk-entry-panel");
+  await panel.getByTestId("desk-surname").fill(person.surname);
+  await panel.getByTestId("desk-firstName").fill(person.firstName);
+  await panel.getByTestId("desk-patronymic").fill(person.patronymic);
+  await panel.getByTestId("desk-email").fill(person.email);
+  await panel.getByTestId("desk-contactPhone").fill(person.phone);
+  await page.getByTestId("desk-specialtyId").click();
+  await page.getByRole("listbox").getByRole("option").first().click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await panel.getByTestId("desk-workplace").fill("ГКБ №1");
+  await page.getByTestId("desk-city").click();
+  await page
+    .getByRole("combobox", { name: "Поиск населённого пункта", exact: true })
+    .fill("Химки");
+  await page
+    .getByRole("listbox")
+    .getByRole("option", { name: /^Химки/ })
+    .first()
+    .click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  const consent = panel.getByTestId("desk-paperConsent");
+  await consent.locator("xpath=ancestor::label[1]").click();
+  await expect(consent).toBeChecked();
+  const answered = page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" &&
+      /\/v1\/admin\/events\/[^/]+\/registrations$/.test(
+        new URL(res.url()).pathname,
+      ),
+  );
+  await panel.getByTestId("desk-entry-submit").click();
+  const res = await answered;
+  expect(res.status(), "desk entry answered").toBeLessThan(300);
+  const { status } = (await res.json()) as { status: "accepted" | "existing" };
+  if (status === "accepted") await expect(panel).toHaveCount(0);
+  return status;
+}

@@ -33,22 +33,15 @@ const row: CongressRosterRow = {
   attendance: [],
 };
 
-const mailLabel = (status: "sent" | "failed") =>
-  status === "sent" ? "Отправлено" : "Не отправлено";
-
 describe("044 EARS-21 roster projection", () => {
-  it("EARS-25/34: the columns are №, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма, присутствие", () => {
+  it("EARS-37: the columns are №, ФИО, специальность, город, телефон, дата регистрации, присутствие", () => {
     expect(CONGRESS_ROSTER_COLUMNS).toEqual([
       "number",
       "fullName",
       "specialtyName",
-      "workplace",
       "city",
-      "region",
       "phone",
-      "email",
       "registeredAt",
-      "confirmationMailStatus",
       "attendance",
     ]);
   });
@@ -60,39 +53,34 @@ describe("044 EARS-21 roster projection", () => {
     expect(congressRosterRowNumber({ page: 2, pageSize: 1 }, 0)).toBe(2);
   });
 
-  it("EARS-21: a full row renders every cell, the registration instant in МСК", () => {
-    const cells = congressRosterCells(row, mailLabel);
+  it("EARS-37: a full row renders exactly the visible cells, the registration instant in МСК", () => {
+    const cells = congressRosterCells(row);
+    expect(Object.keys(cells)).toEqual([
+      "fullName",
+      "specialtyName",
+      "city",
+      "phone",
+      "registeredAt",
+    ]);
     expect(cells.fullName).toBe("Иванова Мария Петровна");
     expect(cells.specialtyName).toBe("Кардиология");
     expect(cells.phone).toBe("+7 (900) 111-22-33");
     expect(cells.registeredAt).toContain("09:00");
     expect(cells.registeredAt).not.toContain("06:00");
-    expect(cells.confirmationMailStatus).toBe("Отправлено");
   });
 
   it("EARS-16: an answer-less row renders empty cells, never a placeholder", () => {
-    const cells = congressRosterCells(
-      {
-        ...row,
-        specialtyName: null,
-        workplace: null,
-        city: null,
-        region: null,
-        phone: null,
-        email: null,
-        confirmationMailStatus: null,
-      },
-      mailLabel,
-    );
-    for (const key of [
-      "specialtyName",
-      "workplace",
-      "city",
-      "region",
-      "phone",
-      "email",
-      "confirmationMailStatus",
-    ] as const) {
+    const cells = congressRosterCells({
+      ...row,
+      specialtyName: null,
+      workplace: null,
+      city: null,
+      region: null,
+      phone: null,
+      email: null,
+      confirmationMailStatus: null,
+    });
+    for (const key of ["specialtyName", "city", "phone"] as const) {
       expect(cells[key]).toBe("");
     }
     expect(cells.fullName).toBe("Иванова Мария Петровна");

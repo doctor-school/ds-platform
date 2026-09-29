@@ -107,6 +107,11 @@ export function DeskRegistrationForm({
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [existingEmail, setExistingEmail] = useState<string | null>(null);
+  // 044 EARS-35/36 — the desk answer names the existing registration, so
+  // «Открыть запись» opens its participant card, not a search for the email.
+  const [existingRegistrationId, setExistingRegistrationId] = useState<
+    string | null
+  >(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [specialtiesFailed, setSpecialtiesFailed] = useState(false);
   const { mutate, mutation } = useCustomMutation();
@@ -187,7 +192,10 @@ export function DeskRegistrationForm({
             return;
           }
           if (answer.data.status === "existing") {
-            if (current()) setExistingEmail(body.email);
+            if (current()) {
+              setExistingRegistrationId(answer.data.registrationId);
+              setExistingEmail(body.email);
+            }
             return;
           }
           // A registration was written: the roster names it even when the
@@ -294,7 +302,7 @@ export function DeskRegistrationForm({
                 })}{" "}
                 <DsLink asChild variant="inline">
                   <Link
-                    href={`/events/${encodeURIComponent(eventId)}/roster?q=${encodeURIComponent(existingEmail)}`}
+                    href={`/events/${encodeURIComponent(eventId)}/roster?registration=${encodeURIComponent(existingRegistrationId ?? "")}`}
                     data-testid="desk-entry-open-existing"
                     onClick={() => changeOpen(false)}
                   >

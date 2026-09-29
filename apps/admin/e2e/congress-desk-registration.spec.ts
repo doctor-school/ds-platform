@@ -327,15 +327,16 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
     await expect(
       row.locator("[data-testid='roster-cell-fullName']"),
     ).toHaveText("Сидорова Мария Петровна");
-    await expect(row.locator("[data-testid='roster-cell-email']")).toHaveText(
-      email,
+    // EARS-37: the email left the table for the participant card (EARS-36).
+    await expect(row.locator("[data-testid='roster-cell-phone']")).toHaveText(
+      "+7 (999) 123-45-67",
     );
     await expect(
       row.locator("[data-testid='roster-cell-registeredAt']"),
     ).toContainText(todayMsk());
   });
 
-  test("044 EARS-35: the same email again names the existing registration and links to its row", async () => {
+  test("044 EARS-35/36: the same email again names the existing registration and «Открыть запись» opens its participant card", async () => {
     test.skip(!eventId, "depends on the entry made by the first test");
     await desk.goto(`/events/${eventId}/roster`);
     await expect(desk.getByTestId("roster-total")).toHaveText("Найдено: 1");
@@ -378,13 +379,15 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
 
     await existing.getByTestId("desk-entry-open-existing").click();
     await expect(panel).toHaveCount(0);
-    await expect(
-      desk.getByRole("searchbox", { name: "Поиск участника" }),
-    ).toHaveValue(email);
-    await expect(desk.getByTestId("roster-total")).toHaveText("Найдено: 1");
-    await expect(
-      tableRows(desk).locator("[data-testid='roster-cell-email']"),
-    ).toHaveText(email);
+    // The desk answer names the registration: the link lands on its card.
+    await desk.waitForURL(
+      new RegExp(`/events/${eventId}/roster\\?registration=[0-9a-f-]{36}$`),
+    );
+    const card = desk.getByTestId("participant-card-panel");
+    await expect(card.getByTestId("participant-card-email")).toHaveText(email);
+    await expect(card.getByTestId("participant-card-origin")).toHaveText(
+      "Стойка регистрации",
+    );
   });
 
   test("044 EARS-35: without the paper-consent tick the entry is refused and no row is written", async () => {

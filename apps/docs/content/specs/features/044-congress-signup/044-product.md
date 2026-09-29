@@ -128,7 +128,7 @@ The admin roster reuses the owner-approved admin Stage-A baseline: spec 012 EARS
 
 The **confirmation email** is approved (owner Stage-A, 2026-09-21, #2287 issuecomment-5756369423): it is a copy in the shape of the platform's existing notice emails (`apps/api/src/mailer/notice-emails.ts`), its exact text recorded in `044-requirements-en.md` EARS-13 (amended 2026-09-24, #2369: one copy for every participant, no account paragraph, no sign-in action).
 
-Every roster column is sortable and filterable — owner, verbatim: «Сортировка и фильтрация должна быть по всем полям вообще».
+Every roster column is sortable and filterable — owner, verbatim: «Сортировка и фильтрация должна быть по всем полям вообще». EARS-37 narrows the sort: it orders only the visible columns and attendance per congress day, while workplace, region, email and mail status — moved into the participant card — stay filterable but not sortable.
 
 The intake **form's look on `orthobio.ru`** is owned by the sibling repository's own Issue, `doctor-school/orthobio-site#78` — that repo's design process, not this PRD, settles it.
 

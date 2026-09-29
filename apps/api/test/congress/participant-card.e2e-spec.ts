@@ -409,6 +409,31 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(day2).toEqual({ day: DAY_2, present: null, history: [] });
     });
 
+    it("044 EARS-36.4: a registrar without a display name shows in the history as their email, not as the raw IdP sub", async () => {
+      await pool.query(
+        "UPDATE users SET display_name = NULL WHERE zitadel_sub = $1",
+        [admin.sub],
+      );
+      const { rows } = await pool.query<{ email: string }>(
+        "SELECT email FROM users WHERE zitadel_sub = $1",
+        [admin.sub],
+      );
+      await mark(admin.headers, twin, DAY_2, true);
+
+      const body = CongressParticipantCardSchema.parse(
+        (await card(registrarA.headers, slugA, twin)).json(),
+      );
+      const day2 = body.attendance.find((d) => d.day === DAY_2)!;
+      expect(day2.history).toEqual([
+        {
+          present: true,
+          at: expect.any(String),
+          actor: rows[0]!.email,
+          source: "admin-ui",
+        },
+      ]);
+    });
+
     it("044 EARS-36.5: pre-migration rows read back as origin site (answers present) and platform (no answers, profile fallback)", async () => {
       const site = CongressParticipantCardSchema.parse(
         (await card(admin.headers, slugA, legacySite)).json(),

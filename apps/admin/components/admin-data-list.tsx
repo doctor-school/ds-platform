@@ -35,7 +35,8 @@ import {
  *   • filters apply INSTANTLY — the text field debounces inside `FilterBar`
  *     (≈400ms) and every facet fires on change; there is no submit control;
  *   • the applied set renders as removable chips with «Сбросить всё»;
- *   • the whole ROW opens the record where the caller passes `rowHref`, so such a
+ *   • the whole ROW opens the record where the caller passes `rowHref` (or an
+ *     in-page record through `onRowClick`), so such a
  *     list needs no «Действия» column; a caller with a per-row COMMAND SET and no
  *     record route (the 014 recordings history) renders that set as a column
  *     instead — both shapes are supported, the row link is not a requirement;
@@ -86,6 +87,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   query,
   onQueryChange,
   rowHref,
+  onRowClick,
   emptyTitle,
   emptyDescription,
   testId,
@@ -145,6 +147,11 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
    * than by an unfinished surface. `DataTable` then renders plain rows.
    */
   rowHref?: (row: Row) => string;
+  /**
+   * The row opens an in-page record instead of a route — the 044 roster opens
+   * its participant card in the side panel over the list (EARS-36).
+   */
+  onRowClick?: (row: Row) => void;
   emptyTitle: string;
   emptyDescription: string;
   testId: string;
@@ -314,6 +321,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
           rows={rows}
           getRowKey={getRowKey}
           rowHref={rowHref}
+          onRowClick={onRowClick}
           isLoading={isLoading}
           error={
             error ? (

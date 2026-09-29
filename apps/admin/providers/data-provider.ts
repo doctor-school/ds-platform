@@ -919,6 +919,12 @@ export const congressRosterUrl = {
    */
   deskRegistration: (eventIdOrSlug: string) =>
     `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/registrations`,
+  /**
+   * 044 EARS-36 — one registration's participant card (`GET`), inside the
+   * roster's event: the server refuses (404) a registration of another event.
+   */
+  card: (eventIdOrSlug: string, registrationId: string) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/registrations/${encodeURIComponent(registrationId)}`,
 };
 
 /** 044 EARS-34 — one registration's presence mark for one congress day. */

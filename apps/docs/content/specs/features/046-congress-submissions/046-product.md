@@ -1,6 +1,6 @@
 ---
-title: "Feature 046 — Congress abstracts and talk submissions (PRD)"
-description: "Product requirements for abstract and talk submissions from the congress site orthobio.ru: submission together with the participant registration (044), several submissions per participant, edit and add-another until the deadline through a link in the confirmation email, a submission window held in settings, and a read-only submissions registry for the congress partner. Source of the 046 EARS triplet (ADR-0014)."
+title: "Feature 046 — Congress submissions: oral talks, posters and abstracts (PRD)"
+description: "Product requirements for congress submissions in a «Мои заявки на Конгресс» section of the Doctor.School account: a registered participant sends oral talks, posters and abstracts, many and at any time while intake is open; drafts save themselves; statuses and committee comments show in the section and arrive by email; the program committee reviews in the admin; the congress partner reads; dates and limits are admin settings. Source of the 046 EARS triplet (ADR-0014)."
 slug: two-site-ia-046-congress-submissions-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -10,75 +10,102 @@ lang: en
 
 > **EN (this)** · **RU:** [`046-product-ru.md`](./046-product-ru.md)
 
-> Epic: [«Two storefronts — information architecture» product brief](../../product/two-site-ia/brief.md) · Parent feature: [044 — Congress sign-up](../044-congress-signup/044-product.md). Feature Issue: #2379; this draft spec's Issue: #2385.
+> Epic: [«Two storefronts — information architecture» product brief](../../product/two-site-ia/brief.md) · Builds on: [044 — Congress sign-up](../044-congress-signup/044-product.md). Feature Issue: #2379; this spec's Issue: #2385.
 
 ## Summary
 
-The product owner described congress participation as follows (verbatim, RU): «Существует три варианта участия в Конгрессе, для каждого из них предусмотрена своя форма: Участник … Каждая другая форма подразумевает заполнение формы участника. То есть быть участником обязательно в любом случае, остальные два варианта опциональны. Подать тезисы для обсуждения на Конгрессе. Выступить с докладом на Конгрессе. Подаётся тема, название доклада, список соавторов доклада.» — being a participant is mandatory; submitting an abstract and applying for a talk are optional additions to it.
+The organisers of the 2027 congress want three kinds of materials from participants — **oral talks**, **posters** and **abstracts** — and wrote down how intake must work: one account, many submissions; the kind belongs to the submission, not to the person; a person may send several talks, a talk and a poster, abstracts and a talk about the same work, or all three, at different times, while intake is open. Registering for the congress stays separate.
 
-Feature 046 builds on the 044 sign-up and re-does none of it. The participant registration stays mandatory and runs exactly the 044 path: a passwordless Doctor.School account, the personal-data consent, the event registration row, the confirmation email. 046 attaches **submissions** of two kinds to that registration — an **abstract** and a **talk application**. One participant may hold several, each linked to their registration for this congress.
+**Where it happens.** Registration stays on the congress site orthobio.ru (feature 044). Materials are sent in the participant's Doctor.School account, in a section «Мои заявки на Конгресс» on doctor.school. A participant reaches it from the link in the 044 confirmation letter or from a button on the congress site, and signs in with the emailed code — the same login as today, nothing new to learn. An account without a congress registration sees one line — «Сначала зарегистрируйтесь участником Конгресса» — and a link to the registration form.
 
-An **abstract** is text later published on the congress pages: «Тезисы вводятся текстом, тут всё чётко структурируем, так как это контент для отображения на страницах Конгресса.» It is therefore neither a free field nor a file but a structured record: title, topic (section), authors, length-limited text sections and keywords. A **talk application** is shorter: topic, talk title and the co-author list with a flag for who presents.
+**How a submission is made.** The participant picks a kind and fills its form. Everything saves itself while typing; they can leave and come back. Only when they press «Отправить» does the platform check that the form is complete, that intake for that kind is open, that the limit is not reached and that the person may send this kind. From that moment the submission goes to the program committee.
 
-Submissions are accepted only until a deadline, and the deadline is a setting, not a code constant: «Да, но тоже вынести эту дату в настройки, чтобы можно было легко менять.» Today the deadline is 1 December 2026; the congress site already states «с 1 октября по 1 декабря 2026». Until the deadline the author can correct a submission and add another through the link in the confirmation email — no password, no platform sign-in. After the deadline submitting and editing are closed, while the participant registration stays open until the 044 window closes (22 April 2027, 00:00 Moscow time).
+**Kinds.**
 
-The third party is the **congress partner**: «Партнёр Конгресса - видит исключительно заявки на тезисы и доклады. Не видит полный список участников … Им доступна выборка по спикерам и по тезисам. Аналогично с поиском и фильтрацией.» The partner contacts authors about their talks, so contacts are visible: «Контакты он тоже видит, так как они выходят с людьми на связь по поводу докладов. Read-only.» The partner role is bound to one congress by the same event-role binding mechanism the 044 amendment introduces (#2380). The role is granted manually in Zitadel for now; the platform-admin screen for granting such roles is a separate task, #2378.
+- **Oral talk** — title, authors (each: surname, first name, patronymic if any, workplace; one marked as the presenter), educational goal, summary. The talk is given in person.
+- **Poster** — title, authors, goal, content. Posters are for participants younger than 40 on the first day of the congress (23 April 2027); the platform asks for the birth date once and remembers it. Poster files and their layout rules come later from the organisers.
+- **Abstracts** — title, authors and five sections «Актуальность», «Цель», «Материалы и методы», «Результаты и обсуждение», «Выводы», together no more than 5000 characters including spaces, with one counter for the whole text. Plain text only — tables, formulas, figures and photos cannot be inserted. When sending, the author gives consent to publication in РИНЦ and confirms that there are no incorrect borrowings and no trade names. Abstracts are not a talk application; on a talk or poster the author can press «Подать тезисы по этой работе» to start abstracts with the same title and authors.
 
-046 is `user-facing`: the submissions registry and the submission card are `apps/admin` screens, and the submission form and the edit page are congress-site screens (repo `doctor-school/orthobio-site`, Issue orthobio-site#99) talking through the same same-origin `/api` proxy as the 044 form.
+**Statuses.** Черновик → Отправлена → На рассмотрении → Принята / Отклонена / На доработке. The author sees the status in the section and receives a letter when the submission is sent, accepted, rejected or returned for revision; for a rejection and a revision request the committee writes a comment, which the author reads in the letter and in the section. Before a deadline the platform reminds authors who still have unsent drafts.
+
+**Who reviews.** The **program committee** of the congress works in the Doctor.School admin: a list of every sent submission with filters by kind, status, date and author, and a card that opens at the side with the full text and the author's contacts, where the committee sets the status and writes the comment. Everyone in the committee sees all submissions; there is no distribution between reviewers. The **congress partner** sees the same list and cards read-only, to contact authors about their talks. Both roles are given per congress by the Doctor.School team.
+
+**Dates and limits are settings.** Intake opens «по готовности» — when the organisers are ready — and closes on 15 January 2027 for oral talks and on 29 January 2027 for posters and abstracts, each inclusive, until 23:59 Moscow time. Abstracts are limited to 3 per author, talks and posters are unlimited. All of this, and the counting rule below, is changed by a Doctor.School administrator on a settings screen in the admin, without a platform release.
 
 ## User stories
 
-- **US-1** — As an author-participant, I want to submit an abstract together with my congress registration, so that it reaches the programme and the congress pages.
-- **US-2** — As a speaker-participant, I want to submit a talk application together with my registration — topic, title and co-authors, marking who presents — so that the organisers consider my talk.
-- **US-3** — As an author, I want to submit several submissions — several abstracts, several talks or both — without registering again.
-- **US-4** — As an author, I want to correct a submission or add another until the deadline through the link in my email, without setting a password or signing in to the platform.
-- **US-5** — As an author, I want an email listing my submissions with a link to edit them, so that I know everything was accepted and can come back later.
-- **US-6** — As a congress partner, I want to see my congress's submissions registry with the authors' contacts and to search and filter it by speaker and by abstract, so that I can contact people about their talks.
-- **US-7** — As an organiser, I want the congress partner to see only the submissions — not the participant list, not other events, not other admin sections — and to change nothing.
-- **US-8** — As a platform administrator, I want to change the submission opening and closing dates in settings, without a platform release and without editing the congress site.
-- **US-9** — As a participant, I want to see outside the submission window that submitting is not yet open or already closed, while still being able to register as a participant.
+- **US-1** — As a registered participant, I want to open «Мои заявки на Конгресс» from the congress letter or site and sign in with the emailed code, so that I can send materials without a new password or a new registration.
+- **US-2** — As a person with a Doctor.School account but no congress registration, I want to be told plainly to register first and where, so that I do not fill a form that cannot be sent.
+- **US-3** — As a speaker, I want to send an oral talk with its authors, goal and summary, so that the program committee considers it.
+- **US-4** — As a young researcher, I want to send a poster, and to be told clearly if I am not eligible by age, so that I do not waste effort.
+- **US-5** — As an author, I want to send abstracts in the required structure with a live character counter, and to give the publication consent and statements the organisers require, so that my abstracts can be published.
+- **US-6** — As a participant, I want to send several submissions of any kinds at different times — including abstracts about a talk I already sent — and to know the limit before I hit it.
+- **US-7** — As an author, I want my drafts saved automatically and to be told when a kind is not open yet or already closed, so that I never lose text and never guess why sending is not possible.
+- **US-8** — As an author, I want to see each submission's status and the committee's comment in the section and to receive them by email.
+- **US-9** — As an author, I want to take back a sent submission before review to correct it, and to revise and resend a submission returned for revision.
+- **US-10** — As a program committee member, I want to see every sent submission of the congress, filter them, read each in full and set a status with a comment, so that the committee decides in one place.
+- **US-11** — As a Doctor.School administrator, I want to set the opening dates, deadlines, limits and the counting rule per kind in the admin, so that the organisers' changes need no release.
+- **US-12** — As a congress partner, I want to read the submissions and the authors' contacts, so that I can contact people about their talks — without changing anything.
+- **US-13** — As an author with unsent drafts, I want a reminder before the deadline.
+- **US-14** — As a participant who just registered, I want the confirmation letter to show me where to send materials.
 
 ## Scenarios
 
-1. **Participant + abstract.** The participant fills the participant block, presses «Подать тезисы», fills title, topic, authors, text sections (each with a character counter) and keywords, and submits. The site shows the confirmation; the email carries the registration, the list of submissions and the edit link.
-2. **Participant + talk.** Same, pressing «Подать заявку на доклад»: topic, title, co-authors (full name, workplace, email, presents flag).
-3. **Two abstracts.** The participant adds two abstract blocks in one submission; the email lists both.
-4. **Edit via link.** The author opens the link from the email, sees their submissions, corrects the «Результаты» section of an abstract, adds one more talk and saves. An email with the updated list follows.
-5. **Submissions closed.** After the deadline the participant form is still available, but there are no abstract and talk sections — a closed-intake message stands in their place. The email link opens the submissions read-only with the same message. A request carrying submissions that still reaches the API is refused whole and creates nothing.
-6. **Partner searches.** The congress partner signs in to the admin, sees the single «Заявки» item, filters by kind «Тезисы», searches by a speaker's surname and by a word from an abstract title, opens the card and sees the full text, the authors and the submitter's contacts.
-7. **Partner hits the boundary.** The partner types the participant-roster URL or another section — the server refuses and the admin has nothing to render.
+1. **From the letter to the first talk.** The participant opens the confirmation letter, presses «Подать материалы в кабинете», signs in with the code, and sees the section. They create an oral talk — they are already listed as the first author with their workplace — type the title and the summary, close the tab, return the next day, finish and send. They accept the personal-data consent once. The status becomes «Отправлена» and a letter arrives.
+2. **No registration.** A doctor with a Doctor.School account opens the section. It says «Сначала зарегистрируйтесь участником Конгресса» and links to orthobio.ru/registration.
+3. **Poster and age.** The participant chooses a poster; the platform asks for the birth date. Born on 23 April 1987 or earlier, the poster is refused with the explanation that posters are for participants younger than 40 on 23 April 2027; talks and abstracts stay available.
+4. **Abstracts about a talk.** On the sent talk the participant presses «Подать тезисы по этой работе», gets abstracts with the same title and authors, writes the five sections watching the counter, gives the РИНЦ consent and the two statements, and sends.
+5. **The fourth abstract.** With three abstracts sent, the fourth is refused with «Можно отправить не больше 3 тезисов». If one of the three was rejected, the fourth goes through.
+6. **Closed kind.** On 16 January an oral talk draft can still be read, but says «Приём устных докладов закрыт 15 января 2027 — отправить заявку нельзя».
+7. **Committee returns a talk.** A committee member filters by «Устный доклад», opens a talk at the side, chooses «На доработке», writes the comment and saves. The author receives a letter with the comment, corrects the talk in the section before the deadline and sends it again.
+8. **Partner reads.** The congress partner opens the list, finds a poster by an author's surname, reads it and the author's phone; there is nothing to press.
+9. **Deadline moved.** The organisers extend abstracts to 31 January. The administrator changes the last day in the settings; the section shows the new date at once, and authors with drafts receive a fresh reminder.
 
 ## Product acceptance criteria
 
-- No submission exists without a participant registration: every submission belongs to a participant's registration for this congress.
-- One participant may hold several submissions of both kinds; re-sending the same form creates no duplicate submissions.
-- Abstracts are stored as structured text with length limits that the form shows and the server enforces identically.
-- The submission deadline changes in settings without a platform release and without editing the site: the site reads the dates from the platform.
-- Until the deadline the author edits and adds submissions through the email link; after it the link changes nothing.
-- The congress partner sees only their congress's submissions, with contacts, with search and filters by speaker and by abstract, and can change nothing; the participant roster is closed to them.
-- The form response does not reveal whether the email already had an account (as in 044).
+- A submission can be made only from an account registered for the congress; an account without registration sees only the prompt to register.
+- Registering, signing in and the congress site forms work exactly as today; the only change to the 044 letter is the link to the section.
+- One account can hold any number of oral talks and posters and up to 3 live abstracts; rejected ones and drafts do not count.
+- Drafts never get lost and are never refused for being incomplete; completeness, dates, the limit and age are checked only on «Отправить», and a refusal says what to fix.
+- Abstracts cannot exceed 5000 characters including spaces; the counter on screen and the platform count the same way.
+- Posters are refused for participants aged 40 or more on 23 April 2027, with a plain explanation; other kinds stay open.
+- The author sees the status and the committee comment in the section and in letters for «Отправлена», «Принята», «Отклонена», «На доработке»; «На рассмотрении» sends no letter.
+- A rejection or a revision request cannot be saved without a comment.
+- The committee sees every sent submission of its congress and nothing else in the admin; the partner sees the same read-only, without the committee comments and without age; neither sees drafts.
+- Dates, limits and the counting rule change on the admin settings screen and take effect without a release.
+
+## Decisions the organisers still confirm
+
+These are built as stated; each is a setting or a small rule that can be flipped when the organisers answer. **Подтверждается организаторами.**
+
+1. A rejected abstract does not count toward the 3-abstract limit.
+2. An author can take back a sent submission, while it is not yet «На рассмотрении» and before its deadline; it returns to draft and stops counting.
+3. A submission «На доработке» is corrected and resent by its author until the kind's deadline.
+4. No letter is sent when a submission goes «На рассмотрении».
+5. The limit counts only the author who sends; counting the first author of every submission as well is a setting, off by default (TZ §8).
 
 ## Approved mockup
 
-No approved mockup yet. The site form, the edit page, the submissions registry and the admin card pass the Stage-A design gate (`build-ui-from-design-system`); the registry reuses the owner-approved admin `AdminDataList` composition, as the 044 roster does. The proposed UX shape is Open question 3.
+No approved mockup yet. There is no canvas for the section, the three forms, the admin list, card and settings, or the letters. Each goes through the Stage-A design gate before its slice is built (`046-design.md`, «Delivery slices»); the admin list and side card reuse the owner-approved admin list and the side panel already used for the 044 participant card.
+
+## Dependencies
+
+- **Congress site — `doctor-school/orthobio-site#99`** (re-scoped by the tech lead): a «Подать материалы» section with «Зарегистрироваться» and «Войти в кабинет», and a «Подать материалы в кабинете» button on the «Заявка принята» card. It links to the platform section and can ship once the section is live.
+- **Two consent texts** from the organisers: the personal-data consent for submissions (the submission content, co-authors' data, the birth date for posters, and passing submissions to the program committee and the congress partner) and the consent to publication of abstracts in РИНЦ. The platform publishes them on its documents pages and records every acceptance with the text version.
+- **Role grants** for committee members and the partner are made by the Doctor.School team on request until the grants screen (#2378) exists.
 
 ## Out of scope
 
-- Review, selection, accepted/rejected states and publishing abstracts on the congress pages — the next feature; 046 only collects submissions.
-- Withdrawal (deletion) of a submission by its author: the team deletes on request manually, as with 044 registrations.
-- File uploads (poster, slides, abstract PDF).
-- The screen for granting event-bound roles — #2378; until then roles are granted manually in Zitadel.
-- Exporting the submissions registry to a file.
-- Submissions through the signed-in doctor's platform registration path (044 EARS-16): 046 works only from the congress-site form.
+- Poster files and their layout rules.
+- Publishing abstracts on the congress pages, scoring, assigning submissions to reviewers.
+- A congress questionnaire on the platform or any change to login and registration.
+- Co-author accounts or confirmations; a limit per organisation (the organisers set none).
+- Exporting the list to a file; resending a failed letter; statistics of past congresses (the organisers have no data yet).
 
 ## Open questions
 
-Three decisions for the product owner. Nothing else in the spec depends on them: each answer slots into a place already reserved for it without restructuring the documents.
-
-1. **The final abstract and talk field set.** The owner is updating it from past congress archives. The spec currently records a base set, to be confirmed by the owner: for an abstract — title, topic (a section from a closed list), authors, the sections «Актуальность», «Материалы и методы», «Результаты», «Выводы», each length-limited, and keywords; for a talk — topic, title and co-authors. Owner decision: confirm this set or supply the replacement — the fields, the topic (section) list and the character limits.
-2. **Whether «постерный доклад» stays a third submission kind.** The site lists three kinds today (oral talk, abstract publication, poster), the owner's wording names two. Owner decision: the poster is a separate submission kind (then it is added as a third kind with its own field set), a variant of the abstract (a «poster requested» flag), or not accepted.
-3. **Confirmation of the UX shape.** Proposal from research: one site form — the participant block first, then expandable «Подать тезисы» and «Подать заявку на доклад» sections, each repeatable; a co-author repeater (full name, workplace, email, presents flag); abstract sections with character counters; edit and add-another until the deadline through the confirmation-email link, which is not a platform sign-in. Owner decision: accept this shape or name another; email and screen copy is approved at Stage A.
+1. **Revision after the deadline.** The committee will most likely review after 29 January, and by the default above a submission returned «На доработке» after its deadline can no longer be resent. Owner decision: keep it, or give revisions their own deadline (a setting).
 
 ## Prior system — migration source
 
-No platform counterpart: neither the platform nor the 044 form accepts submissions. The field-set source is the past congress archives the product owner is working through (Open question 1). No data migration.
+The 2026 congress collected materials «через личный кабинет на платформе регистрации» — an external registration platform with no source in our repositories, so there is no reviewable predecessor and nothing to migrate.

@@ -87,6 +87,12 @@ This amendment overrides three decisions running in production: it narrows the r
 - Card and columns: «Должна быть возможность открыть карточку участника - сейчас только табличный вид, нельзя посмотреть детали. Ввиду этого, кстати, можно сократить кол-во столбцов таблицы»; the set «№, ФИО, специальность, город, телефон, дата регистрации, присутствие» — «Ок».
 - Search: «Поиск. Он уже сейчас есть - тут просто проверить, что он чётко работает.» — no handler changes; a live check V-30 is added.
 
+## Production amendment — cabinet link in the confirmation email (2026-09-29, #2385)
+
+This amendment overrides, for one link only, the «no action button or link» of the 2026-09-24 amendment above, and with it verification rows V-1/V-2 («no sign-in action») and the email line of the `@EARS-13` happy-path scenario in `044-scenarios.feature`; the running-production copy is retained above. The product owner decided on 2026-09-29, when choosing a platform cabinet for congress submissions (feature 046), that the confirmation email leads the participant to that cabinet with the link «Подать материалы в кабинете» — a reversal of the 2026-09-24 decision for this link only; the account paragraph stays removed.
+
+The confirmation email of the site form and of the desk (EARS-35) carries the link «Подать материалы в кабинете» to `/account/congress` on the doctor storefront as its only action; subject, first line and footer are unchanged. The handler is owned by feature 046 as `046-requirements-en.md` EARS-15, so that the link ships in the same release as the page it opens (`046-design.md`, «044 letter link — placement of the amendment»); 044 adds no EARS for it.
+
 ## Outcomes
 
 - A congress sign-up submitted on the congress site becomes, in one transaction, a Doctor.School account and a registration on the existing `registrations` table — the participant never registers a second time.

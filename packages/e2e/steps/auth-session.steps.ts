@@ -6,6 +6,8 @@ import { Given, Then, When } from "./support/fixtures.js";
 
 const SEED = "verified-cardiologist";
 const SESSION_COOKIE = "__Host-ds_session";
+const GENERIC_PASSWORD_ERROR =
+  "Не удалось войти. Проверьте данные и попробуйте снова.";
 const loginResponses = new WeakMap<Page, Response>();
 const refusedLoginResponses = new WeakMap<Page, Response>();
 
@@ -139,9 +141,9 @@ Then(
     await expect(page).toHaveURL(
       new RegExp(`${world.host.loginPath}(?:\\?|$)`),
     );
-    await expect(page.getByRole("alert")).toContainText(
-      "Не удалось войти. Проверьте данные и попробуйте снова.",
-    );
+    await expect(
+      page.getByRole("alert").filter({ hasText: GENERIC_PASSWORD_ERROR }),
+    ).toBeVisible();
   },
 );
 

@@ -304,12 +304,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(out.statusCode).toBe(200);
     });
 
-    it("#2456: the account endpoints serve an event-registrar session too", async () => {
-      const email = uniqueEmail("registrar-only");
-      await accountWithRoles(email, ["event-registrar"]);
-      const cookie = await login(email);
+    it("#2456: a registrar who is also a site user (doctor_guest + event-registrar) reads its own account; a registrar-only principal stays refused (044 EARS-19)", async () => {
+      const both = uniqueEmail("registrar-user");
+      await accountWithRoles(both, ["doctor_guest", "event-registrar"]);
+      expect(
+        (await getProfile(cookieHeader(await login(both)))).statusCode,
+      ).toBe(200);
+      expect(await mirrorRole(both)).toBe("event-registrar");
 
-      expect((await getProfile(cookieHeader(cookie))).statusCode).toBe(200);
+      const only = uniqueEmail("registrar-only");
+      await accountWithRoles(only, ["event-registrar"]);
+      expect(
+        (await getProfile(cookieHeader(await login(only)))).statusCode,
+      ).toBe(403);
     });
 
     it("#2456: a signed-in staff session marks the mirror row staff, and losing the staff role returns it to the visitor role", async () => {

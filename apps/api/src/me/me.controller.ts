@@ -41,15 +41,13 @@ import { MeService, UnknownSubjectError } from "./me.service.js";
  * (EARS-16). The read is per-caller ⇒ never shared-cacheable.
  */
 /**
- * #2456 — every project role a signed-in user can hold. The account surface
- * belongs to the user, not to the visitor role: a staff member (platform
- * administrator, event registrar) is a user with a profile too.
+ * #2456 — the account surface belongs to the signed-in user, not to the visitor
+ * role: a platform administrator is a user with a profile too, even on a grant
+ * that lacks `doctor_guest`. A principal holding ONLY `event-registrar` stays
+ * refused here — 044 EARS-19 confines that role to the roster and the admin
+ * session endpoints; a registrar who is also a site user holds `doctor_guest`.
  */
-const ACCOUNT_ROLES: Role[] = [
-  "doctor_guest",
-  "platform_admin",
-  "event-registrar",
-];
+const ACCOUNT_ROLES: Role[] = ["doctor_guest", "platform_admin"];
 
 @Controller({ path: "me", version: "1" })
 export class MeController {

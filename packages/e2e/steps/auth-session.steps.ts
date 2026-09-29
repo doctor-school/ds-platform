@@ -43,13 +43,17 @@ Then(
   "the doctor's own profile is readable through the BFF",
   async ({ page, world }) => {
     const doctor = resolveGoldenDoctor(world.signedInAs ?? "");
-    const profileResponse = await page.request.get(
-      `${world.hostBaseUrl}/v1/me/profile`,
-    );
-    expect(profileResponse.status(), "authenticated self-profile read").toBe(
-      200,
-    );
-    expect(await profileResponse.json()).toMatchObject({ email: doctor.email });
+    // The BFF binds the session to the browser fingerprint. A Playwright API
+    // request does not carry that fingerprint even when its cookie jar is shared.
+    const profileResponse = await page.evaluate(async () => {
+      const response = await fetch("/v1/me/profile", {
+        headers: { accept: "application/json" },
+        credentials: "include",
+      });
+      return { status: response.status, body: await response.json() };
+    });
+    expect(profileResponse.status, "authenticated self-profile read").toBe(200);
+    expect(profileResponse.body).toMatchObject({ email: doctor.email });
     await page.goto(`${world.hostBaseUrl}/account`);
     await expect(page.getByTestId("profile-email")).toHaveText(doctor.email);
   },

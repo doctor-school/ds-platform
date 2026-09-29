@@ -257,6 +257,16 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
     expect(door.carriedTarget).toBe("/account");
   });
 
+  it("006 EARS-6: a doctor-room arrival lands back in the room and carries onward, naming no эфир to complete", async () => {
+    const door = await doorOf(DOCTOR_FIXTURE, {
+      returnTo: "/events/cardio-live/room",
+    });
+
+    expect(door.landing).toBe("/events/cardio-live/room");
+    expect(door.returnTarget ?? null).toBe(null);
+    expect(door.carriedTarget).toBe("/events/cardio-live/room");
+  });
+
   it("#2258 S3: a cross-origin target is dropped at the hop, never propagated", async () => {
     const door = await doorOf(DOCTOR_FIXTURE, {
       returnTo: "https://evil.example/account",

@@ -9,6 +9,7 @@ import { parseAccountReturnTarget } from "../return-target";
 import {
   RETURN_CONTEXT_PARAM,
   resolveCarriedReturnTarget,
+  resolveRoomReturnTarget,
   withReturnContext,
   type ReturnContextHost,
 } from "../return-context-href";
@@ -23,6 +24,7 @@ import { serverApiBase } from "./session";
 export {
   RETURN_CONTEXT_PARAM,
   resolveCarriedReturnTarget,
+  resolveRoomReturnTarget,
   withReturnContext,
   type ReturnContextHost,
 };
@@ -165,6 +167,18 @@ export function isAccountReturnTarget(
 }
 
 /**
+ * 006 EARS-6 - does this arrival name THIS host room? Like the account family, a
+ * room return is a landing in its own right: it resolves no эфир card, and the
+ * room gate re-runs when the doctor arrives back on it.
+ */
+export function isRoomReturnTarget(
+  host: ReturnContextHost,
+  returnTo: string | undefined,
+): boolean {
+  return resolveRoomReturnTarget(host, returnTo) !== null;
+}
+
+/**
  * 021 #1945 / #1987 - the host LANDING for an arrival return target (the path
  * the host NAVIGATES to once the door is passed), or `null`.
  *
@@ -173,7 +187,7 @@ export function isAccountReturnTarget(
  * path from the guard-validated slug through `routes.eventPathTemplate` (the
  * doctor host serves the same эфир at `/events/<slug>`; on the Academy the
  * template is the canonical shape itself). The account family is answered first
- * against `routes.account`. A target that is already a host path (the doctor
+ * against `routes.account`, then this host room against `routes.room`. A target that is already a host path (the doctor
  * feed `/events?...&resume=<slug>`) passes through verbatim.
  */
 export function resolveReturnLandingPath(
@@ -182,6 +196,10 @@ export function resolveReturnLandingPath(
 ): string | null {
   const account = parseAccountReturnTarget(returnTo, host.routes.account);
   if (account) return account;
+
+  // 006 EARS-6 - this host room, answered before the эфир vocabulary.
+  const room = resolveRoomReturnTarget(host, returnTo);
+  if (room) return room;
 
   const intent = parseReturnTarget(returnTo);
   if (!intent) return null;

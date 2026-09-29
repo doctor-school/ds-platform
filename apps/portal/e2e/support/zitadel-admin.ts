@@ -114,3 +114,58 @@ export async function deleteUser(userId: string): Promise<void> {
     /* best-effort; the reconciliation sweep tolerates leftovers */
   });
 }
+
+/**
+ * #2232 fixture — narrow an account's project grant to `platform_admin` ALONE
+ * (`PUT /management/v1/users/{sub}/grants/{grantId}`), so a session minted for it
+ * holds no `doctor_guest` role: the shape of a real administrator session on a
+ * storefront. A grant that still carried `doctor_guest` would pass the api's role
+ * check and prove nothing. The user and grant read projections lag the register
+ * write, so both are polled. Needs IDP_PROJECT_ID.
+ */
+export async function narrowGrantToPlatformAdmin(email: string): Promise<void> {
+  const projectId = process.env.IDP_PROJECT_ID;
+  if (!projectId) {
+    throw new Error("narrowGrantToPlatformAdmin needs IDP_PROJECT_ID");
+  }
+  type Grant = { id: string; projectId?: string };
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1000));
+    const users = await fetch(`${base()}/management/v1/users/_search`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        queries: [{ emailQuery: { emailAddress: email } }],
+      }),
+    });
+    if (!users.ok) continue;
+    const sub = ((await users.json()) as { result?: { id: string }[] })
+      .result?.[0]?.id;
+    if (!sub) continue;
+    const search = await fetch(`${base()}/management/v1/users/grants/_search`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ queries: [{ userIdQuery: { userId: sub } }] }),
+    });
+    if (!search.ok) continue;
+    const grant = (
+      ((await search.json()) as { result?: Grant[] }).result ?? []
+    ).find((g) => g.projectId === projectId);
+    if (!grant) continue;
+    const update = await fetch(
+      `${base()}/management/v1/users/${sub}/grants/${grant.id}`,
+      {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify({ roleKeys: ["platform_admin"] }),
+      },
+    );
+    if (!update.ok) {
+      throw new Error(
+        `narrowGrantToPlatformAdmin failed: HTTP ${update.status} ${await update.text()}`,
+      );
+    }
+    return;
+  }
+  throw new Error(`no project grant surfaced on the IdP for ${email}`);
+}

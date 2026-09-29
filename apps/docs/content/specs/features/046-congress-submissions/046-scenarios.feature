@@ -10,7 +10,6 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     And posters and abstracts are open until 2027-01-29 inclusive, Moscow time
     And abstracts are limited to 3 per submitting account, oral talks and posters are unlimited, posters have an age limit of 40
     And the first-author counting rule is off
-    And revisions are accepted until 2027-03-01 inclusive, Moscow time
 
   @EARS-1 @EARS-2 @EARS-3
   Scenario: Platform administrator sets the intake without a release
@@ -22,8 +21,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the oral closing instant is stored as 2027-01-16T00:00+03:00
     And the next author request sees oral talks open without a release
     And the change is recorded by the 010 change audit with the administrator as the actor
-    When the administrator enters "Доработки принимаются до" 2027-03-01 and saves
-    Then the event's revision closing instant is stored as 2027-03-02T00:00+03:00
+    And the form has no revision date, because each submission's revision deadline comes from its own revision request
     When the administrator enters a last day before the opening day and saves
     Then the save is refused and nothing changes
     When the administrator enters an opening day for posters without a last day and saves
@@ -83,23 +81,37 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the draft shows "Дату открытия приёма объявят позже" and no active send action
 
   @EARS-12 @EARS-13
-  Scenario: Withdraw a sent talk and delete a draft
+  Scenario: Take a sent talk back for correction and delete a draft
     Given the participant has a sent oral talk that the committee has not taken into review
-    When the participant withdraws it before 2027-01-16T00:00+03:00
+    When the participant chooses «Забрать на исправление» before 2027-01-16T00:00+03:00
     Then its status becomes "Черновик" and it no longer appears in the committee registry
     When the participant deletes that draft after confirming
     Then it is gone from the section
-    And a request to delete or withdraw a submission in review is refused
-    When the committee takes a sent talk into review while the participant withdraws it
-    Then the talk stays "На рассмотрении" and the withdraw is refused
+    And a request to delete a submission in review is refused
+    When the committee takes a sent talk into review while the participant takes it back
+    Then the talk stays "На рассмотрении" and the take-back is refused
+
+  @EARS-12 @EARS-17
+  Scenario: Withdraw after review started keeps the place in the limit
+    Given the participant has an abstract "На рассмотрении" and two abstracts "Отправлена"
+    When the participant chooses «Отозвать» on the abstract in review and confirms
+    Then its status becomes "Отозвана", it opens read-only with no action, and no letter is sent
+    And the committee registry lists it as "Отозвана" with no status control
+    And a resend or an autosave of it is refused
+    When the participant sends a fourth abstract
+    Then the send is refused with "Можно отправить не больше 3 тезисов"
+    Given the current time is 2027-01-30T00:00+03:00 and the participant has an oral talk "Отправлена"
+    Then the talk offers «Отозвать» and not «Забрать на исправление»
+    And an accepted or a rejected submission offers neither
 
   @EARS-17
-  Scenario: Abstract limit counts only live submissions of the submitting account
+  Scenario: Abstract limit counts every sent abstract of the submitting account
     Given the participant has three abstracts in the statuses "Отправлена", "На рассмотрении" and "Отклонена"
     When the participant sends a fourth abstract
-    Then it becomes "Отправлена"
-    When the participant sends a fifth abstract
     Then the send is refused with "Можно отправить не больше 3 тезисов" and the draft stays a draft
+    When the participant takes the "Отправлена" abstract back to a draft while abstract intake is open
+    And the participant sends the fourth abstract again
+    Then it becomes "Отправлена"
 
   @EARS-18 @EARS-19 @EARS-20
   Scenario: Poster eligibility by birth date
@@ -151,13 +163,15 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
 
   @EARS-28 @EARS-29
   Scenario: Committee asks for a revision
-    Given the committee member opens a sent oral talk in the side panel
+    Given the current time is 2027-02-16T11:00+03:00, a Tuesday
+    And the committee member opens a sent oral talk in the side panel
     Then the card shows the content, the authors, the submitter's email and phone and the status history
     When the member chooses "На доработке" without a comment
     Then the change is refused asking for a comment
     When the member enters "Уточните образовательную цель" and saves
     Then the status becomes "needs_revision" and the change is recorded with the member as the actor
-    And the author receives a letter carrying "Уточните образовательную цель" and the last revision day 1 March 2027
+    And the submission's revision deadline is stored as 2027-02-20T00:00+03:00 and the card shows it
+    And the author receives a letter carrying "Уточните образовательную цель" and the deadline "до 19 февраля 2027, 23:59 МСК"
     When the member later sets "На рассмотрении" on another submission
     Then no letter is sent
 
@@ -167,24 +181,37 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     When the member saves a status change
     Then the change is refused by live revalidation with the program-committee error and nothing changes
 
-  @EARS-11 @EARS-30
+  @EARS-11 @EARS-30 @EARS-34
   Scenario: Author revises and resends before the deadline
-    Given the author's oral talk is "На доработке" with the comment "Уточните образовательную цель"
+    Given the author's oral talk was returned "На доработке" on 2027-02-16 with the comment "Уточните образовательную цель"
+    And the current time is 2027-02-17T13:00+03:00
     When the author opens the section
     Then the talk shows the status "На доработке" and the comment "Уточните образовательную цель"
-    And the section shows "Исправить и отправить можно до 1 марта 2027 включительно"
-    When the author edits the goal and sends on 2027-02-20, after the oral intake closed
+    And the section shows "Исправить и отправить до 19 февраля 2027, 23:59 МСК" and "осталось 2 дня 11 часов"
+    When the author edits the goal and sends on 2027-02-18, after the oral intake closed
     Then the status becomes "Отправлена" and a new receipt letter is sent
     And the resend is not counted against the kind's limit a second time
-    Given another talk of the author is "На доработке" after 2027-03-02T00:00+03:00
-    Then that talk is read-only with the explanation that revisions were accepted until 1 March 2027 inclusive
 
-  @EARS-1 @EARS-30
-  Scenario: Without a revision deadline the kind's deadline applies
-    Given the event's "Доработки принимаются до" is empty
-    And the author's poster is "На доработке"
-    When the author sends it again after 2027-01-30T00:00+03:00
-    Then the send is refused because revisions were accepted until 29 January 2027 inclusive and nothing changes
+  @EARS-34
+  Scenario: The revision term skips the weekend
+    Given the committee sets "На доработке" on a poster at 2027-02-19T17:00+03:00, a Friday
+    Then the poster's revision deadline is stored as 2027-02-25T00:00+03:00, the end of Wednesday 24 February
+    And no intake setting changes that deadline
+
+  @EARS-28 @EARS-30 @EARS-35
+  Scenario: An expired revision waits for the committee, and the platform administrator extends another
+    Given the author's oral talk is "На доработке" with the revision deadline 2027-02-20T00:00+03:00
+    And the current time is 2027-02-20T00:00+03:00
+    When the author opens the talk
+    Then it is read-only with "Срок доработки истёк — ждите решения программного комитета"
+    And an autosave or a send request reaching the API is refused and the status stays "На доработке"
+    When a committee member sets "Отклонена" with a comment
+    Then the status becomes "rejected" and the author receives the rejection letter
+    Given the author's poster is "На доработке" with an expired revision deadline
+    When a platform administrator sets «Продлить срок доработки до» 2027-03-03 in its card
+    Then the poster's revision deadline is stored as 2027-03-04T00:00+03:00 and the change is recorded with the administrator as the actor
+    And the author can edit and send the poster again
+    And the same extension from a committee member, or with a day not after the current deadline, is refused
 
   @EARS-32
   Scenario: Congress partner reads without acting

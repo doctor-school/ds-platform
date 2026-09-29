@@ -51,7 +51,6 @@ erDiagram
         uuid event_id PK
         text registration_url
         boolean first_author_counts
-        timestamptz revision_closes_at
     }
     congress_submission_kind_settings {
         uuid event_id PK
@@ -77,6 +76,7 @@ erDiagram
         text committee_comment
         timestamptz submitted_at
         timestamptz status_changed_at
+        timestamptz revision_due_at
         text last_letter_kind
         text last_letter_status
         timestamptz last_letter_at
@@ -86,9 +86,9 @@ erDiagram
     }
 ```
 
-- **`congress_submissions`** — `kind` ∈ `oral | poster | abstract`; `status` ∈ `draft | submitted | in_review | accepted | rejected | needs_revision`; `authors` is the ordered array `{surname, firstName, patronymic?, workplace, presenting}`; `body` is the per-kind text object validated by the discriminated Zod union (`oral: {goal, summary}`, `poster: {goal, content}`, `abstract: {relevance, aim, methods, results, conclusions}`); `statements` holds the two abstract statements with their instant. FKs are `ON DELETE restrict` like every retained child (#1278); a soft-deleted registration hides its submissions from every read and blocks sending. Audited by the 010 `audit_row_change()` trigger — the status history of EARS-28 is that ledger.
+- **`congress_submissions`** — `kind` ∈ `oral | poster | abstract`; `status` ∈ `draft | submitted | in_review | accepted | rejected | needs_revision | withdrawn`; `authors` is the ordered array `{surname, firstName, patronymic?, workplace, presenting}`; `body` is the per-kind text object validated by the discriminated Zod union (`oral: {goal, summary}`, `poster: {goal, content}`, `abstract: {relevance, aim, methods, results, conclusions}`); `statements` holds the two abstract statements with their instant. FKs are `ON DELETE restrict` like every retained child (#1278); a soft-deleted registration hides its submissions from every read and blocks sending. Audited by the 010 `audit_row_change()` trigger — the status history of EARS-28 is that ledger.
 - **Settings in platform data, not environment.** 044 kept its window in API configuration because it was one fixed constant pair per congress (044 EARS-28). Here the organisers ask for limits configurable in the admin (TZ §3) and the opening date is «по готовности»; an environment value would make every change a deploy, and three kinds × four values per event is data, not configuration. Two tables keep event-level and kind-level values apart; both are audited by the 010 trigger, which answers «who moved the deadline». Storefront ownership (ADR-0016 §8): submissions `doctor`, settings `admin-only`.
-- **Revision deadline — `congress_submission_settings.revision_closes_at`** (nullable, per event). The committee reviews after the intake closes (the last kind closes on 29 January 2027), so a revision bound to the kind's closing instant could never be resent; the organisers need a separate «Доработки принимаются до». The effective end of a submission's revision window is `coalesce(revision_closes_at, kind.closes_at)` — one function in `packages/schemas/src/congress/` used by the send check, the autosave refusal, the section and the needs-revision letter, so all four name the same day. Per event, not per kind: the committee works one review round for the whole congress. Empty falls back to the kind's closing instant, so an event that never sets it behaves as if revisions shared the intake deadline.
+- **Revision deadline — `congress_submissions.revision_due_at`** (nullable, per submission; customer decision 2026-09-29). The committee reviews after the intake closes, so a revision cannot be bound to the kind's closing instant; each submission returned for revision gets its own term of three business days instead. The status route to `needs_revision` sets `revision_due_at = revisionDueAt(changedAt)` in the same transaction: the Moscow calendar day of the change, then three Monday-to-Friday days after it (the day itself not counted, no holiday calendar), stored as 00:00 Moscow of the day after the third — the same exclusive-boundary shape as the kind's `closes_at` (EARS-3). `revisionDueAt` is one function in `packages/schemas/src/congress/` used by the status route, the send check, the autosave refusal, the section's deadline and countdown and the needs-revision letter, so all name the same instant. The term is a product constant, not a setting; holidays are covered by the platform administrator's extension (EARS-35), which overwrites `revision_due_at` under the 010 audit. The column is created with the table in S2 (the section reads it) and written from S5 (the committee's status route and the extension).
 - **`users.birth_date`** (`date`, nullable). Asked once and reused across events, so it belongs to the account and not to a registration or a submission. Written only by the holder through `PUT /v1/me/birth-date`; retention and erasure follow the `users` row (ADR-0009 §2.6). The 044 consent text lives on the congress site, outside this repository, so its coverage of the birth date cannot be verified here; the purpose `congress-submission-personal-data` (EARS-16) covers it explicitly.
 - **`event_role_grants`** — `EVENT_SCOPED_ROLES` widens from `["event-registrar"]` to add `congress-program-committee` and `congress-partner`, with the CHECK widened in the same reviewed migration. The partial unique index keeps «one registrar grant per user»; the two new roles are unique per (user, role, event) and may span several events.
 
@@ -119,23 +119,31 @@ Defaults; counts are Unicode code points after trimming surrounding whitespace, 
 stateDiagram-v2
     [*] --> draft: create (author)
     draft --> submitted: send (author, EARS-9)
-    submitted --> draft: withdraw before closing (author, EARS-12, conditional on submitted)
+    submitted --> draft: take back while the kind is open (author, EARS-12, conditional on submitted)
+    submitted --> withdrawn: withdraw after the kind closed (author, EARS-12)
+    in_review --> withdrawn: withdraw (author, EARS-12)
+    needs_revision --> withdrawn: withdraw (author, EARS-12)
     draft --> [*]: delete (author, EARS-13)
     submitted --> in_review: committee
     submitted --> accepted: committee
     submitted --> rejected: committee + comment
-    submitted --> needs_revision: committee + comment
+    submitted --> needs_revision: committee + comment, sets revision_due_at (EARS-34)
     in_review --> accepted: committee
     in_review --> rejected: committee + comment
-    in_review --> needs_revision: committee + comment
-    needs_revision --> submitted: resend before the revision deadline (author, EARS-30)
+    in_review --> needs_revision: committee + comment, sets revision_due_at (EARS-34)
+    needs_revision --> submitted: resend before revision_due_at (author, EARS-30)
+    needs_revision --> accepted: committee
+    needs_revision --> rejected: committee + comment
     accepted --> in_review: committee correction
     rejected --> in_review: committee correction
+    withdrawn --> [*]
 ```
 
-Letters: `submitted` → receipt; `accepted`, `rejected`, `needs_revision` → status letter; `in_review` → none. A committee correction back to `in_review` sends nothing; the next decision sends its letter.
+`withdrawn` «Отозвана» is final: no author action, no committee transition, still counted toward the kind's limit and still listed in the registry. The committee and the platform administrator are the actors of every committee transition. After `revision_due_at` the author's resend is refused and the submission waits in `needs_revision` for `accepted` or `rejected`, or for the platform administrator's extension (EARS-35), which moves `revision_due_at` without a status change.
 
-**Withdraw races the committee.** The withdraw is `UPDATE … SET status = 'draft' WHERE id = … AND status = 'submitted' RETURNING id`, the same conditional-update shape as the deadline sweep: when a committee change to `in_review` (or a decision) commits first, the withdraw matches no row and is refused as «already in review», so it can never overwrite the committee's status. The committee's status change is likewise conditional on the status it read.
+Letters: `submitted` → receipt; `accepted`, `rejected`, `needs_revision` → status letter; `in_review`, `draft` (take back) and `withdrawn` → none. A committee correction back to `in_review` sends nothing; the next decision sends its letter.
+
+**Withdraw races the committee.** One endpoint, `POST …/:id/withdraw {expectedStatus}`, decides the target from the row: `submitted` while the kind is open → `draft`; `submitted` after the kind's closing instant, `in_review` or `needs_revision` → `withdrawn`. The write is `UPDATE … SET status = <target> WHERE id = … AND status = <expectedStatus> RETURNING id`, the same conditional-update shape as the deadline sweep: when a committee change commits first, the withdraw matches no row and is refused, so it can never overwrite the committee's status and the author is shown the new status before choosing again. The committee's status change is likewise conditional on the status it read, so it never overwrites a withdrawal.
 
 ## Send cascade
 
@@ -147,7 +155,7 @@ sequenceDiagram
     participant M as mailer
     C->>A: POST /v1/me/congress-submissions/:id/send {consents?, statements?}
     A->>D: BEGIN; SELECT registration (active) ; pg_advisory_xact_lock(user, event, kind)
-    A->>A: complete-schema(kind) · kind open (needs_revision: revision window open) · age rule · consents / statements
+    A->>A: complete-schema(kind) · kind open (needs_revision: before revision_due_at) · age rule · consents / statements
     A->>D: count counted statuses except this submission (own; + first author if rule on) vs submit_limit
     alt any check fails
         A-->>C: 422 {problems:[{code, field?, params}]} — nothing written
@@ -161,7 +169,7 @@ sequenceDiagram
     end
 ```
 
-The advisory lock serialises concurrent sends of one account, event and kind so two tabs cannot both take the third abstract slot. The count excludes the submission being sent, so a `needs_revision` resend — already counted — is never refused by its own slot; a resend checks the revision window instead of the kind window (`revision-closed` refuses it). The problem codes (`kind-not-open`, `kind-closed`, `revision-closed`, `limit-reached`, `first-author-limit-reached`, `age-limit`, `consent-required`, `statement-required`, `field-invalid`) map to RU copy in the package dictionary. Endpoints of the author (`access: authenticated`, ownership checked on every row): `GET /v1/me/congress-submissions?event=`, `POST /v1/me/congress-submissions` (`{eventId, kind, derivedFromId?}`), `PATCH /v1/me/congress-submissions/:id` (autosave, draft schema), `DELETE …/:id`, `POST …/:id/send`, `POST …/:id/withdraw`, `PUT /v1/me/birth-date`.
+The advisory lock serialises concurrent sends of one account, event and kind so two tabs cannot both take the third abstract slot. The count covers every status except `draft` — `rejected` and `withdrawn` included (customer decision 2026-09-29) — and excludes the submission being sent, so a `needs_revision` resend — already counted — is never refused by its own slot; a resend checks its own `revision_due_at` instead of the kind window (`revision-closed` refuses it). The problem codes (`kind-not-open`, `kind-closed`, `revision-closed`, `withdraw-not-allowed`, `limit-reached`, `first-author-limit-reached`, `age-limit`, `consent-required`, `statement-required`, `field-invalid`) map to RU copy in the package dictionary. Endpoints of the author (`access: authenticated`, ownership checked on every row): `GET /v1/me/congress-submissions?event=`, `POST /v1/me/congress-submissions` (`{eventId, kind, derivedFromId?}`), `PATCH /v1/me/congress-submissions/:id` (autosave, draft schema), `DELETE …/:id`, `POST …/:id/send`, `POST …/:id/withdraw`, `PUT /v1/me/birth-date`.
 
 **Autosave.** The hook debounces 1.5 s after the last keystroke and flushes on blur and on page hide; the PATCH carries the full draft object (last write wins for one author). The saved state reads «Сохранено» / «Сохраняем…» / «Не удалось сохранить — повторим» with automatic retry.
 
@@ -183,7 +191,7 @@ All letters render through `email-layout.ts` in the shape of `notice-emails.ts`,
 - **Receipt** — «Doctor.School — заявка получена»: «Ваша заявка «{тема}» ({вид}) получена и передана программному комитету {мероприятие}. Статус можно посмотреть в кабинете.» [Мои заявки на Конгресс]
 - **Accepted** — «Doctor.School — заявка принята»: «Программный комитет принял вашу заявку «{тема}» ({вид}).»
 - **Rejected** — «Doctor.School — заявка отклонена»: «Программный комитет отклонил заявку «{тема}» ({вид}). Комментарий комитета: {комментарий}»
-- **Needs revision** — «Doctor.School — заявку нужно доработать»: «Программный комитет просит доработать заявку «{тема}» ({вид}): {комментарий}. Исправить и отправить заявку можно в кабинете до {последний день доработок} включительно.» — the last day of the revision window (`revision_closes_at`, or the kind's last day while it is empty)
+- **Needs revision** — «Doctor.School — заявку нужно доработать»: «Программный комитет просит доработать заявку «{тема}» ({вид}): {комментарий}. Исправить и отправить заявку можно в кабинете до {дата}, 23:59 МСК.» — that submission's `revision_due_at` (EARS-34), the last day being the day before the stored instant
 - **Reminder** — «Doctor.School — приём {вида} заканчивается {дата}»: «У вас есть неотправленные черновики: {список}. Отправить их можно до {дата} включительно.»
 
 **Link origin — `MAILER_DOCTOR_BASE_URL`.** Every link these letters carry, and the 044 confirmation-letter link (EARS-15), is an absolute URL `{MAILER_DOCTOR_BASE_URL}/account/congress`. The API has only one mailer origin today, `MAILER_PORTAL_BASE_URL`, and it is the Academy (`https://academy.doctor.school`), so the doctor storefront needs its own setting, named in the same style. It is a **required** key — `MAILER_DOCTOR_BASE_URL: z.url()` in `apps/api/src/config/env.schema.ts`, with no default, like `DATABASE_URL` — so an api without it fails at boot instead of mailing a link to the wrong site. Values:
@@ -208,6 +216,7 @@ The production value is a change to the production `api.env` that S2 (#2433) dep
 | `/v1/me/congress-submissions*`, `/v1/me/birth-date`     | any authenticated account                                          | row ownership + active registration  | —            |
 | `GET /v1/admin/events/:id/congress-submissions[/:sid]`  | `platform_admin`, `congress-program-committee`, `congress-partner` | `EventGrantPolicy.assertEventAccess` | —            |
 | `POST …/congress-submissions/:sid/status`               | `platform_admin`, `congress-program-committee`                     | same                                 | `live`       |
+| `POST …/congress-submissions/:sid/revision-deadline`    | `platform_admin`                                                   | —                                    | `live`       |
 | `GET/PUT /v1/admin/events/:id/congress-intake-settings` | `platform_admin`                                                   | —                                    | `live` (PUT) |
 
 The partner projection drops `committee_comment` and the age server-side, not in the view.
@@ -217,8 +226,8 @@ The partner projection drops `committee_comment` and the age server-side, not in
 ## Admin projections
 
 - **Registry** — `apps/admin/lib/congress-submissions.ts` on the `AdminDataList` composition in the pattern of `apps/admin/lib/congress-roster.ts` (server query state: page, search, filters, sort). Columns №, вид, тема, подающий, статус, отправлена, изменена. The committee and the partner see the same registry; drafts are excluded in the query, never in the view.
-- **Card** — the `Sheet` primitive (#2396), as for the 044 participant card (#2383): content, authors, submitter email and phone from the 044 answers (or the account email where the registration has no answers), status history from `audit_ledger`, source work link, last letter outcome, poster age. The status control is a select plus a `Textarea` for the comment, required for `rejected` and `needs_revision`.
-- **Settings** — a form per event: registration address, first-author rule, «Доработки принимаются до» (the last revision day; empty = the kinds' own last days), and per kind the opening date, the last day, the limit and the age limit, dates entered as Moscow calendar days (EARS-3).
+- **Card** — the `Sheet` primitive (#2396), as for the 044 participant card (#2383): content, authors, submitter email and phone from the 044 answers (or the account email where the registration has no answers), status history from `audit_ledger`, source work link, last letter outcome, poster age. The status control is a select plus a `Textarea` for the comment, required for `rejected` and `needs_revision`; a `withdrawn` card shows «Отозвана» and no control. A `needs_revision` card shows the revision deadline («до {дата}, 23:59 МСК», or «срок истёк»), and for the platform administrator only a date field «Продлить срок доработки до» that calls the revision-deadline endpoint (EARS-35).
+- **Settings** — a form per event: registration address, first-author rule, and per kind the opening date, the last day, the limit and the age limit, dates entered as Moscow calendar days (EARS-3).
 
 ## 044 letter link — placement of the amendment
 
@@ -232,15 +241,15 @@ The 2026 congress took materials «через личный кабинет на �
 
 Each slice ships its UI with its backend (F-22). No canvas exists for any of these surfaces, so each UI slice opens with a Stage-A gate per `build-ui-from-design-system`.
 
-| #   | Slice                | UI deliverable                                                                                       | Backend                                                                                                                   | Stage A                                                                                                                                     | EARS            |
-| --- | -------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| S1  | Intake settings      | admin settings screen per event                                                                      | settings tables, admin endpoints, 010 audit                                                                               | A-1 settings form                                                                                                                           | EARS-1…EARS-3   |
-| S2  | Cabinet + oral talks | `/account/congress`: empty state, list, oral form, autosave, send, withdraw, delete; 044 letter link | submissions table, author endpoints, status basics, limit, submission consent, receipt letter, `@ds/congress-submissions` | A-2 section + oral form; L-1 receipt and 044 link line                                                                                      | EARS-4…EARS-17  |
-| S3  | Posters              | poster form, birth-date step, age refusal                                                            | `users.birth_date`, birth-date endpoint, age rule                                                                         | A-3 poster form and age message                                                                                                             | EARS-18…EARS-20 |
-| S4  | Abstracts            | abstract form, total counter, consent and statements, «Подать тезисы по этой работе»                 | length function, publication consent, statements, first-author rule                                                       | A-4 abstract form                                                                                                                           | EARS-21…EARS-25 |
-| S5  | Program committee    | admin registry, card in `Sheet`, status control, role nav; status and comment in the section         | role, grants, admin endpoints, transitions, status letters, revision loop, ADR-0001 A1 amendment                          | A-5 registry, card and status control (registry and card shell reuse the approved `AdminDataList` baseline and `Sheet`); L-2 status letters | EARS-26…EARS-31 |
-| S6  | Congress partner     | read-only card and registry for the partner                                                          | role, binding, projection without comment and age                                                                         | none new — a role projection of A-5                                                                                                         | EARS-32         |
-| S7  | Deadline reminder    | the reminder letter                                                                                  | scheduled sweep                                                                                                           | L-3 reminder letter                                                                                                                         | EARS-33         |
+| #   | Slice                | UI deliverable                                                                                                                                                    | Backend                                                                                                                                                                  | Stage A                                                                                                                                                         | EARS                              |
+| --- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| S1  | Intake settings      | admin settings screen per event                                                                                                                                   | settings tables, admin endpoints, 010 audit                                                                                                                              | A-1 settings form                                                                                                                                               | EARS-1…EARS-3                     |
+| S2  | Cabinet + oral talks | `/account/congress`: empty state, list, oral form, autosave, send, take back and withdraw to «Отозвана», revision deadline and countdown, delete; 044 letter link | submissions table incl. `revision_due_at`, author endpoints, status basics, limit over every sent status, submission consent, receipt letter, `@ds/congress-submissions` | A-2 section + oral form; L-1 receipt and 044 link line                                                                                                          | EARS-4…EARS-17                    |
+| S3  | Posters              | poster form, birth-date step, age refusal                                                                                                                         | `users.birth_date`, birth-date endpoint, age rule                                                                                                                        | A-3 poster form and age message                                                                                                                                 | EARS-18…EARS-20                   |
+| S4  | Abstracts            | abstract form, total counter, consent and statements, «Подать тезисы по этой работе»                                                                              | length function, publication consent, statements, first-author rule                                                                                                      | A-4 abstract form                                                                                                                                               | EARS-21…EARS-25                   |
+| S5  | Program committee    | admin registry, card in `Sheet`, status control, role nav; status and comment in the section                                                                      | role, grants, admin endpoints, transitions, status letters, revision loop, per-submission revision deadline and its extension, ADR-0001 A1 amendment                     | A-5 registry, card, status control and deadline extension (registry and card shell reuse the approved `AdminDataList` baseline and `Sheet`); L-2 status letters | EARS-26…EARS-31, EARS-34, EARS-35 |
+| S6  | Congress partner     | read-only card and registry for the partner                                                                                                                       | role, binding, projection without comment and age                                                                                                                        | none new — a role projection of A-5                                                                                                                             | EARS-32                           |
+| S7  | Deadline reminder    | the reminder letter                                                                                                                                               | scheduled sweep                                                                                                                                                          | L-3 reminder letter                                                                                                                                             | EARS-33                           |
 
 Issues (sub-issues of #2379): S1 #2432, S2 #2433, S3 #2434, S4 #2435, S5 #2437, S6 #2438, S7 #2439. Technical dependencies (native blocked-by): S2 after S1 — a kind opens only through S1's settings; S3, S4, S5 and S7 after S2 — they extend S2's table, package and send cascade (S7 sweeps S2's drafts and links to its section); S6 after S5 — it projects S5's registry and card. Anything else is wave order, not dependency.
 

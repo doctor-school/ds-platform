@@ -1,5 +1,5 @@
 {
-  "id": "bf414e93-dd50-4c1a-bfe9-e2b676ed25a2",
+  "id": "5cf7ffa2-0931-4573-86c3-76176bd55f82",
   "prevId": "259ca820-4dd1-49f1-9244-c8e3cbab578e",
   "version": "7",
   "dialect": "postgresql",
@@ -3413,12 +3413,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "revision_closes_at": {
-          "name": "revision_closes_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

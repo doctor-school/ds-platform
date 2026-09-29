@@ -32,7 +32,6 @@ export interface IntakeKindFields {
 export interface IntakeFormFields {
   registrationUrl: string;
   firstAuthorCounts: boolean;
-  revisionLastDay: string;
   kinds: Record<CongressSubmissionKind, IntakeKindFields>;
 }
 
@@ -47,7 +46,7 @@ const text = (value: string | number | null): string =>
 export function intakeFormFields(
   settings: Pick<
     CongressIntakeSettings,
-    "registrationUrl" | "firstAuthorCounts" | "revisionLastDay" | "kinds"
+    "registrationUrl" | "firstAuthorCounts" | "kinds"
   >,
 ): IntakeFormFields {
   const kinds = {} as Record<CongressSubmissionKind, IntakeKindFields>;
@@ -63,7 +62,6 @@ export function intakeFormFields(
   return {
     registrationUrl: text(settings.registrationUrl),
     firstAuthorCounts: settings.firstAuthorCounts,
-    revisionLastDay: text(settings.revisionLastDay),
     kinds,
   };
 }
@@ -101,7 +99,6 @@ export function intakeRequest(
   return {
     registrationUrl: orNull(fields.registrationUrl),
     firstAuthorCounts: fields.firstAuthorCounts,
-    revisionLastDay: orNull(fields.revisionLastDay),
     kinds,
   };
 }
@@ -109,7 +106,6 @@ export function intakeRequest(
 /** A form field a refusal can name, in react-hook-form path notation. */
 export type IntakeFieldPath =
   | "registrationUrl"
-  | "revisionLastDay"
   | `kinds.${CongressSubmissionKind}.${keyof IntakeKindFields}`;
 
 /** Why a field was refused — the key of its RU sentence (`congressIntake.refusals.*`). */
@@ -143,9 +139,6 @@ function refusalOf(issue: unknown): IntakeRefusal | null {
       : undefined;
   if (path.length === 1 && path[0] === "registrationUrl") {
     return { field: "registrationUrl", reason: "registrationUrl" };
-  }
-  if (path.length === 1 && path[0] === "revisionLastDay") {
-    return { field: "revisionLastDay", reason: "day" };
   }
   const [root, kind, name] = path as unknown[];
   if (

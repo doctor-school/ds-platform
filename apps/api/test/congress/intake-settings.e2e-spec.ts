@@ -227,14 +227,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: admin.headers,
       });
       expect(res.statusCode, res.body).toBe(200);
+      // No congress-wide revision deadline on the wire — each submission's
+      // revision term is its own.
+      expect(Object.keys(res.json()).sort()).toEqual([
+        "configured",
+        "eventId",
+        "firstAuthorCounts",
+        "kinds",
+        "registrationUrl",
+      ]);
       const body = CongressIntakeSettingsSchema.parse(res.json());
       expect(body).toEqual({
         eventId: freshEventId,
         configured: false,
         registrationUrl: null,
         firstAuthorCounts: false,
-        revisionLastDay: null,
-        revisionClosesAt: null,
         kinds: {
           oral: {
             kind: "oral",
@@ -281,7 +288,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           {
             registrationUrl: "https://orthobio.ru/registration",
             firstAuthorCounts: true,
-            revisionLastDay: "2027-03-01",
           },
           {
             oral: {
@@ -306,8 +312,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         configured: true,
         registrationUrl: "https://orthobio.ru/registration",
         firstAuthorCounts: true,
-        revisionLastDay: "2027-03-01",
-        revisionClosesAt: "2027-03-01T21:00:00.000Z",
       });
       expect(body.kinds.oral).toEqual({
         kind: "oral",
@@ -320,19 +324,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
 
       const { rows } = await pool.query<{
-        revision: string;
         url: string;
         rule: boolean;
       }>(
-        `SELECT to_char(revision_closes_at AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD HH24:MI') AS revision,
-                registration_url AS url, first_author_counts AS rule
+        `SELECT registration_url AS url, first_author_counts AS rule
            FROM congress_submission_settings WHERE event_id = $1`,
         [eventId],
       );
-      // The last revision day 1 March is stored as 00:00 Moscow of 2 March.
       expect(rows).toEqual([
         {
-          revision: "2027-03-02 00:00",
           url: "https://orthobio.ru/registration",
           rule: true,
         },
@@ -367,14 +367,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         "congress_submission_kind_settings",
         eventId,
       );
+      // The event-level change: the first-author rule is switched off again.
       const res = await put(
         admin.headers,
         eventId,
         settings(
           {
             registrationUrl: "https://orthobio.ru/registration",
-            firstAuthorCounts: true,
-            revisionLastDay: null,
+            firstAuthorCounts: false,
           },
           {
             oral: {
@@ -408,8 +408,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(next.statusCode).toBe(200);
       const body = CongressIntakeSettingsSchema.parse(next.json());
       expect(body.kinds.abstract.submitLimit).toBe(5);
-      expect(body.revisionLastDay).toBeNull();
-      expect(body.revisionClosesAt).toBeNull();
+      expect(body.firstAuthorCounts).toBe(false);
 
       // Every row the first save created is in the ledger, attributed to the
       // acting administrator from the admin UI.

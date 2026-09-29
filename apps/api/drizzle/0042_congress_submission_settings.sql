@@ -20,8 +20,7 @@ CREATE TABLE "congress_submission_kind_settings" (
 CREATE TABLE "congress_submission_settings" (
 	"event_id" uuid PRIMARY KEY NOT NULL,
 	"registration_url" text,
-	"first_author_counts" boolean DEFAULT false NOT NULL,
-	"revision_closes_at" timestamp with time zone
+	"first_author_counts" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "congress_submission_kind_settings" ADD CONSTRAINT "congress_submission_kind_settings_event_id_congress_submission_settings_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."congress_submission_settings"("event_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint

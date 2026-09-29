@@ -369,7 +369,6 @@ export function buildGoldenDataset(
         eventId: golden.events.upcoming.id,
         registrationUrl: "https://orthobio.ru/congress/registration",
         firstAuthorCounts: false,
-        revisionClosesAt: mskDay(35),
       },
     ];
   const congressSubmissionKindSettings: GoldenDataset["congressSubmissionKindSettings"] =

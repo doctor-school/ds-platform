@@ -29,9 +29,6 @@ export type CongressSettingsKind = (typeof CONGRESS_SETTINGS_KINDS)[number];
  * - `registration_url` — the external registration address the section links to
  *   while the account has no registration (EARS-5); nullable until set.
  * - `first_author_counts` — the first-author counting rule (EARS-24), off by default.
- * - `revision_closes_at` — «Доработки принимаются до», stored as 00:00 Moscow of
- *   the day after the last revision day (EARS-3); empty = each kind's own
- *   closing instant (`effectiveRevisionClosesAt` in `@ds/schemas`).
  *
  * Settings live in platform data, not environment (046-design «Settings in
  * platform data»): a change takes effect on the next request without a
@@ -49,7 +46,6 @@ export const congressSubmissionSettings = pgTable(
       .references(() => events.id, { onDelete: "restrict" }),
     registrationUrl: text("registration_url"),
     firstAuthorCounts: boolean("first_author_counts").notNull().default(false),
-    revisionClosesAt: timestamp("revision_closes_at", { withTimezone: true }),
   },
 );
 

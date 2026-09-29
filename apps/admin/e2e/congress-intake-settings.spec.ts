@@ -83,7 +83,6 @@ async function readSettings(page: Page, eventId: string) {
     configured: boolean;
     registrationUrl: string | null;
     firstAuthorCounts: boolean;
-    revisionLastDay: string | null;
     kinds: Record<
       "oral" | "poster" | "abstract",
       {
@@ -121,7 +120,8 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
     await expect(
       page.getByTestId("intake-firstAuthorCounts"),
     ).not.toBeChecked();
-    await expect(page.getByTestId("intake-revisionLastDay")).toHaveValue("");
+    // No congress-wide revision deadline: each submission's revision term is its own.
+    await expect(page.getByText("Доработки принимаются до")).toHaveCount(0);
     for (const kind of ["oral", "poster", "abstract"]) {
       await expect(page.getByTestId(`intake-${kind}-opensOn`)).toHaveValue("");
       await expect(page.getByTestId(`intake-${kind}-lastDay`)).toHaveValue("");
@@ -148,7 +148,6 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
     await page.getByTestId("intake-firstAuthorCounts").focus();
     await page.keyboard.press("Space");
     await expect(page.getByTestId("intake-firstAuthorCounts")).toBeChecked();
-    await page.getByTestId("intake-revisionLastDay").fill("2027-03-10");
     await page.getByTestId("intake-oral-opensOn").fill("2027-02-01");
     await page.getByTestId("intake-oral-lastDay").fill("2027-02-28");
     await page.getByTestId("intake-oral-submitLimit").fill("2");
@@ -172,7 +171,6 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
       configured: true,
       registrationUrl: "https://orthobio.ru/congress/registration",
       firstAuthorCounts: true,
-      revisionLastDay: "2027-03-10",
       kinds: {
         oral: {
           opensOn: "2027-02-01",

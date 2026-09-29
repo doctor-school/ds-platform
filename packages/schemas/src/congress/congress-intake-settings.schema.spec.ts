@@ -6,7 +6,6 @@ import {
   CONGRESS_INTAKE_OPENING_WITHOUT_CLOSING,
   CongressIntakeSettingsRequestSchema,
   type CongressIntakeSettingsRequest,
-  effectiveRevisionClosesAt,
   instantToMskDay,
   isCongressKindIntakeOpen,
   lastDayOfClosingInstant,
@@ -55,22 +54,10 @@ describe("046 congress intake settings — contract and day rules", () => {
     );
   });
 
-  it("046 EARS-1: the revision window ends at the event's revision instant, else at the kind's closing instant", () => {
-    const revision = new Date("2027-03-01T21:00:00.000Z");
-    const kind = new Date("2027-01-29T21:00:00.000Z");
-    expect(effectiveRevisionClosesAt(revision, kind)).toEqual(revision);
-    // Independent of the kind's instant — even when the revision one is earlier.
-    const early = new Date("2027-01-01T21:00:00.000Z");
-    expect(effectiveRevisionClosesAt(early, kind)).toEqual(early);
-    expect(effectiveRevisionClosesAt(null, kind)).toEqual(kind);
-    expect(effectiveRevisionClosesAt(null, null)).toBeNull();
-  });
-
   it("046 EARS-2: the product defaults — abstracts 3, oral and poster unlimited, poster age 40, rule off, no dates", () => {
     expect(CONGRESS_INTAKE_DEFAULTS).toEqual({
       registrationUrl: null,
       firstAuthorCounts: false,
-      revisionLastDay: null,
       kinds: {
         oral: {
           opensOn: null,

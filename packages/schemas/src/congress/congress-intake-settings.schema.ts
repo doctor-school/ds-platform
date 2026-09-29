@@ -12,9 +12,8 @@ import { MSK_UTC_OFFSET } from "../events/events.schema.js";
  * surface (the cabinet section, the send check, the letters) agree on the day:
  *
  * - the opening day `D` is stored as 00:00 Moscow of `D`;
- * - a last day `L` — the kind's last day of acceptance and the event's last day
- *   of revisions alike — is stored as 00:00 Moscow of `L + 1`, so the window is
- *   open through 23:59:59 Moscow time of `L`.
+ * - a kind's last day of acceptance `L` is stored as 00:00 Moscow of `L + 1`,
+ *   so the window is open through 23:59:59 Moscow time of `L`.
  */
 
 /** The three kinds of congress material (046-design §«Data model»). */
@@ -97,21 +96,6 @@ export function isCongressKindIntakeOpen(
   return t >= window.opensAt.getTime() && t < window.closesAt.getTime();
 }
 
-/**
- * The end of a submission's revision window: the event's revision closing
- * instant, independent of the kind's closing instant, or — while that setting
- * is empty — the kind's closing instant (EARS-1; 046-design «Revision
- * deadline»: `coalesce(revision_closes_at, kind.closes_at)`). The one function
- * the send check, the autosave refusal, the section and the needs-revision
- * letter all use.
- */
-export function effectiveRevisionClosesAt(
-  revisionClosesAt: Date | null,
-  kindClosesAt: Date | null,
-): Date | null {
-  return revisionClosesAt ?? kindClosesAt;
-}
-
 // ---------------------------------------------------------------------------
 // Wire contract
 // ---------------------------------------------------------------------------
@@ -152,8 +136,6 @@ export const CongressIntakeSettingsRequestSchema = z
       .nullable(),
     /** The first-author counting rule (EARS-24); off by default. */
     firstAuthorCounts: z.boolean(),
-    /** «Доработки принимаются до» — last revision day, inclusive; `null` = the kinds' own last days. */
-    revisionLastDay: MskCalendarDaySchema.nullable(),
     kinds: z.strictObject({
       oral: CongressKindSettingsInputSchema,
       poster: CongressKindSettingsInputSchema,
@@ -207,8 +189,6 @@ export const CongressIntakeSettingsSchema = z.object({
   configured: z.boolean(),
   registrationUrl: z.string().nullable(),
   firstAuthorCounts: z.boolean(),
-  revisionLastDay: MskCalendarDaySchema.nullable(),
-  revisionClosesAt: z.iso.datetime().nullable(),
   kinds: z.object({
     oral: CongressKindSettingsSchema,
     poster: CongressKindSettingsSchema,
@@ -227,7 +207,6 @@ export type CongressIntakeSettings = z.infer<
 export const CONGRESS_INTAKE_DEFAULTS: CongressIntakeSettingsRequest = {
   registrationUrl: null,
   firstAuthorCounts: false,
-  revisionLastDay: null,
   kinds: {
     oral: {
       opensOn: null,

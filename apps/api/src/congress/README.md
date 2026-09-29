@@ -135,7 +135,7 @@ Spec: `apps/docs/content/specs/features/046-congress-submissions/`.
 
 The settings are platform data, not environment (046-design «Settings in platform
 data»): `congress_submission_settings` per event (registration address,
-first-author rule, «Доработки принимаются до») and
+first-author rule) and
 `congress_submission_kind_settings` per event and kind (`oral`, `poster`,
 `abstract`: opening, closing, submit limit, age limit). An event without a
 settings row has no congress section; the read then answers
@@ -147,6 +147,5 @@ rewritten, so the ledger records changes, not saves.
 Dates cross the wire as Moscow calendar days and are stored as instants through
 the one conversion in `@ds/schemas` (`congress-intake-settings.schema.ts`): the
 opening day at 00:00 Moscow, each last day at 00:00 Moscow of the day after.
-The same file holds `isCongressKindIntakeOpen` and
-`effectiveRevisionClosesAt` (`coalesce(revision_closes_at, kind.closes_at)`),
-the rules every later surface of 046 uses.
+The same file holds `isCongressKindIntakeOpen`, the intake rule every later
+surface of 046 uses.

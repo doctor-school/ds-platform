@@ -102,8 +102,6 @@ export function CongressIntakeSettingsForm({
     );
   }
 
-  const revisionLastDay = form.watch("revisionLastDay");
-
   return (
     <Form {...form}>
       <form
@@ -179,32 +177,6 @@ export function CongressIntakeSettingsForm({
                     </FormControl>
                     <FormMessage>
                       {t("fields.firstAuthorCountsHint")}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="revisionLastDay"
-                render={({ field }) => (
-                  <FormItem className="sm:max-w-xs">
-                    <FormLabel htmlFor="revisionLastDay">
-                      {t("fields.revisionLastDay")}
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        id="revisionLastDay"
-                        type="date"
-                        data-testid="intake-revisionLastDay"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage>
-                      {revisionLastDay
-                        ? t("fields.revisionLastDaySet", {
-                            date: formatIntakeDay(revisionLastDay),
-                          })
-                        : t("fields.revisionLastDayHint")}
                     </FormMessage>
                   </FormItem>
                 )}

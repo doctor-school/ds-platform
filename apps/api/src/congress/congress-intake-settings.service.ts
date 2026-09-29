@@ -70,20 +70,15 @@ export class CongressIntakeSettingsService {
           eventId,
           registrationUrl: body.registrationUrl,
           firstAuthorCounts: body.firstAuthorCounts,
-          revisionClosesAt:
-            body.revisionLastDay === null
-              ? null
-              : mskClosingInstantAfterLastDay(body.revisionLastDay),
         })
         .onConflictDoUpdate({
           target: s.eventId,
           set: {
             registrationUrl: sql`excluded.registration_url`,
             firstAuthorCounts: sql`excluded.first_author_counts`,
-            revisionClosesAt: sql`excluded.revision_closes_at`,
           },
-          setWhere: sql`(${s.registrationUrl}, ${s.firstAuthorCounts}, ${s.revisionClosesAt})
-            IS DISTINCT FROM (excluded.registration_url, excluded.first_author_counts, excluded.revision_closes_at)`,
+          setWhere: sql`(${s.registrationUrl}, ${s.firstAuthorCounts})
+            IS DISTINCT FROM (excluded.registration_url, excluded.first_author_counts)`,
         });
 
       const k = congressSubmissionKindSettings;
@@ -142,14 +137,11 @@ export class CongressIntakeSettingsService {
         ? projectKind(row)
         : fromInput(k, CONGRESS_INTAKE_DEFAULTS.kinds[k]);
     };
-    const revision = settings.revisionClosesAt;
     return {
       eventId,
       configured: true,
       registrationUrl: settings.registrationUrl,
       firstAuthorCounts: settings.firstAuthorCounts,
-      revisionLastDay: revision ? lastDayOfClosingInstant(revision) : null,
-      revisionClosesAt: revision ? revision.toISOString() : null,
       kinds: {
         oral: kind("oral"),
         poster: kind("poster"),
@@ -204,8 +196,6 @@ function defaultsFor(eventId: string): CongressIntakeSettings {
     configured: false,
     registrationUrl: d.registrationUrl,
     firstAuthorCounts: d.firstAuthorCounts,
-    revisionLastDay: null,
-    revisionClosesAt: null,
     kinds: {
       oral: fromInput("oral", d.kinds.oral),
       poster: fromInput("poster", d.kinds.poster),

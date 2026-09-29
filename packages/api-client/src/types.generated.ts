@@ -2060,8 +2060,6 @@ export interface components {
                 };
             };
             registrationUrl: string | null;
-            revisionClosesAt: string | null;
-            revisionLastDay: string | null;
         };
         CongressIntakeSettingsRequestDto: {
             firstAuthorCounts: boolean;
@@ -2086,7 +2084,6 @@ export interface components {
                 };
             };
             registrationUrl: string | null;
-            revisionLastDay: string | null;
         };
         CongressParticipantCardDto: {
             attendance: {

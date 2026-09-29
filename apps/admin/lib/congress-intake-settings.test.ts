@@ -27,8 +27,6 @@ function unconfigured(): CongressIntakeSettings {
     configured: false,
     registrationUrl: null,
     firstAuthorCounts: false,
-    revisionLastDay: null,
-    revisionClosesAt: null,
     kinds: {
       oral: kind("oral"),
       poster: kind("poster"),
@@ -47,7 +45,6 @@ describe("046 EARS-2 — the admin intake-settings form projection", () => {
     expect(fields).toEqual({
       registrationUrl: "",
       firstAuthorCounts: false,
-      revisionLastDay: "",
       kinds: {
         oral: { opensOn: "", lastDay: "", submitLimit: "", maxAgeYears: "" },
         poster: {
@@ -72,7 +69,6 @@ describe("046 EARS-2 — the admin intake-settings form projection", () => {
     const fields = intakeFormFields(unconfigured());
     fields.registrationUrl = "  https://orthobio.ru/registration  ";
     fields.firstAuthorCounts = true;
-    fields.revisionLastDay = "2026-12-01";
     fields.kinds.oral = {
       opensOn: "2026-11-01",
       lastDay: "2026-11-20",
@@ -83,7 +79,6 @@ describe("046 EARS-2 — the admin intake-settings form projection", () => {
     expect(body).toEqual({
       registrationUrl: "https://orthobio.ru/registration",
       firstAuthorCounts: true,
-      revisionLastDay: "2026-12-01",
       kinds: {
         oral: {
           opensOn: "2026-11-01",
@@ -114,7 +109,6 @@ describe("046 EARS-2 — the admin intake-settings form projection", () => {
     const saved = unconfigured();
     saved.configured = true;
     saved.registrationUrl = "https://orthobio.ru/registration";
-    saved.revisionLastDay = "2026-12-01";
     saved.kinds.poster = {
       ...saved.kinds.poster,
       opensOn: "2026-11-01",
@@ -124,7 +118,6 @@ describe("046 EARS-2 — the admin intake-settings form projection", () => {
     };
     const fields = intakeFormFields(saved);
     expect(fields.registrationUrl).toBe("https://orthobio.ru/registration");
-    expect(fields.revisionLastDay).toBe("2026-12-01");
     expect(fields.kinds.poster).toEqual({
       opensOn: "2026-11-01",
       lastDay: "2026-11-20",

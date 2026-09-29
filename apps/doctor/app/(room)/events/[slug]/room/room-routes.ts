@@ -5,7 +5,7 @@ import { buildRoomReturnHref } from "@ds/room/room-return";
 import { DOCTOR_ROOM_RETURN_ROUTES } from "@/lib/room-config";
 
 /**
- * 006 EARS-6 / EARS-11 · 020 EARS-7 / §6.1 D10 (#1722, slice 3) — the DOCTOR
+ * 006 EARS-6 / EARS-11 · 020 EARS-7 / §6.1 (#1722, slice 3) — the DOCTOR
  * host's room route table.
  *
  * The shared room unit owns no route: `resolveRoomEntry` takes the three refusal

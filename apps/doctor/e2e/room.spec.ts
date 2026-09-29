@@ -20,9 +20,9 @@ import {
  * the room renders WITHOUT the storefront shell.
  *
  * The academy twin is `apps/portal/e2e/room.spec.ts`. This file is not a copy of
- * it: the routes, the chrome and — above all — the way a session is minted differ,
- * because doctor.school ships no login form (`support/doctor-session.ts` explains
- * the same-origin BFF login it uses instead).
+ * it: the routes, the chrome and the way a session is minted differ — outside the
+ * guest scenario, which drives this host's own `/login` form, the session comes
+ * from the same-origin BFF login (`support/doctor-session.ts` explains why).
  *
  * Live-stand-gated tier: it needs the BUILT doctor app whose `/v1/*` rewrite
  * reaches a running api + Postgres seeded with the 006 live rooms and their stream

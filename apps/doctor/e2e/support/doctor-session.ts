@@ -4,12 +4,11 @@ import { expect, type Page } from "@playwright/test";
  * 006 · 020 (#1912, #1722 slice 4) — mint a real `__Host-ds_session` on the
  * DOCTOR origin for the live-stand room tier.
  *
- * Why this is not a UI login helper (the academy's `room.spec.ts` drives the
- * `/login` form): doctor.school has NO login route by design — ADR-0015 §4 REQ-24
- * / 020 §6.1 D10 give this host exactly one link into the Academy and no auth
- * form of its own, and its `/register` form is fail-closed pending #1541/#1558.
- * So the only honest way to put a REAL session cookie on this origin in a test is
- * the same-origin BFF the app already ships: `apps/doctor/next.config.ts` rewrites
+ * Why this is not a UI login helper: the room tier's subject is the ROOM, not the
+ * sign-in door (the guest's `/login?returnTo=<room>` hop and its landing back in
+ * the room are asserted in `room.spec.ts` itself). Minting the session through
+ * the same-origin BFF the app already ships keeps every other room scenario off
+ * the form: `apps/doctor/next.config.ts` rewrites
  * `/v1/:path*` to the api, and `POST /v1/auth/login` answers with the
  * `Set-Cookie: __Host-ds_session` the browser then carries on every subsequent
  * navigation. No cookie is fabricated and no gate is bypassed — the room's EARS-1

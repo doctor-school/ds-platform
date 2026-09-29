@@ -10,13 +10,12 @@ import type { RoomAccess } from "./room-config";
  * so both storefronts route truthfully — never a soft wall over a rendered
  * player, and never a redirect into the OTHER host's flows.
  *
- * The two tables differ on exactly one branch, and that difference is the reason
- * this is parameterised rather than hardcoded: the Academy sends a guest through
- * its 003 login flow carrying a same-origin room `returnTo`, while the doctor
- * storefront has no login route at all and sends the visitor to its own event
- * page (D10 / ADR-0015 §4 REQ-24 — doctor.school holds exactly one link into the
- * Academy, and a cross-origin `returnTo` would be refused by the Academy's
- * same-origin guard anyway).
+ * The two tables have the same shape and differ only in their paths, which is the
+ * reason this is parameterised rather than hardcoded: each host sends a guest to
+ * its OWN `/login` carrying a same-origin `returnTo` back to its own room — the
+ * Academy's `/webinars/<slug>/room`, the doctor storefront's `/events/<slug>/room`
+ * (020 EARS-7). Never the other host's login: a cross-origin `returnTo` would be
+ * refused by the same-origin guard anyway (ADR-0015 §4 REQ-24).
  *
  * The outcome set is CLOSED — `render`, `redirect(href)`, `not-found` — so a host
  * page is a `switch` over three cases and cannot silently fall through to

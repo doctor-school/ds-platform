@@ -299,6 +299,17 @@ describe("006 EARS-6: a room arrival comes back to the room", () => {
     ).toBe("/events/cardio-live/room");
   });
 
+  it("006 EARS-6: an Academy guest arriving with returnTo=<Academy room> signs in INTO the room", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await guestLandingOf(ACADEMY_FIXTURE, {
+        returnTo: "/webinars/cardio-live/room",
+      }),
+    ).toBe("/webinars/cardio-live/room");
+    expect(resolveReturnContext).not.toHaveBeenCalled();
+  });
+
   it("006 EARS-6: another host's room is not this host's room — the LD-4 landing stands", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);
 
@@ -470,6 +481,15 @@ describe("021 EARS-3 (#2333): the door gets the signed-in re-decision where it c
       await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
     ).toBeUndefined();
     expect(await actionOf(DOCTOR_FIXTURE, { returnTo: "/account" })).toBeUndefined();
+  });
+
+  it("006 EARS-6: a doctor-room return is a carried target — no re-decision, the door lands in the room", async () => {
+    const door = (await doorOf(DOCTOR_FIXTURE, {
+      returnTo: "/events/cardio-live/room",
+    })) as unknown as ReactElement<DoorProps & { landing: string }>;
+
+    expect(door.props.resolveSignedInLanding).toBeUndefined();
+    expect(door.props.landing).toBe("/events/cardio-live/room");
   });
 
   it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {

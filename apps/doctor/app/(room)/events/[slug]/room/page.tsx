@@ -14,14 +14,15 @@ import { DOCTOR_ROOM_ROUTES } from "./room-routes";
  * The room itself is the shared `@ds/room` unit (ADR-0013 A1): this page is the
  * doctor storefront's thin HOST projection over it and owns exactly four things —
  * the session forward, its own upstream base (`lib/room.ts`), its own route table
- * (D10) and its own copy. The composition, the transport and the entry resolution
+ * (`room-routes.ts`) and its own copy. The composition, the transport and the entry resolution
  * are the shared unit's, identical to the academy's mount.
  *
  * It CONSUMES the EARS-1 server-side grant and never re-implements the gate.
  * `resolveRoomEntry` closes the outcome set to render / redirect / not-found, so
  * the page cannot fall through to rendering a room the gate refused, and all
- * three EARS-6 refusals route through THIS host's targets — never an academy
- * login (D10 / ADR-0015 §4 REQ-24).
+ * three EARS-6 refusals route through THIS host's targets — a guest to this
+ * host's own `/login` carrying the room `returnTo`, never an academy login
+ * (ADR-0015 §4 REQ-24).
  *
  * D16a — a request carrying no session cookie is redirected BEFORE any upstream
  * read: an anonymous visitor's forwarded surface carries an empty cookie, and

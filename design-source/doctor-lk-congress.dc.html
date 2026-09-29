@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}input,textarea,select,button{font-family:inherit}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.45}}</style></helmet>
+
+<div data-screen-label="{{ artboard }}" style="{{ outerStyle }}">
+<dc-import name="ds-shell" host="doctor" loggedIn="{{ true }}" dark="{{ dark }}" mobile="{{ m }}" onTheme="{{ toggleTheme }}" embedded="{{ true }}" hint-size="100%,900px">
+
+  <div data-screen-label="d-lk-congress · постер-шапка" style="background:#114D9E;padding:{{ posterPad }}">
+    <div style="max-width:1104px;margin:0 auto">
+      <sc-if value="{{ posterList }}" hint-placeholder-val="{{ true }}">
+        <nav style="font-size:12.5px;font-weight:700;margin-bottom:22px"><a href="doctor-cabinet.dc.html" style="color:#AED4FB;text-decoration:none" style-hover="color:#fff !important">← Аккаунт</a></nav>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <h1 style="margin:0;font-size:clamp(30px,5vw,48px);line-height:1.04;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Мои заявки на Конгресс</h1>
+            <div style="font-size:15px;font-weight:500;color:#D3E8FD;margin-top:12px">VIII конгресс «Ортобиология» · 23–24 апреля 2027</div>
+          </div>
+          <a href="doctor-congress.dc.html" style="font-size:13.5px;font-weight:700;color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;padding-bottom:4px" style-hover="color:#D3E8FD !important">Страница Конгресса ↗</a>
+        </div>
+      </sc-if>
+      <sc-if value="{{ posterApp }}" hint-placeholder-val="{{ false }}">
+        <nav style="margin-bottom:22px"><button onClick="{{ closeApp }}" style="font:inherit;font-size:12.5px;font-weight:700;color:#AED4FB;background:none;border:0;padding:0;cursor:pointer" style-hover="color:#fff !important">← Мои заявки</button></nav>
+        <div style="font-size:13px;font-weight:600;color:#AED4FB;margin-bottom:10px">{{ o.kind }} · VIII конгресс «Ортобиология»</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+          <h1 style="margin:0;flex:1;min-width:240px;font-size:clamp(24px,3.8vw,38px);line-height:1.12;font-weight:800;letter-spacing:-.025em;color:#fff;text-wrap:balance">{{ o.topic }}</h1>
+          <span style="{{ o.posterBadge }}">{{ o.status }}</span>
+        </div>
+        <div style="font-size:14px;font-weight:500;color:#D3E8FD;margin-top:12px">{{ o.dateLine }}</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <main style="max-width:1104px;margin:0 auto;padding:{{ mainPad }};box-sizing:border-box">
+
+    <sc-if value="{{ noReg }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="d-lk-congress · нет регистрации" style="{{ noRegStyle }}">
+        <span style="font-size:15px;font-weight:600;color:{{ ink }}">Сначала зарегистрируйтесь участником Конгресса</span>
+        <a href="doctor-congress.dc.html#join" style="font-size:14px;font-weight:700;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Регистрация на сайте Конгресса ↗</a>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="d-lk-congress · загрузка" style="{{ skelBox }}">
+        <sc-for list="{{ skel }}" as="sk" hint-placeholder-count="4">
+          <div style="{{ sk.style }}">
+            <div style="height:12px;width:120px;flex:none;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:10px"><div style="height:14px;width:{{ sk.w }};background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div><div style="height:11px;width:34%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div></div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ loadErr }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="d-lk-congress · ошибка" style="{{ loadErrStyle }}">
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:15px;font-weight:700;color:{{ ink }}">Не удалось загрузить заявки</div>
+          <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};margin-top:4px">Сервер не ответил. Черновики и отправленные заявки сохранены.</div>
+        </div>
+        <button onClick="{{ retry }}" style="{{ btnOutline }}" style-hover="background:var(--lk-row) !important;transform:translate(1px,1px) !important">Повторить</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showContent }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:{{ blockGap }}">
+
+        <sc-if value="{{ showPicker }}" hint-placeholder-val="{{ false }}">
+          <section data-screen-label="d-lk-congress · выбор вида">
+            <div style="{{ secHead }}">
+              <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Новая заявка</span>
+              <span style="{{ secRule }}"></span>
+              <sc-if value="{{ canCollapsePicker }}" hint-placeholder-val="{{ false }}"><button onClick="{{ togglePicker }}" style="{{ quietBtn }}" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">Свернуть</button></sc-if>
+            </div>
+            <p style="{{ pickerNote }}">Можно подать сколько угодно докладов и постеров и до 3 тезисов, пока приём открыт.</p>
+            <div style="{{ pickBox }}">
+              <sc-for list="{{ picks }}" as="pk" hint-placeholder-count="3">
+                <div style="{{ pk.style }}">
+                  <div style="{{ pk.nameStyle }}">{{ pk.name }}</div>
+                  <div style="font-size:13.5px;line-height:1.5;color:{{ inkMuted }}">{{ pk.intake }}</div>
+                  <sc-if value="{{ pk.hasCount }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px;font-weight:600;color:{{ ink }}">{{ pk.count }}</div></sc-if>
+                  <sc-if value="{{ pk.hasReason }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;line-height:1.55;color:{{ inkMuted }};text-wrap:pretty">{{ pk.reason }}</div></sc-if>
+                  <sc-if value="{{ pk.avail }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pk.onStart }}" style="{{ textAction }};margin-top:auto;padding-top:6px" style-hover="text-decoration:underline !important;text-underline-offset:4px !important">Начать заявку →</button></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ showList }}" hint-placeholder-val="{{ true }}">
+          <section data-screen-label="d-lk-congress · список">
+            <sc-if value="{{ showListHead }}" hint-placeholder-val="{{ true }}">
+              <div style="{{ secHead }}">
+                <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Мои заявки</span>
+                <span style="{{ secRule }}"></span>
+                <sc-if value="{{ showNewBtn }}" hint-placeholder-val="{{ true }}"><button onClick="{{ togglePicker }}" style="{{ btnPrimarySm }}" style-hover="background:var(--lk-pri-h) !important;border-color:var(--lk-pri-h) !important;transform:translate(1px,1px) !important;box-shadow:2px 2px 0 var(--lk-border) !important" style-active="background:var(--lk-pri-h) !important;border-color:var(--lk-pri-h) !important;transform:translate(3px,3px) !important;box-shadow:none !important">+ Новая заявка</button></sc-if>
+              </div>
+              <div data-screen-label="d-lk-congress · фильтр по статусу" style="{{ filterRow }}">
+                <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+                  <button onClick="{{ f.onClick }}" aria-pressed="{{ f.on }}" style="{{ f.style }}" style-hover="border-color:var(--hv-bd) !important"><sc-if value="{{ f.hasDot }}" hint-placeholder-val="{{ false }}"><span style="{{ f.dot }}"></span></sc-if><span>{{ f.label }}</span><span style="{{ f.countStyle }}">{{ f.count }}</span></button>
+                </sc-for>
+                <sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><span style="{{ tagStyle }}">новое · фильтр по статусу</span></sc-if>
+              </div>
+            </sc-if>
+
+            <div style="{{ listStyle }}">
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+                <div onClick="{{ r.onRow }}" title="{{ r.title }}" style="{{ r.style }}" style-hover="background:var(--hv-bg) !important">
+                  <sc-if value="{{ r.rail }}" hint-placeholder-val="{{ false }}"><span style="{{ r.dotLg }}"></span></sc-if>
+                  <sc-if value="{{ r.full }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ rowGrid }}">
+                      <span style="{{ r.statusBtn }}"><span style="{{ r.dot }}"></span><span>{{ r.status }}</span></span>
+                      <div style="min-width:0;display:flex;flex-direction:column;gap:5px">
+                        <button onClick="{{ r.onOpen }}" style="{{ r.topicStyle }}" style-hover="text-decoration:underline !important;text-decoration-thickness:2px !important;text-underline-offset:4px !important">{{ r.topic }}</button>
+                        <div style="font-size:13px;line-height:1.5;color:{{ inkFaint }}">{{ r.meta }}</div>
+                        <sc-if value="{{ r.commentFull }}" hint-placeholder-val="{{ false }}"><div style="{{ r.commentStyle }}"><span style="font-weight:700;color:{{ r.commentInk }}">Комитет: </span>{{ r.comment }}</div></sc-if>
+                        <sc-if value="{{ r.commentClamp }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:4px;min-width:0">
+                            <span style="{{ r.clampStyle }}"><span style="font-weight:700;color:{{ r.commentInk }}">Комитет: </span>{{ r.comment }}</span>
+                            <sc-if value="{{ r.commentLong }}" hint-placeholder-val="{{ false }}"><button onClick="{{ r.onOpen }}" style="{{ quietBtn }}" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">Читать целиком</button></sc-if>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ r.hasDeadline }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;font-weight:600;color:{{ r.deadlineInk }}">{{ r.deadline }}</div></sc-if>
+                        <sc-if value="{{ r.wdAsk }}" hint-placeholder-val="{{ false }}">
+                          <div onClick="{{ r.wdStop }}" style="{{ wdAskStyle }}"><span>Отозвать заявку? Комитет её не рассмотрит, вернуть будет нельзя.</span><span style="display:flex;gap:14px;align-items:center"><button onClick="{{ r.wdYes }}" style="{{ dangerBtnSm }}" style-hover="background:var(--lk-danger-h) !important;border-color:var(--lk-danger-h) !important">Отозвать</button><button onClick="{{ r.wdNo }}" style="{{ quietBtn }}" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">Отмена</button></span></div>
+                        </sc-if>
+                      </div>
+                      <sc-if value="{{ r.hasActions }}" hint-placeholder-val="{{ true }}">
+                        <div style="{{ actionsCol }}">
+                          <sc-if value="{{ r.hasPrimary }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.primary.onClick }}" style="{{ textAction }}" style-hover="text-decoration:underline !important;text-underline-offset:4px !important">{{ r.primary.label }} →</button></sc-if>
+                          <sc-for list="{{ r.sec }}" as="sa" hint-placeholder-count="1"><button onClick="{{ sa.onClick }}" style="{{ sa.style }}" style-hover="color:var(--hv-c) !important;text-decoration-color:var(--hv-c) !important">{{ sa.label }}</button></sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+
+              <div data-screen-label="d-lk-congress · заявка" style="{{ detailWrap }}">
+                <sc-if value="{{ detailPlaceholder }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:2px dashed {{ dashBorder }};padding:56px 24px;text-align:center;font-size:14px;color:{{ inkMuted }}">Выберите заявку в списке — она откроется здесь.</div>
+                </sc-if>
+                <sc-if value="{{ hasOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:24px">
+                    <sc-if value="{{ sheetBar }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ sheetBarStyle }}"><button onClick="{{ closeApp }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ accent }};background:none;border:0;padding:12px 0;cursor:pointer" style-hover="color:var(--lk-ink) !important">← Мои заявки</button></div>
+                    </sc-if>
+                    <sc-if value="{{ railToggle }}" hint-placeholder-val="{{ false }}">
+                      <div><button onClick="{{ toggleRail }}" style="{{ quietBtn }}" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">{{ railToggleLabel }}</button></div>
+                    </sc-if>
+                    <sc-if value="{{ detailHead }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:8px">
+                        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:{{ inkMuted }};flex-wrap:wrap"><span style="{{ o.dot }}"></span><span style="font-weight:700;color:{{ ink }}">{{ o.status }}</span><span>· {{ o.kind }} · {{ o.dateLine }}</span></div>
+                        <div style="font-size:24px;line-height:1.22;font-weight:800;letter-spacing:-.02em;color:{{ ink }};text-wrap:balance">{{ o.topic }}</div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ o.commentBlock }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ o.commentBoxStyle }}">
+                        <div style="font-size:13px;font-weight:700;color:{{ o.commentInk }};margin-bottom:8px">Комментарий программного комитета · {{ o.commentDate }}</div>
+                        <div style="{{ o.commentTextStyle }}">{{ o.comment }}</div>
+                        <sc-if value="{{ o.hasDeadline }}" hint-placeholder-val="{{ false }}"><div style="margin-top:12px;font-size:13.5px;font-weight:600;color:{{ o.deadlineInk }}">{{ o.deadline }}</div></sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ o.hasNotice }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ o.noticeStyle }}"><span style="font-size:15px;color:{{ o.noticeInk }};flex:none">{{ o.noticeIcon }}</span><div style="font-size:14px;line-height:1.5;font-weight:600;color:{{ ink }}">{{ o.notice }}</div></div>
+                    </sc-if>
+                    <sc-if value="{{ o.detailActions }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;gap:10px 24px;flex-wrap:wrap">
+                        <sc-for list="{{ o.det }}" as="da" hint-placeholder-count="1"><button onClick="{{ da.onClick }}" style="{{ da.style }}" style-hover="text-decoration:underline !important;text-underline-offset:4px !important">{{ da.label }}</button></sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ o.wdAsk }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ wdAskStyle }}"><span>Отозвать заявку? Комитет её не рассмотрит, вернуть будет нельзя.</span><span style="display:flex;gap:14px;align-items:center"><button onClick="{{ o.wdYes }}" style="{{ dangerBtnSm }}" style-hover="background:var(--lk-danger-h) !important;border-color:var(--lk-danger-h) !important">Отозвать</button><button onClick="{{ o.wdNo }}" style="{{ quietBtn }}" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">Отмена</button></span></div>
+                    </sc-if>
+                    <sc-if value="{{ o.hasSummary }}" hint-placeholder-val="{{ false }}">
+                      <div role="alert" data-screen-label="d-lk-congress · сводка ошибок" style="{{ summaryStyle }}">
+                        <div style="font-size:14.5px;font-weight:700;color:{{ ink }}">{{ o.summaryTitle }}</div>
+                        <ul style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:5px">
+                          <sc-for list="{{ o.summary }}" as="se" hint-placeholder-count="3">
+                            <li style="font-size:13.5px;line-height:1.5;color:{{ danger }}">
+                              <sc-if value="{{ se.link }}" hint-placeholder-val="{{ true }}"><button onClick="{{ se.onClick }}" style="font:inherit;font-size:13.5px;font-weight:600;color:{{ danger }};background:none;border:0;padding:0;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px">{{ se.msg }}</button></sc-if>
+                              <sc-if value="{{ se.plain }}" hint-placeholder-val="{{ false }}"><span style="font-weight:700">{{ se.msg }}</span></sc-if>
+                            </li>
+                          </sc-for>
+                        </ul>
+                        <div style="margin-top:8px;font-size:12.5px;color:{{ inkMuted }}">Текст заявки сохранён.</div>
+                      </div>
+                    </sc-if>
+
+                    <div style="{{ formWrap }}">
+                      <sc-for list="{{ o.blocks }}" as="b" hint-placeholder-count="4">
+                        <div style="{{ b.wrap }}">
+                          <sc-if value="{{ b.isSection }}" hint-placeholder-val="{{ false }}">
+                            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:{{ ink }}">{{ b.text }}</span><sc-if value="{{ b.hasSub }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:{{ inkFaint }}">{{ b.sub }}</span></sc-if></div>
+                          </sc-if>
+                          <sc-if value="{{ b.isLine }}" hint-placeholder-val="{{ false }}"><div style="font-size:14px;color:{{ inkBody }}">{{ b.text }}</div></sc-if>
+
+                          <sc-if value="{{ b.isField }}" hint-placeholder-val="{{ true }}">
+                            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px">
+                              <label for="{{ b.inputId }}" style="{{ b.labelStyle }}">{{ b.label }}</label>
+                              <sc-if value="{{ b.hasTag }}" hint-placeholder-val="{{ false }}"><span style="{{ tagStyle }}">{{ b.tag }}</span></sc-if>
+                            </div>
+                            <sc-if value="{{ b.hasHint }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;line-height:1.55;color:{{ inkMuted }};margin:-2px 0 9px;text-wrap:pretty">{{ b.hint }}</div></sc-if>
+                            <sc-if value="{{ b.editMulti }}" hint-placeholder-val="{{ false }}"><textarea id="{{ b.inputId }}" value="{{ b.value }}" onChange="{{ b.onChange }}" rows="{{ b.rows }}" placeholder="{{ b.placeholder }}" style="{{ b.inputStyle }}" style-hover="border-color:var(--lk-ink) !important" style-focus="border-color:#6BB1F7 !important;box-shadow:0 0 0 3px rgba(107,177,247,.5) !important"></textarea></sc-if>
+                            <sc-if value="{{ b.editSingle }}" hint-placeholder-val="{{ true }}"><input id="{{ b.inputId }}" value="{{ b.value }}" onChange="{{ b.onChange }}" placeholder="{{ b.placeholder }}" style="{{ b.inputStyle }}" style-hover="border-color:var(--lk-ink) !important" style-focus="border-color:#6BB1F7 !important;box-shadow:0 0 0 3px rgba(107,177,247,.5) !important"></sc-if>
+                            <sc-if value="{{ b.ro }}" hint-placeholder-val="{{ false }}"><div style="{{ roText }}">{{ b.roText }}</div></sc-if>
+                            <sc-if value="{{ b.hasErr }}" hint-placeholder-val="{{ false }}"><div style="margin-top:6px;font-size:13px;font-weight:600;color:{{ danger }}">{{ b.err }}</div></sc-if>
+                          </sc-if>
+
+                          <sc-if value="{{ b.isAuthors }}" hint-placeholder-val="{{ false }}">
+                            <sc-if value="{{ b.hasTagRow }}" hint-placeholder-val="{{ false }}"><div style="margin-bottom:10px"><span style="{{ tagStyle }}">новое · список авторов: добавить, удалить, порядок</span></div></sc-if>
+                            <div style="border-top:1px solid {{ hairline }}">
+                              <sc-for list="{{ b.authors }}" as="a" hint-placeholder-count="1">
+                                <div style="border-bottom:1px solid {{ hairline }};padding:12px 0">
+                                  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                                    <span style="width:18px;flex:none;font-size:13px;font-weight:700;color:{{ inkFaint }};font-variant-numeric:tabular-nums">{{ a.n }}</span>
+                                    <div style="flex:1;min-width:180px">
+                                      <div style="{{ a.nameStyle }}">{{ a.full }}</div>
+                                      <div style="font-size:13px;color:{{ inkMuted }};margin-top:2px">{{ a.org }}</div>
+                                    </div>
+                                    <sc-if value="{{ a.showSp }}" hint-placeholder-val="{{ false }}"><button onClick="{{ a.onSpeaker }}" role="radio" aria-checked="{{ a.sp }}" style="{{ a.spStyle }}" style-hover="border-color:var(--hv-bd) !important;color:var(--hv-c) !important"><span style="{{ a.spDot }}"></span>Докладчик</button></sc-if>
+                                    <sc-if value="{{ a.edit }}" hint-placeholder-val="{{ true }}">
+                                      <span style="display:flex;gap:2px;align-items:center">
+                                        <button onClick="{{ a.onToggle }}" style="{{ quietBtn }};margin-right:8px" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">{{ a.toggleLabel }}</button>
+                                        <button onClick="{{ a.onUp }}" disabled="{{ a.upDis }}" title="Выше" aria-label="Переместить выше" style="{{ a.upStyle }}" style-hover="background:var(--hv-bg) !important">↑</button>
+                                        <button onClick="{{ a.onDown }}" disabled="{{ a.downDis }}" title="Ниже" aria-label="Переместить ниже" style="{{ a.downStyle }}" style-hover="background:var(--hv-bg) !important">↓</button>
+                                        <button onClick="{{ a.onDel }}" disabled="{{ a.delDis }}" title="Удалить автора" aria-label="Удалить автора" style="{{ a.delStyle }}" style-hover="background:var(--hv-bg) !important">✕</button>
+                                      </span>
+                                    </sc-if>
+                                  </div>
+                                  <sc-if value="{{ a.open }}" hint-placeholder-val="{{ false }}">
+                                    <div style="{{ authorGrid }}">
+                                      <sc-for list="{{ a.inputs }}" as="ai" hint-placeholder-count="4">
+                                        <label style="{{ ai.wrap }}"><span style="display:block;font-size:13px;font-weight:600;color:{{ inkBody }};margin-bottom:6px">{{ ai.label }}</span><input id="{{ ai.id }}" value="{{ ai.value }}" onChange="{{ ai.onChange }}" style="{{ ai.style }}" style-hover="border-color:var(--lk-ink) !important" style-focus="border-color:#6BB1F7 !important;box-shadow:0 0 0 3px rgba(107,177,247,.5) !important"></label>
+                                      </sc-for>
+                                    </div>
+                                  </sc-if>
+                                </div>
+                              </sc-for>
+                            </div>
+                            <sc-if value="{{ b.edit }}" hint-placeholder-val="{{ true }}"><button onClick="{{ b.onAdd }}" style="{{ textAction }};margin-top:12px" style-hover="text-decoration:underline !important;text-underline-offset:4px !important">+ Добавить автора</button></sc-if>
+                            <sc-if value="{{ b.hasErr }}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;font-size:13px;font-weight:600;color:{{ danger }}">{{ b.err }}</div></sc-if>
+                          </sc-if>
+
+                          <sc-if value="{{ b.isChecks }}" hint-placeholder-val="{{ false }}">
+                            <div style="display:flex;flex-direction:column;gap:12px">
+                              <sc-for list="{{ b.checks }}" as="c" hint-placeholder-count="3">
+                                <div>
+                                  <button id="{{ c.id }}" onClick="{{ c.onToggle }}" disabled="{{ c.dis }}" role="checkbox" aria-checked="{{ c.on }}" style="{{ c.btnStyle }}" style-hover="background:var(--hv-bg) !important"><span style="{{ c.boxStyle }}">{{ c.mark }}</span><span style="font-size:14px;line-height:1.5;color:{{ inkBody }};padding-top:1px">{{ c.label }}</span></button>
+                                  <sc-if value="{{ c.hasErr }}" hint-placeholder-val="{{ false }}"><div style="margin:5px 0 0 32px;font-size:13px;font-weight:600;color:{{ danger }}">{{ c.err }}</div></sc-if>
+                                </div>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+
+                      <sc-if value="{{ o.showBar }}" hint-placeholder-val="{{ true }}">
+                        <div data-screen-label="d-lk-congress · панель отправки" style="{{ barStyle }}">
+                          <sc-if value="{{ o.confirming }}" hint-placeholder-val="{{ false }}">
+                            <div data-screen-label="d-lk-congress · подтверждение отправки" style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:220px"><span style="font-size:15px;font-weight:800;color:{{ ink }}">{{ o.confirmTitle }}</span><span style="font-size:13px;line-height:1.5;color:{{ inkBody }};text-wrap:pretty">{{ o.confirmSub }}</span></div>
+                            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button onClick="{{ o.onCancel }}" style="{{ btnSecondaryLg }}" style-hover="background:var(--lk-row) !important;transform:translate(1px,1px) !important;box-shadow:2px 2px 0 var(--lk-border) !important" style-active="background:var(--lk-row) !important;transform:translate(3px,3px) !important;box-shadow:none !important">Отмена</button><button onClick="{{ o.onConfirm }}" style="{{ o.submitStyle }}" style-hover="background:var(--hv-bg) !important;border-color:var(--hv-bg) !important;transform:var(--hv-tf) !important;box-shadow:var(--hv-sh) !important" style-active="background:var(--hv-bg) !important;border-color:var(--hv-bg) !important;transform:var(--ac-tf) !important;box-shadow:var(--ac-sh) !important">{{ o.confirmLabel }}</button></div>
+                          </sc-if>
+                          <sc-if value="{{ o.notConfirming }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap;flex:1;min-width:200px">
+                            <sc-if value="{{ o.edit }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:8px"><span style="{{ saveDot }}"></span><span style="{{ saveTextStyle }}">{{ saveText }}</span></span></sc-if>
+                            <sc-if value="{{ o.hasCounter }}" hint-placeholder-val="{{ false }}">
+                              <span id="in-counter" tabindex="-1" style="display:inline-flex;align-items:center;gap:10px;outline:none">
+                                <span style="width:96px;height:4px;background:{{ hairline }};position:relative;flex:none"><span style="{{ o.barFill }}"></span></span>
+                                <span style="{{ o.counterStyle }}">{{ o.counterText }}</span>
+                                <sc-if value="{{ o.hasCounterNote }}" hint-placeholder-val="{{ false }}"><span style="{{ o.counterNoteStyle }}">{{ o.counterNote }}</span></sc-if>
+                              </span>
+                            </sc-if>
+                            <sc-if value="{{ o.hasBarHint }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:{{ inkMuted }}">{{ o.barHint }}</span></sc-if>
+                            <sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><span style="{{ tagStyle }}">{{ o.barTag }}</span></sc-if>
+                          </div>
+                          <button onClick="{{ o.onSubmit }}" disabled="{{ o.submitDis }}" style="{{ o.submitStyle }}" style-hover="background:var(--hv-bg) !important;border-color:var(--hv-bg) !important;transform:var(--hv-tf) !important;box-shadow:var(--hv-sh) !important" style-active="background:var(--hv-bg) !important;border-color:var(--hv-bg) !important;transform:var(--ac-tf) !important;box-shadow:var(--ac-sh) !important">{{ o.submitLabel }}</button>
+                          </sc-if>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+      </div>
+    </sc-if>
+  </main>
+</dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;нет регистрации&quot;,&quot;пусто&quot;,&quot;выбор вида&quot;,&quot;список&quot;,&quot;список · фильтр «На доработке»&quot;,&quot;список · после 15 января&quot;,&quot;список · после 29 января&quot;,&quot;форма · устный доклад&quot;,&quot;форма · постерный доклад&quot;,&quot;форма · тезисы&quot;,&quot;тезисы · почти 5 000 знаков&quot;,&quot;отправка не прошла&quot;,&quot;черновик · приём закрыт&quot;,&quot;только чтение&quot;,&quot;на доработке&quot;,&quot;доработка · срок прошёл&quot;,&quot;отозвана&quot;,&quot;отправка · подтверждение&quot;,&quot;загрузка&quot;,&quot;ошибка загрузки&quot;],&quot;default&quot;:&quot;список&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;today&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;10 ноября 2026&quot;,&quot;20 декабря 2026&quot;,&quot;20 января 2027&quot;,&quot;5 февраля 2027&quot;,&quot;25 февраля 2027&quot;],&quot;default&quot;:&quot;20 декабря 2026&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;over40&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;saveState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Сохранено&quot;,&quot;Сохраняем…&quot;,&quot;Не удалось сохранить&quot;],&quot;default&quot;:&quot;Сохранено&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние&quot;},&quot;width&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;авто&quot;,&quot;1440&quot;,&quot;390&quot;],&quot;default&quot;:&quot;авто&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Артборд&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Артборд&quot;},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Артборд&quot;}}">
+class Component extends DCLogic {
+  data() {
+    if (this._d) return this._d;
+    const ME = { sn: 'Орлов', nm: 'Виктор', pt: 'Андреевич', org: 'Городская клиническая больница № 12, Москва', sp: true, me: true };
+    const GU = { sn: 'Гусев', nm: 'Дмитрий', pt: 'Сергеевич', org: 'Сеченовский университет, кафедра травматологии', sp: false };
+    const KR = { sn: 'Крылова', nm: 'Елена', pt: 'Николаевна', org: 'Городская клиническая больница № 12, Москва', sp: false };
+    const EPI = {
+      act: 'Латеральный эпикондилит — одна из самых частых причин боли в локтевом суставе у пациентов трудоспособного возраста: им страдают 1–3 % взрослого населения, а среди людей, чья работа связана с повторяющимися движениями кисти, распространённость выше. У большинства пациентов симптомы проходят на фоне консервативного лечения, однако у 10–20 % заболевание принимает хроническое течение и сохраняется дольше шести месяцев. Инъекции глюкокортикостероидов дают быстрый, но нестойкий эффект и при повторном введении связаны с риском дегенерации сухожилия. Обогащённая тромбоцитами плазма рассматривается как альтернатива, но данные о её эффективности в реальной клинической практике и о факторах, влияющих на ответ, остаются противоречивыми.',
+      goal: 'Оценить эффективность и безопасность инъекций обогащённой тромбоцитами плазмы под ультразвуковым контролем у пациентов с хроническим латеральным эпикондилитом через 6 и 12 месяцев после лечения и выделить факторы, связанные с отсутствием ответа на терапию.',
+      methods: 'Проспективное одноцентровое наблюдательное исследование выполнено в 2024–2026 годах. Включали пациентов 25–65 лет с клинически и сонографически подтверждённым латеральным эпикондилитом длительностью более 6 месяцев и неэффективностью консервативного лечения не менее 3 месяцев. Критерии невключения: инъекции глюкокортикостероидов в течение 3 месяцев до включения, полнослойный разрыв общего сухожилия разгибателей, системные заболевания соединительной ткани, приём антиагрегантов. Всего включено 120 пациентов (64 женщины, 56 мужчин, средний возраст 46 ± 9 лет). Плазму получали методом двойного центрифугирования; препарат с концентрацией тромбоцитов в 4–5 раз выше исходной вводили однократно под УЗ-контролем, при недостаточном ответе через 6 недель — повторно. Боль оценивали по визуальной аналоговой шкале (VAS), функцию — по опроснику PRTEE исходно, через 6 недель, 6 и 12 месяцев.',
+      results: 'Через 12 месяцев наблюдение завершили 112 пациентов (93 %). Средний балл VAS снизился с 6,8 ± 1,2 до 2,1 ± 1,4, балл PRTEE — с 58 ± 11 до 19 ± 12 (p < 0,001 для обоих показателей). Клинически значимое улучшение, определённое как снижение PRTEE не менее чем на 25 %, достигнуто у 91 пациента (81 %). Повторная инъекция потребовалась 34 пациентам. Наихудший ответ отмечен у пациентов с длительностью симптомов более 18 месяцев и с частичным интрасубстанциальным разрывом по данным УЗИ: доля ответивших на терапию среди них составила 58 %. Нежелательные явления ограничивались болью в месте введения в первые 48–72 часа (у 27 % пациентов); серьёзных нежелательных явлений не зарегистрировано.',
+      concl: 'Инъекции обогащённой тромбоцитами плазмы под ультразвуковым контролем у пациентов с хроническим латеральным эпикондилитом сопровождаются стойким уменьшением боли и улучшением функции на протяжении 12 месяцев. Длительность симптомов более 18 месяцев и частичный разрыв сухожилия связаны с меньшей вероятностью ответа и должны учитываться при отборе пациентов.'
+    };
+    const EXTRA = {
+      act: ' Отдельный вопрос — отбор пациентов: в опубликованных работах критерии включения различаются, а доля пациентов с частичными разрывами сухожилия, которые хуже отвечают на любое консервативное лечение, как правило, не указывается. Это затрудняет перенос результатов исследований в повседневную практику амбулаторного травматолога. Пациенты с хроническим эпикондилитом в среднем трижды обращаются за медицинской помощью, прежде чем им предлагают инъекционную терапию.',
+      goal: ' Дополнительно — оценить сроки возвращения к работе и связь ультразвуковой картины с клиническим результатом.',
+      methods: ' Первичной конечной точкой считали долю пациентов с клинически значимым улучшением по PRTEE через 12 месяцев; вторичными — динамику VAS, потребность в повторной инъекции, частоту нежелательных явлений и возвращение к прежней работе. Ультразвуковое исследование выполнял один специалист до лечения и через 6 месяцев; оценивали толщину сухожилия, гипоэхогенные зоны, неоваскуляризацию и частичные разрывы. Статистическая обработка: критерий Уилкоксона для связанных выборок, многофакторная логистическая регрессия для поиска предикторов ответа; уровень значимости p < 0,05.',
+      results: ' В многофакторной модели независимыми предикторами отсутствия ответа оказались длительность симптомов более 18 месяцев (отношение шансов 3,4; 95 % ДИ 1,6–7,2) и частичный разрыв по данным УЗИ (ОШ 2,9; 95 % ДИ 1,3–6,4); возраст, пол, индекс массы тела и сторона поражения значимого влияния не оказали. К прежней работе через 3 месяца вернулись 84 % работающих пациентов. По данным контрольного УЗИ через 6 месяцев толщина сухожилия уменьшилась в среднем с 5,1 до 4,4 мм, гипоэхогенные зоны сохранялись у 22 % пациентов, и именно им чаще требовалась повторная инъекция. Результаты сопоставимы с данными рандомизированных исследований последних лет, однако отсутствие контрольной группы не позволяет отделить эффект препарата от естественного течения заболевания.',
+      concl: ' Для уточнения роли препарата нужно рандомизированное исследование с группой сравнения, получающей программу нагрузочной реабилитации.'
+    };
+    const apps = [
+      { id: 'sent', kind: 'oral', status: 'sent', topic: 'PRP при латеральном эпикондилите: результаты 120 пациентов', changed: '16 декабря 2026', sentAt: '16 декабря 2026, 18:40', authors: [ME, GU],
+        fields: { goal: 'Показать, как отбирать пациентов с латеральным эпикондилитом для PRP-терапии и каких результатов ждать через 6 и 12 месяцев.', summary: 'Проспективное наблюдение 120 пациентов с хроническим латеральным эпикондилитом, получивших одну или две инъекции обогащённой тромбоцитами плазмы под УЗ-контролем. Разберём критерии отбора, протокол подготовки препарата, динамику по шкалам VAS и PRTEE и случаи, когда ответа на терапию не было.' } },
+      { id: 'review', kind: 'poster', status: 'review', topic: 'Аутологичная жировая ткань при гонартрозе II стадии: 12 месяцев наблюдения', changed: '11 декабря 2026', sentAt: '9 декабря 2026, 10:15', authors: [Object.assign({}, ME, { sp: false }), KR],
+        fields: { goal: 'Оценить динамику боли и функции после однократного введения микрофрагментированной жировой ткани при гонартрозе II стадии.', content: '38 пациентов, наблюдение 12 месяцев, оценка по WOMAC и VAS. Снижение WOMAC на 41 % к 12 месяцу; нежелательные явления — отёк в зоне забора у 5 пациентов.' } },
+      { id: 'accepted', kind: 'oral', status: 'accepted', topic: 'Возвращение в спорт после PRP-терапии: критерии допуска', changed: '14 декабря 2026', sentAt: '3 декабря 2026, 11:20', authors: [ME],
+        fields: { goal: 'Дать врачу алгоритм решения о допуске спортсмена к тренировкам после инъекционной терапии тендинопатий.', summary: 'Критерии допуска после PRP-терапии тендинопатий и частичных разрывов: клинические тесты, ультразвуковая картина, функциональные пробы. Три клинических случая из практики команды по лёгкой атлетике.' } },
+      { id: 'rejected', kind: 'poster', status: 'rejected', topic: 'Реабилитация после эндопротезирования тазобедренного сустава: опыт отделения', changed: '10 декабря 2026', sentAt: '2 декабря 2026, 16:05', comment: 'Работа не соответствует тематике конгресса', commentDate: '10 декабря 2026', authors: [Object.assign({}, ME, { sp: false }), KR],
+        fields: { goal: 'Описать протокол ранней реабилитации после тотального эндопротезирования тазобедренного сустава.', content: 'Ретроспективный анализ 64 пациентов: сроки вертикализации, длительность госпитализации, осложнения.' } },
+      { id: 'wd', kind: 'oral', status: 'withdrawn', topic: 'Ударно-волновая терапия при подошвенном фасциите: кому она не поможет', changed: '8 декабря 2026', sentAt: '1 декабря 2026, 12:10', withdrawnAt: '8 декабря 2026', authors: [ME],
+        fields: { goal: 'Разобрать признаки, при которых ударно-волновая терапия подошвенного фасциита не даёт эффекта.', summary: 'Ретроспективный разбор 52 пациентов: длительность симптомов, данные УЗИ, сопутствующие деформации стопы.' } },
+      { id: 'revision', kind: 'theses', status: 'revision', topic: 'Комбинация PRP и гиалуроновой кислоты при гонартрозе: проспективное исследование', changed: '17 декабря 2026', sentAt: '12 декабря 2026, 21:30', comment: 'Уточните дизайн исследования и критерии включения пациентов в разделе «Материалы и методы»: укажите, как распределяли пациентов по группам, были ли группы сопоставимы по возрасту, индексу массы тела и длительности заболевания, и сколько пациентов выбыло из наблюдения. В разделе «Результаты» приведите значения WOMAC и VAS по группам исходно и через 6 месяцев с доверительными интервалами и уровнем значимости различий. Выводы должны следовать из результатов: различия по VAS не достигли статистической значимости, поэтому формулировка «предпочтительный вариант лечения» данными не подтверждается. Раздел «Актуальность» можно сократить — сейчас он повторяет общеизвестные сведения.', commentDate: '17 декабря 2026', authors: [Object.assign({}, ME, { sp: false }), GU, KR],
+        fields: {
+          act: 'Остеоартрит коленного сустава — ведущая причина хронической боли и снижения подвижности у людей старше 50 лет. Внутрисуставные инъекции гиалуроновой кислоты и обогащённой тромбоцитами плазмы применяют по отдельности; их комбинация может сочетать механический и биологический эффекты.',
+          goal: 'Сравнить динамику боли и функции при комбинированном введении PRP и гиалуроновой кислоты и при монотерапии PRP у пациентов с гонартрозом II стадии.',
+          methods: 'Обследованы 86 пациентов с гонартрозом II стадии по Kellgren–Lawrence. Пациенты получали либо три инъекции PRP, либо три инъекции PRP в сочетании с гиалуроновой кислотой с интервалом 1 неделя. Оценка по WOMAC и VAS исходно, через 3 и 6 месяцев.',
+          results: 'Через 6 месяцев снижение WOMAC составило 38 % в группе комбинированной терапии и 29 % в группе монотерапии. Различия по VAS между группами к 6 месяцу не достигли статистической значимости.',
+          concl: 'Комбинация PRP и гиалуроновой кислоты — предпочтительный вариант лечения гонартроза II стадии.' },
+        checks: { rinc: true, plag: true, trade: true } }
+    ];
+    const KIND = {
+      oral: { label: 'Устный доклад', gen: 'устных докладов', close: '15 января 2027' },
+      poster: { label: 'Постерный доклад', gen: 'постерных докладов', close: '15 января 2027' },
+      theses: { label: 'Тезисы', gen: 'тезисов', close: '29 января 2027' }
+    };
+    const DEFS = {
+      oral: [{ k: 'goal', label: 'Образовательная цель', rows: 2, ph: 'Чему научится слушатель доклада' }, { k: 'summary', label: 'Краткое содержание', rows: 5, ph: 'О чём доклад: материал, случаи, выводы' }],
+      poster: [{ k: 'goal', label: 'Цель', rows: 2 }, { k: 'content', label: 'Содержание', rows: 5 }],
+      theses: [{ k: 'act', label: 'Актуальность', rows: 3 }, { k: 'goal', label: 'Цель', rows: 2 }, { k: 'methods', label: 'Материалы и методы', rows: 4 }, { k: 'results', label: 'Результаты и обсуждение', rows: 4 }, { k: 'concl', label: 'Выводы', rows: 3 }]
+    };
+    const DATES = [
+      { k: 1, label: '10 ноября 2026' }, { k: 2, label: '20 декабря 2026' }, { k: 3, label: '20 января 2027' }, { k: 4, label: '5 февраля 2027' }, { k: 5, label: '25 февраля 2027' }
+    ];
+    const PRESETS = {
+      'нет регистрации': { noReg: true },
+      'пусто': { date: 1, empty: true },
+      'выбор вида': { picker: true, over40: true },
+      'список': {},
+      'список · фильтр «На доработке»': { filter: 'revision' },
+      'список · после 15 января': { date: 3 },
+      'список · после 29 января': { date: 4 },
+      'форма · устный доклад': { onlyDraft: true, open: 'draft', kind: 'oral' },
+      'форма · постерный доклад': { onlyDraft: true, open: 'draft', kind: 'poster' },
+      'форма · тезисы': { open: 'tdraft', tFrom: 'sent' },
+      'тезисы · почти 5 000 знаков': { open: 'tdraft', tFrom: 'sent', long: true },
+      'отправка не прошла': { open: 'tdraft', tFrom: 'sent', errors: true },
+      'черновик · приём закрыт': { date: 3, open: 'draft', kind: 'oral', closedDraft: true },
+      'только чтение': { open: 'accepted' },
+      'на доработке': { open: 'revision' },
+      'доработка · срок прошёл': { date: 5, open: 'revision' },
+      'отозвана': { open: 'wd' },
+      'отправка · подтверждение': { open: 'tdraft', tFrom: 'sent', long: true, confirm: true },
+      'загрузка': { loading: true },
+      'ошибка загрузки': { loadErr: true }
+    };
+    this._d = { ME, GU, KR, EPI, EXTRA, apps, KIND, DEFS, DATES, PRESETS };
+    return this._d;
+  }
+  presetState(screen) {
+    const D = this.data();
+    const P = D.PRESETS[screen] || D.PRESETS['список'];
+    const st = { screen: D.PRESETS[screen] ? screen : 'список', date: P.date || 2, over40: P.over40 != null ? !!P.over40 : !!this.props.over40, empty: !!P.empty, onlyDraft: !!P.onlyDraft, noReg: !!P.noReg, loading: !!P.loading, loadErr: !!P.loadErr,
+      openId: P.open || null, draftKind: P.kind || 'oral', tFrom: P.tFrom || null, deleted: {}, pickerOpen: !!P.picker, withdrawn: {}, sentNow: {}, vals: {}, authors: {}, checks: {}, tried: {}, thesesOverride: null, filter: P.filter || null, editA: {}, railOpen: false, askWd: null, confirm: P.confirm ? { tdraft: true } : {}, revoked: {} };
+    if (P.closedDraft) st.vals = { 'draft.topic': 'Инъекционная терапия тендинопатий у спортсменов: когда PRP не нужна', 'draft.goal': 'Показать, в каких случаях инъекционная терапия тендинопатий не даёт преимуществ перед программой нагрузочной реабилитации.' };
+    const E = D.EPI;
+    if (P.long) {
+      const v = {}; ['act', 'goal', 'methods', 'results', 'concl'].forEach(k => { v[k] = E[k] + D.EXTRA[k]; });
+      const tot = () => Object.keys(v).reduce((n, k) => n + v[k].length, 0);
+      while (tot() > 4990) { const parts = v.act.split('. '); if (parts.length < 3) break; parts.pop(); v.act = parts.join('. ') + '.'; }
+      st.vals = {}; Object.keys(v).forEach(k => { st.vals['tdraft.' + k] = v[k]; });
+      st.checks = { 'tdraft.rinc': true, 'tdraft.plag': true, 'tdraft.trade': true };
+    }
+    if (P.errors) {
+      let res = E.results;
+      const tot = () => E.act.length + E.goal.length + E.methods.length + res.length;
+      while (tot() <= 5000) res = res + '\n\n' + E.results;
+      st.vals = { 'tdraft.results': res, 'tdraft.concl': '' };
+      st.checks = { 'tdraft.rinc': true, 'tdraft.plag': true };
+      st.tried = { tdraft: true };
+      st.thesesOverride = 3;
+    }
+    return st;
+  }
+  propState(p, prev) {
+    const st = {}, ch = k => !prev || prev[k] !== p[k];
+    if (ch('screen')) Object.assign(st, this.presetState(p.screen || 'список'));
+    
+    if (ch('width')) st.widthS = p.width === '390' ? '390' : p.width === '1440' ? '1440' : null;
+    if (ch('dark') && p.dark != null) st.dark = !!p.dark;
+    if (ch('showNotes')) st.notes = p.showNotes ?? true;
+    if (ch('today') && p.today) { const x = this.data().DATES.find(dd => dd.label === p.today); if (x) st.date = x.k; }
+    if (ch('over40') && p.over40 != null) st.over40 = !!p.over40;
+    if (ch('saveState')) { const v = p.saveState || 'Сохранено'; st.saveFail = v === 'Не удалось сохранить'; st.saving = v === 'Сохраняем…'; }
+    return st;
+  }
+  state = Object.assign({
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    vpMobile: false, variant: 'А', widthS: null, notes: true, saveFail: false, saving: false, savedAt: '14:32'
+  }, this.propState(this.props, null));
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ vpMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  componentDidUpdate(prev) {
+    const st = this.propState(this.props, prev);
+    if (Object.keys(st).length) this.setState(st);
+  }
+  componentWillUnmount() {
+    clearTimeout(this.t); clearTimeout(this.rt);
+    if (this.mq) this.mq.removeEventListener ? this.mq.removeEventListener('change', this.upd) : this.mq.removeListener(this.upd);
+  }
+  autosave() {
+    this.setState({ saving: true }); clearTimeout(this.t);
+    this.t = setTimeout(() => { const n = new Date(), p = x => (x < 10 ? '0' : '') + x; this.setState({ saving: false, savedAt: p(n.getHours()) + ':' + p(n.getMinutes()) }); }, 900);
+  }
+  top() { if (this.state.variant === 'А') try { window.scrollTo(0, 0); } catch (e) {} }
+  renderVals() {
+    const D = this.data(), s = this.state, d = s.dark, V = s.variant;
+    const m = s.widthS ? s.widthS === '390' : s.vpMobile;
+    const forced = s.widthS === '390' && !s.vpMobile;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)', inkBody = d ? 'rgba(255,255,255,.8)' : 'oklch(.32 .016 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)', inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff', pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)', hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2', btnBg = d ? '#6BB1F7' : '#114D9E', btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD', tintFg = d ? '#AED4FB' : '#114D9E';
+    const shadow = d ? '#6BB1F7' : '#114D9E', shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const success = d ? '#4ADE80' : '#009959', successTint = d ? '#0e2a1c' : '#e6f6ee';
+    const danger = d ? '#E15555' : '#C81E1E', dangerTint = d ? '#3a1414' : '#FDECEC';
+    const warn = d ? '#F5B740' : '#8A5A00', warnTint = d ? '#332612' : '#fdf4e3';
+    const dashBorder = d ? 'rgba(255,255,255,.35)' : 'oklch(.704 .01 250)';
+    const priH = d ? '#AED4FB' : '#0D3A77', dangerH = d ? '#c43d3d' : '#A31515';
+    const quietBtn = 'font:inherit;font-size:13px;font-weight:600;color:' + inkMuted + ';background:none;border:0;padding:0;cursor:pointer;text-align:inherit;text-decoration:underline;text-decoration-color:' + dashBorder + ';text-underline-offset:4px';
+    const fieldBorder = dashBorder;
+
+    const di = s.date, today = D.DATES[di - 1].label;
+    const open = { oral: di <= 2, poster: di === 2, theses: di === 2 || di === 3 };
+    const NOW = [null, new Date(2026, 10, 10, 12, 0), new Date(2026, 11, 20, 14, 32), new Date(2027, 0, 20, 12, 0), new Date(2027, 1, 5, 12, 0), new Date(2027, 1, 25, 12, 0)][di];
+    const revLeft = new Date(2026, 11, 22, 23, 59) - NOW;
+    const thesesNotClosed = di <= 3, revOpen = revLeft > 0, revUrgent = revOpen && revLeft < 3 * 86400000;
+    const pl = (n, f) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? f[0] : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? f[1] : f[2]);
+    const leftText = (() => { const mins = Math.floor(revLeft / 60000), dd = Math.floor(mins / 1440), hh = Math.floor(mins % 1440 / 60), mm = mins % 60; const H = ['час', 'часа', 'часов']; return dd ? pl(dd, ['день', 'дня', 'дней']) + (hh ? ' ' + pl(hh, H) : '') : pl(hh, H) + ' ' + pl(mm, ['минута', 'минуты', 'минут']); })();
+    const intakeLine = k => {
+      if (k === 'theses' && di === 1) return 'Дату открытия приёма объявят позже';
+      if (k === 'poster' && di === 1) return 'Приём откроется 1 декабря 2026';
+      return open[k] ? 'Приём до ' + D.KIND[k].close + ' включительно' : 'Приём закрыт ' + D.KIND[k].close;
+    };
+    const ageReason = 'Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027';
+    const canSend = k => open[k] && !(k === 'poster' && s.over40);
+
+    const val = (id, k, def) => { const v = s.vals[id + '.' + k]; return v !== undefined ? v : (def || ''); };
+    let apps = [];
+    if (!s.empty) {
+      const src = s.tFrom ? D.apps.find(a => a.id === s.tFrom) : null;
+      if (src && !s.deleted.tdraft) apps.push({ id: 'tdraft', kind: 'theses', status: 'draft', topic: src.topic, changed: today, authors: src.authors.map(a => Object.assign({}, a, { sp: false })), fields: src.id === 'sent' ? D.EPI : {}, checks: {} });
+      if (!s.deleted.draft) apps.push({ id: 'draft', kind: s.draftKind, status: 'draft', topic: '', changed: di >= 3 ? '14 января 2027' : '18 декабря 2026', authors: [Object.assign({}, D.ME, { sp: s.draftKind === 'oral' })], fields: {}, checks: {} });
+      if (!s.onlyDraft) D.apps.forEach(a => { if (!s.deleted[a.id]) apps.push(Object.assign({}, a)); });
+    }
+    apps = apps.map(a => {
+      if (s.revoked[a.id]) return Object.assign({}, a, { status: 'withdrawn', withdrawnAt: today, changed: today });
+      if (s.sentNow[a.id]) return Object.assign({}, a, { status: 'sent', sentAt: today + ', 14:32', changed: today, comment: null });
+      if (s.withdrawn[a.id]) return Object.assign({}, a, { status: 'draft', changed: today });
+      return a;
+    });
+    const thesesSent = s.thesesOverride != null ? s.thesesOverride : apps.filter(a => a.kind === 'theses' && a.status !== 'draft').length;
+    const STAT = { draft: 'Черновик', sent: 'Отправлена', review: 'На рассмотрении', accepted: 'Принята', rejected: 'Отклонена', revision: 'На доработке', withdrawn: 'Отозвана' };
+    const STATP = { draft: 'Черновики', sent: 'Отправлены', review: 'На рассмотрении', accepted: 'Приняты', rejected: 'Отклонены', revision: 'На доработке', withdrawn: 'Отозваны' };
+    const dotBase = 'flex:none;display:inline-block;width:10px;height:10px;box-sizing:border-box;';
+    const DOT = {
+      draft: dotBase + 'border:2px solid ' + inkFaint,
+      sent: dotBase + 'background:' + accent,
+      review: dotBase + 'border:2px solid ' + accent,
+      accepted: dotBase + 'background:' + success,
+      rejected: dotBase + 'background:' + danger,
+      revision: dotBase + 'background:' + warn,
+      withdrawn: dotBase + 'background:' + inkFaint
+    };
+    const posterBase = 'flex:none;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:12px 20px;transform:rotate(3deg);white-space:nowrap;';
+    const POSTER = { draft: 'background:transparent;color:#D3E8FD;border:2px dashed #6BB1F7', rejected: 'background:transparent;color:#D3E8FD;border:2px solid rgba(255,255,255,.4)', withdrawn: 'background:transparent;color:#AED4FB;border:2px solid rgba(255,255,255,.3)', accepted: 'background:#E6F6EE;color:#00693D;box-shadow:4px 4px 0 #0D3A77' };
+
+    const openApp = id => () => { this.setState({ openId: id, pickerOpen: false }); this.top(); };
+    const del = id => () => this.setState(st => ({ deleted: Object.assign({}, st.deleted, { [id]: true }), openId: st.openId === id ? null : st.openId, withdrawn: Object.assign({}, st.withdrawn, { [id]: false }) }));
+    const withdraw = id => () => { this.setState(st => ({ withdrawn: Object.assign({}, st.withdrawn, { [id]: true }), sentNow: Object.assign({}, st.sentNow, { [id]: false }), openId: id, filter: null })); this.top(); };
+    const clearFor = (obj, id) => { const o = {}; Object.keys(obj).forEach(k => { if (k.indexOf(id + '.') !== 0) o[k] = obj[k]; }); return o; };
+    const thesesFrom = id => () => { this.setState(st => ({ tFrom: id, openId: 'tdraft', pickerOpen: false, filter: null, deleted: Object.assign({}, st.deleted, { tdraft: false }), vals: clearFor(st.vals, 'tdraft'), checks: clearFor(st.checks, 'tdraft'), authors: Object.assign({}, st.authors, { tdraft: null }), tried: Object.assign({}, st.tried, { tdraft: false }), sentNow: Object.assign({}, st.sentNow, { tdraft: false }), thesesOverride: null })); this.top(); };
+    const start = k => () => { this.setState(st => ({ empty: false, onlyDraft: st.empty ? true : st.onlyDraft, draftKind: k, openId: 'draft', pickerOpen: false, filter: null, deleted: Object.assign({}, st.deleted, { draft: false }), vals: clearFor(st.vals, 'draft'), checks: clearFor(st.checks, 'draft'), authors: Object.assign({}, st.authors, { draft: null }), tried: Object.assign({}, st.tried, { draft: false }), sentNow: Object.assign({}, st.sentNow, { draft: false }) })); this.top(); };
+
+    const stop = fn => e => { if (e && e.stopPropagation) e.stopPropagation(); if (fn) fn(e); };
+    const askWd = id => () => this.setState({ askWd: id });
+    const revoke = id => () => this.setState(st => ({ revoked: Object.assign({}, st.revoked, { [id]: true }), askWd: null }));
+    const actsFor = a => {
+      const kOpen = canSend(a.kind); let primary = null, sec = [], det = [];
+      if (a.status === 'withdrawn') return { primary, sec, det };
+      const canWd = a.status === 'review' || (a.status === 'revision' && revOpen);
+      if (a.status === 'draft') { primary = { label: kOpen ? 'Продолжить' : 'Открыть', onClick: openApp(a.id) }; const dl = { label: 'Удалить черновик', onClick: del(a.id), danger: true }; sec.push(dl); det.push(dl); }
+      else if (a.status === 'sent' && open[a.kind]) { primary = { label: 'Забрать на исправление', onClick: withdraw(a.id) }; det.push(primary); }
+      else if (a.status === 'revision') primary = { label: revOpen ? 'Продолжить' : 'Открыть', onClick: openApp(a.id) };
+      else primary = { label: 'Открыть', onClick: openApp(a.id) };
+      if (a.kind !== 'theses' && a.status !== 'draft' && thesesNotClosed) { const t = { label: 'Подать тезисы по этой работе', onClick: thesesFrom(a.id) }; sec.push(t); det.push(t); }
+      if (canWd) { const wd = { label: 'Отозвать', onClick: askWd(a.id), danger: true }; sec.push(wd); det.push(wd); }
+      return { primary, sec, det };
+    };
+    const closedText = a => {
+      const K = D.KIND[a.kind];
+      if (a.kind === 'poster' && s.over40) return ageReason;
+      if (a.kind === 'theses' && di === 1) return 'Дату открытия приёма тезисов объявят позже — черновик сохранится';
+      if (a.kind === 'poster' && di === 1) return 'Приём постерных докладов откроется 1 декабря 2026 — черновик сохранится';
+      return 'Приём ' + K.gen + ' закрыт ' + K.close + ' — отправить заявку нельзя';
+    };
+    const deadlineText = revOpen ? 'Исправить и отправить до 22 декабря, 23:59 МСК · осталось ' + leftText : 'Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя';
+    const revInk = revOpen && !revUrgent ? inkBody : warn;
+    const commentTone = a => a.status === 'rejected' ? { ink: danger, bg: dangerTint } : { ink: warn, bg: warnTint };
+
+    // фильтр по статусу
+    const present = Object.keys(STAT).filter(k => apps.some(a => a.status === k));
+    const filter = s.filter && present.indexOf(s.filter) !== -1 ? s.filter : null;
+    const setFilter = k => e => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(st => ({ filter: st.filter === k ? null : k })); };
+    const chip = on => 'font:inherit;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:' + (on ? 700 : 600) + ';padding:7px 12px;cursor:pointer;border:2px solid ' + (on ? btnBg : hairline) + ';background:' + (on ? btnBg : 'transparent') + ';color:' + (on ? btnFg : ink);
+    const filters = [{ k: null, label: 'Все' }].concat(present.map(k => ({ k, label: STATP[k] }))).map(f => {
+      const on = filter === f.k, n = f.k ? apps.filter(a => a.status === f.k).length : apps.length;
+      return { label: f.label, count: String(n), on, hasDot: !!f.k, dot: f.k ? DOT[f.k] + (on ? ';outline:2px solid ' + btnFg : '') : '', style: chip(on) + ';--hv-bd:' + (on ? btnBg : dashBorder),
+        countStyle: 'font-size:12px;font-weight:600;color:' + (on ? btnFg : inkFaint) + ';font-variant-numeric:tabular-nums', onClick: () => this.setState({ filter: f.k }) };
+    });
+    const shown = apps.filter(a => !filter || a.status === filter);
+
+    const openA = apps.find(a => a.id === s.openId) || null;
+    const isOpen = !!openA;
+    const N = shown.length;
+    const split = (V === 'Б' || V === 'Г') && !m;
+    const rail = V === 'Г' && !m && isOpen && !s.railOpen;
+
+    // строки
+    const rows = shown.map((a, i) => {
+      const acts = actsFor(a), sel = s.openId === a.id, tone = commentTone(a);
+      const draftClosed = a.status === 'draft' && !canSend(a.kind);
+      const t = val(a.id, 'topic', a.topic);
+      let style, hover = '';
+      const first = i === 0, last = i === N - 1;
+      if (m) {
+        style = 'padding:16px;background:' + (split || V === 'Б' || V === 'Г' ? (sel ? tint : surface) : surface) + ';border-bottom:1px solid ' + hairline + ';' + 'cursor:pointer;';
+        if (V === 'В') style += 'order:' + (2 * i) + ';';
+        if ((V === 'А' || V === 'Б' || V === 'Г') && isOpen) style = 'display:none';
+      } else if (split) {
+        style = 'grid-column:1;min-width:0;cursor:pointer;background:' + (sel ? tint : surface) + ';border-left:2px solid ' + border + ';border-right:2px solid ' + border + ';border-top:' + (first ? '2px solid ' + border : '1px solid ' + hairline) + ';' + (last ? 'border-bottom:2px solid ' + border + ';' : '') + (rail ? 'display:flex;align-items:center;justify-content:center;height:52px' : 'padding:14px 16px');
+        hover = sel ? '' : 'background:' + sectionGray;
+      } else {
+        style = 'padding:20px 24px;cursor:pointer;' + (first ? '' : 'border-top:1px solid ' + hairline + ';') + (V === 'В' ? 'order:' + (2 * i) + ';' : '');
+        if (V === 'А' && isOpen) style = 'display:none';
+      }
+      style += ';--hv-bg:' + (sel && (split || m) ? tint : sectionGray);
+      const showExtra = !(V === 'Б' || V === 'Г');
+      const metaParts = [D.KIND[a.kind].label, (a.status === 'draft' ? 'изменён ' : 'изменено ') + a.changed];
+      if (showExtra && a.status === 'sent') metaParts.push('рассмотрит программный комитет, ответ придёт на почту');
+      if (showExtra && draftClosed) metaParts.push(closedText(a).split(' — ')[0].toLowerCase());
+      return {
+        style, hover, rail, full: !rail, title: rail ? STAT[a.status] + ' · ' + (t || 'Без темы') : '',
+        onRow: openApp(a.id), onOpen: stop(openApp(a.id)),
+        status: STAT[a.status], dot: DOT[a.status], dotLg: DOT[a.status].replace('width:10px;height:10px', 'width:14px;height:14px') + (sel ? ';outline:2px solid ' + btnBg + ';outline-offset:3px' : ''),
+        statusBtn: 'display:inline-flex;align-items:center;gap:8px;padding:2px 0;font-size:13px;font-weight:' + (a.status === 'revision' ? 700 : 600) + ';color:' + (a.status === 'revision' ? warn : a.status === 'withdrawn' ? inkMuted : ink) + ';white-space:nowrap;align-self:start;margin-top:2px',
+        topic: t || 'Без темы',
+        topicStyle: 'font:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left;font-size:' + (split ? '14.5px' : '16px') + ';line-height:1.4;font-weight:700;color:' + (t ? ink : inkFaint) + ';text-wrap:pretty',
+        meta: metaParts.join(' · '),
+        commentFull: !!a.comment && V === 'В' && sel, commentClamp: !!a.comment && (V === 'А' || (V === 'В' && !sel)),
+        commentLong: (a.comment || '').length > 150,
+        clampStyle: 'font-size:13.5px;line-height:1.55;color:' + inkBody + ';display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;text-wrap:pretty',
+        comment: a.comment || '', commentInk: tone.ink,
+        commentStyle: 'margin-top:4px;font-size:13.5px;line-height:1.55;color:' + inkBody + ';text-wrap:pretty',
+        hasDeadline: a.status === 'revision', deadline: deadlineText, deadlineInk: revInk,
+        hasActions: showExtra && (!!acts.primary || acts.sec.length > 0), hasPrimary: !!acts.primary,
+        primary: acts.primary ? { label: acts.primary.label, onClick: stop(acts.primary.onClick) } : { label: '', onClick: null },
+        sec: acts.sec.map(x => ({ label: x.label, onClick: stop(x.onClick), style: quietBtn + ';--hv-c:' + (x.danger ? danger : ink) })),
+        wdAsk: showExtra && s.askWd === a.id, wdYes: stop(revoke(a.id)), wdNo: stop(() => this.setState({ askWd: null })), wdStop: stop(null)
+      };
+    });
+
+    // открытая заявка
+    let o = { kind: '', topic: '', status: '', dateLine: '', blocks: [], det: [], summary: [] };
+    if (openA) {
+      const a = openA, K = D.KIND[a.kind], id = a.id;
+      const editable = (a.status === 'draft' && canSend(a.kind)) || (a.status === 'revision' && revOpen);
+      const readDraft = a.status === 'draft' && !editable;
+      const authors = s.authors[id] || a.authors.map((x, i) => Object.assign({ uid: 'b' + i }, x));
+      const setAuthors = arr => { this.setState(st => ({ authors: Object.assign({}, st.authors, { [id]: arr }) })); this.autosave(); };
+      const chk = k => { const v = s.checks[id + '.' + k]; return v !== undefined ? v : !!(a.checks && a.checks[k]); };
+      const defs = D.DEFS[a.kind];
+      const topic = val(id, 'topic', a.topic);
+      const fv = k => val(id, k, a.fields[k]);
+      const total = a.kind === 'theses' ? defs.reduce((n, f) => n + fv(f.k).length, 0) : 0;
+      const firstSend = a.status === 'draft' && !apps.some(x => x.status !== 'draft');
+      const askBirth = a.kind === 'poster' && a.status === 'draft' && !apps.some(x => x.kind === 'poster' && x.status !== 'draft');
+      const tried = !!s.tried[id] && editable;
+      const E = [];
+      if (a.kind === 'theses' && a.status === 'draft' && thesesSent >= 3) E.push({ k: null, msg: 'Можно отправить не больше 3 тезисов' });
+      if (!topic.trim()) E.push({ k: 'topic', msg: 'Укажите тему', focus: 'in-topic' });
+      const badA = authors.findIndex(x => !x.sn.trim() || !x.nm.trim() || !x.org.trim());
+      if (badA >= 0) E.push({ k: 'authors', msg: 'Заполните фамилию, имя и место работы у каждого автора', focus: 'in-a' + badA + '-sn' });
+      else if (a.kind === 'oral' && authors.filter(x => x.sp).length !== 1) E.push({ k: 'authors', msg: 'Отметьте одного докладчика' });
+      if (askBirth && !val(id, 'birth').trim()) E.push({ k: 'birth', msg: 'Укажите дату рождения', focus: 'in-birth' });
+      defs.forEach(f => { if (!fv(f.k).trim()) E.push({ k: f.k, msg: 'Заполните поле «' + f.label + '»', focus: 'in-' + f.k }); });
+      if (a.kind === 'theses' && total > 5000) E.push({ k: 'counter', msg: 'Сократите текст тезисов до 5 000 знаков — сейчас ' + total.toLocaleString('ru-RU'), focus: 'in-results' });
+      if (a.kind === 'theses') {
+        if (!chk('rinc')) E.push({ k: 'chk-rinc', msg: 'Дайте согласие на публикацию в РИНЦ', focus: 'chk-rinc' });
+        if (!chk('plag')) E.push({ k: 'chk-plag', msg: 'Подтвердите, что в тексте нет некорректных заимствований', focus: 'chk-plag' });
+        if (!chk('trade')) E.push({ k: 'chk-trade', msg: 'Подтвердите, что в тексте нет торговых наименований', focus: 'chk-trade' });
+      }
+      if (firstSend && !chk('pd')) E.push({ k: 'chk-pd', msg: 'Дайте согласие на обработку персональных данных', focus: 'chk-pd' });
+      const errOf = k => { if (!tried) return null; const e = E.find(x => x.k === k); return e ? e.msg : null; };
+      const inStyle = (err, multi, extra) => 'width:100%;box-sizing:border-box;font:inherit;font-size:15px;font-weight:400;line-height:1.6;padding:11px 14px;border:2px solid ' + (err ? danger : fieldBorder) + ';background:' + surface + ';color:' + ink + ';outline:none;' + (multi ? 'resize:vertical;field-sizing:content;min-height:4.5em;' : '') + (extra || '');
+      const labelStyle = 'font-size:14px;font-weight:700;color:' + ink;
+      const blocks = [];
+      let secN = 0;
+      const section = (text, sub) => { blocks.push({ isSection: true, text, sub: sub || '', hasSub: !!sub, wrap: secN++ ? 'padding-top:28px;margin-top:4px;border-top:1px solid ' + hairline : '' }); };
+      const field = (k, label, opts) => {
+        const v = opts.value, err = errOf(k);
+        blocks.push({ isField: true, label, labelStyle: editable ? labelStyle : 'font-size:13px;font-weight:700;color:' + inkMuted, inputId: 'in-' + k, value: v, rows: opts.rows || 1, placeholder: opts.ph || '',
+          onChange: e => { const nv = e.target.value; this.setState(st => ({ vals: Object.assign({}, st.vals, { [id + '.' + k]: nv }) })); this.autosave(); },
+          editMulti: editable && !!opts.multi, editSingle: editable && !opts.multi, ro: !editable, roText: v || '—',
+          hasErr: !!err, err: err || '', inputStyle: inStyle(err, opts.multi, opts.extra),
+          hasHint: !!opts.hint && editable, hint: opts.hint || '', hasTag: !!opts.tag && s.notes, tag: opts.tag || '', wrap: '' });
+      };
+      section('О работе', a.kind === 'oral' ? 'Формат участия — очный' : '');
+      field('topic', a.kind === 'theses' ? 'Название тезисов' : 'Тема', { value: topic, ph: 'Например: PRP при латеральном эпикондилите: результаты 120 пациентов' });
+      if (askBirth && editable) field('birth', 'Дата рождения', { value: val(id, 'birth'), ph: 'дд.мм.гггг', extra: 'max-width:200px', hint: 'Спрашиваем один раз — перед первым постером. ' + ageReason + '.', tag: 'новое · поле даты рождения' });
+      section('Авторы', a.kind === 'oral' ? 'Отметьте одного докладчика' : 'Порядок — как в публикации');
+      const aErr = errOf('authors');
+      const ghost = dis => 'font:inherit;width:32px;height:32px;font-size:14px;font-weight:700;border:0;background:transparent;color:' + (dis ? hairline : inkMuted) + ';cursor:' + (dis ? 'default' : 'pointer') + ';--hv-bg:' + (dis ? 'transparent' : sectionGray);
+      const authorViews = authors.map((x, i) => {
+        const mv = (from, to) => () => { const arr = authors.slice(); const t = arr[from]; arr[from] = arr[to]; arr[to] = t; setAuthors(arr); };
+        const setK = key => e => { const nv = e.target.value; setAuthors(authors.map((y, j) => j === i ? Object.assign({}, y, { [key]: nv }) : y)); };
+        const incomplete = !x.sn.trim() || !x.nm.trim() || !x.org.trim();
+        const ek = id + '.' + (x.uid || i);
+        const isEd = editable && (s.editA[ek] !== undefined ? s.editA[ek] : (tried && incomplete));
+        const inp = (key, label, wrap) => ({ label, id: 'in-a' + i + '-' + key, value: x[key], onChange: setK(key), wrap: wrap || 'display:block;min-width:0',
+          style: 'width:100%;box-sizing:border-box;font:inherit;font-size:14.5px;padding:9px 12px;border:2px solid ' + (tried && key !== 'pt' && !x[key].trim() ? danger : fieldBorder) + ';background:' + surface + ';color:' + ink + ';outline:none' });
+        return {
+          n: i + 1, full: [x.sn, x.nm, x.pt].filter(Boolean).join(' ') || 'Новый автор', org: x.org || (x.me ? '' : 'место работы не указано'),
+          nameStyle: 'font-size:14.5px;font-weight:700;color:' + (x.sn ? ink : inkFaint),
+          showSp: a.kind === 'oral' && (editable || x.sp), sp: !!x.sp, edit: editable, open: isEd,
+          onSpeaker: editable ? () => setAuthors(authors.map((y, j) => Object.assign({}, y, { sp: j === i }))) : null,
+          spStyle: 'font:inherit;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:' + (x.sp ? 700 : 500) + ';padding:5px 10px;cursor:' + (editable ? 'pointer' : 'default') + ';border:2px solid ' + (x.sp ? btnBg : hairline) + ';background:' + (x.sp ? tint : 'transparent') + ';color:' + (x.sp ? tintFg : inkMuted) + ';--hv-bd:' + (editable && !x.sp ? dashBorder : x.sp ? btnBg : hairline) + ';--hv-c:' + (editable && !x.sp ? ink : x.sp ? tintFg : inkMuted),
+          spHover: editable && !x.sp ? 'border-color:' + dashBorder + ';color:' + ink : '',
+          spDot: 'width:10px;height:10px;box-sizing:border-box;border:2px solid currentColor;border-radius:50%;background:' + (x.sp ? 'currentColor' : 'transparent'),
+          toggleLabel: isEd ? 'Готово' : 'Изменить', onToggle: () => this.setState(st => ({ editA: Object.assign({}, st.editA, { [ek]: !isEd }) })),
+          upDis: i === 0, downDis: i === authors.length - 1, delDis: authors.length === 1,
+          upStyle: ghost(i === 0), downStyle: ghost(i === authors.length - 1), delStyle: ghost(authors.length === 1),
+          onUp: i > 0 ? mv(i, i - 1) : null, onDown: i < authors.length - 1 ? mv(i, i + 1) : null,
+          onDel: authors.length > 1 ? () => setAuthors(authors.filter((y, j) => j !== i)) : null,
+          inputs: [inp('sn', 'Фамилия'), inp('nm', 'Имя'), inp('pt', 'Отчество'), inp('org', 'Место работы', 'display:block;min-width:0;grid-column:1 / -1')]
+        };
+      });
+      blocks.push({ isAuthors: true, edit: editable, authors: authorViews, hasErr: !!aErr, err: aErr || '', hasTagRow: editable && s.notes, wrap: '',
+        onAdd: () => { const uid = 'n' + Date.now(); this.setState(st => ({ editA: Object.assign({}, st.editA, { [id + '.' + uid]: true }) })); setAuthors(authors.concat([{ uid, sn: '', nm: '', pt: '', org: '', sp: false }])); } });
+      section(a.kind === 'theses' ? 'Текст тезисов' : 'Содержание', a.kind === 'theses' ? 'Пять разделов, всего до 5 000 знаков' : '');
+      defs.forEach(f => field(f.k, f.label, { value: fv(f.k), multi: true, rows: f.rows, ph: f.ph }));
+      const checkList = [];
+      const mkChk = (k, label) => { const on = chk(k), err = errOf('chk-' + k); checkList.push({ id: 'chk-' + k, label, on, dis: !editable, mark: on ? '✓' : '', hasErr: !!err, err: err || '',
+        onToggle: editable ? () => { this.setState(st => ({ checks: Object.assign({}, st.checks, { [id + '.' + k]: !on }) })); } : null,
+        hover: editable ? 'background:' + sectionGray : '',
+        btnStyle: 'font:inherit;display:flex;gap:12px;align-items:flex-start;background:none;border:0;padding:6px 8px;margin:-6px -8px;text-align:left;cursor:' + (editable ? 'pointer' : 'default') + ';--hv-bg:' + (editable ? sectionGray : 'transparent'),
+        boxStyle: 'flex:none;width:20px;height:20px;box-sizing:border-box;border:2px solid ' + (err ? danger : on ? btnBg : fieldBorder) + ';background:' + (on ? btnBg : surface) + ';color:' + btnFg + ';display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800' }); };
+      if (a.kind === 'theses') { mkChk('rinc', 'Согласие на публикацию тезисов в сборнике Конгресса с размещением в РИНЦ'); mkChk('plag', 'В тексте нет некорректных заимствований'); mkChk('trade', 'В тексте нет торговых наименований'); }
+      if (firstSend && editable) mkChk('pd', 'Согласие на обработку персональных данных для рассмотрения заявки программным комитетом Конгресса');
+      if (checkList.length) { section('Подтверждения'); blocks.push({ isChecks: true, checks: checkList, wrap: '' }); }
+
+      let notice = null;
+      if (s.sentNow[id]) notice = { t: 'Заявка отправлена. Рассмотрит программный комитет, ответ придёт на почту.', c: success, bg: successTint, i: '✓' };
+      else if (readDraft) notice = { t: closedText(a), c: warn, bg: warnTint, i: '⚠' };
+      else if (a.status === 'revision' && !revOpen) notice = { t: deadlineText, c: warn, bg: warnTint, i: '⚠' };
+      else if (a.status === 'withdrawn') notice = { t: 'Заявка отозвана ' + (a.withdrawnAt || today) + '. Программный комитет её не рассмотрит; изменить или отправить её снова нельзя.', c: inkMuted, bg: sectionGray, i: '—' };
+      const acts = actsFor(a), tone = commentTone(a);
+      const confirming = editable && !E.length && !!s.confirm[id];
+      const longC = (a.comment || '').length > 240;
+      const big = V === 'А';
+      const n = E.length, w = (n % 10 === 1 && n % 100 !== 11) ? 'ошибку' : ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) ? 'ошибки' : 'ошибок';
+      const pct = Math.min(total / 5000, 1), over = total > 5000, near = !over && total >= 4500;
+      const cInk = over ? danger : near ? warn : ink;
+      o = {
+        kind: K.label, topic: topic || 'Без темы', status: STAT[a.status], dot: DOT[a.status],
+        posterBadge: posterBase + (POSTER[a.status] || 'background:#fff;color:#114D9E;box-shadow:4px 4px 0 #0D3A77'),
+        dateLine: a.status === 'draft' ? 'черновик изменён ' + a.changed : a.status === 'withdrawn' ? 'отозвана ' + (a.withdrawnAt || today) : 'отправлена ' + a.sentAt,
+        commentBlock: !!a.comment && V !== 'В', comment: a.comment || '', commentDate: a.commentDate || '', commentInk: tone.ink,
+        commentBoxStyle: (m ? 'margin:0 -16px;padding:18px 16px;' : 'padding:' + (big ? '22px 26px' : '18px 20px') + ';') + 'background:' + tone.bg,
+        commentTextStyle: longC ? 'font-size:15.5px;line-height:1.65;font-weight:400;color:' + ink + ';max-width:72ch;white-space:pre-wrap;text-wrap:pretty' : 'font-size:' + (big && !m ? '19px' : '15.5px') + ';line-height:1.5;font-weight:600;color:' + ink + ';text-wrap:pretty',
+        hasDeadline: a.status === 'revision', deadline: deadlineText, deadlineInk: revInk,
+        wdAsk: V !== 'В' && s.askWd === id, wdYes: revoke(id), wdNo: () => this.setState({ askWd: null }),
+        hasNotice: !!notice, notice: notice ? notice.t : '', noticeInk: notice ? notice.c : ink, noticeIcon: notice ? notice.i : '',
+        noticeStyle: notice ? (m ? 'margin:0 -16px;padding:14px 16px;' : 'padding:14px 18px;') + 'background:' + notice.bg + ';display:flex;gap:12px;align-items:flex-start' : '',
+        detailActions: V !== 'В' && acts.det.length > 0,
+        det: acts.det.map(x => ({ label: x.label, onClick: x.onClick, style: 'font:inherit;font-size:14px;font-weight:700;background:none;border:0;padding:0;cursor:pointer;color:' + (x.danger ? danger : accent) })),
+        hasSummary: tried && n > 0, summaryTitle: 'Заявка не отправлена. Исправьте ' + n + ' ' + w + ':',
+        summary: E.map(e => ({ msg: e.msg, link: !!e.focus, plain: !e.focus, onClick: () => { const el = document.getElementById(e.focus); if (el) el.focus(); } })),
+        edit: editable, blocks,
+        showBar: editable || readDraft,
+        hasCounter: a.kind === 'theses', counterText: total.toLocaleString('ru-RU') + ' / 5 000',
+        counterStyle: 'font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:' + cInk,
+        barFill: 'position:absolute;left:0;top:0;bottom:0;width:' + (pct * 100).toFixed(1) + '%;background:' + (over ? danger : near ? warn : accent),
+        hasCounterNote: over || near, counterNote: over ? 'больше на ' + (total - 5000).toLocaleString('ru-RU') : 'осталось ' + (5000 - total).toLocaleString('ru-RU'),
+        counterNoteStyle: 'font-size:13px;font-weight:600;color:' + cInk,
+        hasBarHint: readDraft, barHint: readDraft ? closedText(a).split(' — ')[0] : '',
+        barTag: a.kind === 'theses' ? 'новое · автосохранение и общий счётчик знаков' : 'новое · строка автосохранения',
+        submitLabel: a.status === 'revision' ? 'Отправить снова' : 'Отправить', submitDis: !editable,
+        submitStyle: editable ? 'font:inherit;flex:none;font-size:14.5px;font-weight:800;color:' + btnFg + ';background:' + btnBg + ';border:2px solid ' + btnBg + ';padding:12px 26px;cursor:pointer;box-shadow:3px 3px 0 ' + border + ';--hv-bg:' + priH + ';--hv-tf:translate(1px,1px);--hv-sh:2px 2px 0 ' + border + ';--ac-tf:translate(3px,3px);--ac-sh:none' : 'font:inherit;flex:none;font-size:14.5px;font-weight:800;color:' + inkFaint + ';background:' + hairline + ';border:2px solid ' + hairline + ';padding:12px 26px;cursor:not-allowed;--hv-bg:' + hairline + ';--hv-tf:none;--hv-sh:none;--ac-tf:none;--ac-sh:none',
+        submitHover: editable ? 'transform:translate(1px,1px);box-shadow:2px 2px 0 ' + border : '',
+        submitActive: editable ? 'transform:translate(3px,3px);box-shadow:none' : '',
+        onSubmit: editable ? () => {
+          if (E.length) { this.setState(st => ({ tried: Object.assign({}, st.tried, { [id]: true }) })); return; }
+          this.setState(st => ({ confirm: Object.assign({}, st.confirm, { [id]: true }) }));
+        } : null,
+        confirming, notConfirming: !confirming,
+        confirmTitle: a.status === 'revision' ? 'Отправить исправленную заявку?' : 'Отправить заявку в программный комитет?',
+        confirmSub: a.status === 'revision' ? 'После отправки изменить её будет нельзя — комитет рассмотрит эту версию.' : 'После отправки редактирование закроется. Забрать заявку на исправление можно, пока открыт приём.',
+        confirmLabel: a.status === 'revision' ? 'Да, отправить снова' : 'Да, отправить',
+        onCancel: () => this.setState(st => ({ confirm: Object.assign({}, st.confirm, { [id]: false }) })),
+        onConfirm: () => this.setState(st => ({ sentNow: Object.assign({}, st.sentNow, { [id]: true }), withdrawn: Object.assign({}, st.withdrawn, { [id]: false }), tried: Object.assign({}, st.tried, { [id]: false }), confirm: Object.assign({}, st.confirm, { [id]: false }) }))
+      };
+    }
+
+    // раскладка
+    let listStyle, detailWrap;
+    const openIdx = shown.findIndex(a => a.id === s.openId);
+    if (m) {
+      listStyle = 'display:flex;flex-direction:column;margin:0 -16px;border-top:1px solid ' + hairline + ';background:' + surface;
+      if (V === 'В') detailWrap = openIdx >= 0 ? 'order:' + (2 * openIdx + 1) + ';background:' + surface + ';border-bottom:1px solid ' + hairline + ';padding:4px 16px 0' : 'display:none';
+      else detailWrap = isOpen ? 'background:' + pageBg + ';padding:0 16px' : 'display:none';
+    } else if (split) {
+      const col1 = rail ? '64px' : '320px';
+      listStyle = 'display:grid;grid-template-columns:' + col1 + ' minmax(0,1fr);grid-template-rows:repeat(' + Math.max(N, 1) + ',auto) 1fr;column-gap:40px;align-items:start';
+      detailWrap = 'grid-column:2;grid-row:1 / span ' + (Math.max(N, 1) + 1) + ';min-width:0';
+    } else if (V === 'А' && isOpen) {
+      listStyle = 'display:block'; detailWrap = 'max-width:760px';
+    } else {
+      listStyle = 'display:flex;flex-direction:column;border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow;
+      detailWrap = V === 'В' && openIdx >= 0 ? 'order:' + (2 * openIdx + 1) + ';padding:0 24px 0 216px' : 'display:none';
+    }
+    const formWrap = 'display:flex;flex-direction:column;gap:20px;' + (V === 'В' && !m ? 'padding-top:8px;' : '');
+    const barStyle = 'position:sticky;bottom:0;z-index:4;display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:' + (V === 'В' ? surface : pageBg) + ';border-top:2px solid ' + border + ';padding:14px ' + (m ? '16px' : '0') + ';margin:8px ' + (m ? '-16px' : '0') + ' 0;' + (V === 'В' && !m ? 'margin-bottom:0;padding-bottom:18px' : '') + ';' + (o.confirming ? 'background:' + tint + ';padding:16px ' + (m ? '16px' : '20px') : '');
+
+    // выбор вида
+    const picks = ['oral', 'poster', 'theses'].map((k, i) => {
+      const K = D.KIND[k];
+      let reason = '', avail = canSend(k);
+      if (k === 'poster' && s.over40) { reason = ageReason; avail = false; }
+      if (k === 'theses' && thesesSent >= 3) { reason = 'Отправлено 3 тезиса из 3 — больше подать нельзя'; avail = false; }
+      return {
+        name: K.label, intake: intakeLine(k), hasCount: k === 'theses' && thesesSent < 3, count: 'Отправлено ' + thesesSent + ' из 3',
+        hasReason: !!reason, reason, avail, onStart: start(k),
+        nameStyle: 'font-size:17px;font-weight:800;letter-spacing:-.01em;color:' + (avail ? ink : inkMuted),
+        style: 'display:flex;flex-direction:column;gap:6px;min-width:0;padding:' + (m ? '16px' : '22px 24px') + ';' + (i ? (m ? 'border-top:1px solid ' + hairline : 'border-left:1px solid ' + hairline) : '') + (avail ? '' : ';background:' + sectionGray)
+      };
+    });
+
+    const content = !s.noReg && !s.loading && !s.loadErr;
+    const hideForOpen = (V === 'А' && isOpen) || (m && isOpen && V !== 'В');
+    const showPicker = content && !hideForOpen && (s.empty || apps.length === 0 || s.pickerOpen);
+    const w = m ? '390' : '1440', th = d ? 'dark' : 'light';
+    const secHead = m ? 'margin:0 -16px;padding:18px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px' : 'display:flex;align-items:center;gap:18px;margin-bottom:16px';
+
+    return {
+      dark: d, m,
+      artboard: 'd-lk-congress · ' + w + ' · ' + th + ' · ' + s.screen + '',
+      outerStyle: 'background:' + pageBg + ';--lk-ink:' + ink + ';--lk-row:' + sectionGray + ';--lk-border:' + border + ';--lk-pri-h:' + priH + ';--lk-danger-h:' + dangerH + ';' + (forced ? 'width:390px;margin:24px auto;border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';overflow:hidden' : 'min-height:100vh'),
+      toggleTheme: () => { const nd = !d; try { localStorage.setItem('ds-theme', nd ? 'dark' : 'light'); } catch (e) {} this.setState({ dark: nd }); },
+      posterList: !(V === 'А' && isOpen), posterApp: V === 'А' && isOpen,
+      posterPad: m ? '22px 16px 26px' : 'clamp(28px,4vw,40px) clamp(16px,4vw,48px) clamp(36px,5vw,48px)',
+      mainPad: m ? '0 16px 48px' : 'clamp(36px,5vw,52px) clamp(16px,4vw,48px) 96px',
+      blockGap: m ? '8px' : '48px',
+      noReg: s.noReg, loading: s.loading, loadErr: s.loadErr, showContent: content,
+      noRegStyle: 'display:flex;align-items:baseline;gap:10px 18px;flex-wrap:wrap;' + (m ? 'padding:24px 0' : 'padding:22px 0;border-top:2px solid ' + ink + ';border-bottom:1px solid ' + hairline),
+      skelBox: m ? 'margin:16px -16px 0;border-top:1px solid ' + hairline : 'border:2px solid ' + hairline,
+      skel: ['64%', '48%', '72%', '55%'].map((x, i) => ({ w: x, style: 'display:flex;gap:24px;align-items:flex-start;padding:' + (m ? '16px' : '20px 24px') + ';' + (i ? 'border-top:1px solid ' + hairline : '') })),
+      loadErrStyle: 'display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:' + dangerTint + ';' + (m ? 'margin:16px -16px 0;padding:18px 16px' : 'padding:20px 24px'),
+      retry: () => { this.setState({ loadErr: false, loading: true }); clearTimeout(this.rt); this.rt = setTimeout(() => this.setState(this.presetState('список')), 1200); },
+      showPicker, canCollapsePicker: !s.empty && apps.length > 0,
+      togglePicker: () => this.setState(st => ({ pickerOpen: !st.pickerOpen })),
+      pickerNote: 'margin:' + (m ? '0 0 12px' : '0 0 16px') + ';font-size:14.5px;line-height:1.6;color:' + inkBody + ';text-wrap:pretty',
+      pickBox: m ? 'display:flex;flex-direction:column;margin:0 -16px;border-top:1px solid ' + hairline + ';border-bottom:1px solid ' + hairline + ';background:' + surface : 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:2px solid ' + border + ';background:' + surface,
+      picks,
+      showList: content && apps.length > 0, showListHead: !hideForOpen, showNewBtn: !s.pickerOpen,
+      filterRow: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;' + (m ? 'padding:0 0 4px' : ''),
+      filters,
+      tagStyle: 'display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:' + accent + ';border:1px dashed ' + accent + ';padding:3px 7px',
+      notes: s.notes,
+      secHead, secRule: m ? 'display:none' : 'flex:1;border-top:2px solid ' + ink,
+      listStyle, rows, detailWrap,
+      rowGrid: m || split ? 'display:flex;flex-direction:column;gap:6px' : 'display:grid;grid-template-columns:168px minmax(0,1fr) auto;gap:24px;align-items:start',
+      detailPlaceholder: split && !isOpen, hasOpen: isOpen,
+      sheetBar: m && isOpen && V !== 'В',
+      sheetBarStyle: 'position:sticky;top:0;z-index:5;margin:0 -16px;padding:2px 16px;background:' + surface + ';border-bottom:1px solid ' + hairline,
+      railToggle: V === 'Г' && !m && isOpen, railToggleLabel: s.railOpen ? '← Свернуть список' : '→ Развернуть список',
+      toggleRail: () => this.setState(st => ({ railOpen: !st.railOpen })),
+      detailHead: split || (m && V !== 'В' && V !== 'А'),
+      closeApp: () => { this.setState({ openId: null }); this.top(); },
+      o, formWrap, barStyle,
+      actionsCol: m ? 'display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:6px' : 'display:flex;flex-direction:column;align-items:flex-end;gap:8px;text-align:right;max-width:240px',
+      authorGrid: 'display:grid;grid-template-columns:' + (m ? '1fr' : 'repeat(3,minmax(0,1fr))') + ';gap:10px;margin:14px 0 4px 32px',
+      roText: 'font-size:15px;line-height:1.7;color:' + inkBody + ';white-space:pre-wrap;max-width:68ch;text-wrap:pretty',
+      summaryStyle: 'background:' + dangerTint + ';' + (m ? 'margin:0 -16px;padding:18px 16px' : 'padding:18px 22px'),
+      saveText: s.saveFail ? 'Не удалось сохранить — повторим' : s.saving ? 'Сохраняем…' : 'Сохранено · ' + s.savedAt,
+      saveDot: 'width:8px;height:8px;flex:none;border-radius:50%;background:' + (s.saveFail ? danger : s.saving ? accent : success) + (s.saving ? ';animation:livePulse 1s ease-in-out infinite' : ''),
+      saveTextStyle: 'font-size:13px;font-weight:600;color:' + (s.saveFail ? danger : inkMuted),
+      btnPrimarySm: 'font:inherit;font-size:13.5px;font-weight:800;color:' + btnFg + ';background:' + btnBg + ';border:2px solid ' + btnBg + ';padding:9px 16px;cursor:pointer;white-space:nowrap;box-shadow:3px 3px 0 ' + border,
+      btnOutline: 'font:inherit;font-size:13.5px;font-weight:700;color:' + ink + ';background:' + surface + ';border:2px solid ' + border + ';padding:10px 18px;cursor:pointer;box-shadow:3px 3px 0 ' + shadowSm,
+      textAction: 'font:inherit;font-size:14px;font-weight:700;color:' + accent + ';background:none;border:0;padding:0;cursor:pointer;text-align:inherit;white-space:nowrap',
+      quietBtn,
+      btnSecondaryLg: 'font:inherit;flex:none;font-size:14.5px;font-weight:800;color:' + ink + ';background:' + surface + ';border:2px solid ' + border + ';padding:12px 26px;cursor:pointer;box-shadow:3px 3px 0 ' + border,
+      quietHover: 'color:' + ink + ';text-decoration-color:' + ink,
+      dangerBtnSm: 'font:inherit;font-size:13px;font-weight:700;color:#fff;background:' + danger + ';border:2px solid ' + danger + ';padding:6px 14px;cursor:pointer',
+      dangerBtnHover: 'background:' + (d ? '#c43d3d' : '#A31515') + ';border-color:' + (d ? '#c43d3d' : '#A31515'),
+      wdAskStyle: 'display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin-top:8px;padding:10px 14px;background:' + dangerTint + ';font-size:13.5px;font-weight:600;color:' + ink + ';cursor:default',
+      ink, inkBody, inkMuted, inkFaint, surface, border, hairline, sectionGray, accent, tint, tintFg, danger, dashBorder
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -114,11 +114,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # API EARS-5/EARS-8 tests own IdP password-check and Redis refresh-token proof.
 
   @EARS-5 @EARS-16 @failure
-  Scenario: Wrong password returns a generic error and increments the lockout counter
-    Given a verified doctor_guest user
-    When the user submits a wrong password
-    Then a generic authentication error is returned
-    And the failed-attempt counter is incremented
+  Scenario: Wrong password returns a generic error without a private session
+    Given the golden doctor "verified-cardiologist" is available for password sign-in
+    When that doctor submits a wrong password through the Academy password form
+    Then the Academy shows the generic password sign-in error
+    And the refused login sets no BFF session cookie
+    And the doctor's private profile is not readable through the BFF
+    # API EARS-5 test owns the IdP failed-attempt increment assertion. The browser
+    # verifies the live refusal without claiming to read Zitadel's native counter.
 
   @EARS-6 @EARS-8 @happy
   Scenario: Passwordless login with an email OTP code

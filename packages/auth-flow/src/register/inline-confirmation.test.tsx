@@ -458,4 +458,29 @@ describe("rows 51 + 76: the panel's words and hops are the host's data", () => {
         .getAttribute("href"),
     ).toBe(`${DOCTOR_FIXTURE.routes.reset}${carried}`);
   });
+
+  /** The «Войти» hop on the doctor code step, read by its stable test id. */
+  const signInHref = () =>
+    screen.getByTestId("verify-go-to-login").getAttribute("href");
+
+  it("021 EARS-13: with no carried target the «Войти» link on the doctor code step is the plain sign-in route", () => {
+    renderPanel({ carriedTarget: null });
+
+    expect(signInHref()).toBe(DOCTOR_FIXTURE.routes.login);
+  });
+
+  it.each([
+    ["a protocol-relative", "//evil.example/steal"],
+    ["an absolute cross-origin", "https://evil.example"],
+  ])(
+    "021 EARS-13: %s carried target never decorates the «Войти» link on the doctor code step",
+    (_kind, hostile) => {
+      renderPanel({ carriedTarget: hostile });
+
+      const href = signInHref();
+      expect(href).toBe(DOCTOR_FIXTURE.routes.login);
+      expect(href).not.toContain("evil.example");
+      expect(href).not.toContain(encodeURIComponent(hostile));
+    },
+  );
 });

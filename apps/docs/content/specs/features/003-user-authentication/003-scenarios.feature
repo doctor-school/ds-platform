@@ -125,10 +125,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-6 @EARS-8 @happy
   Scenario: Passwordless login with an email OTP code
-    Given a verified doctor_guest user
-    When the user requests an email login code and submits the correct code
-    Then Zitadel otp_email verifies it
-    And a BFF session is established with a __Host- cookie
+    Given the golden doctor "verified-cardiologist" has a verified email for code sign-in
+    When that doctor requests an email login code and submits the delivered code through Academy
+    Then the email-code login succeeds and opens the authenticated webinar listing
+    And the browser holds a host-only __Host-ds_session cookie with HttpOnly, Secure, and SameSite=Lax
+    And the doctor's own profile is readable through the BFF
+    And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
 
   @EARS-34 @EARS-16 @happy
   Scenario: A login-email-code request for an unverified account sends verification out-of-band

@@ -37,6 +37,8 @@ Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without 
 
 **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`); squash title = PR title.
 
+**Code comments:** a comment explains only why this code is written this way. It never restates another module's behaviour or a product decision — it cites the spec clause (`NNN EARS-k`) instead. A restated product fact in a comment is a review finding.
+
 **Versioning:** changesets. User-facing PR → `pnpm changeset`; internal-only (refactor/docs/chore) — none.
 
 **Version-Packages release PR (`changeset-release/main`) merge gate.** No `ci` check-run on the bot branch — expected, and the reason the merge takes `--admin` (the ruleset’s PR-scoped bypass); no Mode-a needed. Gate: (1) touched files are ONLY release artifacts (`.changeset/*` removals, `version` fields, `CHANGELOG.md`, lockfile) — anything else = stop; (2) main CI green at the consumed head (`gh run list --branch main`). Merge when the wave it versions has landed, not mid-wave (the bot regenerates on every main push).

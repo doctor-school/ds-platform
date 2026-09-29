@@ -259,6 +259,7 @@ SPEC ANCHORS: read only the line ranges / anchors named in Recon facts — never
 
 ## Recon facts (authoritative — do not re-verify)
 - <fill: the DONE facts the subagent needs — sibling scripts to mirror, exact file locations, wiring points. Hand these as facts; never write "re-read the cited files yourself".>
+- A claim read from a code comment is a hypothesis: verify it against the spec, a test or live behaviour before relying on it (#2457).
 
 ## Deliverable / scope (${scopeLabel})
 ${bulletsOrPlaceholder(scopeSource, "the files/surfaces this slice touches — each is in-slice or a named, tracked exclusion")}

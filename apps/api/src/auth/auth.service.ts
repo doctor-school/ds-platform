@@ -573,10 +573,8 @@ export class AuthService {
       // code (unmetered, no SMS). Phone verification is a future post-registration
       // secondary-identifier concern, so there is no register-time SMS send and no
       // EARS-14 budget gate here (the budget still gates the SMS-OTP login send).
-      // #904: pass the registrant's email so the verification link bakes it into
-      // the /verify#email= fragment — a cold email-button open then seeds the
-      // account and the submit works (the fragment never reaches the server, so
-      // the #869 scanner-prefetch invariant holds).
+      // The registrant's email is the destination of the code-only, link-free
+      // mail (003 EARS-29), so the adapter needs no user lookup to address it.
       // #1128: deliver the create-time code echoed by CreateUser
       // (`created.verificationCode`) instead of generating a second one via a
       // follow-up `/email/resend` — a single verification code, never invalidated

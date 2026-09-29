@@ -17,10 +17,9 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../auth/index.js";
  * as `packages/design-system/src/primitives/fields/field-schemas.ts` is for the
  * portal. The rules are message-LESS by design (#200): the RU copy belongs to
  * the host screen's catalog, and a schema-level message in zod v4 would outrank
- * it. The REQUEST schemas stay as they are — in particular
- * `DoctorConfirmRequestSchema.code` remains `z.string()` because the 003 engine
- * normalises trim + case server-side and the request contract carries no 021
- * code vocabulary (LD-1).
+ * it. The REQUEST schemas stay as they are — the code is confirmed on the 003
+ * command (#2455), whose engine normalises trim + case server-side, so no 021
+ * code vocabulary exists (LD-1).
  */
 
 /**

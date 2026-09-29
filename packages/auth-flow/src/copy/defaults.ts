@@ -1,6 +1,6 @@
 import { PASSWORD_MIN_LENGTH, PROMO_CODE_MAX_LENGTH } from "@ds/schemas";
 
-import type { AuthFlowCopy } from "../host-config";
+import type { AuthFlowCopy, AuthFlowCopyOverride } from "../host-config";
 
 /**
  * The package's own words for every auth field, control and sentence.
@@ -221,3 +221,31 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
   },
 };
+
+/**
+ * The identifier wording of a host that serves no SMS (#2411).
+ *
+ * The identifier box is one thing; a host varies only the channel SET. Where
+ * `channels` has no `sms` the box accepts an email only
+ * (`identifierFieldSchema`), so no label, placeholder, description or error may
+ * promise a phone. Verbatim from the canvas `isDoctor` branches of `fLoginId`,
+ * `fResetId`, `otpIntro`, the reset title and `vEmail`. `resolveAuthFlowCopy`
+ * lays this over the defaults before a host's own `copy` override.
+ */
+export const EMAIL_ONLY_IDENTIFIER_COPY = {
+  fields: {
+    identifier: { invalid: "Введите корректный адрес электронной почты." },
+  },
+  login: {
+    password: {
+      identifierLabel: "Электронная почта",
+      identifierPlaceholder: "doctor@example.com",
+    },
+    otp: { description: "Пришлём код на почту — пароль не нужен." },
+  },
+  reset: {
+    description: "Укажите электронную почту — пришлём код для сброса.",
+    identifierLabel: "Электронная почта",
+    identifierPlaceholder: "doctor@example.com",
+  },
+} as const satisfies AuthFlowCopyOverride;

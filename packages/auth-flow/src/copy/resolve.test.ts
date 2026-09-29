@@ -47,3 +47,52 @@ describe("resolveAuthFlowCopy", () => {
     expect(resolveAuthFlowCopy(config)).toBe(resolveAuthFlowCopy(config));
   });
 });
+
+/**
+ * #2411 — the identifier box is one thing; a host varies only the channel SET.
+ * A host that serves no SMS must not promise a phone in any identifier label,
+ * placeholder, description or error (canvas `design-source/auth.dc.html`,
+ * `isDoctor` branches of `fLoginId` / `fResetId` / `otpIntro` / reset title),
+ * the same switch `identifierFieldSchema` already makes for validation.
+ */
+describe("resolveAuthFlowCopy — identifier wording follows the host channels", () => {
+  it("an email-only host gets the canvas email-only identifier strings", () => {
+    const copy = resolveAuthFlowCopy({ channels: ["email"] });
+
+    expect(copy.login.password.identifierLabel).toBe("Электронная почта");
+    expect(copy.login.password.identifierPlaceholder).toBe(
+      "doctor@example.com",
+    );
+    expect(copy.login.otp.description).toBe(
+      "Пришлём код на почту — пароль не нужен.",
+    );
+    expect(copy.reset.description).toBe(
+      "Укажите электронную почту — пришлём код для сброса.",
+    );
+    expect(copy.reset.identifierLabel).toBe("Электронная почта");
+    expect(copy.reset.identifierPlaceholder).toBe("doctor@example.com");
+    expect(copy.fields.identifier?.invalid).toBe(
+      "Введите корректный адрес электронной почты.",
+    );
+    expect(copy.login.title).toBe(DEFAULT_AUTH_FLOW_COPY.login.title);
+  });
+
+  it("a host serving SMS keeps the email-or-phone strings unchanged", () => {
+    const copy = resolveAuthFlowCopy({ channels: ["email", "sms"] });
+
+    expect(copy).toEqual(DEFAULT_AUTH_FLOW_COPY);
+    expect(copy.login.password.identifierLabel).toBe(
+      "Электронная почта или телефон",
+    );
+  });
+
+  it("a host override still wins over the email-only wording", () => {
+    const copy = resolveAuthFlowCopy({
+      channels: ["email"],
+      copy: { login: { password: { identifierLabel: "Почта" } } },
+    });
+
+    expect(copy.login.password.identifierLabel).toBe("Почта");
+    expect(copy.reset.identifierLabel).toBe("Электронная почта");
+  });
+});

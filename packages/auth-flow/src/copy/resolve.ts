@@ -1,6 +1,6 @@
 import type { AuthFlowCopy, AuthFlowCopyOverride } from "../host-config";
 
-import { DEFAULT_AUTH_FLOW_COPY } from "./defaults";
+import { DEFAULT_AUTH_FLOW_COPY, EMAIL_ONLY_IDENTIFIER_COPY } from "./defaults";
 
 type PlainObject = Record<string, unknown>;
 
@@ -34,24 +34,36 @@ const mergeDeep = (base: unknown, override: unknown): unknown => {
 const cache = new WeakMap<object, AuthFlowCopy>();
 
 /**
- * Any host config: only `copy` is read, and the index signature keeps the
- * parameter from being a weak type, so a config that states no override at all
- * — the normal case today — still satisfies it.
+ * Any host config: only `copy` and `channels` are read, and the index signature
+ * keeps the parameter from being a weak type, so a config that states neither —
+ * the consent-copy call sites — still satisfies it.
  */
 type AuthFlowCopySource = {
   readonly copy?: AuthFlowCopyOverride | undefined;
+  readonly channels?: readonly string[] | undefined;
   readonly [key: string]: unknown;
 };
 
-/** The words this host renders: the package defaults with its own override merged over them. */
+/**
+ * The words this host renders: the package defaults, the email-only identifier
+ * wording when the host states channels without `sms` (#2411 — the same switch
+ * `identifierFieldSchema` makes for validation), then its own override merged
+ * over them.
+ */
 export const resolveAuthFlowCopy = (config: AuthFlowCopySource): AuthFlowCopy => {
   const cached = cache.get(config);
   if (cached) return cached;
 
+  const emailOnly =
+    config.channels !== undefined && !config.channels.includes("sms");
+  const base = emailOnly
+    ? (mergeDeep(DEFAULT_AUTH_FLOW_COPY, EMAIL_ONLY_IDENTIFIER_COPY) as AuthFlowCopy)
+    : DEFAULT_AUTH_FLOW_COPY;
+
   const resolved = (
     config.copy === undefined
-      ? DEFAULT_AUTH_FLOW_COPY
-      : (mergeDeep(DEFAULT_AUTH_FLOW_COPY, config.copy) as AuthFlowCopy)
+      ? base
+      : (mergeDeep(base, config.copy) as AuthFlowCopy)
   ) satisfies AuthFlowCopy;
 
   cache.set(config, resolved);

@@ -82,9 +82,12 @@ describe("017 #1933: what reaches the HTML of the sign-in door", () => {
     expect(html).toContain('data-testid="password-login-form"');
     expect(html).toContain('data-testid="login-method-otp"');
     // …and the sentences are the PACKAGE's (#2027): a field is one thing on
-    // both storefronts, so neither host restates them and both read alike.
+    // both storefronts, so neither host restates them; the host varies only
+    // the channel set, and an email-only host promises no phone (#2411).
     expect(html).toContain("Вход");
-    expect(html).toContain("Электронная почта или телефон");
+    expect(html).toContain("Электронная почта");
+    expect(html).not.toContain("или телефон");
+    expect(html).not.toContain("+7…");
     expect(html).toContain("Создать аккаунт");
     expect(markup(ACADEMY_FIXTURE)).toContain("Электронная почта или телефон");
   });
@@ -164,7 +167,7 @@ async function signIn(props?: {
 }) {
   const user = userEvent.setup();
   render(<LoginDoor config={DOCTOR_FIXTURE} landing="/events" {...props} />);
-  await user.type(screen.getByLabelText("Электронная почта или телефон"), "doc@clinic.ru");
+  await user.type(screen.getByLabelText("Электронная почта"), "doc@clinic.ru");
   await user.type(
     screen.getByLabelText("Пароль", { selector: "input" }),
     "correct-horse-battery");

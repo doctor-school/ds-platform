@@ -165,7 +165,7 @@ async function signIn(
   doctor: { email: string; password: string },
 ): Promise<void> {
   const form = page.getByTestId("password-login-form");
-  await form.getByLabel("Электронная почта или телефон").fill(doctor.email);
+  await form.getByLabel("Электронная почта", { exact: true }).fill(doctor.email);
   await form.getByLabel("Пароль", { exact: true }).fill(doctor.password);
   await page.getByTestId("password-login-submit").click();
 }

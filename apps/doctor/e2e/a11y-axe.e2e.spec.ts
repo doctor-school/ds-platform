@@ -250,7 +250,7 @@ for (const [state, drive] of [
       );
       const form = page.getByTestId("password-login-form");
       await form
-        .getByLabel("Электронная почта или телефон")
+        .getByLabel("Электронная почта", { exact: true })
         .fill("doctor@clinic.ru");
       await form
         .getByLabel("Пароль", { exact: true })

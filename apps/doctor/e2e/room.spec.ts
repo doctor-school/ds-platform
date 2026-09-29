@@ -216,7 +216,7 @@ test.describe("006 EARS-6 denied-access routing on the doctor host (this host's 
     const form = page.getByTestId("password-login-form");
     await expect(form).toBeVisible();
     await form
-      .getByLabel("Электронная почта или телефон")
+      .getByLabel("Электронная почта", { exact: true })
       .fill(process.env.E2E_DOCTOR_EMAIL!);
     await form
       .getByLabel("Пароль", { exact: true })

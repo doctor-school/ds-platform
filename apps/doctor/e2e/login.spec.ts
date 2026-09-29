@@ -109,7 +109,7 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
   await page.goto("/login");
 
   const form = passwordForm(page);
-  await form.getByLabel("Электронная почта или телефон").fill("doctor@clinic.ru");
+  await form.getByLabel("Электронная почта", { exact: true }).fill("doctor@clinic.ru");
   await form.getByLabel("Пароль", { exact: true }).fill("wrong-password-123");
   await page.getByTestId("password-login-submit").click();
 

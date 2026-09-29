@@ -20,6 +20,10 @@ import type pg from "pg";
 
 /** Child tables of `events`, in the order they must be removed. */
 const EVENT_CHILDREN = [
+  // 046 EARS-1 (#2432) — the per-kind intake settings hang off the event-level
+  // settings row (FK `ON DELETE RESTRICT`), so they go first.
+  "congress_submission_kind_settings",
+  "congress_submission_settings",
   // 044 EARS-38 (#2384) — an event-scoped role binding names its event.
   "event_role_grants",
   "presence_beats",

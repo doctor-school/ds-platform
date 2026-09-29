@@ -10,8 +10,9 @@ browser's guest cookie — and the front page otherwise.
 
 The door's landing is decided at guest render, when no session exists and only
 the guest cookie can be read. The shared sign-in, sign-up and confirmation
-mounts now also hand their door a server action (`signedInLandingAction`,
-`@ds/auth-flow/server`) that runs the SAME `resolveArrivalLanding` rule again on
+mounts now also hand their door a server action (`signedInLandingAction`, a
+package-internal module the mounts import directly — deliberately not exported
+from the `@ds/auth-flow/server` barrel, which also reaches client code) that runs the SAME `resolveArrivalLanding` rule again on
 the action's own request, which carries the new session cookie. The door awaits
 it after password sign-in, after code sign-in and after the post-confirmation
 sign-in, then completes the carried target over it exactly as before: a

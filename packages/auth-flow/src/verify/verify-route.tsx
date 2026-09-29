@@ -66,11 +66,16 @@ export async function VerifyRoute({
   });
 
   const landing = await resolveArrivalLanding(config, requestHeaders);
-  // #2333 — decided for a guest; the step asks again once the confirmed doctor
-  // is signed in (on a specialty-aware host only).
-  const resolveSignedInLanding = signedInLandingAction(config);
-  // 021 EARS-3 — the эфир read fills the card, so a host with none never pays.
   const safeTarget = resolveReturnTargetPath(returnTo ?? undefined);
+  // #2333 — `landing` was decided for a GUEST. As on the login and registration
+  // mounts, the step gets the server action that decides it again once the
+  // confirmed doctor is signed in only where that can change the destination:
+  // a specialty-aware host with no validated carried target (a carried target
+  // is final, 005 EARS-2).
+  const resolveSignedInLanding = safeTarget
+    ? undefined
+    : signedInLandingAction(config);
+  // 021 EARS-3 — the эфир read fills the card, so a host with none never pays.
   const returnEvent =
     config.returnTo?.card && safeTarget
       ? await resolveReturnContext(safeTarget)

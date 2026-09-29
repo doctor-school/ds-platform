@@ -2,7 +2,7 @@
 title: "046 — Congress submissions: oral talks, posters and abstracts"
 description: "Requirements for congress submissions in a «Мои заявки на Конгресс» section of the doctor storefront account: three kinds (oral talk, poster, abstracts) as properties of the submission, many per account, autosaved drafts checked at submit, per-event and per-kind intake settings edited in apps/admin, a poster age rule from the birth date, abstract attestations and a publication consent, statuses with letters, an event-bound program committee reviewing in the admin registry and card, a read-only congress-partner view, a deadline reminder, and a cabinet link in the 044 confirmation letter."
 slug: 046-congress-submissions
-status: Draft
+status: In dev
 issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2438, 2439]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/2379

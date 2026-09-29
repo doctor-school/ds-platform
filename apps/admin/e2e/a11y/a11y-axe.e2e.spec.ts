@@ -751,4 +751,29 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     ).toHaveText("Аксенова Мария Петровна");
     for (const theme of THEMES) await scan(page, theme);
   });
+
+  // 046 EARS-2 (#2432) / V-18 — the congress intake settings screen, scanned
+  // on the product defaults and again with a server refusal on a field, so
+  // the info notice, the invalid date input and its error text are covered.
+  test("046 EARS-2: the congress intake settings screen passes WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const id = await createEventForScan(page);
+
+    await page.goto(`/events/${id}/congress-intake`);
+    await page
+      .getByTestId("congress-intake-defaults")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.getByTestId("intake-oral-opensOn").fill("2027-02-10");
+    await page.getByTestId("intake-oral-lastDay").fill("2027-02-01");
+    await page.getByTestId("intake-save").click();
+    await expect(page.getByTestId("intake-oral-lastDay")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    for (const theme of THEMES) await scan(page, theme);
+  });
 });

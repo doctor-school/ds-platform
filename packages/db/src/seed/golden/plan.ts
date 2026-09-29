@@ -14,6 +14,10 @@ import { doctorSpecialties } from "../../schema/doctor-specialties.js";
 import { eventRecordings } from "../../schema/event-recordings.js";
 import { events, streamConfig } from "../../schema/events.js";
 import { consentRecords } from "../../schema/consent-records.js";
+import {
+  congressSubmissionKindSettings,
+  congressSubmissionSettings,
+} from "../../schema/congress-submission-settings.js";
 import { registrationAttendance } from "../../schema/registration-attendance.js";
 import { registrations } from "../../schema/registrations.js";
 import {
@@ -125,6 +129,9 @@ export const GOLDEN_SEED_ORDER = Object.freeze([
   "event_projects",
   "event_directions",
   "registrations",
+  // 046 EARS-1 (#2432) — the event's congress intake settings, then its kinds.
+  "congress_submission_settings",
+  "congress_submission_kind_settings",
   "event_recordings",
   "consent_records",
   "doctor_specialties",
@@ -237,6 +244,20 @@ export function buildGoldenSeedPlan(
         },
       ],
     }),
+    // Keyed by the event (and the kind), like `stream_config`: one settings
+    // row per congress, no surrogate id.
+    step(
+      "congress_submission_settings",
+      congressSubmissionSettings,
+      dataset.congressSubmissionSettings,
+      ["eventId"],
+    ),
+    step(
+      "congress_submission_kind_settings",
+      congressSubmissionKindSettings,
+      dataset.congressSubmissionKindSettings,
+      ["eventId", "kind"],
+    ),
     step("event_recordings", eventRecordings, dataset.eventRecordings, ["id"], {
       replacesVolumeNamespace: GOLDEN_GROUP.eventRecordings,
     }),
@@ -359,6 +380,18 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   check("consent_records", dataset.consentRecords, "userId", userIds);
   check("event_recordings", dataset.eventRecordings, "eventId", eventIds);
   check("stream_config", dataset.streamConfig, "eventId", eventIds);
+  check(
+    "congress_submission_settings",
+    dataset.congressSubmissionSettings,
+    "eventId",
+    eventIds,
+  );
+  check(
+    "congress_submission_kind_settings",
+    dataset.congressSubmissionKindSettings,
+    "eventId",
+    new Set(dataset.congressSubmissionSettings.map((row) => row.eventId)),
+  );
   check("event_experts", dataset.eventExperts, "eventId", eventIds);
   check("event_experts", dataset.eventExperts, "expertId", expertIds);
   check("event_projects", dataset.eventProjects, "eventId", eventIds);

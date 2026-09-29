@@ -8,6 +8,7 @@ import {
 import { VersioningType } from "@nestjs/common";
 import { beforeAll, afterAll, afterEach, describe, expect, it } from "vitest";
 import type pg from "pg";
+import { CONGRESS_INTAKE_DEFAULTS } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
@@ -264,6 +265,21 @@ const FLOOR_ROUTES: {
     endpoint: "GET /v1/admin/events/:idOrSlug/registrations/:registrationId",
     method: "GET",
     url: `/v1/admin/events/${ABSENT_ID}/registrations/${ABSENT_ID}`,
+  },
+  // 046 EARS-1…3 (#2432) — the congress intake settings, excluded from the
+  // EARS-11.7 count for the same reason; `platform_admin` only. The body is the
+  // product defaults, well-formed, so an admitted principal reaches the
+  // absent-event 404, never a validation 400.
+  {
+    endpoint: "GET /v1/admin/events/:id/congress-intake-settings",
+    method: "GET",
+    url: `/v1/admin/events/${ABSENT_ID}/congress-intake-settings`,
+  },
+  {
+    endpoint: "PUT /v1/admin/events/:id/congress-intake-settings",
+    method: "PUT",
+    url: `/v1/admin/events/${ABSENT_ID}/congress-intake-settings`,
+    payload: CONGRESS_INTAKE_DEFAULTS,
   },
   // 012 EARS-1/EARS-16 (#1283) — the taxonomy project routes sit on the same
   // raised floor as every other admin route: the guard refuses before validation,
@@ -1087,7 +1103,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // attendance mark and EARS-36/EARS-38's participant card are excluded
       // for the same reason as the recordings routes: they share the path
       // prefix but are a different feature with its own EARS coverage (and its
-      // own role set), and the floor-table rows above assert them.
+      // own role set), and the floor-table rows above assert them. 046's
+      // congress intake settings are excluded likewise.
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&
@@ -1095,7 +1112,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           !r.endpoint.endsWith("/roster") &&
           !r.endpoint.endsWith("/:idOrSlug/registrations") &&
           !r.endpoint.endsWith("/attendance/:day") &&
-          !r.endpoint.endsWith("/registrations/:registrationId"),
+          !r.endpoint.endsWith("/registrations/:registrationId") &&
+          !r.endpoint.endsWith("/congress-intake-settings"),
       );
       expect(events.length).toBe(12);
       for (const row of events) {

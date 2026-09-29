@@ -12,6 +12,10 @@
 // contour that only carries the happy path proves only the happy path.
 
 import type { NewConsentRecord } from "../../schema/consent-records.js";
+import type {
+  congressSubmissionKindSettings,
+  congressSubmissionSettings,
+} from "../../schema/congress-submission-settings.js";
 import type { NewEventRecording } from "../../schema/event-recordings.js";
 import type { NewEvent, NewStreamConfigRow } from "../../schema/events.js";
 import type { NewRegistration } from "../../schema/registrations.js";
@@ -33,7 +37,7 @@ import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
 import { golden, GOLDEN_GROUP, goldenUuid } from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
-import { goldenDateOnly, shiftFromNow } from "./now.js";
+import { goldenDateOnly, goldenMskMidnight, shiftFromNow } from "./now.js";
 import { expertPhotoKey } from "./programme.js";
 import {
   buildGoldenVolume,
@@ -90,6 +94,8 @@ export interface GoldenDataset {
   projects: NewProject[];
   events: NewEvent[];
   streamConfig: NewStreamConfigRow[];
+  congressSubmissionSettings: (typeof congressSubmissionSettings.$inferInsert)[];
+  congressSubmissionKindSettings: (typeof congressSubmissionKindSettings.$inferInsert)[];
   eventExperts: NewEventExpert[];
   eventProjects: NewEventProject[];
   registrations: NewRegistration[];
@@ -348,6 +354,50 @@ export function buildGoldenDataset(
     },
     ...volume.streamConfig,
   ];
+
+  // 046 EARS-1 (#2432) — the upcoming эфир (the registration happy path, which
+  // carries the named registrations) is a configured congress, so the admin
+  // intake-settings screen opens on saved values and the cabinet has a section:
+  // oral and poster open at the pin, abstracts announced for later. The limits
+  // are the product defaults of EARS-2. Instants sit on Moscow day boundaries,
+  // as the settings screen writes them (EARS-3): an opening at 00:00 MSK of its
+  // day, a closing at 00:00 MSK of the day after the last day.
+  const mskDay = (days: number) => goldenMskMidnight(at({ days }));
+  const congressSubmissionSettings: GoldenDataset["congressSubmissionSettings"] =
+    [
+      {
+        eventId: golden.events.upcoming.id,
+        registrationUrl: "https://orthobio.ru/congress/registration",
+        firstAuthorCounts: false,
+      },
+    ];
+  const congressSubmissionKindSettings: GoldenDataset["congressSubmissionKindSettings"] =
+    [
+      {
+        eventId: golden.events.upcoming.id,
+        kind: "oral",
+        opensAt: mskDay(-7),
+        closesAt: mskDay(22),
+        submitLimit: null,
+        maxAgeYears: null,
+      },
+      {
+        eventId: golden.events.upcoming.id,
+        kind: "poster",
+        opensAt: mskDay(-7),
+        closesAt: mskDay(22),
+        submitLimit: null,
+        maxAgeYears: 40,
+      },
+      {
+        eventId: golden.events.upcoming.id,
+        kind: "abstract",
+        opensAt: mskDay(8),
+        closesAt: mskDay(29),
+        submitLimit: 3,
+        maxAgeYears: null,
+      },
+    ];
 
   // #1943 — the seeded event carries an expert, so the event page's expert block
   // is exercised by the contour instead of rendering an empty slot.
@@ -642,6 +692,8 @@ export function buildGoldenDataset(
     projects,
     events,
     streamConfig,
+    congressSubmissionSettings,
+    congressSubmissionKindSettings,
     eventExperts,
     eventProjects,
     registrations,

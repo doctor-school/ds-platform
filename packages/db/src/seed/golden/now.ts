@@ -98,3 +98,17 @@ export function shiftFromNow(now: Date, offset: GoldenOffset): Date {
 export function goldenDateOnly(at: Date): string {
   return at.toISOString().slice(0, 10);
 }
+
+const MSK_OFFSET_MS = 3 * MS.hours;
+
+/**
+ * 00:00 Europe/Moscow of the Moscow day `at` falls on — the instant a
+ * calendar-day setting is stored as (046 EARS-3: an opening at 00:00 of its
+ * day, a closing at 00:00 of the day after the last day). Moscow keeps no
+ * seasonal time, so the offset is fixed. `@ds/db` sits below `@ds/schemas`,
+ * whose `mskDayStartInstant` owns the same rule for the write path.
+ */
+export function goldenMskMidnight(at: Date): Date {
+  const local = at.getTime() + MSK_OFFSET_MS;
+  return new Date(local - (local % MS.days) - MSK_OFFSET_MS);
+}

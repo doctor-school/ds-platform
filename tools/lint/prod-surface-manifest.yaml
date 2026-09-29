@@ -253,6 +253,15 @@ routes:
     route: /events/[id]/roster
     file: apps/admin/app/events/[id]/roster/page.tsx
     status: product-ready
+  # 046 EARS-2/EARS-3 (#2432): the congress intake settings of one event — the
+  # platform administrator's form (Stage A route «а»: approved admin form
+  # patterns + DS primitives, no canvas). Driven live in
+  # `apps/admin/e2e/congress-intake-settings.spec.ts` and scanned by the 046
+  # block of `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`.
+  - app: admin
+    route: /events/[id]/congress-intake
+    file: apps/admin/app/events/[id]/congress-intake/page.tsx
+    status: product-ready
   # 012 EARS-1 (#1283): the project authoring vertical — the shared taxonomy admin
   # list shell plus the Stage-A composition-B tabbed detail (#1282, owner pick
   # 2026-08-17). Real product deliverables, driven live in

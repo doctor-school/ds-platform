@@ -397,6 +397,57 @@ describe("#2063 golden seed plan", () => {
     expect(step?.conflictKeys).toEqual(["eventId"]);
   });
 
+  it("046 EARS-1 (#2432): keys the congress intake settings on the event, and each kind on (event, kind)", () => {
+    const plan = buildGoldenSeedPlan(dataset, specialtyIdByName);
+    expect(
+      plan.find((s) => s.name === "congress_submission_settings")?.conflictKeys,
+    ).toEqual(["eventId"]);
+    expect(
+      plan.find((s) => s.name === "congress_submission_kind_settings")
+        ?.conflictKeys,
+    ).toEqual(["eventId", "kind"]);
+  });
+
+  it("046 EARS-1 (#2432): the upcoming эфир is a configured congress — open oral and poster, abstracts announced, all on Moscow day boundaries", () => {
+    const eventId = golden.events.upcoming.id;
+    expect(dataset.congressSubmissionSettings).toEqual([
+      expect.objectContaining({
+        eventId,
+        registrationUrl: expect.stringMatching(/^https:\/\//),
+        firstAuthorCounts: false,
+      }),
+    ]);
+    const kinds = dataset.congressSubmissionKindSettings;
+    expect(kinds.map((k) => [k.eventId, k.kind])).toEqual([
+      [eventId, "oral"],
+      [eventId, "poster"],
+      [eventId, "abstract"],
+    ]);
+    const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const onMskMidnight = (d: unknown) =>
+      ((d as Date).getTime() + MSK_OFFSET_MS) % DAY_MS === 0;
+    for (const kind of kinds) {
+      expect(onMskMidnight(kind.opensAt)).toBe(true);
+      expect(onMskMidnight(kind.closesAt)).toBe(true);
+      expect((kind.closesAt as Date).getTime()).toBeGreaterThan(
+        (kind.opensAt as Date).getTime(),
+      );
+    }
+    const byKind = new Map(kinds.map((k) => [k.kind, k]));
+    const isOpen = (k: (typeof kinds)[number]) =>
+      now.getTime() >= (k.opensAt as Date).getTime() &&
+      now.getTime() < (k.closesAt as Date).getTime();
+    expect(isOpen(byKind.get("oral")!)).toBe(true);
+    expect(isOpen(byKind.get("poster")!)).toBe(true);
+    expect(isOpen(byKind.get("abstract")!)).toBe(false);
+    // The product defaults (EARS-2) where the golden sets nothing else.
+    expect(byKind.get("poster")?.maxAgeYears).toBe(40);
+    expect(byKind.get("abstract")?.submitLimit).toBe(3);
+    expect(byKind.get("oral")?.submitLimit).toBeNull();
+    expect(goldenReferentialIssues(dataset)).toEqual([]);
+  });
+
   it("resolves doctor specialties through the seeded book", () => {
     const rows = resolveDoctorSpecialtyRows(
       dataset.doctorSpecialties,
@@ -429,14 +480,16 @@ describe("#2212 a re-run rewrites the dates", () => {
   });
 
   const eventsStep = (at: Date) =>
-    buildGoldenSeedPlan(buildGoldenDataset(at, subjects), specialtyIdByName).find(
-      (s) => s.name === "events",
-    )!;
+    buildGoldenSeedPlan(
+      buildGoldenDataset(at, subjects),
+      specialtyIdByName,
+    ).find((s) => s.name === "events")!;
 
   const stepNamed = (name: string, at: Date) =>
-    buildGoldenSeedPlan(buildGoldenDataset(at, subjects), specialtyIdByName).find(
-      (s) => s.name === name,
-    )!;
+    buildGoldenSeedPlan(
+      buildGoldenDataset(at, subjects),
+      specialtyIdByName,
+    ).find((s) => s.name === name)!;
 
   it("#2212: the events upsert refreshes every date-bearing column", () => {
     const step = eventsStep(now);
@@ -490,9 +543,12 @@ describe("#2212 a re-run rewrites the dates", () => {
         );
       }
       for (const key of keys) {
-        if (JSON.stringify(after[key]) === JSON.stringify(before[key])) continue;
-        expect(updateKeys, `${key} moves but the upsert never rewrites it`)
-          .toContain(key);
+        if (JSON.stringify(after[key]) === JSON.stringify(before[key]))
+          continue;
+        expect(
+          updateKeys,
+          `${key} moves but the upsert never rewrites it`,
+        ).toContain(key);
         moved.add(key);
       }
     }
@@ -690,7 +746,9 @@ describe("#2213 golden dataset at volume", () => {
     return days;
   };
 
-  const eventsByMskDay = (events: { startsAt?: unknown; state?: unknown }[]) => {
+  const eventsByMskDay = (
+    events: { startsAt?: unknown; state?: unknown }[],
+  ) => {
     const byDay = new Map<string, { state?: unknown }[]>();
     for (const event of events) {
       const key = mskDayKey(event.startsAt as Date);
@@ -849,8 +907,9 @@ describe("#2213 golden dataset at volume", () => {
     expect(dataset.events.length).toBeGreaterThanOrEqual(48);
     expect(dataset.experts.length).toBeGreaterThanOrEqual(34);
     expect(dataset.projects.length).toBeGreaterThanOrEqual(12);
-    expect(dataset.users.filter((u) => u.role === "doctor_guest").length)
-      .toBeGreaterThanOrEqual(12);
+    expect(
+      dataset.users.filter((u) => u.role === "doctor_guest").length,
+    ).toBeGreaterThanOrEqual(12);
     expect(dataset.registrations.length).toBeGreaterThanOrEqual(30);
     expect(dataset.eventRecordings.length).toBeGreaterThanOrEqual(20);
     expect(dataset.doctorSpecialties.length).toBeGreaterThanOrEqual(12);
@@ -866,10 +925,12 @@ describe("#2213 golden dataset at volume", () => {
     expect(byState("hidden").length).toBeGreaterThanOrEqual(3);
 
     const ended = byState("ended");
-    expect(ended.filter((e) => recordedEventIds.has(e.id as string)).length)
-      .toBeGreaterThanOrEqual(14);
-    expect(ended.filter((e) => !recordedEventIds.has(e.id as string)).length)
-      .toBeGreaterThanOrEqual(6);
+    expect(
+      ended.filter((e) => recordedEventIds.has(e.id as string)).length,
+    ).toBeGreaterThanOrEqual(14);
+    expect(
+      ended.filter((e) => !recordedEventIds.has(e.id as string)).length,
+    ).toBeGreaterThanOrEqual(6);
   });
 
   it("#2213: fills more than one page of the archive and of the admin list", () => {
@@ -907,7 +968,9 @@ describe("#2213 golden dataset at volume", () => {
   it("#2213: fills each of the next 4 calendar months and the previous 6", () => {
     for (const pin of COVERAGE_PINS) {
       const { pinned, built, upcoming } = atPin(pin);
-      const futureMonths = new Set(upcoming.map((e) => monthKey(e.startsAt as Date)));
+      const futureMonths = new Set(
+        upcoming.map((e) => monthKey(e.startsAt as Date)),
+      );
       // m = 0 is the month the operator opens the schedule IN. The weekly grid
       // starts three days out, so on the last days of a month it lands entirely
       // in the next one — the «сегодня» row is what makes this month non-empty
@@ -952,11 +1015,13 @@ describe("#2213 golden dataset at volume", () => {
     const projectsPer = new Map<string, number>();
     for (const link of dataset.eventExperts) {
       const id = link.eventId as string;
-      if (isGoldenVolumeUuid(id)) expertsPer.set(id, (expertsPer.get(id) ?? 0) + 1);
+      if (isGoldenVolumeUuid(id))
+        expertsPer.set(id, (expertsPer.get(id) ?? 0) + 1);
     }
     for (const link of dataset.eventProjects) {
       const id = link.eventId as string;
-      if (isGoldenVolumeUuid(id)) projectsPer.set(id, (projectsPer.get(id) ?? 0) + 1);
+      if (isGoldenVolumeUuid(id))
+        projectsPer.set(id, (projectsPer.get(id) ?? 0) + 1);
     }
     expect(volumeEvents.length).toBeGreaterThan(0);
     for (const event of volumeEvents) {
@@ -1024,9 +1089,7 @@ describe("#2213 golden dataset at volume", () => {
     // instant lives in `dataset.ts`. A registration older than its account is
     // a row the product can never produce — and the first thing that breaks if
     // those two windows drift apart.
-    const userById = new Map(
-      dataset.users.map((u) => [u.id as string, u]),
-    );
+    const userById = new Map(dataset.users.map((u) => [u.id as string, u]));
     expect(dataset.registrations.length).toBeGreaterThan(0);
     for (const row of dataset.registrations) {
       const user = userById.get(row.userId as string)!;
@@ -1073,18 +1136,25 @@ describe("#2213 golden dataset at volume", () => {
       perProject.set(id, (perProject.get(id) ?? 0) + 1);
     }
     for (const project of dataset.projects.filter(isVolume)) {
-      expect(perProject.get(project.id as string) ?? 0).toBeGreaterThanOrEqual(4);
+      expect(perProject.get(project.id as string) ?? 0).toBeGreaterThanOrEqual(
+        4,
+      );
     }
   });
 
   it("#2213: carries at least two doctors in each state the DB distinguishes", () => {
     const doctors = dataset.users.filter((u) => u.role === "doctor_guest");
-    expect(doctors.filter((u) => u.emailVerified && u.recordStatus === "active").length)
-      .toBeGreaterThanOrEqual(2);
-    expect(doctors.filter((u) => !u.emailVerified && u.recordStatus === "active").length)
-      .toBeGreaterThanOrEqual(2);
-    expect(doctors.filter((u) => u.recordStatus === "retired").length)
-      .toBeGreaterThanOrEqual(2);
+    expect(
+      doctors.filter((u) => u.emailVerified && u.recordStatus === "active")
+        .length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      doctors.filter((u) => !u.emailVerified && u.recordStatus === "active")
+        .length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      doctors.filter((u) => u.recordStatus === "retired").length,
+    ).toBeGreaterThanOrEqual(2);
     for (const user of volumeUsers) {
       expect(user.recordStatus === "retired").toBe(user.deletedAt != null);
     }
@@ -1101,7 +1171,9 @@ describe("#2213 golden dataset at volume", () => {
       (r) => startsAtById.get(r.eventId as string)!.getTime() < now.getTime(),
     );
     expect(past.length).toBeGreaterThanOrEqual(5);
-    expect(dataset.registrations.length - past.length).toBeGreaterThanOrEqual(5);
+    expect(dataset.registrations.length - past.length).toBeGreaterThanOrEqual(
+      5,
+    );
   });
 
   it("#2213: carries recordings in every kind and every status", () => {
@@ -1154,16 +1226,23 @@ describe("#2213 golden dataset at volume", () => {
     expect(bare.length).toBeGreaterThanOrEqual(6);
     for (const event of bare) expect(event.recordingExpectedBy).toBeTruthy();
     for (const event of dataset.events.filter(
-      (e) => isGoldenVolumeUuid(e.id as string) && publishedFor.has(e.id as string),
+      (e) =>
+        isGoldenVolumeUuid(e.id as string) && publishedFor.has(e.id as string),
     )) {
       expect(event.recordingExpectedBy).toBeUndefined();
     }
 
     // Both sides of the promise: a date still ahead of «now», and one already
     // missed — the overdue copy is its own rendered state.
-    const dates = bare.map((e) => Date.parse(`${e.recordingExpectedBy}T00:00:00Z`));
-    expect(dates.filter((d) => d > now.getTime()).length).toBeGreaterThanOrEqual(3);
-    expect(dates.filter((d) => d < now.getTime()).length).toBeGreaterThanOrEqual(2);
+    const dates = bare.map((e) =>
+      Date.parse(`${e.recordingExpectedBy}T00:00:00Z`),
+    );
+    expect(
+      dates.filter((d) => d > now.getTime()).length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      dates.filter((d) => d < now.getTime()).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("#2213: registers doctors only where registration is possible", () => {
@@ -1244,10 +1323,14 @@ describe("#2213 golden dataset at volume", () => {
     // The named catalogue is the compile target of the #2067 scenarios; volume
     // ids live strictly above it, so a scenario `Given` can never collide.
     expect(isGoldenVolumeUuid(golden.events.upcoming.id)).toBe(false);
-    expect(isGoldenVolumeUuid(golden.doctors.verifiedCardiologist.id)).toBe(false);
+    expect(isGoldenVolumeUuid(golden.doctors.verifiedCardiologist.id)).toBe(
+      false,
+    );
     // The marker is the golden prefix, not the ordinal tail: a production uuid
     // whose last twelve hex digits exceed the base is still not a volume row.
-    expect(isGoldenVolumeUuid("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).toBe(false);
+    expect(isGoldenVolumeUuid("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).toBe(
+      false,
+    );
     const ids = collectIds(dataset);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -1347,9 +1430,10 @@ describe("#2213 golden taxonomy and targeting", () => {
     for (const [family, rows] of families) {
       for (const row of rows) {
         const retired = row.status === "retired";
-        expect(row.deletedAt instanceof Date, `${family} ${String(row.id)}`).toBe(
-          retired,
-        );
+        expect(
+          row.deletedAt instanceof Date,
+          `${family} ${String(row.id)}`,
+        ).toBe(retired);
       }
     }
     // `directions_published_has_first_published_at` / the partners twin.
@@ -1383,7 +1467,8 @@ describe("#2213 golden taxonomy and targeting", () => {
     // excluded — `TargetingService.resolve` answers `mode: 'general'` for it and
     // never reads a direction at all.
     const uncovered = RAZDEL_I_NAMES.filter(
-      (name) => ownDirectionIds(specialtyIdByName.get(name) as string).length === 0,
+      (name) =>
+        ownDirectionIds(specialtyIdByName.get(name) as string).length === 0,
     );
     expect(uncovered).toEqual([]);
   });
@@ -1393,7 +1478,10 @@ describe("#2213 golden taxonomy and targeting", () => {
     // at the month boundaries: a specialty that resolves to a direction nothing
     // upcoming is classified under renders the same empty feed as no direction
     // at all.
-    for (const pin of ["2026-01-15T12:00:00.000Z", "2026-12-31T23:30:00.000Z"]) {
+    for (const pin of [
+      "2026-01-15T12:00:00.000Z",
+      "2026-12-31T23:30:00.000Z",
+    ]) {
       const pinned = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: pin });
       const built = buildGoldenDataset(pinned, subjects);
       const publishedById = new Map(
@@ -1444,7 +1532,10 @@ describe("#2213 golden taxonomy and targeting", () => {
     const MS_DAY = 24 * 60 * 60 * 1000;
     const HORIZON_DAYS = 14;
     const SEASON_AHEAD_DAYS = 18 * 7;
-    for (const pin of ["2026-01-15T12:00:00.000Z", "2026-12-31T23:30:00.000Z"]) {
+    for (const pin of [
+      "2026-01-15T12:00:00.000Z",
+      "2026-12-31T23:30:00.000Z",
+    ]) {
       const pinned = resolveGoldenNow({ [GOLDEN_NOW_ENV_VAR]: pin });
       const built = buildGoldenDataset(pinned, subjects);
       const publishedById = new Set(
@@ -1549,8 +1640,15 @@ describe("#2213 golden taxonomy and targeting", () => {
       expect(count, String(event.slug)).toBeLessThanOrEqual(3);
     }
     // The curated six are hand-picked, not left to the round-robin.
-    for (const key of ["upcoming", "live", "pastWithRecording", "archived"] as const) {
-      expect(classified.get(golden.events[key].id) ?? 0).toBeGreaterThanOrEqual(1);
+    for (const key of [
+      "upcoming",
+      "live",
+      "pastWithRecording",
+      "archived",
+    ] as const) {
+      expect(classified.get(golden.events[key].id) ?? 0).toBeGreaterThanOrEqual(
+        1,
+      );
     }
   });
 
@@ -1591,7 +1689,11 @@ describe("#2213 golden taxonomy and targeting", () => {
     // Each pair is unique across active AND retained rows (`*_pair_key`).
     for (const rows of [dataset.projectExperts, dataset.projectPartners]) {
       const keys = rows.map((row) =>
-        [row.projectId, (row as { expertId?: unknown }).expertId, (row as { partnerId?: unknown }).partnerId]
+        [
+          row.projectId,
+          (row as { expertId?: unknown }).expertId,
+          (row as { partnerId?: unknown }).partnerId,
+        ]
           .filter((part) => part != null)
           .join("|"),
       );
@@ -1603,8 +1705,9 @@ describe("#2213 golden taxonomy and targeting", () => {
       const id = link.partnerId as string;
       perPartner.set(id, (perPartner.get(id) ?? 0) + 1);
     }
-    expect([...perPartner.values()].filter((n) => n > 1).length)
-      .toBeGreaterThanOrEqual(4);
+    expect(
+      [...perPartner.values()].filter((n) => n > 1).length,
+    ).toBeGreaterThanOrEqual(4);
   });
 
   it("#2213: is referentially sound over the taxonomy link tables too", () => {
@@ -1638,7 +1741,8 @@ describe("#2213 golden taxonomy and targeting", () => {
     for (const rows of [dataset.directions, dataset.partners]) {
       const slugs = rows.map((row) => row.slug as string);
       expect(new Set(slugs).size).toBe(slugs.length);
-      for (const slug of slugs) expect(slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+      for (const slug of slugs)
+        expect(slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     }
   });
 
@@ -1723,7 +1827,9 @@ describe("#2213 golden volume content and media", () => {
     expect(volumeExperts.length).toBeGreaterThanOrEqual(32);
     for (const expert of volumeExperts) {
       expect(expert.photoRef).toBeTruthy();
-      expect(ordinalFromExpertPhotoKey(expert.photoRef as string)).not.toBeNull();
+      expect(
+        ordinalFromExpertPhotoKey(expert.photoRef as string),
+      ).not.toBeNull();
       expect((expert.bio ?? "").length).toBeGreaterThanOrEqual(120);
       expect(expert.credentials).toBeTruthy();
       expect(expert.affiliation).toBeTruthy();
@@ -1806,8 +1912,9 @@ describe("#2213 golden volume content and media", () => {
 
   it("#2213: carries a prose bank wide enough for the whole catalogue", () => {
     expect(VOLUME_PROGRAMME.length).toBeGreaterThanOrEqual(120);
-    expect(new Set(VOLUME_PROGRAMME.map(([, s]) => s)).size)
-      .toBeGreaterThanOrEqual(10);
+    expect(
+      new Set(VOLUME_PROGRAMME.map(([, s]) => s)).size,
+    ).toBeGreaterThanOrEqual(10);
     expect(new Set(VOLUME_PROGRAMME.map(([t]) => t)).size).toBe(
       VOLUME_PROGRAMME.length,
     );
@@ -1827,8 +1934,7 @@ describe("#2213 golden volume content and media", () => {
 
   it("#2213: advertises the length its own programme adds up to", () => {
     for (const event of volumeEvents) {
-      const index =
-        Number.parseInt((event.id as string).slice(-12), 16) - 1000;
+      const index = Number.parseInt((event.id as string).slice(-12), 16) - 1000;
       expect(event.durationMin).toBe(programmeTotalMinutes(index));
       expect(event.durationMin as number).toBeGreaterThanOrEqual(115);
     }
@@ -1838,8 +1944,7 @@ describe("#2213 golden volume content and media", () => {
     let withProgramme = 0;
     let upcomingWithout = 0;
     for (const event of volumeEvents) {
-      const index =
-        Number.parseInt((event.id as string).slice(-12), 16) - 1000;
+      const index = Number.parseInt((event.id as string).slice(-12), 16) - 1000;
       const expected = hasProgramme(event.state as string, index);
       expect(Boolean(event.programPdfRef), `${String(event.slug)}`).toBe(
         expected,
@@ -1897,7 +2002,8 @@ describe("#2213 golden volume content and media", () => {
             .join(" ");
         }),
     );
-    for (const speaker of first.speakers) expect(names.has(speaker.name)).toBe(true);
+    for (const speaker of first.speakers)
+      expect(names.has(speaker.name)).toBe(true);
   });
 
   it("#2213: renders a programme PDF that parses and carries its title", async () => {

@@ -38,6 +38,10 @@ const AUDITED_TABLES = [
   // 044 EARS-34 (#2381) — a per-day attendance mark; who marked the participant
   // present, and when, is the ledger's answer (the table has no author column).
   "registration_attendance",
+  // 046 EARS-2 (#2432) — congress intake settings; the ledger answers «who
+  // moved the deadline» (046-design «Settings in platform data»).
+  "congress_submission_settings",
+  "congress_submission_kind_settings",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */

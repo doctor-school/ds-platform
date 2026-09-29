@@ -88,14 +88,26 @@ export default function EventEditPage() {
                 </p>
                 {/* 044 EARS-21 — the platform administrator's way into the
                     event's registrations; view-only, like the roster itself. */}
-                <DsLink asChild variant="standalone" size="sm">
-                  <Link
-                    href={`/events/${id}/roster`}
-                    data-testid="event-roster-link"
-                  >
-                    {t("congressRoster.entryLink")}
-                  </Link>
-                </DsLink>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <DsLink asChild variant="standalone" size="sm">
+                    <Link
+                      href={`/events/${id}/roster`}
+                      data-testid="event-roster-link"
+                    >
+                      {t("congressRoster.entryLink")}
+                    </Link>
+                  </DsLink>
+                  {/* 046 EARS-2 — the event's congress intake settings, beside
+                      its roster; platform administrator only. */}
+                  <DsLink asChild variant="standalone" size="sm">
+                    <Link
+                      href={`/events/${id}/congress-intake`}
+                      data-testid="event-congress-intake-link"
+                    >
+                      {t("congressIntake.entryLink")}
+                    </Link>
+                  </DsLink>
+                </div>
               </div>
               <StateBadge state={detail.state} />
             </div>

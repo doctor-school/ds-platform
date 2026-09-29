@@ -123,3 +123,29 @@ and no automatic retry. A participant whose mail failed recovers by submitting
 the form again; a registrar sees the failed rows on the roster and can act on
 them. Adding a retry queue for one congress mail would be a subsystem nobody
 operates.
+
+## Congress intake settings (feature 046, EARS-1…EARS-3)
+
+Spec: `apps/docs/content/specs/features/046-congress-submissions/`.
+
+| File                                        | Role                                                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `congress-intake-settings.admin.controller` | `GET` / `PUT /v1/admin/events/:id/congress-intake-settings` — `platform_admin` only, the `PUT` revalidates live.   |
+| `congress-intake-settings.service`          | Reads the settings (or the product defaults), stores Moscow days as instants, writes in the request audit context. |
+
+The settings are platform data, not environment (046-design «Settings in platform
+data»): `congress_submission_settings` per event (registration address,
+first-author rule) and
+`congress_submission_kind_settings` per event and kind (`oral`, `poster`,
+`abstract`: opening, closing, submit limit, age limit). An event without a
+settings row has no congress section; the read then answers
+`configured: false` with the defaults (abstracts 3, poster age 40). A save is
+read on the next request, and both tables carry the 010 `audit_row_change()`
+trigger — the ledger answers «who moved the deadline». An unchanged row is not
+rewritten, so the ledger records changes, not saves.
+
+Dates cross the wire as Moscow calendar days and are stored as instants through
+the one conversion in `@ds/schemas` (`congress-intake-settings.schema.ts`): the
+opening day at 00:00 Moscow, each last day at 00:00 Moscow of the day after.
+The same file holds `isCongressKindIntakeOpen`, the intake rule every later
+surface of 046 uses.

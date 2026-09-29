@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { loadEnv } from "../config/env.schema.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { MailerModule } from "../mailer/mailer.module.js";
+import { CongressIntakeSettingsAdminController } from "./congress-intake-settings.admin.controller.js";
+import { CongressIntakeSettingsService } from "./congress-intake-settings.service.js";
 import { CongressSignUpController } from "./congress-signup.controller.js";
 import { CongressSignUpService } from "./congress-signup.service.js";
 import {
@@ -25,9 +27,14 @@ import {
  */
 @Module({
   imports: [AuthModule, MailerModule],
-  controllers: [CongressSignUpController],
+  // 046 EARS-1…3: the platform administrator's intake settings per event.
+  controllers: [
+    CongressSignUpController,
+    CongressIntakeSettingsAdminController,
+  ],
   providers: [
     CongressSignUpService,
+    CongressIntakeSettingsService,
     {
       provide: CONGRESS_SIGN_UP_CLOCK,
       useValue: (() => new Date()) satisfies CongressSignUpClock,

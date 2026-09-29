@@ -55,3 +55,4 @@ export {
   type SpecialtyActor,
   type SpecialtyAwareLanding,
 } from "./landing";
+export { signedInLandingAction } from "./signed-in-landing";

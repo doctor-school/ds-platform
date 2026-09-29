@@ -70,6 +70,11 @@ export type RegisterDoorProps = {
    */
   landing: string;
   /**
+   * #2333 — the mount's server action that decides the landing AGAIN once the
+   * confirmed doctor is signed in; absent where it cannot change.
+   */
+  resolveSignedInLanding?: () => Promise<string>;
+  /**
    * The RAW carried `returnTo` param, for the footer LINKS and the `/verify` hop
    * only. Guarded by the same-origin rule at each consumption point, so a hostile
    * value is never propagated onward.
@@ -91,6 +96,11 @@ export type RegisterConfirmationProps = {
   config: AuthFlowHostConfig;
   email: string;
   landing: string;
+  /**
+   * #2333 — the mount's server action that decides the landing AGAIN once the
+   * confirmed doctor is signed in; absent where it cannot change.
+   */
+  resolveSignedInLanding?: () => Promise<string>;
   returnTarget?: string | null;
   carriedTarget?: string | null;
   /** 021 EARS-2 — the arrival plate the form stood under; the step keeps it. */
@@ -231,6 +241,7 @@ function acceptancesOf(
 export function RegisterDoor({
   config,
   landing,
+  resolveSignedInLanding,
   returnTo = null,
   returnTarget = null,
   carriedTarget = null,
@@ -460,6 +471,7 @@ export function RegisterDoor({
             config={config}
             email={registeredEmail}
             landing={landing}
+            {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
             returnTarget={returnTarget}
             carriedTarget={carriedTarget}
             returnContextPlate={returnContextPlate}

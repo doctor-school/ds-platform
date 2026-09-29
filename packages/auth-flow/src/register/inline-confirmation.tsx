@@ -23,6 +23,7 @@ export function RegistrationConfirmation({
   config,
   email,
   landing,
+  resolveSignedInLanding,
   returnTarget = null,
   carriedTarget = null,
   returnContextPlate,
@@ -32,6 +33,7 @@ export function RegistrationConfirmation({
       config={config}
       email={email}
       landing={landing}
+      {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
       returnTarget={returnTarget}
       completionTarget={returnTarget}
       carriedTarget={carriedTarget}

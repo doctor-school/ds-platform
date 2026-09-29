@@ -9,6 +9,7 @@ import {
   resolveReturnContext,
   resolveReturnTargetPath,
   resolveServerAuth,
+  signedInLandingAction,
 } from "../server";
 import { AuthShell } from "../shell";
 import { VerifyAddressGate, VerifyStep } from "./verify-entry";
@@ -62,6 +63,9 @@ export async function VerifyRoute({
   });
 
   const landing = await resolveArrivalLanding(config, requestHeaders);
+  // #2333 — decided for a guest; the step asks again once the confirmed doctor
+  // is signed in (on a specialty-aware host only).
+  const resolveSignedInLanding = signedInLandingAction(config);
   // 021 EARS-3 — the эфир read fills the card, so a host with none never pays.
   const safeTarget = resolveReturnTargetPath(returnTo ?? undefined);
   const returnEvent =
@@ -87,6 +91,7 @@ export async function VerifyRoute({
         <VerifyStep
           config={config}
           landing={landing}
+          {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
           returnTo={returnTo}
           // The mobile plate above the card, as the registration door draws it.
           returnContextPlate={plate}

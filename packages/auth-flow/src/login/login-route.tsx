@@ -10,6 +10,7 @@ import {
   resolveReturnLandingPath,
   resolveReturnTargetPath,
   resolveServerAuth,
+  signedInLandingAction,
 } from "../server";
 import { AuthShell } from "../shell";
 import { LoginDoor } from "./login-door";
@@ -92,10 +93,19 @@ export async function LoginRoute({
   // host's own `routes.account`, not just the cabinet index (014 EARS-6.5).
   const accountLanding = isAccountReturnTarget(config, returnTo);
 
+  const landsOnCarriedTarget = Boolean(
+    landingTarget && (gateResolved || accountLanding),
+  );
   const landing =
-    landingTarget && (gateResolved || accountLanding)
+    landsOnCarriedTarget && landingTarget
       ? landingTarget
       : await resolveArrivalLanding(config, requestHeaders);
+  // #2333 — `landing` above was decided for a GUEST (no session, so a profile
+  // specialty is invisible). When it is the LD-4 arrival decision on a
+  // specialty-aware host, the door also gets the server action that decides it
+  // again once the sign-in has set the session; a carried target is final.
+  const resolveSignedInLanding =
+    landsOnCarriedTarget ? undefined : signedInLandingAction(config);
 
   guardAuthRoute({
     authenticated,
@@ -115,6 +125,7 @@ export async function LoginRoute({
       <LoginDoor
         config={config}
         landing={landing}
+        {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
         // The RAW arrival value: the door's shared carry helper answers both the
         // эфир and the account shape and re-appends only what the guards
         // reconstructed, so a hostile param is dropped at the hop (#2258 / S3).

@@ -92,6 +92,7 @@ type DoorProps = {
   returnTarget?: string | null;
   carriedTarget?: string | null;
   returnContextPlate?: unknown;
+  resolveSignedInLanding?: () => Promise<string>;
 };
 
 type ShellProps = {
@@ -327,5 +328,28 @@ describe("#2027 PR 1.6 (Academy): the same mount over the other host config", ()
     expect(shell.props.returnContext ?? null).toBe(null);
     expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
     expect(resolveReturnContext).not.toHaveBeenCalled();
+  });
+});
+
+describe("021 EARS-3 (#2333): the sign-up door gets the signed-in re-decision where it can change", () => {
+  async function actionOf(config: AuthFlowHostConfig, params: Params) {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    return (await doorOf(config, params)).resolveSignedInLanding;
+  }
+
+  it("021 EARS-3: a guest direct arrival on the doctor storefront carries the re-decision", async () => {
+    expect(await actionOf(DOCTOR_FIXTURE, {})).toBeTypeOf("function");
+  });
+
+  it("005 EARS-2: a carried validated target is the landing — nothing to re-decide", async () => {
+    resolveReturnContext.mockResolvedValue(EVENT);
+
+    expect(
+      await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
+    ).toBeUndefined();
+  });
+
+  it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {
+    expect(await actionOf(ACADEMY_FIXTURE, {})).toBeUndefined();
   });
 });

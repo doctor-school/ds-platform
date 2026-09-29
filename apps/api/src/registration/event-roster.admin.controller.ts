@@ -11,6 +11,9 @@ import type { FastifyRequest } from "fastify";
 import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import {
+  type CongressParticipantCard,
+  CongressParticipantCardParamsSchema,
+  CongressParticipantCardSchema,
   type CongressRosterList,
   CongressRosterListSchema,
   CongressRosterQuerySchema,
@@ -28,6 +31,11 @@ import {
 /** Paged response of `GET /v1/admin/events/:idOrSlug/roster` (044 EARS-18). */
 export class CongressRosterListDto extends createZodDto(
   CongressRosterListSchema,
+) {}
+
+/** Response of `GET /v1/admin/events/:idOrSlug/registrations/:registrationId` (044 EARS-36). */
+export class CongressParticipantCardDto extends createZodDto(
+  CongressParticipantCardSchema,
 ) {}
 
 /**
@@ -54,8 +62,9 @@ export class CongressRosterListDto extends createZodDto(
  * is a `check: "policy"` row without `objectAttrs`, and its handler runs
  * {@link EventGrantPolicy.assertEventAccess} — the registrar reaches only the
  * event its `event_role_grants` row binds it to; the platform administrator is
- * not limited. A future desk route on this family (card, attendance, manual
- * registration) takes the same step; the denial-set suite's EARS-38.6 sweep
+ * not limited. Every desk route on this family — the participant card below
+ * (EARS-36), the attendance mark, the manual registration — takes the same
+ * step; the denial-set suite's EARS-38.6 sweep
  * fails any registrar-reachable route classified `fast-path`.
  */
 @Controller({ path: "admin/events", version: "1" })
@@ -146,5 +155,64 @@ export class EventRosterAdminController {
       }
       throw err;
     }
+  }
+
+  /**
+   * 044 EARS-36 — `GET /v1/admin/events/:idOrSlug/registrations/:registrationId`:
+   * the participant card the registrar opens from a roster row. Read-only; the
+   * card's one action is the EARS-34 attendance mark on its own route.
+   *
+   * Same authorization row as the roster (a read: `audit: low-stakes`,
+   * `revalidate: none`) and the same event-binding step first. 400 for a
+   * malformed id; 404 for an unknown event (administrator) or a registration
+   * that is not one of this event's — a guessed id of another event reads
+   * nothing (EARS-38).
+   */
+  @Get(":idOrSlug/registrations/:registrationId")
+  @ApiOkResponse({ type: CongressParticipantCardDto })
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin", "event-registrar"],
+    check: "policy",
+    audit: "low-stakes",
+    revalidate: "none",
+    tests: ["EARS-36", "EARS-38"],
+  })
+  async card(
+    @Req() req: FastifyRequest,
+    @Param("idOrSlug") idOrSlug: string,
+    @Param("registrationId") registrationId: string,
+  ): Promise<CongressParticipantCard> {
+    // EARS-38 — the binding step runs first, so a refused registrar learns
+    // nothing from a 400 or 404.
+    const eventKey = await this.grants.assertEventAccess(
+      (req as { user?: AdminSessionPrincipal }).user,
+      idOrSlug,
+    );
+    const params = CongressParticipantCardParamsSchema.safeParse({
+      registrationId,
+    });
+    if (!params.success) {
+      throw new BadRequestException({
+        message: "invalid registration id",
+        issues: params.error.issues,
+      });
+    }
+    const congressDays = this.attendance.congressDays();
+    let card: CongressParticipantCard | undefined;
+    try {
+      card = await this.registrations.participantCard(
+        eventKey,
+        params.data.registrationId,
+        congressDays,
+      );
+    } catch (err) {
+      if (err instanceof RegistrationEventNotFoundError) {
+        throw new NotFoundException("event not found");
+      }
+      throw err;
+    }
+    if (!card) throw new NotFoundException("registration not found");
+    return card;
   }
 }

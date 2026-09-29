@@ -193,6 +193,30 @@ never a widening of the one above:
     `registration_attendance` composed with `q` and paging. `present` without
     `attendanceDay` is 400; a non-congress `attendanceDay` is 422.
 
+- `GET /v1/admin/events/:idOrSlug/registrations/:registrationId`
+  (`EventRosterAdminController.card`) — 044 EARS-36 (#2383): the participant
+  card the registrar opens from a roster row.
+  - **Contents.** Every stored answer (name parts, full name, specialty name,
+    workplace, city, region, phone as typed, email — with the roster's EARS-16
+    account fallback), `registeredAt`, `intakeOrigin`, the participant's
+    congress consent rows (`consent_records`: purpose, version, captured-at,
+    `paper` origin), `confirmationMail { status, at }`, the read-time
+    `possibleDuplicate` (the SAME window expression as `findEventRoster`,
+    computed over the event and then narrowed to the row) and, per configured
+    congress day, the current mark (`null` = never marked) plus its `history`
+    of changes.
+  - **History = the 010 audit.** The first reader of `audit_ledger`: the
+    `data.registration_attendance.*` rows whose `metadata.pk.registration_id`
+    is this registration, from `registeredAt` on (partition pruning), oldest
+    first; the actor is the ledger's `subject_id` resolved to the `users`
+    display name, else the raw `sub`; `source` as stored.
+  - **Never** `account_created_by_intake` (EARS-35/EARS-36; the schema is
+    strict).
+  - **Scope + authorization** exactly as the roster: `check: "policy"` +
+    `assertEventAccess` first, `audit: "low-stakes"`, `revalidate: "none"`;
+    another event's registration through this path is 404 (the shared
+    `registrationOfEvent` predicate the attendance write uses).
+
 ### Binding a registrar to an event (runbook, until #2378)
 
 There is no grants screen yet (#2378). On the product owner's request the tech
@@ -230,8 +254,9 @@ every desk route then answers `403 EVENT_BINDING_REQUIRED`.
 - `RegistrationController` — the `/events/:idOrSlug/registration` write + state
   read; `MyEventsController` — the `/me/events` list (`/me` path prefix, the
   caller's own resources). Both `doctor_guest`-authenticated (EARS-10).
-  `EventRosterAdminController` — the 044 EARS-18 registrar roster read, the one
-  admin-tier route of this module (`event-registrar` / `platform_admin`).
+  `EventRosterAdminController` — the 044 registrar desk reads: the EARS-18
+  roster and the EARS-36 participant card (`event-registrar` /
+  `platform_admin`).
 - `RegistrationRepository` — Drizzle access: writes the `registrations` record;
   reads `events` (007) and `users` (003) read-only, including the `MyEvents` join
   and the `findEventRoster` roster read (record columns only, no PII join). The

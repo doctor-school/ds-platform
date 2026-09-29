@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  type CongressParticipantCard,
   type CongressRosterList,
   type CongressRosterQuery,
   type EventLifecycleState,
@@ -228,6 +229,22 @@ export class RegistrationService {
       },
       congressDays: [...congressDays],
     };
+  }
+
+  /**
+   * 044 EARS-36 — the participant card of `registrationId` inside the event
+   * `idOrSlug`. An unknown event is a {@link RegistrationEventNotFoundError}
+   * (as for the roster); a registration that is not one of that event's is
+   * `undefined` — the caller answers 404 and reads nothing (EARS-38).
+   */
+  async participantCard(
+    idOrSlug: string,
+    registrationId: string,
+    congressDays: readonly string[],
+  ): Promise<CongressParticipantCard | undefined> {
+    const event = await this.repo.findEventHeader(idOrSlug);
+    if (!event) throw new RegistrationEventNotFoundError(idOrSlug);
+    return this.repo.findParticipantCard(event.id, registrationId, congressDays);
   }
 
   private async resolveUser(sub: string): Promise<string> {

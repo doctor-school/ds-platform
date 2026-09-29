@@ -717,7 +717,8 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   });
 
   // 044 EARS-21 (#2315) — the congress roster on the shared list shell, scanned
-  // with a real row so the ten-column table and its record column are covered.
+  // with a real row so the seven-column table (EARS-37) and its record column
+  // are covered, then with the participant card open over it (EARS-36).
   test("the congress roster passes WCAG 2 A/AA (light)", async ({
     page,
     browser,
@@ -734,6 +735,20 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
     await page.goto(`/events/${id}/roster`);
     await expect(page.getByTestId("roster-total")).toHaveText("Найдено: 1");
+    for (const theme of THEMES) await scan(page, theme);
+
+    // 044 EARS-36 / V-14 — the same roster with the participant card open in
+    // the side panel over it (the non-modal inspector at this width).
+    await page
+      .getByTestId("roster-table")
+      .getByRole("button", { name: "Аксенова Мария Петровна" })
+      .click();
+    await expect(page).toHaveURL(/[?&]registration=[0-9a-f-]{36}/);
+    await expect(
+      page
+        .getByTestId("participant-card-panel")
+        .getByTestId("participant-card-fullName"),
+    ).toHaveText("Аксенова Мария Петровна");
     for (const theme of THEMES) await scan(page, theme);
   });
 });

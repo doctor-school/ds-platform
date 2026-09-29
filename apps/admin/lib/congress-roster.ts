@@ -2,26 +2,24 @@ import type { CongressRosterRow } from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
 
 /**
- * 044 EARS-21/25 — the pure projection behind the congress roster screen
+ * 044 EARS-21/37 — the pure projection behind the congress roster screen
  * (`app/events/[id]/roster/page.tsx`). The page is a thin `AdminDataList` mount;
  * what it shows per row is decided here, so the Node-only unit tier can pin it.
  *
- * The columns follow EARS-25 exactly. № is a row COUNTER over the server's
- * paging, not a stored value: it carries no sort and no filter.
+ * The columns follow EARS-37 exactly: №, ФИО, специальность, город, телефон,
+ * дата регистрации, присутствие. Workplace, region, email and the mail status
+ * left the table for the participant card (EARS-36, `./participant-card.ts`).
+ * № is a row COUNTER over the server's paging, not a stored value: it carries
+ * no sort and no filter.
  */
 export const CONGRESS_ROSTER_COLUMNS = [
   "number",
   "fullName",
   "specialtyName",
-  "workplace",
   "city",
-  "region",
   "phone",
-  "email",
   "registeredAt",
-  "confirmationMailStatus",
-  // 044 EARS-34 — one presence box per congress day. Appended LAST: the EARS-37
-  // column order is its own handler (#2383).
+  // 044 EARS-34 — one presence box per congress day.
   "attendance",
 ] as const;
 export type CongressRosterColumn = (typeof CONGRESS_ROSTER_COLUMNS)[number];
@@ -51,20 +49,13 @@ export function congressRosterRowNumber(
  */
 export function congressRosterCells(
   row: CongressRosterRow,
-  mailStatusLabel: (status: "sent" | "failed") => string,
 ): CongressRosterCells {
   return {
     fullName: row.fullName,
     specialtyName: row.specialtyName ?? "",
-    workplace: row.workplace ?? "",
     city: row.city ?? "",
-    region: row.region ?? "",
     phone: row.phone ?? "",
-    email: row.email ?? "",
     registeredAt: formatMskDateTime(row.registeredAt),
-    confirmationMailStatus: row.confirmationMailStatus
-      ? mailStatusLabel(row.confirmationMailStatus)
-      : "",
   };
 }
 

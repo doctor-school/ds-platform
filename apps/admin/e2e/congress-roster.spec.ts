@@ -25,18 +25,14 @@ import { visible } from "./support/visible";
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
 
-/** EARS-25, exactly — № first, статус письма — then EARS-34's «Присутствие». */
+/** EARS-37, exactly — №, ФИО, специальность, город, телефон, дата регистрации, присутствие. */
 const COLUMNS = [
   "№",
   "ФИО",
   "Специальность",
-  "Место работы",
   "Город",
-  "Область",
   "Телефон",
-  "Email",
   "Дата регистрации",
-  "Статус письма",
   "Присутствие",
 ];
 
@@ -250,11 +246,23 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
     const cell = (key: string) =>
       row.locator(`[data-testid='roster-cell-${key}']`);
 
-    // Profile values: the display name and the account email.
+    // Profile values: the display name (the account email is in the card).
     await expect(cell("fullName")).toHaveText(name);
-    await expect(cell("email")).toHaveText(emails[name]!);
     await expect(cell("registeredAt")).not.toBeEmpty();
     // No answers and no profile value → an EMPTY cell, not «—» or a stand-in.
+    for (const key of ["specialtyName", "city", "phone"]) {
+      await expect(cell(key), `${key} stays empty`).toHaveText("");
+    }
+    await expect(row).not.toContainText("—");
+    await shot(page, "roster-answerless-row");
+
+    // EARS-36: the card carries the account email and leaves the answer
+    // fields the row does not have EMPTY too.
+    await visible(page.getByRole("button", { name, exact: true })).click();
+    const card = page.getByTestId("participant-card-panel");
+    await expect(card.getByTestId("participant-card-email")).toHaveText(
+      emails[name]!,
+    );
     for (const key of [
       "specialtyName",
       "workplace",
@@ -262,9 +270,10 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
       "region",
       "phone",
     ]) {
-      await expect(cell(key), `${key} stays empty`).toHaveText("");
+      await expect(
+        card.getByTestId(`participant-card-${key}`),
+        `card ${key} stays empty`,
+      ).toHaveText("");
     }
-    await expect(row).not.toContainText("—");
-    await shot(page, "roster-answerless-row");
   });
 });

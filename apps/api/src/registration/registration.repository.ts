@@ -700,8 +700,9 @@ export class RegistrationRepository {
    * one registration's row keys. `created_at >= registeredAt` lets Postgres
    * prune the monthly partitions older than the registration itself — no
    * attendance row can predate its registration. The actor is the ledger's
-   * `subject_id` resolved to the matching `users` display name, else the raw
-   * `sub`; the source is the label as stored.
+   * `subject_id` resolved to the matching `users` display name, else that
+   * user's email, else the raw `sub` (an actor with no `users` row, e.g. a
+   * direct DB write); the source is the label as stored.
    */
   private async findAttendanceHistory(
     registrationId: string,
@@ -714,7 +715,7 @@ export class RegistrationRepository {
         at: auditLedger.createdAt,
         actor: sql<
           string | null
-        >`coalesce(nullif(trim(${users.displayName}), ''), ${auditLedger.subjectId})`,
+        >`coalesce(nullif(trim(${users.displayName}), ''), ${users.email}::text, ${auditLedger.subjectId})`,
         source: sql<string>`coalesce(${auditLedger.metadata}->>'source', 'db-direct')`,
       })
       .from(auditLedger)

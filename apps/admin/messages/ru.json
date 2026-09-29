@@ -1303,21 +1303,62 @@
       "number": "№",
       "fullName": "ФИО",
       "specialtyName": "Специальность",
-      "workplace": "Место работы",
       "city": "Город",
-      "region": "Область",
       "phone": "Телефон",
-      "email": "Email",
       "registeredAt": "Дата регистрации",
-      "confirmationMailStatus": "Статус письма",
       "attendance": "Присутствие"
     },
     "attendance": {
       "dayLabel": "{short} — присутствие {day}"
     },
-    "mailStatuses": {
-      "sent": "Отправлено",
-      "failed": "Не отправлено"
+    "participantCard": {
+      "title": "Карточка участника",
+      "description": "Данные участника только для просмотра. Отметить можно только присутствие.",
+      "loading": "Загрузка карточки участника…",
+      "fields": {
+        "fullName": "ФИО",
+        "specialtyName": "Специальность",
+        "workplace": "Место работы",
+        "city": "Город",
+        "region": "Регион",
+        "phone": "Телефон",
+        "email": "Email",
+        "registeredAt": "Дата регистрации",
+        "origin": "Источник",
+        "consent": "Согласие",
+        "mail": "Письмо-подтверждение"
+      },
+      "origins": {
+        "site": "Сайт",
+        "desk": "Стойка регистрации",
+        "platform": "Платформа"
+      },
+      "consentPurposes": {
+        "congressPersonalData": "Обработка персональных данных"
+      },
+      "consentLine": "{purpose}, версия {version}, {at} МСК",
+      "consentPaper": "На бумаге",
+      "mail": {
+        "sent": "Отправлено {at} МСК",
+        "failed": "Не доставлено {at} МСК"
+      },
+      "none": "—",
+      "atMsk": "{at} МСК",
+      "possibleDuplicate": "Возможный дубль",
+      "possibleDuplicateHint": "Телефон совпадает с другой регистрацией на это мероприятие.",
+      "attendanceTitle": "Присутствие",
+      "historyTitle": "История отметок {day}",
+      "historyEmpty": "Отметок не было.",
+      "historyEntry": "{actor} — {at} МСК — {change}",
+      "historyMarked": "отметил",
+      "historyCleared": "снял",
+      "historyNoActor": "Без автора",
+      "errors": {
+        "forbidden": "Нет доступа к карточке участника.",
+        "notFound": "Такой записи нет в реестре этого мероприятия.",
+        "failed": "Не удалось загрузить карточку участника."
+      },
+      "retry": "Повторить"
     },
     "filters": {
       "search": "Поиск участника",

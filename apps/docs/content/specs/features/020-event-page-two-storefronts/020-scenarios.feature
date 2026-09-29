@@ -74,12 +74,23 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And the participation policy resolves to "register"
     And no room URL is present in the response body or in the rendered DOM
     When the reader requests the room route directly
-    Then the room refuses entry and the reader is returned to the participation path
+    Then the room refuses entry and the reader is sent to "<room refusal>"
 
     Examples:
-      | reader                     |
-      | an anonymous visitor       |
-      | a signed-in doctor         |
+      | reader               | room refusal                                           |
+      | an anonymous visitor | this host's /login carrying a returnTo to the room URL |
+      | a signed-in doctor   | the participation path on the event page (?from=room)  |
+
+  @EARS-7
+  Scenario: A guest bounced from the doctor room signs in and lands back in the room
+    Given feature 006 reports an open room for the event
+    And the visitor is not signed in and holds a registration on the event under their account
+    When the visitor opens the room URL /events/<slug>/room on doctor.school
+    Then the server redirects to /login on doctor.school with returnTo set to /events/<slug>/room
+    And no academy.doctor.school URL is reached
+    When the visitor signs in
+    Then the visitor lands back on /events/<slug>/room and the room entry is evaluated again
+    And no registration is created on the visitor's behalf
 
   @EARS-9 @failure
   Scenario: A hybrid event whose offline seats are gone moves the doctor to online participation

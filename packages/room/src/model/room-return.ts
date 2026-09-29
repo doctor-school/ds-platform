@@ -1,4 +1,8 @@
-import { parseAcademyEventReturnTarget } from "@ds/schemas";
+import {
+  parseAcademyEventReturnTarget,
+  parseDoctorEventReturnTarget,
+  type RegistrationIntent,
+} from "@ds/schemas";
 
 /**
  * 006 EARS-6 — the safe ROOM-return target that rides the 003 auth round-trip when
@@ -20,19 +24,23 @@ import { parseAcademyEventReturnTarget } from "@ds/schemas";
  * inheriting the Academy's `/webinars/…` shape.
  *
  * Open-redirect safety is delegated to the hardened `@ds/schemas` slug validation:
- * the guard strips the room suffix and validates the remaining
- * `/webinars/<slug>` through `parseAcademyEventReturnTarget`, so a cross-origin,
- * protocol-relative, backslash, or traversal target (`https://evil/…/room`,
- * `//evil/room`, `/webinars/../account/room`, `/webinars/a/b/room`) can never
- * survive as a room return. The canonical room path is reconstructed from the
- * validated slug and the host template, never trusted verbatim.
+ * the guard strips the room suffix and validates the remaining event path through
+ * the host-scoped event parser that matches the host template's prefix
+ * (`/webinars/<slug>` → `parseAcademyEventReturnTarget` on the Academy,
+ * `/events/<slug>` → `parseDoctorEventReturnTarget` on the doctor storefront), so a
+ * cross-origin, protocol-relative, backslash, or traversal target
+ * (`https://evil/…/room`, `//evil/room`, `/webinars/../account/room`,
+ * `/events/a/b/room`) can never survive as a room return. The canonical room path
+ * is reconstructed from the validated slug and the host template, never trusted
+ * verbatim.
  *
- * The parser is the ACADEMY-scoped shape, never the union: a room lives on the
- * academy host under `/webinars/`. Admitting the doctor host's feed shape here
- * would let `/events?tense=upcoming&resume=abc/room` strip its suffix, validate as
- * a feed target, and come back out as a "canonical room path" that is neither a
- * room nor an academy path — and this parser is consulted FIRST in
- * `completeReturnTarget`, so it would win.
+ * The parser is the HOST-scoped event-page shape, never the union: a room return is
+ * validated only against the event page of the host whose template it is. Admitting
+ * the doctor host's feed shape here would let `/events?tense=upcoming&resume=abc/room`
+ * strip its suffix, validate as a feed target, and come back out as a "canonical
+ * room path" that is not a room at all — and this parser is consulted FIRST in
+ * `completeReturnTarget`, so it would win. A template whose prefix names no known
+ * event page admits no room return (fail closed).
  */
 
 /** The `:slug` placeholder a host's room template interpolates. */
@@ -57,6 +65,19 @@ export interface RoomReturnTarget {
   /** The canonical same-origin room path for {@link RoomReturnTarget.eventSlug}. */
   readonly returnTo: string;
 }
+
+/**
+ * The event-page guard for each room-template prefix — a closed set, one entry per
+ * storefront event page the platform serves. Each is the strict single-shape
+ * `@ds/schemas` parser for that page, never the union (the doctor feed shape is no
+ * room's event half).
+ */
+const EVENT_PAGE_PARSERS: Readonly<
+  Record<string, (returnTo: unknown) => RegistrationIntent | null>
+> = {
+  "/webinars/": parseAcademyEventReturnTarget,
+  "/events/": parseDoctorEventReturnTarget,
+};
 
 /**
  * Split a host's room template into the text before and after its SINGLE `:slug`.
@@ -96,15 +117,20 @@ export function parseRoomReturnTarget(
   if (typeof returnTo !== "string") return null;
   if (!returnTo.endsWith(template.suffix)) return null;
 
-  // Strip the room suffix and validate the remaining `/webinars/<slug>` through
-  // the hardened registration-intent guard (single same-origin segment, no
-  // traversal, SLUG_RE-safe). This reuses the open-redirect defence verbatim.
+  // Strip the room suffix and validate the remaining event path through the
+  // hardened registration-intent guard for THIS host's event page (single
+  // same-origin segment, no traversal, SLUG_RE-safe). This reuses the
+  // open-redirect defence verbatim.
+  const parseEventPage = Object.hasOwn(EVENT_PAGE_PARSERS, template.prefix)
+    ? EVENT_PAGE_PARSERS[template.prefix]
+    : undefined;
+  if (!parseEventPage) return null;
   const eventPath = returnTo.slice(0, -template.suffix.length);
-  const intent = parseAcademyEventReturnTarget(eventPath);
+  const intent = parseEventPage(eventPath);
   if (!intent) return null;
 
   // The guard's canonical event path must be exactly what this host's template
-  // says it is. On the Academy the two agree by construction; a host whose
+  // says it is. The two agree by construction for a known prefix; a host whose
   // template disagrees with the shape the guard admits gets `null` instead of a
   // path neither side would serve.
   if (intent.returnTo !== `${template.prefix}${intent.eventSlug}`) return null;

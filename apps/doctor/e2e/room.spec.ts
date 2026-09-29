@@ -15,9 +15,9 @@ import {
  * end — that the server-side EARS-1 grant admits a registered doctor over the
  * doctor origin's own `__Host-ds_session`, that the provider enum reaches the
  * rendered embed, that the presence loop actually beats, that the EARS-6 refusals
- * land on THIS host's targets (never an academy login, which does not exist here —
- * ADR-0015 §4 REQ-24 / 020 §6.1 D10), and that the room renders WITHOUT the
- * storefront shell.
+ * land on THIS host's targets (a guest on this host's own `/login` carrying the
+ * room, never an academy login — ADR-0015 §4 REQ-24 / 020 EARS-7 / §6.1), and that
+ * the room renders WITHOUT the storefront shell.
  *
  * The academy twin is `apps/portal/e2e/room.spec.ts`. This file is not a copy of
  * it: the routes, the chrome and — above all — the way a session is minted differ,
@@ -180,35 +180,51 @@ test.describe("006 EARS-4 server-authoritative heartbeat presence on the doctor 
 });
 
 // The leading `006 EARS-6 ` prefix is the ears-test-lint feature scope.
-test.describe("006 EARS-6 denied-access routing on the doctor host (no academy login)", () => {
-  test("006 EARS-6.1: an unauthenticated visitor is routed to THIS host's event page and never to a login URL", async ({
+test.describe("006 EARS-6 denied-access routing on the doctor host (this host's own doors)", () => {
+  test("006 EARS-6.1: an unauthenticated visitor is sent to THIS host's login carrying the room, and signing in lands them back in the room", async ({
     page,
   }) => {
-    // The whole navigation trail is recorded: D10's contract is not merely "where
-    // the visitor ends up" but that no login URL is ever reached — a redirect that
-    // bounced through one and back would satisfy a landing-URL assertion alone.
+    const roomPath = `/events/${SLUG_YOUTUBE}/room`;
+    const expectedLogin = `/login?returnTo=${encodeURIComponent(roomPath)}`;
+
+    // The server page redirects BEFORE any upstream read (D16a) — a server
+    // redirect to this host's own login carrying a same-origin return to the room
+    // (rule S1 · 020 EARS-7 / §6.1), never an academy login.
+    const bounce = await page.request.get(`${DOCTOR_BASE}${roomPath}`, {
+      maxRedirects: 0,
+    });
+    expect(bounce.status()).toBe(307);
+    expect(bounce.headers()["location"]).toBe(expectedLogin);
+
     const trail: string[] = [];
     page.on("framenavigated", (frame) => {
       if (frame === page.mainFrame()) trail.push(frame.url());
     });
-
-    await page.goto(`${DOCTOR_BASE}/events/${SLUG_YOUTUBE}/room`, {
+    await page.goto(`${DOCTOR_BASE}${roomPath}`, {
       waitUntil: "domcontentloaded",
     });
-
-    // The server page redirects BEFORE any upstream read (D16a) to this host's
-    // own event page — the honest next step, where the participation card lives.
-    await expect(page).toHaveURL(
-      new RegExp(`/events/${SLUG_YOUTUBE}(?:$|[?#])`),
-    );
+    await expect(page).toHaveURL(`${DOCTOR_BASE}${expectedLogin}`);
     expect(
-      trail.filter((url) => /\/login(?:$|[/?#])/.test(url)),
-      `no login URL may appear in the trail (D10) — trail: ${trail.join(" -> ")}`,
+      trail.filter((url) => /academy|\/webinars\//.test(url)),
+      `no academy URL may appear in the trail — trail: ${trail.join(" -> ")}`,
     ).toEqual([]);
-
     // No soft wall: nothing of the room composition renders on the refusal.
     await expect(page.getByTestId("room-context-strip")).toHaveCount(0);
-    await expect(page.getByTestId("room-chat")).toHaveCount(0);
+
+    // Sign in through this host's own door: the carried room return completes
+    // and the gate re-runs — the registered doctor is admitted into the room.
+    const form = page.getByTestId("password-login-form");
+    await expect(form).toBeVisible();
+    await form
+      .getByLabel("Электронная почта или телефон")
+      .fill(process.env.E2E_DOCTOR_EMAIL!);
+    await form
+      .getByLabel("Пароль", { exact: true })
+      .fill(process.env.E2E_DOCTOR_PASSWORD!);
+    await page.getByTestId("password-login-submit").click();
+
+    await expect(page).toHaveURL(`${DOCTOR_BASE}${roomPath}`);
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
   });
 
   test("006 EARS-6.2: a registered doctor reaching the room of a NOT-live event lands on the truthful event page, no watchable room", async ({

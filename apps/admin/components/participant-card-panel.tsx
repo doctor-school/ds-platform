@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type Ref } from "react";
 import { useCustom, type HttpError } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Alert, Badge, Button } from "@ds/design-system";
@@ -52,6 +52,7 @@ export function ParticipantCardPanel({
   onNavigate,
   onRosterStale,
   onCloseAutoFocus,
+  contentRef,
 }: {
   eventId: string;
   /** The open card's registration; `null` = the panel is closed. */
@@ -61,6 +62,8 @@ export function ParticipantCardPanel({
   /** A mark changed the roster, or the grant is gone: the page re-reads its list. */
   onRosterStale: () => void;
   onCloseAutoFocus: (event: Event) => void;
+  /** The panel element — the page moves the focus into it on a row switch. */
+  contentRef?: Ref<HTMLDivElement>;
 }) {
   const t = useTranslations("congressRoster.participantCard");
   const { query } = useCustom<CongressParticipantCard, HttpError>({
@@ -144,6 +147,7 @@ export function ParticipantCardPanel({
       }}
     >
       <SheetContent
+        ref={contentRef}
         size="md"
         data-testid="participant-card-panel"
         onNavigate={onNavigate}

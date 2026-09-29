@@ -35,6 +35,8 @@ import {
   PARTICIPANT_CARD_PARAM,
   participantCardHref,
   participantCardNeighbour,
+  pendingCardAnchor,
+  queueCardRequest,
   settlePendingCards,
 } from "@/lib/participant-card";
 import { canAccessResource } from "@/lib/admin-access";
@@ -108,16 +110,28 @@ export default function CongressRosterPage() {
     pendingCards.current = settlePendingCards(
       pendingCards.current,
       openRegistration,
-    ).pending;
+    );
     if (openRegistration) lastOpened.current = openRegistration;
   }, [openRegistration]);
   const showCard = (registrationId: string | null) => {
     if (registrationId) lastOpened.current = registrationId;
-    pendingCards.current = [...pendingCards.current, registrationId];
+    pendingCards.current = queueCardRequest(
+      pendingCards.current,
+      openRegistration,
+      registrationId,
+    );
     router.replace(
       participantCardHref(pathname, searchParams.toString(), registrationId),
       { scroll: false },
     );
+  };
+  // The panel takes the focus when it opens; a row picked while the non-modal
+  // inspector (≥ lg) is already open would keep it on the row, outside the
+  // panel that owns ↑/↓ — so the focus follows the card into the panel.
+  const cardContent = useRef<HTMLDivElement>(null);
+  const showCardFromRow = (registrationId: string) => {
+    showCard(registrationId);
+    cardContent.current?.focus({ preventScroll: true });
   };
   const [accepted, setAccepted] = useState<string | null>(null);
   // 044 EARS-35 / ADR-0001 A1: the desk route re-checks the grant live; a 403
@@ -204,10 +218,7 @@ export default function CongressRosterPage() {
   const rosterStale = useCallback(() => void refetchRoster(), [refetchRoster]);
   const rowIds = rows.map((row) => row.registrationId);
   const navigateCard = (direction: "prev" | "next") => {
-    const { anchor } = settlePendingCards(
-      pendingCards.current,
-      openRegistration,
-    );
+    const anchor = pendingCardAnchor(pendingCards.current, openRegistration);
     if (!anchor) return;
     const next = participantCardNeighbour(rowIds, anchor, direction);
     if (next) showCard(next);
@@ -390,7 +401,7 @@ export default function CongressRosterPage() {
             columns={columns}
             rows={rows}
             getRowKey={(row) => row.registrationId}
-            onRowClick={(row) => showCard(row.registrationId)}
+            onRowClick={(row) => showCardFromRow(row.registrationId)}
             total={roster?.total ?? 0}
             isLoading={request.isLoading}
             error={
@@ -409,6 +420,7 @@ export default function CongressRosterPage() {
             onNavigate={navigateCard}
             onRosterStale={rosterStale}
             onCloseAutoFocus={returnFocusToRow}
+            contentRef={cardContent}
           />
         </div>
       </AppShell>

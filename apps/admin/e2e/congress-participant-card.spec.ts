@@ -230,9 +230,7 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
       await page.setViewportSize({ width, height: 900 });
       const overflow = await panel
         .locator("dd")
-        .evaluateAll((dds) =>
-          dds.map((dd) => dd.scrollWidth - dd.clientWidth),
-        );
+        .evaluateAll((dds) => dds.map((dd) => dd.scrollWidth - dd.clientWidth));
       expect(
         Math.max(...overflow),
         `a card fact overflows the panel at ${width}px`,
@@ -308,6 +306,38 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
     await expect(fullNameFact).toHaveText(names[1]!);
   });
 
+  test("044 EARS-36: after a second row click ↓ moves to the next participant, not the page", async () => {
+    test.skip(!eventId, "depends on the roster seeded above");
+    const page = desk;
+    // Wide enough for the non-modal inspector (≥ lg), short enough that the
+    // page itself can scroll — an arrow the card missed would move it.
+    await page.setViewportSize({ width: 1440, height: 420 });
+    await page.goto(`/events/${eventId}/roster`);
+    await expect(page.getByTestId("roster-total")).toHaveText("Найдено: 4");
+    const names = await nameCells(page).allInnerTexts();
+
+    await rowControl(page, names[0]!).click();
+    const panel = card(page);
+    const fullNameFact = panel.getByTestId("participant-card-fullName");
+    await expect(fullNameFact).toHaveText(names[0]!);
+
+    // Switch rows while the panel stays open.
+    await rowControl(page, names[2]!).click();
+    await expect(fullNameFact).toHaveText(names[2]!);
+    const third = registrationParam(page);
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+
+    await page.keyboard.press("ArrowDown");
+    await expect(fullNameFact).toHaveText(names[3]!);
+    await expect.poll(() => registrationParam(page)).not.toBe(third);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+
+    // Esc still gives the focus back to the row whose card was open.
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(rowControl(page, names[3]!)).toBeFocused();
+  });
+
   test("044 EARS-36: a direct ?registration= link opens the card on load", async () => {
     test.skip(!eventId, "depends on the roster seeded above");
     const page = desk;
@@ -328,9 +358,9 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
     await page.goto(
       `/events/${eventId}/roster?registration=00000000-0000-4000-8000-000000000000`,
     );
-    await expect(card(page).getByTestId("participant-card-error")).toContainText(
-      "Такой записи нет в реестре этого мероприятия.",
-    );
+    await expect(
+      card(page).getByTestId("participant-card-error"),
+    ).toContainText("Такой записи нет в реестре этого мероприятия.");
   });
 
   test("044 EARS-36: a mark in the card flips the roster's box and lands in the day's history", async () => {

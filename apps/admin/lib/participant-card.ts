@@ -110,18 +110,39 @@ export function participantCardFailure(
  * `router.replace` answers asynchronously, so a held ↓ fires again before the
  * address shows the card the previous press asked for. The page keeps the
  * requests it has sent (`pending`, oldest first) and walks on from the NEWEST
- * one; when the address answers with one of them, that request and every older
- * one are settled. With nothing pending, the address is the card (a direct
- * link, the desk's «Открыть запись»).
+ * one; with nothing pending, the address is the card (a direct link, the
+ * desk's «Открыть запись»).
+ */
+export function pendingCardAnchor(
+  pending: readonly (string | null)[],
+  address: string | null,
+): string | null {
+  return pending.length > 0 ? pending[pending.length - 1]! : address;
+}
+
+/**
+ * The address changed. When it answers one of the requests, that request and
+ * every older one are settled (the newest occurrence — the router may commit
+ * only the last of a burst); when it answers none of them, something else
+ * navigated (a link) and the address wins: the queue is dropped.
  */
 export function settlePendingCards(
   pending: readonly (string | null)[],
   address: string | null,
-): { pending: (string | null)[]; anchor: string | null } {
-  const answered = pending.indexOf(address);
-  const rest = answered === -1 ? [...pending] : pending.slice(answered + 1);
-  return {
-    pending: rest,
-    anchor: rest.length > 0 ? rest[rest.length - 1]! : address,
-  };
+): (string | null)[] {
+  const answered = pending.lastIndexOf(address);
+  return answered === -1 ? [] : pending.slice(answered + 1);
+}
+
+/**
+ * A card request joins the queue — unless it names the card already open: the
+ * address will not change for it, so it would never be answered and would
+ * outrank the next address. Asking for the open card again drops the queue.
+ */
+export function queueCardRequest(
+  pending: readonly (string | null)[],
+  open: string | null,
+  requested: string | null,
+): (string | null)[] {
+  return requested === open ? [] : [...pending, requested];
 }

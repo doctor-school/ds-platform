@@ -7,6 +7,8 @@ import {
   participantCardFields,
   participantCardHref,
   participantCardNeighbour,
+  pendingCardAnchor,
+  queueCardRequest,
   settlePendingCards,
 } from "./participant-card";
 import { congressRosterUrl } from "@/providers/data-provider";
@@ -125,19 +127,30 @@ describe("044 EARS-36 participant card", () => {
 
   it("EARS-36: a held ↓ walks on from the card it asked for, not from the address that has not caught up yet", () => {
     // Two presses before the address answers: the anchor is the newest request.
-    expect(settlePendingCards(["b", "c"], "a")).toEqual({
-      pending: ["b", "c"],
-      anchor: "c",
-    });
-    // The address catches up one step: that request is settled, the next stays.
-    expect(settlePendingCards(["b", "c"], "b")).toEqual({
-      pending: ["c"],
-      anchor: "c",
-    });
-    expect(settlePendingCards(["c"], "c")).toEqual({ pending: [], anchor: "c" });
+    expect(pendingCardAnchor(["b", "c"], "a")).toBe("c");
     // Nothing pending: the address is the card.
-    expect(settlePendingCards([], "d")).toEqual({ pending: [], anchor: "d" });
+    expect(pendingCardAnchor([], "d")).toBe("d");
+    // The address catches up one step: that request is settled, the next stays.
+    expect(settlePendingCards(["b", "c"], "b")).toEqual(["c"]);
+    expect(settlePendingCards(["c"], "c")).toEqual([]);
     // A close is a request too.
-    expect(settlePendingCards([null], null)).toEqual({ pending: [], anchor: null });
+    expect(settlePendingCards([null], null)).toEqual([]);
+    // The router committed only the newest of a burst: the newest occurrence
+    // settles everything before it.
+    expect(settlePendingCards(["a", "b", "a"], "a")).toEqual([]);
+  });
+
+  it("EARS-36: an address that answers none of the requests wins — the queue is dropped", () => {
+    // A link (the desk's «Открыть запись») lands on Z while X is still queued.
+    expect(settlePendingCards(["x"], "z")).toEqual([]);
+    expect(pendingCardAnchor(settlePendingCards(["x"], "z"), "z")).toBe("z");
+  });
+
+  it("EARS-36: a click on the row whose card is already open queues nothing", () => {
+    // The address will not change, so the request would never be answered.
+    expect(queueCardRequest([], "x", "x")).toEqual([]);
+    expect(queueCardRequest(["y"], "x", "x")).toEqual([]);
+    expect(queueCardRequest([], "x", "y")).toEqual(["y"]);
+    expect(queueCardRequest(["y"], "x", null)).toEqual(["y", null]);
   });
 });

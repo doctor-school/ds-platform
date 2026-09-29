@@ -299,16 +299,21 @@ export function DeskRegistrationForm({
                 {t.rich("congressRoster.deskEntry.existing", {
                   email: existingEmail,
                   b: (chunks) => <b>{chunks}</b>,
-                })}{" "}
-                <DsLink asChild variant="inline">
-                  <Link
-                    href={`/events/${encodeURIComponent(eventId)}/roster?registration=${encodeURIComponent(existingRegistrationId ?? "")}`}
-                    data-testid="desk-entry-open-existing"
-                    onClick={() => changeOpen(false)}
-                  >
-                    {t("congressRoster.deskEntry.openExisting")}
-                  </Link>
-                </DsLink>
+                })}
+                {existingRegistrationId ? (
+                  <>
+                    {" "}
+                    <DsLink asChild variant="inline">
+                      <Link
+                        href={`/events/${encodeURIComponent(eventId)}/roster?registration=${encodeURIComponent(existingRegistrationId)}`}
+                        data-testid="desk-entry-open-existing"
+                        onClick={() => changeOpen(false)}
+                      >
+                        {t("congressRoster.deskEntry.openExisting")}
+                      </Link>
+                    </DsLink>
+                  </>
+                ) : null}
               </p>
             </Alert>
           ) : null}
@@ -336,9 +341,13 @@ export function DeskRegistrationForm({
                   t("congressRoster.deskEntry.fields.patronymic"),
                   { hint: t("congressRoster.deskEntry.fields.patronymicHint") },
                 )}
-                {textField("email", t("congressRoster.deskEntry.fields.email"), {
-                  type: "email",
-                })}
+                {textField(
+                  "email",
+                  t("congressRoster.deskEntry.fields.email"),
+                  {
+                    type: "email",
+                  },
+                )}
                 {textField(
                   "contactPhone",
                   t("congressRoster.deskEntry.fields.phone"),
@@ -354,7 +363,7 @@ export function DeskRegistrationForm({
                 )}
                 <SettlementFields form={form} />
               </FormSection>
-  
+
               <FormSection
                 legend={t("congressRoster.deskEntry.sections.consent")}
               >
@@ -381,7 +390,7 @@ export function DeskRegistrationForm({
                   )}
                 />
               </FormSection>
-  
+
               {specialtiesFailed ? (
                 <FormError data-testid="desk-entry-book-error">
                   {t("congressRoster.deskEntry.errors.specialtiesFailed")}
@@ -532,7 +541,9 @@ function SettlementFields({ form }: { form: DeskForm }) {
     // A typed place is kept in the spelling the form stores (the directory's,
     // when the text named exactly one of its places).
     setChoice(
-      freeSettlementText(value) === null ? value : freeSettlementValue(next.city),
+      freeSettlementText(value) === null
+        ? value
+        : freeSettlementValue(next.city),
     );
     setResolution(next);
     form.setValue("city", next.city, {
@@ -566,7 +577,9 @@ function SettlementFields({ form }: { form: DeskForm }) {
                 value={choice}
                 onValueChange={commit}
                 onSearchChange={setQuery}
-                placeholder={t("congressRoster.deskEntry.fields.cityPlaceholder")}
+                placeholder={t(
+                  "congressRoster.deskEntry.fields.cityPlaceholder",
+                )}
                 searchLabel={t("congressRoster.deskEntry.fields.citySearch")}
                 searchPlaceholder={t(
                   "congressRoster.deskEntry.fields.cityPlaceholder",

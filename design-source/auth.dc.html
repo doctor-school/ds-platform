@@ -95,6 +95,7 @@
                     <div style="font-size:14px;font-weight:700;color:{{ ink }};margin-bottom:4px">Вход по одноразовому коду</div>
                     <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }}">{{ otpIntro }}</div>
                   </div>
+                  <sc-if value="{{ otpChannelRow }}" hint-placeholder-val="{{ true }}">
                   <div>
                     <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Канал кода</div>
                     <div style="display:flex;gap:8px">
@@ -102,6 +103,7 @@
                       <button onClick="{{ chSms }}" data-tab="{{ chSmsOn }}" style="{{ chSmsStyle }}">SMS</button>
                     </div>
                   </div>
+                  </sc-if>
                   <div>
                     <label style="{{ fOtpId.labelStyle }}">{{ fOtpId.label }}</label>
                     <input type="text" value="{{ fOtpId.value }}" onChange="{{ fOtpId.onChange }}" onBlur="{{ fOtpId.onBlur }}" placeholder="{{ fOtpId.placeholder }}" style="{{ fOtpId.inputStyle }}">
@@ -119,7 +121,7 @@
                   <div>
                     <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из сообщения</label>
                     <div style="display:flex">
-                      <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
+                      <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="8"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
                     </div>
                   </div>
                   <button onClick="{{ submit }}" data-btn="primary" aria-busy="{{ primaryBusyAttr }}" style="{{ primaryBtn }}">{{ otpBtnLabel }}</button>
@@ -530,12 +532,13 @@ class Component extends DCLogic {
       tabPwOn: s.loginTab === 'password', tabOtpOn: s.loginTab === 'otp',
       tabPwStyle: segTab(s.loginTab === 'password'), tabOtpStyle: segTab(s.loginTab === 'otp') + ';border-left:2px solid ' + border,
       otpNotSent: !s.otpSent, otpSent: s.otpSent,
+      otpChannelRow: !isDoctor,
       chEmail: () => this.setState({ otpChannel: 'email' }), chSms: () => this.setState({ otpChannel: 'sms' }),
       chEmailOn: s.otpChannel === 'email', chSmsOn: s.otpChannel === 'sms',
       chEmailStyle: chBtn(s.otpChannel === 'email'), chSmsStyle: chBtn(s.otpChannel === 'sms'),
       sendOtp: () => {
         this.setState({ touched: Object.assign({}, s.touched, { otpId: true }) });
-        const v = s.values['otpId'] || ''; const ok = s.otpChannel === 'email' ? emailOk(v) : phoneOk(v);
+        const v = s.values['otpId'] || ''; const ok = (isDoctor || s.otpChannel === 'email') ? emailOk(v) : phoneOk(v);
         if (ok) { this.flash('otp'); setTimeout(() => this.setState({ otpSent: true, verified: false }), 300); this.startCd(); }
       },
       otpBack: () => this.setState({ otpSent: false, verified: false, cooldown: 0, otp: Array(8).fill(''), values: Object.assign({}, s.values, { code: '' }) }),
@@ -544,7 +547,7 @@ class Component extends DCLogic {
         : mkField('loginId', 'Электронная почта или телефон', 'doctor@example.com или +7…', vIdent, 'Заполните это поле.'),
       otpIntro: isDoctor ? 'Пришлём код на почту — пароль не нужен.' : 'Пришлём код на почту или телефон — пароль не нужен.',
       fLoginPw: mkField('loginPw', 'Пароль', '', null, 'Заполните это поле.'),
-      fOtpId: s.otpChannel === 'email'
+      fOtpId: (isDoctor || s.otpChannel === 'email')
         ? mkField('otpId', 'Электронная почта', 'doctor@example.com', vEmail, 'Заполните это поле.')
         : mkField('otpId', 'Телефон', '+79991234567', vPhone, 'Заполните это поле.'),
       fCode: mkField('code', 'Введите код', '12345678', vCode, 'Введите код.'),

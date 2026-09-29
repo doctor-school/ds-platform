@@ -37,7 +37,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "directionSpecialties.validation"
     | "directionAdjacency.validation"
     | "recordings.validation"
-    | "eventExperts.validation" = "events.validation",
+    | "eventExperts.validation"
+    | "congressRoster.deskEntry.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
   const t = useTranslations(namespace);
 
@@ -160,6 +161,17 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   // ADJACENT box and reads as its own sentence: «выберите смежное направление»
   // would be advice the operator has already followed.
   if (has("specialtyMinzdravId")) return t("specialty");
+  // 044 EARS-35 desk entry. The specialty is a SELECTOR over the closed book
+  // (a `z.uuid()`, so «nothing chosen» is `invalid_format` and would reach
+  // `fallback`); the contact phone is refused on its NORMALISED value (EARS-29,
+  // a `custom` issue), which is a different fix from an empty box; and the
+  // paper-consent tick is a `z.literal(true)` whose refusal must say what the
+  // registrar has to attest, not «проверьте значение».
+  if (has("specialtyId")) return t("specialty");
+  if (has("contactPhone")) {
+    return issue.code === "too_big" ? t("maxLength") : t("phone");
+  }
+  if (has("paperConsent")) return t("paperConsent");
   if (has("adjacentDirectionId")) {
     return issue.code === "custom" ? t("selfEdge") : t("adjacentDirection");
   }

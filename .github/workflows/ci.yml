@@ -1549,10 +1549,16 @@ jobs:
           # roster of every event carries the congress day columns, and the
           # roster answers 503 CONGRESS_DAYS_UNCONFIGURED without
           # CONGRESS_SIGNUP_EVENT_DAYS, so this tier cannot read a roster
-          # without it. The others mirror the runner defaults; the event id and
-          # the consent version stay unset because this tier never drives the
-          # public intake.
+          # without it. EARS-35: the registrar's desk entry runs through the
+          # congress intake use-case, which refuses every submission (422)
+          # unless its settings are configured and valid. The desk addresses its
+          # event by the route and ignores the window, so the event id here is
+          # only the PUBLIC door's binding, which this tier never drives: any
+          # well-formed id serves. The consent version follows the
+          # published-text shape.
           CONGRESS_SIGNUP_TIMING_FLOOR_MS: "5"
+          CONGRESS_SIGNUP_EVENT_ID: 00000000-0000-4000-8000-000000000044
+          CONGRESS_SIGNUP_CONSENT_VERSION: 2026-10-01.sha256-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
           CONGRESS_SIGNUP_EVENT_VENUE: Москва, тестовая площадка
           CONGRESS_SIGNUP_WINDOW_OPENS_AT: 2026-10-01T00:00:00.000+03:00
           CONGRESS_SIGNUP_WINDOW_CLOSES_AT: 2027-01-01T00:00:00.000+03:00

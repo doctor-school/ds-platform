@@ -12,12 +12,20 @@ import { HttpException } from "@nestjs/common";
  * SAME strings 012 already publishes, so a client that learned the 012 contract
  * sees no new shape when the refusal starts coming from the guard instead of the
  * handler.
+ *
+ * `EVENT_BINDING_REQUIRED` is the one code not thrown by the guard: it is
+ * {@link EventGrantPolicy}'s refusal of a registrar whose `event_role_grants`
+ * binding does not admit the path's event (044 EARS-38) — no binding row, a
+ * re-pointed one, another event or an unknown event all answer it alike. It
+ * lives in this vocabulary because it is the same kind of verdict: about the
+ * principal's standing, so a client treats it as no-access, never as a retry.
  */
 export type AdminAuthorityErrorCode =
   | "ADMIN_SESSION_REQUIRED"
   | "PLATFORM_ADMIN_REQUIRED"
   | "PD_OFFICER_REQUIRED"
   | "EVENT_REGISTRAR_REQUIRED"
+  | "EVENT_BINDING_REQUIRED"
   | "STEP_UP_REQUIRED"
   | "IDP_REVALIDATION_UNAVAILABLE";
 
@@ -29,6 +37,7 @@ export const ADMIN_AUTHORITY_STATUS: Readonly<
   PLATFORM_ADMIN_REQUIRED: 403,
   PD_OFFICER_REQUIRED: 403,
   EVENT_REGISTRAR_REQUIRED: 403,
+  EVENT_BINDING_REQUIRED: 403,
   STEP_UP_REQUIRED: 401,
   IDP_REVALIDATION_UNAVAILABLE: 503,
 };
@@ -40,6 +49,7 @@ const ADMIN_AUTHORITY_TITLE: Readonly<Record<AdminAuthorityErrorCode, string>> =
     PLATFORM_ADMIN_REQUIRED: "platform_admin required",
     PD_OFFICER_REQUIRED: "pd_officer required",
     EVENT_REGISTRAR_REQUIRED: "event-registrar required",
+    EVENT_BINDING_REQUIRED: "Event binding required",
     STEP_UP_REQUIRED: "Fresh step-up verification required",
     IDP_REVALIDATION_UNAVAILABLE: "Identity provider unavailable",
   };

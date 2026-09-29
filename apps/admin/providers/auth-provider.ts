@@ -97,10 +97,21 @@ export const authProvider: AuthProvider = {
     return { authenticated: false, redirectTo: LOGIN_PATH, logout: true };
   },
 
+  /**
+   * Only a 401 means the session is gone, so only a 401 signs the operator out.
+   * A 403 is a refusal of THIS action by a live session (ADR-0001 A1: the
+   * console treats it as no-access, never a retry and never a logout) — e.g. a
+   * registrar whose event binding was withdrawn (044 EARS-38). The screen that
+   * made the call owns what it shows; logging out here would race it to
+   * `/login` and hide the refusal.
+   */
   onError: async (error) => {
     const status = (error as { statusCode?: number }).statusCode;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       return { logout: true, redirectTo: LOGIN_PATH, error };
+    }
+    if (status === 403) {
+      return { error };
     }
     return {};
   },

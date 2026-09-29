@@ -113,7 +113,9 @@ never a widening of the one above:
   the handler runs `EventGrantPolicy.assertEventAccess`
   (`apps/api/src/authz/event-grant.policy.ts`), which admits a registrar only
   for the event its `event_role_grants` row binds it to — another event, an
-  unknown one, or no binding row at all is a 403 — and does not limit
+  unknown one, or no binding row at all is the same
+  `403 EVENT_BINDING_REQUIRED` (a credential refusal: the admin console shows
+  no-access and offers no retry) — and does not limit
   `platform_admin`. `total` counts the filtered set over the WHOLE event — the
   pager's denominator — and, for the administrator, an unknown event is a 404,
   never an empty page.
@@ -121,7 +123,9 @@ never a widening of the one above:
 - `POST /v1/admin/events/:idOrSlug/registrations`
   (`DeskRegistrationAdminController` → `CongressSignUpService.signUp` with
   `{ origin: "desk", eventKey, consentOrigin: "paper" }`, 044 EARS-35) — the
-  registrar enters a walk-in participant at the congress desk. The body is the
+  registrar enters a walk-in participant at the congress desk (admin entry:
+  «Добавить участника» on the roster screen,
+  `apps/admin/components/desk-registration-form.tsx`, #2382). The body is the
   congress-site answer set (`CongressDeskRegistrationRequestSchema`, composed
   from the public request) with `paperConsent: true` instead of the online
   acceptance and no captcha token; a body without the tick is a 400 from the
@@ -208,6 +212,8 @@ WHERE u.email = '<registrar email>' AND e.slug = '<event slug>';
 The registrar sees the bound roster on the next `GET /v1/admin/auth/session`
 read (its `eventGrants` field); no re-login is needed, because the binding is
 read from the table on every request rather than baked into the session.
+Deleting or re-pointing the row takes effect on the next request the same way:
+every desk route then answers `403 EVENT_BINDING_REQUIRED`.
 
 ## Exported symbols
 

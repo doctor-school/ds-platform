@@ -13,6 +13,7 @@ import {
   RecordingExpectedByFormSchema,
   StreamConfigFormSchema,
   DirectionFormSchema,
+  DeskRegistrationFormSchema,
 } from "./form-schemas";
 import { translateIssue, type ZodIssueLike } from "./use-localized-resolver";
 
@@ -450,5 +451,56 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         RecordingExpectedByFormSchema.safeParse({ expectedBy: good }).success,
       ).toBe(true);
     }
+  });
+  it("044 EARS-35: every desk-entry failing rule maps to a specific key, never fallback", () => {
+    const valid = {
+      surname: "Иванова",
+      firstName: "Анна",
+      patronymic: "",
+      email: "walkin@example.org",
+      specialtyId: "11111111-1111-4111-8111-111111111111",
+      workplace: "ГКБ №1",
+      city: "Москва",
+      region: "Московская область",
+      contactPhone: "+7 (999) 123-45-67",
+      paperConsent: true,
+    };
+    // An empty patronymic is «no patronymic» (EARS-3), not a refusal.
+    expect(DeskRegistrationFormSchema.safeParse(valid).success).toBe(true);
+
+    const empty = keysFor(DeskRegistrationFormSchema, {
+      surname: "",
+      firstName: "",
+      patronymic: "",
+      email: "",
+      specialtyId: "",
+      workplace: "",
+      city: "",
+      region: "",
+      contactPhone: "",
+      paperConsent: false,
+    });
+    expect(empty).not.toContain("fallback");
+    expect(empty).toEqual(
+      expect.arrayContaining([
+        "required",
+        "email",
+        "specialty",
+        "phone",
+        "paperConsent",
+      ]),
+    );
+
+    // The unticked paper-consent box is its own sentence (the refused state).
+    expect(
+      keysFor(DeskRegistrationFormSchema, { ...valid, paperConsent: false }),
+    ).toEqual(["paperConsent"]);
+    // A phone that does not normalise to E.164 names the phone, not «check the value».
+    expect(
+      keysFor(DeskRegistrationFormSchema, { ...valid, contactPhone: "12" }),
+    ).toEqual(["phone"]);
+    expect(
+      keysFor(DeskRegistrationFormSchema, { ...valid, city: "г".repeat(201) }),
+    ).toEqual(["maxLength"]);
   });
 });

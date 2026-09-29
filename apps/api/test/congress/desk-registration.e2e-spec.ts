@@ -390,12 +390,55 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     });
 
-    it("044 EARS-38: the registrar bound to event A is refused on event B and nothing is written", async () => {
+    it("044 EARS-38: the registrar bound to event A is refused on event B with EVENT_BINDING_REQUIRED and nothing is written", async () => {
       const email = uniqueEmail("desk-other-event");
 
       const res = await desk(registrar.headers, slugB, entry(email));
 
       expect(res.statusCode).toBe(403);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "EVENT_BINDING_REQUIRED",
+      );
+      expect(await snapshot(email)).toEqual({
+        users: 0,
+        registrations: [],
+        consents: [],
+      });
+    });
+
+    it("044 EARS-38: an unknown event answers the same EVENT_BINDING_REQUIRED as another event — the desk learns nothing about which events exist", async () => {
+      const res = await desk(
+        registrar.headers,
+        "no-such-congress",
+        entry(uniqueEmail("desk-unknown-event")),
+      );
+
+      expect(res.statusCode).toBe(403);
+      expect((res.json() as { errorCode: string }).errorCode).toBe(
+        "EVENT_BINDING_REQUIRED",
+      );
+    });
+
+    it("044 EARS-38: a registrar whose event binding row was withdrawn after sign-in is refused with EVENT_BINDING_REQUIRED (a credential refusal, never a retry) and nothing is written", async () => {
+      const unbound = await adminPrincipal(
+        "desk-unbound",
+        "event-registrar",
+        eventA,
+      );
+      await pool.query(
+        `DELETE FROM event_role_grants
+          WHERE user_id = (SELECT id FROM users WHERE zitadel_sub = $1)`,
+        [unbound.sub],
+      );
+      const email = uniqueEmail("desk-unbound-entry");
+
+      const res = await desk(unbound.headers, slugA, entry(email));
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json()).toMatchObject({
+        status: 403,
+        errorCode: "EVENT_BINDING_REQUIRED",
+      });
       expect(await snapshot(email)).toEqual({
         users: 0,
         registrations: [],

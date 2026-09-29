@@ -127,3 +127,52 @@ export function attendanceFailureKind(status: number): AttendanceFailureKind {
   if (status === 0 || status === 503) return "unavailable";
   return "failed";
 }
+
+/**
+ * 044 EARS-35 — what a refused desk entry means to the registrar. The desk
+ * route re-validates the principal against the IdP on every call (ADR-0001 A1,
+ * `revalidate: "live"`), so two refusals are about the GRANT, not the entry:
+ *
+ *  - `grantWithdrawn` — a 403 naming the missing registrar / administrator
+ *    grant, or `EVENT_BINDING_REQUIRED` (the event binding was withdrawn or
+ *    re-pointed, EARS-38): the grant is gone since the page loaded. The screen stops
+ *    offering the roster (the shell's own refusal); a retry would only be
+ *    refused again, so none is offered.
+ *  - `revalidationUnavailable` — a 503 while the IdP could not be asked: the
+ *    grant is unknown, not refused, so a retry is legitimate and the form keeps
+ *    what the registrar typed.
+ *
+ * `noConsent` is the server's own refusal of the missing paper-consent tick (the
+ * client refuses it first; this is the belt for a request that got through).
+ * Everything else — unknown event (404), event not open (422), a network fault
+ * — is the generic refusal, with the typed values kept.
+ */
+export type DeskEntryFailure =
+  "grantWithdrawn" | "revalidationUnavailable" | "noConsent" | "generic";
+
+const GRANT_REFUSAL_CODES = new Set([
+  "EVENT_REGISTRAR_REQUIRED",
+  "PLATFORM_ADMIN_REQUIRED",
+  "EVENT_BINDING_REQUIRED",
+]);
+
+export function deskEntryFailure(error: unknown): DeskEntryFailure {
+  const { statusCode, errorCode, fieldErrors } = (error ?? {}) as {
+    statusCode?: number;
+    errorCode?: string;
+    fieldErrors?: { path: string; message: string }[];
+  };
+  if (statusCode === 403 && errorCode && GRANT_REFUSAL_CODES.has(errorCode)) {
+    return "grantWithdrawn";
+  }
+  if (statusCode === 503 && errorCode === "IDP_REVALIDATION_UNAVAILABLE") {
+    return "revalidationUnavailable";
+  }
+  if (
+    statusCode === 400 &&
+    fieldErrors?.some((issue) => issue.path === "paperConsent")
+  ) {
+    return "noConsent";
+  }
+  return "generic";
+}

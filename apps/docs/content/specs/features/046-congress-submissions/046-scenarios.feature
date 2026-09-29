@@ -1,4 +1,4 @@
-@feature:046 @track:doctor
+@feature:046 @track:doctor @host:doctor
 Feature: 046 — Congress submissions: oral talks, posters and abstracts
   As a registered congress participant, a program committee member, a congress partner and a platform administrator
   I want submissions of three kinds to be prepared, sent, reviewed and read in one platform cabinet and one admin registry

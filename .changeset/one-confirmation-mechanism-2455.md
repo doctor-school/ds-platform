@@ -1,8 +1,8 @@
 ---
-"@ds/auth-flow": minor
-"@ds/schemas": minor
-"@ds/api": minor
-"@ds/api-client": minor
+"@ds/auth-flow": major
+"@ds/schemas": major
+"@ds/api": major
+"@ds/api-client": major
 "@ds/doctor": patch
 "@ds/portal": patch
 ---

@@ -3,7 +3,7 @@ title: "046 — Congress submissions: oral talks, posters and abstracts"
 description: "Requirements for congress submissions in a «Мои заявки на Конгресс» section of the doctor storefront account: three kinds (oral talk, poster, abstracts) as properties of the submission, many per account, autosaved drafts checked at submit, per-event and per-kind intake settings edited in apps/admin, a poster age rule from the birth date, abstract attestations and a publication consent, statuses with letters, an event-bound program committee reviewing in the admin registry and card, a read-only congress-partner view, a deadline reminder, and a cabinet link in the 044 confirmation letter."
 slug: 046-congress-submissions
 status: Draft
-issues: [2379, 2385]
+issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2438, 2439]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/2379
 prior_decisions:
@@ -186,14 +186,14 @@ Field lengths are defaults recorded in `046-design.md` («Field set and limits»
 
 ## Work-package map
 
-The package Issues are opened by `open-ears-issues` once the product owner has read this spec; until then the packages are named by content. Slices and Stage-A gates: `046-design.md` («Delivery slices»).
+One Issue per work package, each a sub-issue of #2379 that folds its EARS range and ships its UI with its backend (`open-ears-issues` 3b). Slices, dependencies and Stage-A gates: `046-design.md` («Delivery slices»).
 
-| EARS            | Work package                                                                                                          |
-| --------------- | --------------------------------------------------------------------------------------------------------------------- |
-| EARS-1…EARS-3   | **Intake settings** — settings storage, admin settings screen                                                         |
-| EARS-4…EARS-17  | **Cabinet and oral talks** — storage, status basics, the section, oral form, send, withdraw, receipt, 044 link, limit |
-| EARS-18…EARS-20 | **Posters** — poster form, birth date, age rule                                                                       |
-| EARS-21…EARS-25 | **Abstracts** — sections and counter, publication consent and statements, first-author rule, abstract from a work     |
-| EARS-26…EARS-31 | **Program committee** — role and binding, registry, card, status change, status letters, revision loop, admin nav     |
-| EARS-32         | **Congress partner** — read-only projection of the registry and card                                                  |
-| EARS-33         | **Deadline reminder** — scheduled reminder letter                                                                     |
+| EARS            | Issue | Work package                                                                                                          |
+| --------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
+| EARS-1…EARS-3   | #2432 | **Intake settings** — settings storage, admin settings screen                                                         |
+| EARS-4…EARS-17  | #2433 | **Cabinet and oral talks** — storage, status basics, the section, oral form, send, withdraw, receipt, 044 link, limit |
+| EARS-18…EARS-20 | #2434 | **Posters** — poster form, birth date, age rule                                                                       |
+| EARS-21…EARS-25 | #2435 | **Abstracts** — sections and counter, publication consent and statements, first-author rule, abstract from a work     |
+| EARS-26…EARS-31 | #2437 | **Program committee** — role and binding, registry, card, status change, status letters, revision loop, admin nav     |
+| EARS-32         | #2438 | **Congress partner** — read-only projection of the registry and card                                                  |
+| EARS-33         | #2439 | **Deadline reminder** — scheduled reminder letter                                                                     |

@@ -1,16 +1,16 @@
 # 003 — User authentication scenarios
 # Gherkin for the net-new web auth vertical (doctor_guest over Zitadel).
-# Happy paths + failure branches. Translated to Playwright via playwright-bdd
-# once that runner exists (out of scope here; authored now to satisfy the SDD triplet).
+# Happy paths + failure branches. Selected journeys are translated to Playwright
+# via playwright-bdd as their executable steps are backfilled.
 # Tags map scenarios to EARS handlers in 003-requirements-en.md.
 
 @host:academy
 Feature: Net-new web authentication producing a doctor_guest identity
 
-  Background:
-    Given the Zitadel IdP is reachable and seeded with the doctor_guest role
-    And the portal serves headless inline auth forms on its configured origin
-    And the abuse guards (rate-limit, captcha, sms-budget) are active
+  # Environment assumptions for these journeys: Zitadel is reachable and seeded
+  # with doctor_guest; the portal serves inline auth forms on its configured
+  # origin; rate-limit, captcha, and sms-budget guards are active. Individual
+  # executable scenarios assert their own concrete prerequisites and outcomes.
 
   @EARS-1 @EARS-20 @EARS-19 @happy
   Scenario: Register with email and password
@@ -105,12 +105,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-5 @EARS-8 @happy
   Scenario: Log in with password and establish a BFF session
-    Given a verified doctor_guest user
-    When the user submits the correct identifier and password
-    Then Zitadel verifies the password in a session
-    And the BFF completes the OIDC exchange and stores the rotating refresh token in Redis
-    And a __Host- session cookie is set with HttpOnly, Secure, and SameSite=Lax
-    And no token appears in the response body
+    Given the golden doctor "verified-cardiologist" is available for password sign-in
+    When that doctor signs in through the Academy password form
+    Then the Academy opens the authenticated webinar listing
+    And the doctor's own profile is readable through the BFF
+    And the browser holds a host-only __Host-ds_session cookie with HttpOnly, Secure, and SameSite=Lax
+    And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
+    # API EARS-5/EARS-8 tests own IdP password-check and Redis refresh-token proof.
 
   @EARS-5 @EARS-16 @failure
   Scenario: Wrong password returns a generic error and increments the lockout counter

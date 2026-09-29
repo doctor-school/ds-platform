@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { users, type DrizzleHandle, type User } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -95,9 +95,9 @@ export class UserMirrorService {
 
     // `role` is intentionally NOT in the conflict `set`: a new row is granted
     // `doctor_guest` (via `values` below), but an existing row's role is
-    // preserved on update so a reconcile/webhook pass never downgrades a future
-    // elevated role back to `doctor_guest`. F1 only has `doctor_guest`, so this
-    // is a forward-looking seam, not a behaviour change today.
+    // preserved on update so a reconcile/webhook pass never downgrades a staff
+    // row back to `doctor_guest`. The staff marker is owned by the session
+    // path (`setRole`, #2456), which reads the project-roles claim.
     const set: Record<string, unknown> = {
       updatedAt: new Date(),
       // Reactivation (#753): an upsert is only issued for an active Zitadel
@@ -171,17 +171,31 @@ export class UserMirrorService {
   }
 
   /**
-   * EARS-26 (#709): does a mirror row exist for `zitadel_sub`? The read-path
-   * self-heal's presence probe — a single indexed lookup on the unique
-   * `zitadel_sub` key, run per authenticated request by the session auth hook.
+   * The mirror row's `role` for `zitadel_sub`, or `undefined` when there is no
+   * row — one indexed probe that answers both «is it mirrored?» (EARS-26) and
+   * «does the staff marker match the session?» (#2456).
    */
-  async existsBySub(zitadelSub: string): Promise<boolean> {
+  async findRoleBySub(zitadelSub: string): Promise<string | undefined> {
     const [row] = await this.db
-      .select({ id: users.id })
+      .select({ role: users.role })
       .from(users)
       .where(eq(users.zitadelSub, zitadelSub))
       .limit(1);
-    return row !== undefined;
+    return row?.role;
+  }
+
+  /**
+   * #2456 — project the session's project-roles claim onto `users.role` (the
+   * staff marker the participant counts read; see `staff-role.ts`). Written only
+   * when it differs, so the steady state is write-free.
+   */
+  async setRole(zitadelSub: string, role: string): Promise<void> {
+    await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(users)
+        .set({ role, updatedAt: new Date() })
+        .where(and(eq(users.zitadelSub, zitadelSub), ne(users.role, role))),
+    );
   }
 
   async findByEmail(email: string): Promise<User | undefined> {

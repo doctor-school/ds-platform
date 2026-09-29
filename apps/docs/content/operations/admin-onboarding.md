@@ -186,7 +186,7 @@ so the value never appears in any process argv or on screen):
 `changeRequired: false` because the admin login surface has no forced-change
 step — a forced change would leave the person stuck.
 
-### 5. Grant `platform_admin`
+### 5. Grant `doctor_guest` + `platform_admin`
 
 `$W/step5.sh` = preamble +:
 
@@ -194,7 +194,7 @@ step — a forced change would leave the person stuck.
 USER_ID='<user_id>'
 PROJECT_ID='<project_id>'
 curl -sS -X POST "$B/management/v1/users/$USER_ID/grants" -H @"$H" --data-binary @- <<EOF
-{"projectId":"$PROJECT_ID","roleKeys":["platform_admin"]}
+{"projectId":"$PROJECT_ID","roleKeys":["doctor_guest","platform_admin"]}
 EOF
 
 # Read back
@@ -203,10 +203,26 @@ curl -sS -X POST "$B/management/v1/users/grants/_search" -H @"$H" --data-binary 
 EOF
 ```
 
-Expect a grant with `roleKeys: ["platform_admin"]` and state
+Expect a grant with `roleKeys: ["doctor_guest","platform_admin"]` and state
 `USER_GRANT_STATE_ACTIVE`; note its grant `id` for offboarding. **Never grant
 Zitadel manager roles** (`IAM_*`, `ORG_*`, project-manager memberships) — they
 give IdP-administration power a product operator does not need.
+
+A staff member is a user of the sites too: `doctor_guest` is the visitor role
+(their own events, rooms, profile), `platform_admin` the admin rights on top.
+The api marks the account as staff in the `users` mirror (`users.role`) from the
+session's roles on every signed-in request, and every participant count, roster
+and presence figure leaves staff accounts out — no manual step.
+
+An existing staff grant that holds only `platform_admin` is widened in place
+(one grant per user and project — a second POST answers «already exists»):
+
+```bash
+GRANT_ID='<grant id from the read-back>'
+curl -sS -X PUT "$B/management/v1/users/$USER_ID/grants/$GRANT_ID" -H @"$H" --data-binary @- <<EOF
+{"roleKeys":["doctor_guest","platform_admin"]}
+EOF
+```
 
 ### 6. The `users` mirror row — nothing to do
 
@@ -335,7 +351,7 @@ Message 2 — optional, for someone onboarded to work on events:
 
 - [ ] Step 1 search returns exactly one account for `<email>`.
 - [ ] Step 4 printed «password verified» (the throwaway session was deleted by the same script).
-- [ ] Grant read-back shows `roleKeys: ["platform_admin"]`, `USER_GRANT_STATE_ACTIVE`, and no `IAM_*` / `ORG_*` memberships were added.
+- [ ] Grant read-back shows `roleKeys: ["doctor_guest","platform_admin"]`, `USER_GRANT_STATE_ACTIVE`, and no `IAM_*` / `ORG_*` memberships were added.
 - [ ] DM(s) delivered from `bbmka` to the right recipient.
 - [ ] Temporary bot token revoked and absent from `token list bbmka --all`.
 - [ ] The person confirmed a successful first login (MFA enrolled). The `users` mirror row appears on that first request (step 6).

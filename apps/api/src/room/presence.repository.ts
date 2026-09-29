@@ -4,6 +4,7 @@ import type { DoctorPresenceMinutes } from "@ds/schemas";
 import { presenceBeats, users } from "@ds/db";
 import { eq, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { isParticipant } from "../auth/staff-role.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -112,6 +113,7 @@ export class PresenceRepository {
         FROM ${presenceBeats}
         WHERE ${presenceBeats.eventId} = ${eventId}
           AND ${presenceBeats.beatAt} >= now() - make_interval(secs => ${windowSeconds})
+          AND ${isParticipant(presenceBeats.userId)}
           ${excludeUserId ? sql`AND ${presenceBeats.userId} <> ${excludeUserId}` : sql``}
       `,
     );
@@ -143,6 +145,7 @@ export class PresenceRepository {
           SELECT max(${presenceBeats.beatAt}) AS last_beat
           FROM ${presenceBeats}
           WHERE ${presenceBeats.eventId} = ${eventId}
+            AND ${isParticipant(presenceBeats.userId)}
           GROUP BY ${presenceBeats.userId}
         ) doctors
         WHERE last_beat >= now() - make_interval(secs => ${windowSeconds})
@@ -190,6 +193,7 @@ export class PresenceRepository {
           )) AS buckets
         FROM ${presenceBeats}
         WHERE ${presenceBeats.eventId} = ${eventId}
+          AND ${isParticipant(presenceBeats.userId)}
         GROUP BY ${presenceBeats.userId}
         ORDER BY ${presenceBeats.userId}
       `,

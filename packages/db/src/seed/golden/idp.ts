@@ -26,6 +26,13 @@ export interface GoldenIdpAccount {
    * roster lands as a catalogue row rather than a type change.
    */
   role: "doctor_guest" | "platform_admin" | "event-registrar";
+  /**
+   * The project roles the IdP grant carries (#2456). A staff account is a user
+   * of the sites too: it holds the visitor role `doctor_guest` AND its staff
+   * role, while `role` above is the mirror's staff marker (the api projects the
+   * session's roles onto it; participant counts leave staff out).
+   */
+  roleKeys: readonly ("doctor_guest" | "platform_admin" | "event-registrar")[];
   /** `users.email_verified` — the storefront's «подтвердите почту» fork. */
   emailVerified: boolean;
   /**
@@ -57,6 +64,7 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     key: "doctorUnverified" as GoldenAccountKey,
     username: "golden.doctor.unverified@example.test",
     role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
     emailVerified: false,
     mfaEnrolled: false,
     idpAccountExpected: true,
@@ -67,6 +75,7 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     key: "doctorVerified" as GoldenAccountKey,
     username: "golden.doctor.verified@example.test",
     role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
     emailVerified: true,
     mfaEnrolled: false,
     idpAccountExpected: true,
@@ -77,6 +86,7 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     key: "doctorMfa" as GoldenAccountKey,
     username: "golden.doctor.mfa@example.test",
     role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
     emailVerified: true,
     mfaEnrolled: true,
     idpAccountExpected: true,
@@ -87,6 +97,7 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     key: "doctorDeleted" as GoldenAccountKey,
     username: "golden.doctor.deleted@example.test",
     role: "doctor_guest" as const,
+    roleKeys: ["doctor_guest"] as const,
     emailVerified: true,
     mfaEnrolled: false,
     idpAccountExpected: false,
@@ -97,6 +108,7 @@ export const GOLDEN_IDP_ACCOUNTS: readonly GoldenIdpAccount[] = Object.freeze([
     key: "admin" as GoldenAccountKey,
     username: "golden.admin@example.test",
     role: "platform_admin" as const,
+    roleKeys: ["doctor_guest", "platform_admin"] as const,
     emailVerified: true,
     mfaEnrolled: true,
     idpAccountExpected: true,

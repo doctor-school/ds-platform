@@ -235,5 +235,99 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const after = await dbRow(email);
       expect(after).toEqual(before);
     });
+
+    /** Register, then set the account's project roles to exactly `roles`. */
+    async function accountWithRoles(
+      email: string,
+      roles: readonly string[],
+    ): Promise<string> {
+      await doctorSession(email);
+      const { rows } = await pool.query<{ zitadel_sub: string }>(
+        `SELECT zitadel_sub FROM users WHERE email = $1`,
+        [email],
+      );
+      const sub = rows[0]!.zitadel_sub;
+      for (const held of fake.grantedRoles(sub))
+        await fake.revokeProjectRole(sub, held);
+      for (const role of roles) await fake.grantProjectRole(sub, role);
+      return sub;
+    }
+
+    async function login(email: string): Promise<string> {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: email, password },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+    }
+
+    async function mirrorRole(email: string): Promise<string> {
+      const { rows } = await pool.query<{ role: string }>(
+        `SELECT role FROM users WHERE email = $1`,
+        [email],
+      );
+      return rows[0]!.role;
+    }
+
+    it("#2456: a staff session holding ONLY platform_admin reads and edits its own account — the account page never locks a signed-in user out", async () => {
+      const email = uniqueEmail("staff-only");
+      await accountWithRoles(email, ["platform_admin"]);
+      const cookie = await login(email);
+
+      const profile = await getProfile(cookieHeader(cookie));
+      expect(profile.statusCode).toBe(200);
+      expect(MyProfileSchema.parse(profile.json()).email).toBe(email);
+
+      const name = await app.inject({
+        method: "GET",
+        url: "/v1/me/display-name",
+        headers: cookieHeader(cookie),
+      });
+      expect(name.statusCode).toBe(200);
+
+      const put = await app.inject({
+        method: "PUT",
+        url: "/v1/me/display-name",
+        headers: cookieHeader(cookie),
+        payload: { displayName: "Служебная Учётка" },
+      });
+      expect(put.statusCode).toBe(200);
+
+      const out = await app.inject({
+        method: "POST",
+        url: "/v1/auth/logout",
+        headers: cookieHeader(cookie),
+      });
+      expect(out.statusCode).toBe(200);
+    });
+
+    it("#2456: the account endpoints serve an event-registrar session too", async () => {
+      const email = uniqueEmail("registrar-only");
+      await accountWithRoles(email, ["event-registrar"]);
+      const cookie = await login(email);
+
+      expect((await getProfile(cookieHeader(cookie))).statusCode).toBe(200);
+    });
+
+    it("#2456: a signed-in staff session marks the mirror row staff, and losing the staff role returns it to the visitor role", async () => {
+      const email = uniqueEmail("staff-marker");
+      const sub = await accountWithRoles(email, [
+        "doctor_guest",
+        "platform_admin",
+      ]);
+      expect(await mirrorRole(email)).toBe("doctor_guest");
+
+      const staff = await login(email);
+      expect((await getProfile(cookieHeader(staff))).statusCode).toBe(200);
+      expect(await mirrorRole(email)).toBe("platform_admin");
+
+      await fake.revokeProjectRole(sub, "platform_admin");
+      const visitor = await login(email);
+      expect((await getProfile(cookieHeader(visitor))).statusCode).toBe(200);
+      expect(await mirrorRole(email)).toBe("doctor_guest");
+    });
   },
 );

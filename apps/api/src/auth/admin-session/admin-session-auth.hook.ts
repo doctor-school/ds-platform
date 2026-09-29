@@ -186,7 +186,10 @@ export class AdminSessionAuthHook implements OnApplicationBootstrap {
         // Parity with the portal hook (EARS-26, #709): lazily re-materialize a
         // missing `users` mirror row before the handler runs, so an admin write
         // that joins the mirror does not 404 on a webhook lag. Never throws.
-        await this.selfHeal.ensureMirrored(resolution.subject.sub);
+        await this.selfHeal.ensureMirrored(
+          resolution.subject.sub,
+          resolution.subject.roles,
+        );
         return;
       }
       if ("anonymous" in resolution) return;

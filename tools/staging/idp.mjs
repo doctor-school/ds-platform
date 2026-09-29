@@ -70,6 +70,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     key: "doctorUnverified",
     username: "golden.doctor.unverified@example.test",
     role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
     emailVerified: false,
     mfaEnrolled: false,
     idpAccountExpected: true,
@@ -80,6 +81,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     key: "doctorVerified",
     username: "golden.doctor.verified@example.test",
     role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
     emailVerified: true,
     mfaEnrolled: false,
     idpAccountExpected: true,
@@ -90,6 +92,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     key: "doctorMfa",
     username: "golden.doctor.mfa@example.test",
     role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
     emailVerified: true,
     // MFA enrolment is NOT converged here. `reset-identities` guarantees existence,
     // password and email-verified state only; enrolling the TOTP factor for
@@ -104,6 +107,7 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     key: "doctorDeleted",
     username: "golden.doctor.deleted@example.test",
     role: "doctor_guest",
+    roleKeys: ["doctor_guest"],
     emailVerified: true,
     mfaEnrolled: false,
     // No live IdP account may exist for the soft-deleted doctor, yet the seed still
@@ -117,6 +121,8 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     key: "admin",
     username: "golden.admin@example.test",
     role: "platform_admin",
+    // #2456: staff are users too — the visitor role plus the admin rights on top.
+    roleKeys: ["doctor_guest", "platform_admin"],
     emailVerified: true,
     mfaEnrolled: true,
     idpAccountExpected: true,
@@ -282,14 +288,14 @@ export function planGoldenIdentities({ accounts, existing }) {
           key: account.key,
         });
       }
-      if (!sameSet(live.grant?.roleKeys, [account.role])) {
+      if (!sameSet(live.grant?.roleKeys, account.roleKeys)) {
         steps.push({
           op: "ensure-grant",
           username: account.username,
           userId: live.userId,
           key: account.key,
           grantId: live.grant?.id ?? null,
-          roleKeys: [account.role],
+          roleKeys: account.roleKeys,
         });
       }
       continue;
@@ -328,7 +334,7 @@ export function planGoldenIdentities({ accounts, existing }) {
       userId: null,
       key: account.key,
       grantId: null,
-      roleKeys: [account.role],
+      roleKeys: account.roleKeys,
     });
   }
   return { steps, subjects };
@@ -706,7 +712,7 @@ export async function convergeGoldenIdentities({
   // then fails on, and this converge is the only place that knows the difference.
   for (const account of accounts) {
     if (!account.idpAccountExpected || granted.has(account.key)) continue;
-    log(`  ↳ ${account.username} already holds ${account.role}`);
+    log(`  ↳ ${account.username} already holds ${account.roleKeys.join(", ")}`);
   }
 
   for (const account of accounts) {

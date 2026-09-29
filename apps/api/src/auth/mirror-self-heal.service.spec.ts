@@ -36,19 +36,28 @@ function fakeIdp(user: Omit<IdpUser, "active"> | null): {
   return { idp, granted, getUserCalls };
 }
 
-function fakeMirror(exists: boolean): {
+function fakeMirror(
+  exists: boolean,
+  role = "doctor_guest",
+): {
   mirror: UserMirrorService;
   upserted: string[];
+  roleWrites: [string, string][];
 } {
   const upserted: string[] = [];
+  const roleWrites: [string, string][] = [];
   const mirror = {
-    existsBySub: vi.fn(() => Promise.resolve(exists)),
+    findRoleBySub: vi.fn(() => Promise.resolve(exists ? role : undefined)),
     upsert: vi.fn((input: { zitadelSub: string }) => {
       upserted.push(input.zitadelSub);
       return Promise.resolve();
     }),
+    setRole: vi.fn((sub: string, next: string) => {
+      roleWrites.push([sub, next]);
+      return Promise.resolve();
+    }),
   } as unknown as UserMirrorService;
-  return { mirror, upserted };
+  return { mirror, upserted, roleWrites };
 }
 
 describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () => {
@@ -126,11 +135,62 @@ describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () =>
       phoneVerified: false,
     });
     const mirror = {
-      existsBySub: vi.fn(() => Promise.resolve(false)),
+      findRoleBySub: vi.fn(() => Promise.resolve(undefined)),
       upsert: vi.fn(() => Promise.reject(new Error("db down"))),
     } as unknown as UserMirrorService;
     const svc = new MirrorSelfHealService(idp, mirror);
 
     await expect(svc.ensureMirrored("orphan-2")).resolves.toBeUndefined();
+  });
+
+  describe("#2456 staff marker — users.role mirrors the session's project-roles claim", () => {
+    const idpUser = {
+      sub: "staff-1",
+      email: "staff@ds.test",
+      emailVerified: true,
+      phoneVerified: false,
+    };
+
+    it("#2456: a visitor row whose session carries platform_admin is marked staff — the mirror records the staff role", async () => {
+      const { idp } = fakeIdp(idpUser);
+      const { mirror, roleWrites } = fakeMirror(true, "doctor_guest");
+      const svc = new MirrorSelfHealService(idp, mirror);
+
+      await svc.ensureMirrored("staff-1", ["doctor_guest", "platform_admin"]);
+
+      expect(roleWrites).toEqual([["staff-1", "platform_admin"]]);
+    });
+
+    it("#2456: a staff row whose session no longer carries a staff role is returned to the visitor role", async () => {
+      const { idp } = fakeIdp(idpUser);
+      const { mirror, roleWrites } = fakeMirror(true, "platform_admin");
+      const svc = new MirrorSelfHealService(idp, mirror);
+
+      await svc.ensureMirrored("staff-1", ["doctor_guest"]);
+
+      expect(roleWrites).toEqual([["staff-1", "doctor_guest"]]);
+    });
+
+    it("#2456: a row already matching the claim is not written (hot path stays one read)", async () => {
+      const { idp, getUserCalls } = fakeIdp(idpUser);
+      const { mirror, roleWrites } = fakeMirror(true, "event-registrar");
+      const svc = new MirrorSelfHealService(idp, mirror);
+
+      await svc.ensureMirrored("staff-1", ["event-registrar", "doctor_guest"]);
+
+      expect(roleWrites).toEqual([]);
+      expect(getUserCalls).toEqual([]);
+    });
+
+    it("#2456: a freshly healed staff row is marked staff in the same pass", async () => {
+      const { idp } = fakeIdp(idpUser);
+      const { mirror, upserted, roleWrites } = fakeMirror(false);
+      const svc = new MirrorSelfHealService(idp, mirror);
+
+      await svc.ensureMirrored("staff-1", ["platform_admin"]);
+
+      expect(upserted).toEqual(["staff-1"]);
+      expect(roleWrites).toEqual([["staff-1", "platform_admin"]]);
+    });
   });
 });

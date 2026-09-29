@@ -117,7 +117,7 @@ export class SessionAuthHook implements OnApplicationBootstrap {
         // mirror-backed read serves instead of feeding the generic-401 →
         // `/login` → `/account` carousel. Awaited: the heal must land before
         // the handler resolves the sub. Never throws (fail-soft inside).
-        await this.selfHeal.ensureMirrored(subject.sub);
+        await this.selfHeal.ensureMirrored(subject.sub, subject.roles);
       }
     });
   }

@@ -131,6 +131,42 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
 });
 
 /**
+ * #2411 — the storefront signs in over the SAME channels as the Academy.
+ *
+ * The code step offers the SMS channel, a typed phone passes the identifier box
+ * and the request the door sends is the Academy's own: `POST
+ * /v1/auth/login/otp/request` with `channel: "sms"` (the one host-agnostic api
+ * route both storefronts proxy to). The api answer is fulfilled at the network
+ * edge with the route's real 200 body — this tier boots no api.
+ */
+test("003 EARS-7: a phone reaches the sign-in code step, as on the Academy", async ({
+  page,
+}) => {
+  const sent: unknown[] = [];
+  await page.route("**/v1/auth/login/otp/request", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "otp_sent" }),
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByTestId("login-method-otp").click();
+  await page.getByTestId("otp-channel-sms").click();
+  const id = page.getByTestId("otp-identifier");
+  await id.fill("+79991234567");
+  await expect(id).toHaveValue("+79991234567");
+  await page.getByTestId("otp-send").click();
+
+  await expect(page.getByTestId("otp-verify")).toBeVisible();
+  expect(sent).toEqual([
+    expect.objectContaining({ identifier: "+79991234567", channel: "sms" }),
+  ]);
+});
+
+/**
  * #1955 — the wordmark on the auth door follows the THEME.
  *
  * Below the `layout:` breakpoint the brand panel is not rendered at all and the

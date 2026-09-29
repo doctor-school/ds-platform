@@ -16,6 +16,7 @@ import {
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
+  EMAIL_ONLY_FIXTURE,
 } from "../test-support/host-config-fixtures";
 
 /**
@@ -76,10 +77,10 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
     // E.164 sign-in on a host with no SMS channel buys a round trip that can
     // only fail, and the doctor would read the generic outcome copy for it.
     expect(identifierFieldSchema(ACADEMY_FIXTURE).safeParse("+79991234567").success).toBe(true);
-    expect(identifierFieldSchema(DOCTOR_FIXTURE).safeParse("+79991234567").success).toBe(false);
-    expect(identifierFieldSchema(DOCTOR_FIXTURE).safeParse("doctor@clinic.ru").success).toBe(true);
+    expect(identifierFieldSchema(EMAIL_ONLY_FIXTURE).safeParse("+79991234567").success).toBe(false);
+    expect(identifierFieldSchema(EMAIL_ONLY_FIXTURE).safeParse("doctor@clinic.ru").success).toBe(true);
     expect(
-      loginIdentifierFormSchema(DOCTOR_FIXTURE).safeParse({
+      loginIdentifierFormSchema(EMAIL_ONLY_FIXTURE).safeParse({
         identifier: "+79991234567",
         password: "Sup3r$ecretPw!9",
       }).success,
@@ -88,7 +89,7 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
 
   it("003 EARS-7: the OTP request shape is refused for a channel the host does not serve", () => {
     // Row 21 switches the validator by `config.channels`, and the OTP shape is
-    // part of it: an email-only storefront must not be able to build the SMS
+    // part of it: an email-only host must not be able to build the SMS
     // request at all. Without the config the caller could hand the package a
     // channel its own host never offers and buy a round trip that can only fail.
     expect(
@@ -98,13 +99,13 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
       }).success,
     ).toBe(true);
     expect(
-      otpIdentifierFormSchema(DOCTOR_FIXTURE, "sms").safeParse({
+      otpIdentifierFormSchema(EMAIL_ONLY_FIXTURE, "sms").safeParse({
         identifier: "+79991234567",
         channel: "sms",
       }).success,
     ).toBe(false);
     expect(
-      otpIdentifierFormSchema(DOCTOR_FIXTURE, "email").safeParse({
+      otpIdentifierFormSchema(EMAIL_ONLY_FIXTURE, "email").safeParse({
         identifier: "doctor@clinic.ru",
         channel: "email",
       }).success,

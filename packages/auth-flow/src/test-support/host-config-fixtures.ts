@@ -76,7 +76,7 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   returnTo: { parkingCookie: { name: "ds_return_to", maxAgeSeconds: 900 } },
 };
 
-/** The doctor storefront: email-only sign-in codes, promo box on the form. */
+/** The doctor storefront: sign-in codes over both channels (#2411), promo box on the form. */
 export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
@@ -117,7 +117,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     registerIcon: "user-plus-square",
   },
   botProtection: { siteKey: undefined },
-  channels: ["email"],
+  channels: ["email", "sms"],
   register: {
     promoField: true,
   },
@@ -163,4 +163,14 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   // Row 46 - the doctor door publishes the return context beside the form; it
   // parks nothing (row 29), so there is no cookie here.
   returnTo: { card: true },
+};
+
+/**
+ * A host that serves sign-in codes over e-mail ONLY. No storefront ships this
+ * today (both serve e-mail and SMS, #2411), but `channels` is host data and the
+ * package's single-channel branch stays covered against it.
+ */
+export const EMAIL_ONLY_FIXTURE: AuthFlowHostConfig = {
+  ...DOCTOR_FIXTURE,
+  channels: ["email"],
 };

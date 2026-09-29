@@ -114,9 +114,9 @@ export const DOCTOR_AUTH_FLOW = {
     // of the SmartCaptcha resource for the challenge to run there.
     siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
   },
-  // Sign-in codes go to email only here; the identifier box therefore refuses a
-  // phone shape rather than promising a journey this storefront does not run.
-  channels: ["email"],
+  // The storefront serves sign-in codes over both channels, exactly as the
+  // Academy does, so its identifier box is the email-or-E.164 union (#2411).
+  channels: ["email", "sms"],
   register: {
     promoField: true,
   },

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 /**
  * Wave-1 gate row 21 — the sign-in-code step offers exactly the channels this
  * host SERVES. `channels` already gated the identifier VALIDATION rule; the
- * visible choice has to follow it, or the doctor storefront draws an SMS tab
+ * visible choice has to follow it, or an email-only host draws an SMS tab
  * whose code the BFF never sends. A single-channel host has nothing to choose
  * between, so the row is absent rather than a lone locked button.
  */
@@ -33,6 +33,7 @@ import type { AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
+  EMAIL_ONLY_FIXTURE,
 } from "../test-support/host-config-fixtures";
 import { LoginDoor } from "./login-door";
 
@@ -48,8 +49,8 @@ async function openCodeStep(config: AuthFlowHostConfig) {
 
 describe("the sign-in-code step offers the channels this host serves", () => {
   it("a host serving e-mail only draws no channel row and asks for the address", async () => {
-    expect(DOCTOR_FIXTURE.channels).toEqual(["email"]);
-    await openCodeStep(DOCTOR_FIXTURE);
+    expect(EMAIL_ONLY_FIXTURE.channels).toEqual(["email"]);
+    await openCodeStep(EMAIL_ONLY_FIXTURE);
 
     expect(screen.queryByTestId("otp-channel-sms")).toBeNull();
     expect(screen.queryByTestId("otp-channel-email")).toBeNull();

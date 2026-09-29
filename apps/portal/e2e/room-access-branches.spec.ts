@@ -225,6 +225,34 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
     await expectRoomRendered(page);
   });
 
+  test("006 EARS-6.1: a guest who signs in from the room's login as a doctor NOT registered for the event is re-gated to the register front door, never admitted", async ({
+    page,
+    context,
+  }) => {
+    // Provision a doctor with a session but NO registration for the live event.
+    const { email, password } = await registerDoctor(page);
+    await page.waitForURL(/\/(webinars|account)(?:$|[/?#])/);
+
+    // Log out and hit the room as a GUEST: routed to login carrying the room.
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForURL(/\/login\?/);
+    expect(page.url()).toContain(
+      `returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}/room`)}`,
+    );
+
+    // Signing in returns to the room url, where the gate RE-RUNS and — the doctor
+    // being unregistered — routes to the 005 register front door on the event
+    // page (`?from=room`): the participation path, no room composition.
+    await loginAs(page, email, password);
+    await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}\\?from=room`));
+    await expect(page.getByTestId("room-access-guidance")).toBeVisible();
+    await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
+    await expectNoRoom(page);
+  });
+
   test("006 EARS-6.2: an authenticated-but-unregistered doctor is guided to the register front door (no player), and admitted to the room on register", async ({
     page,
   }) => {

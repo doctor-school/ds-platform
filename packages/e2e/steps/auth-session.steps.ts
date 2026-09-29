@@ -6,7 +6,10 @@ import { Given, Then, When } from "./support/fixtures.js";
 
 const SEED = "verified-cardiologist";
 const SESSION_COOKIE = "__Host-ds_session";
+const GENERIC_PASSWORD_ERROR =
+  "Не удалось войти. Проверьте данные и попробуйте снова.";
 const loginResponses = new WeakMap<Page, Response>();
+const refusedLoginResponses = new WeakMap<Page, Response>();
 
 Given(
   'the golden doctor "verified-cardiologist" is available for password sign-in',
@@ -100,5 +103,72 @@ Then(
     const readable = JSON.stringify(clientState);
     expect(readable).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
     expect(readable).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
+  },
+);
+
+When(
+  "that doctor submits a wrong password through the Academy password form",
+  async ({ page, world }) => {
+    expect(world.host.id).toBe("academy");
+    const doctor = resolveGoldenDoctor(SEED);
+    await page.goto(`${world.hostBaseUrl}${world.host.loginPath}`, {
+      waitUntil: "load",
+    });
+    await page.waitForLoadState("networkidle");
+    await page.locator('input[autocomplete="username"]').fill(doctor.email);
+    await page
+      .locator('input[autocomplete="current-password"]')
+      .fill("wrong-password-for-staging-2431");
+    const loginResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/auth/login" &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: /Войти|Продолжить/i }).click();
+    refusedLoginResponses.set(page, await loginResponse);
+  },
+);
+
+Then(
+  "the Academy shows the generic password sign-in error",
+  async ({ page, world }) => {
+    const response = refusedLoginResponses.get(page);
+    expect(
+      response,
+      "wrong-password login response was captured",
+    ).toBeDefined();
+    expect(response!.status()).toBe(401);
+    await expect(page).toHaveURL(
+      new RegExp(`${world.host.loginPath}(?:\\?|$)`),
+    );
+    await expect(
+      page.getByRole("alert").filter({ hasText: GENERIC_PASSWORD_ERROR }),
+    ).toBeVisible();
+  },
+);
+
+Then("the refused login sets no BFF session cookie", async ({ page }) => {
+  const response = refusedLoginResponses.get(page);
+  expect(response, "wrong-password login response was captured").toBeDefined();
+  expect((await response!.headerValue("set-cookie")) ?? "").not.toContain(
+    `${SESSION_COOKIE}=`,
+  );
+  expect(await page.context().cookies()).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ name: SESSION_COOKIE })]),
+  );
+});
+
+Then(
+  "the doctor's private profile is not readable through the BFF",
+  async ({ page }) => {
+    // Use the browser's own origin and fingerprint, as the positive read does.
+    const status = await page.evaluate(async () => {
+      const response = await fetch("/v1/me/profile", {
+        headers: { accept: "application/json" },
+        credentials: "include",
+      });
+      return response.status;
+    });
+    expect(status).toBe(401);
   },
 );

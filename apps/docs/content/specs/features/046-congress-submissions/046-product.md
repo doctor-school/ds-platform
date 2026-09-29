@@ -16,7 +16,7 @@ lang: en
 
 The organisers of the 2027 congress want three kinds of materials from participants — **oral talks**, **posters** and **abstracts** — and wrote down how intake must work: one account, many submissions; the kind belongs to the submission, not to the person; a person may send several talks, a talk and a poster, abstracts and a talk about the same work, or all three, at different times, while intake is open. Registering for the congress stays separate.
 
-**Where it happens.** Registration stays on the congress site orthobio.ru (feature 044). Materials are sent in the participant's Doctor.School account, in a section «Мои заявки на Конгресс» on doctor.school. A participant reaches it from the link in the 044 confirmation letter or from a button on the congress site, and signs in with the emailed code — the same login as today, nothing new to learn. An account without a congress registration sees one line — «Сначала зарегистрируйтесь участником Конгресса» — and a link to the registration form.
+**Where it happens.** Registration stays on the congress site orthobio.ru (feature 044). Materials are sent in the participant's Doctor.School account, in a section «Мои заявки на Конгресс» on the Doctor.School doctor storefront — today `new.doctor.school`, and `doctor.school` once the storefront moves to the root domain. A participant reaches it from the link in the 044 confirmation letter or from a button on the congress site, and signs in with the emailed code — the same login as today, nothing new to learn. An account without a congress registration sees one line — «Сначала зарегистрируйтесь участником Конгресса» — and a link to the registration form.
 
 **How a submission is made.** The participant picks a kind and fills its form. Everything saves itself while typing; they can leave and come back. Only when they press «Отправить» does the platform check that the form is complete, that intake for that kind is open, that the limit is not reached and that the person may send this kind. From that moment the submission goes to the program committee.
 
@@ -91,7 +91,7 @@ No approved mockup yet. There is no canvas for the section, the three forms, the
 
 ## Dependencies
 
-- **Congress site — `doctor-school/orthobio-site#99`** (re-scoped by the tech lead): a «Подать материалы» section with «Зарегистрироваться» and «Войти в кабинет», and a «Подать материалы в кабинете» button on the «Заявка принята» card. It links to the platform section and can ship once the section is live.
+- **Congress site — `doctor-school/orthobio-site#99`** (re-scoped by the tech lead): a «Подать материалы» section with «Зарегистрироваться» and «Войти в кабинет», and a «Подать материалы в кабинете» button on the «Заявка принята» card. It links to the platform section, today `https://new.doctor.school/account/congress`, and can ship once the section is live.
 - **Two consent texts** from the organisers: the personal-data consent for submissions (the submission content, co-authors' data, the birth date for posters, and passing submissions to the program committee and the congress partner) and the consent to publication of abstracts in РИНЦ. The platform publishes them on its documents pages and records every acceptance with the text version.
 - **Role grants** for committee members and the partner are made by the Doctor.School team on request until the grants screen (#2378) exists.
 

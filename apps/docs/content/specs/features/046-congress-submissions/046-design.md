@@ -119,7 +119,7 @@ Defaults; counts are Unicode code points after trimming surrounding whitespace, 
 stateDiagram-v2
     [*] --> draft: create (author)
     draft --> submitted: send (author, EARS-9)
-    submitted --> draft: withdraw before closing (author, EARS-12)
+    submitted --> draft: withdraw before closing (author, EARS-12, conditional on submitted)
     draft --> [*]: delete (author, EARS-13)
     submitted --> in_review: committee
     submitted --> accepted: committee
@@ -134,6 +134,8 @@ stateDiagram-v2
 ```
 
 Letters: `submitted` → receipt; `accepted`, `rejected`, `needs_revision` → status letter; `in_review` → none. A committee correction back to `in_review` sends nothing; the next decision sends its letter.
+
+**Withdraw races the committee.** The withdraw is `UPDATE … SET status = 'draft' WHERE id = … AND status = 'submitted' RETURNING id`, the same conditional-update shape as the deadline sweep: when a committee change to `in_review` (or a decision) commits first, the withdraw matches no row and is refused as «already in review», so it can never overwrite the committee's status. The committee's status change is likewise conditional on the status it read.
 
 ## Send cascade
 
@@ -184,6 +186,19 @@ All letters render through `email-layout.ts` in the shape of `notice-emails.ts`,
 - **Needs revision** — «Doctor.School — заявку нужно доработать»: «Программный комитет просит доработать заявку «{тема}» ({вид}): {комментарий}. Исправить и отправить заявку можно в кабинете до {последний день доработок} включительно.» — the last day of the revision window (`revision_closes_at`, or the kind's last day while it is empty)
 - **Reminder** — «Doctor.School — приём {вида} заканчивается {дата}»: «У вас есть неотправленные черновики: {список}. Отправить их можно до {дата} включительно.»
 
+**Link origin — `MAILER_DOCTOR_BASE_URL`.** Every link these letters carry, and the 044 confirmation-letter link (EARS-15), is an absolute URL `{MAILER_DOCTOR_BASE_URL}/account/congress`. The API has only one mailer origin today, `MAILER_PORTAL_BASE_URL`, and it is the Academy (`https://academy.doctor.school`), so the doctor storefront needs its own setting, named in the same style. It is a **required** key — `MAILER_DOCTOR_BASE_URL: z.url()` in `apps/api/src/config/env.schema.ts`, with no default, like `DATABASE_URL` — so an api without it fails at boot instead of mailing a link to the wrong site. Values:
+
+| Environment          | Where it is set                                                                                                                                                 | Value                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Production           | `/etc/ds-platform/api.env` (template `infra/deploy/api.env.example`)                                                                                            | `https://new.doctor.school`                                                    |
+| Stage slot           | rendered by `tools/staging/slot.mjs` next to `MAILER_PORTAL_BASE_URL`, from the slot's doctor host                                                              | `https://doctor-<slot>.stage.doctor.school` (`doctor-pr-<N>…`, `doctor-main…`) |
+| Dev stand            | `infra/dev-stand/.env.example`                                                                                                                                  | the local doctor origin, `http://localhost:3004`                               |
+| CI and codegen boots | wherever the api boots with a placeholder `DATABASE_URL` (`.github/workflows/ci.yml` `endpoint-authz`, api e2e jobs; `apps/api/scripts/generate-api-client.ts`) | a placeholder origin set the same way                                          |
+
+The production value is a change to the production `api.env` that S2 (#2433) depends on: it is recorded on #2433 as its release prerequisite, and the S2 PR carries the `Release-requires` line for it, so the release that ships S2 sets the key before the api restarts.
+
+**Root-domain cut-over.** The doctor storefront is served on `new.doctor.school` until #1430 moves it to the root `doctor.school`. At that cut-over two values flip together: this API key to `https://doctor.school`, and the orthobio.ru link «Войти в кабинет» to `https://doctor.school/account/congress` (a site config value in `doctor-school/orthobio-site`). Both are on #1430's cut-over checklist.
+
 **Deadline sweep.** A `@Cron` job every 15 minutes selects kinds with `now < closes_at ≤ now + 72 h`, then claims drafts with `UPDATE … SET reminded_for_closes_at = closes_at WHERE kind = … AND status = 'draft' AND reminded_for_closes_at IS DISTINCT FROM closes_at RETURNING user_id, id`, and sends one letter per claimed account. The conditional update is the idempotency: a parallel instance claims nothing, and a moved closing instant re-arms because the stored value no longer matches.
 
 ## Authorization boundary
@@ -195,7 +210,9 @@ All letters render through `email-layout.ts` in the shape of `notice-emails.ts`,
 | `POST …/congress-submissions/:sid/status`               | `platform_admin`, `congress-program-committee`                     | same                                 | `live`       |
 | `GET/PUT /v1/admin/events/:id/congress-intake-settings` | `platform_admin`                                                   | —                                    | `live` (PUT) |
 
-The partner projection drops `committee_comment` and the age server-side, not in the view. **ADR-0001 A1 extension.** A1 chooses which grant live revalidation asks the IdP about and knows `event-registrar` only; the status route is the first committee-reachable live write, so the committee work package ships an ADR-0001 amendment (A1 is in production — amendment, via `do-adr-revision`) adding `congress-program-committee` to the selection rule with `403 PROGRAM_COMMITTEE_REQUIRED`. Revalidation still admits nobody; admission stays the role check plus the event binding.
+The partner projection drops `committee_comment` and the age server-side, not in the view.
+
+**Admin session for the two roles.** The admin origin admits a role only through `MFA_REQUIRED_BY_ROLE` (`apps/api/src/auth/admin-session/mfa-policy.ts`), so S5 adds `congress-program-committee` and S6 adds `congress-partner` there with TOTP, as for `event-registrar`: committee members and partner staff — external users — enrol TOTP on first login. Each role is also a project role seeded by `infra/dev-stand/idp/provision.sh` step 2 and by the production provisioning (`infra/deploy/README.md`, operator access), so a grant can be issued; without both, the role cannot sign in. **ADR-0001 A1 extension.** A1 chooses which grant live revalidation asks the IdP about and knows `event-registrar` only; the status route is the first committee-reachable live write, so the committee work package ships an ADR-0001 amendment (A1 is in production — amendment, via `do-adr-revision`) adding `congress-program-committee` to the selection rule with `403 PROGRAM_COMMITTEE_REQUIRED`. Revalidation still admits nobody; admission stays the role check plus the event binding.
 
 ## Admin projections
 
@@ -227,4 +244,4 @@ Each slice ships its UI with its backend (F-22). No canvas exists for any of the
 
 Issues (sub-issues of #2379): S1 #2432, S2 #2433, S3 #2434, S4 #2435, S5 #2437, S6 #2438, S7 #2439. Technical dependencies (native blocked-by): S2 after S1 — a kind opens only through S1's settings; S3, S4, S5 and S7 after S2 — they extend S2's table, package and send cascade (S7 sweeps S2's drafts and links to its section); S6 after S5 — it projects S5's registry and card. Anything else is wave order, not dependency.
 
-**Cross-repo dependency — `doctor-school/orthobio-site#99` (re-scoped by the tech lead).** On orthobio.ru: a «Подать материалы» section with two buttons, «Зарегистрироваться» (the 044 form) and «Войти в кабинет» (`https://doctor.school/account/congress`), and a «Подать материалы в кабинете» button on the site's «Заявка принята» card. It needs S2 on production; nothing on the platform waits for it.
+**Cross-repo dependency — `doctor-school/orthobio-site#99` (re-scoped by the tech lead).** On orthobio.ru: a «Подать материалы» section with two buttons, «Зарегистрироваться» (the 044 form) and «Войти в кабинет» (`https://new.doctor.school/account/congress`, a site config value), and a «Подать материалы в кабинете» button on the site's «Заявка принята» card. It needs S2 on production; nothing on the platform waits for it. At the root-domain cut-over (#1430) the site link becomes `https://doctor.school/account/congress` together with `MAILER_DOCTOR_BASE_URL` («Letters»).

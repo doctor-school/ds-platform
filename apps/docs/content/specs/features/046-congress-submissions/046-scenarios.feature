@@ -26,11 +26,13 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the event's revision closing instant is stored as 2027-03-02T00:00+03:00
     When the administrator enters a last day before the opening day and saves
     Then the save is refused and nothing changes
+    When the administrator enters an opening day for posters without a last day and saves
+    Then the save is refused and nothing changes
 
   @EARS-4 @EARS-15
   Scenario: The confirmation letter leads a guest into the section
     Given a participant registered on the congress site and received the 044 confirmation letter
-    Then the letter carries exactly one action, «Подать материалы в кабинете», pointing to "/account/congress" on the doctor storefront
+    Then the letter carries exactly one action, «Подать материалы в кабинете», pointing to "/account/congress" on the doctor storefront origin set in MAILER_DOCTOR_BASE_URL
     When the participant follows the link as a guest
     Then the doctor storefront sends them to the login with "/account/congress" as the return target
     When they sign in with the emailed code
@@ -88,6 +90,8 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     When the participant deletes that draft after confirming
     Then it is gone from the section
     And a request to delete or withdraw a submission in review is refused
+    When the committee takes a sent talk into review while the participant withdraws it
+    Then the talk stays "На рассмотрении" and the withdraw is refused
 
   @EARS-17
   Scenario: Abstract limit counts only live submissions of the submitting account

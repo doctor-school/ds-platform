@@ -602,8 +602,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-40 @failure
   Scenario: A /verify opened with no address goes to the registration door
-    Given a visitor opens /verify with neither an ?email= query nor an #email= fragment
-    When the route has read the fragment
+    Given a visitor opens /verify with no ?email= query
+    When the route has mounted
     Then the visitor is taken to /register in place of the address-less /verify
     And a same-origin returnTo on the arrival is carried onward to /register
     And no verification step without an address is ever shown

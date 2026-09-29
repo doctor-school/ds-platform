@@ -168,6 +168,15 @@ routes:
     status: deferred
     issue: "#1430"
 
+  # 003 EARS-24 (#2455) — the registration confirmation step on THIS host: the
+  # same package `/verify` route the Academy mounts. Same cut-over as the doors
+  # beside it — the storefront opens with #1430.
+  - app: doctor
+    route: /verify
+    file: apps/doctor/app/(auth)/verify/page.tsx
+    status: deferred
+    issue: "#1430"
+
   # 003 EARS-11/12 (#1989) — password recovery on THIS host: the shared
   # `<PasswordRecoveryCard>` projected by `components/reset-screen.tsx`, ending
   # the #1933/#1958 interim that sent «Забыли пароль» and «Сменить пароль»

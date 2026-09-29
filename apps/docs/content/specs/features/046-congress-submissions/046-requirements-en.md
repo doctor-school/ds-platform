@@ -50,7 +50,7 @@ lang: en
 - The «Подать материалы» section on orthobio.ru and the button on its «Заявка принята» card — `doctor-school/orthobio-site#99` in that repository (WBS dependency in `046-design.md`); this spec owns only the addresses the site links to.
 - A congress questionnaire on the platform and any change to the login or registration mechanics of `@ds/auth-flow`.
 - The screen for granting event-bound roles — #2378; until it ships the tech lead inserts `event_role_grants` rows on the product owner's request, as for the 044 registrar.
-- Co-author accounts, invitations or co-author confirmation; a per-organisation limit (the organisers set none).
+- Co-author accounts, invitations or co-author confirmation; a per-organisation limit does not apply: participants register as individuals, there are no organisation accounts, and «Организация / место работы» is plain text in the profile and the submission that nothing is counted or limited by (organisation accounts, if they appear, are a separate decision).
 - A retry queue for letters; exporting the registry to a file; submission statistics (the organisers have no past-year data yet).
 
 ## Constraints
@@ -131,7 +131,7 @@ Field lengths are defaults recorded in `046-design.md` («Field set and limits»
 - **EARS-22** (`realizes: US-5`) — THE SYSTEM SHALL show one total counter for the five abstract sections, updated as the author types and marked when above 5000, and SHALL accept only plain text — no formatting, tables, formulas, images or uploads are possible in the form or the contract.
 - **EARS-23** (`realizes: US-5`) — WHEN the author sends abstracts, THE SYSTEM SHALL require the consent to publication in РИНЦ — the published document `consent-congress-abstract-publication`, recorded as one `consent_records` row per send under the purpose `congress-abstract-publication` with the server-stamped version and referenced from the submission — and two statements, «в тексте нет некорректных заимствований» and «в тексте нет торговых наименований», stored on the submission with their instant.
 - **EARS-24** (`realizes: US-6`) — WHERE the event's first-author rule is on, THE SYSTEM SHALL also refuse a send when the event already holds, from any submitter, as many submissions of that kind in the counted statuses of EARS-17 whose first author has the same normalised full name as this submission's first author.
-- **EARS-25** (`realizes: US-6`) — WHEN the author chooses «Подать тезисы по этой работе» on an oral talk or a poster, THE SYSTEM SHALL create an abstract draft prefilled with its title and authors and linked to that submission, subject to EARS-6; the link is shown on the abstract card in the admin.
+- **EARS-25** (`realizes: US-6`) — WHEN the author chooses «Подать тезисы по этой работе» on a sent oral talk or poster — in any status except `draft` — THE SYSTEM SHALL create an abstract draft prefilled with its title and authors and linked to that submission, subject to EARS-6, and SHALL NOT offer the action on a draft; the link is shown on the abstract card in the admin.
 
 ### Work package «program committee» — API, `apps/admin`
 

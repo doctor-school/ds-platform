@@ -12,8 +12,11 @@ import {
   resolveReturnLandingPath,
   resolveReturnTargetPath,
   resolveServerAuth,
-  signedInLandingAction,
 } from "../server";
+// Deliberately NOT through the `../server` barrel: that barrel also reaches
+// client components and the host proxy, where an inline server action may not
+// be defined. Only these server mounts build the action.
+import { signedInLandingAction } from "../server/signed-in-landing";
 import { AuthShell } from "../shell";
 import { RegisterDoor } from "./register-door";
 

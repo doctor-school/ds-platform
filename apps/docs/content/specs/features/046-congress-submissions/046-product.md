@@ -30,7 +30,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 
 **Who reviews.** The **program committee** of the congress works in the Doctor.School admin: a list of every sent submission with filters by kind, status, date and author, and a card that opens at the side with the full text and the author's contacts, where the committee sets the status and writes the comment. Everyone in the committee sees all submissions; there is no distribution between reviewers. The **congress partner** sees the same list and cards read-only, to contact authors about their talks. Both roles are given per congress by the Doctor.School team.
 
-**Dates and limits are settings.** Intake opens «по готовности» — when the organisers are ready — and closes on 15 January 2027 for oral talks and on 29 January 2027 for posters and abstracts, each inclusive, until 23:59 Moscow time. Abstracts are limited to 3 per author, talks and posters are unlimited. All of this, and the counting rule below, is changed by a Doctor.School administrator on a settings screen in the admin, without a platform release.
+**Dates and limits are settings.** Intake opens «по готовности» — when the organisers are ready — and closes on 15 January 2027 for oral talks and on 29 January 2027 for posters and abstracts, each inclusive, until 23:59 Moscow time. Abstracts are limited to 3 per author, talks and posters are unlimited. A separate date «Доработки принимаются до» says until when authors may correct and resend submissions returned for revision — it can fall after the intake deadlines, because the committee reviews after intake closes. All of this, and the counting rule below, is changed by a Doctor.School administrator on a settings screen in the admin, without a platform release.
 
 ## User stories
 
@@ -57,7 +57,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 4. **Abstracts about a talk.** On the sent talk the participant presses «Подать тезисы по этой работе», gets abstracts with the same title and authors, writes the five sections watching the counter, gives the РИНЦ consent and the two statements, and sends.
 5. **The fourth abstract.** With three abstracts sent, the fourth is refused with «Можно отправить не больше 3 тезисов». If one of the three was rejected, the fourth goes through.
 6. **Closed kind.** On 16 January an oral talk draft can still be read, but says «Приём устных докладов закрыт 15 января 2027 — отправить заявку нельзя».
-7. **Committee returns a talk.** A committee member filters by «Устный доклад», opens a talk at the side, chooses «На доработке», writes the comment and saves. The author receives a letter with the comment, corrects the talk in the section before the deadline and sends it again.
+7. **Committee returns a talk.** A committee member filters by «Устный доклад», opens a talk at the side, chooses «На доработке», writes the comment and saves. The author receives a letter with the comment, corrects the talk in the section before the date «Доработки принимаются до» — the letter and the section both name it — and sends it again, even though oral intake has already closed.
 8. **Partner reads.** The congress partner opens the list, finds a poster by an author's surname, reads it and the author's phone; there is nothing to press.
 9. **Deadline moved.** The organisers extend abstracts to 31 January. The administrator changes the last day in the settings; the section shows the new date at once, and authors with drafts receive a fresh reminder.
 
@@ -71,6 +71,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 - Posters are refused for participants aged 40 or more on 23 April 2027, with a plain explanation; other kinds stay open.
 - The author sees the status and the committee comment in the section and in letters for «Отправлена», «Принята», «Отклонена», «На доработке»; «На рассмотрении» sends no letter.
 - A rejection or a revision request cannot be saved without a comment.
+- A submission returned for revision can be corrected and resent until the date «Доработки принимаются до», shown in the letter and in the section, even after its kind's intake has closed.
 - The committee sees every sent submission of its congress and nothing else in the admin; the partner sees the same read-only, without the committee comments and without age; neither sees drafts.
 - Dates, limits and the counting rule change on the admin settings screen and take effect without a release.
 
@@ -80,7 +81,7 @@ These are built as stated; each is a setting or a small rule that can be flipped
 
 1. A rejected abstract does not count toward the 3-abstract limit.
 2. An author can take back a sent submission, while it is not yet «На рассмотрении» and before its deadline; it returns to draft and stops counting.
-3. A submission «На доработке» is corrected and resent by its author until the kind's deadline.
+3. A submission «На доработке» is corrected and resent by its author until the date «Доработки принимаются до», which the Doctor.School administrator sets per congress in the admin independently of the intake deadlines; the revision letter and the section show that date. While the date is not set, revisions are accepted until the deadline of the submission's kind.
 4. No letter is sent when a submission goes «На рассмотрении».
 5. The limit counts only the author who sends; counting the first author of every submission as well is a setting, off by default (TZ §8).
 
@@ -104,7 +105,7 @@ No approved mockup yet. There is no canvas for the section, the three forms, the
 
 ## Open questions
 
-1. **Revision after the deadline.** The committee will most likely review after 29 January, and by the default above a submission returned «На доработке» after its deadline can no longer be resent. Owner decision: keep it, or give revisions their own deadline (a setting).
+None.
 
 ## Prior system — migration source
 

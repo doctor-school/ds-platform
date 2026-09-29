@@ -51,6 +51,7 @@ erDiagram
         uuid event_id PK
         text registration_url
         boolean first_author_counts
+        timestamptz revision_closes_at
     }
     congress_submission_kind_settings {
         uuid event_id PK
@@ -87,6 +88,7 @@ erDiagram
 
 - **`congress_submissions`** — `kind` ∈ `oral | poster | abstract`; `status` ∈ `draft | submitted | in_review | accepted | rejected | needs_revision`; `authors` is the ordered array `{surname, firstName, patronymic?, workplace, presenting}`; `body` is the per-kind text object validated by the discriminated Zod union (`oral: {goal, summary}`, `poster: {goal, content}`, `abstract: {relevance, aim, methods, results, conclusions}`); `statements` holds the two abstract statements with their instant. FKs are `ON DELETE restrict` like every retained child (#1278); a soft-deleted registration hides its submissions from every read and blocks sending. Audited by the 010 `audit_row_change()` trigger — the status history of EARS-28 is that ledger.
 - **Settings in platform data, not environment.** 044 kept its window in API configuration because it was one fixed constant pair per congress (044 EARS-28). Here the organisers ask for limits configurable in the admin (TZ §3) and the opening date is «по готовности»; an environment value would make every change a deploy, and three kinds × four values per event is data, not configuration. Two tables keep event-level and kind-level values apart; both are audited by the 010 trigger, which answers «who moved the deadline». Storefront ownership (ADR-0016 §8): submissions `doctor`, settings `admin-only`.
+- **Revision deadline — `congress_submission_settings.revision_closes_at`** (nullable, per event). The committee reviews after the intake closes (the last kind closes on 29 January 2027), so a revision bound to the kind's closing instant could never be resent; the organisers need a separate «Доработки принимаются до». The effective end of a submission's revision window is `coalesce(revision_closes_at, kind.closes_at)` — one function in `packages/schemas/src/congress/` used by the send check, the autosave refusal, the section and the needs-revision letter, so all four name the same day. Per event, not per kind: the committee works one review round for the whole congress. Empty falls back to the kind's closing instant, so an event that never sets it behaves as if revisions shared the intake deadline.
 - **`users.birth_date`** (`date`, nullable). Asked once and reused across events, so it belongs to the account and not to a registration or a submission. Written only by the holder through `PUT /v1/me/birth-date`; retention and erasure follow the `users` row (ADR-0009 §2.6). The 044 consent text lives on the congress site, outside this repository, so its coverage of the birth date cannot be verified here; the purpose `congress-submission-personal-data` (EARS-16) covers it explicitly.
 - **`event_role_grants`** — `EVENT_SCOPED_ROLES` widens from `["event-registrar"]` to add `congress-program-committee` and `congress-partner`, with the CHECK widened in the same reviewed migration. The partial unique index keeps «one registrar grant per user»; the two new roles are unique per (user, role, event) and may span several events.
 
@@ -126,7 +128,7 @@ stateDiagram-v2
     in_review --> accepted: committee
     in_review --> rejected: committee + comment
     in_review --> needs_revision: committee + comment
-    needs_revision --> submitted: resend before closing (author, EARS-30)
+    needs_revision --> submitted: resend before the revision deadline (author, EARS-30)
     accepted --> in_review: committee correction
     rejected --> in_review: committee correction
 ```
@@ -143,8 +145,8 @@ sequenceDiagram
     participant M as mailer
     C->>A: POST /v1/me/congress-submissions/:id/send {consents?, statements?}
     A->>D: BEGIN; SELECT registration (active) ; pg_advisory_xact_lock(user, event, kind)
-    A->>A: complete-schema(kind) · kind open · age rule · consents / statements
-    A->>D: count counted statuses (own; + first author if rule on) vs submit_limit
+    A->>A: complete-schema(kind) · kind open (needs_revision: revision window open) · age rule · consents / statements
+    A->>D: count counted statuses except this submission (own; + first author if rule on) vs submit_limit
     alt any check fails
         A-->>C: 422 {problems:[{code, field?, params}]} — nothing written
     else all pass
@@ -157,7 +159,7 @@ sequenceDiagram
     end
 ```
 
-The advisory lock serialises concurrent sends of one account, event and kind so two tabs cannot both take the third abstract slot. The problem codes (`kind-not-open`, `kind-closed`, `limit-reached`, `first-author-limit-reached`, `age-limit`, `consent-required`, `statement-required`, `field-invalid`) map to RU copy in the package dictionary. Endpoints of the author (`access: authenticated`, ownership checked on every row): `GET /v1/me/congress-submissions?event=`, `POST /v1/me/congress-submissions` (`{eventId, kind, derivedFromId?}`), `PATCH /v1/me/congress-submissions/:id` (autosave, draft schema), `DELETE …/:id`, `POST …/:id/send`, `POST …/:id/withdraw`, `PUT /v1/me/birth-date`.
+The advisory lock serialises concurrent sends of one account, event and kind so two tabs cannot both take the third abstract slot. The count excludes the submission being sent, so a `needs_revision` resend — already counted — is never refused by its own slot; a resend checks the revision window instead of the kind window (`revision-closed` refuses it). The problem codes (`kind-not-open`, `kind-closed`, `revision-closed`, `limit-reached`, `first-author-limit-reached`, `age-limit`, `consent-required`, `statement-required`, `field-invalid`) map to RU copy in the package dictionary. Endpoints of the author (`access: authenticated`, ownership checked on every row): `GET /v1/me/congress-submissions?event=`, `POST /v1/me/congress-submissions` (`{eventId, kind, derivedFromId?}`), `PATCH /v1/me/congress-submissions/:id` (autosave, draft schema), `DELETE …/:id`, `POST …/:id/send`, `POST …/:id/withdraw`, `PUT /v1/me/birth-date`.
 
 **Autosave.** The hook debounces 1.5 s after the last keystroke and flushes on blur and on page hide; the PATCH carries the full draft object (last write wins for one author). The saved state reads «Сохранено» / «Сохраняем…» / «Не удалось сохранить — повторим» with automatic retry.
 
@@ -179,7 +181,7 @@ All letters render through `email-layout.ts` in the shape of `notice-emails.ts`,
 - **Receipt** — «Doctor.School — заявка получена»: «Ваша заявка «{тема}» ({вид}) получена и передана программному комитету {мероприятие}. Статус можно посмотреть в кабинете.» [Мои заявки на Конгресс]
 - **Accepted** — «Doctor.School — заявка принята»: «Программный комитет принял вашу заявку «{тема}» ({вид}).»
 - **Rejected** — «Doctor.School — заявка отклонена»: «Программный комитет отклонил заявку «{тема}» ({вид}). Комментарий комитета: {комментарий}»
-- **Needs revision** — «Doctor.School — заявку нужно доработать»: «Программный комитет просит доработать заявку «{тема}» ({вид}): {комментарий}. Исправить и отправить заявку можно в кабинете до {последний день} включительно.»
+- **Needs revision** — «Doctor.School — заявку нужно доработать»: «Программный комитет просит доработать заявку «{тема}» ({вид}): {комментарий}. Исправить и отправить заявку можно в кабинете до {последний день доработок} включительно.» — the last day of the revision window (`revision_closes_at`, or the kind's last day while it is empty)
 - **Reminder** — «Doctor.School — приём {вида} заканчивается {дата}»: «У вас есть неотправленные черновики: {список}. Отправить их можно до {дата} включительно.»
 
 **Deadline sweep.** A `@Cron` job every 15 minutes selects kinds with `now < closes_at ≤ now + 72 h`, then claims drafts with `UPDATE … SET reminded_for_closes_at = closes_at WHERE kind = … AND status = 'draft' AND reminded_for_closes_at IS DISTINCT FROM closes_at RETURNING user_id, id`, and sends one letter per claimed account. The conditional update is the idempotency: a parallel instance claims nothing, and a moved closing instant re-arms because the stored value no longer matches.
@@ -199,7 +201,7 @@ The partner projection drops `committee_comment` and the age server-side, not in
 
 - **Registry** — `apps/admin/lib/congress-submissions.ts` on the `AdminDataList` composition in the pattern of `apps/admin/lib/congress-roster.ts` (server query state: page, search, filters, sort). Columns №, вид, тема, подающий, статус, отправлена, изменена. The committee and the partner see the same registry; drafts are excluded in the query, never in the view.
 - **Card** — the `Sheet` primitive (#2396), as for the 044 participant card (#2383): content, authors, submitter email and phone from the 044 answers (or the account email where the registration has no answers), status history from `audit_ledger`, source work link, last letter outcome, poster age. The status control is a select plus a `Textarea` for the comment, required for `rejected` and `needs_revision`.
-- **Settings** — a form per event: registration address, first-author rule, and per kind the opening date, the last day, the limit and the age limit, dates entered as Moscow calendar days (EARS-3).
+- **Settings** — a form per event: registration address, first-author rule, «Доработки принимаются до» (the last revision day; empty = the kinds' own last days), and per kind the opening date, the last day, the limit and the age limit, dates entered as Moscow calendar days (EARS-3).
 
 ## 044 letter link — placement of the amendment
 

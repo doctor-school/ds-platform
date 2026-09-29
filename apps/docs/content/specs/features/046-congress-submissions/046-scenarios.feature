@@ -10,6 +10,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     And posters and abstracts are open until 2027-01-29 inclusive, Moscow time
     And abstracts are limited to 3 per submitting account, oral talks and posters are unlimited, posters have an age limit of 40
     And the first-author counting rule is off
+    And revisions are accepted until 2027-03-01 inclusive, Moscow time
 
   @EARS-1 @EARS-2 @EARS-3
   Scenario: Platform administrator sets the intake without a release
@@ -21,6 +22,8 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the oral closing instant is stored as 2027-01-16T00:00+03:00
     And the next author request sees oral talks open without a release
     And the change is recorded by the 010 change audit with the administrator as the actor
+    When the administrator enters "Доработки принимаются до" 2027-03-01 and saves
+    Then the event's revision closing instant is stored as 2027-03-02T00:00+03:00
     When the administrator enters a last day before the opening day and saves
     Then the save is refused and nothing changes
 
@@ -150,7 +153,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the change is refused asking for a comment
     When the member enters "Уточните образовательную цель" and saves
     Then the status becomes "needs_revision" and the change is recorded with the member as the actor
-    And the author receives a letter carrying "Уточните образовательную цель"
+    And the author receives a letter carrying "Уточните образовательную цель" and the last revision day 1 March 2027
     When the member later sets "На рассмотрении" on another submission
     Then no letter is sent
 
@@ -165,10 +168,19 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Given the author's oral talk is "На доработке" with the comment "Уточните образовательную цель"
     When the author opens the section
     Then the talk shows the status "На доработке" and the comment "Уточните образовательную цель"
-    When the author edits the goal and sends before 2027-01-16T00:00+03:00
+    And the section shows "Исправить и отправить можно до 1 марта 2027 включительно"
+    When the author edits the goal and sends on 2027-02-20, after the oral intake closed
     Then the status becomes "Отправлена" and a new receipt letter is sent
-    Given another talk of the author is "На доработке" after 2027-01-16T00:00+03:00
-    Then that talk is read-only with the explanation that the deadline has passed
+    And the resend is not counted against the kind's limit a second time
+    Given another talk of the author is "На доработке" after 2027-03-02T00:00+03:00
+    Then that talk is read-only with the explanation that revisions were accepted until 1 March 2027 inclusive
+
+  @EARS-1 @EARS-30
+  Scenario: Without a revision deadline the kind's deadline applies
+    Given the event's "Доработки принимаются до" is empty
+    And the author's poster is "На доработке"
+    When the author sends it again after 2027-01-30T00:00+03:00
+    Then the send is refused because revisions were accepted until 29 January 2027 inclusive and nothing changes
 
   @EARS-32
   Scenario: Congress partner reads without acting

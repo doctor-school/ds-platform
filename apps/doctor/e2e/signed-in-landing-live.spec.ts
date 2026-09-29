@@ -47,7 +47,7 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  * Harness (dev stand, production build of the doctor host, api on :3000):
  *   E2E_DOCTOR_URL=http://localhost:3004 IDP_ISSUER=… MAILPIT_URL=… \
  *   E2E_LANDING_EVENT_SLUG=<seeded slug> \
- *   pnpm --filter @ds/doctor test:e2e:register-live -- signed-in-landing-live
+ *   pnpm --filter @ds/doctor test:e2e:register-live signed-in-landing-live
  */
 
 requireLiveStandEnv([

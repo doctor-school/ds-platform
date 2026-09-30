@@ -436,7 +436,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `UPDATE congress_submissions
             SET status = 'needs_revision', committee_comment = 'Уточните цель',
-                revision_due_at = '2027-02-20T00:00:00+03:00', submitted_at = now()
+                revision_due_at = '2027-02-20T00:00:00+03:00', submitted_at = now(),
+                status_changed_at = '2027-02-10T12:30:00+03:00'
           WHERE id = $1`,
         [mine],
       );
@@ -455,6 +456,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         Date.parse("2027-02-20T00:00:00+03:00"),
       );
       expect(s.submissions[0]!.updatedAt).toBeTruthy();
+      // The committee comment is dated by the status change that carried it.
+      expect(Date.parse(s.submissions[0]!.statusChangedAt)).toBe(
+        Date.parse("2027-02-10T12:30:00+03:00"),
+      );
       const oral = s.kinds.find((k) => k.kind === "oral")!;
       expect(oral).toMatchObject({ state: "open", submitLimit: 3, used: 1, offered: true });
 

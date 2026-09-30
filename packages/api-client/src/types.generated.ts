@@ -2266,6 +2266,8 @@ export interface components {
             revisionDueAt: string | null;
             /** @enum {string} */
             status: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+            /** Format: date-time */
+            statusChangedAt: string;
             submittedAt: string | null;
             title: string;
             /** Format: date-time */
@@ -2330,6 +2332,8 @@ export interface components {
                 revisionDueAt: string | null;
                 /** @enum {string} */
                 status: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+                /** Format: date-time */
+                statusChangedAt: string;
                 submittedAt: string | null;
                 title: string;
                 /** Format: date-time */

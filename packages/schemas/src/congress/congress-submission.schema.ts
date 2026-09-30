@@ -379,6 +379,11 @@ export const CongressSubmissionSchema = z.object({
   submittedAt: z.iso.datetime({ offset: true }).nullable(),
   /** The submission's own revision deadline (EARS-34), exclusive instant. */
   revisionDueAt: z.iso.datetime({ offset: true }).nullable(),
+  /**
+   * The last status change — the committee comment is dated by the change
+   * that carried it (EARS-11).
+   */
+  statusChangedAt: z.iso.datetime({ offset: true }),
   /** The last change of content or status (EARS-11). */
   updatedAt: z.iso.datetime({ offset: true }),
   createdAt: z.iso.datetime({ offset: true }),

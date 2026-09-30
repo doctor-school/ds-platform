@@ -742,6 +742,7 @@ function project(row: CongressSubmissionRow): CongressSubmission {
     committeeComment: commented ? row.committeeComment : null,
     submittedAt: row.submittedAt?.toISOString() ?? null,
     revisionDueAt: row.revisionDueAt?.toISOString() ?? null,
+    statusChangedAt: row.statusChangedAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
   };

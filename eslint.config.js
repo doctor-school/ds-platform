@@ -219,6 +219,7 @@ export default [
       "apps/**/*.{ts,tsx,js,jsx,mjs,cjs}",
       "packages/events-storefront/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
+      "packages/congress-submissions/src/**/*.{ts,tsx}",
     ],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },
@@ -297,6 +298,7 @@ export default [
       "packages/storefront-shell/src/**/*.{ts,tsx}",
       "packages/events-storefront/src/**/*.{ts,tsx}",
       "packages/room/src/**/*.{ts,tsx}",
+      "packages/congress-submissions/src/**/*.{ts,tsx}",
     ],
     //
     // LEGACY BASELINE (decision-debt, DEBT.md 2026-09-14). The rule lands with

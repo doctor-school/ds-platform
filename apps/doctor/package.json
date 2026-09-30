@@ -18,6 +18,7 @@
   "dependencies": {
     "@ds/auth-flow": "workspace:*",
     "@ds/design-system": "workspace:*",
+    "@ds/congress-submissions": "workspace:*",
     "@ds/events-storefront": "workspace:*",
     "@ds/legal-content": "workspace:*",
     "@ds/room": "workspace:*",

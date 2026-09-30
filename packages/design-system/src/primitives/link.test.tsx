@@ -168,3 +168,26 @@ describe("Link rendering + routing", () => {
     expect(link).toHaveClass("w-full", "text-primary-action");
   });
 });
+
+/**
+ * The quiet and danger text actions of the congress section
+ * (`design-source/doctor-lk-congress.dc.html`, `quietBtn` and the danger
+ * detail actions): secondary actions that must read quieter than the blue
+ * primary action beside them.
+ */
+describe("Link quiet tones (046, canvas doctor-lk-congress.dc.html)", () => {
+  it("046 EARS-13: the muted tone is a resting-underlined muted ink that turns page ink on hover", () => {
+    const cls = linkVariants({ tone: "muted" });
+    expect(cls).toMatch(/(?:^|\s)text-muted-foreground(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)underline(?:\s|$)/);
+    expect(cls).toMatch(/(?:^|\s)decoration-muted-2(?:\s|$)/);
+    expect(cls).toMatch(/hover:text-foreground/);
+    expect(cls).not.toMatch(/text-primary-action/);
+  });
+
+  it("046 EARS-12: the danger tone paints the destructive text ink", () => {
+    const cls = linkVariants({ tone: "danger" });
+    expect(cls).toMatch(/(?:^|\s)text-destructive-text(?:\s|$)/);
+    expect(cls).not.toMatch(/text-primary-action/);
+  });
+});

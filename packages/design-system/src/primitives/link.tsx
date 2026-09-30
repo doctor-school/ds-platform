@@ -35,7 +35,8 @@ import { cn } from "../lib/utils";
  *  - `mobile-nav-row` — one full-bleed row of the mobile nav sheet.
  *
  * `tone` carries the ink (`default`, `on-primary`, `header-nav` for the navy
- * band's muted nav tier, `neutral` for page ink), `size` the type step
+ * band's muted nav tier, `neutral` for page ink, `muted` / `danger` for quiet secondary and
+ * destructive text actions), `size` the type step
  * (`default`, `sm` = the canvas 13.5px nav/footer link) and `weight` the stroke
  * (`default` = 700, `strong` = the canvas 800 cross-storefront link). Every one
  * of them is backed by `design-source/ds-shell.dc.html`; the storefront chrome
@@ -71,6 +72,13 @@ const linkVariants = cva(
         // Page ink: a link that reads as a ROW of a surface (the mobile nav
         // sheet, canvas line 46) rather than as an inline action.
         neutral: "text-foreground",
+        // A quiet secondary action beside a primary one
+        // (`design-source/doctor-lk-congress.dc.html` `quietBtn`): muted ink,
+        // a resting underline in the dash colour, page ink on hover.
+        muted:
+          "text-muted-foreground underline decoration-muted-2 hover:text-foreground hover:decoration-foreground",
+        // A destructive text action (the same canvas, danger detail actions).
+        danger: "text-destructive-text active:text-destructive-text/80",
       },
       variant: {
         standalone: "",

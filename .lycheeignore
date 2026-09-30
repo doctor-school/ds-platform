@@ -58,11 +58,6 @@ design-source/support\.js
 # on a third party's availability. Same class as the GOV.UK entry above.
 ^https://primer\.style($|/.*$)
 
-# Lint-guard test fixtures deliberately carry placeholder/broken markdown links
-# (e.g. a MEMORY.md fixture mimicking the auto-memory index). They are test data,
-# not docs — exclude the whole fixture tree from the link check. See #293.
-tools/lint/guard-tests/fixtures/
-
 # Vendored Claude Design canvas sources (design-source/*.dc.html): verbatim
 # spec artifacts, not documentation. Their {{ template }} hrefs and
 # canvas-relative links (events-feed.dc.html, account-my-events.dc.html, …) resolve only

@@ -273,12 +273,16 @@ describe("row meta and date line", () => {
     expect(dateLine(sub({ updatedAt: late }))).toBe(
       "черновик изменён 19 декабря 2026",
     );
-    expect(dateLine(sub({ status: "withdrawn", updatedAt: late }))).toBe(
-      "отозвана 19 декабря 2026",
+    // The withdrawal date is the status moment, not the last edit.
+    const withdrawn = sub({
+      status: "withdrawn",
+      statusChangedAt: late,
+      updatedAt: "2026-12-10T09:00:00.000Z",
+    });
+    expect(dateLine(withdrawn)).toBe("отозвана 19 декабря 2026");
+    expect(withdrawnNotice(withdrawn)).toMatch(
+      /^Заявка отозвана 19 декабря 2026\. /,
     );
-    expect(
-      withdrawnNotice(sub({ status: "withdrawn", updatedAt: late })),
-    ).toMatch(/^Заявка отозвана 19 декабря 2026\. /);
     expect(dateLine(sub({ status: "submitted", submittedAt: late }))).toBe(
       "отправлена 19 декабря 2026, 06:00",
     );

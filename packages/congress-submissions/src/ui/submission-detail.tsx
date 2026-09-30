@@ -366,19 +366,17 @@ export function SubmissionDetail({
               <Alert variant="success">{COPY.sentNotice}</Alert>
             ) : readDraft ? (
               <Alert variant="warn">{closedText(intake)}</Alert>
-            ) : s.status === "needs_revision" && !rev.open ? (
+            ) : s.status === "needs_revision" &&
+              !rev.open &&
+              !s.committeeComment ? (
+              // The expired line lives in the committee box (the slot of the
+              // open-deadline line); it stands alone only when there is no box.
               <Alert variant="warn">{rev.text}</Alert>
             ) : s.status === "withdrawn" ? (
               <div
                 role="status"
-                className="-mx-4 flex items-start gap-3 bg-section px-4 py-3.5 layout:mx-0 layout:px-4.5"
+                className="-mx-4 bg-section px-4 py-3.5 layout:mx-0 layout:px-4.5"
               >
-                <span
-                  aria-hidden="true"
-                  className="flex-none text-body-compact text-muted-foreground"
-                >
-                  —
-                </span>
                 <p className="text-sm font-semibold leading-normal text-foreground">
                   {withdrawnNotice(s)}
                 </p>

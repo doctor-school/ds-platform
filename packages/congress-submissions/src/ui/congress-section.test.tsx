@@ -452,13 +452,16 @@ describe("CongressSection", () => {
     );
     fetchMock.mockResolvedValueOnce(answer(section({ submissions: [late] })));
     render(<CongressSection host={HOST} />);
+    // Shown once — in the committee box, the slot of the open-deadline line.
+    const lines = await screen.findAllByText(
+      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+    );
+    expect(lines).toHaveLength(1);
     expect(
-      (
-        await screen.findAllByText(
-          "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
-        )
-      ).length,
-    ).toBeGreaterThan(0);
+      within(screen.getByTestId("congress-committee-comment")).getByText(
+        "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Отправить снова" }),
     ).toBeNull();
@@ -536,6 +539,30 @@ describe("CongressSection", () => {
     expect(
       screen.queryByRole("button", { name: "Отправить снова" }),
     ).toBeNull();
+  });
+
+  it("EARS-12: the withdrawn detail dates the notice by the status moment and shows no stray dash", async () => {
+    const withdrawn = sub({
+      ...complete,
+      status: "withdrawn",
+      submittedAt: "2026-12-10T09:00:00.000Z",
+      statusChangedAt: "2026-12-16T15:40:00.000Z",
+      updatedAt: "2026-12-10T09:00:00.000Z",
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${withdrawn.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ submissions: [withdrawn] })),
+    );
+    render(<CongressSection host={HOST} />);
+    const notice = await screen.findByText(/^Заявка отозвана /);
+    expect(notice.textContent).toMatch(/^Заявка отозвана 17 декабря 2026\. /);
+    const box = notice.closest('[role="status"]')!;
+    expect(box.textContent).not.toContain("—");
+    expect(screen.queryByText("—")).toBeNull();
   });
 
   it("EARS-12: «Отозвать» asks first; confirming withdraws with the status the author saw", async () => {

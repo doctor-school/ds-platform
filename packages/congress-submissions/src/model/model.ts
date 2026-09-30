@@ -296,13 +296,14 @@ export function rowMeta(
 /** The detail header's date line. */
 export function dateLine(s: CongressSubmission): string {
   if (s.status === "draft") return `черновик изменён ${localDate(s.updatedAt)}`;
-  if (s.status === "withdrawn") return `отозвана ${localDate(s.updatedAt)}`;
+  if (s.status === "withdrawn")
+    return `отозвана ${localDate(s.statusChangedAt)}`;
   return `отправлена ${localDateTime(s.submittedAt ?? s.updatedAt)}`;
 }
 
 /** The withdrawn notice (046 EARS-12). */
 export function withdrawnNotice(s: CongressSubmission): string {
-  return `Заявка отозвана ${localDate(s.updatedAt)}. Программный комитет её не рассмотрит; изменить или отправить её снова нельзя.`;
+  return `Заявка отозвана ${localDate(s.statusChangedAt)}. Программный комитет её не рассмотрит; изменить или отправить её снова нельзя.`;
 }
 
 // ---------------------------------------------------------------------------

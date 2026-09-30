@@ -357,6 +357,47 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await ctx.close();
 }
 
+// The read-only details: a withdrawn talk (EARS-12 — the notice dated by the
+// status moment, no icon line) and the needs-revision talk past its deadline
+// (EARS-30 — «Срок доработки истёк …» once, in the committee box). The deadline
+// is moved into the past for the frame and restored for the resend below.
+{
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "light");
+  await page.goto(`${BASE}/account/congress`);
+  await page
+    .getByTestId("congress-row")
+    .filter({ hasText: "Комбинация PRP и гиалуроновой кислоты" })
+    .getByRole("button", { name: "Открыть" })
+    .click();
+  await page.getByText(/^Заявка отозвана /).waitFor();
+  await shot(page, "interactions-withdrawn", "light");
+
+  const revisionTitle = TALKS[0].title;
+  await db((c) =>
+    c.query(
+      `UPDATE congress_submissions SET revision_due_at = now() - interval '1 hour'
+       WHERE event_id = $1 AND title = $2`,
+      [eventId, revisionTitle],
+    ),
+  );
+  await page.goto(`${BASE}/account/congress`);
+  await page
+    .getByTestId("congress-row")
+    .filter({ hasText: "PRP при латеральном эпикондилите" })
+    .getByRole("button", { name: "Открыть" })
+    .click();
+  await page.getByText(/^Срок доработки истёк /).waitFor();
+  await shot(page, "interactions-revision-expired", "light");
+  await db((c) =>
+    c.query(
+      `UPDATE congress_submissions SET revision_due_at = $3::timestamptz
+       WHERE event_id = $1 AND title = $2`,
+      [eventId, revisionTitle, new Date(Date.now() + 2 * DAY + 5 * 3_600_000)],
+    ),
+  );
+  await ctx.close();
+}
+
 // The author resend (EARS-30): the needs-revision talk sent again before its
 // deadline → «Отправить исправленную заявку?» → «Отправлена».
 {

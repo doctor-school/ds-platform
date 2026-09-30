@@ -4023,7 +4023,7 @@ const ACCOUNT_PROFILE_PROPS: PropRow[] = [
     type: "() => void | Promise<void>",
     required: true,
     description:
-      "The EARS-10 logout transport AND where it routes: the Academy to /login, the doctor storefront to the storefront landing.",
+      "The EARS-10 logout transport AND where it routes: both storefronts route to the shared SIGN_OUT_DESTINATION (`/`) from @ds/auth-flow (#2488).",
   },
 ];
 

@@ -34,6 +34,10 @@ One registration-confirmation mechanism on both storefronts (#2455).
   «Подтверждение», wherever the arrival resolved an эфир — the canvas `auth`
   draws it for both hosts. `returnTo.card` is removed from
   `AuthFlowHostConfig`; the sign-in door takes the same one эфир read as the
-  other doors (only a not-found answer drops the target).
+  other doors. Only a not-found answer drops the target, and on the Academy it
+  drops the parked copy of that target too: after sign-in the visitor lands on
+  the default landing, never on the page of an эфир that no longer exists. The
+  parked target still carries every arrival the door does not judge (a room, the
+  personal account, a direct arrival).
 - A signed-in visitor on the Academy `/verify` is sent to the landing the
   registration door would send them to (`/webinars`), not to `/account`.

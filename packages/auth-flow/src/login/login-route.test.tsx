@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,21 +25,46 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *   • `resolveArrivalLanding` keeps its real LD-4 rule, bound to a doubled
  *     `fetch`: what is stubbed is the specialty READ, never the decision.
  */
-const { redirect, resolveServerAuth, readReturnEvent, specialtyFetch } =
-  vi.hoisted(() => ({
-    redirect: vi.fn((path: string) => {
-      throw new Error(`NEXT_REDIRECT:${path}`);
-    }),
-    resolveServerAuth: vi.fn(),
-    readReturnEvent: vi.fn(),
-    specialtyFetch: vi.fn(),
-  }));
+const {
+  redirect,
+  resolveServerAuth,
+  readReturnEvent,
+  specialtyFetch,
+  push,
+  login,
+  registerForEvent,
+} = vi.hoisted(() => ({
+  redirect: vi.fn((path: string) => {
+    throw new Error(`NEXT_REDIRECT:${path}`);
+  }),
+  resolveServerAuth: vi.fn(),
+  readReturnEvent: vi.fn(),
+  specialtyFetch: vi.fn(),
+  push: vi.fn(),
+  login: vi.fn(async () => undefined),
+  registerForEvent: vi.fn(async (_slug: string) => ({ registered: true })),
+}));
 
 vi.mock("next/navigation", () => ({
   redirect,
-  // The nested client door reads the router; only the mount's redirect is under
-  // test here.
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  // The nested client door reads the router: `push` is where a visitor lands
+  // once the mount's decision has been driven through the door (the journey
+  // tier below).
+  useRouter: () => ({ push, refresh: vi.fn() }),
+}));
+// The BFF seam of the journey tier: the sign-in call itself succeeds, so what is
+// under test is only where the mount's decision sends the visitor afterwards.
+vi.mock("../client/auth-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../client/auth-client")>()),
+  createAuthClient: () => ({
+    login,
+    requestOtp: vi.fn(),
+    loginWithOtp: vi.fn(),
+  }),
+}));
+vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/client")>()),
+  registerForEvent: (slug: string) => registerForEvent(slug),
 }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "__Host-ds_session=x" }),
@@ -56,6 +82,7 @@ vi.mock("../server", async (importOriginal) => {
   };
 });
 
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
@@ -478,7 +505,7 @@ describe("017 #1955 (Academy): the same rules over the other host config", () =>
     ["Витрина", DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"],
     ["Академия", ACADEMY_FIXTURE, "/webinars/prp-pri-gonartroze"],
   ])(
-    "021 EARS-10 (#2455): on %s an эфир read that could not tell keeps the target and draws no card; only «gone» drops it",
+    "021 EARS-10 (#2455): on %s an эфир read that could not tell keeps the target and draws no card; only «gone» drops it — the carried target and any parked copy",
     async (_host, config, target) => {
       resolveServerAuth.mockResolvedValue({ status: "guest" });
       readReturnEvent.mockResolvedValue({ status: "unavailable" });
@@ -487,14 +514,84 @@ describe("017 #1955 (Academy): the same rules over the other host config", () =>
         returnTo: "/webinars/prp-pri-gonartroze",
       });
       expect(kept.props.returnTarget).toBe(target);
+      expect(
+        (kept.props as { returnTargetGone?: boolean }).returnTargetGone,
+      ).toBe(false);
 
       readReturnEvent.mockResolvedValue(GONE);
       const dropped = await doorOf(config, {
         returnTo: "/webinars/prp-pri-gonartroze",
       });
       expect(dropped.props.returnTarget ?? null).toBe(null);
+      expect(
+        (dropped.props as { returnTargetGone?: boolean }).returnTargetGone,
+      ).toBe(true);
     },
   );
+});
+
+/**
+ * The mount's decision driven THROUGH the door to where the visitor lands. On the
+ * Академия the middleware parks the same `returnTo` the mount reads (014 EARS-6),
+ * so a door prop alone cannot prove the landing: the parked copy is the second
+ * carrier, and the rule must hold across both.
+ */
+describe("021 EARS-10 (#2455): where a sign-in on the Академия lands", () => {
+  const PARKING = ACADEMY_FIXTURE.returnTo?.parkingCookie;
+  const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).login;
+
+  function park(target: string): void {
+    document.cookie = `${PARKING?.name}=${encodeURIComponent(target)}; Path=/`;
+  }
+
+  async function signInThrough(params: Params): Promise<void> {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    render(await doorOf(ACADEMY_FIXTURE, params));
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText(COPY.password.identifierLabel),
+      "doc@example.com",
+    );
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, { selector: "input" }),
+      "Sup3r$ecretPw!9",
+    );
+    await user.click(screen.getByTestId("password-login-submit"));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+  }
+
+  afterEach(() => {
+    document.cookie = `${PARKING?.name}=; Path=/; Max-Age=0`;
+  });
+
+  it("021 EARS-10: an эфир that no longer exists is dropped on /login too — the parked copy is consumed, not used, and the visitor lands on the default", async () => {
+    readReturnEvent.mockResolvedValue(GONE);
+    park("/webinars/prp-pri-gonartroze");
+
+    await signInThrough({ returnTo: "/webinars/prp-pri-gonartroze" });
+
+    expect(push).toHaveBeenCalledWith(ACADEMY_FIXTURE.landing.afterLogin);
+    expect(registerForEvent).not.toHaveBeenCalled();
+    // Consumed exactly once: the dead page cannot come back on a later sign-in.
+    expect(document.cookie).not.toContain(`${PARKING?.name}=%2F`);
+  });
+
+  it("014 EARS-6: an arrival the mount did not judge still lands on the parked target", async () => {
+    park("/webinars/prp-pri-gonartroze");
+
+    await signInThrough({});
+
+    expect(readReturnEvent).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith("/webinars/prp-pri-gonartroze");
+  });
+
+  it("006 EARS-6: an Academy room arrival still signs in INTO the room", async () => {
+    park("/webinars/prp-pri-gonartroze/room");
+
+    await signInThrough({ returnTo: "/webinars/prp-pri-gonartroze/room" });
+
+    expect(push).toHaveBeenCalledWith("/webinars/prp-pri-gonartroze/room");
+  });
 });
 
 /**

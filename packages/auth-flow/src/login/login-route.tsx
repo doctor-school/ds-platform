@@ -81,11 +81,13 @@ export async function LoginRoute({
 
   // 021 EARS-10 — the ONE эфир read, the rule the registration door and the
   // confirmation step take (`resolveRegistrationArrival`): only a «gone» answer
-  // drops the target. The card is drawn from a page that answered (EARS-2/3),
-  // on every host — the canvas «Вход» gates it on the return context alone
-  // (#2455).
+  // drops the target — the carried one AND its parked copy (the door consumes
+  // that without using it). The card is drawn from a page that answered
+  // (EARS-2/3), on every host — the canvas «Вход» gates it on the return context
+  // alone (#2455).
   const eventRead = safeTarget ? await readReturnEvent(safeTarget) : null;
-  const gateResolved = eventRead !== null && eventRead.status !== "gone";
+  const eventGone = eventRead?.status === "gone";
+  const gateResolved = eventRead !== null && !eventGone;
   const returnEvent = eventRead?.status === "found" ? eventRead.event : null;
 
   // #1987 — an account arrival resolves NO эфир, so the gate branch would refuse
@@ -141,6 +143,7 @@ export async function LoginRoute({
         // 005 EARS-2 — the эфир intent to COMPLETE after sign-in, in this host's
         // vocabulary, supplied only when the arrival actually resolved.
         returnTarget={landingTarget && gateResolved ? landingTarget : null}
+        returnTargetGone={eventGone}
         returnContextPlate={plate}
       />
     </AuthShell>

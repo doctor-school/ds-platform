@@ -16,7 +16,7 @@ import type { ConsentTier, OtpChannel } from "@ds/schemas";
  * are what the server session read, the signed-in guard and the return-target
  * codec consume. PR 1.5 adds what the sign-in door reads: the landing table
  * (with the remembered-specialty reads named as paths), the event and room route
- * templates, the return-context card flag and the door's copy as plain string
+ * templates and the door's copy as plain string
  * templates (the copy crosses the server-mount → client boundary, so it can hold
  * no function), and the shared auth frame's brand assets and panel copy. The
  * consent tiers arrive with PR 1.6, which adds everything the registration door
@@ -600,6 +600,6 @@ export type AuthFlowHostConfig = {
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;
-  /** Absent = no parking and no return-context card (rows 29, 46). */
+  /** Absent = this host parks no return target (row 29). */
   readonly returnTo?: AuthFlowReturnToConfig;
 };

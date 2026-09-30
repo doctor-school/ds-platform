@@ -309,7 +309,6 @@ export type AuthFlowHostConfig = {
   /** returnTo parking. `undefined` = this host parks nothing. */
   returnTo?: {
     parkingCookie: { name: string; maxAgeSeconds: number };
-    card: boolean; // the doctor return-context card
   };
   // The VALUE, not the env NAME: Next inlines `NEXT_PUBLIC_*` only where the
   // app's own source reads `process.env.NEXT_PUBLIC_…` as a literal, so a

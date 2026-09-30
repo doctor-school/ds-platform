@@ -153,6 +153,17 @@ export function extractNote(body) {
   return "";
 }
 
+/** The RAW section's note text — comments and service lines stripped, but NOT
+ *  cut at the first machine-marker line — or "" when there is no section. The
+ *  `product-note-boundary` guard decides "is there a note to police" from this
+ *  (Issue #2489): a note whose first line is an ASCII key (`Email: …`) cuts to
+ *  "" in `extractNote`, yet it is a real note that delivery would drop. */
+export function rawNoteText(body) {
+  const raw = rawSectionBody(body);
+  if (raw === null) return "";
+  return stripServiceMarkers(raw.replace(HTML_COMMENT_RE, "")).trim();
+}
+
 /** True when the note is a REAL product note (not `none`, blank, or placeholder). */
 export function noteIsReal(note) {
   const firstLine = note.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";

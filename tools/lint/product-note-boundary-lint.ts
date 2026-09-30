@@ -37,9 +37,9 @@
 import { readFileSync } from "node:fs";
 
 import {
-  extractNote,
   firstMarkerLine,
   noteIsReal,
+  rawNoteText,
   rawSectionBody,
 } from "../ci/post-product-note.mjs";
 import { ghViewJson } from "./lib/gh";
@@ -60,12 +60,18 @@ function info(msg: string): void {
 }
 
 /** The first machine-marker line inside the raw Product note section, or null
- *  when the section is absent, carries no real note (`none`/blank — nothing is
- *  delivered), or holds prose only. */
+ *  when the section is absent, carries no real note (`none`/blank/placeholder —
+ *  nothing is delivered), or holds prose only.
+ *
+ *  "Is there a note to police" is decided from the RAW section (comments and
+ *  service lines stripped), never from `extractNote`: the delivery cut stops at
+ *  the first marker line, so a note whose FIRST line is an ASCII key
+ *  (`Email: …`) extracts to "" and would silently vanish from delivery while
+ *  looking like an empty note here. */
 function boundaryViolation(body: string): string | null {
   const raw = rawSectionBody(body);
   if (raw === null) return null;
-  if (!noteIsReal(extractNote(body))) return null;
+  if (!noteIsReal(rawNoteText(body))) return null;
   return firstMarkerLine(raw);
 }
 

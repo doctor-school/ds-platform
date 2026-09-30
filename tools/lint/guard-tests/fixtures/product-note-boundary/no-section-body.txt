@@ -1,0 +1,9 @@
+## Summary
+
+Refactor only.
+
+registry-research: n/a — no UI touch
+
+## Linked
+
+- Closes #2489

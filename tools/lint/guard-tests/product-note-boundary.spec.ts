@@ -46,6 +46,23 @@ describe("product-note-boundary-lint", () => {
     expect(code).toBe(0);
   });
 
+  it("2489: a real note whose FIRST line is an ASCII key (`Email: …`) → exit 1 (delivery would drop the whole note)", () => {
+    const b = readFileSync(body("marker-first-body.txt"), "utf8");
+    expect(extractNote(b)).toBe("");
+    const { code, stderr } = runGuard(GUARD, FIX, {
+      extraArgs: ["--body-file", body("marker-first-body.txt")],
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("Email: письмо");
+  });
+
+  it("2489: no Product note section → exit 0", () => {
+    const { code } = runGuard(GUARD, FIX, {
+      extraArgs: ["--body-file", body("no-section-body.txt")],
+    });
+    expect(code).toBe(0);
+  });
+
   it("2489: a `none` note → exit 0 (nothing is delivered)", () => {
     const { code } = runGuard(GUARD, FIX, {
       extraArgs: ["--body-file", body("none-body.txt")],

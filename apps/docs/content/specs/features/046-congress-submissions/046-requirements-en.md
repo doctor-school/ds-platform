@@ -94,7 +94,7 @@ lang: en
 
 **Read models** — the author's section (registration presence, per-kind intake state, limit usage, own submissions with their revision deadlines); the event's submissions registry; the submission card; the intake settings.
 
-**Policies** — «no submission without a registration»; «validation, deadline, limit and eligibility are checked at send, never at autosave»; «drafts are private to their author»; «a letter failure never rolls back a status»; «committee and partner are deny-by-default outside their bound event».
+**Policies** — «no submission without a registration»; «validation, deadline, limit and eligibility are checked at send, never at autosave»; «drafts are private to their author»; «a letter failure never rolls back a status or a revision deadline»; «committee and partner are deny-by-default outside their bound event».
 
 ## EARS requirements
 

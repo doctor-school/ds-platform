@@ -71,7 +71,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 - Drafts never get lost and are never refused for being incomplete; completeness, dates, the limit and age are checked only on «Отправить», and a refusal says what to fix.
 - Abstracts cannot exceed 5000 characters including spaces; the counter on screen and the platform count the same way.
 - Posters are refused for participants aged 40 or more on 23 April 2027, with a plain explanation; other kinds stay open.
-- The author sees the status and the committee comment in the section and in letters for «Отправлена», «Принята», «Отклонена», «На доработке»; «На рассмотрении» sends no letter.
+- The author sees the status and the committee comment in the section and in letters for «Отправлена», «Принята», «Отклонена», «На доработке» and when the revision deadline is extended; «На рассмотрении» sends no letter.
 - A rejection or a revision request cannot be saved without a comment.
 - A submission returned for revision can be corrected and resent until 23:59 Moscow time of the 3rd business day after the committee's request, even after its kind's intake has closed; the letter names the deadline and the section shows it with a countdown. After it the submission waits for the committee's decision; only the Doctor.School administrator can extend it.
 - The committee sees every sent submission of its congress and nothing else in the admin; the partner sees the same read-only, without the committee comments and without age; neither sees drafts.

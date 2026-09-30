@@ -358,9 +358,10 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
 }
 
 // The read-only details: a withdrawn talk (EARS-12 — the notice dated by the
-// status moment, no icon line) and the needs-revision talk past its deadline
-// (EARS-30 — «Срок доработки истёк …» once, in the committee box). The deadline
-// is moved into the past for the frame and restored for the resend below.
+// status moment, under the canvas «—» icon) and the needs-revision talk past
+// its deadline (EARS-30 — «Срок доработки истёк …» in the committee box and in
+// the canvas ⚠ notice). The deadline is moved into the past for the frame and
+// restored for the resend below.
 {
   const { ctx, page } = await themed(VIEWPORTS.desktop, "light");
   await page.goto(`${BASE}/account/congress`);

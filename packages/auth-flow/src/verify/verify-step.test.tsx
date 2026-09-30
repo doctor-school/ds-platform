@@ -128,6 +128,10 @@ function setupUser() {
 type PanelProps = {
   landing?: string;
   resolveSignedInLanding?: () => Promise<string>;
+  resolveCompletionTarget?: () => Promise<{
+    returnTarget: string | null;
+    landing: string;
+  }>;
   returnTarget?: string | null;
   carriedTarget?: string | null;
 };
@@ -148,6 +152,9 @@ function renderPanel(props: PanelProps = {}, options?: { held?: boolean }) {
       landing={props.landing ?? "/events"}
       {...(props.resolveSignedInLanding
         ? { resolveSignedInLanding: props.resolveSignedInLanding }
+        : {})}
+      {...(props.resolveCompletionTarget
+        ? { resolveCompletionTarget: props.resolveCompletionTarget }
         : {})}
       returnTarget={
         props.returnTarget === undefined ? RETURN_TARGET : props.returnTarget
@@ -363,6 +370,34 @@ describe("021 EARS-10 (amended 2026-09-29): the confirmed doctor lands on the or
     await waitFor(() =>
       expect(h.replace).toHaveBeenCalledWith("/events?specialty=kardiologiya"),
     );
+  });
+
+  it("021 EARS-10 (#2455): the эфир judged gone when the code is accepted is no target — the doctor lands on the answer's landing", async () => {
+    const user = setupUser();
+    renderPanel({
+      resolveCompletionTarget: vi
+        .fn()
+        .mockResolvedValue({ returnTarget: null, landing: "/" }),
+    });
+
+    await submitCode(user);
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/"));
+    expect(h.registerForEvent).not.toHaveBeenCalled();
+  });
+
+  it("021 EARS-10 (#2455): a completion-time check that cannot be asked is not «gone» — the эфир page stays the landing", async () => {
+    const user = setupUser();
+    renderPanel({
+      resolveCompletionTarget: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+
+    await submitCode(user);
+
+    await waitFor(() =>
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
+    );
+    expect(h.registerForEvent).toHaveBeenCalledWith("kardio");
   });
 });
 

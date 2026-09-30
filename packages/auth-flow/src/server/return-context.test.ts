@@ -5,6 +5,7 @@ import {
   formatMskDateLabel,
   formatMskTime,
   isAccountReturnTarget,
+  readReturnEvent,
   resolveCarriedReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
@@ -395,5 +396,42 @@ describe("#2027 PR 1.5: the landing and carry rules read the host config, not a 
     expect(isAccountReturnTarget(moved, "/cabinet")).toBe(true);
     expect(isAccountReturnTarget(moved, "/account")).toBe(false);
     expect(resolveCarriedReturnTarget(moved, "/account")).toBeNull();
+  });
+});
+
+describe("021 EARS-10 (#2455): readReturnEvent tells «gone» from «could not tell»", () => {
+  it("021 EARS-10: a page that answers is found", async () => {
+    const { impl } = stubFetch(EVENT);
+    const read = await readReturnEvent("/webinars/prp-pri-gonartroze", impl);
+    expect(read?.status).toBe("found");
+  });
+
+  it("021 EARS-10: 004 EARS-6 not-found is «gone»", async () => {
+    const { impl } = stubFetch({ message: "event not found" }, { status: 404 });
+    await expect(
+      readReturnEvent("/webinars/prp-pri-gonartroze", impl),
+    ).resolves.toEqual({ status: "gone" });
+  });
+
+  it.each([
+    ["a 5xx", () => stubFetch({}, { status: 503 }).impl],
+    ["a body that fails the contract", () => stubFetch({ title: 1 }).impl],
+    [
+      "a network failure",
+      () =>
+        (async () => {
+          throw new TypeError("fetch failed");
+        }) as unknown as typeof fetch,
+    ],
+  ])("021 EARS-10: %s is «unavailable», never «gone»", async (_l, make) => {
+    await expect(
+      readReturnEvent("/webinars/prp-pri-gonartroze", make()),
+    ).resolves.toEqual({ status: "unavailable" });
+  });
+
+  it("021 EARS-10: an arrival naming no эфир reads nothing", async () => {
+    const { impl, calls } = stubFetch(EVENT);
+    await expect(readReturnEvent("/account", impl)).resolves.toBeNull();
+    expect(calls).toHaveLength(0);
   });
 });

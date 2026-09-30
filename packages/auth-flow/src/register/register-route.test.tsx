@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Mocked seams, and why each is the honest one:
  *   • `redirect` — Next's own control-flow throw, doubled so a test can never
  *     observe the mount rendering on past a redirect it was supposed to take.
- *   • `resolveServerAuth` / `resolveReturnContext` — the two upstream READS.
+ *   • `resolveServerAuth` / `readReturnEvent` — the two upstream READS.
  *     The GUARD (`guardAuthRoute`) and the whole return-target codec stay the
  *     real shared ones, so this tier proves the mount routes its decision
  *     through them rather than re-deciding locally.
@@ -27,13 +27,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * the server decision handed across the boundary, and the door's own rendering
  * is pinned by `register-door.test.tsx`.
  */
-const { redirect, resolveServerAuth, resolveReturnContext, specialtyFetch } =
+const { redirect, resolveServerAuth, readReturnEvent, specialtyFetch } =
   vi.hoisted(() => ({
     redirect: vi.fn((path: string) => {
       throw new Error(`NEXT_REDIRECT:${path}`);
     }),
     resolveServerAuth: vi.fn(),
-    resolveReturnContext: vi.fn(),
+    readReturnEvent: vi.fn(),
     specialtyFetch: vi.fn(),
   }));
 
@@ -49,7 +49,7 @@ vi.mock("../server", async (importOriginal) => {
   return {
     ...actual,
     resolveServerAuth,
-    resolveReturnContext,
+    readReturnEvent,
     resolveArrivalLanding: (
       host: Parameters<typeof actual.resolveArrivalLanding>[0],
       requestHeaders: Headers,
@@ -79,6 +79,9 @@ const EVENT = {
   specialties: ["Травматология"],
   speakers: [{ name: "Анна Соколова" }],
 };
+/** The public event read's answers (021 EARS-10): the page answered / 004 EARS-6 not-found. */
+const FOUND = { status: "found", event: EVENT } as const;
+const GONE = { status: "gone" } as const;
 
 /** The specialty read answering «nothing remembered» — the LD-4 default branch. */
 function forgetsSpecialty(): void {
@@ -155,7 +158,7 @@ async function stepOf(
 beforeEach(() => {
   vi.clearAllMocks();
   forgetsSpecialty();
-  resolveReturnContext.mockResolvedValue(null);
+  readReturnEvent.mockResolvedValue(GONE);
 });
 
 /**
@@ -174,7 +177,7 @@ describe("#675: /register is closed to a doctor who already has a session", () =
     expect(await landingOf(DOCTOR_FIXTURE, {})).toBe("/");
     expect(redirect).toHaveBeenCalledTimes(1);
     // No landing target to honour ⇒ the эфир read is never paid for.
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("#675: a guest still gets the door — no redirect, the door element is returned", async () => {
@@ -202,7 +205,7 @@ describe("#2027 S4: the sign-up door honours the carried target too", () => {
     expect(await landingOf(DOCTOR_FIXTURE, { returnTo: "/account" })).toBe(
       "/account",
     );
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("#2027 S4: a page BELOW the cabinet lands on ITSELF, not on the cabinet index", async () => {
@@ -212,7 +215,7 @@ describe("#2027 S4: the sign-up door honours the carried target too", () => {
   });
 
   it("#2027 S4: the эфир arrival still lands on the doctor-host projection", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     expect(
       await landingOf(DOCTOR_FIXTURE, {
@@ -244,7 +247,7 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
   });
 
   it("#2027 PR 1.6: a repeated returnTo degrades to its FIRST value, it never breaks the door", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     const door = await doorOf(DOCTOR_FIXTURE, {
       returnTo: ["/webinars/prp-pri-gonartroze", "/account"],
@@ -254,7 +257,7 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
   });
 
   it("#2027 PR 1.6: the эфир arrival carries landing and raw returnTo to the door, returnTarget and carriedTarget to its /verify step", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
     const params = { returnTo: "/webinars/prp-pri-gonartroze" };
 
     const door = await doorOf(DOCTOR_FIXTURE, params);
@@ -310,7 +313,7 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
   });
 
   it("021 EARS-2: a doctor-host gate arrival fills BOTH return-context slots", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     const shell = await shellOf(DOCTOR_FIXTURE, {
       returnTo: "/webinars/prp-pri-gonartroze",
@@ -358,7 +361,7 @@ describe("#2027 PR 1.6 (Academy): the same mount over the other host config", ()
 
   it("021 EARS-10 (#2455): a host that publishes no return-context card asks whether the эфир exists, and draws no card", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     const params = { returnTo: "/webinars/prp-pri-gonartroze" };
     const shell = await shellOf(ACADEMY_FIXTURE, params);
@@ -369,7 +372,7 @@ describe("#2027 PR 1.6 (Academy): the same mount over the other host config", ()
     );
     expect(shell.props.returnContext ?? null).toBe(null);
     expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
-    expect(resolveReturnContext).toHaveBeenCalledWith(
+    expect(readReturnEvent).toHaveBeenCalledWith(
       "/webinars/prp-pri-gonartroze",
     );
   });
@@ -386,10 +389,12 @@ describe("021 EARS-3 (#2333): the confirmation after the sign-up door gets the s
   });
 
   it("005 EARS-2: a carried validated target is the landing — nothing to re-decide", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     expect(
-      await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
+      await actionOf(DOCTOR_FIXTURE, {
+        returnTo: "/webinars/prp-pri-gonartroze",
+      }),
     ).toBeUndefined();
   });
 

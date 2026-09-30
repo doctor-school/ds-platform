@@ -21,8 +21,9 @@ One registration-confirmation mechanism on both storefronts (#2455).
 - The landing after confirmation is decided the same way on both hosts (owner
   decision «Б», 2026-09-29, 021 Amendment — 2026-09-29): the page of the эфир
   the visitor came from, even when it has ended or filled up (the page states
-  that itself); an эфир that no longer exists → the default landing. The
-  `/verify` mount asks the one public event read on every host.
+  that itself); an эфир that no longer exists → the default landing. The one
+  public event read is asked on every host when the code is accepted; only its
+  not-found answer means «no longer exists» — a failed read keeps the эфир page.
 - `AuthFlowHostConfig` breaking changes: `routes.verify` is required;
   `api.confirmPath`, `api.confirmCarriesReturnTarget` and
   `verify.deepLinkEntry` are removed (the verification mail is link-free, so the

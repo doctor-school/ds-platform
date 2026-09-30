@@ -129,13 +129,20 @@ export function resolveReturnTargetPath(
 }
 
 /**
- * Resolve the raw `returnTo` value to a card projection, or `null` when there is
- * nothing honest to show. `fetchImpl` is injected for tests.
+ * The public event read of an arrival, in the three answers its callers tell
+ * apart (021 EARS-10, #2455): the page answers, the эфир no longer exists, or
+ * the read could not tell. `null` when the arrival names no эфир at all.
+ * `fetchImpl` is injected for tests.
  */
-export async function resolveReturnContext(
+export type ReturnEventRead =
+  | { status: "found"; event: ReturnContextEvent }
+  | { status: "gone" }
+  | { status: "unavailable" };
+
+export async function readReturnEvent(
   returnTo: string | undefined,
   fetchImpl: typeof fetch = fetch,
-): Promise<ReturnContextEvent | null> {
+): Promise<ReturnEventRead | null> {
   // The parser is the guard: an unsafe target never reaches the read.
   const intent = parseReturnTarget(returnTo);
   if (!intent) return null;
@@ -145,13 +152,28 @@ export async function resolveReturnContext(
       `${serverApiBase()}/v1/public/events/${encodeURIComponent(intent.eventSlug)}`,
       { headers: { accept: "application/json" }, cache: "no-store" },
     );
-    if (!res.ok) return null;
+    // 004 EARS-6 — not-found is the one answer that means «no longer exists»;
+    // any other failure says nothing about existence (021 EARS-10, #2455).
+    if (res.status === 404) return { status: "gone" };
+    if (!res.ok) return { status: "unavailable" };
     const parsed = PublicEventPageSchema.safeParse(await res.json());
-    if (!parsed.success) return null;
-    return toReturnContextEvent(parsed.data);
+    if (!parsed.success) return { status: "unavailable" };
+    return { status: "found", event: toReturnContextEvent(parsed.data) };
   } catch {
-    return null;
+    return { status: "unavailable" };
   }
+}
+
+/**
+ * Resolve the raw `returnTo` value to a card projection, or `null` when there is
+ * nothing honest to show. `fetchImpl` is injected for tests.
+ */
+export async function resolveReturnContext(
+  returnTo: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ReturnContextEvent | null> {
+  const read = await readReturnEvent(returnTo, fetchImpl);
+  return read?.status === "found" ? read.event : null;
 }
 
 /**

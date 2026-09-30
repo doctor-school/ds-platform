@@ -67,6 +67,9 @@ export async function VerifyRoute({
           {...(arrival.resolveSignedInLanding
             ? { resolveSignedInLanding: arrival.resolveSignedInLanding }
             : {})}
+          {...(arrival.resolveCompletionTarget
+            ? { resolveCompletionTarget: arrival.resolveCompletionTarget }
+            : {})}
           returnTarget={arrival.returnTarget}
           carriedTarget={arrival.carriedTarget}
           // The mobile plate above the card, as the registration door draws it.

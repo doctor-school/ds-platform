@@ -1,14 +1,10 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import type { AuthFlowHostConfig } from "../host-config";
+import type { CompletionTarget } from "../client/signed-in-landing";
 import { withReturnTarget } from "../return-target-href";
 import { VerifyDoor } from "./verify-door";
 
@@ -63,6 +59,8 @@ type VerifyTargets = {
   returnTarget?: string | null;
   /** Rule S3 — what the sideways hops and the cold exit carry onward. */
   carriedTarget?: string | null;
+  /** 021 EARS-10 (#2455) — the mount's completion-time re-check; passed through. */
+  resolveCompletionTarget?: () => Promise<CompletionTarget>;
 };
 
 /**
@@ -74,6 +72,7 @@ export function VerifyStep({
   config,
   landing,
   resolveSignedInLanding,
+  resolveCompletionTarget,
   returnTarget = null,
   carriedTarget = null,
   returnContextPlate,
@@ -93,6 +92,7 @@ export function VerifyStep({
       email={address}
       landing={landing}
       {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
+      {...(resolveCompletionTarget ? { resolveCompletionTarget } : {})}
       returnTarget={returnTarget}
       carriedTarget={carriedTarget}
       returnContextPlate={returnContextPlate}
@@ -106,6 +106,7 @@ export function VerifyEntry({
   email,
   landing,
   resolveSignedInLanding,
+  resolveCompletionTarget,
   returnTo,
   returnTarget = null,
   carriedTarget = null,
@@ -125,6 +126,7 @@ export function VerifyEntry({
         config={config}
         landing={landing}
         {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
+        {...(resolveCompletionTarget ? { resolveCompletionTarget } : {})}
         returnTarget={returnTarget}
         carriedTarget={carriedTarget}
         returnContextPlate={returnContextPlate}

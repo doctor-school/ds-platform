@@ -72,9 +72,10 @@ keeps the step with the generic sentence.
 Where the doctor lands is decided the same way on both storefronts (owner
 decision Б, 2026-09-29): the page of the эфир they came from — an ended or full
 эфир included, its page states that itself — through the shared 005 EARS-2
-completion; an эфир that no longer exists (the `/verify` mount's public event
-read answers nothing) → the LD-4 landing (`/events` for a remembered specialty,
-else `/`). `router.replace`, no screen in between (standard **S5** in
+completion; an эфир that no longer exists when the code is accepted (the public
+event read, asked again at that moment, answers not-found) → the LD-4 landing
+(`/events` for a remembered specialty, else `/`). A read that fails is not «no
+longer exists»: the эфир page stays the destination (021 EARS-10). `router.replace`, no screen in between (standard **S5** in
 `packages/auth-flow/README.md`).
 
 ## Sessions on two hosts (ADR-0015 §4)

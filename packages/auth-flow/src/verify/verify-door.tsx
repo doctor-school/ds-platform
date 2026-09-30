@@ -28,7 +28,11 @@ import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowVerifyCopy } from "../host-config";
-import { landingAfterSignIn } from "../client/signed-in-landing";
+import {
+  completionTargetAfterSignIn,
+  landingAfterSignIn,
+  type CompletionTarget,
+} from "../client/signed-in-landing";
 import { withReturnTarget } from "../return-target-href";
 import { VerifyGlyph } from "./verify-glyph";
 
@@ -70,6 +74,11 @@ export type VerifyDoorProps = {
    */
   resolveSignedInLanding?: () => Promise<string>;
   /**
+   * 021 EARS-10 (#2455) — the mount's server action that judges the carried
+   * эфир again once the code is accepted; absent when the arrival carried none.
+   */
+  resolveCompletionTarget?: () => Promise<CompletionTarget>;
+  /**
    * The resolved эфир intent of the arrival (021 EARS-10), in this host's
    * vocabulary. It is what 005 EARS-2 completes once the visitor is signed in
    * — the shared rule guards it. `null` when the arrival named no эфир or one
@@ -105,6 +114,7 @@ export function VerifyDoor({
   email,
   landing,
   resolveSignedInLanding,
+  resolveCompletionTarget,
   returnTarget = null,
   carriedTarget = null,
   returnContextPlate,
@@ -201,15 +211,18 @@ export function VerifyDoor({
         landing,
         resolveSignedInLanding,
       );
-      // 005 EARS-2 — the session exists now, so the carried эфир is COMPLETED
-      // before the visitor is sent anywhere, and its page is the landing — an
-      // ended or full эфир included, its page states that itself (021 EARS-10).
-      // Best-effort by the rule's contract. The target is the one the mount
-      // resolved; a parked value never replaces it (021 EARS-10).
+      // 021 EARS-10 (amendment 2026-09-29) — the target is judged now, not
+      // when this step rendered.
+      const target = await completionTargetAfterSignIn(
+        { returnTarget, landing: signedInLanding },
+        resolveCompletionTarget,
+      );
+      // 005 EARS-2 — completed before the visitor is sent anywhere; a parked
+      // value never replaces the mount's target (021 EARS-10).
       destinationHref = await completeResolvedReturnTarget(
         config,
-        returnTarget,
-        signedInLanding,
+        target.returnTarget,
+        target.landing,
       );
     } catch (err) {
       // Q1 — a refused replay stays on this step, generic (003 EARS-16).

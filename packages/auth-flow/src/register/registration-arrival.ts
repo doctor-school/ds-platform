@@ -3,17 +3,22 @@ import {
   guardAuthRoute,
   isAccountReturnTarget,
   isRoomReturnTarget,
+  readReturnEvent,
   resolveArrivalLanding,
   resolveCarriedReturnTarget,
-  resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
   resolveServerAuth,
+  type ReturnContextEvent,
 } from "../server";
 // Deliberately NOT through the `../server` barrel: that barrel also reaches
 // client components and the host proxy, where an inline server action may not
 // be defined. Only the server mounts build the action.
 import { signedInLandingAction } from "../server/signed-in-landing";
+import {
+  completionTargetAction,
+  type CompletionTarget,
+} from "../server/completion-target";
 
 /** What a registration arrival resolves to, before the first byte of HTML. */
 export type RegistrationArrival = {
@@ -22,6 +27,11 @@ export type RegistrationArrival = {
   /** #2333 — the re-decision once the confirmed doctor is signed in; absent where it cannot change. */
   resolveSignedInLanding?: () => Promise<string>;
   /**
+   * 021 EARS-10 (#2455) — the эфир target judged again when the code is
+   * accepted; present only while the arrival carries a standing эфир target.
+   */
+  resolveCompletionTarget?: () => Promise<CompletionTarget>;
+  /**
    * 021 EARS-10 — the эфир intent to COMPLETE after sign-up, in this host's
    * vocabulary, supplied only when the arrival actually resolved.
    */
@@ -29,7 +39,7 @@ export type RegistrationArrival = {
   /** Rule S3 — what the confirmation step's sideways hops carry onward. */
   carriedTarget: string | null;
   /** 021 EARS-3 — the carried эфир for the return-context card; `null` = no card. */
-  returnEvent: Awaited<ReturnType<typeof resolveReturnContext>>;
+  returnEvent: ReturnContextEvent | null;
 };
 
 /**
@@ -82,15 +92,12 @@ export async function resolveRegistrationArrival({
     });
   }
 
-  // 021 EARS-10 (owner decision Б, 2026-09-29) — the ONE эфир read, asked on
-  // every host: an эфир whose page still exists (live, ended or full — the page
-  // states that itself) is the target; one that no longer exists is no target,
-  // and the visitor lands on the default. Only a host that publishes the 021
-  // EARS-3 return-context card also draws it.
-  const resolvedEvent = safeTarget
-    ? await resolveReturnContext(safeTarget)
-    : null;
-  const gateResolved = resolvedEvent !== null;
+  // 021 EARS-10 (owner decision Б, amendment 2026-09-29) — the ONE эфир read,
+  // asked on every host; only its «gone» answer drops the target. The card is
+  // drawn only from a page that answered, on a host that publishes it (EARS-3).
+  const eventRead = safeTarget ? await readReturnEvent(safeTarget) : null;
+  const gateResolved = eventRead !== null && eventRead.status !== "gone";
+  const resolvedEvent = eventRead?.status === "found" ? eventRead.event : null;
   const returnEvent = config.returnTo?.card ? resolvedEvent : null;
 
   // #1987 / rule S4 — an account arrival resolves NO эфир, so the gate branch
@@ -120,11 +127,16 @@ export async function resolveRegistrationArrival({
 
   guardAuthRoute({ authenticated, pathname, routes: config.routes, landing });
 
+  // 021 EARS-10 — the render-time answer is re-asked at completion.
+  const resolveCompletionTarget =
+    safeTarget && landingTarget && gateResolved
+      ? completionTargetAction(config, safeTarget, landingTarget)
+      : undefined;
+
   return {
     landing,
     ...(resolveSignedInLanding ? { resolveSignedInLanding } : {}),
-    // An эфир that no longer exists is the same as no target: completing it
-    // would land the visitor on a page nothing answers.
+    ...(resolveCompletionTarget ? { resolveCompletionTarget } : {}),
     returnTarget: landingTarget && gateResolved ? landingTarget : null,
     carriedTarget,
     returnEvent,

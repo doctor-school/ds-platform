@@ -202,7 +202,7 @@ describe("release-notes — main() ordering invariants (subprocess)", () => {
 describe("release-notes — the digest carries no PR evidence tail (#2489)", () => {
   it("2489: a digest over a PR set containing the #2451-shaped body has no ui-/Stage-B-/evidence-URL lines", () => {
     const fixture = readFileSync(
-      resolve(HERE, "fixtures", "product-note-boundary", "pr-2451-body.md"),
+      resolve(HERE, "fixtures", "product-note-boundary", "pr-2451-body.txt"),
       "utf8",
     );
     const notes = [

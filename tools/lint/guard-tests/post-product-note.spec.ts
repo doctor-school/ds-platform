@@ -345,7 +345,7 @@ describe("post-product-note — machine-marker section boundary (pure)", () => {
     HERE,
     "fixtures",
     "product-note-boundary",
-    "pr-2451-body.md",
+    "pr-2451-body.txt",
   );
   const RU_NOTE = [
     "В админке у мероприятия появилась ссылка «Приём материалов Конгресса». На этой странице администратор платформы настраивает, как Конгресс принимает материалы:",

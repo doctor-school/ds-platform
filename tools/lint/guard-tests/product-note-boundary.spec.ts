@@ -25,7 +25,7 @@ const body = (name: string): string => resolve(FIX, name);
 describe("product-note-boundary-lint", () => {
   it("2489: the #2451-shaped body (evidence under the note) → exit 1, names the first marker line", () => {
     const { code, stderr } = runGuard(GUARD, FIX, {
-      extraArgs: ["--body-file", body("pr-2451-body.md")],
+      extraArgs: ["--body-file", body("pr-2451-body.txt")],
     });
     expect(code).toBe(1);
     expect(stderr).toContain("registry-research: adopted");
@@ -34,21 +34,21 @@ describe("product-note-boundary-lint", () => {
 
   it("2489: a template-shaped body (note, then `## Linked`) → exit 0", () => {
     const { code } = runGuard(GUARD, FIX, {
-      extraArgs: ["--body-file", body("template-body.md")],
+      extraArgs: ["--body-file", body("template-body.txt")],
     });
     expect(code).toBe(0);
   });
 
   it("2489: a RU note with in-sentence colons → exit 0", () => {
     const { code } = runGuard(GUARD, FIX, {
-      extraArgs: ["--body-file", body("ru-colon-body.md")],
+      extraArgs: ["--body-file", body("ru-colon-body.txt")],
     });
     expect(code).toBe(0);
   });
 
   it("2489: a `none` note → exit 0 (nothing is delivered)", () => {
     const { code } = runGuard(GUARD, FIX, {
-      extraArgs: ["--body-file", body("none-body.md")],
+      extraArgs: ["--body-file", body("none-body.txt")],
     });
     expect(code).toBe(0);
   });
@@ -83,7 +83,7 @@ describe("product-note-boundary-lint", () => {
   });
 
   it("2489: the raw section still sees the evidence the delivery cut removes", () => {
-    const b = readFileSync(body("pr-2451-body.md"), "utf8");
+    const b = readFileSync(body("pr-2451-body.txt"), "utf8");
     expect(firstMarkerLine(rawSectionBody(b))).toMatch(/^registry-research:/);
     expect(extractNote(b)).not.toMatch(/registry-research|Stage-B|https?:/);
   });

@@ -121,6 +121,11 @@ describe("CongressSection", () => {
     expect(
       screen.getByRole("link", { name: "Регистрация на сайте Конгресса ↗" }),
     ).toHaveAttribute("href", "https://orthobio.ru/#join");
+    // Canvas «нет регистрации»: the link is the 14px/700 step (Link `sm`).
+    const reg = screen.getByRole("link", {
+      name: "Регистрация на сайте Конгресса ↗",
+    });
+    expect(reg).toHaveClass("text-sm", "font-bold", "underline");
     expect(screen.queryByText("Новая заявка")).not.toBeInTheDocument();
   });
 
@@ -158,6 +163,15 @@ describe("CongressSection", () => {
     expect(
       within(oral).getByRole("button", { name: "Начать заявку →" }),
     ).toHaveClass("text-sm");
+    // Canvas «выбор вида»: every kind name is the 17px/800 lead step.
+    for (const k of ["oral", "poster", "abstract"]) {
+      const name = within(screen.getByTestId(`congress-pick-${k}`)).getByRole(
+        "heading",
+        { level: 3 },
+      );
+      expect(name).toHaveClass("text-lead", "font-extrabold");
+      expect(name).not.toHaveClass("text-lg");
+    }
     for (const k of ["poster", "abstract"]) {
       expect(
         within(screen.getByTestId(`congress-pick-${k}`)).queryByRole("button"),
@@ -225,7 +239,9 @@ describe("CongressSection", () => {
             sub({
               status: "needs_revision",
               committeeComment: "Уточните дизайн исследования. ".repeat(8),
-              revisionDueAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+              revisionDueAt: new Date(
+                Date.now() + 5 * 86_400_000,
+              ).toISOString(),
             }),
           ],
         }),
@@ -240,7 +256,9 @@ describe("CongressSection", () => {
     );
     quiet(screen.getByRole("button", { name: "Свернуть" }));
 
-    await userEvent.click(within(row).getByRole("button", { name: "Отозвать" }));
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Отозвать" }),
+    );
     const ask = screen.getByRole("group", { name: /Отозвать заявку\?/ });
     quiet(within(ask).getByRole("button", { name: "Отмена" }));
   });

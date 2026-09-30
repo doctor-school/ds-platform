@@ -264,7 +264,10 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
               {COPY.noRegistration}
             </span>
             {section.registrationUrl ? (
-              <Link href={section.registrationUrl} variant="inline">
+              // Canvas 14px/700 = Link `sm`; the canvas 2px underline has no
+              // Link variant, so the default 1px `inline` underline stands
+              // (recorded parity delta, PR #2474).
+              <Link href={section.registrationUrl} variant="inline" size="sm">
                 {COPY.registrationLink}
               </Link>
             ) : null}
@@ -427,7 +430,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                     >
                       <h3
                         className={cn(
-                          "text-lg font-extrabold tracking-tight",
+                          "text-lead font-extrabold tracking-tight",
                           avail ? "text-foreground" : "text-muted-foreground",
                         )}
                       >

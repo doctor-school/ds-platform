@@ -2274,7 +2274,7 @@ export interface components {
         CongressSubmissionRefusalDto: {
             problems: {
                 /** @enum {string} */
-                code: "registration-required" | "kind-not-open" | "kind-closed" | "revision-closed" | "status-conflict" | "withdraw-not-allowed" | "limit-reached" | "first-author-limit-reached" | "age-limit" | "consent-required" | "statement-required" | "field-invalid";
+                code: "registration-required" | "kind-not-available" | "kind-not-open" | "kind-closed" | "revision-closed" | "status-conflict" | "withdraw-not-allowed" | "limit-reached" | "first-author-limit-reached" | "age-limit" | "consent-required" | "statement-required" | "field-invalid";
                 field?: string;
                 params?: {
                     [key: string]: string | number | null;

@@ -166,7 +166,8 @@ Refusals carry `{problems: [{code, field?, params?}]}` — 422 for an unmet send
 condition, 409 for a status the action does not apply to; the codes live in
 `@ds/schemas` (`congress-submission.schema.ts`) with the field limits, the
 length rule and the per-kind forms. A kind is offered once its form is
-registered there (oral now; posters and abstracts with their slices).
+registered there (oral now; posters and abstracts with their slices); creating
+a draft of a kind not offered yet is 422 `kind-not-available`.
 
 - **Send cascade (EARS-9).** One transaction: the row locked, an advisory lock on
   (account, event, kind), then registration, the kind window, the complete field
@@ -186,8 +187,13 @@ registered there (oral now; posters and abstracts with their slices).
   `in_review`, `needs_revision`, or `submitted` after closing → `withdrawn`. The
   update matches only a row still in `expectedStatus`, so a concurrent committee
   change wins and the withdraw is refused with the current status.
-- **Delete (EARS-13).** The one physical delete: an unsent draft is its author's
-  private scratch; any other status is 409.
+- **Delete (EARS-13).** Retires the draft (`record_status = 'retired'`,
+  `deleted_at` set — the ADR-0003 §3.6 retained-row rule; no physical delete);
+  a retired draft is excluded from every list, count and the kind's limit. Any
+  other status is 409.
+- **Author 1 (EARS-6).** Prefilled from the 044 registration answers; without
+  answers its name fields stay empty for the author to fill — the display name
+  is never split into a first name and a surname.
 
 `congress_submissions` (migration 0043) carries the 010 `audit_row_change()`
 trigger — the ledger is the status history — and `authors` is a PD-masked

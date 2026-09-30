@@ -13,6 +13,7 @@ import {
 import { CONGRESS_SETTINGS_KINDS } from "./congress-submission-settings.js";
 import { consentRecords } from "./consent-records.js";
 import { events } from "./events.js";
+import { recordStatus } from "./lifecycle.js";
 import { registrations } from "./registrations.js";
 import { users } from "./users.js";
 
@@ -116,6 +117,10 @@ export const congressSubmissions = pgTable(
     remindedForClosesAt: timestamp("reminded_for_closes_at", {
       withTimezone: true,
     }),
+    // ADR-0003 §3.6 — a retained row: the author's draft delete (EARS-13)
+    // retires the row; every read takes `record_status = 'active'` only.
+    recordStatus: recordStatus("record_status").notNull().default("active"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -131,6 +136,15 @@ export const congressSubmissions = pgTable(
     check(
       "congress_submissions_status_known",
       sql`${t.status} IN ('draft', 'submitted', 'in_review', 'accepted', 'rejected', 'needs_revision', 'withdrawn')`,
+    ),
+    check(
+      "congress_submissions_retired_iff_deleted",
+      sql`(${t.recordStatus} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    // Only a draft is ever retired (EARS-13): a sent submission is never deleted.
+    check(
+      "congress_submissions_retired_only_draft",
+      sql`${t.recordStatus} = 'active' OR ${t.status} = 'draft'`,
     ),
     check(
       "congress_submissions_last_letter_status_known",

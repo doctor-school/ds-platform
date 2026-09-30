@@ -231,6 +231,7 @@ export function parseCongressDraftBody(
 
 export const CONGRESS_SUBMISSION_PROBLEM_CODES = [
   "registration-required",
+  "kind-not-available",
   "kind-not-open",
   "kind-closed",
   "revision-closed",

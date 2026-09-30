@@ -22,10 +22,14 @@ CREATE TABLE "congress_submissions" (
 	"last_letter_status" text,
 	"last_letter_at" timestamp with time zone,
 	"reminded_for_closes_at" timestamp with time zone,
+	"record_status" "record_status" DEFAULT 'active' NOT NULL,
+	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "congress_submissions_kind_known" CHECK ("congress_submissions"."kind" IN ('oral', 'poster', 'abstract')),
 	CONSTRAINT "congress_submissions_status_known" CHECK ("congress_submissions"."status" IN ('draft', 'submitted', 'in_review', 'accepted', 'rejected', 'needs_revision', 'withdrawn')),
+	CONSTRAINT "congress_submissions_retired_iff_deleted" CHECK (("congress_submissions"."record_status" = 'retired') = ("congress_submissions"."deleted_at" IS NOT NULL)),
+	CONSTRAINT "congress_submissions_retired_only_draft" CHECK ("congress_submissions"."record_status" = 'active' OR "congress_submissions"."status" = 'draft'),
 	CONSTRAINT "congress_submissions_last_letter_status_known" CHECK ("congress_submissions"."last_letter_status" IS NULL OR "congress_submissions"."last_letter_status" IN ('sent', 'failed'))
 );
 --> statement-breakpoint

@@ -128,6 +128,7 @@ export class CongressSubmissionsService {
               eq(congressSubmissions.userId, user.id),
               eq(congressSubmissions.eventId, eventId),
               eq(congressSubmissions.registrationId, registration.id),
+              eq(congressSubmissions.recordStatus, "active"),
             ),
           )
           .orderBy(desc(congressSubmissions.createdAt))
@@ -170,9 +171,7 @@ export class CongressSubmissionsService {
   ): Promise<CongressSubmission> {
     const user = await this.account(sub);
     if (!hasCongressSubmissionForm(body.kind)) {
-      throw new BadRequestException(
-        `the ${body.kind} kind is not offered in the cabinet`,
-      );
+      refuse([{ code: "kind-not-available", params: { kind: body.kind } }]);
     }
     return withRequestAuditContext(this.db, async (tx) => {
       await this.settings(tx, body.eventId);
@@ -198,7 +197,7 @@ export class CongressSubmissionsService {
           registrationId: registration.id,
           userId: user.id,
           kind: body.kind,
-          authors: [firstAuthor(registration.answers, user.displayName)],
+          authors: [firstAuthor(registration.answers)],
         })
         .returning();
       return project(row!);
@@ -308,6 +307,7 @@ export class CongressSubmissionsService {
               eq(congressSubmissions.kind, row.kind),
               ne(congressSubmissions.status, "draft"),
               ne(congressSubmissions.id, row.id),
+              eq(congressSubmissions.recordStatus, "active"),
             ),
           );
         if ((counted?.n ?? 0) >= w.submitLimit) {
@@ -428,15 +428,23 @@ export class CongressSubmissionsService {
     await withRequestAuditContext(this.db, async (tx) => {
       const row = await this.ownRow(tx, user.id, id, true);
       if (row.status !== "draft") statusConflict(row.status);
-      // retained-data-ok: an unsent draft is its author's private scratch — EARS-13 deletes it; a sent submission is never deleted.
-      await tx
-        .delete(congressSubmissions)
+      // ADR-0003 §3.6: a retained row is retired, never physically removed.
+      const [retired] = await tx
+        .update(congressSubmissions)
+        .set({
+          recordStatus: "retired",
+          deletedAt: sql`now()`,
+          updatedAt: sql`now()`,
+        })
         .where(
           and(
             eq(congressSubmissions.id, row.id),
             eq(congressSubmissions.status, "draft"),
+            eq(congressSubmissions.recordStatus, "active"),
           ),
-        );
+        )
+        .returning({ id: congressSubmissions.id });
+      if (!retired) statusConflict(row.status);
     });
   }
 
@@ -444,9 +452,9 @@ export class CongressSubmissionsService {
 
   private async account(
     sub: string,
-  ): Promise<{ id: string; displayName: string | null }> {
+  ): Promise<{ id: string }> {
     const [user] = await this.db
-      .select({ id: users.id, displayName: users.displayName })
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.zitadelSub, sub))
       .limit(1);
@@ -519,6 +527,7 @@ export class CongressSubmissionsService {
         and(
           eq(congressSubmissions.id, id),
           eq(congressSubmissions.userId, userId),
+          eq(congressSubmissions.recordStatus, "active"),
           eq(registrations.recordStatus, "active"),
         ),
       )
@@ -580,9 +589,9 @@ export class CongressSubmissionsService {
 }
 
 /**
- * EARS-6 — author 1 from the registration answers, or, where the registration
- * has none, from the account display name: the first word is taken as the
- * first name and the rest as the surname; the author corrects the draft.
+ * EARS-6 — author 1 from the registration answers. The account has no
+ * structured name, so without answers the name fields stay empty for the
+ * author to fill; the display name is never split into name parts.
  */
 function firstAuthor(
   answers: {
@@ -591,22 +600,13 @@ function firstAuthor(
     patronymic?: string | undefined;
     workplace: string;
   } | null,
-  displayName: string | null,
 ): CongressSubmissionDraftAuthor {
-  if (answers) {
-    return {
-      surname: answers.surname,
-      firstName: answers.firstName,
-      ...(answers.patronymic ? { patronymic: answers.patronymic } : {}),
-      workplace: answers.workplace,
-      presenting: true,
-    };
-  }
-  const words = (displayName ?? "").trim().split(/\s+/).filter(Boolean);
-  const [first, ...rest] = words;
+  if (!answers) return { presenting: true };
   return {
-    ...(first ? { firstName: first } : {}),
-    ...(rest.length > 0 ? { surname: rest.join(" ") } : {}),
+    surname: answers.surname,
+    firstName: answers.firstName,
+    ...(answers.patronymic ? { patronymic: answers.patronymic } : {}),
+    workplace: answers.workplace,
     presenting: true,
   };
 }

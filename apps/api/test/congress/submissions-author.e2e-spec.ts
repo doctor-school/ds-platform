@@ -341,7 +341,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows[0]).toEqual({ user_id: d.userId, reg_user: d.userId });
     });
 
-    it("EARS-6: without registration answers author 1 comes from the display name; creating is refused only after the closing instant", async () => {
+    it("EARS-6: without registration answers author 1's name is left empty (the display name is never split); creating is refused only after the closing instant", async () => {
       const d = await doctor("sub-display");
       await pool.query("UPDATE users SET display_name = 'Мария Иванова' WHERE id = $1", [d.userId]);
       const future = await congress({
@@ -351,9 +351,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await register(d, future);
       const early = await create(d, future);
       expect(early.statusCode).toBe(201);
-      expect(CongressSubmissionSchema.parse(early.json()).authors[0]).toMatchObject({
-        firstName: "Мария",
-        surname: "Иванова",
+      expect(CongressSubmissionSchema.parse(early.json()).authors[0]).toEqual({
         presenting: true,
       });
 
@@ -363,6 +361,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const late = await create(d, closed);
       expect(late.statusCode).toBe(422);
       expect(codes(late)).toEqual(["kind-closed"]);
+    });
+
+    it("EARS-5: a kind whose form the cabinet does not offer yet is refused with a named problem", async () => {
+      const d = await doctor("sub-kind-na");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const poster = await create(d, eventId, "poster");
+      expect(poster.statusCode).toBe(422);
+      expect(codes(poster)).toEqual(["kind-not-available"]);
     });
 
     it("EARS-7: an autosave stores incomplete content, enforces maximum lengths, and is refused on a submitted submission", async () => {
@@ -676,8 +683,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const del = (id: string) =>
         app.inject({ method: "DELETE", url: `${BASE}/${id}`, headers: d.headers });
       expect((await del(draft)).statusCode).toBe(204);
-      const { rows } = await pool.query("SELECT 1 FROM congress_submissions WHERE id = $1", [draft]);
-      expect(rows).toHaveLength(0);
+      // ADR-0003 §3.6 — the row is retired, not removed, and gone for the author.
+      const { rows } = await pool.query<{ record_status: string }>(
+        "SELECT record_status FROM congress_submissions WHERE id = $1",
+        [draft],
+      );
+      expect(rows).toEqual([{ record_status: "retired" }]);
+      expect((await section(d, eventId)).submissions.map((s) => s.id)).toEqual([sent]);
+      expect((await autosave(d, draft, { title: "x" })).statusCode).toBe(404);
+      expect((await del(draft)).statusCode).toBe(404);
 
       const refused = await del(sent);
       expect(refused.statusCode).toBe(409);

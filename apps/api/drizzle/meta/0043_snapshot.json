@@ -1,5 +1,5 @@
 {
-  "id": "cab77c98-736b-4850-9faf-80f31d08d085",
+  "id": "9882d932-0674-44a4-a382-e7d09e2cb30d",
   "prevId": "5cf7ffa2-0931-4573-86c3-76176bd55f82",
   "version": "7",
   "dialect": "postgresql",
@@ -3563,6 +3563,20 @@
           "primaryKey": false,
           "notNull": false
         },
+        "record_status": {
+          "name": "record_status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3686,6 +3700,14 @@
         "congress_submissions_status_known": {
           "name": "congress_submissions_status_known",
           "value": "\"congress_submissions\".\"status\" IN ('draft', 'submitted', 'in_review', 'accepted', 'rejected', 'needs_revision', 'withdrawn')"
+        },
+        "congress_submissions_retired_iff_deleted": {
+          "name": "congress_submissions_retired_iff_deleted",
+          "value": "(\"congress_submissions\".\"record_status\" = 'retired') = (\"congress_submissions\".\"deleted_at\" IS NOT NULL)"
+        },
+        "congress_submissions_retired_only_draft": {
+          "name": "congress_submissions_retired_only_draft",
+          "value": "\"congress_submissions\".\"record_status\" = 'active' OR \"congress_submissions\".\"status\" = 'draft'"
         },
         "congress_submissions_last_letter_status_known": {
           "name": "congress_submissions_last_letter_status_known",

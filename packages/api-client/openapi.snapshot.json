@@ -1378,6 +1378,7 @@
                 "code": {
                   "enum": [
                     "registration-required",
+                    "kind-not-available",
                     "kind-not-open",
                     "kind-closed",
                     "revision-closed",

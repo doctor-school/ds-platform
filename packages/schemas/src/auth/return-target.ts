@@ -31,6 +31,18 @@
 export const MAX_RETURN_TARGET_LENGTH = 512;
 
 /**
+ * 014 EARS-6 amendment 2026-09-30 (#2487) — the ONE query the guard keeps: the
+ * land-only marker of an эфир return (`registration-intent.ts`
+ * `formatLandOnlyReturnTarget`). A carried event page means «register me on the
+ * way back»; the same page followed by exactly `?intent=land` means «bring me
+ * back, register nothing» (the shell header's sign-in). The marker is a fixed
+ * literal, never attacker-authored page state, so keeping it re-opens no
+ * redirect chaining; any other query — or the marker next to anything else — is
+ * dropped as before, and with it the marker.
+ */
+export const LAND_ONLY_RETURN_QUERY = "intent=land";
+
+/**
  * Characters that never belong in a same-origin path and are classic redirect
  * bypasses: any C0 control character or space (a raw tab/newline is stripped by
  * browsers when parsing a URL, so a `/<TAB>/evil` can re-form as `//evil`), DEL,
@@ -67,10 +79,12 @@ function hasUnsafeChar(value: string): boolean {
  * including their percent-encoded forms); an empty inner segment that re-forms
  * `//`; and a malformed percent-escape.
  *
- * The returned target carries NO query and NO fragment. The return target is a
- * page, not page state, and dropping both removes redirect chaining outright: the
- * page a visitor is landed on can never be handed an attacker-authored `?next=`
- * to follow onward.
+ * The returned target carries NO fragment and NO query but the one fixed
+ * {@link LAND_ONLY_RETURN_QUERY} marker. The return target is a page, not page
+ * state, and dropping both removes redirect chaining outright: the page a visitor
+ * is landed on can never be handed an attacker-authored `?next=` to follow
+ * onward. The marker survives so the parked copy of a land-only return (014
+ * EARS-6) is still land-only when read back, never a registration intent.
  */
 export function parseSameOriginReturnTarget(returnTo: unknown): string | null {
   if (typeof returnTo !== "string") return null;
@@ -114,7 +128,8 @@ export function parseSameOriginReturnTarget(returnTo: unknown): string | null {
   // Return the ORIGINAL (still-encoded) path, not the decoded form: it is now
   // proven to be a same-origin absolute-path reference, and re-emitting the
   // decoded text would corrupt a legitimately encoded segment.
-  return path;
+  const query = queryAt === -1 ? "" : withoutHash.slice(queryAt + 1);
+  return query === LAND_ONLY_RETURN_QUERY ? `${path}?${query}` : path;
 }
 
 /** `true` iff `returnTo` is a safe same-origin return target (014 EARS-6). */

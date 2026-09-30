@@ -284,7 +284,7 @@ describe("StorefrontHeader", () => {
     expect(screen.queryByTestId("shell-avatar")).toBeNull();
   });
 
-  it("017 EARS-1 · 014 EARS-6: on an event page the guest control carries that page as returnTo, on both hosts (#2487)", () => {
+  it("017 EARS-1 · 014 EARS-6: on an event page the guest control carries the land-only return of that page, on both hosts (#2487)", () => {
     const guest = {
       status: "guest",
       loginHref: "/login",
@@ -299,7 +299,7 @@ describe("StorefrontHeader", () => {
       const view = render(<StorefrontHeader config={config} auth={guest} />);
       expect(screen.getByTestId("shell-login")).toHaveAttribute(
         "href",
-        `/login?returnTo=${encodeURIComponent(path)}`,
+        `/login?returnTo=${encodeURIComponent(`${path}?intent=land`)}`,
       );
       view.unmount();
     }
@@ -325,15 +325,15 @@ describe("StorefrontHeader", () => {
     }
   });
 
-  it("017 EARS-1 · 014 EARS-6: guestLoginHref carries only the return whitelist's reconstruction (#2487)", () => {
-    // `usePathname` never carries the query; the carried value is the
-    // whitelist's own reconstruction of the path.
+  it("017 EARS-1 · 014 EARS-6: guestLoginHref carries the LAND-ONLY return of the event page (#2487)", () => {
+    // `usePathname` never carries the query; the carried value is the shared
+    // land-only shape — the page comes back, no registration fires.
     expect(guestLoginHref("/login", "/events/x")).toBe(
-      "/login?returnTo=%2Fevents%2Fx",
+      "/login?returnTo=%2Fevents%2Fx%3Fintent%3Dland",
     );
     // A loginHref that already carries a query gets `&`.
     expect(guestLoginHref("/login?a=1", "/webinars/x")).toBe(
-      "/login?a=1&returnTo=%2Fwebinars%2Fx",
+      "/login?a=1&returnTo=%2Fwebinars%2Fx%3Fintent%3Dland",
     );
     // A hostile, traversal or unusable value is dropped, never echoed.
     for (const raw of [

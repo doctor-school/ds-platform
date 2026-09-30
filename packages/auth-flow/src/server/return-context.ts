@@ -1,6 +1,7 @@
 import {
   PublicEventPageSchema,
   RETURN_TARGET_PREFIX,
+  parseLandOnlyReturnTarget,
   parseReturnTarget,
   type PublicEventPage,
 } from "@ds/schemas";
@@ -201,6 +202,16 @@ export function isRoomReturnTarget(
 }
 
 /**
+ * 014 EARS-6 amendment 2026-09-30 (#2487) - is this arrival a LAND-ONLY эфир
+ * return (the shell header's sign-in)? Like a room or account return it is a
+ * landing in its own right: it resolves no эфир card, registers nothing, and the
+ * door lands the visitor back on the event page.
+ */
+export function isLandOnlyReturnTarget(returnTo: string | undefined): boolean {
+  return parseLandOnlyReturnTarget(returnTo) !== null;
+}
+
+/**
  * 021 #1945 / #1987 - the host LANDING for an arrival return target (the path
  * the host NAVIGATES to once the door is passed), or `null`.
  *
@@ -223,7 +234,11 @@ export function resolveReturnLandingPath(
   const room = resolveRoomReturnTarget(host, returnTo);
   if (room) return room;
 
-  const intent = parseReturnTarget(returnTo);
+  // 014 EARS-6 amendment 2026-09-30 (#2487) — a land-only return lands on its
+  // event page, re-homed like an intent; the completion (not this landing) is
+  // what keeps it from registering.
+  const landOnly = parseLandOnlyReturnTarget(returnTo);
+  const intent = parseReturnTarget(landOnly ? landOnly.page : returnTo);
   if (!intent) return null;
   return intent.returnTo.startsWith(RETURN_TARGET_PREFIX)
     ? host.routes.eventPathTemplate.replace(":slug", intent.eventSlug)

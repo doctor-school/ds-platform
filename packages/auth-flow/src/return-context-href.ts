@@ -1,4 +1,4 @@
-import { parseReturnTarget } from "@ds/schemas";
+import { parseLandOnlyReturnTarget, parseReturnTarget } from "@ds/schemas";
 import { parseRoomReturnTarget } from "@ds/room/room-return";
 
 import type { AuthFlowHostConfig } from "./host-config";
@@ -54,7 +54,13 @@ export function resolveCarriedReturnTarget(
   const room = resolveRoomReturnTarget(host, returnTo);
   if (room) return room;
 
-  return parseReturnTarget(returnTo)?.returnTo ?? null;
+  // 014 EARS-6 amendment 2026-09-30 (#2487) — the land-only эфир return rides
+  // on as itself, never as the bare page (which would register).
+  return (
+    parseLandOnlyReturnTarget(returnTo)?.returnTo ??
+    parseReturnTarget(returnTo)?.returnTo ??
+    null
+  );
 }
 
 /**

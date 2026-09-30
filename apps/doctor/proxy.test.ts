@@ -158,3 +158,19 @@ describe("014 EARS-6 (#2443): the doctor storefront parks the carried return tar
     expect(parkedTarget(response)).toBeUndefined();
   });
 });
+
+describe("014 EARS-6 (#2487): the parked land-only return stays land-only", () => {
+  it("014 EARS-6: /login with a land-only returnTo parks the marked value, never the bare event page", async () => {
+    const request = new NextRequest(
+      "https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042%3Fintent%3Dland",
+    );
+
+    const response = await proxy(request);
+
+    const parked = parkedTarget(response);
+    expect(parked).toBeDefined();
+    expect(decodeURIComponent(parked ?? "")).toBe(
+      "/events/ahilles-042?intent=land",
+    );
+  });
+});

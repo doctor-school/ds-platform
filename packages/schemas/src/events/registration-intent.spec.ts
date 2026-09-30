@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   DOCTOR_EVENTS_FEED_RESUME_KEY,
+  formatLandOnlyReturnTarget,
+  parseLandOnlyReturnTarget,
   mintDoctorEventsFeedReturnTarget,
   parseAcademyEventReturnTarget,
   parseDoctorEventReturnTarget,
@@ -10,6 +12,10 @@ import {
   RegistrationIntentSchema,
 } from "./registration-intent.js";
 import type { RawQueryRecord } from "./event-listing-query.schema.js";
+import {
+  LAND_ONLY_RETURN_QUERY,
+  parseSameOriginReturnTarget,
+} from "../auth/return-target.js";
 
 /**
  * 019 EARS-12 — the feed-shaped half of the return-target whitelist (021 LD-3).
@@ -320,5 +326,75 @@ describe("021 EARS-10 — the doctor-storefront event-page return target", () =>
     expect(parseReturnTarget(`/events/${longSlug}`)).toBeNull();
     expect(parseDoctorEventReturnTarget(`/events/${longSlug}`)).toBeNull();
     expect(parseAcademyEventReturnTarget(`/webinars/${longSlug}`)).toBeNull();
+  });
+});
+
+/**
+ * 014 EARS-6 amendment 2026-09-30 (#2487) — the LAND-ONLY эфир return: the
+ * shell header's «Войти / Регистрация» brings the visitor back to the event page
+ * and never registers them. One shared shape, and the two values never convert
+ * into each other.
+ */
+describe("014 EARS-6 (#2487): the land-only event return", () => {
+  it("014 EARS-6: an event page formats to its land-only value and parses back to the same page", () => {
+    for (const page of ["/events/ahilles-042", "/webinars/ahilles-042"]) {
+      const value = formatLandOnlyReturnTarget(page);
+      expect(value).toBe(`${page}?${LAND_ONLY_RETURN_QUERY}`);
+      expect(parseLandOnlyReturnTarget(value)).toEqual({
+        eventSlug: "ahilles-042",
+        page,
+        returnTo: value,
+      });
+    }
+  });
+
+  it("014 EARS-6: a land-only value is never a registration intent", () => {
+    const value = formatLandOnlyReturnTarget("/events/ahilles-042");
+    expect(parseReturnTarget(value)).toBeNull();
+    expect(parseDoctorEventReturnTarget(value)).toBeNull();
+    expect(parseDoctorEventsFeedReturnTarget(value)).toBeNull();
+    expect(
+      parseAcademyEventReturnTarget(
+        formatLandOnlyReturnTarget("/webinars/ahilles-042"),
+      ),
+    ).toBeNull();
+  });
+
+  it("014 EARS-6: a registration intent is never a land-only value", () => {
+    expect(parseLandOnlyReturnTarget("/events/ahilles-042")).toBeNull();
+    expect(parseLandOnlyReturnTarget("/webinars/ahilles-042")).toBeNull();
+    const feed = mintDoctorEventsFeedReturnTarget(FEED_QUERY, "ahilles-042");
+    expect(parseLandOnlyReturnTarget(feed)).toBeNull();
+    expect(parseLandOnlyReturnTarget(`${feed}&${LAND_ONLY_RETURN_QUERY}`)).toBeNull();
+  });
+
+  it("014 EARS-6: only an event PAGE with exactly the marker is land-only", () => {
+    for (const raw of [
+      "/events?intent=land",
+      "/events/ahilles-042/room?intent=land",
+      "/events/ahilles-042?intent=land&next=//evil",
+      "/events/ahilles-042?intent=landx",
+      "/events/../account?intent=land",
+      "//evil/events/x?intent=land",
+      "/account?intent=land",
+      null,
+    ]) {
+      expect(parseLandOnlyReturnTarget(raw)).toBeNull();
+    }
+    for (const raw of ["/events", "/account", "/events/x/room", "//evil", null]) {
+      expect(formatLandOnlyReturnTarget(raw)).toBeNull();
+    }
+  });
+
+  it("014 EARS-6: the same-origin guard (parking, completion) keeps the marker and drops any other query", () => {
+    const value = formatLandOnlyReturnTarget("/events/ahilles-042");
+    expect(parseSameOriginReturnTarget(value)).toBe(value);
+    expect(parseSameOriginReturnTarget(`${value}#top`)).toBe(value);
+    expect(parseSameOriginReturnTarget("/events/ahilles-042?next=x")).toBe(
+      "/events/ahilles-042",
+    );
+    expect(
+      parseSameOriginReturnTarget("/events/ahilles-042?intent=land&next=x"),
+    ).toBe("/events/ahilles-042");
   });
 });

@@ -135,6 +135,7 @@ describe("CongressSection", () => {
     const oral = await screen.findByTestId("congress-pick-oral");
     expect(within(oral).getByText("Приём до 15 января 2027 включительно")).toBeInTheDocument();
     expect(within(oral).getByRole("button", { name: "Начать заявку →" })).toBeEnabled();
+    expect(within(oral).getByRole("button", { name: "Начать заявку →" })).toHaveClass("text-sm");
     for (const k of ["poster", "abstract"]) {
       expect(within(screen.getByTestId(`congress-pick-${k}`)).queryByRole("button")).toBeNull();
     }
@@ -163,7 +164,11 @@ describe("CongressSection", () => {
     const rows = await screen.findAllByTestId("congress-row");
     expect(rows).toHaveLength(2);
     expect(within(rows[0]!).getByText("Отправлена")).toBeInTheDocument();
-    expect(within(rows[0]!).getByRole("button", { name: "Забрать на исправление →" })).toBeInTheDocument();
+    // The row's text action is the canvas `textAction` step (14px), not the
+    // row title's body size.
+    expect(within(rows[0]!).getByRole("button", { name: "Забрать на исправление →" })).toHaveClass(
+      "text-sm",
+    );
     expect(within(rows[1]!).getByText("Уточните дизайн исследования")).toBeInTheDocument();
     expect(within(rows[1]!).getByText(/^Исправить и отправить до .* · осталось/)).toBeInTheDocument();
     expect(within(rows[1]!).getByRole("button", { name: "Отозвать" })).toBeInTheDocument();

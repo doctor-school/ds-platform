@@ -225,7 +225,7 @@ export function AuthorsEditor({
         })}
       </div>
       {editable && authors.length < CONGRESS_SUBMISSION_LIMITS.authorsMax ? (
-        <Link asChild className="mt-3">
+        <Link asChild size="sm" className="mt-3">
           <button type="button" onClick={add}>
             {COPY.addAuthor}
           </button>

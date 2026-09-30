@@ -413,7 +413,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                         <p className="text-sm font-semibold text-foreground">{limitLine(it)}</p>
                       ) : null}
                       {avail ? (
-                        <Link asChild className="mt-auto self-start">
+                        <Link asChild size="sm" className="mt-auto self-start">
                           <button type="button" disabled={busy} onClick={() => void start(k)}>
                             {COPY.start}
                           </button>
@@ -550,7 +550,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                         {acts.primary || acts.secondary.length ? (
                           <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2 layout:mt-0 layout:max-w-60 layout:flex-col layout:items-end layout:text-right">
                             {acts.primary ? (
-                              <Link asChild>
+                              <Link asChild size="sm">
                                 <button
                                   type="button"
                                   disabled={busy}

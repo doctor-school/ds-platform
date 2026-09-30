@@ -377,7 +377,7 @@ export function SubmissionDetail({
             {detailActions.length ? (
               <div className="flex flex-wrap gap-x-6 gap-y-2.5">
                 {detailActions.map((a) => (
-                  <Link key={a.action} asChild tone={a.danger ? "danger" : "default"}>
+                  <Link key={a.action} asChild tone={a.danger ? "danger" : "default"} size="sm">
                     <button type="button" disabled={busy} onClick={() => runAction(a)}>
                       {a.label}
                     </button>

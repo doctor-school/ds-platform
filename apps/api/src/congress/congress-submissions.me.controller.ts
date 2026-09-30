@@ -92,10 +92,13 @@ export class CongressSubmissionsMeController {
     private readonly submissions: CongressSubmissionsService,
   ) {}
 
-  /** EARS-5, EARS-10, EARS-11 — the section; 404 for an event with no congress section. */
+  /**
+   * EARS-4, EARS-5, EARS-10, EARS-11 — the section; without `event`, the
+   * congress event's section; 404 for an event with no congress section.
+   */
   @Get()
   @Header("Cache-Control", "no-store")
-  @ApiQuery({ name: "event", required: true })
+  @ApiQuery({ name: "event", required: false })
   @ApiOkResponse({ type: CongressSubmissionSectionDto })
   @Authz({
     access: "authenticated",
@@ -109,6 +112,7 @@ export class CongressSubmissionsMeController {
     @Query("event") event?: string,
   ): Promise<CongressSubmissionSection> {
     const sub = subjectOf(req);
+    if (event === undefined) return this.submissions.section(sub, null);
     const eventId = EventQuerySchema.safeParse(event);
     if (!eventId.success) throw new BadRequestException("event must be a uuid");
     return this.submissions.section(sub, eventId.data);

@@ -118,10 +118,29 @@ export class CongressSubmissionsService {
 
   // ---------------------------------------------------------------- reads
 
-  /** EARS-5, EARS-10, EARS-11 — the author's section for one event. */
-  async section(sub: string, eventId: string): Promise<CongressSubmissionSection> {
+  /**
+   * EARS-4, EARS-5, EARS-10, EARS-11 — the author's section for one event;
+   * `null` is the congress event: the event with intake settings that starts
+   * latest (046-design «Entry and return»).
+   */
+  async section(
+    sub: string,
+    requestedEventId: string | null,
+  ): Promise<CongressSubmissionSection> {
     const user = await this.account(sub);
+    const eventId = requestedEventId ?? (await this.congressEventId(this.db));
     const settings = await this.settings(this.db, eventId);
+    const [event] = await this.db
+      .select({
+        slug: events.slug,
+        title: events.title,
+        startsAt: events.startsAt,
+        durationMin: events.durationMin,
+      })
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    if (!event) throw new NotFoundException("no congress section");
     const registration = await this.activeRegistration(this.db, user.id, eventId);
     const now = this.now();
 
@@ -160,6 +179,14 @@ export class CongressSubmissionsService {
 
     return {
       eventId,
+      event: {
+        slug: event.slug,
+        title: event.title,
+        startsAt: event.startsAt.toISOString(),
+        endsAt: new Date(
+          event.startsAt.getTime() + event.durationMin * 60_000,
+        ).toISOString(),
+      },
       registered: registration !== null,
       registrationUrl: settings.registrationUrl,
       consentRequired: await this.consentRequired(this.db, user.id),
@@ -537,6 +564,18 @@ export class CongressSubmissionsService {
       .limit(1);
     if (!user) throw new UnauthorizedException("authentication required");
     return user;
+  }
+
+  /** The congress event: settings present, latest start; none ⇒ 404 (EARS-1). */
+  private async congressEventId(db: Reader): Promise<string> {
+    const [row] = await db
+      .select({ id: events.id })
+      .from(congressSubmissionSettings)
+      .innerJoin(events, eq(events.id, congressSubmissionSettings.eventId))
+      .orderBy(desc(events.startsAt))
+      .limit(1);
+    if (!row) throw new NotFoundException("no congress section");
+    return row.id;
   }
 
   /** The event's congress settings; none ⇒ no congress section (EARS-1). */

@@ -103,11 +103,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     /** A congress event with its intake settings; the oral window as given. */
-    async function congress(oral: {
-      opensAt: Date | null;
-      closesAt: Date | null;
-      submitLimit?: number | null;
-    }): Promise<string> {
+    async function congress(
+      oral: {
+        opensAt: Date | null;
+        closesAt: Date | null;
+        submitLimit?: number | null;
+      },
+      startsAt = "2027-04-23T09:00:00.000Z",
+    ): Promise<string> {
       const id = randomUUID();
       createdEventIds.push(id);
       await pool.query(
@@ -115,10 +118,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state,
             participation_format)
-         VALUES ($1,$2,'Конгресс','Конгресс','2027-04-23T09:00:00.000Z',480,
+         VALUES ($1,$2,'Конгресс','Конгресс',$4,480,
                  'Ежегодный конгресс.',$3,'sponsor:congress',NULL,'published',
                  'offline')`,
-        [id, `congress-sub-${id.slice(0, 8)}`, ["cardiology"]],
+        [id, `congress-sub-${id.slice(0, 8)}`, ["cardiology"], startsAt],
       );
       await pool.query(
         `INSERT INTO congress_submission_settings (event_id, registration_url)
@@ -312,6 +315,24 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: d.headers,
       });
       expect(none.statusCode).toBe(404);
+    });
+
+    it("EARS-4: without an event the section resolves the latest congress event and names it for the heading", async () => {
+      const d = await doctor("sub-noevent");
+      const eventId = await congress(openWindow(), "2099-04-23T09:00:00.000Z");
+      await register(d, eventId);
+
+      const res = await app.inject({ method: "GET", url: BASE, headers: d.headers });
+      expect(res.statusCode, res.payload).toBe(200);
+      const s = CongressSubmissionSectionSchema.parse(res.json());
+      expect(s.eventId).toBe(eventId);
+      expect(s.registered).toBe(true);
+      expect(s.event).toEqual({
+        slug: `congress-sub-${eventId.slice(0, 8)}`,
+        title: "Конгресс",
+        startsAt: "2099-04-23T09:00:00.000Z",
+        endsAt: "2099-04-23T17:00:00.000Z",
+      });
     });
 
     it("EARS-6: a registered participant's draft is owned by the account, linked to the registration, author 1 prefilled from the answers", async () => {

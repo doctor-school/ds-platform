@@ -29,11 +29,11 @@ sequenceDiagram
     D->>F: guard → /login?returnTo=/account/congress
     F->>A: emailed code login (unchanged; first entry verifies the address, 044 EARS-14)
     F->>D: parseAccountReturnTarget("/account/congress", routes.account) → admitted
-    D->>A: GET /v1/me/congress-submissions?event=…
+    D->>A: GET /v1/me/congress-submissions
     A-->>D: registration presence, kind states, limits, own submissions
 ```
 
-`parseAccountReturnTarget` (`packages/auth-flow/src/return-target.ts`) admits `routes.account` and every page below it on a segment boundary (#1987), so `/account/congress` is a legal return target today; EARS-4 adds no shape and changes no login code. Which event the section shows: every event with a row in `congress_submission_settings` (one in 2027). The external registration address for EARS-5 is that row's `registration_url` (`https://orthobio.ru/registration` for the 2027 congress).
+`parseAccountReturnTarget` (`packages/auth-flow/src/return-target.ts`) admits `routes.account` and every page below it on a segment boundary (#1987), so `/account/congress` is a legal return target today; EARS-4 adds no shape and changes no login code. Which event the section shows: the event with a row in `congress_submission_settings` that starts latest (one in 2027) — `GET /v1/me/congress-submissions` without `event` resolves it and returns its slug, title and dates for the section heading, so `/account/congress` carries no event in its URL. The external registration address for EARS-5 is that row's `registration_url` (`https://orthobio.ru/registration` for the 2027 congress).
 
 ## Data model
 
@@ -171,7 +171,7 @@ sequenceDiagram
     end
 ```
 
-The advisory lock serialises concurrent sends of one account, event and kind so two tabs cannot both take the third abstract slot. The count covers every status except `draft` — `rejected` and `withdrawn` included (customer decision 2026-09-29) — and excludes the submission being sent, so a `needs_revision` resend — already counted — is never refused by its own slot; a resend checks its own `revision_due_at` instead of the kind window (`revision-closed` refuses it). The problem codes (`registration-required`, `kind-not-available` — the cabinet does not offer that kind's form yet —, `kind-not-open`, `kind-closed`, `revision-closed`, `status-conflict` — the action does not apply to the row's status —, `withdraw-not-allowed`, `limit-reached`, `first-author-limit-reached`, `age-limit`, `consent-required`, `statement-required`, `field-invalid`) map to RU copy in the package dictionary. Endpoints of the author (`access: authenticated`, ownership checked on every row): `GET /v1/me/congress-submissions?event=`, `POST /v1/me/congress-submissions` (`{eventId, kind, derivedFromId?}`), `PATCH /v1/me/congress-submissions/:id` (autosave, draft schema), `DELETE …/:id`, `POST …/:id/send`, `POST …/:id/withdraw`, `PUT /v1/me/birth-date`.
+The advisory lock serialises concurrent sends of one account, event and kind so two tabs cannot both take the third abstract slot. The count covers every status except `draft` — `rejected` and `withdrawn` included (customer decision 2026-09-29) — and excludes the submission being sent, so a `needs_revision` resend — already counted — is never refused by its own slot; a resend checks its own `revision_due_at` instead of the kind window (`revision-closed` refuses it). The problem codes (`registration-required`, `kind-not-available` — the cabinet does not offer that kind's form yet —, `kind-not-open`, `kind-closed`, `revision-closed`, `status-conflict` — the action does not apply to the row's status —, `withdraw-not-allowed`, `limit-reached`, `first-author-limit-reached`, `age-limit`, `consent-required`, `statement-required`, `field-invalid`) map to RU copy in the package dictionary. Endpoints of the author (`access: authenticated`, ownership checked on every row): `GET /v1/me/congress-submissions[?event=]`, `POST /v1/me/congress-submissions` (`{eventId, kind, derivedFromId?}`), `PATCH /v1/me/congress-submissions/:id` (autosave, draft schema), `DELETE …/:id`, `POST …/:id/send`, `POST …/:id/withdraw`, `PUT /v1/me/birth-date`.
 
 **Autosave.** The hook debounces 1.5 s after the last keystroke and flushes on blur and on page hide; the PATCH carries the full draft object (last write wins for one author). The saved state reads «Сохранено» / «Сохраняем…» / «Не удалось сохранить — повторим» with automatic retry.
 

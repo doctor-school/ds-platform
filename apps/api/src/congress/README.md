@@ -159,9 +159,11 @@ surface of 046 uses.
 | `congress-submissions.me.controller` | `/v1/me/congress-submissions*` — `authenticated` / `doctor_guest` / `fast-path`, every row self-scoped. |
 | `congress-submissions.service`       | The section read, draft create/autosave/delete, the send cascade and the withdraw.                      |
 
-Endpoints: `GET ?event=` (the section: registration presence, per-kind intake
-state and limit usage, the next send's consent requirement, the account's
-submissions), `POST` (create a draft), `PATCH /:id` (autosave), `POST /:id/send`,
+Endpoints: `GET [?event=]` (the section: the event's slug, title and dates,
+registration presence, per-kind intake state and limit usage, the next send's
+consent requirement, the account's submissions; without `event` — the event
+with intake settings that starts latest, which `/account/congress` shows),
+`POST` (create a draft), `PATCH /:id` (autosave), `POST /:id/send`,
 `POST /:id/withdraw {expectedStatus}`, `DELETE /:id` (drafts only). A row of
 another account, or one whose registration is no longer active, is 404.
 Refusals carry `{problems: [{code, field?, params?}]}` — 422 for an unmet send

@@ -403,9 +403,26 @@ export type CongressSubmissionKindIntake = z.infer<
   typeof CongressSubmissionKindIntakeSchema
 >;
 
-/** `GET /v1/me/congress-submissions?event=` — the author's section (EARS-5, EARS-10, EARS-11). */
+/** The event the section is for, as its heading names it (EARS-4). */
+export const CongressSubmissionSectionEventSchema = z.object({
+  slug: z.string(),
+  title: z.string(),
+  startsAt: z.iso.datetime({ offset: true }),
+  endsAt: z.iso.datetime({ offset: true }),
+});
+export type CongressSubmissionSectionEvent = z.infer<
+  typeof CongressSubmissionSectionEventSchema
+>;
+
+/**
+ * `GET /v1/me/congress-submissions[?event=]` — the author's section (EARS-4,
+ * EARS-5, EARS-10, EARS-11). Without `event` it is the section of the congress
+ * event — the event with intake settings that starts latest (046-design
+ * «Entry and return»), so `/account/congress` needs no event in its URL.
+ */
 export const CongressSubmissionSectionSchema = z.object({
   eventId: z.uuid(),
+  event: CongressSubmissionSectionEventSchema,
   /** An active registration of the account for the event exists (EARS-5). */
   registered: z.boolean(),
   registrationUrl: z.string().nullable(),

@@ -2283,6 +2283,14 @@ export interface components {
         };
         CongressSubmissionSectionDto: {
             consentRequired: boolean;
+            event: {
+                /** Format: date-time */
+                endsAt: string;
+                slug: string;
+                /** Format: date-time */
+                startsAt: string;
+                title: string;
+            };
             /** Format: uuid */
             eventId: string;
             kinds: {
@@ -5001,8 +5009,8 @@ export interface operations {
     };
     CongressSubmissionsMeController_section: {
         parameters: {
-            query: {
-                event: string;
+            query?: {
+                event?: string;
             };
             header?: never;
             path?: never;

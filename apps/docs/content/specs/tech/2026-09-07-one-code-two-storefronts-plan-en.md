@@ -163,7 +163,7 @@ Everything below that a wave does not close on its way is owned by **#2075** (st
 
 **Code.**
 
-- [ ] Twin files retired by wave 1: `auth-client`, `auth-error-message`, `bot-protection`, `theme-toggle`, `auth-shell`.
+- [x] Twin files retired by wave 1: `auth-client`, `auth-error-message`, `bot-protection`, `theme-toggle`, `auth-shell` — verified on main c171730d: no `auth-client`, `auth-error-message`, `bot-protection`, `theme-toggle`, `auth-shell` file under `apps/portal` or `apps/doctor` (the only match is the e2e spec `apps/portal/e2e/shell/theme-toggle.spec.ts`).
 - The `theme` store twin (`apps/{portal,doctor}/lib/theme.ts`, `apps/portal/components/theme-watcher.tsx`) belongs to no wave and no stage-3 item: its owner is the `DEBT.md` line «2026-09-11 PR for #2180 — the theme STORE is a three-copy twin», whose `promote-when` opens the Issue that retires it.
 - [ ] `escapeLike` ×6 in `apps/api` — one helper (#1644), independent of the waves.
 - [ ] `apps/doctor/e2e/support/live-stand-env.ts` twin — one helper under `packages/` or `tools/`.

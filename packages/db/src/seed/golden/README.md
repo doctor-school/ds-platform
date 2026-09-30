@@ -421,9 +421,11 @@ the transaction rather than overwriting it. A step may declare the property only
 while every table referencing its rows is named in its `volumeNamespaceChildren`:
 those children are deleted first, in plan order, for the replaced range alone
 (retained children reference their parent `ON DELETE RESTRICT`, #1278). Today
-the one declared child is `registration_attendance` under `registrations` — the
-044 per-day attendance marks (#2381), meaningless without the registration the
-re-pin replaces; marks on product-created registrations are untouched. An
+the declared children are both under `registrations`: `registration_attendance`
+— the 044 per-day attendance marks (#2381) — and `congress_submissions` — the
+046 submissions a registration holds (#2433); each is meaningless without the
+registration the re-pin replaces, and rows on product-created registrations are
+untouched. An
 undeclared child FK would turn the replacement into a cascade or a `restrict`
 failure, which is what the e2e regression asserts with a
 `pg_constraint` query per table.

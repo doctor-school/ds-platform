@@ -94,7 +94,7 @@ These are built as stated; each is a setting or a small rule that can be flipped
 
 ## Approved mockup
 
-No approved mockup yet. There is no canvas for the section, the three forms, the admin list, card and settings, or the letters. Each goes through the Stage-A design gate before its slice is built (`046-design.md`, «Delivery slices»); the admin list and side card reuse the owner-approved admin list and the side panel already used for the 044 participant card.
+The cabinet section «Мои заявки на Конгресс» is drawn on the canvas `design-source/doctor-lk-congress.dc.html`, the owner's final layout А (2026-09-30). The admin list, card and settings and the letters have no canvas; each goes through the Stage-A design gate before its slice is built (`046-design.md`, «Delivery slices»); the admin list and side card reuse the owner-approved admin list and the side panel already used for the 044 participant card.
 
 ## Dependencies
 

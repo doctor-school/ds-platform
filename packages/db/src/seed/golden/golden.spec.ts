@@ -383,7 +383,11 @@ describe("#2063 golden seed plan", () => {
         child.name,
         child.parentKey,
       ]),
-    ).toEqual([["registration_attendance", "registrationId"]]);
+    ).toEqual([
+      ["registration_attendance", "registrationId"],
+      // 046 EARS-6 (#2433) — a submission is held by its registration.
+      ["congress_submissions", "registrationId"],
+    ]);
     for (const step of plan) {
       if (step.name === "registrations") continue;
       expect(step.volumeNamespaceChildren).toBeUndefined();

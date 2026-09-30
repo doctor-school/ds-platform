@@ -149,3 +149,47 @@ the one conversion in `@ds/schemas` (`congress-intake-settings.schema.ts`): the
 opening day at 00:00 Moscow, each last day at 00:00 Moscow of the day after.
 The same file holds `isCongressKindIntakeOpen`, the intake rule every later
 surface of 046 uses.
+
+## Congress submissions — the author's cabinet (feature 046, EARS-5…EARS-17)
+
+| File                                 | Role                                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `congress-submissions.me.controller` | `/v1/me/congress-submissions*` — `authenticated` / `doctor_guest` / `fast-path`, every row self-scoped. |
+| `congress-submissions.service`       | The section read, draft create/autosave/delete, the send cascade and the withdraw.                      |
+
+Endpoints: `GET ?event=` (the section: registration presence, per-kind intake
+state and limit usage, the next send's consent requirement, the account's
+submissions), `POST` (create a draft), `PATCH /:id` (autosave), `POST /:id/send`,
+`POST /:id/withdraw {expectedStatus}`, `DELETE /:id` (drafts only). A row of
+another account, or one whose registration is no longer active, is 404.
+Refusals carry `{problems: [{code, field?, params?}]}` — 422 for an unmet send
+condition, 409 for a status the action does not apply to; the codes live in
+`@ds/schemas` (`congress-submission.schema.ts`) with the field limits, the
+length rule and the per-kind forms. A kind is offered once its form is
+registered there (oral now; posters and abstracts with their slices).
+
+- **Send cascade (EARS-9).** One transaction: the row locked, an advisory lock on
+  (account, event, kind), then registration, the kind window, the complete field
+  set, the limit and the consent are all checked and every failure named; a
+  refusal throws inside the transaction, so nothing is written. Author names
+  are normalised by the 044 EARS-33 rule on send.
+- **Limit (EARS-17).** Counts the account's submissions of the event and kind in
+  any status except `draft` — `rejected` and `withdrawn` included — the one being
+  sent excluded, under the advisory lock, so two tabs cannot both take the last
+  slot.
+- **Submission consent (EARS-16).** Purpose `congress-submission-personal-data`,
+  version = the congress site policy stamp `CONGRESS_SIGNUP_CONSENT_VERSION`
+  (read through `resolveCongressConsentVersion`, the same reader 044 uses). The
+  send asks for it while the account has no row of that purpose at the current
+  version — one row per account and version, whatever the event.
+- **Withdraw (EARS-12).** `submitted` while the kind is open → `draft`;
+  `in_review`, `needs_revision`, or `submitted` after closing → `withdrawn`. The
+  update matches only a row still in `expectedStatus`, so a concurrent committee
+  change wins and the withdraw is refused with the current status.
+- **Delete (EARS-13).** The one physical delete: an unsent draft is its author's
+  private scratch; any other status is 409.
+
+`congress_submissions` (migration 0043) carries the 010 `audit_row_change()`
+trigger — the ledger is the status history — and `authors` is a PD-masked
+column. `revision_due_at` is read by the section and the autosave rule; the
+committee's status route writes it.

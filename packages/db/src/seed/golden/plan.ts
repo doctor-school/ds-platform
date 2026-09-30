@@ -18,6 +18,7 @@ import {
   congressSubmissionKindSettings,
   congressSubmissionSettings,
 } from "../../schema/congress-submission-settings.js";
+import { congressSubmissions } from "../../schema/congress-submissions.js";
 import { registrationAttendance } from "../../schema/registration-attendance.js";
 import { registrations } from "../../schema/registrations.js";
 import {
@@ -94,8 +95,9 @@ export interface GoldenSeedStep {
    * names, never a physical cascade. A child is listed here only when it hangs
    * off the replaced rows alone and carries no meaning without them — today the
    * per-day attendance marks of a registration (044 EARS-34, #2381), which a
-   * registrar may set on a staging golden registration and which go with the
-   * registration the re-pin replaces. `parentKey` is the Drizzle property name
+   * registrar may set on a staging golden registration, and the congress
+   * submissions it holds (046 EARS-5, #2433), which a tester may create on one;
+   * both go with the registration the re-pin replaces. `parentKey` is the Drizzle property name
    * of the child's FK column.
    */
   volumeNamespaceChildren?: GoldenVolumeChild[];
@@ -240,6 +242,11 @@ export function buildGoldenSeedPlan(
         {
           name: "registration_attendance",
           table: registrationAttendance,
+          parentKey: "registrationId",
+        },
+        {
+          name: "congress_submissions",
+          table: congressSubmissions,
           parentKey: "registrationId",
         },
       ],

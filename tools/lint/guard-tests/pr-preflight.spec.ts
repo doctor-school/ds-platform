@@ -33,6 +33,7 @@ describe("pr-preflight GUARDS roster", () => {
       "prior-decisions",
       "spec-status-fresh",
       "product-note",
+      "product-note-boundary",
       "assignee-milestone",
       "pr-evidence",
     ]);

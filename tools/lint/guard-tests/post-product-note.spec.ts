@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -335,5 +336,51 @@ describe("post-product-note — DELIVERY_ENV invariant (subprocess)", () => {
     });
     expect(code).toBe(0);
     expect(stdout).toContain("nothing to deliver");
+  });
+});
+
+// ── machine-marker boundary (Issue #2489) ───────────────────────────────────
+describe("post-product-note — machine-marker section boundary (pure)", () => {
+  const FIXTURE = resolve(
+    HERE,
+    "fixtures",
+    "product-note-boundary",
+    "pr-2451-body.txt",
+  );
+  const RU_NOTE = [
+    "В админке у мероприятия появилась ссылка «Приём материалов Конгресса». На этой странице администратор платформы настраивает, как Конгресс принимает материалы:",
+    "- адрес регистрации участников — ссылка для тех, кто ещё не зарегистрирован на Конгресс;",
+    "- для каждого вида — «Устный доклад», «Постерный доклад», «Тезисы» — дата открытия приёма и лимит заявок.",
+    "Все даты — календарные дни по московскому времени, последний день включительно.",
+  ].join("\n");
+
+  it("2489: extractNote on the #2451-shaped body returns exactly the RU note (no evidence tail)", () => {
+    const body = readFileSync(FIXTURE, "utf8").replace(/\r\n/g, "\n");
+    expect(extractNote(body)).toBe(RU_NOTE);
+  });
+
+  it("2489: a RU sentence with a mid-line colon and a Cyrillic `Ключ:` line stay in the note", () => {
+    const body =
+      "## Product note (RU)\n\nАдминистратор видит раздел: сроки приёма.\nВажно: даты по Москве, начало в 12:30.\n\n## Linked\n";
+    expect(extractNote(body)).toBe(
+      "Администратор видит раздел: сроки приёма.\nВажно: даты по Москве, начало в 12:30.",
+    );
+  });
+
+  it("2489: `Behavior change:` (one inner space) and a bulleted `- ui-source: x` are markers; a URL line is not", () => {
+    const tail = (line: string) =>
+      extractNote(`## Product note (RU)\n\nВрачи видят дату эфира.\n${line}\n`);
+    expect(tail("Behavior change: new route")).toBe("Врачи видят дату эфира.");
+    expect(tail("- ui-source: feature-x")).toBe("Врачи видят дату эфира.");
+    expect(tail("> Stage-B-head:")).toBe("Врачи видят дату эфира.");
+    expect(tail("https://academy.doctor.school/events")).toBe(
+      "Врачи видят дату эфира.\nhttps://academy.doctor.school/events",
+    );
+  });
+
+  it("2489: a marker-shaped line inside the template's HTML comment is not a boundary", () => {
+    const body =
+      "## Product note (RU)\n\n<!--\nNote: guidance for the author.\n-->\n\nВрачи видят дату эфира.\n\n## Linked\n";
+    expect(extractNote(body)).toBe("Врачи видят дату эфира.");
   });
 });

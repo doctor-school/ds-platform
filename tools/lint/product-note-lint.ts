@@ -38,24 +38,13 @@
  *
  * Run: `pnpm lint:product-note` (PR_NUMBER from the Actions context).
  */
+// The ONE product-note extraction seam (Issue #2489): the section boundary, the
+// `product-note:` single-line marker, HTML-comment + service-line stripping and the
+// real-note test are the SAME functions the merge post and the release digest use.
+import { extractNote, noteIsReal } from "../ci/post-product-note.mjs";
 import { ghViewJson } from "./lib/gh";
 
 const TAG = "[product-note]";
-
-// The `## Product note (RU)` section heading (any level, `(RU)` optional,
-// case-insensitive). We slice from after this heading line to the next heading
-// (or EOF) in code — a non-greedy regex stops at the blank line after the heading.
-const HEADING_RE = /^#{1,6}\s*product\s+note\b[^\n]*$/im;
-const NEXT_HEADING_RE = /\n#{1,6}\s/;
-// Also accept a single-line `product-note:` marker (mirrors registry-research's
-// dual marker/section shape) — value is everything after the colon.
-const MARKER_RE = /^[ \t>*-]*product[- ]note\s*:\s*(.*)$/im;
-// HTML comments (the template's inline authoring guidance) are not note content.
-const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
-// The literal opt-out for an internal-only PR.
-const NONE_RE = /^none[.!]?$/i;
-// Placeholder values that read as "left blank" — treated the same as absent.
-const PLACEHOLDER_RE = /^(n\/?a|tbd|todo|xxx|\.\.\.|<.*>|_+|-+)$/i;
 
 // Kind labels that mark a PR as user-facing. `feature` / `bug` are the bare kind
 // labels (repo-conventions.md); a `feature:NNN-<slug>` area label is also, by
@@ -96,41 +85,6 @@ function isUserFacing(labels: GhLabel[]): boolean {
   );
 }
 
-/** The `## Product note (RU)` section body (after the heading, up to the next
- * heading or EOF), or null when there is no such heading. */
-function sectionBody(body: string): string | null {
-  const h = body.match(HEADING_RE);
-  if (h?.index === undefined) return null;
-  const rest = body.slice(h.index + h[0].length);
-  const next = rest.search(NEXT_HEADING_RE);
-  return next === -1 ? rest : rest.slice(0, next);
-}
-
-/**
- * The Product note text — from the `## Product note (RU)` section or a
- * `product-note:` marker line — with HTML comments stripped and trimmed. Returns
- * "" when there is no section/marker or it is empty after stripping.
- */
-export function extractNote(body: string): string {
-  if (!body) return "";
-  const section = sectionBody(body);
-  if (section !== null) return section.replace(HTML_COMMENT_RE, "").trim();
-  const marker = body.match(MARKER_RE);
-  if (marker) return (marker[1] ?? "").replace(HTML_COMMENT_RE, "").trim();
-  return "";
-}
-
-/** A note counts as a REAL product note (not `none`, blank, or a placeholder). */
-export function noteIsReal(note: string): boolean {
-  const firstLine = note.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
-  const v = firstLine.trim();
-  if (v.length === 0) return false;
-  if (NONE_RE.test(v)) return false;
-  if (PLACEHOLDER_RE.test(v)) return false;
-  // A real note is a sentence, not a bare token.
-  return note.trim().length >= 8;
-}
-
 async function main(): Promise<void> {
   if (process.env.GITHUB_EVENT_NAME !== "pull_request") {
     info(
@@ -167,7 +121,9 @@ async function main(): Promise<void> {
   if (!real) {
     fail(
       `PR #${pr.number} is user-facing but carries no real \`Product note (RU)\`` +
-        (note ? ` (found: "${note.slice(0, 40)}")` : " (section missing or empty)") +
+        (note
+          ? ` (found: "${note.slice(0, 40)}")`
+          : " (section missing or empty)") +
         `. Add 2–4 sentences of the user-visible change in plain product Russian to the ` +
         `\`## Product note (RU)\` section — mirror the session report's «Для пользователя» ` +
         `paragraph. \`none\` is allowed only on internal-only PRs (chore/CI/refactor/deps).`,

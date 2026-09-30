@@ -14,6 +14,9 @@ author it once, mirror it here.
 
 Write `none` for an internal-only PR (chore / CI / refactor / deps) — but `none`
 on a `feature`/`bug`-labeled PR fails the `product-note` guard.
+
+RU prose only: evidence / marker lines (`registry-research:`, `ui-*:`, `Stage-B*:`)
+go under `## Delivery evidence` — the `product-note-boundary` guard fails them here.
 -->
 
 none

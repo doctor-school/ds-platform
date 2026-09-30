@@ -23,8 +23,10 @@
 // stays a clean green success and is never turned into a red job by a missing marker, while
 // every message that is actually POSTed is guaranteed to carry its environment footer.
 //
-// The section-extraction mirrors tools/lint/product-note-lint.ts so the guard and
-// the delivery read the same source of truth.
+// This module is the ONE product-note extraction seam (Issue #2489): the
+// `product-note` lint, the `product-note-boundary` lint, this per-merge post and
+// the PROD release digest (tools/deploy/release-notes.mjs) all import
+// `sectionBody` / `extractNote` / `noteIsReal` from here — no local copies.
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -37,6 +39,18 @@ const HEADING_RE = /^#{1,6}\s*product\s+note\b[^\n]*$/im;
 // top-of-body note no longer lets the English PR summary bleed in (Issue #659).
 const SECTION_STOP_RE =
   /\n(?:#{1,6}\s|[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$)/m;
+// A MACHINE-MARKER line (Issue #2489) — the structural end of the note. PR
+// bodies carry heading-less evidence lines (`registry-research: …`,
+// `ui-render-desktop-light: https://…`, `Stage-B-owner-quote: …`, `Behavior
+// change: …`); when the note was the last headed section they followed it and
+// the capture swallowed them into Mattermost and the release digest. A marker
+// is: an optional leading `>`/`*`/`-`/whitespace, an ASCII key (a letter, then
+// letters/digits/`-`/`_`, at most one inner space), then `:` followed by
+// whitespace or end of line. RU prose never matches — a Cyrillic key is not
+// ASCII and a mid-sentence colon is not at a key position; a URL line does not
+// match either (`https:` is followed by `//`, not whitespace).
+export const MACHINE_MARKER_LINE_RE =
+  /^[ \t>*-]*[A-Za-z][A-Za-z0-9_-]*(?: [A-Za-z0-9_-]+)?:(?:[ \t]|$)/;
 const MARKER_RE = /^[ \t>*-]*product[- ]note\s*:\s*(.*)$/im;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 const NONE_RE = /^none[.!]?$/i;
@@ -73,13 +87,52 @@ export function stripServiceMarkers(text) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-/** The `## Product note (RU)` section body, or null when there is no such heading. */
-function sectionBody(body) {
+/**
+ * The raw `## Product note (RU)` section — heading → next ATX heading / thematic
+ * break / end of body, WITHOUT the machine-marker stop — or null when there is
+ * no such heading. The `product-note-boundary` guard reads this to find evidence
+ * lines that sit inside the section (Issue #2489).
+ */
+export function rawSectionBody(body) {
+  if (!body) return null;
   const h = body.match(HEADING_RE);
   if (h?.index === undefined || h.index === null) return null;
   const rest = body.slice(h.index + h[0].length);
   const next = rest.search(SECTION_STOP_RE);
   return next === -1 ? rest : rest.slice(0, next);
+}
+
+/** `text` split into lines with HTML comments blanked out (line count kept), so a
+ *  marker-shaped line inside the template's guidance comment is never a marker. */
+function linesOutsideComments(text) {
+  return text
+    .replace(HTML_COMMENT_RE, (c) => c.replace(/[^\r\n]/g, " "))
+    .split(/\r?\n/);
+}
+
+/** The first machine-marker line in `text` (HTML comments ignored), or null. */
+export function firstMarkerLine(text) {
+  if (!text) return null;
+  return (
+    linesOutsideComments(text).find((line) =>
+      MACHINE_MARKER_LINE_RE.test(line),
+    ) ?? null
+  );
+}
+
+/**
+ * The `## Product note (RU)` section body, or null when there is no such
+ * heading. The capture stops at the FIRST of: the next heading, a thematic
+ * break, end of body, or a MACHINE-MARKER line (Issue #2489) — the structural
+ * boundary that keeps a PR's evidence tail out of the delivered note.
+ */
+export function sectionBody(body) {
+  const raw = rawSectionBody(body);
+  if (raw === null) return null;
+  const stop = linesOutsideComments(raw).findIndex((line) =>
+    MACHINE_MARKER_LINE_RE.test(line),
+  );
+  return stop === -1 ? raw : raw.split(/\r?\n/).slice(0, stop).join("\n");
 }
 
 /** The Product note text with HTML comments and service-marker lines stripped
@@ -98,6 +151,17 @@ export function extractNote(body) {
       (marker[1] ?? "").replace(HTML_COMMENT_RE, ""),
     ).trim();
   return "";
+}
+
+/** The RAW section's note text — comments and service lines stripped, but NOT
+ *  cut at the first machine-marker line — or "" when there is no section. The
+ *  `product-note-boundary` guard decides "is there a note to police" from this
+ *  (Issue #2489): a note whose first line is an ASCII key (`Email: …`) cuts to
+ *  "" in `extractNote`, yet it is a real note that delivery would drop. */
+export function rawNoteText(body) {
+  const raw = rawSectionBody(body);
+  if (raw === null) return "";
+  return stripServiceMarkers(raw.replace(HTML_COMMENT_RE, "")).trim();
 }
 
 /** True when the note is a REAL product note (not `none`, blank, or placeholder). */

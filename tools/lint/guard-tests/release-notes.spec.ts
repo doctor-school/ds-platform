@@ -53,9 +53,9 @@ describe("release-notes — extractPrNumbers (pure)", () => {
 
   it("multiple `(#N)` in one subject → the LAST (the squash-merge number)", () => {
     // `"... (#651) (#875)"` refers to PR #875 — the merge number is appended last.
-    expect(extractPrNumbers(["tooling(ci): re-run guards (#651) (#875)"])).toEqual([
-      875,
-    ]);
+    expect(
+      extractPrNumbers(["tooling(ci): re-run guards (#651) (#875)"]),
+    ).toEqual([875]);
   });
 
   it("a subject with no `(#N)` is skipped", () => {
@@ -187,10 +187,40 @@ describe("release-notes — main() ordering invariants (subprocess)", () => {
   });
 
   it("no webhook + not dry-run → exit 0, «not configured» (before the env check)", () => {
-    const { code, stdout } = runScript(["--prev-sha", HEX_A, "--new-sha", HEX_B], {
-      // no MATTERMOST_WEBHOOK_URL, no DELIVERY_ENV
-    });
+    const { code, stdout } = runScript(
+      ["--prev-sha", HEX_A, "--new-sha", HEX_B],
+      {
+        // no MATTERMOST_WEBHOOK_URL, no DELIVERY_ENV
+      },
+    );
     expect(code).toBe(0);
     expect(stdout).toContain("not configured");
+  });
+});
+
+// ── machine-marker boundary reaches the digest (Issue #2489) ────────────────
+describe("release-notes — the digest carries no PR evidence tail (#2489)", () => {
+  it("2489: a digest over a PR set containing the #2451-shaped body has no ui-/Stage-B-/evidence-URL lines", () => {
+    const fixture = readFileSync(
+      resolve(HERE, "fixtures", "product-note-boundary", "pr-2451-body.txt"),
+      "utf8",
+    );
+    const notes = [
+      { body: fixture, title: "feat: congress intake", url: "https://x/2451" },
+      {
+        body: "## Product note (RU)\n\nПочинили вход по SMS.\n\n## Linked\n",
+        title: "fix: sms",
+        url: "https://x/2",
+      },
+    ].map(({ body, title, url }) => ({ note: extractNote(body), title, url }));
+    const { text } = buildDigest({ notes, newSha: HEX_A, footer: PROD_FOOTER });
+    expect(text).toContain("Приём материалов Конгресса");
+    expect(text).toContain("Починили вход по SMS.");
+    for (const line of text.split("\n")) {
+      expect(line).not.toMatch(
+        /^\s*(ui-|Stage-B|registry-research|Applicability|Changeset|Behavior change)/,
+      );
+      expect(line).not.toMatch(/raw\.githubusercontent|claude\.ai\/code/);
+    }
   });
 });

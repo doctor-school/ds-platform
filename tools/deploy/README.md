@@ -454,7 +454,9 @@ node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> [--dry
 Posts ONE aggregated **Russian, product-language** release note to the **same**
 `MATTERMOST_WEBHOOK_URL` the per-PR notes use (`tools/ci/post-product-note.mjs`,
 #654) — reusing its `extractNote` / `noteIsReal` / `envFooter` seams so the guard,
-the per-PR note, and this digest read one source of truth. The digest deliberately
+the per-PR note, and this digest read one source of truth. The note section ends at
+the next heading, a thematic break, or the first machine-marker line (`key: …`,
+#2489), so a PR's evidence tail never reaches the digest. The digest deliberately
 does NOT reuse `labelsAreProductKind`: inclusion here is note-driven (#2241 — see
 "Note-driven inclusion" below), while the kind-label gate stays a per-PR-post rule.
 

@@ -6,6 +6,8 @@ import { CongressIntakeSettingsAdminController } from "./congress-intake-setting
 import { CongressIntakeSettingsService } from "./congress-intake-settings.service.js";
 import { CongressSignUpController } from "./congress-signup.controller.js";
 import { CongressSignUpService } from "./congress-signup.service.js";
+import { CongressSubmissionsMeController } from "./congress-submissions.me.controller.js";
+import { CongressSubmissionsService } from "./congress-submissions.service.js";
 import {
   CONGRESS_SIGN_UP_CLOCK,
   CONGRESS_SIGN_UP_ENV,
@@ -31,10 +33,13 @@ import {
   controllers: [
     CongressSignUpController,
     CongressIntakeSettingsAdminController,
+    // 046 EARS-4…17: the author's submissions cabinet.
+    CongressSubmissionsMeController,
   ],
   providers: [
     CongressSignUpService,
     CongressIntakeSettingsService,
+    CongressSubmissionsService,
     {
       provide: CONGRESS_SIGN_UP_CLOCK,
       useValue: (() => new Date()) satisfies CongressSignUpClock,

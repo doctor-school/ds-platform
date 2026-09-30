@@ -7,7 +7,8 @@
 /**
  * PD-column registry (EARS-7, ADR-0009 §2.4): per PD-bearing table, the columns
  * whose values are masked out of audit diffs (`{masked: true}`, no old/new).
- * As-built PD-bearing tables: `users`, `consent_records`, `registrations`; a
+ * As-built PD-bearing tables: `users`, `consent_records`, `registrations`,
+ * `congress_submissions` (046: `authors`); a
  * future table the ADR-0009 retention matrix classifies as PD-bearing is added
  * here AND in a migration regenerating `audit_pd_columns()`.
  *
@@ -26,6 +27,7 @@ export const AUDIT_PD_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   users: ["email", "phone", "display_name"],
   consent_records: ["user_id"],
   registrations: ["answers"],
+  congress_submissions: ["authors"],
 };
 
 /**

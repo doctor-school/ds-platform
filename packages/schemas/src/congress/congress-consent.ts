@@ -44,3 +44,30 @@ export const isCongressSignUpConsentPurpose = (
   purpose: string,
 ): purpose is CongressSignUpConsentPurpose =>
   (CONGRESS_SIGN_UP_CONSENT_PURPOSES as readonly string[]).includes(purpose);
+
+/**
+ * 046 EARS-16 — the congress submission personal-data consent: the submission
+ * content, the co-authors' data the author supplies, the birth date for the
+ * poster rule and the disclosure to the event's program committee and congress
+ * partner.
+ *
+ * Its document is the congress site personal-data policy — the same published
+ * text 044 EARS-9 records — so its version is the same server stamp
+ * (`CONGRESS_SIGNUP_CONSENT_VERSION`); the PURPOSE stays distinct, so accepting
+ * the policy at registration writes no submission-consent row (046-design
+ * «Consents and statements»).
+ */
+export const CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE =
+  "congress-submission-personal-data";
+
+/**
+ * 046 — every purpose the submissions cabinet is willing to record, as a CLOSED
+ * list (the same reasoning as {@link CONGRESS_SIGN_UP_CONSENT_PURPOSES}). The
+ * abstracts publication consent (EARS-23) joins it with the abstracts slice.
+ */
+export const CONGRESS_SUBMISSION_CONSENT_PURPOSES = [
+  CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
+] as const;
+
+export type CongressSubmissionConsentPurpose =
+  (typeof CONGRESS_SUBMISSION_CONSENT_PURPOSES)[number];

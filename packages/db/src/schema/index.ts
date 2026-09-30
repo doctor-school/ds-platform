@@ -14,3 +14,4 @@ export * from "./doctor-specialties.js";
 export * from "./event-role-grants.js";
 export * from "./registration-attendance.js";
 export * from "./congress-submission-settings.js";
+export * from "./congress-submissions.js";

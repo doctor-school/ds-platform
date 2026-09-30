@@ -1,0 +1,688 @@
+import { randomUUID } from "node:crypto";
+import { Test, type TestingModule } from "@nestjs/testing";
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from "@nestjs/platform-fastify";
+import { VersioningType } from "@nestjs/common";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type pg from "pg";
+import {
+  CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
+  CongressSubmissionRefusalSchema,
+  CongressSubmissionSchema,
+  CongressSubmissionSectionSchema,
+} from "@ds/schemas";
+import { AppModule } from "../../src/app.module.js";
+import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
+import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
+import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
+
+/**
+ * 046 EARS-5…EARS-13, EARS-16, EARS-17 — the author's congress submissions,
+ * `/v1/me/congress-submissions*`, oral kind. Verification rows V-3, V-4 (the
+ * window and the status; the receipt letter clauses belong to EARS-14), V-5,
+ * V-6 (the limit, oral kind) and V-9.
+ *
+ * Driven through the REAL routes on the REAL module with a real doctor session;
+ * the committee's status changes (their route is a later work package) are
+ * written straight to the row, which is exactly the concurrent change the
+ * author's conditional withdraw has to lose to.
+ *
+ * Runs against the dev-stand Postgres + the fake IdP; skips when DATABASE_URL or
+ * IDP_ISSUER is absent so the shared CI unit job stays green.
+ */
+
+const VERSION_A = `2026-10-01.sha256-${"a".repeat(64)}`;
+const VERSION_B = `2026-11-01.sha256-${"b".repeat(64)}`;
+const DAY = 24 * 60 * 60 * 1000;
+const BASE = "/v1/me/congress-submissions";
+
+describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
+  "046 congress submissions — the author's cabinet, oral talks (e2e)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    const mailer = new FakeMailer();
+    const fake = new FakeIdpClient(mailer);
+    const password = "Aa1!ufficiently-long-pw";
+    const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const createdEmails: string[] = [];
+    const createdEventIds: string[] = [];
+
+    type Doctor = { headers: Record<string, string>; userId: string };
+
+    async function doctor(prefix: string): Promise<Doctor> {
+      const email = `${prefix}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode, reg.payload).toBe(200);
+      const login = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: email, password },
+      });
+      expect(login.statusCode).toBe(200);
+      const cookie = login.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+      const { rows } = await pool.query<{ id: string }>(
+        "SELECT id FROM users WHERE email = $1",
+        [email],
+      );
+      return {
+        headers: {
+          ...device,
+          cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
+        },
+        userId: rows[0]!.id,
+      };
+    }
+
+    /** A congress event with its intake settings; the oral window as given. */
+    async function congress(oral: {
+      opensAt: Date | null;
+      closesAt: Date | null;
+      submitLimit?: number | null;
+    }): Promise<string> {
+      const id = randomUUID();
+      createdEventIds.push(id);
+      await pool.query(
+        `INSERT INTO events
+           (id, slug, title, school, starts_at, duration_min, description,
+            specialties, partner_ref, program_pdf_ref, state,
+            participation_format)
+         VALUES ($1,$2,'Конгресс','Конгресс','2027-04-23T09:00:00.000Z',480,
+                 'Ежегодный конгресс.',$3,'sponsor:congress',NULL,'published',
+                 'offline')`,
+        [id, `congress-sub-${id.slice(0, 8)}`, ["cardiology"]],
+      );
+      await pool.query(
+        `INSERT INTO congress_submission_settings (event_id, registration_url)
+         VALUES ($1, 'https://orthobio.ru/registration')`,
+        [id],
+      );
+      await pool.query(
+        `INSERT INTO congress_submission_kind_settings
+           (event_id, kind, opens_at, closes_at, submit_limit)
+         VALUES ($1, 'oral', $2, $3, $4)`,
+        [id, oral.opensAt, oral.closesAt, oral.submitLimit ?? null],
+      );
+      return id;
+    }
+
+    const openWindow = () => ({
+      opensAt: new Date(Date.now() - DAY),
+      closesAt: new Date(Date.now() + 30 * DAY),
+    });
+
+    async function closeOral(eventId: string): Promise<void> {
+      await pool.query(
+        `UPDATE congress_submission_kind_settings
+            SET opens_at = $2, closes_at = $3
+          WHERE event_id = $1 AND kind = 'oral'`,
+        [eventId, new Date(Date.now() - 2 * DAY), new Date(Date.now() - 60_000)],
+      );
+    }
+
+    async function register(
+      d: Doctor,
+      eventId: string,
+      answers: Record<string, string> | null = null,
+    ): Promise<void> {
+      await pool.query(
+        `INSERT INTO registrations (user_id, event_id, answers) VALUES ($1, $2, $3)`,
+        [d.userId, eventId, answers],
+      );
+    }
+
+    const create = (d: Doctor, eventId: string, kind = "oral") =>
+      app.inject({
+        method: "POST",
+        url: BASE,
+        headers: d.headers,
+        payload: { eventId, kind },
+      });
+
+    const autosave = (d: Doctor, id: string, payload: unknown) =>
+      app.inject({
+        method: "PATCH",
+        url: `${BASE}/${id}`,
+        headers: d.headers,
+        payload,
+      });
+
+    const send = (d: Doctor, id: string, accept = true) =>
+      app.inject({
+        method: "POST",
+        url: `${BASE}/${id}/send`,
+        headers: d.headers,
+        payload: {
+          acceptedConsents: accept
+            ? [CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE]
+            : [],
+        },
+      });
+
+    const withdraw = (d: Doctor, id: string, expectedStatus: string) =>
+      app.inject({
+        method: "POST",
+        url: `${BASE}/${id}/withdraw`,
+        headers: d.headers,
+        payload: { expectedStatus },
+      });
+
+    const section = async (d: Doctor, eventId: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: `${BASE}?event=${eventId}`,
+        headers: d.headers,
+      });
+      expect(res.statusCode).toBe(200);
+      return CongressSubmissionSectionSchema.parse(res.json());
+    };
+
+    const completeOral = {
+      title: "Эндопротезирование коленного сустава",
+      authors: [
+        {
+          surname: "иванова",
+          firstName: "мария",
+          patronymic: "петровна",
+          workplace: "ГКБ №1",
+          presenting: true,
+        },
+      ],
+      body: { goal: "Разобрать показания.", summary: "Краткое содержание." },
+    };
+
+    /** A complete oral draft, ready to send. */
+    async function readyDraft(d: Doctor, eventId: string): Promise<string> {
+      const created = await create(d, eventId);
+      expect(created.statusCode).toBe(201);
+      const id = CongressSubmissionSchema.parse(created.json()).id;
+      expect((await autosave(d, id, completeOral)).statusCode).toBe(200);
+      return id;
+    }
+
+    async function setStatus(id: string, status: string): Promise<void> {
+      await pool.query(
+        "UPDATE congress_submissions SET status = $2 WHERE id = $1",
+        [id, status],
+      );
+    }
+
+    async function statusOf(id: string): Promise<string> {
+      const { rows } = await pool.query<{ status: string }>(
+        "SELECT status FROM congress_submissions WHERE id = $1",
+        [id],
+      );
+      return rows[0]!.status;
+    }
+
+    const codes = (res: { json: () => unknown }) =>
+      CongressSubmissionRefusalSchema.parse(res.json()).problems.map(
+        (p) => p.code,
+      );
+
+    beforeAll(async () => {
+      process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
+        .overrideProvider(MAILER)
+        .useValue(mailer)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterAll(async () => {
+      process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
+      if (pool) {
+        for (const email of createdEmails.splice(0))
+          await deleteUserFixture(pool, "email", email);
+        for (const id of createdEventIds.splice(0))
+          await deleteEventFixture(pool, id);
+      }
+      await app?.close();
+    });
+
+    // ------------------------------------------------------------------ V-3
+
+    it("EARS-5: without an active registration the section says so and creating a submission is refused", async () => {
+      const d = await doctor("sub-noreg");
+      const eventId = await congress(openWindow());
+
+      const s = await section(d, eventId);
+      expect(s.registered).toBe(false);
+      expect(s.registrationUrl).toBe("https://orthobio.ru/registration");
+      expect(s.submissions).toEqual([]);
+
+      const refused = await create(d, eventId);
+      expect(refused.statusCode).toBe(422);
+      expect(codes(refused)).toEqual(["registration-required"]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM congress_submissions WHERE user_id = $1",
+        [d.userId],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("EARS-5: a guest is refused and an event without intake settings has no section", async () => {
+      const guest = await app.inject({ method: "GET", url: `${BASE}?event=${randomUUID()}` });
+      expect(guest.statusCode).toBe(401);
+      const d = await doctor("sub-nosettings");
+      const none = await app.inject({
+        method: "GET",
+        url: `${BASE}?event=${randomUUID()}`,
+        headers: d.headers,
+      });
+      expect(none.statusCode).toBe(404);
+    });
+
+    it("EARS-6: a registered participant's draft is owned by the account, linked to the registration, author 1 prefilled from the answers", async () => {
+      const d = await doctor("sub-prefill");
+      const eventId = await congress(openWindow());
+      await register(d, eventId, {
+        surname: "Иванова",
+        firstName: "Мария",
+        patronymic: "Петровна",
+        workplace: "ГКБ №1",
+      });
+
+      const created = await create(d, eventId);
+      expect(created.statusCode).toBe(201);
+      const draft = CongressSubmissionSchema.parse(created.json());
+      expect(draft.status).toBe("draft");
+      expect(draft.kind).toBe("oral");
+      expect(draft.authors).toEqual([
+        {
+          surname: "Иванова",
+          firstName: "Мария",
+          patronymic: "Петровна",
+          workplace: "ГКБ №1",
+          presenting: true,
+        },
+      ]);
+      const { rows } = await pool.query<{ user_id: string; reg_user: string }>(
+        `SELECT s.user_id, r.user_id AS reg_user
+           FROM congress_submissions s JOIN registrations r ON r.id = s.registration_id
+          WHERE s.id = $1`,
+        [draft.id],
+      );
+      expect(rows[0]).toEqual({ user_id: d.userId, reg_user: d.userId });
+    });
+
+    it("EARS-6: without registration answers author 1 comes from the display name; creating is refused only after the closing instant", async () => {
+      const d = await doctor("sub-display");
+      await pool.query("UPDATE users SET display_name = 'Мария Иванова' WHERE id = $1", [d.userId]);
+      const future = await congress({
+        opensAt: new Date(Date.now() + 5 * DAY),
+        closesAt: new Date(Date.now() + 30 * DAY),
+      });
+      await register(d, future);
+      const early = await create(d, future);
+      expect(early.statusCode).toBe(201);
+      expect(CongressSubmissionSchema.parse(early.json()).authors[0]).toMatchObject({
+        firstName: "Мария",
+        surname: "Иванова",
+        presenting: true,
+      });
+
+      const closed = await congress(openWindow());
+      await register(d, closed);
+      await closeOral(closed);
+      const late = await create(d, closed);
+      expect(late.statusCode).toBe(422);
+      expect(codes(late)).toEqual(["kind-closed"]);
+    });
+
+    it("EARS-7: an autosave stores incomplete content, enforces maximum lengths, and is refused on a submitted submission", async () => {
+      const d = await doctor("sub-autosave");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = CongressSubmissionSchema.parse((await create(d, eventId)).json()).id;
+
+      const partial = await autosave(d, id, { title: "Черно", body: { goal: "" } });
+      expect(partial.statusCode).toBe(200);
+      expect(CongressSubmissionSchema.parse(partial.json())).toMatchObject({
+        title: "Черно",
+        body: { goal: "" },
+        status: "draft",
+      });
+
+      const tooLong = await autosave(d, id, { title: "т".repeat(301) });
+      expect(tooLong.statusCode).toBe(400);
+      const wrongKey = await autosave(d, id, { body: { content: "x" } });
+      expect(wrongKey.statusCode).toBe(400);
+
+      expect((await autosave(d, id, completeOral)).statusCode).toBe(200);
+      expect((await send(d, id)).statusCode).toBe(200);
+      const refused = await autosave(d, id, { title: "Другая тема" });
+      expect(refused.statusCode).toBe(409);
+      expect(codes(refused)).toEqual(["status-conflict"]);
+    });
+
+    it("EARS-11: the section lists the account's submissions with kind, title, status, last change and revision deadline — and nobody else's", async () => {
+      const d = await doctor("sub-list");
+      const other = await doctor("sub-list-other");
+      const eventId = await congress({ ...openWindow(), submitLimit: 3 });
+      await register(d, eventId);
+      await register(other, eventId);
+      const mine = await readyDraft(d, eventId);
+      await readyDraft(other, eventId);
+      await pool.query(
+        `UPDATE congress_submissions
+            SET status = 'needs_revision', committee_comment = 'Уточните цель',
+                revision_due_at = '2027-02-20T00:00:00+03:00', submitted_at = now()
+          WHERE id = $1`,
+        [mine],
+      );
+
+      const s = await section(d, eventId);
+      expect(s.registered).toBe(true);
+      expect(s.submissions).toHaveLength(1);
+      expect(s.submissions[0]).toMatchObject({
+        id: mine,
+        kind: "oral",
+        title: completeOral.title,
+        status: "needs_revision",
+        committeeComment: "Уточните цель",
+      });
+      expect(Date.parse(s.submissions[0]!.revisionDueAt!)).toBe(
+        Date.parse("2027-02-20T00:00:00+03:00"),
+      );
+      expect(s.submissions[0]!.updatedAt).toBeTruthy();
+      const oral = s.kinds.find((k) => k.kind === "oral")!;
+      expect(oral).toMatchObject({ state: "open", submitLimit: 3, used: 1, offered: true });
+
+      const foreign = await autosave(other, mine, { title: "чужая" });
+      expect(foreign.statusCode).toBe(404);
+    });
+
+    // ------------------------------------------------------------------ V-4
+
+    it("EARS-9: a send before opening, with an empty opening or after closing is refused with the state and changes nothing", async () => {
+      const d = await doctor("sub-window");
+      const notYet = await congress({
+        opensAt: new Date(Date.now() + 5 * DAY),
+        closesAt: new Date(Date.now() + 30 * DAY),
+      });
+      const unannounced = await congress({ opensAt: null, closesAt: null });
+      const closed = await congress(openWindow());
+      for (const e of [notYet, unannounced, closed]) await register(d, e);
+
+      const a = await readyDraft(d, notYet);
+      const b = await readyDraft(d, unannounced);
+      const c = await readyDraft(d, closed);
+      await closeOral(closed);
+
+      const early = await send(d, a);
+      expect(early.statusCode).toBe(422);
+      expect(CongressSubmissionRefusalSchema.parse(early.json()).problems).toEqual([
+        { code: "kind-not-open", params: { opensAt: expect.any(String) } },
+      ]);
+      const none = await send(d, b);
+      expect(none.statusCode).toBe(422);
+      expect(CongressSubmissionRefusalSchema.parse(none.json()).problems).toEqual([
+        { code: "kind-not-open", params: { opensAt: null } },
+      ]);
+      const late = await send(d, c);
+      expect(late.statusCode).toBe(422);
+      expect(codes(late)).toEqual(["kind-closed"]);
+
+      for (const id of [a, b, c]) expect(await statusOf(id)).toBe("draft");
+      const { rows } = await pool.query(
+        "SELECT 1 FROM consent_records WHERE user_id = $1 AND purpose = $2",
+        [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE],
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("EARS-9: an incomplete draft is refused with every unmet field named; inside the window a complete one becomes submitted with the send instant", async () => {
+      const d = await doctor("sub-send");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = CongressSubmissionSchema.parse((await create(d, eventId)).json()).id;
+      await autosave(d, id, { title: "", authors: [], body: { goal: "Цель" } });
+
+      const incomplete = await send(d, id);
+      expect(incomplete.statusCode).toBe(422);
+      const fields = CongressSubmissionRefusalSchema.parse(incomplete.json())
+        .problems.filter((p) => p.code === "field-invalid")
+        .map((p) => p.field);
+      expect(fields).toEqual(expect.arrayContaining(["title", "authors", "body.summary"]));
+      expect(await statusOf(id)).toBe("draft");
+
+      await autosave(d, id, completeOral);
+      const before = Date.now();
+      const sent = await send(d, id);
+      expect(sent.statusCode).toBe(200);
+      const body = CongressSubmissionSchema.parse(sent.json());
+      expect(body.status).toBe("submitted");
+      expect(Date.parse(body.submittedAt!)).toBeGreaterThanOrEqual(before - 1000);
+      // EARS-8 — names are normalised by the 044 EARS-33 rule on send.
+      expect(body.authors[0]).toMatchObject({
+        surname: "Иванова",
+        firstName: "Мария",
+        patronymic: "Петровна",
+      });
+    });
+
+    // ------------------------------------------------------------------ V-5
+
+    it("EARS-16: the first send requires the submission consent and records one row with the stamped version; a second send does not; a new version asks again", async () => {
+      const d = await doctor("sub-consent");
+      const e1 = await congress(openWindow());
+      const e2 = await congress(openWindow());
+      await register(d, e1);
+      await register(d, e2);
+
+      expect((await section(d, e1)).consentRequired).toBe(true);
+      const first = await readyDraft(d, e1);
+      const refused = await send(d, first, false);
+      expect(refused.statusCode).toBe(422);
+      expect(CongressSubmissionRefusalSchema.parse(refused.json()).problems).toEqual([
+        {
+          code: "consent-required",
+          params: { purpose: CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE },
+        },
+      ]);
+      expect((await send(d, first)).statusCode).toBe(200);
+
+      const rows = async () =>
+        (
+          await pool.query<{ version: string }>(
+            "SELECT version FROM consent_records WHERE user_id = $1 AND purpose = $2 ORDER BY captured_at",
+            [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE],
+          )
+        ).rows.map((r) => r.version);
+      expect(await rows()).toEqual([VERSION_A]);
+
+      // Another event, same account and version: no second acceptance.
+      expect((await section(d, e2)).consentRequired).toBe(false);
+      const second = await readyDraft(d, e2);
+      expect((await send(d, second, false)).statusCode).toBe(200);
+      expect(await rows()).toEqual([VERSION_A]);
+
+      process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_B;
+      try {
+        expect((await section(d, e1)).consentRequired).toBe(true);
+        const third = await readyDraft(d, e1);
+        const again = await send(d, third, false);
+        expect(again.statusCode).toBe(422);
+        expect(codes(again)).toEqual(["consent-required"]);
+        expect((await send(d, third)).statusCode).toBe(200);
+        expect(await rows()).toEqual([VERSION_A, VERSION_B]);
+      } finally {
+        process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
+      }
+    });
+
+    // ------------------------------------------------------------------ V-6
+
+    it("EARS-17: rejected and withdrawn submissions count toward the limit, drafts and one returned to draft do not", async () => {
+      const d = await doctor("sub-limit");
+      const eventId = await congress({ ...openWindow(), submitLimit: 2 });
+      await register(d, eventId);
+      const a = await readyDraft(d, eventId);
+      const b = await readyDraft(d, eventId);
+      const c = await readyDraft(d, eventId);
+
+      expect((await send(d, a)).statusCode).toBe(200);
+      await setStatus(a, "rejected");
+      expect((await send(d, b)).statusCode).toBe(200);
+
+      const full = await send(d, c);
+      expect(full.statusCode).toBe(422);
+      expect(CongressSubmissionRefusalSchema.parse(full.json()).problems).toEqual([
+        { code: "limit-reached", params: { limit: 2 } },
+      ]);
+
+      // b back to draft: it no longer counts, so c fits.
+      expect((await withdraw(d, b, "submitted")).statusCode).toBe(200);
+      expect(await statusOf(b)).toBe("draft");
+      expect((await send(d, c)).statusCode).toBe(200);
+
+      // c withdrawn for good still counts: b cannot take the slot back.
+      await setStatus(c, "in_review");
+      expect((await withdraw(d, c, "in_review")).statusCode).toBe(200);
+      expect(await statusOf(c)).toBe("withdrawn");
+      const stillFull = await send(d, b);
+      expect(stillFull.statusCode).toBe(422);
+      expect(codes(stillFull)).toEqual(["limit-reached"]);
+    });
+
+    it("EARS-17: two parallel sends for the last slot admit exactly one", async () => {
+      const d = await doctor("sub-race");
+      const eventId = await congress({ ...openWindow(), submitLimit: 1 });
+      await register(d, eventId);
+      const a = await readyDraft(d, eventId);
+      const b = await readyDraft(d, eventId);
+
+      const results = await Promise.all([send(d, a), send(d, b)]);
+      expect(results.map((r) => r.statusCode).sort()).toEqual([200, 422]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM congress_submissions WHERE user_id = $1 AND status = 'submitted'",
+        [d.userId],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    // ------------------------------------------------------------------ V-9
+
+    it("EARS-12: withdrawing in_review, needs_revision, or submitted after closing sets withdrawn — read-only, never sent again", async () => {
+      const d = await doctor("sub-withdraw");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const inReview = await readyDraft(d, eventId);
+      const revision = await readyDraft(d, eventId);
+      const late = await readyDraft(d, eventId);
+      for (const id of [inReview, revision, late])
+        expect((await send(d, id)).statusCode).toBe(200);
+      await setStatus(inReview, "in_review");
+      await setStatus(revision, "needs_revision");
+      await closeOral(eventId);
+
+      for (const [id, seen] of [
+        [inReview, "in_review"],
+        [revision, "needs_revision"],
+        [late, "submitted"],
+      ] as const) {
+        const res = await withdraw(d, id, seen);
+        expect(res.statusCode).toBe(200);
+        expect(CongressSubmissionSchema.parse(res.json()).status).toBe("withdrawn");
+      }
+
+      const resend = await send(d, late);
+      expect(resend.statusCode).toBe(409);
+      expect(codes(resend)).toEqual(["status-conflict"]);
+      expect((await autosave(d, late, { title: "x" })).statusCode).toBe(409);
+    });
+
+    it("EARS-12: accepted, rejected, withdrawn and draft submissions cannot be withdrawn", async () => {
+      const d = await doctor("sub-nowithdraw");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const draft = await readyDraft(d, eventId);
+      const refusedDraft = await withdraw(d, draft, "draft");
+      expect(refusedDraft.statusCode).toBe(409);
+      expect(codes(refusedDraft)).toEqual(["withdraw-not-allowed"]);
+
+      for (const status of ["accepted", "rejected", "withdrawn"]) {
+        const id = await readyDraft(d, eventId);
+        expect((await send(d, id)).statusCode).toBe(200);
+        await setStatus(id, status);
+        const res = await withdraw(d, id, status);
+        expect(res.statusCode).toBe(409);
+        expect(codes(res)).toEqual(["withdraw-not-allowed"]);
+        expect(await statusOf(id)).toBe(status);
+      }
+    });
+
+    it("EARS-12: a take-back racing a committee change to in_review loses — the row stays in_review", async () => {
+      const d = await doctor("sub-racewd");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+      expect((await send(d, id)).statusCode).toBe(200);
+      // The author saw `submitted`; the committee commits `in_review` first.
+      await setStatus(id, "in_review");
+
+      const res = await withdraw(d, id, "submitted");
+      expect(res.statusCode).toBe(409);
+      expect(CongressSubmissionRefusalSchema.parse(res.json()).problems).toEqual([
+        { code: "withdraw-not-allowed", params: { status: "in_review" } },
+      ]);
+      expect(await statusOf(id)).toBe("in_review");
+    });
+
+    it("EARS-13: a draft may be deleted; a submitted submission may not", async () => {
+      const d = await doctor("sub-delete");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const draft = await readyDraft(d, eventId);
+      const sent = await readyDraft(d, eventId);
+      expect((await send(d, sent)).statusCode).toBe(200);
+
+      const del = (id: string) =>
+        app.inject({ method: "DELETE", url: `${BASE}/${id}`, headers: d.headers });
+      expect((await del(draft)).statusCode).toBe(204);
+      const { rows } = await pool.query("SELECT 1 FROM congress_submissions WHERE id = $1", [draft]);
+      expect(rows).toHaveLength(0);
+
+      const refused = await del(sent);
+      expect(refused.statusCode).toBe(409);
+      expect(codes(refused)).toEqual(["status-conflict"]);
+      expect(await statusOf(sent)).toBe("submitted");
+    });
+  },
+);

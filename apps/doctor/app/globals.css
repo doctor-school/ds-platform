@@ -27,6 +27,8 @@
  */
 @source "../../../packages/storefront-shell/src";
 @source "../../../packages/events-storefront/src";
+/* 046: the «Мои заявки на Конгресс» section at /account/congress. */
+@source "../../../packages/congress-submissions/src";
 
 /*
  * The storefront theme is a CLASS on <html> — `lib/theme.ts` toggles `.dark`,

@@ -13,10 +13,12 @@ import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 import { AuthError } from "@ds/auth-flow/client";
 import { withReturnContext } from "@ds/auth-flow/server";
 import { SIGN_OUT_DESTINATION } from "@ds/auth-flow/host-config";
+import { fetchSection as fetchCongressSection } from "@ds/congress-submissions/client";
 
 import { authClient } from "@/lib/auth-flow-client";
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
+import { DOCTOR_CONGRESS_SECTION } from "@/lib/congress-submissions.host-config";
 
 /**
  * #1958 — the doctor storefront's `/account` projection.
@@ -48,6 +50,11 @@ import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
  * «Сменить пароль», by contrast, is NOT absent and no longer crosses hosts: since
  * #1989 this storefront serves password recovery itself at `/reset`, so the row
  * links host-relative — the same decision the `/login` card on this host carries.
+ *
+ * «Мои заявки на Конгресс» (046 EARS-4) links the section at `/account/congress`
+ * and is shown only to an account with a registration for the congress event:
+ * the row follows the section read's `registered`; a failed read (no congress
+ * configured, offline) hides the row — the section route itself stays reachable.
  */
 
 const COPY = {
@@ -78,6 +85,8 @@ const COPY = {
     eventsLabel: "События",
     eventsTitle: "Мои события",
     eventsHelper: "Эфиры, записи и сертификаты",
+    congressLabel: "Конгресс",
+    congressTitle: "Мои заявки на Конгресс",
     signOut: "Выйти из аккаунта",
   },
   saveGeneric: "Не удалось сохранить. Попробуйте ещё раз.",
@@ -108,6 +117,7 @@ function resolveSaveError(err: unknown): string {
 export function AccountScreen() {
   const router = useRouter();
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [congressRegistered, setCongressRegistered] = useState(false);
 
   const load = useCallback(async () => {
     // EARS-9: one silent refresh + one retry before the doctor is sent to /login.
@@ -145,6 +155,24 @@ export function AccountScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Read after the profile resolves, so the EARS-9 refresh has already renewed
+  // the session this call rides on.
+  const ready = state.kind === "ready";
+  useEffect(() => {
+    if (!ready) return;
+    let live = true;
+    fetchCongressSection()
+      .then((section) => {
+        if (live) setCongressRegistered(section.registered);
+      })
+      .catch(() => {
+        // No congress event, no session yet or offline — the row stays hidden.
+      });
+    return () => {
+      live = false;
+    };
+  }, [ready]);
 
   async function onSaveDisplayName(displayName: string) {
     await authClient.setDisplayName({ displayName });
@@ -226,6 +254,7 @@ export function AccountScreen() {
         DOCTOR_AUTH_ROUTES.account,
       )}
       eventsHref={null}
+      congressHref={congressRegistered ? DOCTOR_CONGRESS_SECTION.path : null}
       renderLink={({ href, children }) => (
         <NextLink href={href}>{children}</NextLink>
       )}

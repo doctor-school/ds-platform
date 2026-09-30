@@ -30,6 +30,7 @@ const h = vi.hoisted(() => {
     refreshStorefrontSession: vi.fn(),
     logoutStorefront: vi.fn(),
     setDoctorDisplayName: vi.fn(),
+    fetchCongressSection: vi.fn(),
     replace: vi.fn(),
     refresh: vi.fn(),
   };
@@ -63,6 +64,10 @@ vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
   },
 }));
 
+vi.mock("@ds/congress-submissions/client", () => ({
+  fetchSection: () => h.fetchCongressSection(),
+}));
+
 import { AccountScreen } from "@/components/account-screen";
 
 const PROFILE: MyProfile = {
@@ -80,6 +85,10 @@ beforeEach(() => {
   h.logoutStorefront.mockReset().mockResolvedValue({});
   h.setDoctorDisplayName.mockReset().mockResolvedValue({});
   h.getMyProfile.mockReset().mockResolvedValue(PROFILE);
+  // Default: no congress event configured — the section read answers 404.
+  h.fetchCongressSection
+    .mockReset()
+    .mockRejectedValue(Object.assign(new Error("404"), { status: 404 }));
 });
 afterEach(cleanup);
 
@@ -128,6 +137,29 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
     expect(screen.queryByText("Эфиры, записи и сертификаты")).toBeNull();
     // The rest of the composition is untouched by that omission.
     expect(screen.getByText("Безопасность")).toBeTruthy();
+  });
+
+  it("046 EARS-4: an account registered for the congress gets the «Мои заявки на Конгресс» row linking at /account/congress", async () => {
+    h.fetchCongressSection.mockResolvedValue({ registered: true });
+    await renderReady();
+
+    const row = await screen.findByText("Мои заявки на Конгресс");
+    expect(row.closest("a")?.getAttribute("href")).toBe("/account/congress");
+  });
+
+  it("046 EARS-4: without a registration — or when the section read fails — the row is absent", async () => {
+    h.fetchCongressSection.mockResolvedValue({ registered: false });
+    await renderReady();
+    await waitFor(() => expect(h.fetchCongressSection).toHaveBeenCalled());
+    expect(screen.queryByText("Мои заявки на Конгресс")).toBeNull();
+
+    cleanup();
+    h.fetchCongressSection.mockRejectedValue(new Error("offline"));
+    await renderReady();
+    await waitFor(() =>
+      expect(h.fetchCongressSection).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.queryByText("Мои заявки на Конгресс")).toBeNull();
   });
 
   it("003 EARS-9.1: a 401 profile read gets ONE silent refresh + ONE retry, then renders", async () => {

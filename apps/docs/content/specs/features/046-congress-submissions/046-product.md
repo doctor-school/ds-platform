@@ -99,7 +99,8 @@ No approved mockup yet. There is no canvas for the section, the three forms, the
 ## Dependencies
 
 - **Congress site — `doctor-school/orthobio-site#99`** (re-scoped by the tech lead): a «Подать материалы» section with «Зарегистрироваться» and «Войти в кабинет», and a «Подать материалы в кабинете» button on the «Заявка принята» card. It links to the platform section, today `https://new.doctor.school/account/congress`, and can ship once the section is live.
-- **Two consent texts** from the organisers: the personal-data consent for submissions (the submission content, co-authors' data, the birth date for posters, and passing submissions to the program committee and the congress partner) and the consent to publication of abstracts in РИНЦ. The platform publishes them on its documents pages and records every acceptance with the text version.
+- **The consent to publication of abstracts in РИНЦ** — its text comes from the organisers. The platform publishes it on its documents pages and records every acceptance with the text version.
+- **The personal-data consent for submissions** (the submission content, co-authors' data, the birth date for posters, and passing submissions to the program committee and the congress partner) is taken against the personal-data policy already published on the congress site, the same text the registration consent records (owner decision 2026-09-30). A dedicated text from the organisers is optional: if it arrives, it becomes a new version and every author is asked once more at the next send.
 - **Role grants** for committee members and the partner are made by the Doctor.School team on request until the grants screen (#2378) exists.
 
 ## Out of scope

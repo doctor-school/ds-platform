@@ -29,5 +29,11 @@ One registration-confirmation mechanism on both storefronts (#2455).
   `verify.deepLinkEntry` are removed (the verification mail is link-free, so the
   `/verify#email=` fragment is no address); the auth client's `confirm` is
   replaced by a typed `verify`. `resolveConfirmLanding` is removed.
+- The return-context card («Вы вернётесь к этому событию» + the эфир + the
+  assurance line) is drawn on both storefronts, on «Вход», «Регистрация» and
+  «Подтверждение», wherever the arrival resolved an эфир — the canvas `auth`
+  draws it for both hosts. `returnTo.card` is removed from
+  `AuthFlowHostConfig`; the sign-in door takes the same one эфир read as the
+  other doors (only a not-found answer drops the target).
 - A signed-in visitor on the Academy `/verify` is sent to the landing the
   registration door would send them to (`/webinars`), not to `/account`.

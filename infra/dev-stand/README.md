@@ -45,6 +45,12 @@ outside git (`.env.local`, `compose.override.yml`). Setup order:
    cp .env.example ~/.ds-platform/.env.local
    ```
 
+   An existing `.env.local` needs the keys added to the template since it was
+   copied: `MAILER_DOCTOR_BASE_URL` is REQUIRED — the api refuses to boot
+   without it — and `CONGRESS_SIGNUP_CONSENT_VERSION` is required for the
+   congress sign-up and for sending a congress submission (the api boots
+   without it).
+
 3. **Personal override (optional)** — only if your recipe needs a non-default
    storage topology (bind mounts, cloud disks). Named volumes work without it:
 

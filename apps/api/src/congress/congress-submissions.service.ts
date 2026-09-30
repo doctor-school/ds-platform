@@ -376,11 +376,6 @@ export class CongressSubmissionsService {
       }
 
       const version = this.consentVersion();
-      // EARS-16 — one row per account and version: serialise the check and
-      // the insert per account, across events and kinds.
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`congress-submission-consent:${user.id}`}, 0))`,
-      );
       const consentMissing = !(await this.hasConsent(tx, user.id, version));
       const consentAccepted = request.acceptedConsents.includes(
         CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
@@ -396,11 +391,22 @@ export class CongressSubmissionsService {
       if (!parsed.ok) refuse(parsed.problems);
 
       if (consentMissing) {
-        await tx.insert(consentRecords).values({
-          userId: user.id,
-          purpose: CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
-          version,
-        });
+        // EARS-16 — one row per account and version, across events and
+        // kinds: the store's partial unique index decides a race between
+        // first sends, and the loser's row is simply not written.
+        await tx
+          .insert(consentRecords)
+          .values({
+            userId: user.id,
+            purpose: CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
+            version,
+          })
+          .onConflictDoNothing({
+            target: [consentRecords.userId, consentRecords.version],
+            // A literal, not a bind parameter: Postgres infers the partial
+            // index only from a predicate it can prove at plan time.
+            where: sql`${consentRecords.purpose} = ${sql.raw(`'${CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE}'`)}`,
+          });
       }
 
       const [sent] = await tx

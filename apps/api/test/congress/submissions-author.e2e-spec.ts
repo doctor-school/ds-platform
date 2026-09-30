@@ -722,6 +722,33 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows).toHaveLength(1);
     });
 
+    it("046 EARS-16: the store keeps one submission-consent row per account and version, whichever path writes it; other purposes are untouched", async () => {
+      const d = await doctor("sub-consent-unique");
+      const insert = (purpose: string, version: string) =>
+        pool.query(
+          "INSERT INTO consent_records (user_id, purpose, version) VALUES ($1, $2, $3)",
+          [d.userId, purpose, version],
+        );
+      await insert(CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE, VERSION_A);
+      await expect(
+        insert(CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE, VERSION_A),
+      ).rejects.toMatchObject({ code: "23505" });
+      await insert(CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE, VERSION_B);
+      await insert("sub-consent-unique-other-purpose", VERSION_A);
+      await insert("sub-consent-unique-other-purpose", VERSION_A);
+      const { rows } = await pool.query(
+        "SELECT purpose FROM consent_records WHERE user_id = $1 AND purpose = ANY($2)",
+        [
+          d.userId,
+          [
+            CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
+            "sub-consent-unique-other-purpose",
+          ],
+        ],
+      );
+      expect(rows).toHaveLength(4);
+    });
+
     it("046 EARS-16: without a configured consent version the section still reads (consent asked) and only the send is refused", async () => {
       const d = await doctor("sub-consent-unset");
       const eventId = await congress(openWindow());

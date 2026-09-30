@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { check, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { users } from "./users.js";
 
@@ -56,6 +63,13 @@ export const consentRecords = pgTable(
       "consent_records_origin_check",
       sql`${table.origin} IS NULL OR ${table.origin} = 'paper'`,
     ),
+    // 046 EARS-16 — «one row per account and version» for the congress
+    // submission consent, enforced by the store: the first sends of any kinds
+    // and events of one account race to one row (`ON CONFLICT DO NOTHING`).
+    // Partial on the purpose, so every other purpose keeps its own semantics.
+    uniqueIndex("consent_records_congress_submission_uniq")
+      .on(table.userId, table.version)
+      .where(sql`${table.purpose} = 'congress-submission-personal-data'`),
   ],
 );
 

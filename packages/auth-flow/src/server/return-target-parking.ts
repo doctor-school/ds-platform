@@ -7,17 +7,11 @@ import type { AuthFlowReturnToConfig } from "../host-config";
  * The ONE `returnTo` parking rule of the shared auth flow (wave-1 gate rows
  * 29-31, #2027 PR 1.4).
  *
- * 014 EARS-6 / design S6 is the behaviour. A gated surface links into the auth
- * entry with `?returnTo=<same-origin path>` and the query carries it onward
- * through the flow. The one hop the query CANNOT survive is the registration
- * branch trip through the inbox: the visitor who leaves for the mail may come
- * back on a cold `/verify?email=...` in a fresh navigation with no `returnTo`
- * at all (the mail itself is link-free, 003 EARS-29). So the
- * moment a visitor reaches an auth entry with a target, the target is validated
- * through the `@ds/schemas` same-origin guard and the CANONICAL result is parked
- * in a short-lived cookie; the client consumption point
- * (`@ds/auth-flow/client` resolveReturnTarget) reads it back exactly once,
- * re-validates it, and clears it.
+ * 014 EARS-6 / design S6 is the behaviour; which step consumes a parked target
+ * is decided there and in 021 EARS-10, not here. This rule only parks: the
+ * target is validated through the `@ds/schemas` same-origin guard and the
+ * CANONICAL result is written to a short-lived cookie, so every consumer reads
+ * back a value that already passed the guard.
  *
  * Row 29 is why the rule takes the parking config rather than assuming it: the
  * doctor storefront parks NOTHING. It carries the target on the canonical query

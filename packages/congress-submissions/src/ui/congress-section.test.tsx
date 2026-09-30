@@ -452,16 +452,18 @@ describe("CongressSection", () => {
     );
     fetchMock.mockResolvedValueOnce(answer(section({ submissions: [late] })));
     render(<CongressSection host={HOST} />);
-    // Shown once — in the committee box, the slot of the open-deadline line.
-    const lines = await screen.findAllByText(
-      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
-    );
-    expect(lines).toHaveLength(1);
+    // The canvas draws the line twice: in the committee box and as the
+    // separate ⚠ warn notice of the detail.
+    const line =
+      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя";
+    const lines = await screen.findAllByText(line);
+    expect(lines).toHaveLength(2);
     expect(
-      within(screen.getByTestId("congress-committee-comment")).getByText(
-        "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
-      ),
+      within(screen.getByTestId("congress-committee-comment")).getByText(line),
     ).toBeInTheDocument();
+    const notice = screen.getByRole("alert");
+    expect(within(notice).getByText(line)).toBeInTheDocument();
+    expect(notice.textContent).toContain("⚠");
     expect(
       screen.queryByRole("button", { name: "Отправить снова" }),
     ).toBeNull();
@@ -541,7 +543,7 @@ describe("CongressSection", () => {
     ).toBeNull();
   });
 
-  it("EARS-12: the withdrawn detail dates the notice by the status moment and shows no stray dash", async () => {
+  it("EARS-12: the withdrawn detail dates the notice by the status moment under the canvas «—» icon", async () => {
     const withdrawn = sub({
       ...complete,
       status: "withdrawn",
@@ -561,8 +563,10 @@ describe("CongressSection", () => {
     const notice = await screen.findByText(/^Заявка отозвана /);
     expect(notice.textContent).toMatch(/^Заявка отозвана 17 декабря 2026\. /);
     const box = notice.closest('[role="status"]')!;
-    expect(box.textContent).not.toContain("—");
-    expect(screen.queryByText("—")).toBeNull();
+    expect(within(box as HTMLElement).getByText("—")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
   });
 
   it("EARS-12: «Отозвать» asks first; confirming withdraws with the status the author saw", async () => {

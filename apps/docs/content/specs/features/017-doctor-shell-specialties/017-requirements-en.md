@@ -315,4 +315,4 @@ These stay open; each is designed around above rather than resolved here, and ea
 
 **The rule now.** The doctor storefront's header renders the search field; the Academy's header renders none. This is the `search` row of «Differences between storefronts» above — the one shell value that differs between the hosts by a cited decision.
 
-**What stays open.** Coverage beyond the events listing — the placeholder's promise of «уроки, школы и события» — lands with the feature that owns such a results surface; the open question narrows to that.
+**Coverage — the owner's direction.** The owner's direction (2026-09-30, chat, verbatim «по идее да, любой формат контента платформы») is that the header search is meant to cover every platform content format — эфиры, уроки, школы and whatever formats follow. Today the doctor storefront's search covers the events listing only. Widening that coverage is future scope for the feature that owns the results surface; how and when it widens is not decided here, and the open question narrows to that.

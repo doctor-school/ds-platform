@@ -104,7 +104,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 - **Taking `apps/promo` out of service** — a separate wave-1 engineering deliverable (ADR-0015 §2) with its own Issue and its own acceptance; 017 owns only the arrival of the routes.
 - **Mobile applications** — a separate track and a separate repository (owner decision F-4); the site's mobile breakpoint is in scope, the app is not.
 - **The full leaderboard page** — 017 shows the block and the link out.
-- **A search results surface** — the header search field is part of the shell; where it leads is not specified here.
+- **A search results surface** — the header search field is part of the shell; where it leads is not specified here. **[Amended 2026-09-30 — the doctor storefront's header search submits to the events listing; the owner's direction is that it covers every platform content format, widening being future scope. See [`017-requirements-en.md`](./017-requirements-en.md) → «Amendment — 2026-09-30».]**
 - **The Academy's own screens** — anything behind the footer link belongs to the Academy features.
 
 ## Open questions
@@ -114,7 +114,7 @@ Around those two, the home page carries what makes the site credible and alive: 
 - **What a doctor who picks «Другое» gets.** The requirement package fixes that «Другое» exists, not what targeting means for it.
 - **How many specialties one doctor may hold.** Left open by OWD-11 — this PRD assumes exactly one primary specialty, which is an assumption, not a recorded decision. _(agent-proposed — UNCONFIRMED.)_
 - **Whether an anonymous choice survives sign-in and other devices.** The storefront remembers a guest's choice in the session; whether it migrates into the profile on registration is unresolved.
-- **Where the header search leads** and what it covers — the placeholder promises «уроки, школы и события», but no results surface exists in the package.
+- **Where the header search leads** and what it covers — the placeholder promises «уроки, школы и события», but no results surface exists in the package. **[Amended 2026-09-30 — the doctor storefront's header search submits to the events listing; the owner's direction is that it covers every platform content format, widening being future scope. See [`017-requirements-en.md`](./017-requirements-en.md) → «Amendment — 2026-09-30».]**
 - **How the scale statistics are computed and refreshed** — live counts, periodically recomputed figures, or operator-set numbers.
 - **The Academy link's destination** — the Academy home page, or a doctor-oriented entry point on it.
 - **Which marketing routes move** out of `apps/promo`, and under which paths they answer on `doctor.school` — the map states the move, not the route list.

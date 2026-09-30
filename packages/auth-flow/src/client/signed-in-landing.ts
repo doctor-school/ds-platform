@@ -19,3 +19,31 @@ export async function landingAfterSignIn(
     return landing;
   }
 }
+
+/** Where a confirmed registration completes and lands (021 EARS-10). */
+export type CompletionTarget = {
+  /** The эфир intent 005 EARS-2 completes; `null` = none. */
+  returnTarget: string | null;
+  /** Where the visitor lands when no target is honoured. */
+  landing: string;
+};
+
+/**
+ * 021 EARS-10 (amendment 2026-09-29, #2455) - the target decided when the code
+ * is accepted, through the mount's server action (`completionTargetAction`).
+ * Absent (the arrival carried no standing эфир) the render-time decision
+ * stands. A failed ask is not «gone» (review NIT on #2460): the render-time
+ * decision stands too, so the visitor still reaches the эфир page, which
+ * answers for itself.
+ */
+export async function completionTargetAfterSignIn(
+  atRender: CompletionTarget,
+  resolveCompletionTarget?: () => Promise<CompletionTarget>,
+): Promise<CompletionTarget> {
+  if (!resolveCompletionTarget) return atRender;
+  try {
+    return await resolveCompletionTarget();
+  } catch {
+    return atRender;
+  }
+}

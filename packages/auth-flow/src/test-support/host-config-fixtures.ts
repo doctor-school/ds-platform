@@ -21,7 +21,6 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
     registerPath: "/v1/auth/register",
-    confirmPath: "/v1/auth/verify",
   },
   routes: {
     login: "/login",
@@ -49,8 +48,6 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   botProtection: { siteKey: undefined },
   channels: ["email", "sms"],
   register: { promoField: false },
-  // The verification mail opens `/verify#email=…` cold (003 EARS-24).
-  verify: { deepLinkEntry: true },
   // One required consent, read as ONE read-only sentence rather than a control
   // (this host's shipped render): the statement is what the visitor reads, the
   // tier item is what gets recorded, and both name the same purpose.
@@ -81,13 +78,11 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
     registerPath: "/v1/storefront/doctor/register",
-    confirmPath: "/v1/storefront/doctor/confirm",
   },
   routes: {
     login: "/login",
     register: "/register",
-    // Confirmation is an inline step of this host registration screen, not a
-    // route of its own - `undefined` is that fact, not a missing value.
+    verify: "/verify",
     reset: "/reset",
     account: "/account",
     allowAuthenticated: ["/reset"],
@@ -121,8 +116,6 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   register: {
     promoField: true,
   },
-  // Confirmation is inline on the registration door: no surface to link into.
-  verify: { deepLinkEntry: false },
   // The two shipped tiers with the rows drawn around them: the declaration and
   // the partner-data access condition above the submit, the marketing opt-in
   // below it. Each statement is composed from the copy the door RENDERS for
@@ -160,9 +153,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     marketingOptIn: true,
     wordingVersion: "2026-09-22",
   },
-  // Row 46 - the doctor door publishes the return context beside the form; it
-  // parks nothing (row 29), so there is no cookie here.
-  returnTo: { card: true },
+  // It parks nothing (row 29), so there is no `returnTo` here.
 };
 
 /**

@@ -22,14 +22,17 @@ import {
 
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
-import { completeReturnTarget } from "../client/return-completion";
+import { completeResolvedReturnTarget } from "../client/return-completion";
 import { resolveAuthFlowCopy } from "../copy";
 import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
 import { makeResolver } from "../form-resolver";
 import type { AuthFlowHostConfig, AuthFlowVerifyCopy } from "../host-config";
-import { landingAfterSignIn } from "../client/signed-in-landing";
-import { resolveConfirmLanding } from "../register/confirm-landing";
+import {
+  completionTargetAfterSignIn,
+  landingAfterSignIn,
+  type CompletionTarget,
+} from "../client/signed-in-landing";
 import { withReturnTarget } from "../return-target-href";
 import { VerifyGlyph } from "./verify-glyph";
 
@@ -38,10 +41,9 @@ import { VerifyGlyph } from "./verify-glyph";
  * 65–77) — the canvas «Подтверждение» screen (`design-source/auth.dc.html`
  * 212-244), drawn by the design-system `<EmailConfirmCard>` block.
  *
- * Both storefronts confirm an address through THIS component: the Academy on
- * its `/verify` route (`VerifyRoute` → `VerifyEntry`), the doctor storefront
- * inline on the registration door (`RegistrationConfirmation`). What differs
- * between them is data — the host config and the three targets below — never a
+ * Both storefronts confirm an address through THIS component, on their own
+ * `/verify` route (`VerifyRoute` → `VerifyEntry`, 003 EARS-24). What differs
+ * between them is data — the host config and the two targets below — never a
  * branch.
  *
  * The surface is EXISTENCE-AGNOSTIC (003 EARS-16): the BFF answers a new and an
@@ -72,17 +74,18 @@ export type VerifyDoorProps = {
    */
   resolveSignedInLanding?: () => Promise<string>;
   /**
-   * The эфир intent the CONFIRM COMMAND re-validates with the code (021 EARS-19)
-   * — supplied only by a host whose confirm command takes one (the doctor
-   * storefront's). Absent, the command carries the address and the code only.
+   * 021 EARS-10 (#2455) — the mount's server action that judges the carried
+   * эфир again once the code is accepted; absent when the arrival carried none.
+   */
+  resolveCompletionTarget?: () => Promise<CompletionTarget>;
+  /**
+   * The resolved эфир intent of the arrival (021 EARS-10), in this host's
+   * vocabulary. It is what 005 EARS-2 completes once the visitor is signed in
+   * — the shared rule guards it. `null` when the arrival named no эфир or one
+   * that no longer exists (021 EARS-10); a parked target (014 EARS-6) is
+   * consumed but never stands in for it.
    */
   returnTarget?: string | null;
-  /**
-   * What 005 EARS-2 completes once the visitor is signed in. The shared rule
-   * guards it, and on a host that parks its target (014 EARS-6) an absent value
-   * consumes the parked one.
-   */
-  completionTarget?: string | null;
   /** Rule S3 — the target the sideways hops and the cold exit carry onward. */
   carriedTarget?: string | null;
   /**
@@ -111,8 +114,8 @@ export function VerifyDoor({
   email,
   landing,
   resolveSignedInLanding,
+  resolveCompletionTarget,
   returnTarget = null,
-  completionTarget = null,
   carriedTarget = null,
   returnContextPlate,
 }: VerifyDoorProps) {
@@ -178,16 +181,10 @@ export function VerifyDoor({
 
   async function onSubmit(values: EmailConfirmValues) {
     setError(null);
-    let confirmed: unknown;
     try {
-      // `returnTo` rides the SAME command as the code where the host's command
-      // takes one, so the server decides the destination with the verification
-      // it just performed (021 EARS-19).
-      confirmed = await authClient.confirm({
-        email,
-        code: values.code,
-        ...(returnTarget ? { returnTo: returnTarget } : {}),
-      });
+      // 003 EARS-3 — the one confirm command on both hosts: the address and the
+      // code. Where the visitor goes next is decided below, on the client.
+      await authClient.verify({ email, code: values.code });
     } catch (err) {
       // 003 EARS-16 — generic, except 429 / 5xx / network (rows 12, 14).
       setError(authErrorMessage(err, errors, copy.failed));
@@ -214,19 +211,19 @@ export function VerifyDoor({
         landing,
         resolveSignedInLanding,
       );
-      // 005 EARS-2 — the session exists now, so the carried эфир is COMPLETED
-      // before the visitor is sent anywhere. Best-effort by the rule's contract.
-      const completed = await completeReturnTarget(
-        config,
-        completionTarget,
-        signedInLanding,
+      // 021 EARS-10 (amendment 2026-09-29) — the target is judged now, not
+      // when this step rendered.
+      const target = await completionTargetAfterSignIn(
+        { returnTarget, landing: signedInLanding },
+        resolveCompletionTarget,
       );
-      // 021 EARS-10 — a confirm command that NAMES a destination produced it in
-      // the round trip that just re-validated the target, so it wins; the 003
-      // command names none, and the completion's landing stands.
-      destinationHref = isNamedLanding(confirmed)
-        ? resolveConfirmLanding(confirmed, signedInLanding)
-        : completed;
+      // 005 EARS-2 — completed before the visitor is sent anywhere; a parked
+      // value never replaces the mount's target (021 EARS-10).
+      destinationHref = await completeResolvedReturnTarget(
+        config,
+        target.returnTarget,
+        target.landing,
+      );
     } catch (err) {
       // Q1 — a refused replay stays on this step, generic (003 EARS-16).
       setSucceeded(false);
@@ -274,17 +271,6 @@ export function VerifyDoor({
       testIds={VERIFY_TEST_IDS}
       returnContextSlot={returnContextPlate}
     />
-  );
-}
-
-/** The confirm response of a command that names where the visitor goes (021 EARS-10). */
-function isNamedLanding(
-  response: unknown,
-): response is Parameters<typeof resolveConfirmLanding>[0] {
-  return (
-    typeof response === "object" &&
-    response !== null &&
-    "primaryAction" in response
   );
 }
 

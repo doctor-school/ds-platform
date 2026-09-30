@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The ONE confirmation step (#2027 PR 1.7, tech spec §2.6 rows 65–77) as the
  * Academy's `/verify` route mounts it: `<VerifyEntry>` seeds the address and
- * hands it to `<VerifyDoor>`, the body the doctor storefront mounts inline too
- * (`register/inline-confirmation.test.tsx` pins that host's exits).
+ * hands it to `<VerifyDoor>`. The doctor storefront mounts the same step on its
+ * own `/verify` (003 EARS-24); `verify-step.test.tsx` runs it over that host.
  *
  * The ids arrive from `apps/portal/app/verify/page.test.tsx`: the behaviour is
  * no longer an Academy page composition but this package unit, so the
@@ -31,7 +31,7 @@ type CaptchaProps = {
 };
 
 const h = vi.hoisted(() => ({
-  confirm: vi.fn(),
+  verify: vi.fn(),
   login: vi.fn(),
   resendVerification: vi.fn(),
   registerForEvent: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../client/auth-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../client/auth-client")>()),
   createAuthClient: () => ({
-    confirm: (...args: unknown[]) => h.confirm(...args),
+    verify: (...args: unknown[]) => h.verify(...args),
     login: (...args: unknown[]) => h.login(...args),
     resendVerification: (...args: unknown[]) => h.resendVerification(...args),
   }),
@@ -86,7 +86,14 @@ import {
 
 import { AuthError } from "../client/auth-client";
 import { resolveAuthFlowCopy } from "../copy";
-import { ACADEMY_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  clearStoredReturnTarget,
+  readStoredReturnTarget,
+} from "../client/return-target-store";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
@@ -95,7 +102,7 @@ const CODE = "PVDC3R";
 const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).verify;
 
 beforeEach(() => {
-  h.confirm.mockReset().mockResolvedValue({ status: "verified" });
+  h.verify.mockReset().mockResolvedValue({ status: "verified" });
   h.login.mockReset().mockResolvedValue({});
   h.resendVerification
     .mockReset()
@@ -122,14 +129,21 @@ afterEach(() => {
 
 type Arrival = { email?: string; returnTo?: string };
 
-/** The Academy route's client body, as `VerifyRoute` hands it the arrival. */
+/**
+ * The Academy route's client body, as `VerifyRoute` hands it the arrival. The
+ * targets are handed RAW (the route hands guard-reconstructed ones), so every
+ * guard below the mount is exercised against the hostile value too.
+ */
 function mount(arrival: Arrival = { email: EMAIL }) {
+  const target = arrival.returnTo ?? null;
   return render(
     <VerifyEntry
       config={ACADEMY_FIXTURE}
       email={arrival.email}
       landing="/webinars"
-      returnTo={arrival.returnTo ?? null}
+      returnTo={target}
+      returnTarget={target}
+      carriedTarget={target}
     />,
   );
 }
@@ -163,7 +177,7 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     h.captchaMode = "manual";
     await enterCode();
 
-    await waitFor(() => expect(h.confirm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(h.verify).toHaveBeenCalledTimes(1));
     expect(h.captchaProps?.requestKey).toBeNull();
   });
 
@@ -224,7 +238,7 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
         expect.objectContaining({ identifier: EMAIL }),
         undefined,
       );
-      expect(h.confirm).not.toHaveBeenCalled();
+      expect(h.verify).not.toHaveBeenCalled();
       expect(resend).toBeDisabled();
       const notice = screen.getByTestId("verify-resend-notice");
       expect(notice).toHaveAttribute("role", "status");
@@ -264,13 +278,13 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
   it("003 EARS-3: auto-submits the fixed-length code (no manual click) and confirms it", async () => {
     await enterCode();
 
-    await waitFor(() => expect(h.confirm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(h.verify).toHaveBeenCalledTimes(1));
     // The Academy's 003 verify command takes the address and the code, nothing else.
-    expect(h.confirm).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
+    expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
   });
 
   it("003 EARS-3 (#337): shows spinner + aria-busy on the submit while the confirm call is in flight", async () => {
-    h.confirm.mockImplementationOnce(() => new Promise(() => {}));
+    h.verify.mockImplementationOnce(() => new Promise(() => {}));
     const user = userEvent.setup();
     await mountSettled();
     const submit = screen.getByTestId("verify-submit");
@@ -280,7 +294,7 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     await user.keyboard(CODE);
 
     await waitFor(() => {
-      expect(h.confirm).toHaveBeenCalledTimes(1);
+      expect(h.verify).toHaveBeenCalledTimes(1);
       expect(submit).toHaveAttribute("aria-busy", "true");
     });
     expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
@@ -359,20 +373,55 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
   });
 });
 
-describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
-  it("003 EARS-24: seeds the email from the URL fragment when there is no ?email= query, and the code reaches the api", async () => {
-    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
-    await enterCode({});
+describe("021 EARS-10 (#2455, owner decision Б): an эфир that no longer exists lands on the default", () => {
+  const PARKING = ACADEMY_FIXTURE.returnTo!.parkingCookie!;
 
-    await waitFor(() => expect(h.confirm).toHaveBeenCalledTimes(1));
-    expect(h.confirm).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
-  });
+  afterEach(() => clearStoredReturnTarget(PARKING));
 
+  it.each([
+    ["Академия", ACADEMY_FIXTURE, "/webinars/gone", "/webinars"],
+    ["Витрина", DOCTOR_FIXTURE, "/events/gone", "/events"],
+  ])(
+    "021 EARS-10: on %s the confirmed doctor lands on the default landing even when the vanished эфир page is parked",
+    async (_host, config, gone, landing) => {
+      // A host that parks (014 EARS-6) parks the arrival target on `/register`
+      // and on `/verify` itself, so the vanished эфир is in the parked cookie
+      // when the mount resolves it to no target.
+      const parking = config.returnTo?.parkingCookie;
+      if (parking) {
+        document.cookie = `${parking.name}=${encodeURIComponent(gone)}; Path=/`;
+      }
+      hold();
+      const user = userEvent.setup();
+      render(
+        <VerifyEntry
+          config={config}
+          email={EMAIL}
+          landing={landing}
+          returnTo={gone}
+          returnTarget={null}
+          carriedTarget={gone}
+        />,
+      );
+      await screen.findByTestId("verify-submit");
+      await user.click(screen.getByRole("textbox"));
+      await user.keyboard(CODE);
+
+      await waitFor(() => expect(h.replace).toHaveBeenCalledWith(landing));
+      expect(h.replace).toHaveBeenCalledTimes(1);
+      expect(h.registerForEvent).not.toHaveBeenCalled();
+      // Consumed once (014 EARS-6): a later sign-in never lands on it either.
+      if (parking) expect(readStoredReturnTarget(parking)).toBeNull();
+    },
+  );
+});
+
+describe("003 EARS-39: a confirmation with no held credential (reload, restored tab, expired hold)", () => {
   it("003 EARS-39: a cold verify (no held password: reload, restored tab, expired hold) routes to /login", async () => {
-    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
-    await enterCode({});
+    await enterCode({ email: EMAIL });
 
     await waitFor(() => expect(h.push).toHaveBeenCalledWith("/login"));
+    expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
     expect(h.login).not.toHaveBeenCalled();
   });
 
@@ -387,6 +436,13 @@ describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
     expect(h.replace).not.toHaveBeenCalled();
     expect(screen.queryByTestId("verify-succeeded")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("003 EARS-3 (#2455): the one 003 command carries the address and the code only, even with a carried target", async () => {
+    await enterCode({ email: EMAIL, returnTo: "/webinars/ahilles-042" });
+
+    await waitFor(() => expect(h.verify).toHaveBeenCalledTimes(1));
+    expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
   });
 });
 
@@ -435,26 +491,9 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     expect(h.replace).not.toHaveBeenCalled();
   });
 
-  it("003 EARS-40: the mail's #email= seed renders the step with the masked address, no redirect", async () => {
+  it("003 EARS-29 (#2455): the verification mail carries no link, so a URL fragment is never an address — a bare query goes to /register", async () => {
     window.history.replaceState(null, "", "/verify#email=doc%40example.com");
-    await mountSettled({});
-
-    expect(screen.getByTestId("verify-card")).toHaveTextContent(
-      "d•••@e•••.com",
-    );
-    expect(screen.getByTestId("verify-resend")).toBeInTheDocument();
-    expect(h.replace).not.toHaveBeenCalled();
-  });
-
-  it("003 EARS-40: a host with no deep-link entry never reads the fragment — a bare query goes to /register", async () => {
-    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
-    render(
-      <VerifyEntry
-        config={{ ...ACADEMY_FIXTURE, verify: { deepLinkEntry: false } }}
-        landing="/webinars"
-        returnTo={null}
-      />,
-    );
+    mount({});
 
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
     expect(screen.queryByTestId("verify-card")).not.toBeInTheDocument();
@@ -463,7 +502,7 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
 
 describe("rows 10-15: one error plate, the shared dictionary", () => {
   it("017 #1933.10: a 429 on the confirm command reads as the rate-limit sentence, never «Код не подошёл»", async () => {
-    h.confirm.mockRejectedValue(new AuthError(429, "Too Many Requests"));
+    h.verify.mockRejectedValue(new AuthError(429, "Too Many Requests"));
     await enterCode();
 
     expect(await screen.findByTestId("verify-error")).toHaveTextContent(
@@ -476,7 +515,7 @@ describe("rows 10-15: one error plate, the shared dictionary", () => {
     // Real time keeps flowing for the typing; the 30 s cooldown is skipped by hand.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      h.confirm.mockRejectedValue(new AuthError(400, "Bad Request"));
+      h.verify.mockRejectedValue(new AuthError(400, "Bad Request"));
       h.resendVerification.mockRejectedValue(
         new AuthError(429, "Too Many Requests"),
       );

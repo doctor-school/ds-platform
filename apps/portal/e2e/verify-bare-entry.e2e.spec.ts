@@ -4,8 +4,8 @@ import { test, expect } from "@playwright/test";
  * 003 EARS-40 (#2394) — a cold `/verify` with no address, browser tier
  * (Academy). The package tests (`@ds/auth-flow` `verify-door.test.tsx`) pin the
  * decision in jsdom; only a real browser proves the shipped page: the server
- * mount hands a bare arrival to the client half, which reads the fragment and,
- * finding no address, REPLACES onto the registration door — the step with a
+ * mount hands a bare arrival to the client half, which, finding no address in
+ * the query, REPLACES onto the registration door — the step with a
  * generic «ваш аккаунт» description is never painted.
  *
  * Backend-free tier (`playwright.ci.config.ts`, its `testMatch` list): a
@@ -56,15 +56,13 @@ test.describe("003 EARS-40 — /verify without an address goes to /register", ()
     );
   });
 
-  test("EARS-40: the /verify#email= deep link still renders the step with the masked address", async ({
+  test("003 EARS-29 (#2455): the verification mail carries no link, so a URL fragment is never an address — /verify#email= goes to /register", async ({
     page,
   }) => {
     await page.goto("/verify#email=doc%40example.com");
 
-    await expect(page.getByTestId("verify-card")).toContainText(
-      "d•••@e•••.com",
-    );
-    expect(new URL(page.url()).pathname).toBe("/verify");
+    await page.waitForURL((url) => url.pathname === "/register");
+    await expect(page.getByTestId("verify-card")).toHaveCount(0);
   });
 
   test("EARS-40: the same-tab ?email= hop still renders the step with the masked address", async ({

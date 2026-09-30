@@ -22,15 +22,14 @@ import type {
  */
 
 /**
- * Registration and confirmation are the storefront's OWN commands (021 EARS-19):
- * they carry the doctor profile the `/v1/auth/*` pair knows nothing about.
- * Everything else — sign-in, codes, recovery, session — is the same shared
+ * Registration is the storefront's OWN command (021 EARS-19): it carries the
+ * doctor profile and consents the 003 command knows nothing about. Everything
+ * else — confirmation, sign-in, codes, recovery, session — is the same shared
  * `/v1/auth` surface the Academy posts to.
  */
 export const DOCTOR_AUTH_FLOW_API: AuthFlowApiConfig = {
   basePath: "/v1/auth",
   registerPath: "/v1/storefront/doctor/register",
-  confirmPath: "/v1/storefront/doctor/confirm",
 };
 
 /**
@@ -63,8 +62,9 @@ export const DOCTOR_AUTH_FLOW = {
   routes: {
     login: "/login",
     register: "/register",
-    // No `verify`: this storefront confirms INLINE on the registration screen
-    // (021 EARS-19) — there is no standalone confirmation surface to guard.
+    // 003 EARS-24 — the confirmation route the registration door hops to, the
+    // same one the Academy serves (`app/(auth)/verify/page.tsx`).
+    verify: "/verify",
     reset: "/reset",
     account: "/account",
     // 003 EARS-28 — the `/account` change-password action hands off to the
@@ -76,10 +76,8 @@ export const DOCTOR_AUTH_FLOW = {
     // (the same literal `lib/room-config.ts` states; pinned by the test).
     room: "/events/:slug/room",
   },
-  // No parking cookie: this storefront carries the target on the canonical
-  // `returnTo` param (wave-1 gate row 29). It does publish the return context
-  // as a card beside the door (row 46).
-  returnTo: { card: true },
+  // No `returnTo`: this storefront parks no cookie and carries the target on
+  // the canonical `returnTo` param (wave-1 gate row 29).
   // 021 EARS-3 / LD-4 — a remembered specialty lands on the events feed; no
   // specialty, or an unresolved read, lands on the storefront home. The two reads
   // are named as paths (the same ones `lib/specialty-choice.ts` issues from the
@@ -120,9 +118,6 @@ export const DOCTOR_AUTH_FLOW = {
   register: {
     promoField: true,
   },
-  // 021 EARS-19 — the address is confirmed inline on the registration door, on
-  // the address just typed; no mail links into a confirmation surface here.
-  verify: { deepLinkEntry: false },
   /**
    * 021 EARS-5 — the F-021-1 «вариант Б» consent read model, stated by the
    * host and rendered by the shared door.

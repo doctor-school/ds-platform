@@ -39,7 +39,6 @@ import type {
   AuthFlowHostConfig,
 } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
-import { RegistrationConfirmation } from "./inline-confirmation";
 import { RegisterGlyph } from "./register-glyph";
 
 /**
@@ -53,11 +52,12 @@ import { RegisterGlyph } from "./register-glyph";
  * composition the two hosts used to own twice: the live BFF command, the
  * bot-protection retry-once orchestration, the EARS-16 outcome mapping, the
  * consent READ MODEL → recorded acceptances projection, the held credential for
- * the step after the submit, and the row-51 fork out of an accepted command.
+ * the step after the submit, and the hop out of an accepted command.
  *
- * Row 51 is the one structural fork, and it is a HOST FACT rather than a branch:
- * a host that serves a `/verify` route of its own hands the address to it, and a
- * host that serves none confirms on the door itself.
+ * Row 51: an accepted registration hands the address to the host's `/verify`
+ * route (003 EARS-24) — the one confirmation mechanism on every host, so the
+ * step survives a reload or a new tab and carries the arrival target in its
+ * query (021 EARS-10).
  */
 export type RegisterDoorProps = {
   /** Everything that differs between the two storefronts (rows 9, 47-64). */
@@ -70,40 +70,12 @@ export type RegisterDoorProps = {
    */
   landing: string;
   /**
-   * #2333 — the mount's server action that decides the landing AGAIN once the
-   * confirmed doctor is signed in; absent where it cannot change.
-   */
-  resolveSignedInLanding?: () => Promise<string>;
-  /**
    * The RAW carried `returnTo` param, for the footer LINKS and the `/verify` hop
    * only. Guarded by the same-origin rule at each consumption point, so a hostile
    * value is never propagated onward.
    */
   returnTo?: string | null;
-  /** The mount's guard-reconstructed completion target, in THIS host's vocabulary. */
-  returnTarget?: string | null;
-  /** The rule S3 carry vocabulary — what the confirmation step hands onward. */
-  carriedTarget?: string | null;
   /** The gate context the visitor arrived from — the plate above the card (021 EARS-2). */
-  returnContextPlate?: ReactNode;
-};
-
-/**
- * The confirmation step's contract (rows 51, 76) — a host with no `/verify`
- * route confirms the address on the door itself.
- */
-export type RegisterConfirmationProps = {
-  config: AuthFlowHostConfig;
-  email: string;
-  landing: string;
-  /**
-   * #2333 — the mount's server action that decides the landing AGAIN once the
-   * confirmed doctor is signed in; absent where it cannot change.
-   */
-  resolveSignedInLanding?: () => Promise<string>;
-  returnTarget?: string | null;
-  carriedTarget?: string | null;
-  /** 021 EARS-2 — the arrival plate the form stood under; the step keeps it. */
   returnContextPlate?: ReactNode;
 };
 
@@ -241,10 +213,7 @@ function acceptancesOf(
 export function RegisterDoor({
   config,
   landing,
-  resolveSignedInLanding,
   returnTo = null,
-  returnTarget = null,
-  carriedTarget = null,
   returnContextPlate,
 }: RegisterDoorProps) {
   // #2027 PR 1.6 — `copy.register` is REQUIRED on the config now that both
@@ -258,7 +227,6 @@ export function RegisterDoor({
   // and is bound once at this boundary, so the call below stays path-free.
   const authClient = useMemo(() => createAuthClient(config.api), [config.api]);
 
-  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
 
@@ -311,23 +279,19 @@ export function RegisterDoor({
     // Row 18: the captcha token travels as the header the client sets.
     await authClient.register(body, captchaToken);
     // 021 EARS-15.4 — hold the typed credential for the step that follows, so
-    // the confirmation can sign this visitor in without asking again.
+    // the confirmation can sign this visitor in without asking again. The slot
+    // is a module singleton: it survives the client-side hop below.
     setPendingRegistration({ identifier: email, password: values.password });
 
-    const verify = config.routes.verify;
-    if (verify) {
-      // Row 51 — this host confirms the address on a route of its own, and the
-      // arrival context rides along so the trip through the mail survives it.
-      router.push(
-        withReturnTarget(
-          `${verify}?email=${encodeURIComponent(email)}`,
-          returnTo,
-        ),
-      );
-      return;
-    }
-    // …and a host that serves no such route confirms here, in place.
-    setRegisteredEmail(email);
+    // Row 51 / 003 EARS-24 — the address is confirmed on the host's `/verify`
+    // route, and the arrival context rides along so the trip through the mail
+    // survives it (021 EARS-10).
+    router.push(
+      withReturnTarget(
+        `${config.routes.verify}?email=${encodeURIComponent(email)}`,
+        returnTo,
+      ),
+    );
   }
 
   function onSubmit(values: RegisterCardValues) {
@@ -459,24 +423,6 @@ export function RegisterDoor({
           sitekey={botProtectionSiteKey(config)}
           {...captcha.fieldProps}
         />
-      }
-      confirmation={
-        registeredEmail ? (
-          // Rows 51 + 76 — a host with no `/verify` route confirms the
-          // address HERE. The panel is a module of its own rather than a mode
-          // of this one: everything past the accepted code (the login replay,
-          // the 005 EARS-2 completion, the EARS-10 landing) is a different
-          // rule set with a different transport.
-          <RegistrationConfirmation
-            config={config}
-            email={registeredEmail}
-            landing={landing}
-            {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
-            returnTarget={returnTarget}
-            carriedTarget={carriedTarget}
-            returnContextPlate={returnContextPlate}
-          />
-        ) : null
       }
       consentItems={consentItems}
       {...(config.register.promoField && copy.promo

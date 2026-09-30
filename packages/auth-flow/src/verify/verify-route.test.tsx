@@ -9,16 +9,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * own behaviour is pinned by `verify-door.test.tsx`.
  *
  * Mocked seams: Next's `redirect` throw, and the two upstream READS
- * (`resolveServerAuth`, `resolveReturnContext`). The guard, the landing rule and
+ * (`resolveServerAuth`, `readReturnEvent`). The guard, the landing rule and
  * the return-target codec stay the real shared ones.
  */
-const { redirect, resolveServerAuth, resolveReturnContext, specialtyFetch } =
+const { redirect, resolveServerAuth, readReturnEvent, specialtyFetch } =
   vi.hoisted(() => ({
     redirect: vi.fn((path: string) => {
       throw new Error(`NEXT_REDIRECT:${path}`);
     }),
     resolveServerAuth: vi.fn(),
-    resolveReturnContext: vi.fn(),
+    readReturnEvent: vi.fn(),
     specialtyFetch: vi.fn(),
   }));
 
@@ -36,7 +36,7 @@ vi.mock("../server", async (importOriginal) => {
   return {
     ...actual,
     resolveServerAuth,
-    resolveReturnContext,
+    readReturnEvent,
     resolveArrivalLanding: (
       host: Parameters<typeof actual.resolveArrivalLanding>[0],
       requestHeaders: Headers,
@@ -64,12 +64,16 @@ const EVENT = {
   specialties: ["Травматология"],
   speakers: [{ name: "Анна Соколова" }],
 };
+/** The public event read's answers (021 EARS-10): the page answered / 004 EARS-6 not-found. */
+const FOUND = { status: "found", event: EVENT } as const;
+const GONE = { status: "gone" } as const;
 
 type Params = Record<string, string | string[] | undefined>;
 type StepProps = {
   config: AuthFlowHostConfig;
   landing: string;
-  returnTo: string | null;
+  returnTarget?: string | null;
+  carriedTarget?: string | null;
   returnContextPlate?: unknown;
 };
 type ShellProps = {
@@ -97,20 +101,21 @@ async function shellOf(config: AuthFlowHostConfig, params: Params) {
 beforeEach(() => {
   vi.clearAllMocks();
   resolveServerAuth.mockResolvedValue({ status: "guest" });
-  resolveReturnContext.mockResolvedValue(null);
+  readReturnEvent.mockResolvedValue(GONE);
   specialtyFetch.mockResolvedValue({ ok: false, status: 404 } as Response);
 });
 
 describe("#2027 PR 1.7: the /verify mount", () => {
-  it("#675: a doctor who already holds a session is sent to the account before anything renders", async () => {
+  it("#675: a doctor who already holds a session is sent to the landing the registration door would send them to, before anything renders", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);
 
     await expect(shellOf(ACADEMY_FIXTURE, {})).rejects.toThrow(
-      "NEXT_REDIRECT:/account",
+      "NEXT_REDIRECT:/webinars",
     );
   });
 
-  it("003 EARS-24: the same-tab hop's ?email= and the RAW returnTo reach the client body with the LD landing", async () => {
+  it("003 EARS-24: the same-tab hop's ?email= reaches the client gate, and the step lands where the registration door would", async () => {
+    readReturnEvent.mockResolvedValue(FOUND);
     const gate = await gateOf(ACADEMY_FIXTURE, {
       email: ["doc@example.com", "other@example.com"],
       returnTo: "/webinars/ahilles-042",
@@ -124,20 +129,19 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     });
     expect(shell.props.children.props).toMatchObject({
       config: ACADEMY_FIXTURE,
-      landing: "/webinars",
-      returnTo: "/webinars/ahilles-042",
+      landing: "/webinars/ahilles-042",
+      returnTarget: "/webinars/ahilles-042",
+      carriedTarget: "/webinars/ahilles-042",
     });
-    // A host that publishes no return-context card never pays for the read.
-    expect(resolveReturnContext).not.toHaveBeenCalled();
-    expect(shell.props.returnContext ?? null).toBe(null);
-    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
+    // 021 EARS-10 (#2455) — whether the эфир still exists is asked on every host.
+    expect(readReturnEvent).toHaveBeenCalledWith("/webinars/ahilles-042");
   });
 
-  it("021 EARS-3: a host that publishes the card shows the carried эфир beside the confirmation", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
-    const withCard = { ...ACADEMY_FIXTURE, returnTo: { card: true } };
+  it("021 EARS-2 (#2455): the Academy shows the carried эфир beside the confirmation, as the canvas «Подтверждение» draws it on both hosts", async () => {
+    readReturnEvent.mockResolvedValue(FOUND);
 
-    const shell = await shellOf(withCard, {
+    const shell = await shellOf(ACADEMY_FIXTURE, {
+      email: "doc@example.com",
       returnTo: "/webinars/ahilles-042",
     });
 
@@ -146,11 +150,19 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     expect(shell.props.children.props.returnContextPlate).toBeTruthy();
   });
 
-  it("003 EARS-40: a bare arrival hands the client gate no address, and the gate wraps the WHOLE frame (shell and panel)", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
-    const withCard = { ...ACADEMY_FIXTURE, returnTo: { card: true } };
+  it("021 EARS-3: a direct arrival on the Academy /verify draws no card — absent, never an empty frame", async () => {
+    const shell = await shellOf(ACADEMY_FIXTURE, { email: "doc@example.com" });
 
-    const gate = await gateOf(withCard, { returnTo: "/webinars/ahilles-042" });
+    expect(shell.props.returnContext ?? null).toBe(null);
+    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
+  });
+
+  it("003 EARS-40: a bare arrival hands the client gate no address, and the gate wraps the WHOLE frame (shell and panel)", async () => {
+    readReturnEvent.mockResolvedValue(FOUND);
+
+    const gate = await gateOf(ACADEMY_FIXTURE, {
+      returnTo: "/webinars/ahilles-042",
+    });
 
     expect(gate.props.email).toBeUndefined();
     expect(gate.props.returnTo).toBe("/webinars/ahilles-042");
@@ -159,8 +171,108 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     expect(gate.props.children.props.returnContext).toBeTruthy();
   });
 
-  it("rows 51, 76: a host with no /verify route cannot mount it — a wiring mistake reads as one", async () => {
-    await expect(shellOf(DOCTOR_FIXTURE, {})).rejects.toThrow(/verify/);
+  it("003 EARS-24 (#2455): the doctor storefront mounts the same step, handed the targets its registration door resolved", async () => {
+    readReturnEvent.mockResolvedValue(FOUND);
+
+    const gate = await gateOf(DOCTOR_FIXTURE, {
+      email: "doc@example.com",
+      returnTo: "/webinars/prp-pri-gonartroze",
+    });
+    const shell = gate.props.children;
+
+    expect(gate.props.email).toBe("doc@example.com");
+    // 021 EARS-10 — the resolved эфир, projected onto THIS host's paths, is the
+    // landing AND what 005 EARS-2 completes; the sideways hops carry the rule S3
+    // vocabulary.
+    expect(shell.props.children.props).toMatchObject({
+      config: DOCTOR_FIXTURE,
+      landing: "/events/prp-pri-gonartroze",
+      returnTarget: "/events/prp-pri-gonartroze",
+      carriedTarget: "/webinars/prp-pri-gonartroze",
+    });
+    // 021 EARS-2 — the arrival card and plate the form stood beside stay.
+    expect(shell.props.returnContext).toBeTruthy();
+    expect(shell.props.children.props.returnContextPlate).toBeTruthy();
+  });
+
+  it.each([
+    ["Витрина", DOCTOR_FIXTURE],
+    ["Академия", ACADEMY_FIXTURE],
+  ])(
+    "021 EARS-10 (#2455, owner decision Б): on %s an эфир that no longer exists is no target — the confirmed doctor lands on the default landing",
+    async (_host, config) => {
+      readReturnEvent.mockResolvedValue(GONE);
+
+      const shell = await shellOf(config, {
+        email: "doc@example.com",
+        returnTo: "/webinars/gone",
+      });
+
+      // The LD-4 arrival decision (no remembered specialty here → the host default).
+      expect(shell.props.children.props).toMatchObject({
+        landing: config.landing.afterLogin,
+        returnTarget: null,
+      });
+    },
+  );
+
+  it.each([
+    ["Витрина", DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"],
+    ["Академия", ACADEMY_FIXTURE, "/webinars/prp-pri-gonartroze"],
+  ])(
+    "021 EARS-10 (#2455, owner decision Б): on %s an эфир that ended or filled up is still the target — its page states that itself",
+    async (_host, config, page) => {
+      // The public read answers for an ended / full эфир exactly as for a live
+      // one: the page exists, so it is where the confirmed doctor lands.
+      readReturnEvent.mockResolvedValue(FOUND);
+
+      const shell = await shellOf(config, {
+        email: "doc@example.com",
+        returnTo: "/webinars/prp-pri-gonartroze",
+      });
+
+      expect(shell.props.children.props).toMatchObject({
+        landing: page,
+        returnTarget: page,
+      });
+    },
+  );
+
+  it.each([
+    ["the page answered", FOUND, "function"],
+    ["the read could not tell", { status: "unavailable" } as const, "function"],
+    ["the эфир is gone", GONE, "undefined"],
+  ])(
+    "021 EARS-10 (#2455): when %s at render, the step gets the completion-time re-check only while the target stands",
+    async (_label, read, kind) => {
+      readReturnEvent.mockResolvedValue(read);
+
+      const shell = await shellOf(DOCTOR_FIXTURE, {
+        email: "doc@example.com",
+        returnTo: "/webinars/prp-pri-gonartroze",
+      });
+      const step = shell.props.children as unknown as ReactElement<{
+        returnTarget: string | null;
+        resolveCompletionTarget?: unknown;
+      }>;
+
+      expect(typeof step.props.resolveCompletionTarget).toBe(kind);
+      expect(step.props.returnTarget).toBe(
+        kind === "function" ? "/events/prp-pri-gonartroze" : null,
+      );
+    },
+  );
+
+  it("#675 (#2455): a signed-in doctor on the storefront /verify is sent to the эфир they carried, never shown a second confirmation", async () => {
+    resolveServerAuth.mockResolvedValue(DOCTOR);
+    readReturnEvent.mockResolvedValue(FOUND);
+
+    await expect(
+      shellOf(DOCTOR_FIXTURE, {
+        email: "doc@example.com",
+        returnTo: "/webinars/prp-pri-gonartroze",
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT:/events/prp-pri-gonartroze");
   });
 });
 
@@ -171,12 +283,8 @@ describe("#2027 PR 1.7: the /verify mount", () => {
  * A validated carried target is final (005 EARS-2), so it gets none.
  */
 describe("021 EARS-3 (#2333): the /verify step gets the signed-in re-decision where it can change", () => {
-  // No shipped specialty-aware host serves `/verify` (the doctor storefront
-  // confirms inline); the package mount still owns the decision for one that does.
-  const SPECIALTY_AWARE_WITH_VERIFY: AuthFlowHostConfig = {
-    ...DOCTOR_FIXTURE,
-    routes: { ...DOCTOR_FIXTURE.routes, verify: "/verify" },
-  };
+  // The doctor storefront: specialty-aware, and served by this mount (#2455).
+  const SPECIALTY_AWARE_WITH_VERIFY: AuthFlowHostConfig = DOCTOR_FIXTURE;
   type ActionProps = { resolveSignedInLanding?: () => Promise<string> };
 
   async function actionOf(config: AuthFlowHostConfig, params: Params) {
@@ -192,6 +300,7 @@ describe("021 EARS-3 (#2333): the /verify step gets the signed-in re-decision wh
   });
 
   it("005 EARS-2: a carried validated returnTo is the landing — nothing to re-decide", async () => {
+    readReturnEvent.mockResolvedValue(FOUND);
     expect(
       await actionOf(SPECIALTY_AWARE_WITH_VERIFY, {
         returnTo: "/events/prp-pri-gonartroze",

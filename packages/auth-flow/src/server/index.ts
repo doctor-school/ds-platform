@@ -39,6 +39,7 @@ export {
   formatMskTime,
   isAccountReturnTarget,
   isRoomReturnTarget,
+  readReturnEvent,
   resolveCarriedReturnTarget,
   resolveReturnContext,
   resolveReturnLandingPath,
@@ -46,6 +47,7 @@ export {
   toReturnContextEvent,
   withReturnContext,
   type ReturnContextEvent,
+  type ReturnEventRead,
 } from "./return-context";
 export {
   NO_SPECIALTY_CHOICE,

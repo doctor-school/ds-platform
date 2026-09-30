@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
-  DoctorConfirmRequest,
-  DoctorConfirmResponse,
   DoctorRegisterRequest,
   DoctorRegisterResponse,
-  VerifyRequest,
-  VerifyResponse,
 } from "@ds/schemas";
 
 import { AuthError, createAuthClient } from "./auth-client";
@@ -263,19 +259,20 @@ describe("021 EARS-19: the bot-protection token on the protected commands", () =
 });
 
 /**
- * The confirmation submit. Each host names its own `api.confirmPath`: the
- * Academy confirms on the shipped 003 engine, the doctor storefront on its
- * command, which DELEGATES to that same engine and adds the 021 success state.
- * Neither carries a captcha token (row 20).
+ * The confirmation submit (#2455). ONE command on both storefronts: the 003
+ * `/v1/auth/verify` engine, a package constant rather than host data, taking the
+ * address and the code only. Where the visitor lands afterwards is decided by
+ * the shared client resolution, never by the confirm answer. Neither host
+ * carries a captcha token (row 20).
  */
-describe("021 EARS-10: the confirmation command", () => {
-  it("EARS-19.3: confirming the emailed code reuses the shipped 003 route unchanged", async () => {
+describe("003 EARS-3: the one confirmation command", () => {
+  it.each([
+    ["Академия", academy],
+    ["Витрина", doctor],
+  ])("EARS-3: %s confirms the emailed code on the shipped 003 route, address and code only", async (_host, client) => {
     fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
 
-    await academy.confirm<VerifyRequest, VerifyResponse>({
-      email: "doctor@clinic.ru",
-      code: "ABC123",
-    });
+    await client.verify({ email: "doctor@clinic.ru", code: "ABC123" });
 
     const [url, init] = callArgs();
     expect(url, "003's engine, not a second code path").toBe("/v1/auth/verify");
@@ -284,44 +281,11 @@ describe("021 EARS-10: the confirmation command", () => {
       code: "ABC123",
     });
     expect("x-smartcaptcha-token" in headers(init)).toBe(false);
-  });
-
-  it("021 EARS-10: the confirm command carries the code AND the doctor-host return target in one request", async () => {
-    fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
-
-    await doctor.confirm<DoctorConfirmRequest, DoctorConfirmResponse>({
-      email: "doctor@clinic.ru",
-      code: "ABC123",
-      returnTo: "/events/prp-pri-gonartroze",
-    });
-
-    const [url, init] = callArgs();
-    expect(url, "one command, not a verify hop plus a landing hop").toBe(
-      "/v1/storefront/doctor/confirm",
-    );
-    expect(JSON.parse(String(init.body))).toEqual({
-      email: "doctor@clinic.ru",
-      code: "ABC123",
-      // The DOCTOR-HOST projection, the only shape the server guard accepts.
-      returnTo: "/events/prp-pri-gonartroze",
-    });
     expect(init.credentials).toBe("include");
   });
+});
 
-  it("021 EARS-10: a direct arrival sends no target at all rather than an empty one", async () => {
-    fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
-
-    await doctor.confirm<DoctorConfirmRequest, DoctorConfirmResponse>({
-      email: "doctor@clinic.ru",
-      code: "ABC123",
-    });
-
-    expect(JSON.parse(String(callArgs()[1].body))).toEqual({
-      email: "doctor@clinic.ru",
-      code: "ABC123",
-    });
-  });
-
+describe("021 EARS-19: the doctor-storefront registration command", () => {
   it("EARS-19.4: a refused token surfaces as the machine-readable code the shared predicates read", async () => {
     fetchMock.mockResolvedValue(
       json({ message: "captcha refused", code: "bot_protection_rejected" }, 403),

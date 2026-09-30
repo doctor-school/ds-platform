@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,28 +18,53 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * Mocked seams, and why each is the honest one:
  *   • `redirect` — Next's own control-flow throw, doubled so a test can never
  *     observe the mount rendering on past a redirect it was supposed to take.
- *   • `resolveServerAuth` / `resolveReturnContext` — the two upstream READS.
+ *   • `resolveServerAuth` / `readReturnEvent` — the two upstream READS.
  *     The GUARD (`guardAuthRoute`) and the whole return-target codec stay the
  *     real shared ones, so this tier proves the mount routes its decision
  *     through them rather than re-deciding locally.
  *   • `resolveArrivalLanding` keeps its real LD-4 rule, bound to a doubled
  *     `fetch`: what is stubbed is the specialty READ, never the decision.
  */
-const { redirect, resolveServerAuth, resolveReturnContext, specialtyFetch } =
-  vi.hoisted(() => ({
-    redirect: vi.fn((path: string) => {
-      throw new Error(`NEXT_REDIRECT:${path}`);
-    }),
-    resolveServerAuth: vi.fn(),
-    resolveReturnContext: vi.fn(),
-    specialtyFetch: vi.fn(),
-  }));
+const {
+  redirect,
+  resolveServerAuth,
+  readReturnEvent,
+  specialtyFetch,
+  push,
+  login,
+  registerForEvent,
+} = vi.hoisted(() => ({
+  redirect: vi.fn((path: string) => {
+    throw new Error(`NEXT_REDIRECT:${path}`);
+  }),
+  resolveServerAuth: vi.fn(),
+  readReturnEvent: vi.fn(),
+  specialtyFetch: vi.fn(),
+  push: vi.fn(),
+  login: vi.fn(async () => undefined),
+  registerForEvent: vi.fn(async (_slug: string) => ({ registered: true })),
+}));
 
 vi.mock("next/navigation", () => ({
   redirect,
-  // The nested client door reads the router; only the mount's redirect is under
-  // test here.
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  // The nested client door reads the router: `push` is where a visitor lands
+  // once the mount's decision has been driven through the door (the journey
+  // tier below).
+  useRouter: () => ({ push, refresh: vi.fn() }),
+}));
+// The BFF seam of the journey tier: the sign-in call itself succeeds, so what is
+// under test is only where the mount's decision sends the visitor afterwards.
+vi.mock("../client/auth-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../client/auth-client")>()),
+  createAuthClient: () => ({
+    login,
+    requestOtp: vi.fn(),
+    loginWithOtp: vi.fn(),
+  }),
+}));
+vi.mock("@ds/events-storefront/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/client")>()),
+  registerForEvent: (slug: string) => registerForEvent(slug),
 }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "__Host-ds_session=x" }),
@@ -48,7 +74,7 @@ vi.mock("../server", async (importOriginal) => {
   return {
     ...actual,
     resolveServerAuth,
-    resolveReturnContext,
+    readReturnEvent,
     resolveArrivalLanding: (
       host: Parameters<typeof actual.resolveArrivalLanding>[0],
       requestHeaders: Headers,
@@ -56,6 +82,7 @@ vi.mock("../server", async (importOriginal) => {
   };
 });
 
+import { resolveAuthFlowCopy } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
@@ -77,6 +104,11 @@ const EVENT = {
   specialties: ["Травматология"],
   speakers: [{ name: "Анна Соколова" }],
 };
+
+/** The эфир read answering «the page is there» — the card has an event to draw. */
+const FOUND = { status: "found", event: EVENT } as const;
+/** The эфир read answering «no such page» — the only answer that drops the target. */
+const GONE = { status: "gone" } as const;
 
 /** The specialty read answering «nothing remembered» — the LD-4 default branch. */
 function forgetsSpecialty(): void {
@@ -154,7 +186,7 @@ async function linkHrefOf(
 beforeEach(() => {
   vi.clearAllMocks();
   forgetsSpecialty();
-  resolveReturnContext.mockResolvedValue(null);
+  readReturnEvent.mockResolvedValue(GONE);
 });
 
 afterEach(cleanup);
@@ -186,7 +218,7 @@ describe("017 #1955: /login is closed to a doctor who already has a session", ()
 
   it("017 #1955.22: a signed-in GATE arrival goes to the эфир it came from, not the generic landing", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     // The LANDING, not the guard target verbatim: the academy serves the эфир at
     // `/webinars/<slug>` and this host serves the same one at `/events/<slug>`
@@ -235,7 +267,7 @@ describe("#1987: an /account arrival comes back to /account", () => {
     );
     // No эфир to resolve — the account shape carries none, so the mount must not
     // pay for the public event read to find that out.
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("#1987: a guest arriving with returnTo=/account signs in INTO /account", async () => {
@@ -288,7 +320,7 @@ describe("006 EARS-6: a room arrival comes back to the room", () => {
       }),
     ).toBe("/events/cardio-live/room");
     // A room return resolves no эфир card — the public event read is not paid.
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("006 EARS-6: a signed-in doctor arriving with a room return is sent straight to the room", async () => {
@@ -307,7 +339,7 @@ describe("006 EARS-6: a room arrival comes back to the room", () => {
         returnTo: "/webinars/cardio-live/room",
       }),
     ).toBe("/webinars/cardio-live/room");
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("006 EARS-6: another host's room is not this host's room — the LD-4 landing stands", async () => {
@@ -361,7 +393,7 @@ describe("#2258: the /login → /register hop carries the arrival target", () =>
   });
 
   it("#2258: the эфир arrival is still carried, unchanged", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     expect(
       await linkHrefOf(
@@ -442,16 +474,123 @@ describe("017 #1955 (Academy): the same rules over the other host config", () =>
     expect(redirect).not.toHaveBeenCalled();
   });
 
-  it("021 EARS-3: a host that publishes no return-context card never pays for the эфир read", async () => {
+  it("021 EARS-2 (#2455): the Academy shows the carried эфир beside the sign-in form, as the canvas «Вход» draws it on both hosts", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
+    readReturnEvent.mockResolvedValue(FOUND);
 
-    const door = await doorOf(ACADEMY_FIXTURE, {
-      returnTo: "/webinars/prp-pri-gonartroze",
-    });
-    // The эфир still COMPLETES after sign-in — the guard reconstruction stands
-    // on its own; only the card, which this host does not publish, needed the read.
-    expect(door.props.returnTarget).toBe("/webinars/prp-pri-gonartroze");
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    const shell = (await LoginRoute({
+      config: ACADEMY_FIXTURE,
+      searchParams: Promise.resolve({
+        returnTo: "/webinars/prp-pri-gonartroze",
+      }),
+    })) as ReactElement<{
+      returnContext?: unknown;
+      children: ReactElement<{
+        returnTarget?: string | null;
+        returnContextPlate?: unknown;
+      }>;
+    }>;
+
+    expect(shell.props.returnContext).toBeTruthy();
+    expect(shell.props.children.props.returnContextPlate).toBeTruthy();
+    expect(shell.props.children.props.returnTarget).toBe(
+      "/webinars/prp-pri-gonartroze",
+    );
+    expect(readReturnEvent).toHaveBeenCalledWith(
+      "/webinars/prp-pri-gonartroze",
+    );
+  });
+
+  it.each([
+    ["Витрина", DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"],
+    ["Академия", ACADEMY_FIXTURE, "/webinars/prp-pri-gonartroze"],
+  ])(
+    "021 EARS-10 (#2455): on %s an эфир read that could not tell keeps the target and draws no card; only «gone» drops it — the carried target and any parked copy",
+    async (_host, config, target) => {
+      resolveServerAuth.mockResolvedValue({ status: "guest" });
+      readReturnEvent.mockResolvedValue({ status: "unavailable" });
+
+      const kept = await doorOf(config, {
+        returnTo: "/webinars/prp-pri-gonartroze",
+      });
+      expect(kept.props.returnTarget).toBe(target);
+      expect(
+        (kept.props as { returnTargetGone?: boolean }).returnTargetGone,
+      ).toBe(false);
+
+      readReturnEvent.mockResolvedValue(GONE);
+      const dropped = await doorOf(config, {
+        returnTo: "/webinars/prp-pri-gonartroze",
+      });
+      expect(dropped.props.returnTarget ?? null).toBe(null);
+      expect(
+        (dropped.props as { returnTargetGone?: boolean }).returnTargetGone,
+      ).toBe(true);
+    },
+  );
+});
+
+/**
+ * The mount's decision driven THROUGH the door to where the visitor lands. On the
+ * Академия the middleware parks the same `returnTo` the mount reads (014 EARS-6),
+ * so a door prop alone cannot prove the landing: the parked copy is the second
+ * carrier, and the rule must hold across both.
+ */
+describe("021 EARS-10 (#2455): where a sign-in on the Академия lands", () => {
+  const PARKING = ACADEMY_FIXTURE.returnTo?.parkingCookie;
+  const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).login;
+
+  function park(target: string): void {
+    document.cookie = `${PARKING?.name}=${encodeURIComponent(target)}; Path=/`;
+  }
+
+  async function signInThrough(params: Params): Promise<void> {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    render(await doorOf(ACADEMY_FIXTURE, params));
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText(COPY.password.identifierLabel),
+      "doc@example.com",
+    );
+    await user.type(
+      screen.getByLabelText(COPY.password.passwordLabel, { selector: "input" }),
+      "Sup3r$ecretPw!9",
+    );
+    await user.click(screen.getByTestId("password-login-submit"));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+  }
+
+  afterEach(() => {
+    document.cookie = `${PARKING?.name}=; Path=/; Max-Age=0`;
+  });
+
+  it("021 EARS-10: an эфир that no longer exists is dropped on /login too — the parked copy is consumed, not used, and the visitor lands on the default", async () => {
+    readReturnEvent.mockResolvedValue(GONE);
+    park("/webinars/prp-pri-gonartroze");
+
+    await signInThrough({ returnTo: "/webinars/prp-pri-gonartroze" });
+
+    expect(push).toHaveBeenCalledWith(ACADEMY_FIXTURE.landing.afterLogin);
+    expect(registerForEvent).not.toHaveBeenCalled();
+    // Consumed exactly once: the dead page cannot come back on a later sign-in.
+    expect(document.cookie).not.toContain(`${PARKING?.name}=%2F`);
+  });
+
+  it("014 EARS-6: an arrival the mount did not judge still lands on the parked target", async () => {
+    park("/webinars/prp-pri-gonartroze");
+
+    await signInThrough({});
+
+    expect(readReturnEvent).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith("/webinars/prp-pri-gonartroze");
+  });
+
+  it("006 EARS-6: an Academy room arrival still signs in INTO the room", async () => {
+    park("/webinars/prp-pri-gonartroze/room");
+
+    await signInThrough({ returnTo: "/webinars/prp-pri-gonartroze/room" });
+
+    expect(push).toHaveBeenCalledWith("/webinars/prp-pri-gonartroze/room");
   });
 });
 
@@ -466,7 +605,10 @@ describe("021 EARS-3 (#2333): the door gets the signed-in re-decision where it c
 
   async function actionOf(config: AuthFlowHostConfig, params: Params) {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
-    const door = (await doorOf(config, params)) as unknown as ReactElement<DoorProps>;
+    const door = (await doorOf(
+      config,
+      params,
+    )) as unknown as ReactElement<DoorProps>;
     return door.props.resolveSignedInLanding;
   }
 
@@ -475,12 +617,16 @@ describe("021 EARS-3 (#2333): the door gets the signed-in re-decision where it c
   });
 
   it("005 EARS-2: a carried validated target is the landing — nothing to re-decide", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     expect(
-      await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
+      await actionOf(DOCTOR_FIXTURE, {
+        returnTo: "/webinars/prp-pri-gonartroze",
+      }),
     ).toBeUndefined();
-    expect(await actionOf(DOCTOR_FIXTURE, { returnTo: "/account" })).toBeUndefined();
+    expect(
+      await actionOf(DOCTOR_FIXTURE, { returnTo: "/account" }),
+    ).toBeUndefined();
   });
 
   it("006 EARS-6: a doctor-room return is a carried target — no re-decision, the door lands in the room", async () => {

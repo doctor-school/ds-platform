@@ -8,10 +8,9 @@ import { parkReturnTarget } from "./return-target-parking";
  * The ONE `returnTo` parking rule of the shared auth flow (wave-1 gate rows
  * 29-31, #2027 PR 1.4).
  *
- * 014 EARS-6 is the behaviour: the query carries the target through the flow,
- * but NOT through the verification mail, which lands the visitor on a cold
- * `/verify#email=...` with no query at all. So a guard-clean target is parked in
- * a short-lived same-origin cookie the moment the visitor enters the auth flow.
+ * 014 EARS-6 is the behaviour (its consumers: 014 EARS-6, 021 EARS-10). These
+ * cases pin only the parking half: a guard-clean target is parked in a
+ * short-lived same-origin cookie the moment the visitor enters the auth flow.
  *
  * Row 29 is why this is a rule and not a middleware: the doctor storefront parks
  * NOTHING - it carries the target on the canonical query param and has no cookie
@@ -117,11 +116,11 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
 });
 
 describe("#2027 PR 1.5 returnTo without parking", () => {
-  it("014 EARS-6.4: a host whose returnTo only publishes the card parks nothing", async () => {
+  it("014 EARS-6.4: a host whose returnTo states no parking cookie parks nothing", async () => {
     const { NextRequest } = await import("next/server");
     const request = new NextRequest(
       "https://doctor.test/login?returnTo=%2Fevents%2Fslug",
     );
-    expect(parkReturnTarget(request, { card: true })).toBeUndefined();
+    expect(parkReturnTarget(request, {})).toBeUndefined();
   });
 });

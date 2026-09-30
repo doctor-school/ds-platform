@@ -116,9 +116,10 @@ async function registerThroughMail(
   );
   expect(code, "registration code should reach Mailpit").toBeTruthy();
 
-  // THE interruption the design names: leave the flow and come back through the
-  // mail's own link shape — a cold `/verify#email=…` with no `returnTo` query.
-  await page.goto(`/verify#email=${encodeURIComponent(email)}`);
+  // THE interruption the design names: leave the flow for the inbox and come
+  // back in a fresh navigation — a cold `/verify?email=…` with no `returnTo`
+  // query (the mail itself is link-free, 003 EARS-29).
+  await page.goto(`/verify?email=${encodeURIComponent(email)}`);
   await page.locator('input[autocomplete="one-time-code"]').fill(code!);
   // Auto-submit on completion carries the flow (#175).
   await page.waitForURL((url) => !url.pathname.startsWith("/verify"), {

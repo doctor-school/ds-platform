@@ -89,9 +89,15 @@ describe("021 #1955: the return-context assurance line", () => {
 
   it("#2027: the panel's eyebrow and assurance line take the canvas panel measures (auth.dc.html 302/304)", () => {
     const { container } = render(
-      <ReturnContextPanel config={DOCTOR_FIXTURE} event={EVENT} variant="login" />,
+      <ReturnContextPanel
+        config={DOCTOR_FIXTURE}
+        event={EVENT}
+        variant="login"
+      />,
     );
-    const panel = container.querySelector('[data-testid="return-context-panel"]');
+    const panel = container.querySelector(
+      '[data-testid="return-context-panel"]',
+    );
     const [eyebrow, assurance] = [
       panel?.firstElementChild,
       panel?.lastElementChild,
@@ -117,8 +123,8 @@ describe("021 #1955: the return-context assurance line", () => {
   });
 });
 
-describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host publishes it", () => {
-  it("021 EARS-2: a host with `returnTo.card` gets both compositions, each hidden at the other's breakpoint — one render per viewport", () => {
+describe("021 EARS-2 / EARS-3: the card renders beside the form iff the arrival resolved an event", () => {
+  it("021 EARS-2: a resolved event gets both compositions, each hidden at the other's breakpoint — one render per viewport", () => {
     const slots = returnContextSlots({
       config: DOCTOR_FIXTURE,
       event: EVENT,
@@ -152,21 +158,32 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the host pub
     expect(slots).toEqual({ panel: undefined, plate: undefined });
   });
 
-  it("021 EARS-3: a host that does not publish the card (Academy) renders no slot even with an event", () => {
-    const slots = returnContextSlots({
-      config: ACADEMY_FIXTURE,
-      event: EVENT,
-      variant: "login",
-    });
+  it.each(["login", "register"] as const)(
+    "021 EARS-2 (#2455): the Academy draws the same card beside the %s door — the canvas `auth` gates it on the return context alone, never on the host",
+    (variant) => {
+      const slots = returnContextSlots({
+        config: ACADEMY_FIXTURE,
+        event: EVENT,
+        variant,
+      });
 
-    expect(slots).toEqual({ panel: undefined, plate: undefined });
-  });
+      expect(slots.panel).toBeDefined();
+      expect(slots.plate).toBeDefined();
+      const panel = renderToStaticMarkup(<>{slots.panel}</>);
+      expect(panel).toContain("Вы вернётесь к этому событию");
+      expect(panel).toContain(EVENT.title);
+    },
+  );
 
-  it("021 EARS-3: a host flagging the card states no words of its own — the package supplies them", () => {
+  it("021 EARS-3: a host states no words of its own for the card — the package supplies them", () => {
     const { copy: _omit, ...withoutCopy } = DOCTOR_FIXTURE;
     const config: AuthFlowHostConfig = withoutCopy;
 
-    const slots = returnContextSlots({ config, event: EVENT, variant: "login" });
+    const slots = returnContextSlots({
+      config,
+      event: EVENT,
+      variant: "login",
+    });
 
     expect(slots.panel).toBeDefined();
     expect(slots.plate).toBeDefined();

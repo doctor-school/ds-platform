@@ -136,7 +136,7 @@ async function provisionDoctor(specialty?: string) {
       consent: [{ purpose: "partner-data-sharing", version: "v1" }],
     });
     const code = await confirmationCode(email, sentAt);
-    await expectOk(api, "POST", "/v1/storefront/doctor/confirm", {
+    await expectOk(api, "POST", "/v1/auth/verify", {
       email,
       code,
     });

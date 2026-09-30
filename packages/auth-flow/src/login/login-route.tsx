@@ -6,8 +6,8 @@ import {
   guardAuthRoute,
   isAccountReturnTarget,
   isRoomReturnTarget,
+  readReturnEvent,
   resolveArrivalLanding,
-  resolveReturnContext,
   resolveReturnLandingPath,
   resolveReturnTargetPath,
   resolveServerAuth,
@@ -28,8 +28,8 @@ import { returnContextSlots } from "./return-context-card";
  * `AuthFlowHostConfig` and forwards `searchParams`. Everything below — the
  * arrival read, the landing decision, the signed-in guard, the return-context
  * slots and the frame — is host-NEUTRAL, and every difference between the two
- * storefronts is config DATA: the routes, the эфир path projection, whether the
- * host publishes a return-context card, whether its landing is specialty-aware.
+ * storefronts is config DATA: the routes, the эфир path projection, whether its
+ * landing is specialty-aware.
  *
  * WHY A SERVER COMPONENT. Both per-visitor facts — «is this visitor already
  * signed in» and «where does sign-in lead» — are decided before the first byte
@@ -79,16 +79,16 @@ export async function LoginRoute({
     });
   }
 
-  // 021 EARS-3 — the эфир READ exists to fill the return-context CARD, so a host
-  // that publishes none never pays for it. The gate is then kept on the guard
-  // reconstruction alone, which stands on its own.
-  const returnEvent =
-    config.returnTo?.card && safeTarget
-      ? await resolveReturnContext(safeTarget)
-      : null;
-  const gateResolved = config.returnTo?.card
-    ? returnEvent !== null
-    : Boolean(safeTarget);
+  // 021 EARS-10 — the ONE эфир read, the rule the registration door and the
+  // confirmation step take (`resolveRegistrationArrival`): only a «gone» answer
+  // drops the target — the carried one AND its parked copy (the door consumes
+  // that without using it). The card is drawn from a page that answered
+  // (EARS-2/3), on every host — the canvas «Вход» gates it on the return context
+  // alone (#2455).
+  const eventRead = safeTarget ? await readReturnEvent(safeTarget) : null;
+  const eventGone = eventRead?.status === "gone";
+  const gateResolved = eventRead !== null && !eventGone;
+  const returnEvent = eventRead?.status === "found" ? eventRead.event : null;
 
   // #1987 — an account arrival resolves NO эфир, so the gate branch would refuse
   // it and drop the doctor on the default landing, which is precisely the
@@ -113,8 +113,9 @@ export async function LoginRoute({
   // specialty is invisible). When it is the LD-4 arrival decision on a
   // specialty-aware host, the door also gets the server action that decides it
   // again once the sign-in has set the session; a carried target is final.
-  const resolveSignedInLanding =
-    landsOnCarriedTarget ? undefined : signedInLandingAction(config);
+  const resolveSignedInLanding = landsOnCarriedTarget
+    ? undefined
+    : signedInLandingAction(config);
 
   guardAuthRoute({
     authenticated,
@@ -142,6 +143,7 @@ export async function LoginRoute({
         // 005 EARS-2 — the эфир intent to COMPLETE after sign-in, in this host's
         // vocabulary, supplied only when the arrival actually resolved.
         returnTarget={landingTarget && gateResolved ? landingTarget : null}
+        returnTargetGone={eventGone}
         returnContextPlate={plate}
       />
     </AuthShell>

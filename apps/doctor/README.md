@@ -52,38 +52,31 @@ apps/doctor/
   playwright.ci.config.ts  # backend-free tier, DOCTOR_CI_PORT (default 3211)
 ```
 
-## Post-confirmation landing (021 EARS-10, amended 2026-09-17)
+## Post-confirmation landing (021 EARS-10, amended 2026-09-29)
 
-After the doctor submits the emailed code, the shared sign-up door's inline
-confirmation (`@ds/auth-flow/register`, mounted by `app/(auth)/register/page.tsx`)
-calls the single storefront command `POST /v1/storefront/doctor/confirm` (it
-verifies the code and decides the landing in one round trip) and then NAVIGATES
-there — `router.replace`, no screen in between. There is no success card: the
-owner removed that step on 2026-09-17 (PR #2239) so this host matches the Academy
-`/verify` route, and the rule is pinned for both hosts as standard **S5** in
-`packages/auth-flow/README.md`. The spec side is the «Amendment — 2026-09-17»
-block of `apps/docs/content/specs/features/021-doctor-registration/`.
+Registration hands the doctor to this host's own `/verify` route
+(`app/(auth)/verify/page.tsx`, the thin mount of `@ds/auth-flow/verify/route`) —
+the same confirmation step the Academy serves, carrying the address and the
+return target in the query (003 EARS-24, 021 EARS-10). The code goes to the one
+003 command both storefronts post, `POST /v1/auth/verify`, which verifies and
+mints no session.
 
-The destination comes from the CONFIRM RESPONSE, not from the client-side
-completion of the return target: the round trip is the only participant that
-re-validated the carried target, so it is the only one that knows the target went
-stale (`reason: ended | full | unpublished | missing`) and where the honest
-destination is. `@ds/auth-flow/register` `resolveConfirmLanding` holds the whole
-rule and nothing else —
-the server's `primaryAction.href` when it honoured or degraded a target, else the
-`landing` the shared route computed from the specialty read (LD-4 —
-`/events`, else `/`). Every href reaching a navigation comes from the server
-response or that prop, never assembled on the client. `replace`, not `push`: a
-spent code form must not be reachable by Back.
+The doctor is then SIGNED IN (021 EARS-15): the registration door held the
+just-entered password in the shared `pending-registration` slot
+(`@ds/design-system/blocks`), and the step replays the real 003 EARS-5
+`POST /v1/auth/login` once the code is accepted, which sets
+`__Host-ds_session`. With no held password (a reload, a new tab) the step sends
+the doctor to the sign-in door carrying the target; a replay the login refuses
+keeps the step with the generic sentence.
 
-The doctor is also SIGNED IN by then (021 EARS-15, #1996): the confirm route
-mints no session, so the screen holds the just-entered password in the shared
-`pending-registration` slot (`@ds/design-system/blocks` — the same one the
-Academy `/register → /verify` pair uses) and replays the real 003 EARS-5
-`POST /v1/auth/login` once the confirm succeeds, which is what sets
-`__Host-ds_session`. A replay that fails does not fail the confirmation — the
-email is verified either way, and that branch keeps the sign-in door with the
-carried target (standard S3) instead of navigating.
+Where the doctor lands is decided the same way on both storefronts (owner
+decision Б, 2026-09-29): the page of the эфир they came from — an ended or full
+эфир included, its page states that itself — through the shared 005 EARS-2
+completion; an эфир that no longer exists when the code is accepted (the public
+event read, asked again at that moment, answers not-found) → the LD-4 landing
+(`/events` for a remembered specialty, else `/`). A read that fails is not «no
+longer exists»: the эфир page stays the destination (021 EARS-10). `router.replace`, no screen in between (standard **S5** in
+`packages/auth-flow/README.md`).
 
 ## Sessions on two hosts (ADR-0015 §4)
 

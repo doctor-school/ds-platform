@@ -25,7 +25,10 @@ import { OtpCodeFieldSchema } from "@ds/design-system/fields";
 import { resolveAuthFlowCopy } from "../copy";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
-import { completeReturnTarget } from "../client/return-completion";
+import {
+  completeResolvedReturnTarget,
+  completeReturnTarget,
+} from "../client/return-completion";
 import { landingAfterSignIn } from "../client/signed-in-landing";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
@@ -89,6 +92,15 @@ export type LoginDoorProps = {
    * direct arrival, and then the landing simply stands.
    */
   returnTarget?: string | null;
+  /**
+   * 021 EARS-10 — the mount's эфир read answered «gone»: the arrival named an
+   * эфир that no longer exists. `returnTarget` is then absent, and the parked
+   * copy of the SAME arrival (014 EARS-6, on a host that parks) is consumed
+   * without being used, so the dead page never comes back through the cookie.
+   * Absent for every arrival the mount did not judge (room, account, a direct
+   * arrival): those still complete over the parked target.
+   */
+  returnTargetGone?: boolean;
   /** The gate context the visitor arrived from — the plate beside the form (021 EARS-2). */
   returnContextPlate?: ReactNode;
 };
@@ -132,11 +144,7 @@ function otpRequestResolverOf(
   >({
     identifier: (value) => {
       if (!value?.trim()) {
-        return (
-          copy.required ??
-          fields.identifier.required ??
-          copy.invalid
-        );
+        return copy.required ?? fields.identifier.required ?? copy.invalid;
       }
       // The channel rides the parse so the host's served-channel rule (row 21)
       // decides the shape; only the identifier's own verdict is rendered, the
@@ -224,6 +232,7 @@ export function LoginDoor({
   resolveSignedInLanding,
   returnTo = null,
   returnTarget = null,
+  returnTargetGone = false,
   returnContextPlate,
 }: LoginDoorProps) {
   const router = useRouter();
@@ -259,13 +268,17 @@ export function LoginDoor({
 
   // #2333 — the session exists now: the landing is decided again for it (the
   // guest-render one could not see a profile specialty), then the carried
-  // target, if any, is completed over it exactly as before.
+  // target, if any, is completed over it exactly as before. 021 EARS-10 — when
+  // the mount found the эфир gone, the parked copy is consumed, never used: the
+  // same completion the confirmation step takes.
   async function completeAfterSignIn(): Promise<string> {
-    return completeReturnTarget(
-      config,
-      returnTarget,
-      await landingAfterSignIn(landing, resolveSignedInLanding),
+    const signedInLanding = await landingAfterSignIn(
+      landing,
+      resolveSignedInLanding,
     );
+    return returnTargetGone
+      ? completeResolvedReturnTarget(config, null, signedInLanding)
+      : completeReturnTarget(config, returnTarget, signedInLanding);
   }
 
   async function finishLogin(values: LoginRequest, captchaToken?: string) {

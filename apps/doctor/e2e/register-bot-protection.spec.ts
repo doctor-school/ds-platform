@@ -26,7 +26,7 @@ import { test, expect, type Page, type Request } from "@playwright/test";
  */
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
 const RESEND_ROUTE = "**/v1/auth/verify/resend";
-const CONFIRM_ROUTE = "**/v1/storefront/doctor/confirm";
+const CONFIRM_ROUTE = "**/v1/auth/verify";
 // 021 EARS-15 (#1996) — the sign-in the confirmation replays.
 const LOGIN_ROUTE = "**/v1/auth/login";
 
@@ -232,7 +232,7 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
   // command: it runs the same 003 engine and answers with the 021 success state,
   // so the code is still checked exactly once and the browser still makes exactly
   // one round trip — what changed is the answer, not the engine.
-  test("021 EARS-19.5: the confirmation state confirms the code through the storefront confirm command", async ({
+  test("021 EARS-19.5: the confirmation state confirms the code through the one 003 confirm command (#2455)", async ({
     page,
   }) => {
     await acceptRegistration(page);
@@ -240,13 +240,7 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          status: "verified",
-          credited: null,
-          profileCompletion: null,
-          primaryAction: { kind: "landing", href: "/events" },
-          secondaryAction: { kind: "cabinet", href: "/account" },
-        }),
+        body: JSON.stringify({ status: "verified" }),
       }),
     );
     // 021 EARS-15 (#1996) — the success state exists ONLY for a doctor who is

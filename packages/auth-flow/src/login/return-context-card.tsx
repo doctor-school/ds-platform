@@ -29,10 +29,11 @@ import type { ReturnContextEvent } from "../server/return-context";
  * the other's breakpoint with `display:none`, which also removes it from the
  * accessibility tree — the event is announced ONCE per viewport.
  *
- * DATA, NOT A HOST BRANCH. Whether a host publishes the card is
- * `config.returnTo.card`; every word comes from `copy.returnContext`.
- * `returnContextSlots` is the one gate: no flag or no resolvable event
- * ⇒ no slot at all, never an empty frame (EARS-3).
+ * NOT A HOST BRANCH. The canvas `auth` draws the card on «Вход»,
+ * «Регистрация» and «Подтверждение» for both storefronts, gated on the return
+ * context alone (#2455), so no host states whether it shows; every word comes
+ * from `copy.returnContext`. `returnContextSlots` is the one gate: no
+ * resolvable event ⇒ no slot at all, never an empty frame (EARS-3).
  */
 
 /**
@@ -141,9 +142,9 @@ export function ReturnContextPlate({
 }
 
 /**
- * Row 46 — the one gate. Both slots are present iff the host publishes the card,
- * states its words and the server resolved an event; otherwise both are
- * `undefined` so the frame renders its value prop and the form stands alone.
+ * Row 46 — the one gate. Both slots are present iff the server resolved an
+ * event; otherwise both are `undefined` so the frame renders its value prop and
+ * the form stands alone.
  */
 export function returnContextSlots({
   config,
@@ -155,7 +156,7 @@ export function returnContextSlots({
   variant: ReturnContextVariant;
 }): { panel: ReactNode | undefined; plate: ReactNode | undefined } {
   const copy = resolveAuthFlowCopy(config).returnContext;
-  if (!config.returnTo?.card || !event) {
+  if (!event) {
     return { panel: undefined, plate: undefined };
   }
   return {

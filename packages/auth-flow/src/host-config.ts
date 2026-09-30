@@ -16,7 +16,7 @@ import type { ConsentTier, OtpChannel } from "@ds/schemas";
  * are what the server session read, the signed-in guard and the return-target
  * codec consume. PR 1.5 adds what the sign-in door reads: the landing table
  * (with the remembered-specialty reads named as paths), the event and room route
- * templates, the return-context card flag and the door's copy as plain string
+ * templates and the door's copy as plain string
  * templates (the copy crosses the server-mount → client boundary, so it can hold
  * no function), and the shared auth frame's brand assets and panel copy. The
  * consent tiers arrive with PR 1.6, which adds everything the registration door
@@ -99,9 +99,9 @@ export type AuthFlowCopy = {
    */
   readonly botProtectionDisclosure: AuthFlowBotProtectionDisclosureCopy;
   /**
-   * The return-context card beside a door (row 46). Its words are the
-   * package's on every host; `returnTo.card` alone decides whether the card is
-   * drawn, so a host that publishes it restates no sentence.
+   * The return-context card beside a door (row 46). Its words, and whether it
+   * is drawn, are the package's on every host: the canvas `auth` draws it
+   * wherever the arrival resolved an эфир, on both storefronts (#2455).
    */
   readonly returnContext: AuthFlowReturnContextCopy;
   /**
@@ -319,8 +319,8 @@ export type AuthFlowRegisterCopy = {
 
 /**
  * The confirmation step's words (rows 65–77) — the canvas «Подтверждение»
- * screen, one dictionary on every host: the Academy's `/verify` route and the
- * doctor storefront's inline step read the same sentences, and a host varies
+ * screen, one dictionary on every host: both storefronts' `/verify` routes read
+ * the same sentences, and a host varies
  * only WHETHER a line is drawn, never its words.
  */
 export type AuthFlowVerifyCopy = {
@@ -416,8 +416,6 @@ export type AuthFlowApiConfig = {
   readonly basePath: string;
   /** `/v1/auth/register` on the Academy, the storefront command on the doctor host. */
   readonly registerPath: string;
-  /** `/v1/auth/verify` on the Academy, the storefront confirm command on the doctor host. */
-  readonly confirmPath: string;
 };
 
 /**
@@ -430,8 +428,11 @@ export type AuthFlowApiConfig = {
 export type AuthFlowRoutes = {
   readonly login: string;
   readonly register: string;
-  /** `undefined` = the confirmation is an inline step on this host (rows 51, 76). */
-  readonly verify?: string;
+  /**
+   * The confirmation route (003 EARS-24, rows 51, 76) — every host confirms a
+   * new address on a route of its own, which the registration door hops to.
+   */
+  readonly verify: string;
   readonly reset: string;
   /** #1987 — the account path the return-target codec admits as a shape (row 32). */
   readonly account: string;
@@ -501,8 +502,6 @@ export type AuthFlowReturnToConfig = {
      */
     readonly maxAgeSeconds: number;
   };
-  /** Row 46 — the door publishes the return context as a card beside the form. */
-  readonly card?: boolean;
 };
 
 /**
@@ -599,19 +598,8 @@ export type AuthFlowHostConfig = {
     /** Row 61 — the NMO-points promise above the submit; absent on a host that makes none. */
     readonly pointsPromise?: string;
   };
-  /** The confirmation step (rows 65–77, 76). */
-  readonly verify: {
-    /**
-     * Whether the verification MAIL links into a confirmation surface of this
-     * host cold — `/verify#email=<addr>`, the address riding the fragment the
-     * browser never sends (003 EARS-24, #904). `true` on a host that serves
-     * `routes.verify`; `false` on a host that confirms inline on the
-     * registration door, where the address is the one just typed.
-     */
-    readonly deepLinkEntry: boolean;
-  };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;
-  /** Absent = no parking and no return-context card (rows 29, 46). */
+  /** Absent = this host parks no return target (row 29). */
   readonly returnTo?: AuthFlowReturnToConfig;
 };

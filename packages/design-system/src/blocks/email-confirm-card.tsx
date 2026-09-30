@@ -37,7 +37,7 @@ import { useResendCountdown } from "./use-resend-countdown";
  *
  * What stays in the HOST app (the blocks-tier contract — see `./index.ts`): copy,
  * i18n, the zod resolver, BFF transport (including the EARS-25 dedicated resend
- * endpoint), the #904 fragment-derived identifier and its masking/fallback label,
+ * endpoint), the identifier and its masked label,
  * the auto-login replay, routing, and the bot-protection element (a slot).
  */
 
@@ -210,18 +210,17 @@ export function EmailConfirmCard({
   const form = useForm<EmailConfirmValues>({
     resolver,
     // Seed the address from the host (registration is email-only, #202); the field
-    // is not user-editable here — they only type the code. On a cold email-button
-    // open the address arrives from the URL fragment after mount (#904), so it is
-    // also seeded reactively below once resolved.
+    // is not user-editable here — they only type the code. A host may resolve the
+    // address after mount, so it is also seeded reactively below once resolved.
     // Spread-if-present rather than `email: undefined`: with
     // `exactOptionalPropertyTypes` an explicit `undefined` is not assignable to the
     // `string` field. RHF reads both as "no default", so the render is unchanged.
     defaultValues: { ...(email === undefined ? {} : { email }), code: "" },
   });
 
-  // #904: the fragment-seeded address resolves after mount (the hash is client-only),
-  // so push it into the non-rendered `email` field once known — otherwise the cold
-  // open submits with an empty identifier and the code never reaches the api.
+  // An address the host resolves after mount is pushed into the non-rendered
+  // `email` field once known — otherwise the submit carries an empty identifier
+  // and the code never reaches the api.
   React.useEffect(() => {
     if (email) form.setValue("email", email);
     // Keyed only on the resolved address — `form` is a stable useForm handle.

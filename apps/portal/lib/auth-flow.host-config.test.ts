@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { returnContextSlots } from "@ds/auth-flow/login";
+
 import type { AuthFlowHostConfig } from "@ds/auth-flow/host-config";
 
 import {
@@ -46,11 +48,39 @@ describe("ACADEMY_AUTH_FLOW.routes", () => {
  */
 const config: AuthFlowHostConfig = ACADEMY_AUTH_FLOW;
 
+const RETURN_EVENT = {
+  time: "19:00",
+  dateLabel: "28 августа · чт",
+  school: "Школа ортобиологии",
+  title: "PRP при гонартрозе: показания, протоколы, ошибки",
+  specialties: ["Травматология"],
+  speakers: [{ name: "Анна Крылова", org: "НМИЦ травматологии" }],
+};
+
+/**
+ * 021 EARS-2 (#2455) — the canvas `auth` draws the return-context card on
+ * «Вход», «Регистрация» and «Подтверждение» for BOTH hosts, gated on the return
+ * context alone; it is the package's behaviour, never a host flag.
+ */
+describe("ACADEMY_AUTH_FLOW: the return-context card", () => {
+  it.each(["login", "register"] as const)(
+    "021 EARS-2 (#2455): the carried эфир is drawn beside the %s door on this host, with no host flag",
+    (variant) => {
+      expect(ACADEMY_AUTH_FLOW).not.toHaveProperty(["returnTo", "card"]);
+      const slots = returnContextSlots({
+        config: ACADEMY_AUTH_FLOW,
+        event: RETURN_EVENT,
+        variant,
+      });
+      expect(slots.panel).toBeDefined();
+      expect(slots.plate).toBeDefined();
+    },
+  );
+});
+
 describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
-  it("003 EARS-1: confirmation has a route of its own — this host does NOT confirm inline", () => {
-    // The verification mail links into a standalone surface, so the door hops to
-    // it after the ack instead of swapping the card in place (the doctor
-    // storefront states no `verify` and confirms inline).
+  it("003 EARS-24: this host serves the confirmation step on its own `/verify` route", () => {
+    // 003 EARS-24 — the registration door hops here after the ack.
     expect(config.routes.verify).toBe("/verify");
   });
 
@@ -100,7 +130,8 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     expect(resolveAuthFlowCopy(config).brand).toEqual({
       eyebrow: "Академия Doctor.School",
       headline: "Среда обитания экспертов здравоохранения",
-      subcopy: "Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.",
+      subcopy:
+        "Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.",
       footer: "© Doctor.School.",
     });
   });

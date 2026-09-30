@@ -8,11 +8,10 @@ import { parseAccountReturnTarget } from "./return-target";
  * The CARRY vocabulary of an auth hop (rule S3 / #2258), in a module with no
  * server import in its graph.
  *
- * These three symbols used to live in `./server/return-context`, whose module
- * graph reaches `next/headers` through `./server/session`. The inline
- * confirmation step (`./register/inline-confirmation`) is a CLIENT component and
- * carries the same value onward to the sign-in and recovery doors, so the rule
- * had to become reachable from both halves without being written twice.
+ * They sit outside `./server/return-context`, whose module graph reaches
+ * `next/headers` through `./server/session`: the client doors carry the same
+ * value onward to the sign-in and recovery doors, so the rule is reachable from
+ * both halves without being written twice.
  * `@ds/auth-flow/server` re-exports them, so its shipped surface is unchanged.
  */
 

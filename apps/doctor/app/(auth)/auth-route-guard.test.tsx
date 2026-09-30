@@ -35,11 +35,13 @@ vi.mock("next/headers", () => ({
 }));
 
 import { RegisterRoute } from "@ds/auth-flow/register/route";
+import { VerifyRoute } from "@ds/auth-flow/verify/route";
 
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 
 import DoctorRegisterPage from "./register/page";
 import DoctorResetPage from "./reset/page";
+import DoctorVerifyPage from "./verify/page";
 
 const SIGNED_IN = new Headers({ cookie: "__Host-ds_session=abc" });
 const GUEST = new Headers();
@@ -81,6 +83,21 @@ describe("#675 doctor auth routes, server-side signed-in guard", () => {
     expect(mounted.props.config).toBe(DOCTOR_AUTH_FLOW);
     // A mount decides nothing before the door runs, so no redirect is issued
     // at this level.
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-24 (#2455): /verify is a MOUNT of the shared confirmation step, the same route the Academy serves, with THIS host's config", async () => {
+    incoming.headers = GUEST;
+    const searchParams = Promise.resolve({ email: "doc@example.com" });
+
+    const mounted = (await DoctorVerifyPage({ searchParams })) as {
+      type: unknown;
+      props: { config: unknown; searchParams: unknown };
+    };
+
+    expect(mounted.type).toBe(VerifyRoute);
+    expect(mounted.props.config).toBe(DOCTOR_AUTH_FLOW);
+    expect(mounted.props.searchParams).toBe(searchParams);
     expect(redirect).not.toHaveBeenCalled();
   });
 

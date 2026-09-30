@@ -4,17 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The INLINE CONFIRMATION STEP of the shared registration door (#2027 PR 1.6,
- * rows 51 + 76): the step a host with no `/verify` route of its own runs on the
- * door itself.
- *
- * The ids arrive verbatim from `apps/doctor/components/registration-screen.test.tsx`
- * — the behaviour they describe is no longer a doctor-host projection but this
- * package unit, so each one now runs over `DOCTOR_FIXTURE`, the fixture whose
- * `routes.verify` is `undefined` and therefore the one host shape that can reach
- * this panel at all. The form step and the row-51 fork INTO this panel are
- * asserted in `register-door.test.tsx`; everything past the accepted code is
- * here.
+ * The CLIENT HALF of the `/verify` route (`VerifyEntry`: the address gate and
+ * the confirmation step) on the doctor storefront. Every host confirms on
+ * `/verify` through the one 003 command (#2455); the server decision handed
+ * across the boundary is pinned in `verify-route.test.tsx`, the hop INTO the
+ * route in `register-door.test.tsx`, and everything past the accepted code here.
  *
  * Mocked seams, and why each is the honest one:
  *   - `../client/auth-client` — the panel builds its client from `config.api`
@@ -30,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const h = vi.hoisted(() => ({
-  confirm: vi.fn(),
+  verify: vi.fn(),
   login: vi.fn(),
   resendVerification: vi.fn(),
   registerForEvent: vi.fn(),
@@ -47,9 +41,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("../client/auth-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../client/auth-client")>()),
   createAuthClient: () => ({
-    confirm: (...args: unknown[]) => {
-      h.calls.push("confirm");
-      return h.confirm(...args);
+    verify: (...args: unknown[]) => {
+      h.calls.push("verify");
+      return h.verify(...args);
     },
     login: (...args: unknown[]) => {
       h.calls.push("login");
@@ -88,7 +82,7 @@ import {
 import { AuthError } from "../client/auth-client";
 import { resolveAuthFlowCopy } from "../copy";
 import { DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
-import { RegistrationConfirmation } from "./inline-confirmation";
+import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3rSecret!";
@@ -103,15 +97,9 @@ const CONFIRM_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
 
 beforeEach(() => {
   h.calls.length = 0;
-  // The shipped EARS-10 body, verbatim in shape: the landing is read off it, so
-  // a loose stub would let the navigation silently pick the wrong branch.
-  h.confirm.mockReset().mockResolvedValue({
-    status: "verified",
-    credited: null,
-    profileCompletion: null,
-    primaryAction: { kind: "return", href: "/events/kardio" },
-    secondaryAction: { href: "/account" },
-  });
+  // The 003 answer names no destination: the landing is the shared client
+  // resolution's, whatever the confirm command says.
+  h.verify.mockReset().mockResolvedValue({ status: "verified" });
   h.login.mockReset().mockResolvedValue({});
   h.resendVerification.mockReset().mockResolvedValue(undefined);
   h.registerForEvent.mockReset().mockResolvedValue(undefined);
@@ -140,22 +128,33 @@ function setupUser() {
 type PanelProps = {
   landing?: string;
   resolveSignedInLanding?: () => Promise<string>;
+  resolveCompletionTarget?: () => Promise<{
+    returnTarget: string | null;
+    landing: string;
+  }>;
   returnTarget?: string | null;
   carriedTarget?: string | null;
 };
 
-/** The panel as the door mounts it, with a credential already held by default. */
+/**
+ * The step as the `/verify` route mounts it after the registration door's hop,
+ * with the credential that door held (021 EARS-15.4) by default.
+ */
 function renderPanel(props: PanelProps = {}, options?: { held?: boolean }) {
   if (options?.held !== false) {
     setPendingRegistration({ identifier: EMAIL, password: PASSWORD });
   }
   return render(
-    <RegistrationConfirmation
+    <VerifyEntry
       config={DOCTOR_FIXTURE}
       email={EMAIL}
+      returnTo={CARRIED_TARGET}
       landing={props.landing ?? "/events"}
       {...(props.resolveSignedInLanding
         ? { resolveSignedInLanding: props.resolveSignedInLanding }
+        : {})}
+      {...(props.resolveCompletionTarget
+        ? { resolveCompletionTarget: props.resolveCompletionTarget }
         : {})}
       returnTarget={
         props.returnTarget === undefined ? RETURN_TARGET : props.returnTarget
@@ -197,7 +196,7 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
     // 401), and the doctor must not be navigated before they are actually on
     // the roster — the эфир page would otherwise open still asking them to
     // register.
-    expect(h.calls).toEqual(["confirm", "login", "register-for-event"]);
+    expect(h.calls).toEqual(["verify", "login", "register-for-event"]);
     expect(h.replace).not.toHaveBeenCalled();
     await act(async () => completeRegistration());
     await waitFor(() =>
@@ -213,7 +212,7 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
 
     await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
     expect(h.registerForEvent).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(["confirm", "login"]);
+    expect(h.calls).toEqual(["verify", "login"]);
   });
 
   it("005 EARS-2: a refused registration never strands the doctor — they are landed anyway", async () => {
@@ -250,7 +249,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
     // Order is the contract: confirm first (the code is the thing being
     // proven), login second, and only then the navigation — a hop fired before
     // the replay would land a guest on the event page.
-    expect(h.calls).toEqual(["confirm", "login", "register-for-event"]);
+    expect(h.calls).toEqual(["verify", "login", "register-for-event"]);
     // EARS-10 (amended 2026-09-17) — the code screen is left by NAVIGATION,
     // with no interstitial in between.
     await waitFor(() =>
@@ -271,7 +270,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
 
     await submitCode(user);
 
-    await waitFor(() => expect(h.confirm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(h.verify).toHaveBeenCalledTimes(1));
     // The Academy rule, whole: no held credential means no session, and a
     // doctor with no session is sent to sign in CARRYING the return context —
     // never walked onto the эфир as a guest. Rule S3: the CARRY vocabulary,
@@ -282,7 +281,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
       ),
     );
     expect(h.login).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(["confirm"]);
+    expect(h.calls).toEqual(["verify"]);
     // The onward hop exists ONLY for a doctor who is signed in.
     expect(h.replace).not.toHaveBeenCalled();
   });
@@ -305,7 +304,7 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
         ),
       );
       expect(h.login).not.toHaveBeenCalled();
-      expect(h.calls).toEqual(["confirm"]);
+      expect(h.calls).toEqual(["verify"]);
       expect(h.replace).not.toHaveBeenCalled();
     } finally {
       clock.mockRestore();
@@ -337,16 +336,15 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
 });
 
 /**
- * 021 EARS-10 (#1546, amended 2026-09-17) — the confirmed doctor is NAVIGATED,
- * and the owner's objection is exactly the failure this tier pins: an
- * interstitial asking for one more tap after the code has already been accepted.
- *
- * The three branches are the three href sources of the clause, asserted here
- * through the whole panel because the unit tier (`./confirm-landing.test.ts`)
- * can only prove the choice, not that the choice reaches the router.
+ * 021 EARS-10 (amended 2026-09-29, owner decision Б) — the confirmed doctor is
+ * NAVIGATED to the page of the эфир they came from, by the same client
+ * resolution the Академия uses (005 EARS-2 completion). Whether that эфир still
+ * exists was decided by the `/verify` arrival (`returnTarget` is `null` when it
+ * does not — pinned in `verify-route.test.tsx`); an ended or full эфир keeps its
+ * page, which states that itself.
  */
-describe("021 EARS-10 (amended 2026-09-17): the confirmed doctor lands directly, with no success card", () => {
-  it("021 EARS-10: a live carried target replaces the confirmation screen with the эфир itself", async () => {
+describe("021 EARS-10 (amended 2026-09-29): the confirmed doctor lands on the originating эфир, with no success card", () => {
+  it("021 EARS-10: a carried эфир replaces the confirmation screen with the эфир page itself", async () => {
     const user = setupUser();
     renderPanel();
 
@@ -355,22 +353,11 @@ describe("021 EARS-10 (amended 2026-09-17): the confirmed doctor lands directly,
     await waitFor(() =>
       expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
-    // Nothing stands between the accepted code and the эфир: no outcome card,
-    // and no «в личный кабинет» second action to read past.
+    // Nothing stands between the accepted code and the эфир: no outcome card.
     expect(screen.queryByTestId("registration-success")).toBeNull();
   });
 
-  it("021 EARS-10: a cold arrival lands on the DOOR's LD-4 decision, not the API's default", async () => {
-    // Nothing was carried, so the confirm route answers with its own default
-    // `/events`; the door decided with 017's remembered specialty, which the
-    // confirmation API does not have.
-    h.confirm.mockResolvedValue({
-      status: "verified",
-      credited: null,
-      profileCompletion: null,
-      primaryAction: { kind: "landing", href: "/events" },
-      secondaryAction: { href: "/account" },
-    });
+  it("021 EARS-10: no carried эфир (a direct arrival, or one that no longer exists) lands on the door's LD-4 decision", async () => {
     const user = setupUser();
     renderPanel({
       landing: "/events?specialty=kardiologiya",
@@ -385,30 +372,32 @@ describe("021 EARS-10 (amended 2026-09-17): the confirmed doctor lands directly,
     );
   });
 
-  it("021 EARS-10: a target that went stale lands on the honest destination the server picked (LD-8)", async () => {
-    // The эфир ended between the arrival and the code. The server re-validated
-    // the target with the verification it had just performed and named the
-    // nearest honest destination; the client has no better answer, so the
-    // doctor is taken there instead of being shown a card explaining it.
-    h.confirm.mockResolvedValue({
-      status: "verified",
-      credited: null,
-      profileCompletion: null,
-      primaryAction: {
-        kind: "landing",
-        href: "/events/kardio",
-        reason: "ended",
-      },
-      secondaryAction: { href: "/account" },
-    });
+  it("021 EARS-10 (#2455): the эфир judged gone when the code is accepted is no target — the doctor lands on the answer's landing", async () => {
     const user = setupUser();
-    renderPanel();
+    renderPanel({
+      resolveCompletionTarget: vi
+        .fn()
+        .mockResolvedValue({ returnTarget: null, landing: "/" }),
+    });
+
+    await submitCode(user);
+
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/"));
+    expect(h.registerForEvent).not.toHaveBeenCalled();
+  });
+
+  it("021 EARS-10 (#2455): a completion-time check that cannot be asked is not «gone» — the эфир page stays the landing", async () => {
+    const user = setupUser();
+    renderPanel({
+      resolveCompletionTarget: vi.fn().mockRejectedValue(new Error("offline")),
+    });
 
     await submitCode(user);
 
     await waitFor(() =>
       expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
+    expect(h.registerForEvent).toHaveBeenCalledWith("kardio");
   });
 });
 
@@ -418,7 +407,7 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
     // 15 min), so the eleventh wrong code inside the window comes back 429 — not
     // a verdict on the code. Before #2001 this host printed the wrong-code line
     // for it and sent the doctor back to retyping a code that could not pass.
-    h.confirm.mockRejectedValue(new AuthError(429, "Too Many Requests"));
+    h.verify.mockRejectedValue(new AuthError(429, "Too Many Requests"));
     const user = setupUser();
     renderPanel();
 
@@ -431,19 +420,41 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
   });
 });
 
-describe("rows 51 + 76: the panel's words and hops are the host's data", () => {
-  it("021 EARS-19: the confirm command carries the reconstructed target, and the description names the masked address", async () => {
+describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify", () => {
+  it("003 EARS-24 (#2455): the doctor /verify draws the canvas «Подтверждение» frame, the «Войти» / «Сбросить пароль» way out included", () => {
+    renderPanel();
+
+    expect(screen.getByText(CONFIRM_COPY.title)).toBeTruthy();
+    expect(screen.getByLabelText(CONFIRM_COPY.codeLabel)).toBeTruthy();
+    expect(screen.getByTestId("verify-submit")).toBeTruthy();
+    expect(screen.getByTestId("verify-resend")).toBeTruthy();
+    expect(screen.getByTestId("verify-go-to-login")).toBeTruthy();
+    expect(screen.getByTestId("verify-go-to-reset")).toBeTruthy();
+  });
+
+  it("003 EARS-40: a doctor /verify with no address is replaced onto the registration door, the carried target kept", () => {
+    render(
+      <VerifyEntry
+        config={DOCTOR_FIXTURE}
+        landing="/events"
+        returnTo={CARRIED_TARGET}
+      />,
+    );
+
+    expect(screen.queryByTestId("verify-card")).toBeNull();
+    expect(h.replace).toHaveBeenCalledWith(
+      `/register?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
+    );
+  });
+
+  it("003 EARS-3 (#2455): the doctor confirms on the one 003 command — the address and the code, no target", async () => {
     const user = setupUser();
     renderPanel();
 
     await submitCode(user);
 
     await waitFor(() =>
-      expect(h.confirm).toHaveBeenCalledWith({
-        email: EMAIL,
-        code: CODE,
-        returnTo: RETURN_TARGET,
-      }),
+      expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE }),
     );
   });
 
@@ -490,16 +501,12 @@ describe("rows 51 + 76: the panel's words and hops are the host's data", () => {
 });
 
 describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NEW session", () => {
-  const LANDING_ANSWER = {
-    status: "verified",
-    credited: null,
-    profileCompletion: null,
-    primaryAction: { kind: "landing", href: "/events" },
-    secondaryAction: { href: "/account" },
-  } as const;
+  // 003 EARS-3 — `POST /v1/auth/verify` answers `{ status: "verified" }` only;
+  // the landing is the step's own decision.
+  const VERIFIED = { status: "verified" } as const;
 
   it("021 EARS-3: a cold arrival re-decides the landing once the replay signed the doctor in", async () => {
-    h.confirm.mockResolvedValue(LANDING_ANSWER);
+    h.verify.mockResolvedValue(VERIFIED);
     const resolveSignedInLanding = vi.fn(async () => {
       h.calls.push("re-decide");
       return "/events";
@@ -520,7 +527,7 @@ describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NE
   });
 
   it("021 EARS-3: a failed re-decision falls back to the guest-time landing", async () => {
-    h.confirm.mockResolvedValue(LANDING_ANSWER);
+    h.verify.mockResolvedValue(VERIFIED);
     const user = setupUser();
     renderPanel({
       landing: "/",
@@ -536,7 +543,9 @@ describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NE
 
   it("005 EARS-2: a carried эфир the server honoured still wins over the re-decided landing", async () => {
     const user = setupUser();
-    renderPanel({ resolveSignedInLanding: vi.fn().mockResolvedValue("/events") });
+    renderPanel({
+      resolveSignedInLanding: vi.fn().mockResolvedValue("/events"),
+    });
 
     await submitCode(user);
 

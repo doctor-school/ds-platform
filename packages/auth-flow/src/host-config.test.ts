@@ -2,10 +2,12 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { resolveAuthFlowCopy } from "./copy";
 
 import type {
+  AuthFlowApiConfig,
   AuthFlowHostConfig,
   AuthFlowLandingConfig,
   AuthFlowLoginCopy,
   AuthFlowReturnToConfig,
+  AuthFlowRoutes,
 } from "./host-config";
 import {
   ACADEMY_FIXTURE,
@@ -50,12 +52,14 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     expect(DOCTOR_FIXTURE.routes.room).toBe("/events/:slug/room");
   });
 
-  it("rows 29, 46: parking is optional inside returnTo, and the card is a flag", () => {
+  it("rows 29, 46 (#2455): parking is optional inside returnTo, and the return-context card is no host field — the canvas draws it on both hosts", () => {
     expectTypeOf<AuthFlowReturnToConfig["parkingCookie"]>().toMatchTypeOf<
       { name: string; maxAgeSeconds: number } | undefined
     >();
-    expect(DOCTOR_FIXTURE.returnTo).toEqual({ card: true });
-    expect(ACADEMY_FIXTURE.returnTo?.card).toBeUndefined();
+    expectTypeOf<
+      keyof AuthFlowReturnToConfig
+    >().toEqualTypeOf<"parkingCookie">();
+    expect(DOCTOR_FIXTURE.returnTo).toBeUndefined();
     expect(ACADEMY_FIXTURE.returnTo?.parkingCookie?.name).toBe("ds_return_to");
   });
 
@@ -88,14 +92,24 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
 });
 
 describe("#2027 PR 1.7 host config — the confirmation step", () => {
-  it("row 76: a host states whether the verification mail links into a surface of its own", () => {
-    expectTypeOf<
-      AuthFlowHostConfig["verify"]["deepLinkEntry"]
-    >().toEqualTypeOf<boolean>();
-    // The Academy's mail opens `/verify#email=…` cold; the doctor host confirms
-    // inline on the registration door and has no such entry.
-    expect(ACADEMY_FIXTURE.verify.deepLinkEntry).toBe(true);
-    expect(DOCTOR_FIXTURE.verify.deepLinkEntry).toBe(false);
+  it("003 EARS-24 (#2455): every host confirms on a /verify route of its own — the route is required and no mechanism switch exists", () => {
+    expectTypeOf<AuthFlowRoutes["verify"]>().toEqualTypeOf<string>();
+    expectTypeOf<AuthFlowHostConfig>().not.toHaveProperty("verify");
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      expect(config.routes.verify).toBe("/verify");
+      expect(config).not.toHaveProperty("verify");
+    }
+  });
+
+  it("003 EARS-3 (#2455): the confirm command is not host data — both hosts post the one 003 command", () => {
+    expectTypeOf<AuthFlowApiConfig>().not.toHaveProperty("confirmPath");
+    expectTypeOf<AuthFlowApiConfig>().not.toHaveProperty(
+      "confirmCarriesReturnTarget",
+    );
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      expect(config.api).not.toHaveProperty("confirmPath");
+      expect(config.api).not.toHaveProperty("confirmCarriesReturnTarget");
+    }
   });
 
   it("rows 65-77: the confirmation words are the canvas «Подтверждение» screen on every host", () => {

@@ -7,8 +7,8 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *
  * The doctor twin of the Academy's `apps/portal/e2e/auth-journeys.e2e.spec.ts`
  * «EARS-23/24: duplicate register → existence-agnostic screen + account-exists
- * notice (no code)», retargeted at this host's inline confirmation step (the
- * doctor door has no `/verify` route — the step renders on `/register`):
+ * notice (no code)», on this host's own `/verify` confirmation step — the same
+ * package step the Academy serves (003 EARS-24, #2455):
  *
  *   1. re-registering an ALREADY-VERIFIED address reaches the SAME confirmation
  *      step a new registrant reaches — nothing on screen says the account exists;
@@ -149,7 +149,7 @@ test.describe("021 EARS-13: a duplicate registration on the doctor host", () => 
     const code = codeOf(verifyMail!);
     expect(code).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(code!);
-    await expect(page).not.toHaveURL(/\/register/);
+    await expect(page).not.toHaveURL(/\/verify/);
     // Sign out by dropping the session cookie: the second attempt is a guest's.
     await page.context().clearCookies();
 

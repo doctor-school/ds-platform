@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Mocked seams, and why each is the honest one:
  *   • `redirect` — Next's own control-flow throw, doubled so a test can never
  *     observe the mount rendering on past a redirect it was supposed to take.
- *   • `resolveServerAuth` / `resolveReturnContext` — the two upstream READS.
+ *   • `resolveServerAuth` / `readReturnEvent` — the two upstream READS.
  *     The GUARD (`guardAuthRoute`) and the whole return-target codec stay the
  *     real shared ones, so this tier proves the mount routes its decision
  *     through them rather than re-deciding locally.
@@ -27,13 +27,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * the server decision handed across the boundary, and the door's own rendering
  * is pinned by `register-door.test.tsx`.
  */
-const { redirect, resolveServerAuth, resolveReturnContext, specialtyFetch } =
+const { redirect, resolveServerAuth, readReturnEvent, specialtyFetch } =
   vi.hoisted(() => ({
     redirect: vi.fn((path: string) => {
       throw new Error(`NEXT_REDIRECT:${path}`);
     }),
     resolveServerAuth: vi.fn(),
-    resolveReturnContext: vi.fn(),
+    readReturnEvent: vi.fn(),
     specialtyFetch: vi.fn(),
   }));
 
@@ -49,7 +49,7 @@ vi.mock("../server", async (importOriginal) => {
   return {
     ...actual,
     resolveServerAuth,
-    resolveReturnContext,
+    readReturnEvent,
     resolveArrivalLanding: (
       host: Parameters<typeof actual.resolveArrivalLanding>[0],
       requestHeaders: Headers,
@@ -62,6 +62,7 @@ import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "../test-support/host-config-fixtures";
+import { VerifyRoute } from "../verify/verify-route";
 import { RegisterRoute } from "./register-route";
 
 /** The signed-in branch of `ServerAuth` — the claims ride along with it. */
@@ -78,6 +79,9 @@ const EVENT = {
   specialties: ["Травматология"],
   speakers: [{ name: "Анна Соколова" }],
 };
+/** The public event read's answers (021 EARS-10): the page answered / 004 EARS-6 not-found. */
+const FOUND = { status: "found", event: EVENT } as const;
+const GONE = { status: "gone" } as const;
 
 /** The specialty read answering «nothing remembered» — the LD-4 default branch. */
 function forgetsSpecialty(): void {
@@ -134,10 +138,27 @@ async function doorOf(
   return (await shellOf(config, params)).props.children.props;
 }
 
+/**
+ * Every prop the `/verify` mount hands the confirmation step for the SAME
+ * arrival, after the door's hop (`?email=` added) — the half of the journey
+ * decision that is consumed past the accepted command (003 EARS-24, #2455):
+ * the эфир to complete, the carry and the signed-in re-decision.
+ */
+async function stepOf(
+  config: AuthFlowHostConfig,
+  params: Params,
+): Promise<DoorProps> {
+  const gate = (await VerifyRoute({
+    config,
+    searchParams: Promise.resolve({ ...params, email: "doc@example.com" }),
+  })) as ReactElement<{ children: ReactElement<ShellProps> }>;
+  return gate.props.children.props.children.props;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   forgetsSpecialty();
-  resolveReturnContext.mockResolvedValue(null);
+  readReturnEvent.mockResolvedValue(GONE);
 });
 
 /**
@@ -156,7 +177,7 @@ describe("#675: /register is closed to a doctor who already has a session", () =
     expect(await landingOf(DOCTOR_FIXTURE, {})).toBe("/");
     expect(redirect).toHaveBeenCalledTimes(1);
     // No landing target to honour ⇒ the эфир read is never paid for.
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("#675: a guest still gets the door — no redirect, the door element is returned", async () => {
@@ -184,7 +205,7 @@ describe("#2027 S4: the sign-up door honours the carried target too", () => {
     expect(await landingOf(DOCTOR_FIXTURE, { returnTo: "/account" })).toBe(
       "/account",
     );
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(readReturnEvent).not.toHaveBeenCalled();
   });
 
   it("#2027 S4: a page BELOW the cabinet lands on ITSELF, not on the cabinet index", async () => {
@@ -194,7 +215,7 @@ describe("#2027 S4: the sign-up door honours the carried target too", () => {
   });
 
   it("#2027 S4: the эфир arrival still lands on the doctor-host projection", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     expect(
       await landingOf(DOCTOR_FIXTURE, {
@@ -226,7 +247,7 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
   });
 
   it("#2027 PR 1.6: a repeated returnTo degrades to its FIRST value, it never breaks the door", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     const door = await doorOf(DOCTOR_FIXTURE, {
       returnTo: ["/webinars/prp-pri-gonartroze", "/account"],
@@ -235,59 +256,64 @@ describe("#2027 PR 1.6: the props the mount hands the sign-up door", () => {
     expect(door.landing).toBe("/events/prp-pri-gonartroze");
   });
 
-  it("#2027 PR 1.6: the эфир arrival carries landing, raw returnTo, returnTarget and carriedTarget", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+  it("#2027 PR 1.6: the эфир arrival carries landing and raw returnTo to the door, returnTarget and carriedTarget to its /verify step", async () => {
+    readReturnEvent.mockResolvedValue(FOUND);
+    const params = { returnTo: "/webinars/prp-pri-gonartroze" };
 
-    const door = await doorOf(DOCTOR_FIXTURE, {
-      returnTo: "/webinars/prp-pri-gonartroze",
-    });
+    const door = await doorOf(DOCTOR_FIXTURE, params);
     expect(door.landing).toBe("/events/prp-pri-gonartroze");
     expect(door.returnTo).toBe("/webinars/prp-pri-gonartroze");
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.landing).toBe(door.landing);
     // 021 EARS-10 — the эфир intent to COMPLETE, in THIS host's vocabulary.
-    expect(door.returnTarget).toBe("/events/prp-pri-gonartroze");
+    expect(step.returnTarget).toBe("/events/prp-pri-gonartroze");
     // Rule S3 — the CARRY vocabulary of the sideways hops, the canonical target.
-    expect(door.carriedTarget).toBe("/webinars/prp-pri-gonartroze");
+    expect(step.carriedTarget).toBe("/webinars/prp-pri-gonartroze");
   });
 
   it("#2258 S3: an account arrival carries onward but names no эфир to complete", async () => {
-    const door = await doorOf(DOCTOR_FIXTURE, { returnTo: "/account" });
+    const params = { returnTo: "/account" };
 
-    expect(door.landing).toBe("/account");
-    expect(door.returnTarget ?? null).toBe(null);
-    expect(door.carriedTarget).toBe("/account");
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe("/account");
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.landing).toBe("/account");
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget).toBe("/account");
   });
 
   it("006 EARS-6: a doctor-room arrival lands back in the room and carries onward, naming no эфир to complete", async () => {
-    const door = await doorOf(DOCTOR_FIXTURE, {
-      returnTo: "/events/cardio-live/room",
-    });
+    const params = { returnTo: "/events/cardio-live/room" };
 
-    expect(door.landing).toBe("/events/cardio-live/room");
-    expect(door.returnTarget ?? null).toBe(null);
-    expect(door.carriedTarget).toBe("/events/cardio-live/room");
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe(
+      "/events/cardio-live/room",
+    );
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget).toBe("/events/cardio-live/room");
   });
 
   it("006 EARS-6: an Academy-room arrival lands back in the room, naming no эфир to complete", async () => {
-    const door = await doorOf(ACADEMY_FIXTURE, {
-      returnTo: "/webinars/cardio-live/room",
-    });
+    const params = { returnTo: "/webinars/cardio-live/room" };
 
-    expect(door.landing).toBe("/webinars/cardio-live/room");
-    expect(door.returnTarget ?? null).toBe(null);
+    expect((await doorOf(ACADEMY_FIXTURE, params)).landing).toBe(
+      "/webinars/cardio-live/room",
+    );
+    expect((await stepOf(ACADEMY_FIXTURE, params)).returnTarget ?? null).toBe(
+      null,
+    );
   });
 
   it("#2258 S3: a cross-origin target is dropped at the hop, never propagated", async () => {
-    const door = await doorOf(DOCTOR_FIXTURE, {
-      returnTo: "https://evil.example/account",
-    });
+    const params = { returnTo: "https://evil.example/account" };
 
-    expect(door.landing).toBe("/");
-    expect(door.returnTarget ?? null).toBe(null);
-    expect(door.carriedTarget ?? null).toBe(null);
+    expect((await doorOf(DOCTOR_FIXTURE, params)).landing).toBe("/");
+    const step = await stepOf(DOCTOR_FIXTURE, params);
+    expect(step.returnTarget ?? null).toBe(null);
+    expect(step.carriedTarget ?? null).toBe(null);
   });
 
   it("021 EARS-2: a doctor-host gate arrival fills BOTH return-context slots", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     const shell = await shellOf(DOCTOR_FIXTURE, {
       returnTo: "/webinars/prp-pri-gonartroze",
@@ -333,27 +359,29 @@ describe("#2027 PR 1.6 (Academy): the same mount over the other host config", ()
     ).toBe("/webinars");
   });
 
-  it("021 EARS-3: a host that publishes no return-context card never pays for the эфир read", async () => {
+  it("021 EARS-2 (#2455): the Academy asks whether the эфир exists and draws its card beside the form, as the canvas «Регистрация» does on both hosts", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
+    readReturnEvent.mockResolvedValue(FOUND);
 
-    const shell = await shellOf(ACADEMY_FIXTURE, {
-      returnTo: "/webinars/prp-pri-gonartroze",
-    });
-    // The эфир still COMPLETES after sign-up — the guard reconstruction stands
-    // on its own; only the card, which this host does not publish, needed the read.
-    expect(shell.props.children.props.returnTarget).toBe(
+    const params = { returnTo: "/webinars/prp-pri-gonartroze" };
+    const shell = await shellOf(ACADEMY_FIXTURE, params);
+    // The эфир still exists, so it COMPLETES after sign-up, and the door shows
+    // it beside the form.
+    expect((await stepOf(ACADEMY_FIXTURE, params)).returnTarget).toBe(
       "/webinars/prp-pri-gonartroze",
     );
-    expect(shell.props.returnContext ?? null).toBe(null);
-    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
-    expect(resolveReturnContext).not.toHaveBeenCalled();
+    expect(shell.props.returnContext).toBeTruthy();
+    expect(shell.props.children.props.returnContextPlate).toBeTruthy();
+    expect(readReturnEvent).toHaveBeenCalledWith(
+      "/webinars/prp-pri-gonartroze",
+    );
   });
 });
 
-describe("021 EARS-3 (#2333): the sign-up door gets the signed-in re-decision where it can change", () => {
+describe("021 EARS-3 (#2333): the confirmation after the sign-up door gets the signed-in re-decision where it can change", () => {
   async function actionOf(config: AuthFlowHostConfig, params: Params) {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
-    return (await doorOf(config, params)).resolveSignedInLanding;
+    return (await stepOf(config, params)).resolveSignedInLanding;
   }
 
   it("021 EARS-3: a guest direct arrival on the doctor storefront carries the re-decision", async () => {
@@ -361,21 +389,23 @@ describe("021 EARS-3 (#2333): the sign-up door gets the signed-in re-decision wh
   });
 
   it("005 EARS-2: a carried validated target is the landing — nothing to re-decide", async () => {
-    resolveReturnContext.mockResolvedValue(EVENT);
+    readReturnEvent.mockResolvedValue(FOUND);
 
     expect(
-      await actionOf(DOCTOR_FIXTURE, { returnTo: "/webinars/prp-pri-gonartroze" }),
+      await actionOf(DOCTOR_FIXTURE, {
+        returnTo: "/webinars/prp-pri-gonartroze",
+      }),
     ).toBeUndefined();
   });
 
   it("006 EARS-6: a doctor-room return is a carried target — no re-decision, the door lands in the room", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
-    const door = await doorOf(DOCTOR_FIXTURE, {
+    const step = await stepOf(DOCTOR_FIXTURE, {
       returnTo: "/events/cardio-live/room",
     });
 
-    expect(door.resolveSignedInLanding).toBeUndefined();
-    expect(door.landing).toBe("/events/cardio-live/room");
+    expect(step.resolveSignedInLanding).toBeUndefined();
+    expect(step.landing).toBe("/events/cardio-live/room");
   });
 
   it("021 EARS-3: the Academy's constant landing gets no re-decision", async () => {

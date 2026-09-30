@@ -179,3 +179,74 @@ describe("014 EARS-6 (#2443): a signed-in visitor never parks - a consumed targe
     ]);
   });
 });
+
+describe("014 EARS-6 (#2495): a door opened without a carried target starts a new flow and discards the parked one", () => {
+  const PARKED = "ds_return_to=%2Fevents%2Fahilles-042";
+
+  function deletionOf(response: Response | undefined): string | undefined {
+    return response?.headers
+      .getSetCookie()
+      .find((header) => header.startsWith("ds_return_to=;"));
+  }
+
+  it.each(["/login", "/register", "/verify", "/reset"])(
+    "014 EARS-6.10: a guest opening %s with no returnTo drops the parked target",
+    (path) => {
+      const response = parkReturnTarget(
+        requestFor(`https://doctor.school${path}`, { cookie: `other=1; ${PARKED}` }),
+      );
+      const deletion = deletionOf(response);
+      expect(deletion).toBeDefined();
+      expect(deletion).toMatch(/Path=\//i);
+      expect(deletion).toMatch(/Max-Age=0/i);
+    },
+  );
+
+  it("014 EARS-6.10: a returnTo the guard refuses is no carried target - the parked one is dropped too", () => {
+    const response = parkReturnTarget(
+      requestFor(
+        `https://academy.doctor.school/login?returnTo=${encodeURIComponent("https://evil.example/")}`,
+        { cookie: "ds_return_to=%2Fwebinars%2Fahilles-042" },
+      ),
+    );
+    expect(deletionOf(response)).toBeDefined();
+  });
+
+  it("014 EARS-6.10: nothing parked, nothing to drop - the host response stays the host's", () => {
+    expect(
+      parkReturnTarget(requestFor("https://doctor.school/login", { cookie: "other=1" })),
+    ).toBeUndefined();
+  });
+
+  it("014 EARS-6.10: the drop is written onto the host's own response, keeping what it carries", () => {
+    const hostResponse = NextResponse.next();
+    hostResponse.headers.append("set-cookie", "host_cookie=kept; Path=/");
+    const response = parkReturnTarget(
+      requestFor("https://doctor.school/login", { cookie: PARKED }),
+      hostResponse,
+    );
+    expect(response).toBe(hostResponse);
+    expect(response?.headers.getSetCookie()).toContain("host_cookie=kept; Path=/");
+    expect(deletionOf(response)).toBeDefined();
+  });
+
+  it("014 EARS-6.10: a door that carries a target re-parks it, so a hop inside the flow keeps the intent", () => {
+    const response = parkReturnTarget(
+      requestFor("https://doctor.school/reset?returnTo=%2Fevents%2Fahilles-042", {
+        cookie: PARKED,
+      }),
+    );
+    expect(deletionOf(response)).toBeUndefined();
+    expect(response?.cookies.get("ds_return_to")?.value).toBe("/events/ahilles-042");
+  });
+
+  it("014 EARS-6.10: a signed-in visitor is left alone - the rule belongs to the guest round-trip", () => {
+    expect(
+      parkReturnTarget(
+        requestFor("https://doctor.school/login", {
+          cookie: `__Host-ds_session=abc; ${PARKED}`,
+        }),
+      ),
+    ).toBeUndefined();
+  });
+});

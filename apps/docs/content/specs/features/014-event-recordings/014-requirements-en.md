@@ -354,3 +354,21 @@ Every mutating recording endpoint and every legacy-lifecycle command require a c
 **The rule.** When the visitor authenticates carrying a land-only return, the system shall land them on that event page of this host and shall not register them for the эфир. The two returns never convert into each other: every registration parser rejects the marked value, the land-only parser admits only the marked value, and the same-origin guard keeps exactly this marker, so the parked copy (both storefronts' parking cookie) stays land-only. Another storefront's event page carried as land-only lands on the host default, as its intent would not be honoured here (019 EARS-12).
 
 **What does not change.** EARS-6's event-page return and its registration completion, the consume-once parking, the whitelist and same-origin guard for every other target, and the default landing.
+
+## Amendment — 2026-09-30: a carried return target lives only inside the flow that carried it (source: [#2495](https://github.com/doctor-school/ds-platform/issues/2495), owner decision 2026-09-30)
+
+> **Status:** EARS-6 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). EARS-6 above remains the decision as originally taken, read under this amendment. The RU counterpart is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-09-30: донесённая цель возврата живёт только внутри потока, который её донёс» with the identical contract.
+
+**Provenance.** EARS-6 stated how a return target is carried but not how long it lives. The shared parking of the target (the same-origin cookie `ds_return_to`, 900 s) was cleared only by a successful sign-in, so a visitor who pressed «Записаться», abandoned the sign-in page and later signed in through the header «Войти» was registered for that эфир without pressing «Записаться» again. The owner confirmed the defect and chose, on 2026-09-30 (verbatim «2»), to keep completing the registration after sign-in, but only inside the flow that started from «Записаться».
+
+**The rule.**
+
+- The carried target — and the registration intent it may hold — lives only inside the sign-in flow that carried it, the same idea as the OAuth `state` parameter.
+- A guest who opens an auth door (`/login`, `/register`, `/verify`, `/reset`) without a guard-clean `returnTo` in the URL starts a new flow: that door discards any parked target. A door that carries `returnTo` parks it as before.
+- Every step inside a flow keeps the target: the doors' links to one another, `/register` → `/verify`, `/verify` → `/login` and the address-less `/verify` → `/register` carry `returnTo` on the URL; the sign-in-code step and the reset-code step stay on their page. A password reset opened from the «Записаться» flow therefore still completes the registration.
+- One rule in `@ds/auth-flow`, run by each storefront's middleware/proxy on the same four doors; a signed-in visitor is outside the rule. The 900 s lifetime stays as the outer bound.
+- The land-only return of the preceding amendment (#2487) is unaffected: the header «Войти / Регистрация» carries it as `returnTo` in the URL, so its door parks it as before, and it never holds a registration intent.
+
+**Consequence.** «Записаться» → sign in (password or code, directly or through a password reset) registers the visitor as before. «Записаться» → leave the page → a plain sign-in later lands on the default landing and registers nothing. This narrows the «later sign-in … lands on the parked target» consequence of 021's 2026-09-30 amendment: that holds only while the sign-in continues the flow that carried the target.
+
+**Verification.** `packages/auth-flow/src/server/return-target-parking.test.ts`, `packages/auth-flow/src/login/login-door.intent-lifetime.test.tsx`, `apps/doctor/proxy.test.ts`, `apps/portal/middleware.test.ts` (`014 EARS-6.10`).

@@ -42,11 +42,22 @@ import { hasSessionCookie } from "./session";
  * has no round-trip left to carry. Sign-out drops the session cookie, so a
  * guest parks again from then on. This holds for every prefetch strategy,
  * including a `<Link prefetch>` "Full" prefetch.
+ *
+ * The parked target lives only inside the flow that carried it (014 EARS-6,
+ * amendment 2026-09-30, #2495). Every hop INSIDE a flow carries `returnTo` on
+ * the URL (the doors' footer links, register -> verify, verify -> login, the
+ * address-less verify -> register) or never leaves the page (the OTP step, the
+ * reset code step), so a guest who opens an auth door with no guard-clean
+ * `returnTo` has started a NEW flow - the header «Войти», a bare `/login`
+ * typed or bookmarked, Back followed by another entry. That door drops any
+ * parked target, so an abandoned «Записаться» can never register the visitor
+ * on a later, unrelated sign-in. Same rule, same cookie, both storefronts.
  */
 
 /**
- * Park the carried target, or return `undefined` when there is nothing to park
- * (no guard-clean target, or the visitor is already signed in).
+ * Park the carried target; with no guard-clean target, drop a target parked by
+ * an earlier flow. Returns `undefined` when there is nothing to write (the
+ * visitor is already signed in, or nothing is carried and nothing is parked).
  *
  * `undefined` rather than a bare `NextResponse.next()` on purpose: the caller (a
  * host middleware) owns what the pass-through response is, and a rule that
@@ -63,12 +74,15 @@ export function parkReturnTarget(
   const target = parseSameOriginReturnTarget(
     request.nextUrl.searchParams.get("returnTo"),
   );
-  if (!target) return undefined;
+  if (!target && !request.cookies.has(RETURN_TARGET_PARKING.name)) {
+    return undefined;
+  }
 
   const parked = NextResponse.next();
-  parked.cookies.set(RETURN_TARGET_PARKING.name, target, {
+  parked.cookies.set(RETURN_TARGET_PARKING.name, target ?? "", {
     path: "/",
-    maxAge: RETURN_TARGET_PARKING.maxAgeSeconds,
+    // No carried target: a new flow began, so the earlier flow's target dies.
+    maxAge: target ? RETURN_TARGET_PARKING.maxAgeSeconds : 0,
     sameSite: "lax",
     // NOT HttpOnly: the consumption point is the client-side auth success
     // handler, which must both read and clear it. It holds a page path and no

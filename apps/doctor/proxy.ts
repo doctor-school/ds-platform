@@ -57,15 +57,18 @@ export async function consumeGuestSpecialtyBeforeRender(
 }
 
 /**
- * 014 EARS-6 (#2443) — the auth entries that park a carried return target: the
- * same three routes the Academy middleware matches, read from this host's route
- * table. The parking RULE and the cookie are `@ds/auth-flow/server`'s, the same
- * on both storefronts; this host only wires its entries to it.
+ * 014 EARS-6 (#2443, #2495) — the auth doors that run the parking rule: the
+ * same four routes the Academy middleware matches, read from this host's route
+ * table. A door carrying a target parks it; a guest's door without one drops a
+ * target an earlier flow parked. The RULE and the cookie are
+ * `@ds/auth-flow/server`'s, the same on both storefronts; this host only wires
+ * its doors to it.
  */
 const PARKING_ENTRIES: readonly string[] = [
   DOCTOR_AUTH_ROUTES.login,
   DOCTOR_AUTH_ROUTES.register,
   DOCTOR_AUTH_ROUTES.verify,
+  DOCTOR_AUTH_ROUTES.reset,
 ];
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {

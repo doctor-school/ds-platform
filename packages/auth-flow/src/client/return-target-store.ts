@@ -1,6 +1,6 @@
 import { parseSameOriginReturnTarget } from "@ds/schemas";
 
-import type { ReturnTargetParking } from "../return-target";
+import { RETURN_TARGET_PARKING } from "../host-config";
 
 /**
  * The CONSUMPTION half of the platform-wide return-to-origin mechanism (014
@@ -25,24 +25,20 @@ import type { ReturnTargetParking } from "../return-target";
  *     query string, which is to say not at all - is dropped in favour of the
  *     surface default landing.
  *
- * The cookie NAME is the host `returnTo.parkingCookie` declaration, the same one
- * the server rule writes through, never a constant here: a package literal would
- * be a second place the two halves could disagree. `undefined` parking is row
- * 29, the doctor storefront, which parks nothing and therefore reads nothing -
- * its target rides the query param alone.
+ * The cookie NAME is the package `RETURN_TARGET_PARKING` declaration, the same
+ * one the server rule writes through, never a second literal here: two literals
+ * would be two places the halves could disagree. It is the same on both
+ * storefronts (row 29, #2443).
  */
 
 /**
  * Read the parked return target, or `null` when there is none, it is unreadable,
- * it does not survive the same-origin guard, or this host parks nothing.
+ * or it does not survive the same-origin guard.
  * Browser-only: on the server there is no `document`, and the answer is `null`.
  */
-export function readStoredReturnTarget(
-  parking: ReturnTargetParking | undefined,
-): string | null {
-  if (!parking) return null;
+export function readStoredReturnTarget(): string | null {
   if (typeof document === "undefined") return null;
-  const prefix = `${parking.name}=`;
+  const prefix = `${RETURN_TARGET_PARKING.name}=`;
   const raw = document.cookie
     .split(";")
     .map((part) => part.trim())
@@ -63,16 +59,11 @@ export function readStoredReturnTarget(
 }
 
 /**
- * Drop the parked return target. Idempotent; a no-op on the server and on a host
- * that parks nothing (which must never clear another host cookie of its own
- * accord).
+ * Drop the parked return target. Idempotent; a no-op on the server.
  */
-export function clearStoredReturnTarget(
-  parking: ReturnTargetParking | undefined,
-): void {
-  if (!parking) return;
+export function clearStoredReturnTarget(): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${parking.name}=; Path=/; Max-Age=0; SameSite=Lax`;
+  document.cookie = `${RETURN_TARGET_PARKING.name}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 /**
@@ -86,10 +77,9 @@ export function clearStoredReturnTarget(
  */
 export function resolveReturnTarget(
   rawFromQuery: string | null,
-  parking: ReturnTargetParking | undefined,
 ): string | null {
   const fromQuery = parseSameOriginReturnTarget(rawFromQuery);
-  const parked = readStoredReturnTarget(parking);
-  clearStoredReturnTarget(parking);
+  const parked = readStoredReturnTarget();
+  clearStoredReturnTarget();
   return fromQuery ?? parked;
 }

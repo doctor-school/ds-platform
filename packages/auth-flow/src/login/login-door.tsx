@@ -33,7 +33,7 @@ import { landingAfterSignIn } from "../client/signed-in-landing";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
 import { makeResolver } from "../form-resolver";
-import type { AuthFlowHostConfig } from "../host-config";
+import { AUTH_FLOW_CHANNELS, type AuthFlowHostConfig } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
 import { LoginGlyph } from "./login-glyph";
 import type { ReactNode } from "react";
@@ -109,7 +109,7 @@ export type LoginDoorProps = {
 function passwordResolverOf(
   config: AuthFlowHostConfig,
 ): LoginCardPasswordProps["resolver"] {
-  const identifier = identifierFieldSchema(config);
+  const identifier = identifierFieldSchema();
   const { fields, login } = resolveAuthFlowCopy(config);
   return makeResolver<
     LoginCardPasswordValues,
@@ -135,7 +135,7 @@ function otpRequestResolverOf(
   config: AuthFlowHostConfig,
   channel: LoginCardOtpChannel,
 ): LoginCardOtpProps["requestResolvers"][LoginCardOtpChannel] {
-  const schema = otpIdentifierFormSchema(config, channel as OtpChannel);
+  const schema = otpIdentifierFormSchema(channel as OtpChannel);
   const fields = resolveAuthFlowCopy(config).fields;
   const copy = channel === "email" ? fields.email : fields.phone;
   return makeResolver<
@@ -490,9 +490,9 @@ export function LoginDoor({
           captchaSlot: captchaSlot(passwordCaptcha.fieldProps),
         }}
         otp={{
-          // Row 21 — the channels this host serves; a one-channel host draws no
-          // channel row at all (the same list gates the identifier schema).
-          channels: config.channels,
+          // Row 21 — the channels the package serves on every storefront
+          // (#2443); the same constant gates the OTP request schema.
+          channels: AUTH_FLOW_CHANNELS,
           requestResolvers,
           verifyResolver,
           sentIdentifier,

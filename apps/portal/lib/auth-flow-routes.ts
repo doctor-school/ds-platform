@@ -12,8 +12,3 @@ import { ACADEMY_AUTH_FLOW } from "./auth-flow.host-config";
 
 /** The auth routes `academy.doctor.school` serves (gate §4.2). */
 export const ACADEMY_AUTH_ROUTES = ACADEMY_AUTH_FLOW.routes;
-
-/**
- * 014 EARS-6 — the Academy's parking declaration for a carried return target.
- */
-export const ACADEMY_AUTH_RETURN_TO = ACADEMY_AUTH_FLOW.returnTo;

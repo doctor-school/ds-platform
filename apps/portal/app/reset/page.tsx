@@ -12,7 +12,7 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * `/login`, `/register` and `/verify` are. Both stages of the recovery card, the
  * challenge, the resend with its neutral acknowledgement, the reveal toggle,
  * «Начать заново», the carried return target and the #675 guard with its
- * `allowAuthenticated` exemption are the ONE recovery flow of
+ * reset-route exemption are the ONE recovery flow of
  * `@ds/auth-flow/reset` — the same body the doctor storefront mounts. What
  * stays here is what this host STATES about itself: `ACADEMY_AUTH_FLOW`. The
  * guard runs inside the mount, so `app/reset/layout.tsx` is gone.

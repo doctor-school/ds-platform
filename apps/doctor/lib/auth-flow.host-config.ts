@@ -17,7 +17,7 @@ import type {
  * The host value file of `@ds/auth-flow` on this host. A plain constant rather
  * than the Academy's hook: this storefront ships no i18n runtime. Its RU
  * auth sentences are the package's own defaults (#2027) — and what stays here is
- * the transport, the channels, the field SET and the site key, which Next inlines from the
+ * the transport, the field SET and the site key, which Next inlines from the
  * literal `process.env.NEXT_PUBLIC_…` expression below.
  */
 
@@ -67,17 +67,12 @@ export const DOCTOR_AUTH_FLOW = {
     verify: "/verify",
     reset: "/reset",
     account: "/account",
-    // 003 EARS-28 — the `/account` change-password action hands off to the
-    // reset flow, so a signed-in doctor must still be able to complete `/reset`.
-    allowAuthenticated: ["/reset"],
     // 020 — the storefront event page a carried intent lands on.
     eventPathTemplate: "/events/:slug",
     // 006 EARS-6 / 020 EARS-7 — the room a guest bounced to `/login` returns to
     // (the same literal `lib/room-config.ts` states; pinned by the test).
     room: "/events/:slug/room",
   },
-  // No `returnTo`: this storefront parks no cookie and carries the target on
-  // the canonical `returnTo` param (wave-1 gate row 29).
   // 021 EARS-3 / LD-4 — a remembered specialty lands on the events feed; no
   // specialty, or an unresolved read, lands on the storefront home. The two reads
   // are named as paths (the same ones `lib/specialty-choice.ts` issues from the
@@ -112,9 +107,6 @@ export const DOCTOR_AUTH_FLOW = {
     // of the SmartCaptcha resource for the challenge to run there.
     siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
   },
-  // The storefront serves sign-in codes over both channels, exactly as the
-  // Academy does, so its identifier box is the email-or-E.164 union (#2411).
-  channels: ["email", "sms"],
   register: {
     promoField: true,
   },

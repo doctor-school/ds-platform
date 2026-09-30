@@ -90,6 +90,7 @@ import {
   clearStoredReturnTarget,
   readStoredReturnTarget,
 } from "../client/return-target-store";
+import { RETURN_TARGET_PARKING } from "../host-config";
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
@@ -374,9 +375,7 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
 });
 
 describe("021 EARS-10 (#2455, owner decision Б): an эфир that no longer exists lands on the default", () => {
-  const PARKING = ACADEMY_FIXTURE.returnTo!.parkingCookie!;
-
-  afterEach(() => clearStoredReturnTarget(PARKING));
+  afterEach(() => clearStoredReturnTarget());
 
   it.each([
     ["Академия", ACADEMY_FIXTURE, "/webinars/gone", "/webinars"],
@@ -384,13 +383,10 @@ describe("021 EARS-10 (#2455, owner decision Б): an эфир that no longer exi
   ])(
     "021 EARS-10: on %s the confirmed doctor lands on the default landing even when the vanished эфир page is parked",
     async (_host, config, gone, landing) => {
-      // A host that parks (014 EARS-6) parks the arrival target on `/register`
+      // Both hosts park (014 EARS-6, #2443) the arrival target on `/register`
       // and on `/verify` itself, so the vanished эфир is in the parked cookie
       // when the mount resolves it to no target.
-      const parking = config.returnTo?.parkingCookie;
-      if (parking) {
-        document.cookie = `${parking.name}=${encodeURIComponent(gone)}; Path=/`;
-      }
+      document.cookie = `${RETURN_TARGET_PARKING.name}=${encodeURIComponent(gone)}; Path=/`;
       hold();
       const user = userEvent.setup();
       render(
@@ -411,7 +407,7 @@ describe("021 EARS-10 (#2455, owner decision Б): an эфир that no longer exi
       expect(h.replace).toHaveBeenCalledTimes(1);
       expect(h.registerForEvent).not.toHaveBeenCalled();
       // Consumed once (014 EARS-6): a later sign-in never lands on it either.
-      if (parking) expect(readStoredReturnTarget(parking)).toBeNull();
+      expect(readStoredReturnTarget()).toBeNull();
     },
   );
 });

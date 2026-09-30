@@ -16,7 +16,7 @@ import type { AuthFlowHostConfig } from "../host-config";
  * shipped ones only closely enough that an assertion can tell two branches apart.
  */
 
-/** The Academy: an email-or-SMS host whose registration form has no promo box. */
+/** The Academy: a registration form with no promo box and one read-only consent sentence. */
 export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
@@ -28,9 +28,6 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     verify: "/verify",
     reset: "/reset",
     account: "/account",
-    // 003 EARS-28 - the /account change-password action hands off here, so a
-    // signed-in visitor must be able to finish a reset.
-    allowAuthenticated: ["/reset"],
     eventPathTemplate: "/webinars/:slug",
     room: "/webinars/:slug/room",
   },
@@ -46,7 +43,6 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     loginIcon: "shield-check",
   },
   botProtection: { siteKey: undefined },
-  channels: ["email", "sms"],
   register: { promoField: false },
   // One required consent, read as ONE read-only sentence rather than a control
   // (this host's shipped render): the statement is what the visitor reads, the
@@ -67,13 +63,9 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     ],
     wordingVersion: "2026-01",
   },
-  // 014 EARS-6 - this host parks the carried target for the trip through the
-  // verification mail. The doctor fixture below states none: row 29, that host
-  // carries the target on the query param alone.
-  returnTo: { parkingCookie: { name: "ds_return_to", maxAgeSeconds: 900 } },
 };
 
-/** The doctor storefront: sign-in codes over both channels (#2411), promo box on the form. */
+/** The doctor storefront: promo box on the form, specialty-aware landing, two consent tiers. */
 export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
@@ -85,7 +77,6 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     verify: "/verify",
     reset: "/reset",
     account: "/account",
-    allowAuthenticated: ["/reset"],
     eventPathTemplate: "/events/:slug",
     room: "/events/:slug/room",
   },
@@ -112,7 +103,6 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     registerIcon: "user-plus-square",
   },
   botProtection: { siteKey: undefined },
-  channels: ["email", "sms"],
   register: {
     promoField: true,
   },
@@ -153,15 +143,4 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     marketingOptIn: true,
     wordingVersion: "2026-09-22",
   },
-  // It parks nothing (row 29), so there is no `returnTo` here.
-};
-
-/**
- * A host that serves sign-in codes over e-mail ONLY. No storefront ships this
- * today (both serve e-mail and SMS, #2411), but `channels` is host data and the
- * package's single-channel branch stays covered against it.
- */
-export const EMAIL_ONLY_FIXTURE: AuthFlowHostConfig = {
-  ...DOCTOR_FIXTURE,
-  channels: ["email"],
 };

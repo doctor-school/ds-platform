@@ -20,11 +20,16 @@
 export { StorefrontHeader } from "./storefront-header";
 export { StorefrontFooter } from "./storefront-footer";
 export { ThemeToggle, type ThemeToggleLabels } from "./theme-toggle";
-export { isHiddenPath, matchesPathPattern } from "./config";
+export {
+  isHiddenPath,
+  matchesPathPattern,
+  SHELL_PRODUCT_DIFFERENCE_FIELDS,
+} from "./config";
 export { ShellAuthCluster } from "./auth-cluster";
 export type {
   ShellAuthState,
   ShellLink,
+  ShellProductDifference,
   StorefrontHostId,
   StorefrontShellConfig,
 } from "./config";

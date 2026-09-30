@@ -19,9 +19,10 @@ import { ResetDoor } from "./reset-door";
  *
  * Server-side, before the first byte of HTML:
  *   • the #675 guard, which LETS a signed-in doctor through because `/reset` is
- *     on the host's `routes.allowAuthenticated` (003 EARS-28 — the cabinet
- *     «Сменить пароль» entry is by definition a signed-in doctor). The exemption
- *     is stated host data, not the absence of a call;
+ *     is the host's reset route, which `authenticatedAllowedRoutes` derives
+ *     (003 EARS-28 — the cabinet «Сменить пароль» entry is by definition a
+ *     signed-in doctor). The exemption is package mechanics, not the absence
+ *     of a call;
  *   • the two ends of the journey (rules S3 + S4): «Вернуться ко входу» is this
  *     host's `routes.login` carrying the guard-reconstructed arrival target, and
  *     the post-reset landing is that target's host projection (#1945 re-homes an

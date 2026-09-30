@@ -111,7 +111,7 @@ function PlateBody({
   );
 }
 
-type CardConfig = Pick<AuthFlowHostConfig, "copy" | "returnTo">;
+type CardConfig = Pick<AuthFlowHostConfig, "copy">;
 
 /** The wide-layout composition: the card in the split's left half, with the door's assurance line. */
 export function ReturnContextPanel({

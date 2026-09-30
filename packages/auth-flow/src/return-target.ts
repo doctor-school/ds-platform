@@ -1,6 +1,6 @@
 import { parseSameOriginReturnTarget } from "@ds/schemas";
 
-import type { AuthFlowReturnToConfig } from "./host-config";
+import type { RETURN_TARGET_PARKING } from "./host-config";
 
 /**
  * The ONE return-target codec of the shared auth flow (wave-1 gate rows 29–32,
@@ -12,9 +12,9 @@ import type { AuthFlowReturnToConfig } from "./host-config";
  *     `@ds/schemas` `parseSameOriginReturnTarget` guard is the single
  *     same-origin rule of the platform (014 EARS-6) and this module re-checks
  *     through it at every moment of use;
- *   • WHERE a host parks one — `returnTo.parkingCookie` host data, `undefined`
- *     on a host that parks nothing (row 29: the doctor storefront carries the
- *     target on the canonical `returnTo` param and has no parking cookie at all);
+ *   • WHERE a target is parked — the one package `RETURN_TARGET_PARKING`
+ *     cookie, the same on both storefronts (row 29, #2443), the fallback for a
+ *     hop that arrives without the canonical `returnTo` param;
  *   • WHICH non-event shape is a legal target — the ACCOUNT FAMILY (row 32,
  *     #1987): the host's own `routes.account` and every page below it.
  *
@@ -28,10 +28,8 @@ import type { AuthFlowReturnToConfig } from "./host-config";
  * guard's own reconstruction, never the visitor's raw string.
  */
 
-/** The host's parking declaration — `undefined` on a host that parks nothing. */
-export type ReturnTargetParking = NonNullable<
-  AuthFlowReturnToConfig["parkingCookie"]
->;
+/** The shape of the package parking declaration (`RETURN_TARGET_PARKING`). */
+export type ReturnTargetParking = typeof RETURN_TARGET_PARKING;
 
 /**
  * Row 32 / #1987 — the account FAMILY.

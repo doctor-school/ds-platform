@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The SERVER MOUNT of password recovery (#2027 PR 1.8, rows 78 and 83) — the
  * sibling of `VerifyRoute`, read as an ELEMENT: this tier owns the decisions
- * handed across the boundary (the guard with its `allowAuthenticated`
+ * handed across the boundary (the guard with its derived reset-route
  * exemption, the carried exit, the post-reset landing), and the body's own
  * behaviour is pinned by `reset-door.test.tsx`.
  *
@@ -90,7 +90,7 @@ describe.each(HOSTS)("ResetRoute on the %s host", (_, config) => {
     expect(shell.props.children.props.loginHref).toBe(config.routes.login);
   });
 
-  it("003 EARS-28: a SIGNED-IN doctor is let through — /reset is this host's `allowAuthenticated` exemption", async () => {
+  it("003 EARS-28: a SIGNED-IN doctor is let through — /reset is the package's derived reset-route exemption", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);
 
     const props = await doorPropsOf(config, { returnTo: "/account" });

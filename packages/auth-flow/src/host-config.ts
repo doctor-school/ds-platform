@@ -11,10 +11,9 @@ import type { ConsentTier, OtpChannel } from "@ds/schemas";
  * variant of a rule the package owns.
  *
  * The type grows ONE PR at a time, with the surfaces that consume it. PR 1.3
- * declared the transport, the copy, the bot-protection value, the channels and
- * the promo box; PR 1.4 adds the route table and the `returnTo` parking, which
- * are what the server session read, the signed-in guard and the return-target
- * codec consume. PR 1.5 adds what the sign-in door reads: the landing table
+ * declared the transport, the copy, the bot-protection value and the promo
+ * box; PR 1.4 adds the route table, which is what the server session read,
+ * the signed-in guard and the return-target codec consume. PR 1.5 adds what the sign-in door reads: the landing table
  * (with the remembered-specialty reads named as paths), the event and room route
  * templates and the door's copy as plain string
  * templates (the copy crosses the server-mount → client boundary, so it can hold
@@ -23,6 +22,13 @@ import type { ConsentTier, OtpChannel } from "@ds/schemas";
  * reads: the consent read model, the copy of the rows a host renders around it,
  * the registration and confirmation copy, and the two optional framing lines
  * above the submit. A field nothing reads yet would be a claim, not a contract.
+ *
+ * What is NOT here is the flow's MECHANICS (#2443): the sign-in-code channels,
+ * the auth routes open to a signed-in visitor and the return-target parking are
+ * package constants below,
+ * so the two storefronts cannot diverge on them by construction. The fields
+ * whose values may legitimately differ per storefront are listed, with their
+ * spec clauses, in {@link AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS}.
  */
 
 /** The fields the shared registration/confirmation rules know about (row 9). */
@@ -437,15 +443,6 @@ export type AuthFlowRoutes = {
   /** #1987 — the account path the return-target codec admits as a shape (row 32). */
   readonly account: string;
   /**
-   * Q3 (rows 26–28) — the auth paths an AUTHENTICATED visitor may still be shown.
-   *
-   * Read SERVER-side by the one guard. `/reset` is on it because 003 EARS-28
-   * pins the `/account` change-password action as a handoff to the existing
-   * reset flow, so a signed-in doctor must be able to complete it; everything
-   * off this list is closed to a visitor who already holds a session.
-   */
-  readonly allowAuthenticated: readonly string[];
-  /**
    * This host's event page (rows 39, 42). A closed set rather than any string:
    * each template names the ONE strict `@ds/schemas` return-target parser for
    * that shape, so a carried target from the other storefront is never an intent
@@ -488,21 +485,23 @@ export type AuthFlowLandingConfig =
     };
 
 /**
- * `returnTo` parking (rows 29–31). `undefined` on a host that parks nothing —
- * the doctor storefront carries the target on the canonical query param and has
- * no cookie at all, which is a host fact and not a missing feature.
+ * #2443 / 014 EARS-6 — the ONE return-target parking of the shared auth flow
+ * (rows 29–31), the same on both storefronts.
+ *
+ * The carried target travels on the canonical `returnTo` query param, which
+ * wins whenever it is present; the parked copy is the fallback for an auth hop
+ * that arrives without it. Package mechanics, not host data: a per-host switch
+ * once let one storefront park and the other not. The cookie is host-only (no
+ * `Domain`), so the two storefronts' origins never share it.
  */
-export type AuthFlowReturnToConfig = {
-  /** Absent = this host parks nothing and carries the target on the query param alone. */
-  readonly parkingCookie?: {
-    readonly name: string;
-    /**
-     * Long enough to open a verification mail and come back, short enough that
-     * an abandoned flow does not resurface days later on an unrelated sign-in.
-     */
-    readonly maxAgeSeconds: number;
-  };
-};
+export const RETURN_TARGET_PARKING = {
+  name: "ds_return_to",
+  /**
+   * Long enough to finish a sign-up and come back, short enough that an
+   * abandoned flow does not resurface days later on an unrelated sign-in.
+   */
+  maxAgeSeconds: 900,
+} as const;
 
 /**
  * The consent block a host renders on its registration door (rows 56–60, 62).
@@ -584,8 +583,6 @@ export type AuthFlowHostConfig = {
    * rule.
    */
   readonly botProtection: { readonly siteKey: string | undefined };
-  /** The sign-in-code channels this host serves — `['email']` where there is no SMS (row 21). */
-  readonly channels: readonly OtpChannel[];
   readonly register: {
     /** Whether the registration form carries the optional promo-code box (row 9). */
     readonly promoField: boolean;
@@ -600,6 +597,70 @@ export type AuthFlowHostConfig = {
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;
-  /** Absent = this host parks no return target (row 29). */
-  readonly returnTo?: AuthFlowReturnToConfig;
 };
+
+/**
+ * #2443 — the sign-in-code channels of the shared auth flow (row 21): e-mail and
+ * SMS, on every storefront.
+ *
+ * A package constant, not host data. Which channels a doctor can sign in with is
+ * auth-flow MECHANICS, and the owner ruled (2026-09-29) that mechanics are not a
+ * storefront difference; a per-host value let one storefront silently drop SMS
+ * once (#2324 → #2411), so the value now has one home and no host can restate it.
+ */
+export const AUTH_FLOW_CHANNELS: readonly OtpChannel[] = ["email", "sms"];
+
+/**
+ * #2443 / Q3 (rows 26–28) — the auth routes an AUTHENTICATED visitor may still be
+ * shown, derived from the host's own route table rather than stated beside it.
+ *
+ * It is exactly the reset route: 003 EARS-28 pins the `/account` change-password
+ * action as a handoff to the existing reset flow, so a signed-in doctor must be
+ * able to complete it; every other auth route is closed to a visitor who
+ * already holds a session. Derived, so a host that serves its reset flow on
+ * another path carries its exemption with it and no host can widen the list.
+ */
+export function authenticatedAllowedRoutes(
+  routes: Pick<AuthFlowRoutes, "reset">,
+): readonly string[] {
+  return [routes.reset];
+}
+
+/** One agreed product difference between the two storefronts and the clause that decides it. */
+export type AuthFlowProductDifference = {
+  /** The {@link AuthFlowHostConfig} field, as a dotted path. */
+  readonly field: string;
+  /** The owning requirements file, repo-relative. */
+  readonly spec: string;
+  /** The clauses that decide the per-storefront value (`NNN EARS-N` / `NNN LD-N`). */
+  readonly clauses: readonly string[];
+};
+
+/**
+ * #2443 — the host-config fields whose values are allowed to DIFFER between the
+ * two storefronts, because a spec decided so (owner 2026-09-29: promo code,
+ * consents and the specialty landing are agreed product differences).
+ *
+ * Every other host field is presentation, brand, route or envelope data, and
+ * the mechanics of the flow are package constants above. Each entry names the
+ * clauses its row in the owning spec's «Differences between storefronts» table
+ * cites (`021-doctor-registration/021-requirements-en.md`).
+ */
+export const AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS: readonly AuthFlowProductDifference[] =
+  [
+    {
+      field: "register.promoField",
+      spec: "apps/docs/content/specs/features/021-doctor-registration/021-requirements-en.md",
+      clauses: ["021 EARS-1", "021 EARS-11"],
+    },
+    {
+      field: "landing.specialtyAware",
+      spec: "apps/docs/content/specs/features/021-doctor-registration/021-requirements-en.md",
+      clauses: ["021 EARS-3", "021 LD-4", "013 EARS-15"],
+    },
+    {
+      field: "consents",
+      spec: "apps/docs/content/specs/features/021-doctor-registration/021-requirements-en.md",
+      clauses: ["021 EARS-4", "021 EARS-5", "021 EARS-6", "003 EARS-20"],
+    },
+  ];

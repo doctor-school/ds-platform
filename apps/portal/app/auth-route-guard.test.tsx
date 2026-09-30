@@ -90,7 +90,7 @@ describe("#675 Academy auth routes, server-side signed-in guard", () => {
     },
   );
 
-  it("003 EARS-28: /reset runs the same guard and lets a SIGNED-IN visitor through (routes.allowAuthenticated)", async () => {
+  it("003 EARS-28: /reset runs the same guard and lets a SIGNED-IN visitor through (the derived reset-route exemption)", async () => {
     // The /account «Сменить пароль» action hands off to the existing reset
     // flow, so a signed-in doctor must be able to complete it.
     incoming.headers = SIGNED_IN;

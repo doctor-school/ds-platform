@@ -55,7 +55,15 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `asset-format`, `registry-research`, `spec-link`, `instruction-budget`,
 `module-readme`, `tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`,
 `glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`,
-`external-anchor`, `db-drift`, `tsc-version`, `retained-data`.
+`external-anchor`, `db-drift`, `tsc-version`, `retained-data`,
+`host-config-parity`.
+
+`host-config-parity` (#2443) imports the two storefronts' real host configs and
+the package product-difference manifests from `LINT_FIXTURE_ROOT` at their repo
+paths, and reads each owning spec's «Differences between storefronts» table from
+the BASE branch. Its fixture cases stand the base read in with a `base/` dir via
+`HOST_CONFIG_PARITY_BASE_DIR` (a case without one has no table on base), which is
+how the «row only on the head tree» RED case is expressed without a git history.
 
 `assert-no-skipped-e2e` (#1595) is the odd one out: it lives at
 `tools/ci/assert-no-skipped-e2e.ts`, not under `tools/lint`, and is spawned with

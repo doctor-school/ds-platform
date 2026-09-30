@@ -662,6 +662,19 @@ jobs:
       - name: canvas-provenance
         run: pnpm lint:canvas-provenance
 
+      # host-config-parity — the doctor storefront and the Academy may set a
+      # different `@ds/auth-flow` / `@ds/storefront-shell` host value only where
+      # the package manifest lists the field AND the owning spec's «Differences
+      # between storefronts» row, read from the BASE branch, cites it (Issue
+      # #2443, after #2324 silently dropped SMS sign-in on one storefront). It
+      # imports the real host constants, and they import `@ds/schemas` values
+      # through its built `dist/`, so that package is built first. POSTURE:
+      # BLOCK, a plain step — a deterministic comparison with no exception file.
+      - name: host-config-parity (deps)
+        run: pnpm exec turbo run build --filter=@ds/schemas
+      - name: host-config-parity
+        run: pnpm lint:host-config-parity
+
       # scenario-coverage — every `EARS-N` handler declared by a `user-facing`
       # feature spec must be tagged on a live scenario in its
       # `NNN-scenarios.feature` (tech spec §6.4 + §6.5, Issue #2067); coverage was

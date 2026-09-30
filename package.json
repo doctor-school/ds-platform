@@ -62,6 +62,7 @@
     "lint:import-boundary": "tsx tools/lint/import-boundary-lint.ts",
     "lint:ui-parity": "tsx tools/lint/ui-parity-lint.ts",
     "lint:canvas-provenance": "tsx tools/lint/canvas-provenance-lint.ts",
+    "lint:host-config-parity": "tsx tools/lint/host-config-parity-lint.ts",
     "lint:retained-data": "tsx tools/lint/retained-data-lint.ts",
     "lint:route-targets": "tsx tools/lint/route-target-lint.ts",
     "lint:scenario-coverage": "tsx tools/lint/scenario-coverage-lint.ts",

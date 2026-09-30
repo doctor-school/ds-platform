@@ -91,7 +91,7 @@ Per ADR-0007 §2.10. Mode (a) — same-session subagent dispatch via `request-mo
 
 ## 5. Lint guards
 
-Guards surface as PR Checks. Authoritative list/severity: `.github/workflows/ci.yml` + `pr-body-guards.yml` (re-runs on body edits); WARN→BLOCK criterion + cadence: ADR-0007 §2.6. `spec-link` / `endpoint-authz` / `playwright-axe` / `prod-surface` / `no-primitive-style-override` are BLOCK; the rest WARN in Phase 0 (baseline drift/glossary: separate hard-red).
+Guards surface as PR Checks. Authoritative list/severity: `.github/workflows/ci.yml` + `pr-body-guards.yml` (re-runs on body edits); WARN→BLOCK criterion + cadence: ADR-0007 §2.6. `spec-link` / `endpoint-authz` / `playwright-axe` / `prod-surface` / `no-primitive-style-override` / `host-config-parity` are BLOCK; the rest WARN in Phase 0 (baseline drift/glossary: separate hard-red).
 
 ---
 

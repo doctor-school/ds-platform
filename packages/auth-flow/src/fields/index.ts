@@ -18,7 +18,11 @@ import {
 } from "@ds/design-system/fields";
 
 import { resolveAuthFlowCopy } from "../copy";
-import type { AuthFlowFieldName, AuthFlowHostConfig } from "../host-config";
+import {
+  AUTH_FLOW_CHANNELS,
+  type AuthFlowFieldName,
+  type AuthFlowHostConfig,
+} from "../host-config";
 
 /**
  * The ONE field-rule set both storefronts resolve their auth forms with (#2027,
@@ -32,12 +36,11 @@ import type { AuthFlowFieldName, AuthFlowHostConfig } from "../host-config";
  * trip and an opaque generic failure. The submitted body still matches the loose
  * request schema.
  *
- * What is host DATA and what is package RULE: the shapes, the bounds and the
- * masking are the rule and live here once; which CHANNELS a host serves
- * (`config.channels`) and whether its registration form carries the promo box
- * (`config.register.promoField`) are data, and so is every sentence
- * (the package copy defaults). A host that serves no SMS therefore gets a narrower
- * identifier box from the same rule, not a second rule.
+ * What is host DATA and what is package RULE: the shapes, the bounds, the
+ * masking and the served CHANNELS (`AUTH_FLOW_CHANNELS`, #2443 — e-mail and SMS
+ * on every storefront) are the rule and live here once; whether a registration
+ * form carries the promo box (`config.register.promoField`) is data, and so is
+ * every sentence (the package copy defaults).
  */
 
 // The phone mask is a field-primitive concern; re-exported so an auth surface
@@ -45,27 +48,21 @@ import type { AuthFlowFieldName, AuthFlowHostConfig } from "../host-config";
 export { maskPhoneInput };
 
 /**
- * The identifier box this host shows (row 21).
- *
- * With SMS among the channels it is the email-OR-E.164 union (Zitadel resolves
- * whichever was typed); without SMS the phone shape is not a thing a doctor can
- * sign in with here, so accepting it in the box would promise a journey the host
- * does not run.
+ * The identifier box of every auth door (row 21): the email-OR-E.164 union,
+ * because the package serves sign-in codes over both channels (Zitadel resolves
+ * whichever was typed).
  */
-export function identifierFieldSchema(
-  config: AuthFlowHostConfig,
-): z.ZodType<string, string> {
-  return config.channels.includes("sms")
-    ? (IdentifierFieldSchema as unknown as z.ZodType<string, string>)
-    : (EmailIdentifierSchema as unknown as z.ZodType<string, string>);
+export function identifierFieldSchema(): z.ZodType<string, string> {
+  return IdentifierFieldSchema as unknown as z.ZodType<string, string>;
 }
 
 /** 003 EARS-5 password sign-in — one identifier box plus the length-only password rule. */
-export function loginIdentifierFormSchema(
-  config: AuthFlowHostConfig,
-): z.ZodType<LoginRequest, LoginRequest> {
+export function loginIdentifierFormSchema(): z.ZodType<
+  LoginRequest,
+  LoginRequest
+> {
   return z.object({
-    identifier: identifierFieldSchema(config),
+    identifier: identifierFieldSchema(),
     password: z.string().min(8).max(256),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<LoginRequest, LoginRequest>;
@@ -78,18 +75,14 @@ export function loginIdentifierFormSchema(
  * {@link identifierFieldSchema} on purpose — here the channel is already chosen.
  */
 export function otpIdentifierFormSchema(
-  config: AuthFlowHostConfig,
   channel: OtpChannel,
 ): z.ZodType<OtpRequest, OtpRequest> {
   const identifier =
     channel === "email" ? EmailIdentifierSchema : PhoneIdentifierSchema;
   return z.object({
     identifier,
-    // Row 21, enforced once: the served channels are the host's, so a channel
-    // this storefront does not offer cannot be built here at all — an email-only
-    // door would otherwise accept an SMS request and buy a round trip that can
-    // only fail, with the generic outcome copy as its answer.
-    channel: z.enum(config.channels as [OtpChannel, ...OtpChannel[]]),
+    // Row 21, enforced once: only a channel the package serves can be built.
+    channel: z.enum(AUTH_FLOW_CHANNELS as [OtpChannel, ...OtpChannel[]]),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<OtpRequest, OtpRequest>;
 }

@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { authenticatedAllowedRoutes } from "@ds/auth-flow/host-config";
+
 /**
  * `/reset` is a MOUNT (#2027 PR 1.8): the recovery flow's behaviour is pinned
  * once, in `packages/auth-flow/src/reset/reset-door.test.tsx` and
@@ -26,8 +28,12 @@ describe("/reset mounts the shared recovery flow", () => {
     expect(element.type).toBe(route);
     expect(element.props.config).toBe(ACADEMY_AUTH_FLOW);
     expect(element.props.searchParams).toBe(searchParams);
-    // 003 EARS-28 — the exemption the mount's guard reads is this host's data.
-    expect(ACADEMY_AUTH_FLOW.routes.allowAuthenticated).toContain("/reset");
+    // 003 EARS-28 — the exemption the mount's guard reads is derived from this
+    // host's reset route (#2443), not stated beside it.
+    expect(ACADEMY_AUTH_FLOW.routes).not.toHaveProperty("allowAuthenticated");
+    expect(authenticatedAllowedRoutes(ACADEMY_AUTH_FLOW.routes)).toEqual([
+      "/reset",
+    ]);
     expect(ACADEMY_AUTH_FLOW.routes.account).toBe("/account");
   });
 });

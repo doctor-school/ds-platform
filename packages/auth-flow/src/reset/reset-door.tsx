@@ -40,7 +40,7 @@ import { ResetGlyph } from "./reset-glyph";
  *
  * Both storefronts recover a password through THIS component, mounted by
  * `ResetRoute`. What differs between them is data — the host config (its copy
- * override, its channels, `routes.login`, `routes.account`) and the two ends the
+ * override, `routes.login`, `routes.account`) and the two ends the
  * route resolved server-side — never a branch.
  *
  * Two steps on one route (003 EARS-11 initiate / EARS-12 complete):
@@ -277,7 +277,7 @@ type CompleteResolver = PasswordRecoveryCardProps["complete"]["resolver"];
 
 /** EARS-11 — the identifier box this host serves (row 21), in the package sentences. */
 function requestResolverOf(config: AuthFlowHostConfig): RequestResolver {
-  const identifier = identifierFieldSchema(config);
+  const identifier = identifierFieldSchema();
   const { fields } = resolveAuthFlowCopy(config);
   return makeResolver<PasswordRecoveryRequestValues, RequestResolver>({
     identifier: (value) => {

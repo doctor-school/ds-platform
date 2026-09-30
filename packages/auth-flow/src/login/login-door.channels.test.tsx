@@ -4,11 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Wave-1 gate row 21 — the sign-in-code step offers exactly the channels this
- * host SERVES. `channels` already gated the identifier VALIDATION rule; the
- * visible choice has to follow it, or an email-only host draws an SMS tab
- * whose code the BFF never sends. A single-channel host has nothing to choose
- * between, so the row is absent rather than a lone locked button.
+ * Wave-1 gate row 21 — the sign-in-code step offers the channels the package
+ * serves: e-mail and SMS on every storefront (#2443, `AUTH_FLOW_CHANNELS`). The
+ * same constant gates the OTP request shape, so the visible choice and the
+ * request that can be built never disagree.
  */
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -33,7 +32,6 @@ import type { AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
-  EMAIL_ONLY_FIXTURE,
 } from "../test-support/host-config-fixtures";
 import { LoginDoor } from "./login-door";
 
@@ -47,23 +45,19 @@ async function openCodeStep(config: AuthFlowHostConfig) {
   await user.click(screen.getByTestId("login-method-otp"));
 }
 
-describe("the sign-in-code step offers the channels this host serves", () => {
-  it("a host serving e-mail only draws no channel row and asks for the address", async () => {
-    expect(EMAIL_ONLY_FIXTURE.channels).toEqual(["email"]);
-    await openCodeStep(EMAIL_ONLY_FIXTURE);
+describe("the sign-in-code step offers the package channels on every storefront (#2443)", () => {
+  it.each([
+    ["the Academy", ACADEMY_FIXTURE],
+    ["the doctor storefront", DOCTOR_FIXTURE],
+  ])(
+    "%s lets the visitor pick between e-mail and SMS",
+    async (_host, config) => {
+      await openCodeStep(config);
 
-    expect(screen.queryByTestId("otp-channel-sms")).toBeNull();
-    expect(screen.queryByTestId("otp-channel-email")).toBeNull();
-    expect(screen.getByLabelText(COPY.otp.emailLabel)).toBeInTheDocument();
-  });
-
-  it("a host serving both channels lets the visitor pick between them", async () => {
-    expect(ACADEMY_FIXTURE.channels).toEqual(["email", "sms"]);
-    await openCodeStep(ACADEMY_FIXTURE);
-
-    expect(screen.getByTestId("otp-channel-email")).toBeInTheDocument();
-    expect(screen.getByTestId("otp-channel-sms")).toBeInTheDocument();
-    // Canvas 106: the group names itself above the buttons, not only to a reader.
-    expect(screen.getByText(COPY.otp.channelGroupLabel)).toBeInTheDocument();
-  });
+      expect(screen.getByTestId("otp-channel-email")).toBeInTheDocument();
+      expect(screen.getByTestId("otp-channel-sms")).toBeInTheDocument();
+      // Canvas 106: the group names itself above the buttons, not only to a reader.
+      expect(screen.getByText(COPY.otp.channelGroupLabel)).toBeInTheDocument();
+    },
+  );
 });

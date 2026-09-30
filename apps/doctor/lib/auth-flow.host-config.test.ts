@@ -12,11 +12,7 @@ import {
   consentStatementOf,
   resolveAuthFlowCopy,
 } from "@ds/auth-flow/copy";
-import {
-  identifierFieldSchema,
-  loginIdentifierFormSchema,
-  otpIdentifierFormSchema,
-} from "@ds/auth-flow/fields";
+import { AUTH_FLOW_CHANNELS } from "@ds/auth-flow/host-config";
 
 import { DOCTOR_AUTH_FLOW } from "./auth-flow.host-config";
 import { doctorNav } from "./navigation-model";
@@ -178,32 +174,8 @@ describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
  * email-only on both hosts (021 LD-9) and is not what this suite pins.
  */
 describe("DOCTOR_AUTH_FLOW: the sign-in door's channels", () => {
-  it("003 EARS-7: the host serves sign-in codes over e-mail AND SMS, like the Academy", () => {
-    expect(DOCTOR_AUTH_FLOW.channels).toEqual(["email", "sms"]);
-  });
-
-  it("003 EARS-5: the identifier box accepts an E.164 phone as well as an address", () => {
-    expect(
-      identifierFieldSchema(DOCTOR_AUTH_FLOW).safeParse("+79991234567").success,
-    ).toBe(true);
-    expect(
-      identifierFieldSchema(DOCTOR_AUTH_FLOW).safeParse("doctor@example.ru")
-        .success,
-    ).toBe(true);
-    expect(
-      loginIdentifierFormSchema(DOCTOR_AUTH_FLOW).safeParse({
-        identifier: "+79991234567",
-        password: "correct-horse-battery",
-      }).success,
-    ).toBe(true);
-  });
-
-  it("003 EARS-7: the SMS sign-in-code request can be built on this host", () => {
-    expect(
-      otpIdentifierFormSchema(DOCTOR_AUTH_FLOW, "sms").safeParse({
-        identifier: "+79991234567",
-        channel: "sms",
-      }).success,
-    ).toBe(true);
+  it("003 EARS-7 (#2443): the host states no channels — the package serves e-mail AND SMS on both storefronts", () => {
+    expect(DOCTOR_AUTH_FLOW).not.toHaveProperty("channels");
+    expect(AUTH_FLOW_CHANNELS).toEqual(["email", "sms"]);
   });
 });

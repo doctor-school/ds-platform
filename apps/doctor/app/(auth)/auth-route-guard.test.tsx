@@ -101,7 +101,7 @@ describe("#675 doctor auth routes, server-side signed-in guard", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
-  it("003 EARS-28: /reset runs the same guard and lets a SIGNED-IN doctor through (routes.allowAuthenticated)", async () => {
+  it("003 EARS-28: /reset runs the same guard and lets a SIGNED-IN doctor through (the derived reset-route exemption)", async () => {
     // The `/account` «Сменить пароль» action hands off to the existing reset
     // flow, so a signed-in doctor must be able to complete it.
     incoming.headers = SIGNED_IN;

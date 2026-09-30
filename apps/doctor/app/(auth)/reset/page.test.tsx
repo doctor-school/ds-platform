@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { authenticatedAllowedRoutes } from "@ds/auth-flow/host-config";
+
 /**
  * `doctor.school/reset` is a MOUNT (#2027 PR 1.8): the recovery flow's
  * behaviour — both stages, the carried return target, the guard exemption — is
@@ -26,8 +28,12 @@ describe("/reset mounts the shared recovery flow", () => {
     expect(element.type).toBe(route);
     expect(element.props.config).toBe(DOCTOR_AUTH_FLOW);
     expect(element.props.searchParams).toBe(searchParams);
-    // 003 EARS-28 — the exemption the mount's guard reads is this host's data.
-    expect(DOCTOR_AUTH_FLOW.routes.allowAuthenticated).toContain("/reset");
+    // 003 EARS-28 — the exemption the mount's guard reads is derived from this
+    // host's reset route (#2443), not stated beside it.
+    expect(DOCTOR_AUTH_FLOW.routes).not.toHaveProperty("allowAuthenticated");
+    expect(authenticatedAllowedRoutes(DOCTOR_AUTH_FLOW.routes)).toEqual([
+      "/reset",
+    ]);
     expect(DOCTOR_AUTH_FLOW.routes.account).toBe("/account");
   });
 });

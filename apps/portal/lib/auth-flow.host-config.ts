@@ -12,7 +12,7 @@ import ru from "../messages/ru.json";
  * The host value file of `@ds/auth-flow`, in the same role as `lib/room-config.ts`
  * is for `@ds/room`: the RULES (the transport, the error branch, the field
  * shapes) and every sentence a doctor reads live in the package once; the PATHS,
- * the CHANNELS, the field SET and the site key are this host's and live here.
+ * the field SET and the site key are this host's and live here.
  */
 
 /**
@@ -49,9 +49,6 @@ export const ACADEMY_AUTH_FLOW = {
     verify: "/verify",
     reset: "/reset",
     account: "/account",
-    // 003 EARS-28 pins the `/account` change-password action as a handoff to the
-    // reset flow, so a signed-in doctor must still be able to complete `/reset`.
-    allowAuthenticated: ["/reset"],
     // 005 EARS-2 — the event page a carried registration intent lands on.
     eventPathTemplate: "/webinars/:slug",
     // 006 EARS-6 — the room a bounced visitor returns to; the same value
@@ -105,9 +102,6 @@ export const ACADEMY_AUTH_FLOW = {
   botProtection: {
     siteKey: process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
   },
-  // The Academy serves sign-in codes over both channels, so its identifier box
-  // is the email-or-E.164 union.
-  channels: ["email", "sms"],
   register: { promoField: false },
   /**
    * 003 EARS-20 — what the Academy records at sign-up, and what it SHOWS.

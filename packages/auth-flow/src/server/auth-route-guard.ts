@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 
-import type { AuthFlowRoutes } from "../host-config";
+import {
+  authenticatedAllowedRoutes,
+  type AuthFlowRoutes,
+} from "../host-config";
 
 /**
  * The ONE authenticated-visitor guard of the shared auth flow (wave-1 gate rows
@@ -30,15 +33,14 @@ import type { AuthFlowRoutes } from "../host-config";
 
 /** What the host surface must do with THIS request. */
 export type AuthRouteGuardDecision =
-  | { action: "render" }
-  | { action: "redirect"; to: string };
+  { action: "render" } | { action: "redirect"; to: string };
 
 export type AuthRouteGuardInput = {
   /** The resolved server-side auth state, already read once for this request. */
   readonly authenticated: boolean;
   /** The pathname being served, as the host framework reports it. */
   readonly pathname: string;
-  /** This host route table - the exemption list lives on it (row 27). */
+  /** This host route table - the exemption is derived from its reset route (row 27). */
   readonly routes: AuthFlowRoutes;
   /**
    * The landing the surrounding flow already resolved for this visitor (a
@@ -64,19 +66,19 @@ function samePath(a: string, b: string): boolean {
  *
  * A guest is always rendered: the guard withholds nothing from the people the
  * auth surfaces exist for. An authenticated visitor is rendered only the routes
- * this host states on `routes.allowAuthenticated`; everything else sends them to
- * the resolved landing, and to `routes.account` when there is none.
+ * `authenticatedAllowedRoutes` derives - the host's reset route, for the
+ * EARS-28 reason above; everything else sends them to the resolved landing, and
+ * to `routes.account` when there is none.
  *
- * The exemption is host DATA, not a package literal: `/reset` is exempt on both
- * storefronts today for the EARS-28 reason above, but a host that serves its
- * reset flow elsewhere - or serves none - says so in its own config instead of
- * the package guessing.
+ * The exemption is package MECHANICS derived from the route table (#2443), not a
+ * host list: a host that serves its reset flow elsewhere carries the exemption
+ * with the route, and no host can widen it.
  */
 export function resolveAuthRouteGuard(
   input: AuthRouteGuardInput,
 ): AuthRouteGuardDecision {
   if (!input.authenticated) return { action: "render" };
-  const exempt = input.routes.allowAuthenticated.some((allowed) =>
+  const exempt = authenticatedAllowedRoutes(input.routes).some((allowed) =>
     samePath(allowed, input.pathname),
   );
   if (exempt) return { action: "render" };

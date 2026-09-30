@@ -150,6 +150,16 @@ The canvas **state** props are not forks — they are content-driven obligations
 | Bot protection — the CLIENT half (challenge wiring)    | 003 EARS-17, **021 EARS-19** | **Not inherited — per-app.** The widget lives in portal-local `apps/portal/components/bot-protection/`, so `apps/doctor` has none; EARS-19 owns re-rendering it (or extracting it into a shared package) on every public 021 form. |
 | Per-purpose consent recording                          | 003 EARS-20 / ADR-0009       | Extends the purpose set (LD-5); the storage is 037's.                                                                                                                                                                              |
 
+## Differences between storefronts
+
+The auth flow is one capability of `@ds/auth-flow` mounted by both storefronts. Its **mechanics** — the sign-in-code channels (e-mail and SMS), the auth routes a signed-in visitor may still complete (the reset route, 003 EARS-28), the confirmation step (003 EARS-24) and the bot-protection challenge (003 EARS-17) — are package constants and are the same on the doctor storefront (Витрина) and the Academy by construction. A host config value may differ between the two storefronts **only** where a row below cites the clause that decides it; the package lists the same fields in `AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS` (`packages/auth-flow/src/host-config.ts`). A difference without a row here is a defect, not a product fact.
+
+| Field                    | Витрина (doctor storefront)                                                                                      | Академия (Academy)                                           | Clause                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------- |
+| `register.promoField`    | `true` — the optional promo-code box on the registration form                                                    | `false` — no promo box                                       | 021 EARS-1, EARS-11                      |
+| `landing.specialtyAware` | `true` — a remembered specialty lands on the 019 events feed, otherwise the storefront home (feed + reads named) | `false` — no carried target lands on `/webinars`             | 021 EARS-3, LD-4 · 013 EARS-15           |
+| `consents` (row set)     | medical-worker declaration + partner-data access condition above the submit, optional marketing opt-in below it  | one required Terms-of-Service acceptance, read as a sentence | 021 EARS-4, EARS-5, EARS-6 · 003 EARS-20 |
+
 ## Lead technical decisions
 
 Each records a call the PRD left open. They are lead decisions in the AGENTS.md §6 decision-debt sense — reversible behind a stated contract, and named here rather than buried in the design.

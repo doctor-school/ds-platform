@@ -30,7 +30,7 @@ uses, so nothing can reach the whole flow through one export (PR 1.1 rework D20)
 | `@ds/auth-flow/verify`         | The confirmation step (#2027 PR 1.7), one body on both hosts — the canvas «Подтверждение» screen: `VerifyDoor`, `VerifyEntry` / `VerifyAddressGate` + `VerifyStep` (the `?email=` seed; without it, a replace onto `/register` carrying `returnTo`, nothing painted — 003 EARS-40), `VerifyGlyph`, `VERIFY_TEST_IDS`.                                                                                                                                               |
 | `@ds/auth-flow/verify/route`   | `VerifyRoute` — the ONE server mount of that step on every host (003 EARS-24): the same arrival decision `RegisterRoute` takes (`guardAuthRoute`, the landing, the эфир to complete, the carry), the return-context panel, then the step.                                                                                                                                                                                                                           |
 | `@ds/auth-flow/reset`          | The password-recovery flow (#2027 PR 1.8), one body on both hosts — the canvas «Сброс» screen: `ResetDoor` (both stages over `PasswordRecoveryCard`), `ResetGlyph`.                                                                                                                                                                                                                                                                                                 |
-| `@ds/auth-flow/reset/route`    | `ResetRoute` — the ONE server mount of recovery: `guardAuthRoute` (let through by `routes.allowAuthenticated`), the carried exit and the post-reset landing, then the door.                                                                                                                                                                                                                                                                                         |
+| `@ds/auth-flow/reset/route`    | `ResetRoute` — the ONE server mount of recovery: `guardAuthRoute` (let through by the derived reset-route exemption), the carried exit and the post-reset landing, then the door.                                                                                                                                                                                                                                                                                   |
 | `@ds/auth-flow/register/route` | `RegisterRoute` — the ONE server mount of that door: `guardAuthRoute`, the registration arrival (landing, carried target), then the door.                                                                                                                                                                                                                                                                                                                           |
 
 The bot-protection WIDGET, its resume-one-action orchestration
@@ -48,13 +48,12 @@ these fields is a question for the owner, never a host-local variant.
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `api.basePath`                                      | The 003 auth root — `/v1/auth` on both hosts today.                                                                                                                                                                                                                                   |
 | `api.registerPath`                                  | `/v1/auth/register` vs the storefront registration command.                                                                                                                                                                                                                           |
-| `routes`                                            | Which paths ARE this host's auth screens, where `/account` is, and (`allowAuthenticated`) which of them a signed-in user may still complete. `verify` is required: every host confirms on its own route.                                                                              |
+| `routes`                                            | Which paths ARE this host's auth screens, where `/account` is. `verify` is required: every host confirms on its own route.                                                                                                                                                            |
 | `returnTo`                                          | The parking cookie (name, `maxAgeSeconds`) the middleware parks a return target in — stated only by a host whose middleware parks one.                                                                                                                                                |
 | `copy.errors`                                       | Each host keeps its own sentences; the package keeps the branch.                                                                                                                                                                                                                      |
 | `copy.botProtection`                                | The four-state challenge copy the shared block's failures map onto.                                                                                                                                                                                                                   |
 | `copy.fields`                                       | One entry per field the host SERVES; `promoCode` iff `register.promoField`.                                                                                                                                                                                                           |
 | `botProtection.siteKey`                             | The site key VALUE — see below.                                                                                                                                                                                                                                                       |
-| `channels`                                          | `['email']` on a host with no SMS: its identifier box refuses the phone shape.                                                                                                                                                                                                        |
 | `register.promoField`                               | Whether the registration form carries the optional promo box.                                                                                                                                                                                                                         |
 | `copy.register`                                     | The sign-up door's words — headings, field labels, the «Уже есть аккаунт? Войти» way out (#2331).                                                                                                                                                                                     |
 | `copy.verify`                                       | The confirmation step's words on every host — the canvas «Подтверждение» strings, with `{destination}` / `{seconds}` templates the package fills on the client.                                                                                                                       |
@@ -66,6 +65,17 @@ these fields is a question for the owner, never a host-local variant.
 at a LITERAL `process.env.NEXT_PUBLIC_…` read in the app's own source. A package
 handed an env NAME would read `undefined` in every built host, so each host does
 its own literal read of `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` and states the result.
+The site key is ENVELOPE (which SmartCaptcha resource this build talks to); the
+challenge itself is package behaviour, rendered wherever a key is configured.
+
+**Mechanics are not host data (#2443).** The sign-in-code channels
+(`AUTH_FLOW_CHANNELS` — e-mail and SMS) and the auth routes a signed-in visitor
+may still complete (`authenticatedAllowedRoutes(routes)` — the reset route,
+003 EARS-28) are package constants, so two storefronts cannot diverge on them.
+The fields whose values MAY differ per storefront are exported as
+`AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS`, each naming the spec clauses of its row in
+021's «Differences between storefronts» table: `register.promoField`,
+`landing.specialtyAware`, `consents`.
 
 ## The bot-protection header contract
 
@@ -103,7 +113,7 @@ Three rules live there, each stated once for both storefronts:
   declaration, one address for auth consumers.
 - **The signed-in guard.** `guardAuthRoute` redirects a signed-in visitor off an
   auth screen BEFORE it renders — a server decision, never a post-paint client
-  flash (#675). A host names its own exceptions in `routes.allowAuthenticated`.
+  flash (#675). The one exception is derived from the host's reset route (`authenticatedAllowedRoutes`).
 - **The `returnTo` parking rule.** `parkReturnTarget` parks a validated return
   target in the host's own cookie from middleware; `@ds/auth-flow/client` reads
   and clears the same cookie in the browser.
@@ -130,8 +140,8 @@ template, so the door lands the guest back in the room and the room gate re-runs
 
 **S2 — a signed-in visitor on an auth FORM is turned around on the server too.**
 `guardAuthRoute` runs on `/login`, `/register` and `/verify` on both hosts, so a
-doctor who still has a session never sees a sign-in form paint and then vanish. A
-host names its own exceptions in `routes.allowAuthenticated`, and `/reset` is one
+doctor who still has a session never sees a sign-in form paint and then vanish. The
+package derives the one exception from the host's reset route, so `/reset` is open
 on both hosts — 003 EARS-28 hands a signed-in doctor here from «Сменить пароль».
 An exemption that is the ABSENCE of a call cannot be read or tested; every route
 calls the guard and the data decides.

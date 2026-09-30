@@ -14,7 +14,7 @@ import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
  * The route is a MOUNT (#2027 wave 1, PR 1.8), the way `/login` and
  * `/register` are: the recovery card, both stages, the challenge, the resend,
  * the reveal toggle, the carried return target and the #675 guard with its
- * `allowAuthenticated` exemption are the ONE recovery flow of
+ * reset-route exemption are the ONE recovery flow of
  * `@ds/auth-flow/reset`, the same body the Academy mounts. What stays here is
  * what this host STATES about itself: `DOCTOR_AUTH_FLOW` and its page metadata.
  *

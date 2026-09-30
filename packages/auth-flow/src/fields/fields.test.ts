@@ -13,11 +13,7 @@ import {
   registerFieldRules,
   resolveVerificationCode,
 } from "./index";
-import {
-  ACADEMY_FIXTURE,
-  DOCTOR_FIXTURE,
-  EMAIL_ONLY_FIXTURE,
-} from "../test-support/host-config-fixtures";
+import { DOCTOR_FIXTURE } from "../test-support/host-config-fixtures";
 
 /**
  * 021 EARS-11 (#1547) — the react-hook-form projection of the FieldSpec SSOT,
@@ -68,47 +64,56 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
     expect(resolveVerificationCode(DOCTOR_FIXTURE, "abc123")).toBeNull();
     expect(resolveVerificationCode(DOCTOR_FIXTURE, "ABC123")).toBeNull();
     for (const bad of ["abc12", "abc-12", undefined]) {
-      expect(resolveVerificationCode(DOCTOR_FIXTURE, bad)).toBe(COPY.code.invalid);
+      expect(resolveVerificationCode(DOCTOR_FIXTURE, bad)).toBe(
+        COPY.code.invalid,
+      );
     }
   });
 
-  it("003 EARS-7: a host that serves no SMS refuses the phone shape in its identifier box", () => {
-    // The union box is the SMS host's, not the package's default: promising an
-    // E.164 sign-in on a host with no SMS channel buys a round trip that can
-    // only fail, and the doctor would read the generic outcome copy for it.
-    expect(identifierFieldSchema(ACADEMY_FIXTURE).safeParse("+79991234567").success).toBe(true);
-    expect(identifierFieldSchema(EMAIL_ONLY_FIXTURE).safeParse("+79991234567").success).toBe(false);
-    expect(identifierFieldSchema(EMAIL_ONLY_FIXTURE).safeParse("doctor@clinic.ru").success).toBe(true);
+  it("003 EARS-7 (#2443): the identifier box is the email-or-E.164 union on every storefront", () => {
+    // The channels are a package constant (e-mail and SMS), so no host can
+    // narrow the box: the phone shape and the address shape are both accepted.
+    expect(identifierFieldSchema().safeParse("+79991234567").success).toBe(
+      true,
+    );
+    expect(identifierFieldSchema().safeParse("doctor@clinic.ru").success).toBe(
+      true,
+    );
+    expect(identifierFieldSchema().safeParse("99545545445").success).toBe(
+      false,
+    );
     expect(
-      loginIdentifierFormSchema(EMAIL_ONLY_FIXTURE).safeParse({
+      loginIdentifierFormSchema().safeParse({
         identifier: "+79991234567",
         password: "Sup3r$ecretPw!9",
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("003 EARS-7: the OTP request shape is refused for a channel the host does not serve", () => {
-    // Row 21 switches the validator by `config.channels`, and the OTP shape is
-    // part of it: an email-only host must not be able to build the SMS
-    // request at all. Without the config the caller could hand the package a
-    // channel its own host never offers and buy a round trip that can only fail.
+  it("003 EARS-6/7: the OTP request shape follows the active channel, and only a served channel is built", () => {
     expect(
-      otpIdentifierFormSchema(ACADEMY_FIXTURE, "sms").safeParse({
+      otpIdentifierFormSchema("sms").safeParse({
         identifier: "+79991234567",
         channel: "sms",
       }).success,
     ).toBe(true);
     expect(
-      otpIdentifierFormSchema(EMAIL_ONLY_FIXTURE, "sms").safeParse({
-        identifier: "+79991234567",
+      otpIdentifierFormSchema("sms").safeParse({
+        identifier: "doctor@clinic.ru",
         channel: "sms",
       }).success,
     ).toBe(false);
     expect(
-      otpIdentifierFormSchema(EMAIL_ONLY_FIXTURE, "email").safeParse({
+      otpIdentifierFormSchema("email").safeParse({
         identifier: "doctor@clinic.ru",
         channel: "email",
       }).success,
     ).toBe(true);
+    expect(
+      otpIdentifierFormSchema("email").safeParse({
+        identifier: "doctor@clinic.ru",
+        channel: "telegram",
+      }).success,
+    ).toBe(false);
   });
 });

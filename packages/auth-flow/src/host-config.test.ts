@@ -10,6 +10,11 @@ import type {
   AuthFlowRoutes,
 } from "./host-config";
 import {
+  AUTH_FLOW_CHANNELS,
+  AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS,
+  authenticatedAllowedRoutes,
+} from "./host-config";
+import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
 } from "./test-support/host-config-fixtures";
@@ -123,6 +128,44 @@ describe("#2027 PR 1.7 host config — the confirmation step", () => {
       expect(copy.codeAccepted).toBe("Код принят — входим…");
       expect(copy.failed).toBe("Код не подошёл. Попробуйте ещё раз.");
       expect(copy.resendAcknowledged).toContain("{destination}");
+    }
+  });
+});
+
+describe("#2443 auth-flow mechanics are package constants, product differences are declared", () => {
+  it("the sign-in-code channels are one package constant — email and SMS — and no host states them", () => {
+    expect(AUTH_FLOW_CHANNELS).toEqual(["email", "sms"]);
+    expectTypeOf<AuthFlowHostConfig>().not.toHaveProperty("channels");
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      expect(config).not.toHaveProperty("channels");
+    }
+  });
+
+  it("003 EARS-28: the auth routes open to a signed-in visitor are derived from the reset route, never host data", () => {
+    expectTypeOf<AuthFlowRoutes>().not.toHaveProperty("allowAuthenticated");
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      expect(config.routes).not.toHaveProperty("allowAuthenticated");
+      expect(authenticatedAllowedRoutes(config.routes)).toEqual(["/reset"]);
+    }
+    expect(
+      authenticatedAllowedRoutes({
+        ...DOCTOR_FIXTURE.routes,
+        reset: "/recover",
+      }),
+    ).toEqual(["/recover"]);
+  });
+
+  it("the product-difference manifest lists exactly the agreed storefront differences, each with its spec clause", () => {
+    expect(
+      AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS.map((entry) => entry.field),
+    ).toEqual(["register.promoField", "landing.specialtyAware", "consents"]);
+    for (const entry of AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS) {
+      expect(entry.spec).toMatch(
+        /^apps\/docs\/content\/specs\/features\/\d{3}-[a-z0-9-]+\/\d{3}-requirements-en\.md$/,
+      );
+      expect(entry.clauses.length).toBeGreaterThan(0);
+      for (const clause of entry.clauses)
+        expect(clause).toMatch(/^\d{3} (EARS|LD)-\d+$/);
     }
   });
 });

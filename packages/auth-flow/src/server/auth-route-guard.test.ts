@@ -22,7 +22,6 @@ const routes: AuthFlowRoutes = {
   verify: "/verify",
   reset: "/reset",
   account: "/account",
-  allowAuthenticated: ["/reset"],
   eventPathTemplate: "/webinars/:slug",
 };
 
@@ -43,7 +42,7 @@ describe("003 EARS-28 shared signed-in auth-route guard", () => {
     }
   });
 
-  it("003 EARS-28.3: /reset stays open to an authenticated visitor via allowAuthenticated", () => {
+  it("003 EARS-28.3: /reset stays open to an authenticated visitor — the exemption is the reset route", () => {
     expect(
       resolveAuthRouteGuard({
         authenticated: true,
@@ -53,12 +52,20 @@ describe("003 EARS-28 shared signed-in auth-route guard", () => {
     ).toEqual({ action: "render" });
   });
 
-  it("003 EARS-28.3: the exemption is host DATA - a host that exempts nothing closes /reset too", () => {
+  it("003 EARS-28.3 (#2443): the exemption is DERIVED from the reset route - it follows the route and opens nothing else", () => {
+    const moved = { ...routes, reset: "/recover" };
+    expect(
+      resolveAuthRouteGuard({
+        authenticated: true,
+        pathname: "/recover",
+        routes: moved,
+      }),
+    ).toEqual({ action: "render" });
     expect(
       resolveAuthRouteGuard({
         authenticated: true,
         pathname: "/reset",
-        routes: { ...routes, allowAuthenticated: [] },
+        routes: moved,
       }),
     ).toEqual({ action: "redirect", to: "/account" });
   });

@@ -1077,6 +1077,20 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: pnpm lint:product-note
 
+      # product-note-boundary: BLOCK (unlisted in guard-policy WARN_GUARDS). The
+      # `## Product note (RU)` section must hold no machine-marker line
+      # (`registry-research: …`, `ui-render-*: https://…`, `Stage-B-*: …`) — the
+      # section is delivered verbatim to Mattermost and the release digest (Issue
+      # #2489). A plain step: its failure reds this job's check-run, which the merge
+      # gate reads. Also re-run on body edits in pr-body-guards.yml.
+      - name: product-note-boundary (BLOCK)
+        id: product_note_boundary
+        continue-on-error: ${{ steps.guard_policy.outputs.product-note-boundary == 'WARN' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm lint:product-note-boundary
+
       # workflow-auth: enforces the "Issue-#10 auth pattern" on the workflow files
       # THEMSELVES — every job that runs `gh` or a PR-event-gated guard (a
       # `tools/lint/lib/gh.ts` consumer) MUST carry `permissions: { contents: read,

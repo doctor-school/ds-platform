@@ -1,6 +1,6 @@
 # PR-body-parsing guard family (Issue #651) — spec-link, ui-parity, registry-research,
 # cross-front-reuse, spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
-# epic-autoclose (ADR-0007 §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
+# epic-autoclose, product-note-boundary (ADR-0007 §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
 # workflow that also triggers on the `edited` activity type: a post-create body
 # edit re-runs exactly these checks and never the full test/build matrix in
 # ci.yml (whose `pull_request` trigger keeps the default
@@ -12,10 +12,11 @@
 # checkout + `pnpm install` — six installs to run six sub-second body parsers.
 # They are now sequential steps of a single job. Posture is preserved exactly,
 # re-encoded from per-JOB to per-STEP:
-#   • `spec-link`, `ui-parity`, and `pr-evidence` are BLOCK → plain steps (a
-#     failure makes the job/check-run red for the merge gate). BLOCK guards run
-#     after WARN guards; `pr-evidence` uses `if: always()` so it still reports
-#     when an earlier BLOCK member failed.
+#   • `spec-link`, `ui-parity`, `pr-evidence` and `product-note-boundary` are
+#     BLOCK → plain steps (a failure makes the job/check-run red for the merge
+#     gate). BLOCK guards run after WARN guards; `pr-evidence` and
+#     `product-note-boundary` use `if: always()` so they still report when an
+#     earlier BLOCK member failed.
 #   • every other member is WARN → `continue-on-error: true` on the STEP so one
 #     flagged guard never stops the others, PLUS a final `if: always()`
 #     WARN-REPORT step that lists every flagged guard in the job summary and
@@ -231,6 +232,18 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: pnpm exec tsx tools/lint/pr-evidence-lint.ts
 
+      # product-note-boundary: BLOCK. The `## Product note (RU)` section holds
+      # RU product prose only — no machine-marker (evidence) line (Issue #2489);
+      # a body edit that moves the evidence under `## Delivery evidence`
+      # re-clears it here.
+      - name: product-note-boundary (BLOCK)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm lint:product-note-boundary
+
       # WARN report — the second half of the WARN encoding, and this batch's
       # VISIBILITY surface. It lists every WARN step whose `outcome` is `failure`
       # in the job summary and exits 0 by design.
@@ -279,5 +292,5 @@ jobs:
           printf '%s\n' "$failed"
           printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "WARN is visible, never merge-blocking (ADR-0007 §2.6): these guards exit 0 here, so they do not fail this check-run and do not block \`merge:gate\`. Only BLOCK members (\`spec-link\`, \`ui-parity\`, \`pr-evidence\`) red this check-run. Fix the findings or promote the guard — do not silence it." >> "$GITHUB_STEP_SUMMARY"
+          echo "WARN is visible, never merge-blocking (ADR-0007 §2.6): these guards exit 0 here, so they do not fail this check-run and do not block \`merge:gate\`. Only BLOCK members (\`spec-link\`, \`ui-parity\`, \`pr-evidence\`, \`product-note-boundary\`) red this check-run. Fix the findings or promote the guard — do not silence it." >> "$GITHUB_STEP_SUMMARY"
           exit 0

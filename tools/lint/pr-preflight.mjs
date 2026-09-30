@@ -157,6 +157,10 @@ export const STATIC_GUARDS = [
   // Vendored-canvas provenance (#2389): every design-source/**/*.dc.html
   // matches its design-source/manifest.json sha256 — BLOCK.
   { name: "canvas-provenance", file: "canvas-provenance-lint.ts" },
+  // Storefront host-config parity (#2443): a value the two storefronts set
+  // differently is a manifest product-difference field cited by its
+  // base-branch spec row — BLOCK. Needs `@ds/schemas` built (its `dist/`).
+  { name: "host-config-parity", file: "host-config-parity-lint.ts" },
   // Both regression-contour guards (#2067) take their PR context from the local
   // git diff against `origin/main` (tools/lint/lib/diff.ts) and, for the
   // quarantine check, the local `gh` — no PR number, so they belong here.

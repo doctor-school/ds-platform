@@ -12,7 +12,9 @@
  * talks through the section's API and sets the committee statuses the S5
  * status route will write (`in_review`, `accepted`, `rejected`,
  * `needs_revision`, `withdrawn`) on the rows, so the list shows the canvas
- * «список» mix.
+ * «список» mix. It also shoots the section's three non-list states: an account
+ * without a 044 registration, the section read held open (loading skeleton) and
+ * the section read answered 500 (load error).
  *
  *   E2E_DOCTOR_URL=http://127.0.0.1:3004 MAILPIT_URL=… DATABASE_URL=<branch db> \
  *     node apps/doctor/e2e/ui-evidence-2433.mjs .github/ui-evidence/2433
@@ -362,6 +364,56 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await page.getByTestId("congress-status-plate").getByText("Отправлена").waitFor();
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, "interactions-resent", "light", false);
+  await ctx.close();
+}
+
+// The section's three non-list states (canvas «нет регистрации», «загрузка»,
+// «ошибка»), desktop light like the other single-state frames.
+{
+  // An account with no 044 registration for the congress (EARS-5).
+  const outsider = await (async () => {
+    const email = `e2e-2433-noreg-${Date.now()}@ds.test`;
+    const password = `Doc-${Date.now()}-aA1!`;
+    const sentAt = Date.now();
+    await post("/v1/storefront/doctor/register", {
+      email,
+      password,
+      medicalWorkerDeclaration: true,
+      consent: [{ purpose: "partner-data-sharing", version: "v1" }],
+    });
+    await post("/v1/auth/verify", { email, code: await verifyCode(email, sentAt) });
+    return { email, password };
+  })();
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "light", outsider);
+  await page.goto(`${BASE}/account/congress`);
+  await page.getByText("Сначала зарегистрируйтесь участником Конгресса").waitFor();
+  await shot(page, "interactions-no-registration", "light");
+  await ctx.close();
+}
+{
+  // The section read held open: the loading skeleton.
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "light");
+  let release;
+  const held = new Promise((r) => (release = r));
+  await page.route((url) => url.pathname === "/v1/me/congress-submissions", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto(`${BASE}/account/congress`);
+  await page.locator('[data-screen-label="d-lk-congress · загрузка"]').waitFor();
+  await shot(page, "interactions-loading", "light", false);
+  release();
+  await ctx.close();
+}
+{
+  // The section read failing: the load-error state with «Повторить».
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "light");
+  await page.route((url) => url.pathname === "/v1/me/congress-submissions", (route) =>
+    route.fulfill({ status: 500, contentType: "application/problem+json", body: "{}" }),
+  );
+  await page.goto(`${BASE}/account/congress`);
+  await page.getByText("Не удалось загрузить заявки").waitFor();
+  await shot(page, "interactions-load-error", "light", false);
   await ctx.close();
 }
 

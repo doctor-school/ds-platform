@@ -55,12 +55,8 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
             `guestCluster.primary` (`ds-shell.dc.html` line 220), the same single
             label on both hosts (017 US-7). A «Войти» + «Регистрация» pair was
             the #2198 Stage-B finding. */}
-        {/* #2487 — the link carries the current page as `returnTo`. */}
-        <GuestLoginLink
-          loginHref={auth.loginHref}
-          authPaths={auth.authPaths}
-          label={auth.label}
-        />
+        {/* #2487 — on an event page the link carries it as `returnTo`. */}
+        <GuestLoginLink loginHref={auth.loginHref} label={auth.label} />
       </div>
     );
   }

@@ -55,19 +55,14 @@ const SHELL: StorefrontShellConfig = {
 
 <StorefrontHeader
   config={SHELL}
-  auth={{
-    status: "guest",
-    loginHref: "/login",
-    authPaths: ["/login", "/register", "/verify", "/reset"],
-    label: "Войти / Регистрация",
-  }}
+  auth={{ status: "guest", loginHref: "/login", label: "Войти / Регистрация" }}
 />;
 ```
 
 ### The auth cluster is DATA, not markup
 
 `auth: ShellAuthState` is a plain serializable value — `{ status: "loading" }`,
-`{ status: "guest"; loginHref; authPaths; label }` or
+`{ status: "guest"; loginHref; label }` or
 `{ status: "doctor"; profileHref; label; initials?; links? }`. The package renders it
 itself (`ShellAuthCluster`), so the chip's geometry, surface and press chain come
 from the ONE design-system definition
@@ -76,12 +71,13 @@ that handed in its own node would re-open the divergence #2180 closed: two
 storefronts drew two different chips into the same bar and the header itself came
 out 4px taller on one of them.
 
-The guest link carries the page the visitor is on as `returnTo` (#2487, 017
+On an event page the guest link carries that page as `returnTo` (#2487, 017
 amendment 2026-09-30): a small client half (`GuestLoginLink`) reads
-`usePathname`, reconstructs the path through `@ds/schemas`
-`parseSameOriginReturnTarget` and appends it to `loginHref` — except on the
-host's `authPaths` (`@ds/auth-flow` `authDoorPaths` of its route table) and below
-them. Hosts supply only the base route and the door list.
+`usePathname` and offers it to `@ds/schemas` `parseReturnTarget` — the same
+return whitelist the sign-in door lands on. A matching page (`/events/<slug>`,
+`/webinars/<slug>`) is appended to `loginHref` as the whitelist reconstructed
+it; home, feeds and the auth doors match no shape and keep the bare route, so
+the door lands on the surface default. Hosts supply only the base route.
 
 The `doctor` branch picks its shape from `initials`: present → the initials
 avatar chip (the Academy), absent → the labelled text chip (the Doctor

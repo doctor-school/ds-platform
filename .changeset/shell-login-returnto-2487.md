@@ -1,13 +1,9 @@
 ---
 "@ds/storefront-shell": patch
-"@ds/auth-flow": patch
-"@ds/portal": patch
-"@ds/doctor": patch
 ---
 
-The header «Войти / Регистрация» brings the visitor back (#2487): on both
-storefronts the guest link is the sign-in route with the current page appended
-as `returnTo`, reconstructed by the shared same-origin guard. On the host's own
-auth doors (`authDoorPaths` of its `@ds/auth-flow` route table) the link carries
-no target; home and feeds still land on the surface default, decided by the
-sign-in door as before.
+The header «Войти / Регистрация» brings the visitor back to the event (#2487):
+on both storefronts, on an event page the guest link is the sign-in route with
+that page appended as `returnTo` — decided by the same return whitelist the
+sign-in door lands on (`@ds/schemas` `parseReturnTarget`). Home, feeds and the
+auth doors keep the bare route, so the door lands on the surface default.

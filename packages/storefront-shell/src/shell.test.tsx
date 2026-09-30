@@ -102,10 +102,6 @@ const ACADEMY: StorefrontShellConfig = {
   ],
 };
 
-/** The auth doors a host serves — the routes whose header link carries no
- *  return target (#2487). */
-const AUTH_PATHS = ["/login", "/register", "/verify", "/reset"] as const;
-
 /** The header always receives an auth state; tests that are not about the auth
  *  cluster pass the neutral reserve branch. */
 const LOADING = { status: "loading" } as const;
@@ -227,18 +223,15 @@ describe("StorefrontHeader", () => {
         auth={{
           status: "guest",
           loginHref: "/login",
-          authPaths: AUTH_PATHS,
           label: "Войти / Регистрация",
         }}
       />,
     );
     const guestCluster = screen.getByTestId("shell-auth-cluster");
     expect(guestCluster).toHaveAttribute("data-cluster", "guest");
-    // Rendered on `/` — the current page rides along as `returnTo` (#2487); the
-    // sign-in door's landing codec treats it as no target (surface default).
     expect(within(guestCluster).getByTestId("shell-login")).toHaveAttribute(
       "href",
-      "/login?returnTo=%2F",
+      "/login",
     );
     expect(screen.queryByTestId("shell-avatar")).toBeNull();
     guest.unmount();
@@ -291,15 +284,13 @@ describe("StorefrontHeader", () => {
     expect(screen.queryByTestId("shell-avatar")).toBeNull();
   });
 
-  it("017 EARS-1 · 014 EARS-6: the guest control carries the current page as returnTo and never an auth door (#2487)", () => {
+  it("017 EARS-1 · 014 EARS-6: on an event page the guest control carries that page as returnTo, on both hosts (#2487)", () => {
     const guest = {
       status: "guest",
       loginHref: "/login",
-      authPaths: AUTH_PATHS,
       label: "Войти / Регистрация",
     } as const;
 
-    // An event page on either host: the header door brings the visitor back.
     for (const [config, path] of [
       [DOCTOR, "/events/kardio-2026"],
       [ACADEMY, "/webinars/kardio-2026"],
@@ -313,13 +304,16 @@ describe("StorefrontHeader", () => {
       view.unmount();
     }
 
-    // The auth doors never target themselves — nor any page below them.
+    // Home, the feeds and the auth doors are no return shape: the bare route,
+    // so the sign-in door lands on the surface default.
     for (const path of [
+      "/",
+      "/events",
+      "/webinars",
       "/login",
       "/register",
       "/verify",
       "/reset",
-      "/reset/x",
     ]) {
       pathname = path;
       const view = render(<StorefrontHeader config={DOCTOR} auth={guest} />);
@@ -329,29 +323,30 @@ describe("StorefrontHeader", () => {
       );
       view.unmount();
     }
-    // A shared prefix is not a segment: `/loginx` is an ordinary page.
-    pathname = "/loginx";
-    render(<StorefrontHeader config={DOCTOR} auth={guest} />);
-    expect(screen.getByTestId("shell-login")).toHaveAttribute(
-      "href",
-      "/login?returnTo=%2Floginx",
-    );
   });
 
-  it("017 EARS-1 · 014 EARS-6: guestLoginHref reconstructs the target through the shared same-origin guard (#2487)", () => {
-    // The query and the fragment never ride along — the guard's reconstruction.
-    expect(guestLoginHref("/login", "/events/x?y=1#z", AUTH_PATHS)).toBe(
+  it("017 EARS-1 · 014 EARS-6: guestLoginHref carries only the return whitelist's reconstruction (#2487)", () => {
+    // `usePathname` never carries the query; the carried value is the
+    // whitelist's own reconstruction of the path.
+    expect(guestLoginHref("/login", "/events/x")).toBe(
       "/login?returnTo=%2Fevents%2Fx",
     );
-    // A hostile or unusable value is dropped, never echoed.
-    expect(guestLoginHref("/login", "//evil.example/x", AUTH_PATHS)).toBe(
-      "/login",
+    // A loginHref that already carries a query gets `&`.
+    expect(guestLoginHref("/login?a=1", "/webinars/x")).toBe(
+      "/login?a=1&returnTo=%2Fwebinars%2Fx",
     );
-    expect(guestLoginHref("/login", null, AUTH_PATHS)).toBe("/login");
-    // The login door itself, with its own query, is still the door.
-    expect(guestLoginHref("/login", "/login?returnTo=%2Fx", AUTH_PATHS)).toBe(
-      "/login",
-    );
+    // A hostile, traversal or unusable value is dropped, never echoed.
+    for (const raw of [
+      "//evil.example/x",
+      "/events/../account",
+      "/\\evil",
+      "/events/x?y=1",
+      null,
+    ]) {
+      expect(guestLoginHref("/login", raw)).toBe("/login");
+    }
+    // A page below an event (the room) is not an эфир shape either.
+    expect(guestLoginHref("/login", "/events/x/room")).toBe("/login");
   });
 
   it("008 EARS-4 · 017 EARS-1: the guest chip class string is byte-identical on BOTH hosts", () => {
@@ -361,7 +356,6 @@ describe("StorefrontHeader", () => {
     const GUEST = {
       status: "guest",
       loginHref: "/login",
-      authPaths: AUTH_PATHS,
       label: "Войти / Регистрация",
     } as const;
 
@@ -387,7 +381,6 @@ describe("StorefrontHeader", () => {
         auth={{
           status: "guest",
           loginHref: "/login",
-          authPaths: AUTH_PATHS,
           label: "Войти / Регистрация",
         }}
       />,

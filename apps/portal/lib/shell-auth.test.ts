@@ -35,8 +35,6 @@ const DOCTOR = {
 const GUEST = {
   status: "guest",
   loginHref: "/login",
-  // #2487 — the academy's own auth doors: the header link carries no target there.
-  authPaths: ["/login", "/register", "/verify", "/reset"],
   label: catalog.shell.login,
 } as const;
 

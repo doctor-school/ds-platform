@@ -6,9 +6,7 @@ import {
   resolveServerAuth,
   serverApiBase,
 } from "@ds/auth-flow/server";
-import { authDoorPaths } from "@ds/auth-flow/return-target-href";
 
-import { ACADEMY_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { initialsFromDisplayName } from "@/lib/display-name";
 import { LOGIN_HREF, MY_EVENTS_HREF, PROFILE_HREF } from "@/lib/shell-config";
 
@@ -58,9 +56,6 @@ export async function resolveAcademyShellAuth(
   const guest: ShellAuthState = {
     status: "guest",
     loginHref: LOGIN_HREF,
-    // #2487 — the package appends the current page as `returnTo`, except on
-    // these doors (this host's own auth route table).
-    authPaths: authDoorPaths(ACADEMY_AUTH_ROUTES),
     label: labels.login,
   };
 

@@ -16,8 +16,11 @@ import { parkReturnTarget } from "./return-target-parking";
  * states whether or where it parks.
  */
 
-function requestFor(url: string): NextRequest {
-  return new NextRequest(new Request(url));
+function requestFor(
+  url: string,
+  headers: Record<string, string> = {},
+): NextRequest {
+  return new NextRequest(new Request(url, { headers }));
 }
 
 function setCookieOf(response: Response): string {
@@ -123,5 +126,53 @@ describe("014 EARS-6 (#2443): parking onto a response the host already minted", 
         header.startsWith("ds_return_to=%2Fevents%2Fahilles-042;"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("014 EARS-6 (#2443): parking happens on a real navigation, never on a prefetch", () => {
+  const url =
+    "https://doctor.school/register?returnTo=%2Fevents%2Fahilles-042";
+
+  it("014 EARS-6.6: a Next router prefetch parks nothing - a consumed target is never re-parked behind the visitor's back", () => {
+    // Next 16 app router: route-tree and segment prefetches carry
+    // `next-router-prefetch` ('1' | '2' | '3') next to `rsc: 1`.
+    for (const value of ["1", "2", "3"]) {
+      expect(
+        parkReturnTarget(
+          requestFor(url, { rsc: "1", "next-router-prefetch": value }),
+        ),
+        `next-router-prefetch: ${value}`,
+      ).toBeUndefined();
+    }
+  });
+
+  it("014 EARS-6.6: a browser speculative prefetch parks nothing", () => {
+    expect(
+      parkReturnTarget(requestFor(url, { "sec-purpose": "prefetch" })),
+    ).toBeUndefined();
+    expect(
+      parkReturnTarget(
+        requestFor(url, { "sec-purpose": "prefetch;prerender" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      parkReturnTarget(requestFor(url, { purpose: "prefetch" })),
+    ).toBeUndefined();
+  });
+
+  it("014 EARS-6.6: a client-side RSC navigation (not a prefetch) still parks", () => {
+    const response = parkReturnTarget(requestFor(url, { rsc: "1" }));
+    expect(response?.cookies.get("ds_return_to")?.value).toBe(
+      "/events/ahilles-042",
+    );
+  });
+
+  it("014 EARS-6.6: a document navigation still parks", () => {
+    const response = parkReturnTarget(
+      requestFor(url, { accept: "text/html", "sec-fetch-mode": "navigate" }),
+    );
+    expect(response?.cookies.get("ds_return_to")?.value).toBe(
+      "/events/ahilles-042",
+    );
   });
 });

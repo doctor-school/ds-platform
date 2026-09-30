@@ -212,6 +212,65 @@ describe("CongressSection", () => {
     expect(screen.getAllByTestId("congress-row")).toHaveLength(1);
   });
 
+  it("EARS-11: every canvas `quietBtn` — «Свернуть», «Читать целиком», the ask's «Отмена», the author toggle — is the 13px/600 step", async () => {
+    const quiet = (el: HTMLElement) => {
+      expect(el).toHaveClass("text-caption", "font-semibold");
+      expect(el).not.toHaveClass("text-sm");
+      expect(el).not.toHaveClass("font-bold");
+    };
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          submissions: [
+            sub({
+              status: "needs_revision",
+              committeeComment: "Уточните дизайн исследования. ".repeat(8),
+              revisionDueAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+            }),
+          ],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    const row = (await screen.findAllByTestId("congress-row"))[0]!;
+    quiet(within(row).getByRole("button", { name: "Читать целиком" }));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "+ Новая заявка" }),
+    );
+    quiet(screen.getByRole("button", { name: "Свернуть" }));
+
+    await userEvent.click(within(row).getByRole("button", { name: "Отозвать" }));
+    const ask = screen.getByRole("group", { name: /Отозвать заявку\?/ });
+    quiet(within(ask).getByRole("button", { name: "Отмена" }));
+  });
+
+  it("EARS-7: the author row's «Изменить» toggle is the canvas `quietBtn` step", async () => {
+    const draft = sub({
+      status: "draft",
+      submittedAt: null,
+      authors: [
+        {
+          surname: "Орлов",
+          firstName: "Виктор",
+          workplace: "ГКБ № 12",
+          presenting: true,
+        },
+      ],
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${draft.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(answer(section({ submissions: [draft] })));
+    render(<CongressSection host={HOST} />);
+    const toggle = await screen.findByRole("button", { name: "Изменить" });
+    expect(toggle).toHaveClass("text-caption", "font-semibold");
+    expect(toggle).not.toHaveClass("text-sm");
+    expect(toggle).not.toHaveClass("font-bold");
+  });
+
   it("EARS-7/9: the oral draft saves on blur; a send with gaps lists each one, the consent included", async () => {
     const draft = sub({
       status: "draft",

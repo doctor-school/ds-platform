@@ -13,12 +13,13 @@
     "test": "vitest run",
     "test:e2e:ci": "node e2e/run-ci-tiers.mjs",
     "test:e2e:shell": "playwright test --config=playwright.shell.config.ts",
-    "test:e2e:register-live": "playwright test --config=playwright.register-live.config.ts"
+    "test:e2e:register-live": "playwright test --config=playwright.register-live.config.ts",
+    "test:e2e:congress": "playwright test --config=playwright.congress.config.ts"
   },
   "dependencies": {
     "@ds/auth-flow": "workspace:*",
-    "@ds/design-system": "workspace:*",
     "@ds/congress-submissions": "workspace:*",
+    "@ds/design-system": "workspace:*",
     "@ds/events-storefront": "workspace:*",
     "@ds/legal-content": "workspace:*",
     "@ds/room": "workspace:*",
@@ -37,10 +38,12 @@
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "@types/node": "^26.5.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^30.0.1",
+    "pg": "^8.23.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",

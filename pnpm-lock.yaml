@@ -437,6 +437,9 @@ importers:
       '@types/node':
         specifier: ^26.5.0
         version: 26.5.0
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
@@ -449,6 +452,9 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@1.8.0)
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       postcss:
         specifier: ^8.5.28
         version: 8.5.28

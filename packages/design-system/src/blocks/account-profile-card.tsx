@@ -72,10 +72,10 @@ export interface AccountProfileCardCopy {
   eventsHelper: string;
   /**
    * The congress-cabinet row (046 EARS-4). Optional: only a host that mounts the
-   * section supplies it, and the row renders only with both copy and
-   * {@link AccountProfileCardProps.congressHref}.
+   * section supplies it, and the row renders only with both the copy and
+   * {@link AccountProfileCardProps.congressHref}. The row carries no small-caps
+   * caption: its one visible label is the section name itself.
    */
-  congressLabel?: string;
   congressTitle?: string;
   signOut: string;
 }
@@ -199,7 +199,8 @@ function RowLink({
   renderLink,
 }: {
   href: string;
-  label: string;
+  /** Small-caps caption column; absent → a desktop spacer keeps titles aligned. */
+  label?: string;
   title: string;
   helper?: string;
   renderLink: NonNullable<AccountProfileCardProps["renderLink"]>;
@@ -213,9 +214,13 @@ function RowLink({
         href,
         children: (
           <>
-            <span className="w-36 shrink-0 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
-              {label}
-            </span>
+            {label ? (
+              <span className="w-36 shrink-0 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
+                {label}
+              </span>
+            ) : (
+              <span aria-hidden className="hidden w-36 shrink-0 layout:block" />
+            )}
             <span className="min-w-0 flex-1">
               <span className="block font-bold">{title}</span>
               {helper ? (
@@ -433,10 +438,9 @@ export function AccountProfileCard({
               renderLink={renderLink}
             />
           ) : null}
-          {congressHref && copy.congressLabel && copy.congressTitle ? (
+          {congressHref && copy.congressTitle ? (
             <RowLink
               href={congressHref}
-              label={copy.congressLabel}
               title={copy.congressTitle}
               renderLink={renderLink}
             />

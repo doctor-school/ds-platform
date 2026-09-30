@@ -85,7 +85,6 @@ const COPY = {
     eventsLabel: "События",
     eventsTitle: "Мои события",
     eventsHelper: "Эфиры, записи и сертификаты",
-    congressLabel: "Конгресс",
     congressTitle: "Мои заявки на Конгресс",
     signOut: "Выйти из аккаунта",
   },

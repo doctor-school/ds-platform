@@ -97,6 +97,8 @@ describe("CongressSection", () => {
       "href",
       "/events/orthobio-2027",
     );
+    // The host shell owns the page's one `main` landmark (V-18 axe: no nested main).
+    expect(screen.queryByRole("main")).toBeNull();
   });
 
   it("EARS-5: without a registration only the line and the registration link show", async () => {

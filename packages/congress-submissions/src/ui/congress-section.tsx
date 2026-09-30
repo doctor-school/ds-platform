@@ -592,11 +592,12 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   );
 }
 
+/** The section body; the host shell owns the page's one `main` landmark. */
 function Main({ children }: { children: React.ReactNode }) {
   return (
-    <main className="pb-12 layout:pb-24 layout:pt-13">
+    <div className="pb-12 layout:pb-24 layout:pt-13">
       <Container>{children}</Container>
-    </main>
+    </div>
   );
 }
 

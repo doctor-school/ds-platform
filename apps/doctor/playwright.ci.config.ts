@@ -81,6 +81,13 @@ export default defineConfig({
     // email through Mailpit, so the spec rides the live
     // `playwright.register-live.config.ts`.
     "register-existing.spec.ts",
+    // 046 V-15 / V-18 (#2433): «Мои заявки на Конгресс» is a signed-in server
+    // route whose every state is an api decision over real rows (intake window,
+    // registration, status machine) and whose guest leg signs in by a REAL
+    // emailed code, so the section spec and its axe scan ride the live
+    // `playwright.congress.config.ts`.
+    "congress-submissions.spec.ts",
+    "a11y/congress-axe.e2e.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

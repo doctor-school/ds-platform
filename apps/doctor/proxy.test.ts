@@ -96,7 +96,11 @@ describe("014 EARS-6 (#2443): the doctor storefront parks the carried return tar
     expect(parkedTarget(response)).toBeUndefined();
   });
 
-  it("017 EARS-6 + 014 EARS-6: on an auth entry the relayed specialty deletion and the parked target BOTH reach the browser", async () => {
+  it("017 EARS-6 + 014 EARS-6 (#2443): a signed-in visitor on an auth entry gets the relayed specialty deletion and parks nothing", async () => {
+    // The relay runs only on a session (017 EARS-6); a signed-in visitor has
+    // no auth round-trip left to carry, and parking here is exactly what let
+    // the post-sign-in prefetch of `/register?returnTo=...` re-park a target
+    // the success handler had already consumed.
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ specialty: null, storedIn: "none" }), {
         status: 200,
@@ -110,7 +114,7 @@ describe("014 EARS-6 (#2443): the doctor storefront parks the carried return tar
     try {
       const response = await proxy(
         new NextRequest(
-          "https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042",
+          "https://doctor.school/register?returnTo=%2Fevents%2Fahilles-042",
           { headers: { cookie: cookies } },
         ),
       );
@@ -118,6 +122,28 @@ describe("014 EARS-6 (#2443): the doctor storefront parks the carried return tar
       expect(headers.some((h) => h.startsWith("__Host-ds_specialty=;"))).toBe(
         true,
       );
+      expect(parkedTarget(response)).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("014 EARS-6 (#2443): a guest holding only a specialty choice parks, and the choice is not consumed", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const response = await proxy(
+        new NextRequest(
+          "https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042",
+          {
+            headers: {
+              cookie:
+                "__Host-ds_specialty=22222222-2222-4222-8222-222222222222",
+            },
+          },
+        ),
+      );
+      expect(fetchImpl).not.toHaveBeenCalled();
       expect(parkedTarget(response)).toBe("%2Fevents%2Fahilles-042");
     } finally {
       vi.unstubAllGlobals();

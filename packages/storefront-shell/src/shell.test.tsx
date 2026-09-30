@@ -32,6 +32,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import {
+  guestLoginHref,
   isHiddenPath,
   matchesPathPattern,
   StorefrontFooter,
@@ -100,6 +101,10 @@ const ACADEMY: StorefrontShellConfig = {
     "/webinars/*/room",
   ],
 };
+
+/** The auth doors a host serves — the routes whose header link carries no
+ *  return target (#2487). */
+const AUTH_PATHS = ["/login", "/register", "/verify", "/reset"] as const;
 
 /** The header always receives an auth state; tests that are not about the auth
  *  cluster pass the neutral reserve branch. */
@@ -203,9 +208,7 @@ describe("StorefrontHeader", () => {
     // than the component holding a second copy of the truth.
     expect(document.documentElement).toHaveClass("dark");
     expect(localStorage.getItem("ds-theme")).toBe("dark");
-    await waitFor(() =>
-      expect(toggle).toHaveAttribute("aria-pressed", "true"),
-    );
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-pressed", "true"));
 
     fireEvent.click(toggle);
     expect(document.documentElement).not.toHaveClass("dark");
@@ -224,15 +227,18 @@ describe("StorefrontHeader", () => {
         auth={{
           status: "guest",
           loginHref: "/login",
+          authPaths: AUTH_PATHS,
           label: "Войти / Регистрация",
         }}
       />,
     );
     const guestCluster = screen.getByTestId("shell-auth-cluster");
     expect(guestCluster).toHaveAttribute("data-cluster", "guest");
+    // Rendered on `/` — the current page rides along as `returnTo` (#2487); the
+    // sign-in door's landing codec treats it as no target (surface default).
     expect(within(guestCluster).getByTestId("shell-login")).toHaveAttribute(
       "href",
-      "/login",
+      "/login?returnTo=%2F",
     );
     expect(screen.queryByTestId("shell-avatar")).toBeNull();
     guest.unmount();
@@ -285,6 +291,69 @@ describe("StorefrontHeader", () => {
     expect(screen.queryByTestId("shell-avatar")).toBeNull();
   });
 
+  it("017 EARS-1 · 014 EARS-6: the guest control carries the current page as returnTo and never an auth door (#2487)", () => {
+    const guest = {
+      status: "guest",
+      loginHref: "/login",
+      authPaths: AUTH_PATHS,
+      label: "Войти / Регистрация",
+    } as const;
+
+    // An event page on either host: the header door brings the visitor back.
+    for (const [config, path] of [
+      [DOCTOR, "/events/kardio-2026"],
+      [ACADEMY, "/webinars/kardio-2026"],
+    ] as const) {
+      pathname = path;
+      const view = render(<StorefrontHeader config={config} auth={guest} />);
+      expect(screen.getByTestId("shell-login")).toHaveAttribute(
+        "href",
+        `/login?returnTo=${encodeURIComponent(path)}`,
+      );
+      view.unmount();
+    }
+
+    // The auth doors never target themselves — nor any page below them.
+    for (const path of [
+      "/login",
+      "/register",
+      "/verify",
+      "/reset",
+      "/reset/x",
+    ]) {
+      pathname = path;
+      const view = render(<StorefrontHeader config={DOCTOR} auth={guest} />);
+      expect(screen.getByTestId("shell-login")).toHaveAttribute(
+        "href",
+        "/login",
+      );
+      view.unmount();
+    }
+    // A shared prefix is not a segment: `/loginx` is an ordinary page.
+    pathname = "/loginx";
+    render(<StorefrontHeader config={DOCTOR} auth={guest} />);
+    expect(screen.getByTestId("shell-login")).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Floginx",
+    );
+  });
+
+  it("017 EARS-1 · 014 EARS-6: guestLoginHref reconstructs the target through the shared same-origin guard (#2487)", () => {
+    // The query and the fragment never ride along — the guard's reconstruction.
+    expect(guestLoginHref("/login", "/events/x?y=1#z", AUTH_PATHS)).toBe(
+      "/login?returnTo=%2Fevents%2Fx",
+    );
+    // A hostile or unusable value is dropped, never echoed.
+    expect(guestLoginHref("/login", "//evil.example/x", AUTH_PATHS)).toBe(
+      "/login",
+    );
+    expect(guestLoginHref("/login", null, AUTH_PATHS)).toBe("/login");
+    // The login door itself, with its own query, is still the door.
+    expect(guestLoginHref("/login", "/login?returnTo=%2Fx", AUTH_PATHS)).toBe(
+      "/login",
+    );
+  });
+
   it("008 EARS-4 · 017 EARS-1: the guest chip class string is byte-identical on BOTH hosts", () => {
     // The #2198 Stage-B finding: 194×44 on the academy vs 191×48 on the doctor
     // host, because each host assembled the chip itself. With the cluster owned
@@ -292,6 +361,7 @@ describe("StorefrontHeader", () => {
     const GUEST = {
       status: "guest",
       loginHref: "/login",
+      authPaths: AUTH_PATHS,
       label: "Войти / Регистрация",
     } as const;
 
@@ -317,12 +387,14 @@ describe("StorefrontHeader", () => {
         auth={{
           status: "guest",
           loginHref: "/login",
+          authPaths: AUTH_PATHS,
           label: "Войти / Регистрация",
         }}
       />,
     );
-    const summary =
-      screen.getByTestId("shell-mobile-menu").querySelector("summary")!;
+    const summary = screen
+      .getByTestId("shell-mobile-menu")
+      .querySelector("summary")!;
     const chip = buttonVariants({ variant: "on-primary", size: "icon" })
       .split(" ")
       // The `≡` glyph is deliberately larger than the chip's body type, so
@@ -475,7 +547,9 @@ describe("StorefrontHeader", () => {
     room.unmount();
 
     pathname = "/webinars";
-    const listing = render(<StorefrontHeader config={ACADEMY} auth={LOADING} />);
+    const listing = render(
+      <StorefrontHeader config={ACADEMY} auth={LOADING} />,
+    );
     expect(screen.getByTestId("storefront-header")).toBeInTheDocument();
     listing.unmount();
 
@@ -577,7 +651,10 @@ describe("StorefrontFooter", () => {
   it("008 EARS-12/14: a footer-scoped hiddenOnPaths overrides the shared list without touching the header", () => {
     const withOwnFooterRoutes: StorefrontShellConfig = {
       ...ACADEMY,
-      footer: { ...ACADEMY.footer, hiddenOnPaths: [...ACADEMY.hiddenOnPaths!, "/"] },
+      footer: {
+        ...ACADEMY.footer,
+        hiddenOnPaths: [...ACADEMY.hiddenOnPaths!, "/"],
+      },
     };
 
     // The route the footer-scoped list adds: footer gone, header untouched.
@@ -592,7 +669,10 @@ describe("StorefrontFooter", () => {
   it("008 EARS-12/14: the footer still honours the shared list where its own list repeats it, and renders elsewhere", () => {
     const withOwnFooterRoutes: StorefrontShellConfig = {
       ...ACADEMY,
-      footer: { ...ACADEMY.footer, hiddenOnPaths: [...ACADEMY.hiddenOnPaths!, "/"] },
+      footer: {
+        ...ACADEMY.footer,
+        hiddenOnPaths: [...ACADEMY.hiddenOnPaths!, "/"],
+      },
     };
 
     pathname = "/register";
@@ -651,13 +731,15 @@ describe("matchesPathPattern", () => {
   });
 
   it("008 EARS-12: a `*` segment matches exactly one segment, never two", () => {
-    expect(matchesPathPattern("/webinars/kardio/room", "/webinars/*/room")).toBe(
-      true,
-    );
+    expect(
+      matchesPathPattern("/webinars/kardio/room", "/webinars/*/room"),
+    ).toBe(true);
     expect(matchesPathPattern("/webinars/a/b/room", "/webinars/*/room")).toBe(
       false,
     );
-    expect(matchesPathPattern("/webinars/room", "/webinars/*/room")).toBe(false);
+    expect(matchesPathPattern("/webinars/room", "/webinars/*/room")).toBe(
+      false,
+    );
     expect(matchesPathPattern("/webinars/kardio", "/webinars/*/room")).toBe(
       false,
     );

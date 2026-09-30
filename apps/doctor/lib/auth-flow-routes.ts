@@ -1,3 +1,4 @@
+import { authDoorPaths } from "@ds/auth-flow/return-target-href";
 import type { ServerAuth } from "@ds/auth-flow/server";
 import type { ShellAuthState } from "@ds/storefront-shell";
 
@@ -48,6 +49,9 @@ export function doctorShellAuthState(auth: ServerAuth): ShellAuthState {
     : {
         status: "guest",
         loginHref: doctorNav.login.href,
+        // #2487 — the package appends the current page as `returnTo`, except
+        // on these doors (this host's own auth route table).
+        authPaths: authDoorPaths(DOCTOR_AUTH_ROUTES),
         label: GUEST_LABEL,
       };
 }

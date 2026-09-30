@@ -55,14 +55,19 @@ const SHELL: StorefrontShellConfig = {
 
 <StorefrontHeader
   config={SHELL}
-  auth={{ status: "guest", loginHref: "/login", label: "Войти / Регистрация" }}
+  auth={{
+    status: "guest",
+    loginHref: "/login",
+    authPaths: ["/login", "/register", "/verify", "/reset"],
+    label: "Войти / Регистрация",
+  }}
 />;
 ```
 
 ### The auth cluster is DATA, not markup
 
 `auth: ShellAuthState` is a plain serializable value — `{ status: "loading" }`,
-`{ status: "guest"; loginHref; label }` or
+`{ status: "guest"; loginHref; authPaths; label }` or
 `{ status: "doctor"; profileHref; label; initials?; links? }`. The package renders it
 itself (`ShellAuthCluster`), so the chip's geometry, surface and press chain come
 from the ONE design-system definition
@@ -70,6 +75,13 @@ from the ONE design-system definition
 that handed in its own node would re-open the divergence #2180 closed: two
 storefronts drew two different chips into the same bar and the header itself came
 out 4px taller on one of them.
+
+The guest link carries the page the visitor is on as `returnTo` (#2487, 017
+amendment 2026-09-30): a small client half (`GuestLoginLink`) reads
+`usePathname`, reconstructs the path through `@ds/schemas`
+`parseSameOriginReturnTarget` and appends it to `loginHref` — except on the
+host's `authPaths` (`@ds/auth-flow` `authDoorPaths` of its route table) and below
+them. Hosts supply only the base route and the door list.
 
 The `doctor` branch picks its shape from `initials`: present → the initials
 avatar chip (the Academy), absent → the labelled text chip (the Doctor

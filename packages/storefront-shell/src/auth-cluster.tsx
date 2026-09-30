@@ -2,6 +2,7 @@ import NextLink from "next/link";
 import { Button } from "@ds/design-system/button";
 
 import type { ShellAuthState } from "./config";
+import { GuestLoginLink } from "./guest-login-link";
 import { HeaderProfileChip } from "./user-cluster";
 
 /**
@@ -54,11 +55,12 @@ export function ShellAuthCluster({ auth }: { auth: ShellAuthState }) {
             `guestCluster.primary` (`ds-shell.dc.html` line 220), the same single
             label on both hosts (017 US-7). A «Войти» + «Регистрация» pair was
             the #2198 Stage-B finding. */}
-        <Button asChild variant="on-primary" size="chip">
-          <NextLink href={auth.loginHref} data-testid="shell-login">
-            {auth.label}
-          </NextLink>
-        </Button>
+        {/* #2487 — the link carries the current page as `returnTo`. */}
+        <GuestLoginLink
+          loginHref={auth.loginHref}
+          authPaths={auth.authPaths}
+          label={auth.label}
+        />
       </div>
     );
   }

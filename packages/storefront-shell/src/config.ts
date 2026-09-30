@@ -34,7 +34,16 @@
  */
 export type ShellAuthState =
   | { status: "loading" }
-  | { status: "guest"; loginHref: string; label: string }
+  | {
+      status: "guest";
+      /** The host's sign-in route — the BASE link; the package appends the
+       *  current page as `returnTo` (#2487). */
+      loginHref: string;
+      /** The host's auth doors (`authDoorPaths` of its `@ds/auth-flow` route
+       *  table): on these, and below them, the link carries no target. */
+      authPaths: readonly string[];
+      label: string;
+    }
   | {
       status: "doctor";
       profileHref: string;

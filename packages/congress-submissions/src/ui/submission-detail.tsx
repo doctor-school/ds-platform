@@ -738,7 +738,7 @@ export function InlineAsk({
         >
           {yes}
         </Button>
-        <Link asChild tone="muted" size="sm">
+        <Link asChild tone="muted" size="caption" weight="semibold">
           <button type="button" onClick={onNo}>
             {COPY.cancel}
           </button>

@@ -91,8 +91,13 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   const [load, setLoad] = React.useState<Load>({ kind: "loading" });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
-  const [filter, setFilter] = React.useState<CongressSubmissionStatus | null>(null);
-  const [ask, setAsk] = React.useState<{ id: string; what: "withdraw" | "delete" } | null>(null);
+  const [filter, setFilter] = React.useState<CongressSubmissionStatus | null>(
+    null,
+  );
+  const [ask, setAsk] = React.useState<{
+    id: string;
+    what: "withdraw" | "delete";
+  } | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [sentNow, setSentNow] = React.useState<Record<string, boolean>>({});
   const [now, setNow] = React.useState(() => new Date());
@@ -140,7 +145,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
             kind: "ready",
             section: {
               ...l.section,
-              submissions: l.section.submissions.map((x) => (x.id === next.id ? next : x)),
+              submissions: l.section.submissions.map((x) =>
+                x.id === next.id ? next : x,
+              ),
             },
           }
         : l,
@@ -163,7 +170,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
       mode="list"
       accountHref={host.accountHref}
       eventLine={section ? eventLine(section.event) : null}
-      eventHref={section ? `${host.eventHrefPrefix}${section.event.slug}` : null}
+      eventHref={
+        section ? `${host.eventHrefPrefix}${section.event.slug}` : null
+      }
     />
   );
 
@@ -214,7 +223,12 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                   {COPY.loadErrorText}
                 </div>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => void read()}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void read()}
+              >
                 {COPY.retry}
               </Button>
             </div>
@@ -261,7 +275,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   }
 
   const subs = section.submissions;
-  const opened = openId ? subs.find((x) => x.id === openId) ?? null : null;
+  const opened = openId ? (subs.find((x) => x.id === openId) ?? null) : null;
 
   if (opened) {
     return (
@@ -278,7 +292,12 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
           replace(s);
           setSentNow((m) => ({ ...m, [s.id]: true }));
           setLoad((l) =>
-            l.kind === "ready" ? { kind: "ready", section: { ...l.section, consentRequired: false } } : l,
+            l.kind === "ready"
+              ? {
+                  kind: "ready",
+                  section: { ...l.section, consentRequired: false },
+                }
+              : l,
           );
           window.scrollTo(0, 0);
         }}
@@ -298,7 +317,13 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
       const draft = await createDraft(section.eventId, kind);
       setLoad((l) =>
         l.kind === "ready"
-          ? { kind: "ready", section: { ...l.section, submissions: [draft, ...l.section.submissions] } }
+          ? {
+              kind: "ready",
+              section: {
+                ...l.section,
+                submissions: [draft, ...l.section.submissions],
+              },
+            }
           : l,
       );
       setFilter(null);
@@ -365,7 +390,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
             <section data-screen-label="d-lk-congress · выбор вида">
               <SectionHead title={COPY.newSubmission}>
                 {subs.length > 0 ? (
-                  <Link asChild tone="muted" size="sm">
+                  <Link asChild tone="muted" size="caption" weight="semibold">
                     <button type="button" onClick={() => setPickerOpen(false)}>
                       {COPY.collapse}
                     </button>
@@ -373,7 +398,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                 ) : null}
               </SectionHead>
               {note ? (
-                <p className="mb-3 text-sm leading-relaxed text-foreground layout:mb-4">{note}</p>
+                <p className="mb-3 text-sm leading-relaxed text-foreground layout:mb-4">
+                  {note}
+                </p>
               ) : null}
               {laterKinds ? (
                 <p className="mb-3 text-sm leading-relaxed text-foreground layout:mb-4">
@@ -392,7 +419,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                       data-testid={`congress-pick-${k}`}
                       className={cn(
                         "flex min-w-0 flex-col gap-1.5 p-4 layout:px-6 layout:py-5.5",
-                        i ? "border-t border-hairline layout:border-l layout:border-t-0" : "",
+                        i
+                          ? "border-t border-hairline layout:border-l layout:border-t-0"
+                          : "",
                         avail ? "" : "bg-section",
                       )}
                     >
@@ -410,11 +439,17 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                         </p>
                       ) : null}
                       {limitLine(it) ? (
-                        <p className="text-sm font-semibold text-foreground">{limitLine(it)}</p>
+                        <p className="text-sm font-semibold text-foreground">
+                          {limitLine(it)}
+                        </p>
                       ) : null}
                       {avail ? (
                         <Link asChild size="sm" className="mt-auto self-start">
-                          <button type="button" disabled={busy} onClick={() => void start(k)}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void start(k)}
+                          >
                             {COPY.start}
                           </button>
                         </Link>
@@ -430,7 +465,11 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
             <section data-screen-label="d-lk-congress · список">
               <SectionHead title={COPY.mySubmissions}>
                 {!pickerOpen ? (
-                  <Button type="button" size="sm" onClick={() => setPickerOpen(true)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setPickerOpen(true)}
+                  >
                     {COPY.newSubmissionButton}
                   </Button>
                 ) : null}
@@ -451,7 +490,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                       {k ? <StatusDot status={k} /> : null}
                       <span>{k ? STATUS_PLURAL[k] : COPY.all}</span>
                       <span className="text-xs font-semibold tabular-nums">
-                        {k ? subs.filter((x) => x.status === k).length : subs.length}
+                        {k
+                          ? subs.filter((x) => x.status === k).length
+                          : subs.length}
                       </span>
                     </span>
                   </FilterChip>
@@ -461,7 +502,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                 {shown.map((s, i) => {
                   const it = intakeOf(s.kind);
                   const acts = actionsFor(s, it, now);
-                  const rev = s.status === "needs_revision" ? revisionView(s, now) : null;
+                  const rev =
+                    s.status === "needs_revision" ? revisionView(s, now) : null;
                   return (
                     <li
                       key={s.id}
@@ -478,7 +520,11 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                           <StatusLabel status={s.status} />
                         </div>
                         <div className="flex min-w-0 flex-1 flex-col gap-1.25">
-                          <Link asChild tone="neutral" className="self-start text-left">
+                          <Link
+                            asChild
+                            tone="neutral"
+                            className="self-start text-left"
+                          >
                             <button
                               type="button"
                               onClick={(e) => {
@@ -505,7 +551,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                                 <span
                                   className={cn(
                                     "font-bold",
-                                    s.status === "rejected" ? "text-destructive-text" : "text-foreground",
+                                    s.status === "rejected"
+                                      ? "text-destructive-text"
+                                      : "text-foreground",
                                   )}
                                 >
                                   {COPY.committee}
@@ -513,7 +561,12 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                                 {s.committeeComment}
                               </span>
                               {s.committeeComment.length > 150 ? (
-                                <Link asChild tone="muted" size="sm">
+                                <Link
+                                  asChild
+                                  tone="muted"
+                                  size="caption"
+                                  weight="semibold"
+                                >
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -539,8 +592,16 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                           ) : null}
                           {ask?.id === s.id ? (
                             <InlineAsk
-                              text={ask.what === "withdraw" ? COPY.withdrawAsk : COPY.deleteAsk}
-                              yes={ask.what === "withdraw" ? COPY.withdraw : COPY.deleteDraft}
+                              text={
+                                ask.what === "withdraw"
+                                  ? COPY.withdrawAsk
+                                  : COPY.deleteAsk
+                              }
+                              yes={
+                                ask.what === "withdraw"
+                                  ? COPY.withdraw
+                                  : COPY.deleteDraft
+                              }
                               busy={busy}
                               onYes={() => void confirmAsk()}
                               onNo={() => setAsk(null)}
@@ -564,7 +625,13 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                               </Link>
                             ) : null}
                             {acts.secondary.map((a) => (
-                              <Link key={a.action} asChild tone="muted" size="sm">
+                              <Link
+                                key={a.action}
+                                asChild
+                                tone="muted"
+                                size="caption"
+                                weight="semibold"
+                              >
                                 <button
                                   type="button"
                                   disabled={busy}
@@ -601,13 +668,22 @@ function Main({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SectionHead({ title, children }: { title: string; children?: React.ReactNode }) {
+function SectionHead({
+  title,
+  children,
+}: {
+  title: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div className="-mx-4 flex items-center justify-between gap-3 px-4 pb-3 pt-4.5 layout:mx-0 layout:mb-4 layout:justify-start layout:gap-4.5 layout:p-0">
       <h2 className="whitespace-nowrap text-caption font-extrabold uppercase tracking-eyebrow text-foreground">
         {title}
       </h2>
-      <span aria-hidden="true" className="hidden flex-1 border-t-2 border-foreground layout:block" />
+      <span
+        aria-hidden="true"
+        className="hidden flex-1 border-t-2 border-foreground layout:block"
+      />
       {children}
     </div>
   );

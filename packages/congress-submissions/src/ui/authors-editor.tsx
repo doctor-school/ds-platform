@@ -28,13 +28,16 @@ export interface AuthorRow extends CongressSubmissionDraftAuthor {
 }
 
 let seq = 0;
-export const newUid = () => `a${Date.now().toString(36)}${(seq++).toString(36)}`;
+export const newUid = () =>
+  `a${Date.now().toString(36)}${(seq++).toString(36)}`;
 
-export const withUids = (authors: CongressSubmissionDraftAuthor[]): AuthorRow[] =>
-  authors.map((a) => ({ ...a, uid: newUid() }));
+export const withUids = (
+  authors: CongressSubmissionDraftAuthor[],
+): AuthorRow[] => authors.map((a) => ({ ...a, uid: newUid() }));
 
-export const withoutUids = (rows: AuthorRow[]): CongressSubmissionDraftAuthor[] =>
-  rows.map(({ uid: _uid, ...a }) => a);
+export const withoutUids = (
+  rows: AuthorRow[],
+): CongressSubmissionDraftAuthor[] => rows.map(({ uid: _uid, ...a }) => a);
 
 const blank = (v: string | undefined) => !(v ?? "").trim();
 
@@ -69,14 +72,24 @@ export function AuthorsEditor({
     next[to] = t;
     onChange(next);
   };
-  const set = (i: number, key: keyof CongressSubmissionDraftAuthor, v: string) =>
-    onChange(authors.map((a, j) => (j === i ? { ...a, [key]: v } : a)));
+  const set = (
+    i: number,
+    key: keyof CongressSubmissionDraftAuthor,
+    v: string,
+  ) => onChange(authors.map((a, j) => (j === i ? { ...a, [key]: v } : a)));
   const add = () => {
     const uid = newUid();
     setOpenRows((o) => ({ ...o, [uid]: true }));
     onChange([
       ...authors,
-      { uid, surname: "", firstName: "", patronymic: "", workplace: "", presenting: false },
+      {
+        uid,
+        surname: "",
+        firstName: "",
+        patronymic: "",
+        workplace: "",
+        presenting: false,
+      },
     ]);
   };
 
@@ -85,8 +98,7 @@ export function AuthorsEditor({
       <div className="border-t border-hairline">
         {authors.map((a, i) => {
           const incomplete = authorIncomplete(a);
-          const open =
-            editable && (openRows[a.uid] ?? (tried && incomplete));
+          const open = editable && (openRows[a.uid] ?? (tried && incomplete));
           const full =
             [a.surname, a.firstName, a.patronymic]
               .map((p) => (p ?? "").trim())
@@ -99,9 +111,24 @@ export function AuthorsEditor({
             max: number;
             wide?: boolean;
           }[] = [
-            { key: "surname", short: "sn", label: COPY.surname, max: CONGRESS_SUBMISSION_LIMITS.name },
-            { key: "firstName", short: "nm", label: COPY.firstName, max: CONGRESS_SUBMISSION_LIMITS.name },
-            { key: "patronymic", short: "pt", label: COPY.patronymic, max: CONGRESS_SUBMISSION_LIMITS.name },
+            {
+              key: "surname",
+              short: "sn",
+              label: COPY.surname,
+              max: CONGRESS_SUBMISSION_LIMITS.name,
+            },
+            {
+              key: "firstName",
+              short: "nm",
+              label: COPY.firstName,
+              max: CONGRESS_SUBMISSION_LIMITS.name,
+            },
+            {
+              key: "patronymic",
+              short: "pt",
+              label: COPY.patronymic,
+              max: CONGRESS_SUBMISSION_LIMITS.name,
+            },
             {
               key: "workplace",
               short: "org",
@@ -139,7 +166,9 @@ export function AuthorsEditor({
                     checked={!!a.presenting}
                     disabled={!editable}
                     onChange={() =>
-                      onChange(authors.map((y, j) => ({ ...y, presenting: j === i })))
+                      onChange(
+                        authors.map((y, j) => ({ ...y, presenting: j === i })),
+                      )
                     }
                   >
                     {COPY.speaker}
@@ -147,7 +176,13 @@ export function AuthorsEditor({
                 ) : null}
                 {editable ? (
                   <span className="flex items-center gap-0.5">
-                    <Link asChild tone="muted" size="sm" className="mr-2">
+                    <Link
+                      asChild
+                      tone="muted"
+                      size="caption"
+                      weight="semibold"
+                      className="mr-2"
+                    >
                       <button
                         type="button"
                         onClick={() =>
@@ -186,7 +221,9 @@ export function AuthorsEditor({
                       title={COPY.removeAuthor}
                       aria-label={COPY.removeAuthor}
                       disabled={authors.length === 1}
-                      onClick={() => onChange(authors.filter((_, j) => j !== i))}
+                      onClick={() =>
+                        onChange(authors.filter((_, j) => j !== i))
+                      }
                     >
                       ✕
                     </Button>
@@ -197,12 +234,18 @@ export function AuthorsEditor({
                 <div className="mb-1 ml-8 mt-3.5 grid grid-cols-1 gap-2.5 layout:grid-cols-3">
                   {inputs.map((f) => {
                     const id = `in-a${i}-${f.short}`;
-                    const missing = tried && f.key !== "patronymic" && blank(a[f.key] as string);
+                    const missing =
+                      tried &&
+                      f.key !== "patronymic" &&
+                      blank(a[f.key] as string);
                     return (
                       <label
                         key={f.key}
                         htmlFor={id}
-                        className={cn("block min-w-0", f.wide && "layout:col-span-3")}
+                        className={cn(
+                          "block min-w-0",
+                          f.wide && "layout:col-span-3",
+                        )}
                       >
                         <span className="mb-1.5 block text-caption font-semibold text-foreground">
                           {f.label}
@@ -232,7 +275,9 @@ export function AuthorsEditor({
         </Link>
       ) : null}
       {error ? (
-        <p className="mt-2 text-caption font-semibold text-destructive-text">{error}</p>
+        <p className="mt-2 text-caption font-semibold text-destructive-text">
+          {error}
+        </p>
       ) : null}
     </div>
   );

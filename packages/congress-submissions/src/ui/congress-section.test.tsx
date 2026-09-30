@@ -203,9 +203,10 @@ describe("CongressSection", () => {
     expect(
       within(rows[1]!).getByText(/^Исправить и отправить до .* · осталось/),
     ).toBeInTheDocument();
-    expect(
-      within(rows[1]!).getByRole("button", { name: "Отозвать" }),
-    ).toBeInTheDocument();
+    // A row's secondary action is the canvas `quietBtn` step (13px/600).
+    const quiet = within(rows[1]!).getByRole("button", { name: "Отозвать" });
+    expect(quiet).toHaveClass("text-caption", "font-semibold");
+    expect(quiet).not.toHaveClass("text-sm");
 
     await userEvent.click(screen.getByRole("button", { name: /На доработке/ }));
     expect(screen.getAllByTestId("congress-row")).toHaveLength(1);

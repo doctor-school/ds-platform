@@ -37,9 +37,11 @@ import { cn } from "../lib/utils";
  * `tone` carries the ink (`default`, `on-primary`, `header-nav` for the navy
  * band's muted nav tier, `neutral` for page ink, `muted` / `danger` for quiet secondary and
  * destructive text actions), `size` the type step
- * (`default`, `sm` = the canvas 13.5px nav/footer link) and `weight` the stroke
- * (`default` = 700, `strong` = the canvas 800 cross-storefront link). Every one
- * of them is backed by `design-source/ds-shell.dc.html`; the storefront chrome
+ * (`default`, `sm` = the canvas 13.5px nav/footer link, `caption` = the 13px
+ * quiet action) and `weight` the stroke (`default` = 700, `strong` = the canvas
+ * 800 cross-storefront link, `semibold` = the 600 quiet action). Every one
+ * of them is backed by a canvas (`design-source/ds-shell.dc.html`,
+ * `design-source/doctor-lk-congress.dc.html`); the storefront chrome
  * composes them instead of re-styling this primitive at the call site (#2180).
  *
  * `asChild` (Radix `Slot`, same contract as `Button`) lets it wrap `next/link`:
@@ -95,12 +97,18 @@ const linkVariants = cva(
         // The canvas nav/footer link type size, 13.5px (`ds-shell.dc.html`
         // lines 85/95) — the `sm` step of the scale.
         sm: "text-sm",
+        // The canvas quiet secondary action, 13px
+        // (`design-source/doctor-lk-congress.dc.html` `quietBtn`) — the
+        // `caption` step of the scale.
+        caption: "text-caption",
       },
       weight: {
         default: "font-bold",
         // The canvas cross-storefront link, weight 800 (`ds-shell.dc.html`
         // line 99).
         strong: "font-extrabold",
+        // The canvas quiet secondary action, weight 600 (`quietBtn`).
+        semibold: "font-semibold",
       },
     },
     defaultVariants: {

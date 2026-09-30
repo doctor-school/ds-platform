@@ -34,9 +34,10 @@ import { MeService, UnknownSubjectError } from "./me.service.js";
  * `fast-path` (EARS-16; ADR-0001 §2): a caller touching only their OWN record
  * needs no policy evaluation — the global `AuthzGuard` refuses an
  * unauthenticated caller (401) before the handler runs, never a silent success.
- * The account is the signed-in USER's, whatever their role (#2456): a staff
- * session holding only a staff role still opens its own profile and signs out
- * from it, never a dead end. Identity is ALWAYS the authenticated session `sub` — no endpoint takes
+ * The account belongs to the signed-in user, staff included (003 production
+ * amendment, #2456): a `platform_admin` session opens its own profile and signs
+ * out from it, never a dead end; a registrar-only principal stays refused (044
+ * EARS-19). Identity is ALWAYS the authenticated session `sub` — no endpoint takes
  * a target user id, so no caller can read or write another doctor's name
  * (EARS-16). The read is per-caller ⇒ never shared-cacheable.
  */

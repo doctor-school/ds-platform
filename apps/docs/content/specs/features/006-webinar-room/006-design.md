@@ -9,6 +9,10 @@ lang: en
 
 # 006 — Webinar room: embed player, live chat, heartbeat presence (Design)
 
+## Production amendment — staff accounts on the self-profile and presence (2026-09-30, #2456)
+
+The display-name endpoints and the presence reads are running in production. This amendment changes two statements only. First, the `required_roles: doctor_guest` classification of `PUT`/`GET /v1/me/display-name` (§11) now reads `doctor_guest | platform_admin`; it stays self-only by the session `sub` and `fast-path`. Second, `countLivePresence`, its expiry query and `deriveEventMinutes` apply the shared `isParticipant` predicate (`apps/api/src/auth/staff-role.ts`), so a staff account is never counted in the room population or the presence minutes. Mechanics of the `users.role` staff marker: 003 design, production amendment of the same date.
+
 ## 1. Architecture overview
 
 Feature 006 is the **room vertical**: one registration-and-live-gated read (`RoomConfig`) and two gated commands (`PostChatMessage`, `RecordPresenceHeartbeat`) in `apps/api`, plus the room surface in `apps/portal`. It owns **no** auth primitive (reuses shipped 003), **no** registration (reads the 005 `EventRoster` as the admission basis), and **no** event authoring / room open-close (reads the 007-owned `EventLifecycleState` + stream config). It **produces** the durable presence beats the sponsor report draws from.

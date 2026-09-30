@@ -62,6 +62,17 @@ The existing delivery route is reused without provider configuration or failover
 
 The earlier authentication slices remain shipped. The Postbox transport revision (EARS-31/32, #2115) is specified here; runtime implementation and controlled activation remain open under #1059. Microsoft delivery evidence remains open under #1120.
 
+## Production amendment — staff accounts are users, not participants (2026-09-30, #2456)
+
+This amendment overrides only the `doctor_guest`-only account statements in Scope and EARS-26/27/28 (and design §4/§12); the running-production baseline is retained below. Owner decision on #2456: a staff account is a signed-in user of the storefronts, not an event participant.
+
+- **Account endpoints (EARS-27/28).** `GET /v1/me/profile` and `GET`/`PUT /v1/me/display-name` (006 EARS-16) admit `platform_admin` as well as `doctor_guest` — still `access: authenticated`, `auth_check: fast-path`, self-only by the session `sub`. A staff session renders its own `/account` surface on both storefronts and signs out from it (EARS-10). A principal holding only `event-registrar` stays refused (044 EARS-19); a registrar who is also a site user holds `doctor_guest`.
+- **Staff marker (EARS-26).** On every authenticated request, the session auth hooks (storefront and admin) shall set the `users.role` mirror column to the first staff role the session's project-roles claim carries, in the order `platform_admin`, `event-registrar`, `legacy_admin`, `pd_officer`, else to `doctor_guest`. The column is written only when the value changes, and a freshly healed row is marked in the same pass. The IdP claim stays the authority: the webhook/sweep upsert never overwrites `role`. The write is fail-soft like the heal. It belongs to the session layer, so the EARS-27 handler itself still performs no write.
+- **Participants exclude staff.** Participant reads count only accounts whose mirror row carries `doctor_guest`: the storefront sign-up count, the roster read model, the registrar roster page (rows and total), the live room population with its expiry, and derived presence minutes (006). Per-user reads (the caller's own events and participant card) are unchanged.
+- **Onboarding.** Staff grants carry `doctor_guest` plus the staff role (admin onboarding runbook, step 5). A staff member's mirror row reads `doctor_guest`, and so still counts, until their next signed-in request after the grant.
+
+Verification: `apps/api/test/me/profile.e2e-spec.ts` (`EARS-27`, `EARS-16` and `EARS-26` staff cases), `apps/api/src/auth/mirror-self-heal.service.spec.ts` and `apps/api/src/auth/staff-role.spec.ts` (`EARS-26`), `apps/api/test/registration/staff-not-participants.e2e-spec.ts` (`EARS-26`). The staff `/account` render is a live-stand Playwright tier on both storefronts plus the Stage-B owner gate.
+
 ## Outcomes
 
 - A net-new visitor can self-register on the doctor portal and obtain a backend identity in the `doctor_guest` role (ADR-0001 §1), authenticated against **Zitadel as the IdP** (ADR-0001 §8).

@@ -25,6 +25,15 @@ lang: en
 
 > Epic: [Webinars — product brief](../../product/webinars/brief.md) · Wave 1, approved variant A «thin vertical». **The MVP-critical surface for the 2026-07-17 live webinar.** PRD source: [`006-product.md`](./006-product.md) (US-1…US-7). Mockup source of truth: the vendored canvas in [`design-source/`](../../../../../../design-source/README.md) — `archive/archive-room-v1.dc.html` (desktop `1fr 400px` player + chat aside; mobile full-bleed player + tabs).
 
+## Production amendment — staff accounts on the self-profile and presence (2026-09-30, #2456)
+
+This amendment overrides only the `required_roles: doctor_guest` classification of the display-name read/write in Prior decisions (ADR-0001 §2) and EARS-16, and the population of the presence reads; the running-production baseline is retained below. Owner decision on #2456: a staff account is a signed-in user, not a participant.
+
+- **EARS-16.** The `SetDisplayName` write and the `GET /v1/me/display-name` self-read are classified `access: authenticated`, `required_roles: doctor_guest | platform_admin`, `auth_check: fast-path`. Every other EARS-16 statement holds: the name is served only to its owner's session, no endpoint exposes another user's name, and the Zitadel placeholder stays never-read. A principal holding only `event-registrar` stays refused (044 EARS-19).
+- **Presence population.** The live room population, its expiry and the derived per-doctor presence minutes count only accounts whose `users` mirror row carries `doctor_guest`; a staff account in the room is not a participant. The 003 production amendment of the same date defines that marker.
+
+Verification: `apps/api/test/me/profile.e2e-spec.ts` (`EARS-16`: a `platform_admin`-only session reads and writes its own name) and `apps/api/test/registration/staff-not-participants.e2e-spec.ts` (presence count and minutes).
+
 ## Outcomes
 
 - A **registered doctor** enters the room from the event page (004) or «мои события» (005) while the webinar is `live` and watches the stream **without any platform-caused obstacle** — the legacy "could not join the broadcast" class is retired (US-1).

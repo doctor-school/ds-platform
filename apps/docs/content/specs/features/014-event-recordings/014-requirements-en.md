@@ -347,7 +347,7 @@ Every mutating recording endpoint and every legacy-lifecycle command require a c
 
 ## Amendment — 2026-09-30: the land-only event return (source: [#2487](https://github.com/doctor-school/ds-platform/issues/2487); 017 «Amendment — 2026-09-30»)
 
-> **Status:** feature 014 is live in production, so this is recorded as an amendment rather than an inline rewrite of EARS-6 (AGENTS.md §6). EARS-6 and every shipped clause above remain the decision as originally taken and are read under this amendment. The RU twin is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-09-30».
+> **Status:** feature 014 is live in production, so this is recorded as an amendment rather than an inline rewrite of EARS-6 (AGENTS.md §6). EARS-6 and every shipped clause above remain the decision as originally taken and are read under this amendment. The RU twin is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-09-30: возврат на страницу события только для приземления».
 
 **What is added.** Next to the event-page return of EARS-6 — the page's own registration button, whose carried event page means «register me, then bring me back» (005 EARS-2, 021 EARS-10) — the return-to-origin mechanism carries a second эфир return: the **land-only** return. It is the event page followed by the fixed `?intent=land` marker, one shared shape defined once in `@ds/schemas` (`formatLandOnlyReturnTarget` / `parseLandOnlyReturnTarget`). The storefront header's «Войти / Регистрация» on an event page carries it (017 «Amendment — 2026-09-30»).
 
@@ -355,9 +355,9 @@ Every mutating recording endpoint and every legacy-lifecycle command require a c
 
 **What does not change.** EARS-6's event-page return and its registration completion, the consume-once parking, the whitelist and same-origin guard for every other target, and the default landing.
 
-## Amendment — 2026-09-30: a carried return target lives only inside the flow that carried it (source: [#2495](https://github.com/doctor-school/ds-platform/issues/2495), owner decision 2026-09-30)
+## Amendment — 2026-09-30 — flow-bound return target (#2495): a carried return target lives only inside the flow that carried it (source: [#2495](https://github.com/doctor-school/ds-platform/issues/2495), owner decision 2026-09-30)
 
-> **Status:** EARS-6 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). EARS-6 above remains the decision as originally taken, read under this amendment. The RU counterpart is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-09-30: донесённая цель возврата живёт только внутри потока, который её донёс» with the identical contract.
+> **Status:** EARS-6 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). EARS-6 above remains the decision as originally taken, read under this amendment. The RU counterpart is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-09-30 — flow-bound return target (#2495)» with the identical contract.
 
 **Provenance.** EARS-6 stated how a return target is carried but not how long it lives. The shared parking of the target (the same-origin cookie `ds_return_to`, 900 s) was cleared only by a successful sign-in, so a visitor who pressed «Записаться», abandoned the sign-in page and later signed in through the header «Войти» was registered for that эфир without pressing «Записаться» again. The owner confirmed the defect and chose, on 2026-09-30 (verbatim «2»), to keep completing the registration after sign-in, but only inside the flow that started from «Записаться».
 
@@ -369,6 +369,10 @@ Every mutating recording endpoint and every legacy-lifecycle command require a c
 - One rule in `@ds/auth-flow`, run by each storefront's middleware/proxy on the same four doors; a signed-in visitor is outside the rule. The 900 s lifetime stays as the outer bound.
 - The land-only return of the preceding amendment (#2487) is unaffected: the header «Войти / Регистрация» carries it as `returnTo` in the URL, so its door parks it as before, and it never holds a registration intent.
 
-**Consequence.** «Записаться» → sign in (password or code, directly or through a password reset) registers the visitor as before. «Записаться» → leave the page → a plain sign-in later lands on the default landing and registers nothing. This narrows the «later sign-in … lands on the parked target» consequence of 021's 2026-09-30 amendment: that holds only while the sign-in continues the flow that carried the target.
+**Consequence.** «Записаться» → sign in (password or code, directly or through a password reset) registers the visitor as before. «Записаться» → leave the page → a plain sign-in later lands on the default landing and registers nothing. This narrows the «later sign-in … lands on the parked target» consequence of 021's 2026-09-30 amendment: that holds only while the sign-in continues the flow that carried the target; 021 records the narrowing in its own «Amendment — 2026-09-30 (2): the parked return target is flow-bound (#2495)».
+
+**The «account already exists» letter.** The «Войти» link in 003 EARS-23's «account already exists» letter opens a new flow and does not carry the event intent, per 021 EARS-10's rule that the target never travels through the letter; a visitor with an existing account who chose registration by mistake and signs in from that letter lands on the default landing, not registered (Academy only today, since the link points at the Academy origin).
+
+**The parked copy stays as the in-flow safety net.** Every in-flow hop carries `returnTo` and the query wins, so the parked `ds_return_to` copy is read only if an in-flow hop ever loses the query; it is kept so that such a hop still lands on the flow's own guard-validated target instead of silently dropping the registration, and it cannot resurrect an abandoned flow because a bare door has already expired it.
 
 **Verification.** `packages/auth-flow/src/server/return-target-parking.test.ts`, `packages/auth-flow/src/login/login-door.intent-lifetime.test.tsx`, `apps/doctor/proxy.test.ts`, `apps/portal/middleware.test.ts` (`014 EARS-6.10`).

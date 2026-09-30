@@ -79,6 +79,12 @@ export function resolveReturnTarget(
   rawFromQuery: string | null,
 ): string | null {
   const fromQuery = parseSameOriginReturnTarget(rawFromQuery);
+  // The parked fallback stays as the in-flow safety net (014 EARS-6, amendment
+  // 2026-09-30 «a carried return target lives only inside the flow that carried
+  // it», #2495). Why keep it: should an in-flow hop ever lose the query, the
+  // flow still lands on its own guard-validated target instead of silently
+  // dropping the visitor's registration; outside a flow a bare door has already
+  // expired the cookie, so it cannot resurrect an abandoned flow.
   const parked = readStoredReturnTarget();
   clearStoredReturnTarget();
   return fromQuery ?? parked;

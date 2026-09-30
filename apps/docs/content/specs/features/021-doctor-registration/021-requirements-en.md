@@ -319,6 +319,14 @@ Each records a call the PRD left open. They are lead decisions in the AGENTS.md 
 
 **What does not change.** LD-3's guard and its declared whitelist; LD-4; LD-8 as narrowed by the 2026-09-29 amendment; EARS-10's in-app carry through the sent-state and code-entry URLs; the confirmation letter carrying no link (003 EARS-29).
 
+## Amendment — 2026-09-30 (2): the parked return target is flow-bound (#2495)
+
+> **Status:** feature 021 is live in production, and the 2026-09-30 amendment above has shipped (`release-2026.09.30-1`), so this is a second dated amendment rather than a rewrite of it (AGENTS.md §6). The source is [#2495](https://github.com/doctor-school/ds-platform/issues/2495) (owner decision 2026-09-30, verbatim «2»); the full contract is [`014-requirements-en.md`](../014-event-recordings/014-requirements-en.md) → «Amendment — 2026-09-30 — flow-bound return target (#2495)». The RU counterpart is [`021-requirements-ru.md`](./021-requirements-ru.md) and the design-side counterpart is [`021-design.md`](./021-design.md), both under the same heading.
+
+**What it narrows.** The 2026-09-30 amendment's consequence «a later sign-in that arrives without the query parameter now lands on the parked target while it lives» holds only while the sign-in continues the flow that carried the target. The parked copy lives only inside that flow, like the OAuth `state` parameter: a guest who opens any of the four auth doors — `/login`, `/register`, `/verify`, `/reset` — without a guard-clean `returnTo` starts a new flow, and that door drops the parked copy; a door that carries `returnTo` parks it as before. Every in-flow hop carries `returnTo` on the URL, and the parked copy remains only as the in-flow safety net.
+
+**The «account already exists» letter.** The «Войти» link in 003 EARS-23's «account already exists» letter opens a new flow and does not carry the event intent, consistent with EARS-10's rule that the target never travels through the letter; the in-flow «Войти» on the `/verify` screen still carries `returnTo`.
+
 ## Invariants
 
 - The surface renders no header, navigation or footer at all — neither its own nor 017's.

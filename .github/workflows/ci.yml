@@ -337,6 +337,9 @@ jobs:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
       IDP_ISSUER: http://localhost:9080
       IDP_REDIRECT_URI: http://localhost:3000/auth/callback
+      # 046 «Letters» — required boot key; the letter suites assert the
+      # congress links against this origin.
+      MAILER_DOCTOR_BASE_URL: http://localhost:3004
       # The three `auth/zitadel-*` suites read the delivered code back out of the
       # sinks. Their in-test defaults point at a personal dev host that does not
       # resolve on a runner, so the URLs are declared here, not defaulted.
@@ -1583,6 +1586,10 @@ jobs:
           CONGRESS_SIGNUP_WINDOW_OPENS_AT: 2026-10-01T00:00:00.000+03:00
           CONGRESS_SIGNUP_WINDOW_CLOSES_AT: 2027-01-01T00:00:00.000+03:00
           CONGRESS_SIGNUP_EVENT_DAYS: 2027-04-23,2027-04-24
+          # 046 «Letters» — the doctor storefront origin the congress letters
+          # link to is a REQUIRED boot key (no default, like DATABASE_URL); the
+          # same local doctor origin the Vitest runner supplies.
+          MAILER_DOCTOR_BASE_URL: http://localhost:3004
         run: |
           pnpm --filter @ds/api start > api.log 2>&1 &
           echo $! > api.pid

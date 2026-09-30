@@ -15,11 +15,13 @@ import {
   congressSubmissions,
   congressSubmissionSettings,
   consentRecords,
+  events,
   registrations,
   users,
   type CongressSubmissionRow,
 } from "@ds/db";
 import {
+  CONGRESS_SUBMISSION_KIND_LABELS,
   CONGRESS_SUBMISSION_KINDS,
   CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
   type CongressSubmission,
@@ -45,8 +47,10 @@ import {
   type AuditedTransaction,
   withRequestAuditContext,
 } from "../audit/audit-context.tx.js";
+import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import { resolveCongressConsentVersion } from "./congress-signup.config.js";
 import {
+  CONGRESS_CABINET_URL,
   CONGRESS_SIGN_UP_CLOCK,
   CONGRESS_SIGN_UP_ENV,
   type CongressSignUpClock,
@@ -108,6 +112,8 @@ export class CongressSubmissionsService {
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(CONGRESS_SIGN_UP_CLOCK) private readonly now: CongressSignUpClock,
     @Inject(CONGRESS_SIGN_UP_ENV) private readonly env: CongressSignUpEnvReader,
+    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(CONGRESS_CABINET_URL) private readonly cabinetUrl: string,
   ) {}
 
   // ---------------------------------------------------------------- reads
@@ -252,7 +258,7 @@ export class CongressSubmissionsService {
     request: CongressSubmissionSendRequest,
   ): Promise<CongressSubmission> {
     const user = await this.account(sub);
-    return withRequestAuditContext(this.db, async (tx) => {
+    const submitted = await withRequestAuditContext(this.db, async (tx) => {
       const row = await this.ownRow(tx, user.id, id, true);
       // The resend of a `needs_revision` submission is the committee work
       // package's (EARS-30); here the author sends drafts.
@@ -362,6 +368,77 @@ export class CongressSubmissionsService {
       if (!sent) statusConflict(row.status);
       return project(sent);
     });
+
+    // EARS-14: the transaction above has COMMITTED; the receipt is started and
+    // never awaited, so the relay can neither delay nor undo the `submitted`.
+    this.dispatchReceipt(submitted.id);
+    return submitted;
+  }
+
+  /**
+   * EARS-14 — the author's receipt for a submission that just became
+   * `submitted`, sent off the response path, with the outcome recorded on the
+   * submission (`last_letter_kind`, `last_letter_status`, `last_letter_at`).
+   *
+   * The pattern of the 044 confirmation (`CongressSignUpService`
+   * `dispatchConfirmationEmail`): started, never awaited; the letter is built
+   * from the committed row read back; a relay rejection becomes `failed` on
+   * the row and never touches the status; the outer `catch` keeps an
+   * unrecordable outcome from becoming an unhandled rejection. No retry queue
+   * (design «Letters»): the section always shows the status. The recorded
+   * instant is when the outcome was known.
+   */
+  private dispatchReceipt(submissionId: string): void {
+    void (async () => {
+      try {
+        const [letter] = await this.db
+          .select({
+            email: users.email,
+            title: congressSubmissions.title,
+            kind: congressSubmissions.kind,
+            eventTitle: events.title,
+          })
+          .from(congressSubmissions)
+          .innerJoin(users, eq(users.id, congressSubmissions.userId))
+          .innerJoin(events, eq(events.id, congressSubmissions.eventId))
+          .where(eq(congressSubmissions.id, submissionId))
+          .limit(1);
+        if (!letter) return;
+
+        let status: "sent" | "failed" = "sent";
+        try {
+          await this.mailer.sendCongressSubmissionReceipt({
+            email: letter.email ?? "",
+            title: letter.title ?? "",
+            kindLabel: CONGRESS_SUBMISSION_KIND_LABELS[letter.kind],
+            eventTitle: letter.eventTitle,
+            cabinetUrl: this.cabinetUrl,
+          });
+        } catch {
+          // The mailer's own diagnostics carry the sanitized provider outcome;
+          // re-logging the error could put the recipient address in a log line.
+          status = "failed";
+          this.logger.warn(
+            `congress submission receipt rejected for submission ${submissionId}`,
+          );
+        }
+
+        await withRequestAuditContext(this.db, (tx) =>
+          tx
+            .update(congressSubmissions)
+            .set({
+              lastLetterKind: "receipt",
+              lastLetterStatus: status,
+              lastLetterAt: new Date(),
+            })
+            .where(eq(congressSubmissions.id, submissionId)),
+        );
+      } catch {
+        this.logger.warn(
+          `congress submission receipt outcome could not be recorded for submission ${submissionId}`,
+        );
+      }
+    })();
   }
 
   /**

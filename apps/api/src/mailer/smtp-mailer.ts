@@ -3,6 +3,7 @@ import {
   accountExistsMessage,
   adminLockoutMessage,
   congressConfirmationMessage,
+  congressSubmissionReceiptMessage,
   formatCongressEventDate,
 } from "./notice-emails.js";
 import { resolveRealSmtp } from "../config/real-smtp.js";
@@ -15,6 +16,7 @@ import {
   assertSendableCode,
   assertSendableEmail,
   type CongressConfirmationRequest,
+  type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
 import {
@@ -122,8 +124,24 @@ export class SmtpMailer implements Mailer {
         eventTitle: input.eventTitle,
         eventDate: formatCongressEventDate(input.eventStartsAt),
         eventVenue: input.eventVenue,
+        cabinetUrl: input.cabinetUrl,
       }),
       "congress registration confirmation",
+    );
+  }
+  async sendCongressSubmissionReceipt(
+    input: CongressSubmissionReceiptRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      congressSubmissionReceiptMessage({
+        title: input.title,
+        kindLabel: input.kindLabel,
+        eventTitle: input.eventTitle,
+        cabinetUrl: input.cabinetUrl,
+      }),
+      "congress submission receipt",
     );
   }
   private async dispatch(

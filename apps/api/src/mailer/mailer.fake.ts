@@ -2,6 +2,7 @@ import {
   assertSendableCode,
   assertSendableEmail,
   type CongressConfirmationRequest,
+  type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
 
@@ -33,6 +34,12 @@ export class FakeMailer implements Mailer {
   readonly congressConfirmations: Array<
     CongressConfirmationRequest & { to: string }
   > = [];
+  /** Every accepted 046 EARS-14 submission receipt, in order. */
+  readonly congressSubmissionReceipts: Array<
+    CongressSubmissionReceiptRequest & { to: string }
+  > = [];
+  /** When set, the NEXT submission receipt rejects with it (046 EARS-14). */
+  private nextSubmissionReceiptFailure: Error | undefined;
   /** When set, the NEXT code send rejects with it (models a transport outage). */
   private nextCodeSendFailure: Error | undefined;
   /** When set, the NEXT congress confirmation rejects with it (044 EARS-12). */
@@ -114,6 +121,30 @@ export class FakeMailer implements Mailer {
       throw failure;
     }
     this.congressConfirmations.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
+    });
+  }
+
+  /**
+   * Test control for 046 EARS-14: make the NEXT submission receipt reject with
+   * `error`, then clear itself (one-shot, like
+   * {@link failNextCongressConfirmation}).
+   */
+  failNextSubmissionReceipt(error: Error): void {
+    this.nextSubmissionReceiptFailure = error;
+  }
+
+  async sendCongressSubmissionReceipt(
+    input: CongressSubmissionReceiptRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    if (this.nextSubmissionReceiptFailure) {
+      const failure = this.nextSubmissionReceiptFailure;
+      this.nextSubmissionReceiptFailure = undefined;
+      throw failure;
+    }
+    this.congressSubmissionReceipts.push({
       ...input,
       to: input.email.trim().toLowerCase(),
     });

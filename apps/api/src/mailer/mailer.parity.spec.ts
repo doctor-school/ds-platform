@@ -9,6 +9,7 @@ import {
   accountExistsMessage,
   adminLockoutMessage,
   congressConfirmationMessage,
+  congressSubmissionReceiptMessage,
 } from "./notice-emails.js";
 
 // Contract parity (a test fake must be no more permissive than the real
@@ -35,6 +36,16 @@ describe("transactional HTML/plain-text content parity", () => {
         eventTitle: "Конгресс-2027",
         eventDate: "12 марта 2027 г. в 10:00",
         eventVenue: "Москва, Крокус Экспо",
+        cabinetUrl: "https://new.doctor.school/account/congress",
+      }),
+    ],
+    [
+      "congress-submission-receipt",
+      congressSubmissionReceiptMessage({
+        title: "Ранняя реабилитация",
+        kindLabel: "Устный доклад",
+        eventTitle: "Конгресс-2027",
+        cabinetUrl: "https://new.doctor.school/account/congress",
       }),
     ],
   ] as const) {
@@ -189,6 +200,7 @@ describe("044 EARS-13: congress-confirmation FakeMailer ↔ SmtpMailer contract 
     eventTitle: "Конгресс-2027",
     eventStartsAt: new Date("2027-03-12T07:00:00.000Z"),
     eventVenue: "Москва, Крокус Экспо",
+    cabinetUrl: "https://new.doctor.school/account/congress",
   } as const;
 
   it("044 EARS-13: when the recipient is invalid, both adapters shall reject", async () => {
@@ -227,6 +239,43 @@ describe("044 EARS-13: congress-confirmation FakeMailer ↔ SmtpMailer contract 
     ).resolves.toBeUndefined();
     expect(fake.congressConfirmations).toEqual([
       { ...CONFIRMATION, email: VALID_EMAIL, to: VALID_EMAIL },
+    ]);
+  });
+});
+
+// 046 EARS-14: the submission receipt joins the same parity contract.
+describe("046 EARS-14: submission-receipt FakeMailer ↔ SmtpMailer contract parity", () => {
+  const RECEIPT = {
+    title: "Ранняя реабилитация",
+    kindLabel: "Устный доклад",
+    eventTitle: "Конгресс-2027",
+    cabinetUrl: "https://new.doctor.school/account/congress",
+  } as const;
+
+  it("EARS-14: when the recipient is invalid, both adapters shall reject", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    for (const bad of INVALID_EMAILS) {
+      await expect(
+        fake.sendCongressSubmissionReceipt({ ...RECEIPT, email: bad }),
+      ).rejects.toThrow();
+      await expect(
+        smtp.sendCongressSubmissionReceipt({ ...RECEIPT, email: bad }),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("EARS-14: when the recipient is valid, both adapters shall accept; the fake records the send", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    await expect(
+      fake.sendCongressSubmissionReceipt({ ...RECEIPT, email: VALID_EMAIL }),
+    ).resolves.toBeUndefined();
+    await expect(
+      smtp.sendCongressSubmissionReceipt({ ...RECEIPT, email: VALID_EMAIL }),
+    ).resolves.toBeUndefined();
+    expect(fake.congressSubmissionReceipts).toEqual([
+      { ...RECEIPT, email: VALID_EMAIL, to: VALID_EMAIL },
     ]);
   });
 });

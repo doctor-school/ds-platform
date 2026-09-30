@@ -35,6 +35,8 @@ async function generate(): Promise<void> {
     "postgresql://openapi:openapi@127.0.0.1:1/openapi";
   process.env.AUDIT_IDENTIFIER_PEPPER ??= "openapi-generation-only";
   process.env.LIFECYCLE_IMPACT_TOKEN_SECRET ??= "openapi-generation-only";
+  // Required boot key (046 «Letters»); generation never sends a letter.
+  process.env.MAILER_DOCTOR_BASE_URL ??= "http://openapi-generation.invalid";
   // Creating the full HTTP application (without init/listen) lets Swagger scan
   // every real controller while avoiding DB connections and lifecycle hooks.
   const app = await createApiApplication({

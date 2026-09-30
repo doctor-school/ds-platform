@@ -94,7 +94,9 @@ same published version.
 
 The confirmation email is live too. It is dispatched AFTER the transaction has
 committed and is never awaited by the response: a slow or unreachable relay can
-neither delay an accepted submission nor turn it into a refusal.
+neither delay an accepted submission nor turn it into a refusal. Its one action
+is «Подать материалы в кабинете», the absolute cabinet link on
+`MAILER_DOCTOR_BASE_URL` (046 EARS-15; see «Letter link origin» below).
 
 **Mail outcome, and why there is no retry queue.** The outcome is recorded on the
 registration itself — `registrations.confirmation_mail_status` (`sent` |
@@ -194,6 +196,23 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
 - **Author 1 (EARS-6).** Prefilled from the 044 registration answers; without
   answers its name fields stay empty for the author to fill — the display name
   is never split into a first name and a surname.
+- **Receipt letter (EARS-14).** After the send transaction commits, the receipt
+  («Doctor.School — заявка получена») is dispatched off the response path to
+  the account email, the letter built from the committed row (kind label from
+  `CONGRESS_SUBMISSION_KIND_LABELS`, the title, `events.title`). The outcome is
+  recorded on the submission — `last_letter_kind = 'receipt'`,
+  `last_letter_status` `sent` | `failed`, `last_letter_at` — and a relay
+  failure never rolls back or delays the `submitted`. No retry queue: the
+  section always shows the status.
+
+**Letter link origin (046 «Letters»).** Every congress letter — the 046 letters
+and the 044 confirmation's single action «Подать материалы в кабинете»
+(EARS-15, the site form and the desk alike) — links to
+`{MAILER_DOCTOR_BASE_URL}/account/congress`, resolved once at boot into the
+`CONGRESS_CABINET_URL` provider. `MAILER_DOCTOR_BASE_URL` is a REQUIRED api
+key (`z.url()`, no default, like `DATABASE_URL`): an api without it refuses to
+boot rather than mail a link to the wrong site. Values per environment:
+046-design «Letters».
 
 `congress_submissions` (migration 0043) carries the 010 `audit_row_change()`
 trigger — the ledger is the status history — and `authors` is a PD-masked

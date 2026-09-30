@@ -8,7 +8,9 @@ import { CongressSignUpController } from "./congress-signup.controller.js";
 import { CongressSignUpService } from "./congress-signup.service.js";
 import { CongressSubmissionsMeController } from "./congress-submissions.me.controller.js";
 import { CongressSubmissionsService } from "./congress-submissions.service.js";
+import { congressCabinetUrl } from "../mailer/notice-emails.js";
 import {
+  CONGRESS_CABINET_URL,
   CONGRESS_SIGN_UP_CLOCK,
   CONGRESS_SIGN_UP_ENV,
   type CongressSignUpClock,
@@ -49,6 +51,13 @@ import {
       // setting in has the intake accepting submissions without a redeploy.
       provide: CONGRESS_SIGN_UP_ENV,
       useValue: (() => loadEnv()) satisfies CongressSignUpEnvReader,
+    },
+    {
+      // 046 «Letters» — resolved once at boot from the REQUIRED
+      // `MAILER_DOCTOR_BASE_URL`: every congress letter links here.
+      provide: CONGRESS_CABINET_URL,
+      useFactory: (): string =>
+        congressCabinetUrl(loadEnv().MAILER_DOCTOR_BASE_URL),
     },
   ],
   // 044 EARS-35: the registrar's desk route (`registration/`) enters walk-ins

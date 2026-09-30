@@ -27,6 +27,21 @@ export type CongressSubmissionKind = z.infer<
   typeof CongressSubmissionKindSchema
 >;
 
+/**
+ * The Russian name of each kind as the «Мои заявки на Конгресс» section shows
+ * it (046-product «Устный доклад», «Постерный доклад», «Тезисы»). One map for
+ * every surface — the section, the admin registry, the letters — so a kind is
+ * never named two ways.
+ */
+export const CONGRESS_SUBMISSION_KIND_LABELS: Record<
+  CongressSubmissionKind,
+  string
+> = {
+  oral: "Устный доклад",
+  poster: "Постерный доклад",
+  abstract: "Тезисы",
+};
+
 /** The age-limit range the administrator may set (EARS-2). */
 export const CONGRESS_MIN_AGE_LIMIT = 18;
 export const CONGRESS_MAX_AGE_LIMIT = 99;

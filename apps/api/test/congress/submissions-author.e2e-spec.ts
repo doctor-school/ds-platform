@@ -5,7 +5,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import {
   CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
@@ -19,6 +19,7 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 import { MAILER } from "../../src/mailer/mailer.types.js";
+import { congressSubmissionReceiptMessage } from "../../src/mailer/notice-emails.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -31,9 +32,9 @@ import {
 
 /**
  * 046 EARS-5…EARS-13, EARS-16, EARS-17 — the author's congress submissions,
- * `/v1/me/congress-submissions*`, oral kind. Verification rows V-3, V-4 (the
- * window and the status; the receipt letter clauses belong to EARS-14), V-5,
- * V-6 (the limit, oral kind) and V-9.
+ * `/v1/me/congress-submissions*`, oral kind, and the EARS-14 receipt letter.
+ * Verification rows V-3, V-4 (the window, the status and the receipt letter),
+ * V-5, V-6 (the limit, oral kind) and V-9.
  *
  * Driven through the REAL routes on the REAL module with a real doctor session;
  * the committee's status changes (their route is a later work package) are
@@ -62,7 +63,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
 
-    type Doctor = { headers: Record<string, string>; userId: string };
+    type Doctor = {
+      headers: Record<string, string>;
+      userId: string;
+      email: string;
+    };
 
     async function doctor(prefix: string): Promise<Doctor> {
       const email = `${prefix}-${Date.now()}-${Math.random()
@@ -93,6 +98,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           cookie: `${SESSION_COOKIE_NAME}=${cookie!.value}`,
         },
         userId: rows[0]!.id,
+        email,
       };
     }
 
@@ -502,6 +508,91 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         firstName: "Мария",
         patronymic: "Петровна",
       });
+    });
+
+    // ------------------------------------------------ V-4 — the receipt letter
+
+    type LetterOutcome = {
+      kind: string | null;
+      status: string | null;
+      at: Date | null;
+    };
+
+    async function letterOf(id: string): Promise<LetterOutcome> {
+      const { rows } = await pool.query<LetterOutcome>(
+        `SELECT last_letter_kind AS kind, last_letter_status AS status,
+                last_letter_at AS at
+           FROM congress_submissions WHERE id = $1`,
+        [id],
+      );
+      return rows[0]!;
+    }
+
+    /** The receipt is sent off the response path — poll for its outcome. */
+    async function waitForLetter(id: string): Promise<LetterOutcome> {
+      return vi.waitFor(
+        async () => {
+          const outcome = await letterOf(id);
+          expect(outcome.status).not.toBeNull();
+          return outcome;
+        },
+        { timeout: 5000, interval: 50 },
+      );
+    }
+
+    const receiptsTo = (email: string) =>
+      mailer.congressSubmissionReceipts.filter((r) => r.to === email);
+
+    it("EARS-14: after the send commits the author gets the receipt naming the kind, title and event with the absolute cabinet link, and the outcome is recorded", async () => {
+      const d = await doctor("sub-receipt");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+
+      const before = Date.now();
+      const sent = await send(d, id);
+      expect(sent.statusCode).toBe(200);
+
+      const outcome = await waitForLetter(id);
+      expect(outcome).toMatchObject({ kind: "receipt", status: "sent" });
+      expect(outcome.at!.getTime()).toBeGreaterThanOrEqual(before - 1000);
+
+      const cabinetUrl = `${process.env.MAILER_DOCTOR_BASE_URL!.replace(/\/+$/, "")}/account/congress`;
+      expect(cabinetUrl).toMatch(/^https?:\/\//);
+      const [receipt] = receiptsTo(d.email.toLowerCase());
+      expect(receipt).toEqual({
+        email: d.email,
+        to: d.email.toLowerCase(),
+        title: completeOral.title,
+        kindLabel: "Устный доклад",
+        eventTitle: "Конгресс",
+        cabinetUrl,
+      });
+      const message = congressSubmissionReceiptMessage(receipt!);
+      expect(message.text).toContain(
+        `Ваша заявка «${completeOral.title}» (устный доклад) получена и ` +
+          "передана программному комитету Конгресс.",
+      );
+      expect(message.text).toContain(`Мои заявки на Конгресс: ${cabinetUrl}`);
+    });
+
+    it("EARS-14: a mail failure keeps the submission submitted and records the outcome failed", async () => {
+      const d = await doctor("sub-receipt-fail");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+
+      mailer.failNextSubmissionReceipt(new Error("relay down"));
+      const sent = await send(d, id);
+      expect(sent.statusCode).toBe(200);
+      expect(CongressSubmissionSchema.parse(sent.json()).status).toBe(
+        "submitted",
+      );
+
+      const outcome = await waitForLetter(id);
+      expect(outcome).toMatchObject({ kind: "receipt", status: "failed" });
+      expect(await statusOf(id)).toBe("submitted");
+      expect(receiptsTo(d.email.toLowerCase())).toHaveLength(0);
     });
 
     // ------------------------------------------------------------------ V-5

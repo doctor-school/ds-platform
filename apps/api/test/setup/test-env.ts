@@ -37,3 +37,9 @@ process.env["CONGRESS_SIGNUP_WINDOW_CLOSES_AT"] ??=
 // without them, and the desk's attendance mark validates against them). The
 // runner supplies the congress's own two days; the attendance suite pins them.
 process.env["CONGRESS_SIGNUP_EVENT_DAYS"] ??= "2027-04-23,2027-04-24";
+
+// 046 «Letters»: the doctor storefront origin is a REQUIRED boot key (no
+// default, like DATABASE_URL), so every suite that boots a module through
+// `loadEnv` needs it. The runner supplies the dev-stand doctor origin; the
+// letter suites assert the links against whatever value is in effect.
+process.env["MAILER_DOCTOR_BASE_URL"] ??= "http://localhost:3004";

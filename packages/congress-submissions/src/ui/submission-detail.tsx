@@ -24,7 +24,7 @@ import {
   sendSubmission,
   withdrawSubmission,
 } from "../client";
-import { COPY, CONGRESS_PRIVACY_POLICY_URL, KIND_COPY } from "../copy";
+import { COPY, CONGRESS_SUBMISSION_CONSENT_HREF, KIND_COPY } from "../copy";
 import {
   type FormError,
   ORAL_FIELDS,
@@ -556,7 +556,7 @@ export function SubmissionDetail({
                       <span className="text-sm leading-normal text-foreground">
                         {COPY.consentBefore}
                         <Link
-                          href={CONGRESS_PRIVACY_POLICY_URL}
+                          href={CONGRESS_SUBMISSION_CONSENT_HREF}
                           target="_blank"
                           rel="noopener noreferrer"
                           variant="inline"

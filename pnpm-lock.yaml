@@ -234,6 +234,9 @@ importers:
       '@ds/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ds/legal-content':
+        specifier: workspace:*
+        version: link:../../packages/legal-content
       '@ds/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

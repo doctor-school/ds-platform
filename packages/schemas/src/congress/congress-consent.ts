@@ -46,24 +46,36 @@ export const isCongressSignUpConsentPurpose = (
   (CONGRESS_SIGN_UP_CONSENT_PURPOSES as readonly string[]).includes(purpose);
 
 /**
- * 046 EARS-16 — the congress submission personal-data consent: the submission
- * content, the co-authors' data the author supplies, the birth date for the
- * poster rule and the disclosure to the event's program committee and congress
- * partner.
+ * 046 EARS-16 — the congress submission personal-data consent: the organising
+ * committee's own consent covering every submission kind (oral, poster,
+ * abstract) — the submission content, the co-authors' data the author
+ * supplies, the birth date for the poster rule, the disclosure to the event's
+ * program committee and congress partner, and the publication of abstracts.
  *
- * Its document is the congress site personal-data policy — the same published
- * text 044 EARS-9 records — so its version is the same server stamp
- * (`CONGRESS_SIGNUP_CONSENT_VERSION`); the PURPOSE stays distinct, so accepting
- * the policy at registration writes no submission-consent row (046-design
- * «Consents and statements»).
+ * Its document is a `@ds/legal-content` document
+ * ({@link CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG}), NOT the congress site
+ * policy 044 EARS-9 records, so its version is that document's own server
+ * stamp (edition plus sha256 of its text) and moves independently of
+ * `CONGRESS_SIGNUP_CONSENT_VERSION` (046-design «Consents and statements»).
  */
 export const CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE =
   "congress-submission-personal-data";
 
 /**
+ * 046 EARS-16 — the slug of the submission consent document in
+ * `@ds/legal-content`: the file the api stamps the version from and the
+ * `/documents/<slug>` page (feature 028) the submission form's consent
+ * checkbox links to. One literal for both, so the recorded version and the
+ * text the author opened cannot name different documents.
+ */
+export const CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG =
+  "consent-congress-submissions";
+
+/**
  * 046 — every purpose the submissions cabinet is willing to record, as a CLOSED
- * list (the same reasoning as {@link CONGRESS_SIGN_UP_CONSENT_PURPOSES}). The
- * abstracts publication consent (EARS-23) joins it with the abstracts slice.
+ * list (the same reasoning as {@link CONGRESS_SIGN_UP_CONSENT_PURPOSES}). One
+ * member: the single consent covers every submission kind, abstracts
+ * publication included (EARS-16).
  */
 export const CONGRESS_SUBMISSION_CONSENT_PURPOSES = [
   CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,

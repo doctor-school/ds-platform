@@ -26,6 +26,7 @@
     "@aws-sdk/client-s3": "^3.1128.0",
     "@aws-sdk/s3-request-presigner": "^3.1128.0",
     "@ds/db": "workspace:*",
+    "@ds/legal-content": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@fastify/multipart": "^10.1.1",
     "@nestjs/common": "^11.2.3",

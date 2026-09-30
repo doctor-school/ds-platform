@@ -372,7 +372,7 @@ describe("CongressSection", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "обработку персональных данных" }),
-    ).toHaveAttribute("href", "https://orthobio.ru/privacy");
+    ).toHaveAttribute("href", "/documents/consent-congress-submissions");
   });
 
   const complete = {

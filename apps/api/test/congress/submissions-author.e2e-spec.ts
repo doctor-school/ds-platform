@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Test, type TestingModule } from "@nestjs/testing";
 import {
   FastifyAdapter,
@@ -7,6 +7,7 @@ import {
 import { VersioningType } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
+import { loadDocument } from "@ds/legal-content";
 import {
   CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
   CongressSubmissionRefusalSchema,
@@ -47,6 +48,37 @@ import {
 
 const VERSION_A = `2026-10-01.sha256-${"a".repeat(64)}`;
 const VERSION_B = `2026-11-01.sha256-${"b".repeat(64)}`;
+
+/**
+ * EARS-16 — the version the submission consent must carry: the published
+ * consent document's edition plus the sha256 of its text, computed here from
+ * the file itself rather than through the api's resolver.
+ */
+const SUBMISSION_CONSENT_VERSION = (() => {
+  const document = loadDocument("consent-congress-submissions");
+  if (!document)
+    throw new Error("the submission consent document is not published");
+  const digest = createHash("sha256").update(document.body).digest("hex");
+  return `${document.frontmatter.edition}.sha256-${digest}`;
+})();
+
+/** EARS-16 — lets one case take the consent document away (the 503 path). */
+const consentDocument = vi.hoisted(() => ({ gone: false }));
+vi.mock("../../src/congress/congress-submission-consent.js", async (load) => {
+  const actual =
+    await load<
+      typeof import("../../src/congress/congress-submission-consent.js")
+    >();
+  return {
+    ...actual,
+    resolveCongressSubmissionConsentVersion: (
+      ...args: Parameters<typeof actual.resolveCongressSubmissionConsentVersion>
+    ) =>
+      consentDocument.gone
+        ? ({ ok: false, reason: "consent-document-missing" } as const)
+        : actual.resolveCongressSubmissionConsentVersion(...args),
+  };
+});
 const DAY = 24 * 60 * 60 * 1000;
 const BASE = "/v1/me/congress-submissions";
 
@@ -655,7 +687,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     // ------------------------------------------------------------------ V-5
 
-    it("EARS-16: the first send requires the submission consent and records one row with the stamped version; a second send does not; a new version asks again", async () => {
+    it("EARS-16: the first send requires the submission consent and records one row with the consent document's version; a second send does not; a new edition asks again", async () => {
       const d = await doctor("sub-consent");
       const e1 = await congress(openWindow());
       const e2 = await congress(openWindow());
@@ -683,26 +715,42 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
             [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE],
           )
         ).rows.map((r) => r.version);
-      expect(await rows()).toEqual([VERSION_A]);
+      // The consent document's own version — not the congress registration
+      // consent setting (044 EARS-9), which versions a different text.
+      expect(await rows()).toEqual([SUBMISSION_CONSENT_VERSION]);
+      expect(SUBMISSION_CONSENT_VERSION).not.toBe(VERSION_A);
 
       // Another event, same account and version: no second acceptance.
       expect((await section(d, e2)).consentRequired).toBe(false);
       const second = await readyDraft(d, e2);
       expect((await send(d, second, false)).statusCode).toBe(200);
-      expect(await rows()).toEqual([VERSION_A]);
+      expect(await rows()).toEqual([SUBMISSION_CONSENT_VERSION]);
+    });
 
-      process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_B;
-      try {
-        expect((await section(d, e1)).consentRequired).toBe(true);
-        const third = await readyDraft(d, e1);
-        const again = await send(d, third, false);
-        expect(again.statusCode).toBe(422);
-        expect(codes(again)).toEqual(["consent-required"]);
-        expect((await send(d, third)).statusCode).toBe(200);
-        expect(await rows()).toEqual([VERSION_A, VERSION_B]);
-      } finally {
-        process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
-      }
+    it("046 EARS-16: consent given under an earlier edition of the document is asked again at the next send", async () => {
+      const d = await doctor("sub-consent-edition");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const earlier = `2026-01-01.sha256-${"e".repeat(64)}`;
+      await pool.query(
+        "INSERT INTO consent_records (user_id, purpose, version) VALUES ($1, $2, $3)",
+        [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE, earlier],
+      );
+
+      expect((await section(d, eventId)).consentRequired).toBe(true);
+      const id = await readyDraft(d, eventId);
+      const again = await send(d, id, false);
+      expect(again.statusCode).toBe(422);
+      expect(codes(again)).toEqual(["consent-required"]);
+      expect((await send(d, id)).statusCode).toBe(200);
+      const { rows } = await pool.query<{ version: string }>(
+        "SELECT version FROM consent_records WHERE user_id = $1 AND purpose = $2 ORDER BY captured_at",
+        [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE],
+      );
+      expect(rows.map((r) => r.version)).toEqual([
+        earlier,
+        SUBMISSION_CONSENT_VERSION,
+      ]);
     });
 
     it("046 EARS-16: two parallel first sends of one account (different events) record one consent row", async () => {
@@ -749,12 +797,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows).toHaveLength(4);
     });
 
-    it("046 EARS-16: without a configured consent version the section still reads (consent asked) and only the send is refused", async () => {
+    it("046 EARS-16: without a published consent document the section still reads (consent asked) and only the send is refused", async () => {
       const d = await doctor("sub-consent-unset");
       const eventId = await congress(openWindow());
       await register(d, eventId);
       const id = await readyDraft(d, eventId);
-      delete process.env.CONGRESS_SIGNUP_CONSENT_VERSION;
+      consentDocument.gone = true;
       try {
         const read = await section(d, eventId);
         expect(read.consentRequired).toBe(true);
@@ -762,7 +810,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect((await send(d, id)).statusCode).toBe(503);
         expect(await statusOf(id)).toBe("draft");
       } finally {
-        process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
+        consentDocument.gone = false;
       }
     });
 

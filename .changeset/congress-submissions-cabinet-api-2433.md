@@ -14,8 +14,10 @@ sent status, submission consent), takes it back to a draft or withdraws it to
 second time), and deletes a draft by retiring the row. Migration 0043 adds
 `congress_submissions` with `revision_due_at`; migration 0044 adds a partial
 unique index keeping one `congress-submission-personal-data` consent row per
-account and version. The section reads without `CONGRESS_SIGNUP_CONSENT_VERSION`
-(the consent then reads as required); only the send needs it — a local
-dev-stand `~/.ds-platform/.env.local` gets the dev stamp from
-`infra/dev-stand/.env.example`. Each submission carries
+account and version. The submission consent is the organising committee's own
+`@ds/legal-content` document `consent-congress-submissions` (one consent for
+every kind, abstracts publication included); its version is stamped from that
+file — edition plus sha256 of its text — independently of the 044
+`CONGRESS_SIGNUP_CONSENT_VERSION`, so a new edition asks every author again.
+Each submission carries
 `statusChangedAt`, the date its committee comment is shown with.

@@ -3525,12 +3525,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "publication_consent_id": {
-          "name": "publication_consent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "statements": {
           "name": "statements",
           "type": "jsonb",
@@ -3698,15 +3692,6 @@
           "tableFrom": "congress_submissions",
           "tableTo": "congress_submissions",
           "columnsFrom": ["derived_from_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "congress_submissions_publication_consent_id_consent_records_id_fk": {
-          "name": "congress_submissions_publication_consent_id_consent_records_id_fk",
-          "tableFrom": "congress_submissions",
-          "tableTo": "consent_records",
-          "columnsFrom": ["publication_consent_id"],
           "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"

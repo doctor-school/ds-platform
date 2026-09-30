@@ -1,6 +1,7 @@
-import type {
-  CongressSubmissionKind,
-  CongressSubmissionStatus,
+import {
+  CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG,
+  type CongressSubmissionKind,
+  type CongressSubmissionStatus,
 } from "@ds/schemas";
 
 /**
@@ -161,5 +162,9 @@ export const COPY = {
   notAnnounced: "Дату открытия приёма объявят позже",
 } as const;
 
-/** The congress site personal-data policy the consent links to (046 EARS-16). */
-export const CONGRESS_PRIVACY_POLICY_URL = "https://orthobio.ru/privacy";
+/**
+ * 046 EARS-16 — the submission consent document the checkbox links to: its
+ * feature-028 page `/documents/<slug>`, which every storefront serves, so the
+ * path is host-relative and the same on every host.
+ */
+export const CONGRESS_SUBMISSION_CONSENT_HREF = `/documents/${CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG}`;

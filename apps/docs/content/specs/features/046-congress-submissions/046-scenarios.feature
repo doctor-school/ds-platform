@@ -58,10 +58,10 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
   Scenario: Sending the first oral talk
     Given the participant's oral talk draft is complete
     When the participant sends it
-    Then the form asks for the congress submission personal-data consent
+    Then the form asks for the congress submission personal-data consent, linking to the document "Согласие на обработку персональных данных для заявок на Конгресс"
     When the participant accepts it and sends
     Then the submission status becomes "Отправлена" with the send instant
-    And one consent record is written under the purpose "congress-submission-personal-data" with the server-stamped version
+    And one consent record is written under the purpose "congress-submission-personal-data" with the version of that document
     And a receipt letter naming the talk is sent after commit and its outcome is recorded on the submission
     When the participant sends a second oral talk
     Then the consent is not asked again
@@ -126,16 +126,16 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then a poster draft is created with the title, authors, goal and content fields and no file field
 
   @EARS-21 @EARS-22 @EARS-23
-  Scenario: Abstracts with the total counter, the publication consent and the statements
+  Scenario: Abstracts with the total counter and the statements
     Given the participant creates abstracts
     Then the form shows the sections "Актуальность", "Цель", "Материалы и методы", "Результаты и обсуждение", "Выводы" as plain-text fields and one total counter
     When the five sections together reach 5001 characters including spaces
     Then the counter is marked and a send is refused naming the 5000-character limit
-    When the participant shortens the text to 5000 characters and sends without the РИНЦ consent
-    Then the send is refused naming the consent and both statements
-    When the participant accepts the РИНЦ publication consent, confirms both statements and sends
-    Then one consent record is written under the purpose "congress-abstract-publication" and referenced from the submission
-    And both statements are stored on the submission with their instant
+    When the participant shortens the text to 5000 characters and sends without the statements
+    Then the send is refused naming both statements
+    When the participant confirms both statements and sends
+    Then both statements are stored on the submission with their instant
+    And no consent other than the congress submission personal-data consent is asked
 
   @EARS-24
   Scenario: First-author rule when the organisers turn it on

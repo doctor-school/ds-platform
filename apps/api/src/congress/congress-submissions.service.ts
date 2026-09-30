@@ -48,13 +48,11 @@ import {
   withRequestAuditContext,
 } from "../audit/audit-context.tx.js";
 import { MAILER, type Mailer } from "../mailer/mailer.types.js";
-import { resolveCongressConsentVersion } from "./congress-signup.config.js";
+import { resolveCongressSubmissionConsentVersion } from "./congress-submission-consent.js";
 import {
   CONGRESS_CABINET_URL,
   CONGRESS_SIGN_UP_CLOCK,
-  CONGRESS_SIGN_UP_ENV,
   type CongressSignUpClock,
-  type CongressSignUpEnvReader,
 } from "./congress-signup.tokens.js";
 
 type Db = DrizzleHandle["db"];
@@ -113,7 +111,6 @@ export class CongressSubmissionsService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(CONGRESS_SIGN_UP_CLOCK) private readonly now: CongressSignUpClock,
-    @Inject(CONGRESS_SIGN_UP_ENV) private readonly env: CongressSignUpEnvReader,
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(CONGRESS_CABINET_URL) private readonly cabinetUrl: string,
   ) {}
@@ -707,15 +704,15 @@ export class CongressSubmissionsService {
     );
   }
 
-  /** EARS-16 — the server-stamped version of the congress site policy. */
+  /** EARS-16 — the server-stamped version of the submission consent document. */
   private consentVersion(): string {
-    const resolved = resolveCongressConsentVersion(this.env());
+    const resolved = resolveCongressSubmissionConsentVersion();
     if (!resolved.ok) {
       this.logger.error(
         `congress submission consent unavailable: ${resolved.reason}`,
       );
       throw new ServiceUnavailableException(
-        "the submission consent is not configured",
+        "the submission consent document is not published",
       );
     }
     return resolved.version;
@@ -742,12 +739,12 @@ export class CongressSubmissionsService {
   }
 
   /**
-   * EARS-16 — whether the section asks for the consent. An unconfigured
-   * version asks for it and leaves the refusal to the send (503), so a config
-   * gap never hides the author's list and drafts.
+   * EARS-16 — whether the section asks for the consent. An unpublished
+   * consent document asks for it and leaves the refusal to the send (503), so
+   * a packaging gap never hides the author's list and drafts.
    */
   private async consentRequired(db: Reader, userId: string): Promise<boolean> {
-    const resolved = resolveCongressConsentVersion(this.env());
+    const resolved = resolveCongressSubmissionConsentVersion();
     if (!resolved.ok) return true;
     return !(await this.hasConsent(db, userId, resolved.version));
   }

@@ -10,13 +10,14 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## What lives here
 
-| File                         | Role                                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `congress-signup.controller` | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`).   |
-| `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in — for both doors (`site`, and the registrar's `desk`, EARS-35).      |
-| `congress-signup.config`     | Every configured setting the intake needs — the event, the consent version, the venue, the registration window and the timing floor — validated. |
-| `congress-signup.tokens`     | The injected clock and the per-request configuration reader.                                                                                     |
-| `congress-signup.dto`        | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                              |
+| File                          | Role                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `congress-signup.controller`  | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`).   |
+| `congress-signup.service`     | The order of the checks and the one transaction the accepted path writes in — for both doors (`site`, and the registrar's `desk`, EARS-35).      |
+| `congress-signup.config`      | Every configured setting the intake needs — the event, the consent version, the venue, the registration window and the timing floor — validated. |
+| `congress-submission-consent` | The submission consent version (046 EARS-16), stamped from its `@ds/legal-content` document.                                                     |
+| `congress-signup.tokens`      | The injected clock and the per-request configuration reader.                                                                                     |
+| `congress-signup.dto`         | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                              |
 
 ## What this module deliberately does NOT own
 
@@ -190,15 +191,20 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
   sent excluded, under the advisory lock, so two tabs cannot both take the last
   slot.
 - **Submission consent (EARS-16).** Purpose `congress-submission-personal-data`,
-  version = the congress site policy stamp `CONGRESS_SIGNUP_CONSENT_VERSION`
-  (read through `resolveCongressConsentVersion`, the same reader 044 uses). The
-  send asks for it while the account has no row of that purpose at the current
-  version — one row per account and version, whatever the event or kind. The
-  store enforces it: a partial unique index on `(user_id, version)` for this
-  purpose (migration 0044) and `ON CONFLICT DO NOTHING`, so concurrent first
-  sends write one row. The section read needs only this one key and never
-  fails on it: unset or malformed, `consentRequired` reads `true` (the consent
-  is asked) and only the send is refused (503) until the key is configured.
+  the organising committee's own consent — one for every submission kind,
+  abstracts publication included. Its text is the `@ds/legal-content` document
+  `consent-congress-submissions` (published at `/documents/<slug>`, which the
+  form's checkbox links to), and its version is stamped from that file by
+  `congress-submission-consent` — the document's `edition` plus the sha256 of
+  its text (ADR-0009 §2.1), the same shape as the 044 stamp but independent of
+  `CONGRESS_SIGNUP_CONSENT_VERSION`, which versions the congress site policy.
+  The send asks for it while the account has no row of that purpose at the
+  current version — one row per account and version, whatever the event or
+  kind — so a new edition asks every author again. The store enforces it: a
+  partial unique index on `(user_id, version)` for this purpose (migration 0044) and `ON CONFLICT DO NOTHING`, so concurrent first sends write one row.
+  The section read never fails on it: if the document is not published
+  `consentRequired` reads `true` (the consent is asked) and only the send is
+  refused (503).
 - **Withdraw (EARS-12).** `submitted` while the kind is open → `draft`;
   `in_review`, `needs_revision`, or `submitted` after closing → `withdrawn`. The
   update matches only a row still in `expectedStatus`, so a concurrent committee

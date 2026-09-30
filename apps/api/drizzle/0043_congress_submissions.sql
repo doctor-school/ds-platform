@@ -12,7 +12,6 @@ CREATE TABLE "congress_submissions" (
 	"authors" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"body" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"derived_from_id" uuid,
-	"publication_consent_id" uuid,
 	"statements" jsonb,
 	"committee_comment" text,
 	"submitted_at" timestamp with time zone,
@@ -37,7 +36,6 @@ ALTER TABLE "congress_submissions" ADD CONSTRAINT "congress_submissions_event_id
 ALTER TABLE "congress_submissions" ADD CONSTRAINT "congress_submissions_registration_id_registrations_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "congress_submissions" ADD CONSTRAINT "congress_submissions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "congress_submissions" ADD CONSTRAINT "congress_submissions_derived_from_id_congress_submissions_id_fk" FOREIGN KEY ("derived_from_id") REFERENCES "public"."congress_submissions"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "congress_submissions" ADD CONSTRAINT "congress_submissions_publication_consent_id_consent_records_id_fk" FOREIGN KEY ("publication_consent_id") REFERENCES "public"."consent_records"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "congress_submissions_user_event_kind_idx" ON "congress_submissions" USING btree ("user_id","event_id","kind");--> statement-breakpoint
 CREATE INDEX "congress_submissions_event_status_idx" ON "congress_submissions" USING btree ("event_id","status");--> statement-breakpoint
 -- feature-010 universal-edit-audit attachment: every submission write is an

@@ -11,7 +11,6 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { CONGRESS_SETTINGS_KINDS } from "./congress-submission-settings.js";
-import { consentRecords } from "./consent-records.js";
 import { events } from "./events.js";
 import { recordStatus } from "./lifecycle.js";
 import { registrations } from "./registrations.js";
@@ -55,8 +54,9 @@ export interface CongressSubmissionAuthorValue {
  * - `kind` ∈ `oral | poster | abstract`; `status` per the status machine.
  * - `authors` — the ordered author array; `body` — the per-kind text object
  *   validated by the kind's form in `@ds/schemas`; drafts hold them incomplete.
- * - `derived_from_id`, `publication_consent_id`, `statements` — the abstracts
- *   slice's link, РИНЦ consent and statements (EARS-23, EARS-25).
+ * - `derived_from_id`, `statements` — the abstracts slice's link and
+ *   statements (EARS-23, EARS-25); publication is covered by the one
+ *   submission consent (EARS-16), so a submission references no consent row.
  * - `revision_due_at` — the submission's own revision deadline (EARS-34),
  *   written by the committee's status route; nullable.
  * - `last_letter_*` — the outcome of the last letter (EARS-14, EARS-29).
@@ -98,10 +98,6 @@ export const congressSubmissions = pgTable(
       .default(sql`'{}'::jsonb`),
     derivedFromId: uuid("derived_from_id").references(
       (): AnyPgColumn => congressSubmissions.id,
-      { onDelete: "restrict" },
-    ),
-    publicationConsentId: uuid("publication_consent_id").references(
-      () => consentRecords.id,
       { onDelete: "restrict" },
     ),
     statements: jsonb("statements").$type<Record<string, string>>(),

@@ -343,6 +343,17 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await page.getByRole("button", { name: "Отправить", exact: true }).click();
   await page.getByText("Дайте согласие на обработку персональных данных").first().waitFor();
   await shot(page, `interactions-consent-${vp}`, "light");
+  // The page the consent link opens: the organising committee's consent,
+  // published as a platform document (028 route).
+  const consentHref = await page
+    .getByRole("link", { name: "обработку персональных данных" })
+    .getAttribute("href");
+  if (consentHref !== "/documents/consent-congress-submissions") {
+    throw new Error(`consent link points at ${consentHref}`);
+  }
+  await page.goto(`${BASE}${consentHref}`);
+  await page.getByRole("heading", { name: "Согласие на обработку персональных данных для заявок на Конгресс" }).waitFor();
+  await shot(page, `interactions-consent-document-${vp}`, "light");
   await ctx.close();
 }
 

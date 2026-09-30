@@ -94,11 +94,10 @@ export async function resolveRegistrationArrival({
 
   // 021 EARS-10 (owner decision Б, amendment 2026-09-29) — the ONE эфир read,
   // asked on every host; only its «gone» answer drops the target. The card is
-  // drawn only from a page that answered, on a host that publishes it (EARS-3).
+  // drawn only from a page that answered (EARS-2/3), on every host (#2455).
   const eventRead = safeTarget ? await readReturnEvent(safeTarget) : null;
   const gateResolved = eventRead !== null && eventRead.status !== "gone";
-  const resolvedEvent = eventRead?.status === "found" ? eventRead.event : null;
-  const returnEvent = config.returnTo?.card ? resolvedEvent : null;
+  const returnEvent = eventRead?.status === "found" ? eventRead.event : null;
 
   // #1987 / rule S4 — an account arrival resolves NO эфир, so the gate branch
   // would refuse it and drop the doctor on the LD-4 default, which is precisely

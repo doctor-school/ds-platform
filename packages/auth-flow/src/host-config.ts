@@ -99,9 +99,9 @@ export type AuthFlowCopy = {
    */
   readonly botProtectionDisclosure: AuthFlowBotProtectionDisclosureCopy;
   /**
-   * The return-context card beside a door (row 46). Its words are the
-   * package's on every host; `returnTo.card` alone decides whether the card is
-   * drawn, so a host that publishes it restates no sentence.
+   * The return-context card beside a door (row 46). Its words, and whether it
+   * is drawn, are the package's on every host: the canvas `auth` draws it
+   * wherever the arrival resolved an эфир, on both storefronts (#2455).
    */
   readonly returnContext: AuthFlowReturnContextCopy;
   /**
@@ -502,8 +502,6 @@ export type AuthFlowReturnToConfig = {
      */
     readonly maxAgeSeconds: number;
   };
-  /** Row 46 — the door publishes the return context as a card beside the form. */
-  readonly card?: boolean;
 };
 
 /**

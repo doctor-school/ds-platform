@@ -52,12 +52,14 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     expect(DOCTOR_FIXTURE.routes.room).toBe("/events/:slug/room");
   });
 
-  it("rows 29, 46: parking is optional inside returnTo, and the card is a flag", () => {
+  it("rows 29, 46 (#2455): parking is optional inside returnTo, and the return-context card is no host field — the canvas draws it on both hosts", () => {
     expectTypeOf<AuthFlowReturnToConfig["parkingCookie"]>().toMatchTypeOf<
       { name: string; maxAgeSeconds: number } | undefined
     >();
-    expect(DOCTOR_FIXTURE.returnTo).toEqual({ card: true });
-    expect(ACADEMY_FIXTURE.returnTo?.card).toBeUndefined();
+    expectTypeOf<
+      keyof AuthFlowReturnToConfig
+    >().toEqualTypeOf<"parkingCookie">();
+    expect(DOCTOR_FIXTURE.returnTo).toBeUndefined();
     expect(ACADEMY_FIXTURE.returnTo?.parkingCookie?.name).toBe("ds_return_to");
   });
 

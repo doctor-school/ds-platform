@@ -133,18 +133,15 @@ describe("#2027 PR 1.7: the /verify mount", () => {
       returnTarget: "/webinars/ahilles-042",
       carriedTarget: "/webinars/ahilles-042",
     });
-    // 021 EARS-10 (#2455) — whether the эфир still exists is asked on every
-    // host; only a host that publishes the card also draws it.
+    // 021 EARS-10 (#2455) — whether the эфир still exists is asked on every host.
     expect(readReturnEvent).toHaveBeenCalledWith("/webinars/ahilles-042");
-    expect(shell.props.returnContext ?? null).toBe(null);
-    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
   });
 
-  it("021 EARS-3: a host that publishes the card shows the carried эфир beside the confirmation", async () => {
+  it("021 EARS-2 (#2455): the Academy shows the carried эфир beside the confirmation, as the canvas «Подтверждение» draws it on both hosts", async () => {
     readReturnEvent.mockResolvedValue(FOUND);
-    const withCard = { ...ACADEMY_FIXTURE, returnTo: { card: true } };
 
-    const shell = await shellOf(withCard, {
+    const shell = await shellOf(ACADEMY_FIXTURE, {
+      email: "doc@example.com",
       returnTo: "/webinars/ahilles-042",
     });
 
@@ -153,11 +150,19 @@ describe("#2027 PR 1.7: the /verify mount", () => {
     expect(shell.props.children.props.returnContextPlate).toBeTruthy();
   });
 
+  it("021 EARS-3: a direct arrival on the Academy /verify draws no card — absent, never an empty frame", async () => {
+    const shell = await shellOf(ACADEMY_FIXTURE, { email: "doc@example.com" });
+
+    expect(shell.props.returnContext ?? null).toBe(null);
+    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
+  });
+
   it("003 EARS-40: a bare arrival hands the client gate no address, and the gate wraps the WHOLE frame (shell and panel)", async () => {
     readReturnEvent.mockResolvedValue(FOUND);
-    const withCard = { ...ACADEMY_FIXTURE, returnTo: { card: true } };
 
-    const gate = await gateOf(withCard, { returnTo: "/webinars/ahilles-042" });
+    const gate = await gateOf(ACADEMY_FIXTURE, {
+      returnTo: "/webinars/ahilles-042",
+    });
 
     expect(gate.props.email).toBeUndefined();
     expect(gate.props.returnTo).toBe("/webinars/ahilles-042");

@@ -16,9 +16,8 @@ import { resolveRegistrationArrival } from "./registration-arrival";
  * `AuthFlowHostConfig` and forwards `searchParams`, and everything below — the
  * arrival read, the landing decision, the signed-in guard, the return-context
  * slots and the frame — is host-NEUTRAL. Every difference between the two
- * storefronts is config DATA: the routes, the эфир path projection, whether the
- * host publishes a return-context card, whether its landing is specialty-aware,
- * the attribution line and the points promise.
+ * storefronts is config DATA: the routes, the эфир path projection, whether its
+ * landing is specialty-aware, the attribution line and the points promise.
  *
  * WHY A SERVER COMPONENT. Both per-visitor facts — «is this visitor already
  * signed in» (#675) and «where does sign-up lead» (021 EARS-3 / LD-4) — are

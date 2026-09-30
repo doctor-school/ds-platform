@@ -19,8 +19,8 @@ import { VerifyAddressGate, VerifyStep } from "./verify-entry";
  * registration door took from the same arrival (`resolveRegistrationArrival`):
  * the #675 signed-in guard (a doctor who holds a session has nothing to confirm
  * here), the landing, the эфир intent the confirmation completes (021 EARS-10),
- * the rule S3 carry, and the return-context panel on a host that publishes one
- * — «после подтверждения почты вы вернётесь сюда же» (canvas 469-472).
+ * the rule S3 carry, and the return-context panel the canvas «Подтверждение»
+ * draws on both hosts — «после подтверждения почты вы вернётесь сюда же».
  *
  * The address is handed to the client gate, which sends an arrival with none to
  * the registration door (003 EARS-40) by a client `replace`, the way every

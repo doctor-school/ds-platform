@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { returnContextSlots } from "@ds/auth-flow/login";
+
 import {
   MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
@@ -56,6 +58,36 @@ describe("DOCTOR_AUTH_FLOW.routes", () => {
  * (a tier, the confirmation copy, the submit-first form) fails here
  * rather than on the stand.
  */
+const RETURN_EVENT = {
+  time: "19:00",
+  dateLabel: "28 августа · чт",
+  school: "Школа ортобиологии",
+  title: "PRP при гонартрозе: показания, протоколы, ошибки",
+  specialties: ["Травматология"],
+  speakers: [{ name: "Анна Крылова", org: "НМИЦ травматологии" }],
+};
+
+/**
+ * 021 EARS-2 (#2455) — the canvas `auth` draws the return-context card on
+ * «Вход», «Регистрация» and «Подтверждение» for BOTH hosts, gated on the return
+ * context alone; it is the package's behaviour, never a host flag.
+ */
+describe("DOCTOR_AUTH_FLOW: the return-context card", () => {
+  it.each(["login", "register"] as const)(
+    "021 EARS-2 (#2455): the carried эфир is drawn beside the %s door on this host, with no host flag",
+    (variant) => {
+      expect(DOCTOR_AUTH_FLOW).not.toHaveProperty(["returnTo", "card"]);
+      const slots = returnContextSlots({
+        config: DOCTOR_AUTH_FLOW,
+        event: RETURN_EVENT,
+        variant,
+      });
+      expect(slots.panel).toBeDefined();
+      expect(slots.plate).toBeDefined();
+    },
+  );
+});
+
 describe("DOCTOR_AUTH_FLOW: the sign-up door's host statement", () => {
   it("003 EARS-24 (#2455): confirmation is the /verify route on the one 003 command, as on the Academy", () => {
     expect(DOCTOR_AUTH_FLOW.routes.verify).toBe("/verify");

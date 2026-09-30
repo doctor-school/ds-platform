@@ -359,19 +359,19 @@ describe("#2027 PR 1.6 (Academy): the same mount over the other host config", ()
     ).toBe("/webinars");
   });
 
-  it("021 EARS-10 (#2455): a host that publishes no return-context card asks whether the эфир exists, and draws no card", async () => {
+  it("021 EARS-2 (#2455): the Academy asks whether the эфир exists and draws its card beside the form, as the canvas «Регистрация» does on both hosts", async () => {
     resolveServerAuth.mockResolvedValue({ status: "guest" });
     readReturnEvent.mockResolvedValue(FOUND);
 
     const params = { returnTo: "/webinars/prp-pri-gonartroze" };
     const shell = await shellOf(ACADEMY_FIXTURE, params);
-    // The эфир still exists, so it COMPLETES after sign-up; the card is only
-    // drawn by a host that publishes it.
+    // The эфир still exists, so it COMPLETES after sign-up, and the door shows
+    // it beside the form.
     expect((await stepOf(ACADEMY_FIXTURE, params)).returnTarget).toBe(
       "/webinars/prp-pri-gonartroze",
     );
-    expect(shell.props.returnContext ?? null).toBe(null);
-    expect(shell.props.children.props.returnContextPlate ?? null).toBe(null);
+    expect(shell.props.returnContext).toBeTruthy();
+    expect(shell.props.children.props.returnContextPlate).toBeTruthy();
     expect(readReturnEvent).toHaveBeenCalledWith(
       "/webinars/prp-pri-gonartroze",
     );

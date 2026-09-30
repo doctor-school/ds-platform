@@ -153,9 +153,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     marketingOptIn: true,
     wordingVersion: "2026-09-22",
   },
-  // Row 46 - the doctor door publishes the return context beside the form; it
-  // parks nothing (row 29), so there is no cookie here.
-  returnTo: { card: true },
+  // It parks nothing (row 29), so there is no `returnTo` here.
 };
 
 /**

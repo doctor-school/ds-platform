@@ -60,10 +60,16 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 
 `host-config-parity` (#2443) imports the two storefronts' real host configs and
 the package product-difference manifests from `LINT_FIXTURE_ROOT` at their repo
-paths, and reads each owning spec's «Differences between storefronts» table from
-the BASE branch. Its fixture cases stand the base read in with a `base/` dir via
-`HOST_CONFIG_PARITY_BASE_DIR` (a case without one has no table on base), which is
-how the «row only on the head tree» RED case is expressed without a git history.
+paths, and reads each owning spec's «Differences between storefronts» table. Two
+rules hold only for a product-difference field whose values DIFFER between the
+hosts: its row must be present on the BASE branch (and the host values must match
+any literal the base row leads with) AND still present on the HEAD tree; equal
+values need no row and ignore any row, so adding or removing a difference never
+deadlocks. Its fixture cases stand the base read in with a `base/` dir via
+`HOST_CONFIG_PARITY_BASE_DIR` (a case without one has no table on base) and hold
+the head spec at its repo path in the case tree, which is how the «row only on
+the head tree» and «row removed on head» RED cases are expressed without a git
+history.
 
 `assert-no-skipped-e2e` (#1595) is the odd one out: it lives at
 `tools/ci/assert-no-skipped-e2e.ts`, not under `tools/lint`, and is spawned with

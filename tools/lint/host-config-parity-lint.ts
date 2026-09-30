@@ -26,16 +26,22 @@
  *   3. A product-difference field whose values DIFFER between the hosts needs a
  *      row, keyed by the backticked field in its first cell, in the
  *      «## Differences between storefronts» table of the manifest's `spec` —
- *      read from the BASE branch (`git show origin/<base>:<spec>`, base =
- *      `GITHUB_BASE_REF` or `main`), so a PR can never approve its own new
- *      difference: a PR adding a row and a value together is RED until the row
- *      lands on its own.
- *   4. Value rule: when a row's Витрина / Академия cell LEADS with a backticked
- *      literal (`true`, `false`, `null`, a number or a bare token), that host's
- *      value must equal it. A cell with no leading literal (a composite value
- *      such as the consent row set, or «on — …») needs the row's presence only.
- *      The rule applies to every row present, whether or not the values differ.
- *   5. A product-difference field with EQUAL values on both hosts needs no row.
+ *      read from the BASE branch (`git cat-file blob origin/<base>:<spec>`,
+ *      base = `GITHUB_BASE_REF` or `main`), so a PR can never approve its own
+ *      new difference: a PR adding a row and a value together is RED until the
+ *      row lands on its own. The row must ALSO still be present on the HEAD
+ *      (working) tree: a spec-only PR that drops a row while the values still
+ *      differ is RED in that PR, not on main after it merges.
+ *   4. Value rule, for a DIFFERING field only: when its base row's Витрина /
+ *      Академия cell LEADS with a backticked literal (`true`, `false`, `null`,
+ *      a number or a bare token), that host's value must equal it. A cell with
+ *      no leading literal (a composite value such as the consent row set, or
+ *      «on — …») needs the row's presence only — so a composite cell opens
+ *      with prose, never with a backticked path.
+ *   5. A product-difference field with EQUAL values on both hosts needs no row
+ *      and ignores any row present, so adding or removing a difference never
+ *      deadlocks: add = spec row first, then the value; remove = hosts equal
+ *      first, then drop the row.
  *   6. Presentation, brand, route and envelope values may differ freely.
  *
  * There is no exception file: a difference is either cited by its spec row or
@@ -45,7 +51,7 @@
  *   LINT_FIXTURE_ROOT            — the tree whose host configs and manifests are
  *                                  read, at their real repo-relative paths.
  *   HOST_CONFIG_PARITY_BASE_DIR  — a dir mirroring repo paths that replaces the
- *                                  `git show origin/<base>:<spec>` read.
+ *                                  `git cat-file blob origin/<base>:<spec>` read.
  *
  * Prerequisite: the host configs import `@ds/schemas` values, which resolve to
  * its built `dist/` (package exports) — CI builds it in the step before this
@@ -349,6 +355,12 @@ function readBaseSpec(spec: string): string | null {
   return text;
 }
 
+/** The spec file as it stands on the head (working) tree; `null` when absent. */
+function readHeadSpec(spec: string): string | null {
+  const file = resolve(ROOT, spec);
+  return existsSync(file) ? readFileSync(file, "utf8") : null;
+}
+
 interface DifferenceRow {
   doctor: string;
   academy: string;
@@ -448,27 +460,34 @@ async function checkPair(
     }
   }
 
-  // (3)–(5) product-difference fields against the base-branch spec rows.
+  // (3)–(5) product-difference fields against the base- and head-tree spec rows.
   for (const entry of manifest) {
     const d = valueAt(doctor, entry.field);
     const a = valueAt(academy, entry.field);
-    const differs = canonical(d) !== canonical(a);
+    // (5) equal values are not a difference: no row needed, any row ignored.
+    if (canonical(d) === canonical(a)) continue;
     const text = readBaseSpec(entry.spec);
     const row = text ? differenceRows(text)?.get(entry.field) : undefined;
     const values =
       `    Витрина  (${pair.doctor.module}:${pair.doctor.export}): ${show(d)}\n` +
       `    Академия (${pair.academy.module}:${pair.academy.export}): ${show(a)}`;
     if (!row) {
-      if (differs) {
-        errors.push(
-          `${pair.config}: \`${entry.field}\` differs between the storefronts and has no row in the ` +
-            `base-branch spec table.\n${values}\n` +
-            `    expected: a row keyed \`${entry.field}\` in «${DIFFERENCES_HEADING.slice(3)}» of ` +
-            `${entry.spec} on origin/${baseRefName()} (clauses: ${entry.clauses.join(", ")}). ` +
-            `A row added in this same PR does not count — land the spec row first.`,
-        );
-      }
+      errors.push(
+        `${pair.config}: \`${entry.field}\` differs between the storefronts and has no row in the ` +
+          `base-branch spec table.\n${values}\n` +
+          `    expected: a row keyed \`${entry.field}\` in «${DIFFERENCES_HEADING.slice(3)}» of ` +
+          `${entry.spec} on origin/${baseRefName()} (clauses: ${entry.clauses.join(", ")}). ` +
+          `A row added in this same PR does not count — land the spec row first.`,
+      );
       continue;
+    }
+    const headText = readHeadSpec(entry.spec);
+    if (!(headText ? differenceRows(headText)?.has(entry.field) : false)) {
+      errors.push(
+        `${pair.config}: \`${entry.field}\` still differs between the storefronts, but the head tree ` +
+          `drops its row from ${entry.spec} (origin/${baseRefName()} still cites it).\n${values}\n` +
+          `    keep the row while the values differ — make the hosts equal first, then remove the row.`,
+      );
     }
     for (const [label, cell, value] of [
       ["Витрина", row.doctor, d],

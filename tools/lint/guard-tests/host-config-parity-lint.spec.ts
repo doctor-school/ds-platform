@@ -9,7 +9,7 @@ import { caseDir, runGuard } from "./run-guard";
  * points `LINT_FIXTURE_ROOT` at a fixture tree holding the two storefronts' host
  * configs and the package manifests at their real repo paths, and
  * `HOST_CONFIG_PARITY_BASE_DIR` at the case's `base/` dir — the stand-in for the
- * `git show origin/<base>:<spec>` read, so the base-vs-head distinction is
+ * `git cat-file blob origin/<base>:<spec>` read, so the base-vs-head distinction is
  * testable without a git history. A case with no `base/` dir has no spec table on
  * base at all.
  */
@@ -32,6 +32,22 @@ describe("host-config-parity-lint", () => {
     const { code, stderr } = run("green-difference-matches-row");
     expect(stderr).toBe("");
     expect(code).toBe(0);
+  });
+
+  it("green: the base row is present but the hosts are now EQUAL (a difference being removed) → exit 0", () => {
+    const { code, stderr } = run("green-equal-hosts-row-on-base");
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+  });
+
+  it("red: the hosts still differ and the head tree drops the row the base branch cites → exit 1", () => {
+    const { code, stderr } = run("red-row-removed-on-head");
+    expect(code).toBe(1);
+    expect(stderr).toContain("`register.promoField`");
+    expect(stderr).toContain("head tree");
+    expect(stderr).toContain(
+      "apps/docs/content/specs/features/021-doctor-registration/021-requirements-en.md",
+    );
   });
 
   it("red: a product-difference field differs with no row in the base spec table → exit 1", () => {

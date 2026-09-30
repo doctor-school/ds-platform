@@ -7,7 +7,6 @@ import {
   readCongressSignUpTimingFloorMs,
   resolveCongressSignUpWindow,
   resolveCongressEventDays,
-  resolveCongressConsentVersion,
 } from "./congress-signup.config.js";
 
 const EVENT_ID = "6f1c0a2e-6a7b-4d2f-9b1e-0c3d4e5f6a7b";
@@ -486,27 +485,5 @@ describe("044 congress sign-up — server configuration", () => {
         reason: "event-days-unsorted",
       });
     });
-  });
-});
-
-describe("046 EARS-16 — the submission consent version", () => {
-  it("EARS-16: the submission consent is stamped with the congress policy version 044 EARS-9 records", () => {
-    expect(
-      resolveCongressConsentVersion({
-        CONGRESS_SIGNUP_CONSENT_VERSION: CONSENT_VERSION,
-      }),
-    ).toEqual({ ok: true, version: CONSENT_VERSION });
-  });
-
-  it("EARS-16: an unset or malformed version is refused rather than stamped", () => {
-    expect(resolveCongressConsentVersion({})).toEqual({
-      ok: false,
-      reason: "consent-version-unset",
-    });
-    expect(
-      resolveCongressConsentVersion({
-        CONGRESS_SIGNUP_CONSENT_VERSION: "v1",
-      }),
-    ).toEqual({ ok: false, reason: "consent-version-malformed" });
   });
 });

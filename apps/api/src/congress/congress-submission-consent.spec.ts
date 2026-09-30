@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,7 +12,27 @@ import { CONGRESS_SIGN_UP_CONSENT_VERSION_PATTERN } from "./congress-signup.conf
 import { resolveCongressSubmissionConsentVersion } from "./congress-submission-consent.js";
 
 const emptyDir = mkdtempSync(join(tmpdir(), "no-legal-documents-"));
-afterAll(() => rmSync(emptyDir, { recursive: true, force: true }));
+// The consent document with an edition that is not a calendar date — the
+// loader refuses it the way it refuses any malformed legal document.
+const malformedDir = mkdtempSync(join(tmpdir(), "malformed-legal-documents-"));
+writeFileSync(
+  join(malformedDir, `${CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG}.md`),
+  [
+    "---",
+    `slug: ${CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG}`,
+    "title: Согласие",
+    'edition: "2026-02-31"',
+    "kind: consent",
+    "---",
+    "",
+    "Текст.",
+    "",
+  ].join("\n"),
+);
+afterAll(() => {
+  rmSync(emptyDir, { recursive: true, force: true });
+  rmSync(malformedDir, { recursive: true, force: true });
+});
 
 describe("046 EARS-16 — the submission consent version", () => {
   it("EARS-16: is the published consent document's edition plus the sha256 of its text", () => {
@@ -51,5 +71,11 @@ describe("046 EARS-16 — the submission consent version", () => {
     expect(
       resolveCongressSubmissionConsentVersion({ documentsDir: emptyDir }),
     ).toEqual({ ok: false, reason: "consent-document-missing" });
+  });
+
+  it("EARS-16: a malformed consent document is reported like a missing one, never thrown", () => {
+    expect(
+      resolveCongressSubmissionConsentVersion({ documentsDir: malformedDir }),
+    ).toEqual({ ok: false, reason: "consent-document-malformed" });
   });
 });

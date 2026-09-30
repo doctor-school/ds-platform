@@ -147,27 +147,6 @@ export type CongressSignUpEnv = Pick<
   | "CONGRESS_SIGNUP_EVENT_DAYS"
 >;
 
-/**
- * 044 EARS-9 / 046 EARS-16 — the server-stamped version of the congress site
- * personal-data policy. The one reader of `CONGRESS_SIGNUP_CONSENT_VERSION`:
- * the registration consent (044) and the submission consent (046) are taken
- * against the same published text, so both stamp this value.
- */
-export function resolveCongressConsentVersion(
-  env: Pick<CongressSignUpEnv, "CONGRESS_SIGNUP_CONSENT_VERSION">,
-):
-  | { ok: true; version: string }
-  | { ok: false; reason: "consent-version-unset" | "consent-version-malformed" } {
-  const version = env.CONGRESS_SIGNUP_CONSENT_VERSION;
-  if (version == null || version === "") {
-    return { ok: false, reason: "consent-version-unset" };
-  }
-  if (!CONGRESS_SIGN_UP_CONSENT_VERSION_PATTERN.test(version)) {
-    return { ok: false, reason: "consent-version-malformed" };
-  }
-  return { ok: true, version };
-}
-
 /** 044 EARS-7 — the resolved timing floor, or why the configured one is unusable. */
 export type CongressSignUpTimingFloorResult =
   | { ok: true; floorMs: number }
@@ -313,9 +292,13 @@ export function resolveCongressSignUpSettings(
     return { ok: false, reason: "event-id-malformed" };
   }
 
-  const consent = resolveCongressConsentVersion(env);
-  if (!consent.ok) return consent;
-  const consentVersion = consent.version;
+  const consentVersion = env.CONGRESS_SIGNUP_CONSENT_VERSION;
+  if (consentVersion == null || consentVersion === "") {
+    return { ok: false, reason: "consent-version-unset" };
+  }
+  if (!CONGRESS_SIGN_UP_CONSENT_VERSION_PATTERN.test(consentVersion)) {
+    return { ok: false, reason: "consent-version-malformed" };
+  }
 
   // EARS-13 — validated HERE with the rest, and BEFORE any side effect: the
   // venue is only read once the registration has committed and the mail is

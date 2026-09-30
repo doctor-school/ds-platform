@@ -739,7 +739,7 @@ export class CongressSubmissionsService {
   }
 
   /**
-   * EARS-16 — whether the section asks for the consent. An unpublished
+   * EARS-16 — whether the section asks for the consent. An unpublished (or malformed)
    * consent document asks for it and leaves the refusal to the send (503), so
    * a packaging gap never hides the author's list and drafts.
    */

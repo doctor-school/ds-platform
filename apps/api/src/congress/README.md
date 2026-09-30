@@ -202,9 +202,9 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
   current version — one row per account and version, whatever the event or
   kind — so a new edition asks every author again. The store enforces it: a
   partial unique index on `(user_id, version)` for this purpose (migration 0044) and `ON CONFLICT DO NOTHING`, so concurrent first sends write one row.
-  The section read never fails on it: if the document is not published
-  `consentRequired` reads `true` (the consent is asked) and only the send is
-  refused (503).
+  The section read never fails on it: if the document is not published or is
+  malformed `consentRequired` reads `true` (the consent is asked) and only the
+  send is refused (503).
 - **Withdraw (EARS-12).** `submitted` while the kind is open → `draft`;
   `in_review`, `needs_revision`, or `submitted` after closing → `withdrawn`. The
   update matches only a row still in `expectedStatus`, so a concurrent committee

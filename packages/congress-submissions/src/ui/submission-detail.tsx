@@ -34,7 +34,7 @@ import {
   draftErrors,
   editable as isEditable,
   kindSendable,
-  mskDate,
+  localDate,
   problemMessages,
   revisionView,
   summaryTitle,
@@ -337,7 +337,7 @@ export function SubmissionDetail({
                       : "text-foreground",
                   )}
                 >
-                  {COPY.committeeComment} · {mskDate(s.statusChangedAt)}
+                  {COPY.committeeComment} · {localDate(s.statusChangedAt)}
                 </div>
                 <div
                   className={cn(
@@ -563,7 +563,6 @@ export function SubmissionDetail({
                         >
                           {COPY.consentLink}
                         </Link>
-                        {COPY.consentAfter}
                       </span>
                     </Checkbox>
                     {errOf("consent") ? (

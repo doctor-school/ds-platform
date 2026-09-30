@@ -125,7 +125,6 @@ export const COPY = {
   sectionConfirmations: "Подтверждения",
   consentBefore: "Согласие на ",
   consentLink: "обработку персональных данных",
-  consentAfter: " для рассмотрения заявки программным комитетом Конгресса",
   saved: "Сохранено",
   saving: "Сохраняем…",
   saveFailed: "Не удалось сохранить — повторим",

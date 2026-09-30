@@ -373,6 +373,13 @@ describe("CongressSection", () => {
     expect(
       screen.getByRole("link", { name: "обработку персональных данных" }),
     ).toHaveAttribute("href", "/documents/consent-congress-submissions");
+    // The label is the consent name alone (owner decision 2026-09-30): the
+    // document covers more purposes than one review tail could name.
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Согласие на обработку персональных данных",
+      }),
+    ).toBeInTheDocument();
   });
 
   const complete = {
@@ -455,6 +462,32 @@ describe("CongressSection", () => {
     expect(
       screen.queryByRole("button", { name: "Отправить снова" }),
     ).toBeNull();
+  });
+
+  it("EARS-11: the committee comment carries the day of the committee action in the viewer zone, not Moscow", async () => {
+    // 15:40Z is 18:40 in Moscow on the 16th and 01:40 on the 17th in the
+    // test zone (Vladivostok) — the action date follows the viewer.
+    const revision = sub({
+      ...complete,
+      status: "needs_revision",
+      committeeComment: "Уточните цель",
+      statusChangedAt: "2026-12-16T15:40:00.000Z",
+      revisionDueAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${revision.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ consentRequired: false, submissions: [revision] })),
+    );
+    render(<CongressSection host={HOST} />);
+    expect(
+      await screen.findByText(
+        "Комментарий программного комитета · 17 декабря 2026",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("046 EARS-9: a send refused because the status changed meanwhile reads the section again", async () => {

@@ -129,50 +129,53 @@ describe("014 EARS-6 (#2443): parking onto a response the host already minted", 
   });
 });
 
-describe("014 EARS-6 (#2443): parking happens on a real navigation, never on a prefetch", () => {
-  const url =
-    "https://doctor.school/register?returnTo=%2Fevents%2Fahilles-042";
+describe("014 EARS-6 (#2443): a signed-in visitor never parks - a consumed target is never re-parked", () => {
+  // The request exactly as Next 16's middleware adapter delivers it to a host
+  // proxy/middleware: FLIGHT_HEADERS (`rsc`, `next-router-prefetch`,
+  // `next-router-segment-prefetch`, ...) are stripped and `_rsc` is removed
+  // from the URL (next/dist/server/web/adapter.js), so a router prefetch of
+  // `/register?returnTo=...` is indistinguishable from a navigation here.
+  const delivered = (cookie?: string) =>
+    requestFor(
+      "https://doctor.school/register?returnTo=%2Fevents%2Fahilles-042",
+      cookie ? { cookie } : {},
+    );
 
-  it("014 EARS-6.6: a Next router prefetch parks nothing - a consumed target is never re-parked behind the visitor's back", () => {
-    // Next 16 app router: route-tree and segment prefetches carry
-    // `next-router-prefetch` ('1' | '2' | '3') next to `rsc: 1`.
-    for (const value of ["1", "2", "3"]) {
-      expect(
-        parkReturnTarget(
-          requestFor(url, { rsc: "1", "next-router-prefetch": value }),
-        ),
-        `next-router-prefetch: ${value}`,
-      ).toBeUndefined();
-    }
-  });
-
-  it("014 EARS-6.6: a browser speculative prefetch parks nothing", () => {
+  it("014 EARS-6.6: with a session cookie the rule parks nothing - the post-sign-in prefetch of the «Создать аккаунт» link cannot resurrect the target", () => {
     expect(
-      parkReturnTarget(requestFor(url, { "sec-purpose": "prefetch" })),
+      parkReturnTarget(delivered("__Host-ds_session=abc; other=1")),
     ).toBeUndefined();
     expect(
-      parkReturnTarget(
-        requestFor(url, { "sec-purpose": "prefetch;prerender" }),
-      ),
-    ).toBeUndefined();
-    expect(
-      parkReturnTarget(requestFor(url, { purpose: "prefetch" })),
+      parkReturnTarget(delivered("other=1; __Host-ds_session=abc")),
     ).toBeUndefined();
   });
 
-  it("014 EARS-6.6: a client-side RSC navigation (not a prefetch) still parks", () => {
-    const response = parkReturnTarget(requestFor(url, { rsc: "1" }));
-    expect(response?.cookies.get("ds_return_to")?.value).toBe(
-      "/events/ahilles-042",
-    );
+  it("014 EARS-6.6: a guest still parks, on either storefront", () => {
+    expect(
+      parkReturnTarget(delivered("other=1"))?.cookies.get("ds_return_to")
+        ?.value,
+    ).toBe("/events/ahilles-042");
+    expect(
+      parkReturnTarget(delivered())?.cookies.get("ds_return_to")?.value,
+    ).toBe("/events/ahilles-042");
   });
 
-  it("014 EARS-6.6: a document navigation still parks", () => {
-    const response = parkReturnTarget(
-      requestFor(url, { accept: "text/html", "sec-fetch-mode": "navigate" }),
-    );
-    expect(response?.cookies.get("ds_return_to")?.value).toBe(
-      "/events/ahilles-042",
-    );
+  it("014 EARS-6.6: a cookie that only resembles the session name is not a session", () => {
+    expect(
+      parkReturnTarget(delivered("x__Host-ds_session=abc"))?.cookies.get(
+        "ds_return_to",
+      )?.value,
+    ).toBe("/events/ahilles-042");
+  });
+
+  it("014 EARS-6.6: a signed-in visitor's host response is handed back untouched", () => {
+    const hostResponse = NextResponse.next();
+    hostResponse.headers.append("set-cookie", "host_cookie=kept; Path=/");
+    expect(
+      parkReturnTarget(delivered("__Host-ds_session=abc"), hostResponse),
+    ).toBeUndefined();
+    expect(hostResponse.headers.getSetCookie()).toEqual([
+      "host_cookie=kept; Path=/",
+    ]);
   });
 });

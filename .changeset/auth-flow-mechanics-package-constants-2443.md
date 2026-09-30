@@ -23,10 +23,10 @@ host argument. The Academy middleware and the doctor proxy both park on
 `/login`, `/register` and `/verify`. Behaviour change on the doctor storefront:
 an auth hop that lost the `returnTo` query param now lands on the parked target
 there too, as it already did on the Academy; the query param still wins when
-present. `parkReturnTarget` parks on a real navigation only and skips prefetches
-(`next-router-prefetch`, `sec-purpose`/`purpose: prefetch`), so a router
-prefetch of `/register?returnTo=...` no longer re-parks a target the success
-handler has already consumed (fixes a stale landing on a later plain `/login`,
+present. `parkReturnTarget` parks for a guest only - a request carrying the session
+cookie parks nothing - so the post-sign-in router prefetch of
+`/register?returnTo=...` no longer re-parks a target the success handler has
+already consumed (fixes a stale landing on a later plain `/login`,
 pre-existing on the Academy).
 
 The package also exports `AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS` — the fields that

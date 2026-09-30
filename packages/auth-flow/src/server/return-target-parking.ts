@@ -2,6 +2,7 @@ import { parseSameOriginReturnTarget } from "@ds/schemas";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { RETURN_TARGET_PARKING } from "../host-config";
+import { hasSessionCookie } from "./session";
 
 /**
  * The ONE `returnTo` parking rule of the shared auth flow (wave-1 gate rows
@@ -24,34 +25,28 @@ import { RETURN_TARGET_PARKING } from "../host-config";
  * path, and the guard - re-applied at the moment of use - is the defence that
  * makes following it safe.
  *
- * Parking happens on a real navigation ONLY, never on a prefetch (#2443). The
- * consumer clears the cookie exactly once on auth success; a prefetch of an
- * auth entry that still carries `returnTo` (the success page's «Создать
- * аккаунт» link, `/register?returnTo=...`) would otherwise re-park the target
- * the visitor just used, and a later plain `/login` would land on that stale
- * page. See `isPrefetch` for the recognised prefetch signals.
+ * A signed-in visitor never parks (#2443). The consumer clears the cookie
+ * exactly once on auth success; after that, the landing page's router
+ * PREFETCH of an auth entry that still carries `returnTo` (the «Создать
+ * аккаунт» link, `/register?returnTo=...`) reaches this rule and would re-park
+ * the target just used, so a later plain `/login` would land on a stale page.
+ * The prefetch itself cannot be recognised here: Next 16's middleware adapter
+ * strips every flight header (`rsc`, `next-router-prefetch`,
+ * `next-router-segment-prefetch`, ...) and the `_rsc` query param before the
+ * host's proxy/middleware sees the request
+ * (`next/dist/server/web/adapter.js`, FLIGHT_HEADERS loop and
+ * `stripInternalSearchParams`), and no `x-middleware-prefetch` is set for the
+ * app router. The session is the signal that survives: parking exists to carry
+ * a GUEST through the auth round-trip, and a visitor who already holds a
+ * session (`hasSessionCookie`, the platform's one session-presence contract)
+ * has no round-trip left to carry. Sign-out drops the session cookie, so a
+ * guest parks again from then on. This holds for every prefetch strategy,
+ * including a `<Link prefetch>` "Full" prefetch.
  */
-
-/**
- * Whether this request is a prefetch rather than a navigation.
- *
- * - `next-router-prefetch` (any value): the Next 16 app router's route-tree and
- *   segment prefetches (`next/dist/client/components/segment-cache/cache.js`,
- *   values '1' | '2' | '3'). A client-side navigation sends `rsc: 1` WITHOUT it
- *   (`router-reducer/fetch-server-response.js`), so it still parks.
- * - `sec-purpose` / legacy `purpose` starting with `prefetch`: the browser's
- *   own speculative prefetch / prerender (Fetch standard, speculation rules).
- */
-function isPrefetch(request: NextRequest): boolean {
-  if (request.headers.has("next-router-prefetch")) return true;
-  const purpose =
-    request.headers.get("sec-purpose") ?? request.headers.get("purpose");
-  return purpose?.trim().toLowerCase().startsWith("prefetch") ?? false;
-}
 
 /**
  * Park the carried target, or return `undefined` when there is nothing to park
- * (no guard-clean target, or the request is a prefetch).
+ * (no guard-clean target, or the visitor is already signed in).
  *
  * `undefined` rather than a bare `NextResponse.next()` on purpose: the caller (a
  * host middleware) owns what the pass-through response is, and a rule that
@@ -64,7 +59,7 @@ export function parkReturnTarget(
   request: NextRequest,
   response?: NextResponse,
 ): NextResponse | undefined {
-  if (isPrefetch(request)) return undefined;
+  if (hasSessionCookie(request.headers.get("cookie"))) return undefined;
   const target = parseSameOriginReturnTarget(
     request.nextUrl.searchParams.get("returnTo"),
   );

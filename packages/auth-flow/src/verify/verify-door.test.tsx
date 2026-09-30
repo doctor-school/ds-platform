@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The ONE confirmation step (#2027 PR 1.7, tech spec §2.6 rows 65–77) as the
  * Academy's `/verify` route mounts it: `<VerifyEntry>` seeds the address and
- * hands it to `<VerifyDoor>`, the body the doctor storefront mounts inline too
- * (`register/inline-confirmation.test.tsx` pins that host's exits).
+ * hands it to `<VerifyDoor>`. The doctor storefront mounts the same step on its
+ * own `/verify` (003 EARS-24); `verify-step.test.tsx` runs it over that host.
  *
  * The ids arrive from `apps/portal/app/verify/page.test.tsx`: the behaviour is
  * no longer an Academy page composition but this package unit, so the
@@ -86,7 +86,14 @@ import {
 
 import { AuthError } from "../client/auth-client";
 import { resolveAuthFlowCopy } from "../copy";
-import { ACADEMY_FIXTURE } from "../test-support/host-config-fixtures";
+import {
+  clearStoredReturnTarget,
+  readStoredReturnTarget,
+} from "../client/return-target-store";
+import {
+  ACADEMY_FIXTURE,
+  DOCTOR_FIXTURE,
+} from "../test-support/host-config-fixtures";
 import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
@@ -364,6 +371,49 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
       "/reset?returnTo=%2Fwebinars%2Fahilles-042",
     );
   });
+});
+
+describe("021 EARS-10 (#2455, owner decision Б): an эфир that no longer exists lands on the default", () => {
+  const PARKING = ACADEMY_FIXTURE.returnTo!.parkingCookie!;
+
+  afterEach(() => clearStoredReturnTarget(PARKING));
+
+  it.each([
+    ["Академия", ACADEMY_FIXTURE, "/webinars/gone", "/webinars"],
+    ["Витрина", DOCTOR_FIXTURE, "/events/gone", "/events"],
+  ])(
+    "021 EARS-10: on %s the confirmed doctor lands on the default landing even when the vanished эфир page is parked",
+    async (_host, config, gone, landing) => {
+      // A host that parks (014 EARS-6) parks the arrival target on `/register`
+      // and on `/verify` itself, so the vanished эфир is in the parked cookie
+      // when the mount resolves it to no target.
+      const parking = config.returnTo?.parkingCookie;
+      if (parking) {
+        document.cookie = `${parking.name}=${encodeURIComponent(gone)}; Path=/`;
+      }
+      hold();
+      const user = userEvent.setup();
+      render(
+        <VerifyEntry
+          config={config}
+          email={EMAIL}
+          landing={landing}
+          returnTo={gone}
+          returnTarget={null}
+          carriedTarget={gone}
+        />,
+      );
+      await screen.findByTestId("verify-submit");
+      await user.click(screen.getByRole("textbox"));
+      await user.keyboard(CODE);
+
+      await waitFor(() => expect(h.replace).toHaveBeenCalledWith(landing));
+      expect(h.replace).toHaveBeenCalledTimes(1);
+      expect(h.registerForEvent).not.toHaveBeenCalled();
+      // Consumed once (014 EARS-6): a later sign-in never lands on it either.
+      if (parking) expect(readStoredReturnTarget(parking)).toBeNull();
+    },
+  );
 });
 
 describe("003 EARS-39: a confirmation with no held credential (reload, restored tab, expired hold)", () => {

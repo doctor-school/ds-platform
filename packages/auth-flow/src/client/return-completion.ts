@@ -1,6 +1,7 @@
 import {
   parseAcademyEventReturnTarget,
   parseDoctorEventReturnTarget,
+  parseSameOriginReturnTarget,
   type RegistrationIntent,
 } from "@ds/schemas";
 import {
@@ -13,7 +14,10 @@ import type {
   AuthFlowEventPathTemplate,
   AuthFlowHostConfig,
 } from "../host-config";
-import { resolveReturnTarget } from "./return-target-store";
+import {
+  clearStoredReturnTarget,
+  resolveReturnTarget,
+} from "./return-target-store";
 
 /**
  * 005 EARS-2 / 014 EARS-6 / wave-1 gate row 39 - the CARRIED-TARGET resolver:
@@ -81,6 +85,28 @@ export async function completeReturnTarget(
   // or `null`; a hostile value never reaches a navigation.
   return completeSharedReturnTarget(
     resolveReturnTarget(rawReturnTo, host.returnTo?.parkingCookie),
+    returnHostOf(host, defaultLanding),
+  );
+}
+
+/**
+ * Complete a target the SERVER mount already resolved from the arrival (the
+ * registration journey's `/verify` step, 021 EARS-10), rather than a raw one.
+ *
+ * The parked target (014 EARS-6) is consumed here too, but it never stands in
+ * for the resolved value: `null` is the mount's answer «no target» (an arrival
+ * that named no эфир, or one that no longer exists), so the visitor lands on the
+ * default. Consuming the parked value without using it keeps the consume-once
+ * invariant: the dead page cannot reappear on a later sign-in either.
+ */
+export async function completeResolvedReturnTarget(
+  host: ReturnCompletionHost,
+  resolvedTarget: string | null,
+  defaultLanding?: string,
+): Promise<string> {
+  clearStoredReturnTarget(host.returnTo?.parkingCookie);
+  return completeSharedReturnTarget(
+    parseSameOriginReturnTarget(resolvedTarget),
     returnHostOf(host, defaultLanding),
   );
 }

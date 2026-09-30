@@ -22,7 +22,7 @@ import {
 
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
-import { completeReturnTarget } from "../client/return-completion";
+import { completeResolvedReturnTarget } from "../client/return-completion";
 import { resolveAuthFlowCopy } from "../copy";
 import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
@@ -72,9 +72,9 @@ export type VerifyDoorProps = {
   /**
    * The resolved эфир intent of the arrival (021 EARS-10), in this host's
    * vocabulary. It is what 005 EARS-2 completes once the visitor is signed in
-   * — the shared rule guards it, and on a host that parks its target (014
-   * EARS-6) an absent value consumes the parked one. `null` when the arrival
-   * named no эфир or one that no longer exists (021 EARS-10).
+   * — the shared rule guards it. `null` when the arrival named no эфир or one
+   * that no longer exists (021 EARS-10); a parked target (014 EARS-6) is
+   * consumed but never stands in for it.
    */
   returnTarget?: string | null;
   /** Rule S3 — the target the sideways hops and the cold exit carry onward. */
@@ -204,8 +204,9 @@ export function VerifyDoor({
       // 005 EARS-2 — the session exists now, so the carried эфир is COMPLETED
       // before the visitor is sent anywhere, and its page is the landing — an
       // ended or full эфир included, its page states that itself (021 EARS-10).
-      // Best-effort by the rule's contract.
-      destinationHref = await completeReturnTarget(
+      // Best-effort by the rule's contract. The target is the one the mount
+      // resolved; a parked value never replaces it (021 EARS-10).
+      destinationHref = await completeResolvedReturnTarget(
         config,
         returnTarget,
         signedInLanding,

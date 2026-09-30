@@ -22,7 +22,10 @@ import {
 import { clearStoredReturnTarget } from "./return-target-store";
 
 const ACADEMY_PARKING = ACADEMY_FIXTURE.returnTo!.parkingCookie!;
-import { completeReturnTarget } from "./return-completion";
+import {
+  completeResolvedReturnTarget,
+  completeReturnTarget,
+} from "./return-completion";
 
 /** Park a target the way the auth-flow entry does: the same-origin cookie. */
 function park(target: string) {
@@ -115,5 +118,36 @@ describe("013 EARS-15: the server-resolved default landing (doctor specialty fee
 
   it("013 EARS-15: without a supplied default the host's own `landing.afterLogin` stands", async () => {
     await expect(completeReturnTarget(DOCTOR_FIXTURE, null)).resolves.toBe("/");
+  });
+});
+
+describe("021 EARS-10: a target the server mount already resolved (the /verify step)", () => {
+  it("021 EARS-10: a resolved «no target» lands on the default — the parked page never stands in, and is consumed", async () => {
+    park("/webinars/gone");
+
+    await expect(
+      completeResolvedReturnTarget(ACADEMY_FIXTURE, null),
+    ).resolves.toBe("/webinars");
+    expect(registerForEvent).not.toHaveBeenCalled();
+    // Consumed once: a later sign-in does not find it either.
+    await expect(completeReturnTarget(ACADEMY_FIXTURE, null)).resolves.toBe(
+      "/webinars",
+    );
+  });
+
+  it("021 EARS-10: a resolved эфир is completed and landed on, and the parked value is consumed", async () => {
+    park("/webinars/other-001");
+
+    await expect(
+      completeResolvedReturnTarget(ACADEMY_FIXTURE, "/webinars/ahilles-042"),
+    ).resolves.toBe("/webinars/ahilles-042");
+    expect(registerForEvent).toHaveBeenCalledWith("ahilles-042");
+    expect(registerForEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("021 EARS-10: a hostile resolved value is still guarded — the default landing", async () => {
+    await expect(
+      completeResolvedReturnTarget(DOCTOR_FIXTURE, "//evil.example", "/events"),
+    ).resolves.toBe("/events");
   });
 });

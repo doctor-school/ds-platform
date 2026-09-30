@@ -58,6 +58,21 @@ design-source/support\.js
 # on a third party's availability. Same class as the GOV.UK entry above.
 ^https://primer\.style($|/.*$)
 
+# IBM Carbon Design System — cited in design/constitution.md at five places
+# (select, dropdown, data-table usage + style, filtering pattern). Excluded
+# because it is UNSTABLE, not because the citations are wrong: on 2026-09-30
+# `markdown-links` went red on `main` itself (run 36727799861) with one run
+# reporting «Connection failed» and the next 404 on the same five URLs. A
+# manual `curl -sIL` the same day: every cited trailing-slash URL answers 308
+# to its slash-less form, which answers 404, while the domain root answers
+# 200 — the site is mid-restructure with no stable canonical to re-point the
+# citations to, so the cited URLs stay as written. A third-party site's
+# availability on a BLOCK gate gates merges at random, so the exclusion is
+# domain-wide and does NOT lapse when the pages come back. Owner decision
+# 2026-08-14 (#1249): CI must not gate on a third party's availability. Same
+# class as the GOV.UK and Primer entries above. #2500
+^https://carbondesignsystem\.com($|/.*$)
+
 # Vendored Claude Design canvas sources (design-source/*.dc.html): verbatim
 # spec artifacts, not documentation. Their {{ template }} hrefs and
 # canvas-relative links (events-feed.dc.html, account-my-events.dc.html, …) resolve only

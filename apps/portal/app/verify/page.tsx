@@ -13,8 +13,8 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * with its 005 EARS-2 completion and the Q1/Q2 exits (003 EARS-39) and the #675
  * signed-in guard are the ONE confirmation step of `@ds/auth-flow/verify` — the
  * same route the doctor storefront mounts. What stays here is what this host
- * STATES about itself: `ACADEMY_AUTH_FLOW` (its `/verify` route, its 003
- * confirm command, its parked return target). The guard runs inside the mount.
+ * STATES about itself: `ACADEMY_AUTH_FLOW` (its `/verify` route and its parked
+ * return target). The guard runs inside the mount.
  */
 export default async function VerifyPage({
   searchParams,

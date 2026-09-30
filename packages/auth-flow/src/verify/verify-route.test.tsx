@@ -174,8 +174,8 @@ describe("#2027 PR 1.7: the /verify mount", () => {
 
     expect(gate.props.email).toBe("doc@example.com");
     // 021 EARS-10 — the resolved эфир, projected onto THIS host's paths, is the
-    // landing, the intent the confirm command re-validates AND what 005 EARS-2
-    // completes; the sideways hops carry the rule S3 vocabulary.
+    // landing AND what 005 EARS-2 completes; the sideways hops carry the rule S3
+    // vocabulary.
     expect(shell.props.children.props).toMatchObject({
       config: DOCTOR_FIXTURE,
       landing: "/events/prp-pri-gonartroze",
@@ -190,39 +190,45 @@ describe("#2027 PR 1.7: the /verify mount", () => {
   it.each([
     ["Витрина", DOCTOR_FIXTURE],
     ["Академия", ACADEMY_FIXTURE],
-  ])("021 EARS-10 (#2455, owner decision Б): on %s an эфир that no longer exists is no target — the confirmed doctor lands on the default landing", async (_host, config) => {
-    resolveReturnContext.mockResolvedValue(null);
+  ])(
+    "021 EARS-10 (#2455, owner decision Б): on %s an эфир that no longer exists is no target — the confirmed doctor lands on the default landing",
+    async (_host, config) => {
+      resolveReturnContext.mockResolvedValue(null);
 
-    const shell = await shellOf(config, {
-      email: "doc@example.com",
-      returnTo: "/webinars/gone",
-    });
+      const shell = await shellOf(config, {
+        email: "doc@example.com",
+        returnTo: "/webinars/gone",
+      });
 
-    // The LD-4 arrival decision (no remembered specialty here → the host default).
-    expect(shell.props.children.props).toMatchObject({
-      landing: config.landing.afterLogin,
-      returnTarget: null,
-    });
-  });
+      // The LD-4 arrival decision (no remembered specialty here → the host default).
+      expect(shell.props.children.props).toMatchObject({
+        landing: config.landing.afterLogin,
+        returnTarget: null,
+      });
+    },
+  );
 
   it.each([
     ["Витрина", DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"],
     ["Академия", ACADEMY_FIXTURE, "/webinars/prp-pri-gonartroze"],
-  ])("021 EARS-10 (#2455, owner decision Б): on %s an эфир that ended or filled up is still the target — its page states that itself", async (_host, config, page) => {
-    // The public read answers for an ended / full эфир exactly as for a live
-    // one: the page exists, so it is where the confirmed doctor lands.
-    resolveReturnContext.mockResolvedValue(EVENT);
+  ])(
+    "021 EARS-10 (#2455, owner decision Б): on %s an эфир that ended or filled up is still the target — its page states that itself",
+    async (_host, config, page) => {
+      // The public read answers for an ended / full эфир exactly as for a live
+      // one: the page exists, so it is where the confirmed doctor lands.
+      resolveReturnContext.mockResolvedValue(EVENT);
 
-    const shell = await shellOf(config, {
-      email: "doc@example.com",
-      returnTo: "/webinars/prp-pri-gonartroze",
-    });
+      const shell = await shellOf(config, {
+        email: "doc@example.com",
+        returnTo: "/webinars/prp-pri-gonartroze",
+      });
 
-    expect(shell.props.children.props).toMatchObject({
-      landing: page,
-      returnTarget: page,
-    });
-  });
+      expect(shell.props.children.props).toMatchObject({
+        landing: page,
+        returnTarget: page,
+      });
+    },
+  );
 
   it("#675 (#2455): a signed-in doctor on the storefront /verify is sent to the эфир they carried, never shown a second confirmation", async () => {
     resolveServerAuth.mockResolvedValue(DOCTOR);

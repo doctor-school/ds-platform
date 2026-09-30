@@ -466,16 +466,12 @@ describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify"
 });
 
 describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NEW session", () => {
-  const LANDING_ANSWER = {
-    status: "verified",
-    credited: null,
-    profileCompletion: null,
-    primaryAction: { kind: "landing", href: "/events" },
-    secondaryAction: { href: "/account" },
-  } as const;
+  // 003 EARS-3 — `POST /v1/auth/verify` answers `{ status: "verified" }` only;
+  // the landing is the step's own decision.
+  const VERIFIED = { status: "verified" } as const;
 
   it("021 EARS-3: a cold arrival re-decides the landing once the replay signed the doctor in", async () => {
-    h.verify.mockResolvedValue(LANDING_ANSWER);
+    h.verify.mockResolvedValue(VERIFIED);
     const resolveSignedInLanding = vi.fn(async () => {
       h.calls.push("re-decide");
       return "/events";
@@ -496,7 +492,7 @@ describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NE
   });
 
   it("021 EARS-3: a failed re-decision falls back to the guest-time landing", async () => {
-    h.verify.mockResolvedValue(LANDING_ANSWER);
+    h.verify.mockResolvedValue(VERIFIED);
     const user = setupUser();
     renderPanel({
       landing: "/",
@@ -512,7 +508,9 @@ describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NE
 
   it("005 EARS-2: a carried эфир the server honoured still wins over the re-decided landing", async () => {
     const user = setupUser();
-    renderPanel({ resolveSignedInLanding: vi.fn().mockResolvedValue("/events") });
+    renderPanel({
+      resolveSignedInLanding: vi.fn().mockResolvedValue("/events"),
+    });
 
     await submitCode(user);
 

@@ -20,9 +20,9 @@ import {
  * `<EmailConfirmCard>` (#1666 slice B) — the shared post-registration confirmation
  * composition. These assertions cover the BLOCK's contract only: copy-as-props, the
  * code form's handler payload, the server-confirmed success row, the two co-equal
- * already-registered actions and the #267 resend cooldown. The portal's
- * EARS-numbered behavioural oracle (transport, the auto-login replay, the #904
- * fragment identifier) stays at app level in `apps/portal/app/verify/page.test.tsx`.
+ * already-registered actions and the #267 resend cooldown. The EARS-numbered
+ * behavioural oracle (transport, the auto-login replay, the address gate) is the
+ * `@ds/auth-flow` step's own: `packages/auth-flow/src/verify/verify-door.test.tsx`.
  */
 
 /** Neutral, product-free copy — every rendered string must come from here. */

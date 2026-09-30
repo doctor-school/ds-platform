@@ -47,10 +47,8 @@ describe("ACADEMY_AUTH_FLOW.routes", () => {
 const config: AuthFlowHostConfig = ACADEMY_AUTH_FLOW;
 
 describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
-  it("003 EARS-1: confirmation has a route of its own — this host does NOT confirm inline", () => {
-    // The verification mail links into a standalone surface, so the door hops to
-    // it after the ack instead of swapping the card in place (the doctor
-    // storefront states no `verify` and confirms inline).
+  it("003 EARS-24: this host serves the confirmation step on its own `/verify` route", () => {
+    // 003 EARS-24 — the registration door hops here after the ack.
     expect(config.routes.verify).toBe("/verify");
   });
 
@@ -100,7 +98,8 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
     expect(resolveAuthFlowCopy(config).brand).toEqual({
       eyebrow: "Академия Doctor.School",
       headline: "Среда обитания экспертов здравоохранения",
-      subcopy: "Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.",
+      subcopy:
+        "Эфиры, программы и сертификация от практикующих экспертов — в одном пространстве.",
       footer: "© Doctor.School.",
     });
   });

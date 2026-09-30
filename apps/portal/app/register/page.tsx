@@ -14,9 +14,8 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * ONE sign-up door of `@ds/auth-flow/register`, which both storefronts mount.
  * What stays on this side is what this host STATES about itself, and that is
  * `ACADEMY_AUTH_FLOW` (`lib/auth-flow.host-config.ts`): its routes (including
- * `verify`, the standalone confirmation surface the verification mail links
- * into — the doctor storefront confirms inline instead), its one required
- * consent read as a single read-only sentence, and its sentences.
+ * `verify`, the route the confirmation step is served on — 003 EARS-24), its one
+ * required consent read as a single read-only sentence, and its sentences.
  *
  * The rendered result is the `<RegisterCard>` composition itself: since #2027 the
  * block draws ONE registration form for both storefronts (the owner's canvas),

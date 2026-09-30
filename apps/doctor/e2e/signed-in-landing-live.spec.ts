@@ -354,3 +354,44 @@ test.describe("#2232 a non-doctor session on the doctor event page", () => {
     await expect(page.getByRole("link", { name: /Участвовать/ })).toHaveCount(0);
   });
 });
+
+/**
+ * #2456 — a staff account is a user: a session holding ONLY `platform_admin`
+ * opens its own account page on the storefront and signs out from it. The
+ * account read used to be `doctor_guest`-only, so the page showed the
+ * «Не удалось загрузить профиль» error frame and no sign-out — a dead end.
+ */
+test.describe("#2456 a staff session on the doctor account page", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test.setTimeout(180_000);
+
+  test("#2456: a platform_admin-only session opens /account — its profile, no error frame — and signs out from it", async ({
+    page,
+  }) => {
+    const admin = await provisionDoctor();
+    await narrowGrantToPlatformAdmin(admin.email);
+
+    // Precondition against the live api: this session holds no visitor role.
+    await expect
+      .poll(() => signInAndReadRegistration(page, admin), {
+        timeout: 90_000,
+        intervals: [3_000],
+      })
+      .toBe(403);
+
+    const response = await page.goto("/account");
+    expect(response?.status()).toBe(200);
+    await expect(page.getByText(admin.email)).toBeVisible();
+    await expect(
+      page.getByText("Не удалось загрузить профиль", { exact: false }),
+    ).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Выйти из аккаунта" }).click();
+    await expect(page).toHaveURL(new RegExp(`^${DOCTOR_URL}/$`));
+    const after = await page.evaluate(async () => {
+      const res = await fetch("/v1/me/profile", { credentials: "include" });
+      return res.status;
+    });
+    expect(after).toBe(401);
+  });
+});

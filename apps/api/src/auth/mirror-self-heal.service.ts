@@ -5,6 +5,7 @@ import {
   type IdpClient,
 } from "./idp/idp.types.js";
 import { UserMirrorService } from "./user-mirror.service.js";
+import { mirrorRoleFromClaims, PARTICIPANT_ROLE } from "./staff-role.js";
 
 /**
  * Read-path mirror self-heal (EARS-26, GH #709) — the third mirror-sync layer
@@ -43,11 +44,21 @@ export class MirrorSelfHealService {
 
   /**
    * Ensure a mirror row exists for the authenticated `sub`; lazily heal it from
-   * the IdP when absent. Never throws.
+   * the IdP when absent. When the session's project-roles claim is supplied,
+   * also keep the `users.role` staff marker in step with it (#2456: any staff
+   * role ⇒ that staff role, else the visitor role) — written only on a change,
+   * so the steady-state hot path stays the one indexed probe. Never throws.
    */
-  async ensureMirrored(sub: string): Promise<void> {
+  async ensureMirrored(sub: string, roles?: readonly string[]): Promise<void> {
     try {
-      if (await this.mirror.existsBySub(sub)) return;
+      const current = await this.mirror.findRoleBySub(sub);
+      const target = roles ? mirrorRoleFromClaims(roles) : undefined;
+      if (current !== undefined) {
+        if (target !== undefined && target !== current) {
+          await this.mirror.setRole(sub, target);
+        }
+        return;
+      }
 
       const idpUser = await this.idp.getUser(sub);
       // Unknown at the IdP, or identifier-less (machine account / no
@@ -61,6 +72,11 @@ export class MirrorSelfHealService {
         emailVerified: idpUser.emailVerified,
         phoneVerified: idpUser.phoneVerified,
       });
+      // The upsert inserts the visitor role; a staff session marks it in the
+      // same pass (#2456).
+      if (target !== undefined && target !== PARTICIPANT_ROLE) {
+        await this.mirror.setRole(idpUser.sub, target);
+      }
       // #157: idempotently ensure the doctor_guest grant, exactly as the
       // webhook and the sweep do on their passes.
       await this.idp.grantProjectRole(idpUser.sub, DOCTOR_GUEST_ROLE);

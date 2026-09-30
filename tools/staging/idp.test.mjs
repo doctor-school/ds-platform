@@ -284,7 +284,7 @@ test("a created account is always granted its catalogue role", () => {
   assert.ok(grants.every((step) => step.grantId === null));
   assert.deepEqual(
     grants.find((step) => step.username.includes("admin")).roleKeys,
-    ["platform_admin"],
+    ["doctor_guest", "platform_admin"],
   );
 });
 
@@ -307,7 +307,7 @@ test("a live account holding the wrong role is re-granted, not re-created", () =
   const grant = admin.find((step) => step.op === "ensure-grant");
   assert.equal(grant.grantId, "g-1");
   assert.equal(grant.userId, "id-a");
-  assert.deepEqual(grant.roleKeys, ["platform_admin"]);
+  assert.deepEqual(grant.roleKeys, ["doctor_guest", "platform_admin"]);
 });
 
 test("a live account already holding its role plans no grant step", () => {
@@ -317,7 +317,7 @@ test("a live account already holding its role plans no grant step", () => {
       {
         userId: `id-${account.key}`,
         emailVerified: account.emailVerified,
-        grant: { id: `g-${account.key}`, roleKeys: [account.role] },
+        grant: { id: `g-${account.key}`, roleKeys: [...account.roleKeys] },
       },
     ]),
   );
@@ -372,6 +372,9 @@ test("the golden account catalogue matches the seed contract in packages/db", ()
       key: field(block, "key"),
       username: field(block, "username"),
       role: field(block, "role"),
+      roleKeys: [...(/roleKeys: \[([^\]]*)\]/.exec(block)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map(
+        (m) => m[1],
+      ),
       emailVerified: field(block, "emailVerified") === "true",
       mfaEnrolled: field(block, "mfaEnrolled") === "true",
       idpAccountExpected: field(block, "idpAccountExpected") === "true",
@@ -415,7 +418,7 @@ test("a converge creates the absent accounts and collects every subject", async 
   // Every created account is granted, and the admin's grant carries its own role.
   const grants = calls.filter((call) => call.key === "POST /management/v1/users/new-id/grants");
   assert.equal(grants.length, 4);
-  assert.ok(grants.some((call) => call.body.roleKeys[0] === "platform_admin"));
+  assert.ok(grants.some((call) => call.body.roleKeys.includes("platform_admin")));
   assert.ok(grants.every((call) => call.body.projectId === "p1"));
   // Neither the PAT nor any password may reach the log.
   assert.doesNotMatch(lines.join("\n"), /pat-value|Secret-123!/);
@@ -450,13 +453,13 @@ test("a converge re-grants a live account whose role drifted, and says so", asyn
     log: (line) => lines.push(line),
   });
   const put = calls.find((call) => call.key === "PUT /management/v1/users/id-a/grants/g-1");
-  assert.deepEqual(put.body, { roleKeys: ["platform_admin"] });
+  assert.deepEqual(put.body, { roleKeys: ["doctor_guest", "platform_admin"] });
   // An ADD alongside the existing authorization would be a second grant, not a fix.
   assert.equal(
     calls.filter((call) => call.key === "POST /management/v1/users/id-a/grants").length,
     0,
   );
-  assert.match(lines.join("\n"), /re-granted platform_admin/);
+  assert.match(lines.join("\n"), /re-granted doctor_guest, platform_admin/);
 });
 
 test("a converge leaves a correct grant alone and logs that it already holds it", async () => {
@@ -469,7 +472,9 @@ test("a converge leaves a correct grant alone and logs that it already holds it"
           body: { result: [{ userId: "id-a", human: { email: { isVerified: true } } }] },
         },
         "POST /management/v1/users/grants/_search": {
-          body: { result: [{ id: "g-1", projectId: "p1", roleKeys: ["platform_admin"] }] },
+          body: {
+            result: [{ id: "g-1", projectId: "p1", roleKeys: ["platform_admin", "doctor_guest"] }],
+          },
         },
         "POST /v2/users/id-a/password": { body: {} },
         ...APP_ROUTES,
@@ -491,7 +496,10 @@ test("a converge leaves a correct grant alone and logs that it already holds it"
     0,
     "an equal role set must not be written back",
   );
-  assert.match(lines.join("\n"), /golden\.admin@example\.test already holds platform_admin/);
+  assert.match(
+    lines.join("\n"),
+    /golden\.admin@example\.test already holds doctor_guest, platform_admin/,
+  );
 });
 
 test("a grant on some other project does not pass for the shared one", async () => {
@@ -523,7 +531,7 @@ test("a grant on some other project does not pass for the shared one", async () 
   assert.deepEqual(added.body, {
     projectId: "p1",
     organizationId: "org-1",
-    roleKeys: ["platform_admin"],
+    roleKeys: ["doctor_guest", "platform_admin"],
   });
 });
 

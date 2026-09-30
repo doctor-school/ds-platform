@@ -23,6 +23,7 @@ import {
 } from "@ds/db";
 import { MONTH_BROADCAST_STATES } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { isParticipant } from "../auth/staff-role.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -304,7 +305,10 @@ export class DoctorEventsRepository {
     return primary;
   }
 
-  /** Live registrations per event — the «сколько коллег записалось» of EARS-2. */
+  /**
+   * Live registrations per event — the «сколько коллег записалось» of EARS-2.
+   * Participants only: a staff account's sign-up is not a colleague (#2456).
+   */
   async countSignUps(eventIds: string[]): Promise<Map<string, number>> {
     if (eventIds.length === 0) return new Map();
     const rows = await this.db
@@ -314,6 +318,7 @@ export class DoctorEventsRepository {
         and(
           inArray(registrations.eventId, eventIds),
           eq(registrations.recordStatus, "active"),
+          isParticipant(registrations.userId),
         ),
       )
       .groupBy(registrations.eventId);

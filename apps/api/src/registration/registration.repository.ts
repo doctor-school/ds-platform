@@ -29,6 +29,7 @@ import {
 } from "@ds/schemas";
 import { and, asc, desc, eq, gte, inArray, or, type SQL, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { isParticipant } from "../auth/staff-role.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
 type Db = DrizzleHandle["db"];
@@ -386,7 +387,13 @@ export class RegistrationRepository {
         possibleDuplicate: possibleDuplicateOverScope(),
       })
       .from(registrations)
-      .where(eq(registrations.eventId, eventId))
+      .where(
+        and(
+          eq(registrations.eventId, eventId),
+          // #2456 — staff sign-ups are not participants.
+          isParticipant(registrations.userId),
+        ),
+      )
       .orderBy(asc(registrations.registeredAt));
     return rows.map((r) => ({
       userId: r.userId,
@@ -439,6 +446,9 @@ export class RegistrationRepository {
 
     const where = and(
       eq(registrations.eventId, eventId),
+      // #2456 — a staff account's registration is not a roster row (and not in
+      // the pager's total).
+      isParticipant(registrations.userId),
       this.rosterSearchPredicate(
         query.q,
         {

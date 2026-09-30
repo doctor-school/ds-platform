@@ -375,3 +375,44 @@ test.describe("#2232 a non-doctor session on the Academy webinar page", () => {
     await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
   });
 });
+
+/**
+ * #2456 — a staff account is a user: a session holding ONLY `platform_admin`
+ * opens its own account page and signs out from it. The account read used to be
+ * `doctor_guest`-only, so the page answered with the «Не удалось загрузить
+ * профиль» error frame and the sign-out never rendered — a dead end.
+ */
+test.describe("#2456 a staff session on the Academy account page", () => {
+  test.skip(!ADMIN_TIER, "requires the IdP service token + project id + Mailpit");
+  test.setTimeout(180_000);
+
+  test("#2456: a platform_admin-only session opens /account — its profile, no error frame — and signs out from it", async ({
+    page,
+  }) => {
+    const admin = await provisionDoctorCreds(page);
+    await narrowGrantToPlatformAdmin(admin.email);
+
+    // Precondition against the live api: this session holds no visitor role.
+    await expect
+      .poll(() => signInAndReadRegistration(page, admin), {
+        timeout: 90_000,
+        intervals: [3_000],
+      })
+      .toBe(403);
+
+    const response = await page.goto(`${BASE}/account`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByText(admin.email)).toBeVisible();
+    await expect(
+      page.getByText("Не удалось загрузить профиль", { exact: false }),
+    ).toHaveCount(0);
+
+    await page.getByTestId("logout").click();
+    await expect(page).toHaveURL(/\/login/);
+    const after = await page.evaluate(async () => {
+      const res = await fetch("/v1/me/profile", { credentials: "include" });
+      return res.status;
+    });
+    expect(after).toBe(401);
+  });
+});

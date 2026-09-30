@@ -10,6 +10,7 @@ import {
 import type { FastifyRequest } from "fastify";
 import type { MyDisplayName, MyProfile } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
+import type { Role } from "../authz/authz.types.js";
 import { SetDisplayNameRequestDto } from "./me.dto.js";
 import { MeService, UnknownSubjectError } from "./me.service.js";
 
@@ -29,14 +30,26 @@ import { MeService, UnknownSubjectError } from "./me.service.js";
  *   `phoneVerified`/`displayName`) off their `users` mirror row — read-only,
  *   no IdP call. The portal `/account` surface renders it (EARS-28).
  *
- * All routes carry the classification `authenticated` / `doctor_guest` / `fast-path`
- * (EARS-16; ADR-0001 §2): a caller touching only their OWN record needs no policy
- * evaluation — the global `AuthzGuard` refuses an unauthenticated caller (401)
- * and any non-`doctor_guest` role (403) before the handler runs, never a silent
- * success. Identity is ALWAYS the authenticated session `sub` — no endpoint takes
+ * All routes carry the classification `authenticated` / {@link ACCOUNT_ROLES} /
+ * `fast-path` (EARS-16; ADR-0001 §2): a caller touching only their OWN record
+ * needs no policy evaluation — the global `AuthzGuard` refuses an
+ * unauthenticated caller (401) before the handler runs, never a silent success.
+ * The account belongs to the signed-in user, staff included (003 production
+ * amendment, #2456): a `platform_admin` session opens its own profile and signs
+ * out from it, never a dead end; a registrar-only principal stays refused (044
+ * EARS-19). Identity is ALWAYS the authenticated session `sub` — no endpoint takes
  * a target user id, so no caller can read or write another doctor's name
  * (EARS-16). The read is per-caller ⇒ never shared-cacheable.
  */
+/**
+ * #2456 — the account surface belongs to the signed-in user, not to the visitor
+ * role: a platform administrator is a user with a profile too, even on a grant
+ * that lacks `doctor_guest`. A principal holding ONLY `event-registrar` stays
+ * refused here — 044 EARS-19 confines that role to the roster and the admin
+ * session endpoints; a registrar who is also a site user holds `doctor_guest`.
+ */
+const ACCOUNT_ROLES: Role[] = ["doctor_guest", "platform_admin"];
+
 @Controller({ path: "me", version: "1" })
 export class MeController {
   constructor(private readonly me: MeService) {}
@@ -44,7 +57,7 @@ export class MeController {
   @Get("display-name")
   @Authz({
     access: "authenticated",
-    roles: ["doctor_guest"],
+    roles: ACCOUNT_ROLES,
     check: "fast-path",
     audit: "none",
     tests: ["EARS-16"],
@@ -64,7 +77,7 @@ export class MeController {
   @Get("profile")
   @Authz({
     access: "authenticated",
-    roles: ["doctor_guest"],
+    roles: ACCOUNT_ROLES,
     check: "fast-path",
     audit: "none",
     tests: ["EARS-27"],
@@ -77,9 +90,9 @@ export class MeController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["doctor_guest"],
+    roles: ACCOUNT_ROLES,
     check: "fast-path",
-    // A `doctor_guest` self-scoped profile write, not an auth/security event —
+    // A self-scoped profile write, not an auth/security event —
     // no AuthAuditLog emission (low-stakes). The display name is not a
     // credential; it never gates access.
     audit: "low-stakes",

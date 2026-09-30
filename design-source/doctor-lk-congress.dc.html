@@ -109,15 +109,12 @@
 
             <div style="{{ listStyle }}">
               <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
-                <div onClick="{{ r.onRow }}" title="{{ r.title }}" style="{{ r.style }}" style-hover="background:var(--hv-bg) !important">
-                  <sc-if value="{{ r.rail }}" hint-placeholder-val="{{ false }}"><span style="{{ r.dotLg }}"></span></sc-if>
-                  <sc-if value="{{ r.full }}" hint-placeholder-val="{{ true }}">
+                <div onClick="{{ r.onRow }}" style="{{ r.style }}" style-hover="background:var(--hv-bg) !important">
                     <div style="{{ rowGrid }}">
                       <span style="{{ r.statusBtn }}"><span style="{{ r.dot }}"></span><span>{{ r.status }}</span></span>
                       <div style="min-width:0;display:flex;flex-direction:column;gap:5px">
                         <button onClick="{{ r.onOpen }}" style="{{ r.topicStyle }}" style-hover="text-decoration:underline !important;text-decoration-thickness:2px !important;text-underline-offset:4px !important">{{ r.topic }}</button>
                         <div style="font-size:13px;line-height:1.5;color:{{ inkFaint }}">{{ r.meta }}</div>
-                        <sc-if value="{{ r.commentFull }}" hint-placeholder-val="{{ false }}"><div style="{{ r.commentStyle }}"><span style="font-weight:700;color:{{ r.commentInk }}">Комитет: </span>{{ r.comment }}</div></sc-if>
                         <sc-if value="{{ r.commentClamp }}" hint-placeholder-val="{{ false }}">
                           <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:4px;min-width:0">
                             <span style="{{ r.clampStyle }}"><span style="font-weight:700;color:{{ r.commentInk }}">Комитет: </span>{{ r.comment }}</span>
@@ -136,27 +133,14 @@
                         </div>
                       </sc-if>
                     </div>
-                  </sc-if>
                 </div>
               </sc-for>
 
               <div data-screen-label="d-lk-congress · заявка" style="{{ detailWrap }}">
-                <sc-if value="{{ detailPlaceholder }}" hint-placeholder-val="{{ false }}">
-                  <div style="border:2px dashed {{ dashBorder }};padding:56px 24px;text-align:center;font-size:14px;color:{{ inkMuted }}">Выберите заявку в списке — она откроется здесь.</div>
-                </sc-if>
                 <sc-if value="{{ hasOpen }}" hint-placeholder-val="{{ false }}">
                   <div style="display:flex;flex-direction:column;gap:24px">
                     <sc-if value="{{ sheetBar }}" hint-placeholder-val="{{ false }}">
                       <div style="{{ sheetBarStyle }}"><button onClick="{{ closeApp }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ accent }};background:none;border:0;padding:12px 0;cursor:pointer" style-hover="color:var(--lk-ink) !important">← Мои заявки</button></div>
-                    </sc-if>
-                    <sc-if value="{{ railToggle }}" hint-placeholder-val="{{ false }}">
-                      <div><button onClick="{{ toggleRail }}" style="{{ quietBtn }}" style-hover="color:var(--lk-ink) !important;text-decoration-color:var(--lk-ink) !important">{{ railToggleLabel }}</button></div>
-                    </sc-if>
-                    <sc-if value="{{ detailHead }}" hint-placeholder-val="{{ false }}">
-                      <div style="display:flex;flex-direction:column;gap:8px">
-                        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:{{ inkMuted }};flex-wrap:wrap"><span style="{{ o.dot }}"></span><span style="font-weight:700;color:{{ ink }}">{{ o.status }}</span><span>· {{ o.kind }} · {{ o.dateLine }}</span></div>
-                        <div style="font-size:24px;line-height:1.22;font-weight:800;letter-spacing:-.02em;color:{{ ink }};text-wrap:balance">{{ o.topic }}</div>
-                      </div>
                     </sc-if>
                     <sc-if value="{{ o.commentBlock }}" hint-placeholder-val="{{ false }}">
                       <div style="{{ o.commentBoxStyle }}">
@@ -378,7 +362,7 @@ class Component extends DCLogic {
     const D = this.data();
     const P = D.PRESETS[screen] || D.PRESETS['список'];
     const st = { screen: D.PRESETS[screen] ? screen : 'список', date: P.date || 2, over40: P.over40 != null ? !!P.over40 : !!this.props.over40, empty: !!P.empty, onlyDraft: !!P.onlyDraft, noReg: !!P.noReg, loading: !!P.loading, loadErr: !!P.loadErr,
-      openId: P.open || null, draftKind: P.kind || 'oral', tFrom: P.tFrom || null, deleted: {}, pickerOpen: !!P.picker, withdrawn: {}, sentNow: {}, vals: {}, authors: {}, checks: {}, tried: {}, thesesOverride: null, filter: P.filter || null, editA: {}, railOpen: false, askWd: null, confirm: P.confirm ? { tdraft: true } : {}, revoked: {} };
+      openId: P.open || null, draftKind: P.kind || 'oral', tFrom: P.tFrom || null, deleted: {}, pickerOpen: !!P.picker, withdrawn: {}, sentNow: {}, vals: {}, authors: {}, checks: {}, tried: {}, thesesOverride: null, filter: P.filter || null, editA: {}, askWd: null, confirm: P.confirm ? { tdraft: true } : {}, revoked: {} };
     if (P.closedDraft) st.vals = { 'draft.topic': 'Инъекционная терапия тендинопатий у спортсменов: когда PRP не нужна', 'draft.goal': 'Показать, в каких случаях инъекционная терапия тендинопатий не даёт преимуществ перед программой нагрузочной реабилитации.' };
     const E = D.EPI;
     if (P.long) {
@@ -413,7 +397,7 @@ class Component extends DCLogic {
   }
   state = Object.assign({
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
-    vpMobile: false, variant: 'А', widthS: null, notes: true, saveFail: false, saving: false, savedAt: '14:32'
+    vpMobile: false, widthS: null, notes: true, saveFail: false, saving: false, savedAt: '14:32'
   }, this.propState(this.props, null));
   componentDidMount() {
     this.mq = window.matchMedia('(max-width: 900px)');
@@ -433,9 +417,9 @@ class Component extends DCLogic {
     this.setState({ saving: true }); clearTimeout(this.t);
     this.t = setTimeout(() => { const n = new Date(), p = x => (x < 10 ? '0' : '') + x; this.setState({ saving: false, savedAt: p(n.getHours()) + ':' + p(n.getMinutes()) }); }, 900);
   }
-  top() { if (this.state.variant === 'А') try { window.scrollTo(0, 0); } catch (e) {} }
+  top() { try { window.scrollTo(0, 0); } catch (e) {} }
   renderVals() {
-    const D = this.data(), s = this.state, d = s.dark, V = s.variant;
+    const D = this.data(), s = this.state, d = s.dark;
     const m = s.widthS ? s.widthS === '390' : s.vpMobile;
     const forced = s.widthS === '390' && !s.vpMobile;
     const ink = d ? '#fff' : 'oklch(.21 .02 250)', inkBody = d ? 'rgba(255,255,255,.8)' : 'oklch(.32 .016 250)';
@@ -546,51 +530,42 @@ class Component extends DCLogic {
 
     const openA = apps.find(a => a.id === s.openId) || null;
     const isOpen = !!openA;
-    const N = shown.length;
-    const split = (V === 'Б' || V === 'Г') && !m;
-    const rail = V === 'Г' && !m && isOpen && !s.railOpen;
 
     // строки
     const rows = shown.map((a, i) => {
       const acts = actsFor(a), sel = s.openId === a.id, tone = commentTone(a);
       const draftClosed = a.status === 'draft' && !canSend(a.kind);
       const t = val(a.id, 'topic', a.topic);
-      let style, hover = '';
-      const first = i === 0, last = i === N - 1;
+      let style;
+      const first = i === 0;
       if (m) {
-        style = 'padding:16px;background:' + (split || V === 'Б' || V === 'Г' ? (sel ? tint : surface) : surface) + ';border-bottom:1px solid ' + hairline + ';' + 'cursor:pointer;';
-        if (V === 'В') style += 'order:' + (2 * i) + ';';
-        if ((V === 'А' || V === 'Б' || V === 'Г') && isOpen) style = 'display:none';
-      } else if (split) {
-        style = 'grid-column:1;min-width:0;cursor:pointer;background:' + (sel ? tint : surface) + ';border-left:2px solid ' + border + ';border-right:2px solid ' + border + ';border-top:' + (first ? '2px solid ' + border : '1px solid ' + hairline) + ';' + (last ? 'border-bottom:2px solid ' + border + ';' : '') + (rail ? 'display:flex;align-items:center;justify-content:center;height:52px' : 'padding:14px 16px');
-        hover = sel ? '' : 'background:' + sectionGray;
+        style = 'padding:16px;background:' + surface + ';border-bottom:1px solid ' + hairline + ';' + 'cursor:pointer;';
+        if (isOpen) style = 'display:none';
       } else {
-        style = 'padding:20px 24px;cursor:pointer;' + (first ? '' : 'border-top:1px solid ' + hairline + ';') + (V === 'В' ? 'order:' + (2 * i) + ';' : '');
-        if (V === 'А' && isOpen) style = 'display:none';
+        style = 'padding:20px 24px;cursor:pointer;' + (first ? '' : 'border-top:1px solid ' + hairline + ';');
+        if (isOpen) style = 'display:none';
       }
-      style += ';--hv-bg:' + (sel && (split || m) ? tint : sectionGray);
-      const showExtra = !(V === 'Б' || V === 'Г');
+      style += ';--hv-bg:' + (sel && m ? tint : sectionGray);
       const metaParts = [D.KIND[a.kind].label, (a.status === 'draft' ? 'изменён ' : 'изменено ') + a.changed];
-      if (showExtra && a.status === 'sent') metaParts.push('рассмотрит программный комитет, ответ придёт на почту');
-      if (showExtra && draftClosed) metaParts.push(closedText(a).split(' — ')[0].toLowerCase());
+      if (a.status === 'sent') metaParts.push('рассмотрит программный комитет, ответ придёт на почту');
+      if (draftClosed) metaParts.push(closedText(a).split(' — ')[0].toLowerCase());
       return {
-        style, hover, rail, full: !rail, title: rail ? STAT[a.status] + ' · ' + (t || 'Без темы') : '',
+        style,
         onRow: openApp(a.id), onOpen: stop(openApp(a.id)),
-        status: STAT[a.status], dot: DOT[a.status], dotLg: DOT[a.status].replace('width:10px;height:10px', 'width:14px;height:14px') + (sel ? ';outline:2px solid ' + btnBg + ';outline-offset:3px' : ''),
+        status: STAT[a.status], dot: DOT[a.status],
         statusBtn: 'display:inline-flex;align-items:center;gap:8px;padding:2px 0;font-size:13px;font-weight:' + (a.status === 'revision' ? 700 : 600) + ';color:' + (a.status === 'revision' ? warn : a.status === 'withdrawn' ? inkMuted : ink) + ';white-space:nowrap;align-self:start;margin-top:2px',
         topic: t || 'Без темы',
-        topicStyle: 'font:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left;font-size:' + (split ? '14.5px' : '16px') + ';line-height:1.4;font-weight:700;color:' + (t ? ink : inkFaint) + ';text-wrap:pretty',
+        topicStyle: 'font:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left;font-size:16px;line-height:1.4;font-weight:700;color:' + (t ? ink : inkFaint) + ';text-wrap:pretty',
         meta: metaParts.join(' · '),
-        commentFull: !!a.comment && V === 'В' && sel, commentClamp: !!a.comment && (V === 'А' || (V === 'В' && !sel)),
+        commentClamp: !!a.comment,
         commentLong: (a.comment || '').length > 150,
         clampStyle: 'font-size:13.5px;line-height:1.55;color:' + inkBody + ';display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;text-wrap:pretty',
         comment: a.comment || '', commentInk: tone.ink,
-        commentStyle: 'margin-top:4px;font-size:13.5px;line-height:1.55;color:' + inkBody + ';text-wrap:pretty',
         hasDeadline: a.status === 'revision', deadline: deadlineText, deadlineInk: revInk,
-        hasActions: showExtra && (!!acts.primary || acts.sec.length > 0), hasPrimary: !!acts.primary,
+        hasActions: !!acts.primary || acts.sec.length > 0, hasPrimary: !!acts.primary,
         primary: acts.primary ? { label: acts.primary.label, onClick: stop(acts.primary.onClick) } : { label: '', onClick: null },
         sec: acts.sec.map(x => ({ label: x.label, onClick: stop(x.onClick), style: quietBtn + ';--hv-c:' + (x.danger ? danger : ink) })),
-        wdAsk: showExtra && s.askWd === a.id, wdYes: stop(revoke(a.id)), wdNo: stop(() => this.setState({ askWd: null })), wdStop: stop(null)
+        wdAsk: s.askWd === a.id, wdYes: stop(revoke(a.id)), wdNo: stop(() => this.setState({ askWd: null })), wdStop: stop(null)
       };
     });
 
@@ -691,7 +666,6 @@ class Component extends DCLogic {
       const acts = actsFor(a), tone = commentTone(a);
       const confirming = editable && !E.length && !!s.confirm[id];
       const longC = (a.comment || '').length > 240;
-      const big = V === 'А';
       const n = E.length, w = (n % 10 === 1 && n % 100 !== 11) ? 'ошибку' : ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) ? 'ошибки' : 'ошибок';
       const pct = Math.min(total / 5000, 1), over = total > 5000, near = !over && total >= 4500;
       const cInk = over ? danger : near ? warn : ink;
@@ -699,14 +673,14 @@ class Component extends DCLogic {
         kind: K.label, topic: topic || 'Без темы', status: STAT[a.status], dot: DOT[a.status],
         posterBadge: posterBase + (POSTER[a.status] || 'background:#fff;color:#114D9E;box-shadow:4px 4px 0 #0D3A77'),
         dateLine: a.status === 'draft' ? 'черновик изменён ' + a.changed : a.status === 'withdrawn' ? 'отозвана ' + (a.withdrawnAt || today) : 'отправлена ' + a.sentAt,
-        commentBlock: !!a.comment && V !== 'В', comment: a.comment || '', commentDate: a.commentDate || '', commentInk: tone.ink,
-        commentBoxStyle: (m ? 'margin:0 -16px;padding:18px 16px;' : 'padding:' + (big ? '22px 26px' : '18px 20px') + ';') + 'background:' + tone.bg,
-        commentTextStyle: longC ? 'font-size:15.5px;line-height:1.65;font-weight:400;color:' + ink + ';max-width:72ch;white-space:pre-wrap;text-wrap:pretty' : 'font-size:' + (big && !m ? '19px' : '15.5px') + ';line-height:1.5;font-weight:600;color:' + ink + ';text-wrap:pretty',
+        commentBlock: !!a.comment, comment: a.comment || '', commentDate: a.commentDate || '', commentInk: tone.ink,
+        commentBoxStyle: (m ? 'margin:0 -16px;padding:18px 16px;' : 'padding:22px 26px;') + 'background:' + tone.bg,
+        commentTextStyle: longC ? 'font-size:15.5px;line-height:1.65;font-weight:400;color:' + ink + ';max-width:72ch;white-space:pre-wrap;text-wrap:pretty' : 'font-size:' + (m ? '15.5px' : '19px') + ';line-height:1.5;font-weight:600;color:' + ink + ';text-wrap:pretty',
         hasDeadline: a.status === 'revision', deadline: deadlineText, deadlineInk: revInk,
-        wdAsk: V !== 'В' && s.askWd === id, wdYes: revoke(id), wdNo: () => this.setState({ askWd: null }),
+        wdAsk: s.askWd === id, wdYes: revoke(id), wdNo: () => this.setState({ askWd: null }),
         hasNotice: !!notice, notice: notice ? notice.t : '', noticeInk: notice ? notice.c : ink, noticeIcon: notice ? notice.i : '',
         noticeStyle: notice ? (m ? 'margin:0 -16px;padding:14px 16px;' : 'padding:14px 18px;') + 'background:' + notice.bg + ';display:flex;gap:12px;align-items:flex-start' : '',
-        detailActions: V !== 'В' && acts.det.length > 0,
+        detailActions: acts.det.length > 0,
         det: acts.det.map(x => ({ label: x.label, onClick: x.onClick, style: 'font:inherit;font-size:14px;font-weight:700;background:none;border:0;padding:0;cursor:pointer;color:' + (x.danger ? danger : accent) })),
         hasSummary: tried && n > 0, summaryTitle: 'Заявка не отправлена. Исправьте ' + n + ' ' + w + ':',
         summary: E.map(e => ({ msg: e.msg, link: !!e.focus, plain: !e.focus, onClick: () => { const el = document.getElementById(e.focus); if (el) el.focus(); } })),
@@ -738,23 +712,17 @@ class Component extends DCLogic {
 
     // раскладка
     let listStyle, detailWrap;
-    const openIdx = shown.findIndex(a => a.id === s.openId);
     if (m) {
       listStyle = 'display:flex;flex-direction:column;margin:0 -16px;border-top:1px solid ' + hairline + ';background:' + surface;
-      if (V === 'В') detailWrap = openIdx >= 0 ? 'order:' + (2 * openIdx + 1) + ';background:' + surface + ';border-bottom:1px solid ' + hairline + ';padding:4px 16px 0' : 'display:none';
-      else detailWrap = isOpen ? 'background:' + pageBg + ';padding:0 16px' : 'display:none';
-    } else if (split) {
-      const col1 = rail ? '64px' : '320px';
-      listStyle = 'display:grid;grid-template-columns:' + col1 + ' minmax(0,1fr);grid-template-rows:repeat(' + Math.max(N, 1) + ',auto) 1fr;column-gap:40px;align-items:start';
-      detailWrap = 'grid-column:2;grid-row:1 / span ' + (Math.max(N, 1) + 1) + ';min-width:0';
-    } else if (V === 'А' && isOpen) {
+      detailWrap = isOpen ? 'background:' + pageBg + ';padding:0 16px' : 'display:none';
+    } else if (isOpen) {
       listStyle = 'display:block'; detailWrap = 'max-width:760px';
     } else {
       listStyle = 'display:flex;flex-direction:column;border:2px solid ' + border + ';background:' + surface + ';box-shadow:6px 6px 0 ' + shadow;
-      detailWrap = V === 'В' && openIdx >= 0 ? 'order:' + (2 * openIdx + 1) + ';padding:0 24px 0 216px' : 'display:none';
+      detailWrap = 'display:none';
     }
-    const formWrap = 'display:flex;flex-direction:column;gap:20px;' + (V === 'В' && !m ? 'padding-top:8px;' : '');
-    const barStyle = 'position:sticky;bottom:0;z-index:4;display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:' + (V === 'В' ? surface : pageBg) + ';border-top:2px solid ' + border + ';padding:14px ' + (m ? '16px' : '0') + ';margin:8px ' + (m ? '-16px' : '0') + ' 0;' + (V === 'В' && !m ? 'margin-bottom:0;padding-bottom:18px' : '') + ';' + (o.confirming ? 'background:' + tint + ';padding:16px ' + (m ? '16px' : '20px') : '');
+    const formWrap = 'display:flex;flex-direction:column;gap:20px;';
+    const barStyle = 'position:sticky;bottom:0;z-index:4;display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:' + pageBg + ';border-top:2px solid ' + border + ';padding:14px ' + (m ? '16px' : '0') + ';margin:8px ' + (m ? '-16px' : '0') + ' 0;' + (o.confirming ? 'background:' + tint + ';padding:16px ' + (m ? '16px' : '20px') : '');
 
     // выбор вида
     const picks = ['oral', 'poster', 'theses'].map((k, i) => {
@@ -771,7 +739,7 @@ class Component extends DCLogic {
     });
 
     const content = !s.noReg && !s.loading && !s.loadErr;
-    const hideForOpen = (V === 'А' && isOpen) || (m && isOpen && V !== 'В');
+    const hideForOpen = isOpen;
     const showPicker = content && !hideForOpen && (s.empty || apps.length === 0 || s.pickerOpen);
     const w = m ? '390' : '1440', th = d ? 'dark' : 'light';
     const secHead = m ? 'margin:0 -16px;padding:18px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px' : 'display:flex;align-items:center;gap:18px;margin-bottom:16px';
@@ -781,7 +749,7 @@ class Component extends DCLogic {
       artboard: 'd-lk-congress · ' + w + ' · ' + th + ' · ' + s.screen + '',
       outerStyle: 'background:' + pageBg + ';--lk-ink:' + ink + ';--lk-row:' + sectionGray + ';--lk-border:' + border + ';--lk-pri-h:' + priH + ';--lk-danger-h:' + dangerH + ';' + (forced ? 'width:390px;margin:24px auto;border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';overflow:hidden' : 'min-height:100vh'),
       toggleTheme: () => { const nd = !d; try { localStorage.setItem('ds-theme', nd ? 'dark' : 'light'); } catch (e) {} this.setState({ dark: nd }); },
-      posterList: !(V === 'А' && isOpen), posterApp: V === 'А' && isOpen,
+      posterList: !isOpen, posterApp: isOpen,
       posterPad: m ? '22px 16px 26px' : 'clamp(28px,4vw,40px) clamp(16px,4vw,48px) clamp(36px,5vw,48px)',
       mainPad: m ? '0 16px 48px' : 'clamp(36px,5vw,52px) clamp(16px,4vw,48px) 96px',
       blockGap: m ? '8px' : '48px',
@@ -803,13 +771,10 @@ class Component extends DCLogic {
       notes: s.notes,
       secHead, secRule: m ? 'display:none' : 'flex:1;border-top:2px solid ' + ink,
       listStyle, rows, detailWrap,
-      rowGrid: m || split ? 'display:flex;flex-direction:column;gap:6px' : 'display:grid;grid-template-columns:168px minmax(0,1fr) auto;gap:24px;align-items:start',
-      detailPlaceholder: split && !isOpen, hasOpen: isOpen,
-      sheetBar: m && isOpen && V !== 'В',
+      rowGrid: m ? 'display:flex;flex-direction:column;gap:6px' : 'display:grid;grid-template-columns:168px minmax(0,1fr) auto;gap:24px;align-items:start',
+      hasOpen: isOpen,
+      sheetBar: m && isOpen,
       sheetBarStyle: 'position:sticky;top:0;z-index:5;margin:0 -16px;padding:2px 16px;background:' + surface + ';border-bottom:1px solid ' + hairline,
-      railToggle: V === 'Г' && !m && isOpen, railToggleLabel: s.railOpen ? '← Свернуть список' : '→ Развернуть список',
-      toggleRail: () => this.setState(st => ({ railOpen: !st.railOpen })),
-      detailHead: split || (m && V !== 'В' && V !== 'А'),
       closeApp: () => { this.setState({ openId: null }); this.top(); },
       o, formWrap, barStyle,
       actionsCol: m ? 'display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:6px' : 'display:flex;flex-direction:column;align-items:flex-end;gap:8px;text-align:right;max-width:240px',

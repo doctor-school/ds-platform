@@ -181,7 +181,8 @@ export function SubmissionDetail({
       shown.push(e);
     }
   }
-  const errOf = (key: string) => shown.find((e) => e.key === key)?.message ?? null;
+  const errOf = (key: string) =>
+    shown.find((e) => e.key === key)?.message ?? null;
 
   async function onSubmit() {
     await autosave.flush();
@@ -200,7 +201,14 @@ export function SubmissionDetail({
       onSent(sent);
     } catch (e) {
       setConfirming(false);
-      if (e instanceof CongressSubmissionsError && e.problems.length) {
+      if (
+        e instanceof CongressSubmissionsError &&
+        e.problems.some((p) => p.code === "status-conflict")
+      ) {
+        // The committee moved the submission meanwhile: the section is read
+        // again and shows where it stands now (046 EARS-9).
+        onStale();
+      } else if (e instanceof CongressSubmissionsError && e.problems.length) {
         setServerErrors(problemMessages(e.problems, intake));
         setTried(true);
       } else if (e instanceof CongressSubmissionsError && e.status === 409) {
@@ -291,7 +299,9 @@ export function SubmissionDetail({
   const fieldError = (key: string) => {
     const e = errOf(key);
     return e ? (
-      <p className="mt-1.5 text-caption font-semibold text-destructive-text">{e}</p>
+      <p className="mt-1.5 text-caption font-semibold text-destructive-text">
+        {e}
+      </p>
     ) : null;
   };
 
@@ -365,7 +375,10 @@ export function SubmissionDetail({
                 role="status"
                 className="-mx-4 flex items-start gap-3 bg-section px-4 py-3.5 layout:mx-0 layout:px-4.5"
               >
-                <span aria-hidden="true" className="flex-none text-body-compact text-muted-foreground">
+                <span
+                  aria-hidden="true"
+                  className="flex-none text-body-compact text-muted-foreground"
+                >
                   —
                 </span>
                 <p className="text-sm font-semibold leading-normal text-foreground">
@@ -377,8 +390,17 @@ export function SubmissionDetail({
             {detailActions.length ? (
               <div className="flex flex-wrap gap-x-6 gap-y-2.5">
                 {detailActions.map((a) => (
-                  <Link key={a.action} asChild tone={a.danger ? "danger" : "default"} size="sm">
-                    <button type="button" disabled={busy} onClick={() => runAction(a)}>
+                  <Link
+                    key={a.action}
+                    asChild
+                    tone={a.danger ? "danger" : "default"}
+                    size="sm"
+                  >
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => runAction(a)}
+                    >
                       {a.label}
                     </button>
                   </Link>
@@ -391,7 +413,9 @@ export function SubmissionDetail({
                 text={ask === "withdraw" ? COPY.withdrawAsk : COPY.deleteAsk}
                 yes={ask === "withdraw" ? COPY.withdraw : COPY.deleteDraft}
                 busy={busy}
-                onYes={() => void (ask === "withdraw" ? onWithdraw() : onDelete())}
+                onYes={() =>
+                  void (ask === "withdraw" ? onWithdraw() : onDelete())
+                }
                 onNo={() => setAsk(null)}
               />
             ) : null}
@@ -407,13 +431,18 @@ export function SubmissionDetail({
                 </div>
                 <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5">
                   {shown.map((e) => (
-                    <li key={e.message} className="text-body-compact text-destructive-text">
+                    <li
+                      key={e.message}
+                      className="text-body-compact text-destructive-text"
+                    >
                       {e.focusId ? (
                         <Link asChild tone="danger" variant="inline">
                           <button
                             type="button"
                             className="text-left"
-                            onClick={() => document.getElementById(e.focusId!)?.focus()}
+                            onClick={() =>
+                              document.getElementById(e.focusId!)?.focus()
+                            }
                           >
                             {e.message}
                           </button>
@@ -424,14 +453,22 @@ export function SubmissionDetail({
                     </li>
                   ))}
                 </ul>
-                <div className="mt-2 text-xs text-muted-foreground">{COPY.summarySaved}</div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {COPY.summarySaved}
+                </div>
               </div>
             ) : null}
 
             <div className="flex flex-col gap-5">
-              {sectionHead(COPY.sectionAbout, s.kind === "oral" ? COPY.onSite : undefined)}
+              {sectionHead(
+                COPY.sectionAbout,
+                s.kind === "oral" ? COPY.onSite : undefined,
+              )}
               <div>
-                <label htmlFor="in-topic" className={cn("mb-2 block", labelClass)}>
+                <label
+                  htmlFor="in-topic"
+                  className={cn("mb-2 block", labelClass)}
+                >
                   {COPY.topic}
                 </label>
                 {canEdit ? (
@@ -453,7 +490,10 @@ export function SubmissionDetail({
                 {fieldError("title")}
               </div>
 
-              {sectionHead(COPY.sectionAuthors, s.kind === "oral" ? COPY.pickSpeaker : undefined)}
+              {sectionHead(
+                COPY.sectionAuthors,
+                s.kind === "oral" ? COPY.pickSpeaker : undefined,
+              )}
               <AuthorsEditor
                 authors={draft.authors}
                 editable={canEdit}
@@ -469,7 +509,10 @@ export function SubmissionDetail({
                 const max = LIMIT[f.key]!;
                 return (
                   <div key={f.key}>
-                    <label htmlFor={`in-${f.key}`} className={cn("mb-2 block", labelClass)}>
+                    <label
+                      htmlFor={`in-${f.key}`}
+                      className={cn("mb-2 block", labelClass)}
+                    >
                       {f.label}
                     </label>
                     {canEdit ? (
@@ -483,7 +526,10 @@ export function SubmissionDetail({
                         aria-invalid={errOf(f.key) ? true : undefined}
                         onChange={(e) => {
                           const nv = clip(e.target.value, max);
-                          update((d) => ({ ...d, body: { ...d.body, [f.key]: nv } }));
+                          update((d) => ({
+                            ...d,
+                            body: { ...d.body, [f.key]: nv },
+                          }));
                         }}
                         onBlur={flush}
                       />
@@ -548,38 +594,63 @@ export function SubmissionDetail({
                         className="flex min-w-56 flex-1 flex-col gap-1"
                       >
                         <span className="text-body-compact font-extrabold text-foreground">
-                          {s.status === "needs_revision" ? COPY.confirmTitleAgain : COPY.confirmTitle}
+                          {s.status === "needs_revision"
+                            ? COPY.confirmTitleAgain
+                            : COPY.confirmTitle}
                         </span>
                         <span className="text-caption leading-normal text-foreground">
-                          {s.status === "needs_revision" ? COPY.confirmSubAgain : COPY.confirmSub}
+                          {s.status === "needs_revision"
+                            ? COPY.confirmSubAgain
+                            : COPY.confirmSub}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
-                        <Button type="button" variant="outline" onClick={() => setConfirming(false)}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setConfirming(false)}
+                        >
                           {COPY.cancel}
                         </Button>
-                        <Button type="button" loading={busy} onClick={() => void onConfirm()}>
-                          {s.status === "needs_revision" ? COPY.confirmYesAgain : COPY.confirmYes}
+                        <Button
+                          type="button"
+                          loading={busy}
+                          onClick={() => void onConfirm()}
+                        >
+                          {s.status === "needs_revision"
+                            ? COPY.confirmYesAgain
+                            : COPY.confirmYes}
                         </Button>
                       </div>
                     </>
                   ) : (
                     <>
                       <div className="flex min-w-48 flex-1 flex-wrap items-center gap-x-5 gap-y-2">
-                        {canEdit ? <SaveLine state={autosave.state} savedAt={savedAt} /> : null}
+                        {canEdit ? (
+                          <SaveLine state={autosave.state} savedAt={savedAt} />
+                        ) : null}
                         {readDraft ? (
                           <span className="text-caption text-muted-foreground">
                             {closedText(intake).split(" — ")[0]}
                           </span>
                         ) : null}
                         {sendFailed ? (
-                          <span role="alert" className="text-caption font-semibold text-destructive-text">
+                          <span
+                            role="alert"
+                            className="text-caption font-semibold text-destructive-text"
+                          >
                             {COPY.sendFailed}
                           </span>
                         ) : null}
                       </div>
-                      <Button type="button" disabled={!sendable} onClick={() => void onSubmit()}>
-                        {s.status === "needs_revision" ? COPY.sendAgain : COPY.send}
+                      <Button
+                        type="button"
+                        disabled={!sendable}
+                        onClick={() => void onSubmit()}
+                      >
+                        {s.status === "needs_revision"
+                          ? COPY.sendAgain
+                          : COPY.send}
                       </Button>
                     </>
                   )}
@@ -593,9 +664,18 @@ export function SubmissionDetail({
   );
 }
 
-function SaveLine({ state, savedAt }: { state: "saved" | "saving" | "failed"; savedAt: Date }) {
+function SaveLine({
+  state,
+  savedAt,
+}: {
+  state: "saved" | "saving" | "failed";
+  savedAt: Date;
+}) {
   return (
-    <span className="inline-flex items-center gap-2" data-testid="congress-save-state">
+    <span
+      className="inline-flex items-center gap-2"
+      data-testid="congress-save-state"
+    >
       <span
         aria-hidden="true"
         className={cn(
@@ -611,7 +691,9 @@ function SaveLine({ state, savedAt }: { state: "saved" | "saving" | "failed"; sa
         role="status"
         className={cn(
           "text-caption font-semibold",
-          state === "failed" ? "text-destructive-text" : "text-muted-foreground",
+          state === "failed"
+            ? "text-destructive-text"
+            : "text-muted-foreground",
         )}
       >
         {state === "failed"
@@ -647,7 +729,13 @@ export function InlineAsk({
     >
       <span>{text}</span>
       <span className="flex items-center gap-3.5">
-        <Button type="button" variant="destructive" size="sm" loading={busy} onClick={onYes}>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          loading={busy}
+          onClick={onYes}
+        >
           {yes}
         </Button>
         <Link asChild tone="muted" size="sm">

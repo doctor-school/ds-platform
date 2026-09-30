@@ -1,6 +1,7 @@
-import type {
-  CongressSubmission,
-  CongressSubmissionKindIntake,
+import {
+  CONGRESS_SUBMISSION_PROBLEM_CODES,
+  type CongressSubmission,
+  type CongressSubmissionKindIntake,
 } from "@ds/schemas";
 
 import {
@@ -123,7 +124,10 @@ describe("revision deadline", () => {
   const due = "2026-12-22T21:00:00.000Z"; // 23 Dec 00:00 МСК, exclusive
 
   it("EARS-11: before the deadline — the date, 23:59 МСК and the countdown", () => {
-    const v = revisionView(sub({ status: "needs_revision", revisionDueAt: due }), NOW);
+    const v = revisionView(
+      sub({ status: "needs_revision", revisionDueAt: due }),
+      NOW,
+    );
     expect(v).toEqual({
       open: true,
       urgent: true,
@@ -184,8 +188,11 @@ describe("actions per status", () => {
   it("EARS-12: in review and needs revision may be withdrawn; decided and withdrawn may not", () => {
     for (const status of ["in_review", "needs_revision"] as const) {
       expect(
-        actionsFor(sub({ status, revisionDueAt: "2026-12-22T21:00:00.000Z" }), intake(), NOW)
-          .secondary.map((s) => s.action),
+        actionsFor(
+          sub({ status, revisionDueAt: "2026-12-22T21:00:00.000Z" }),
+          intake(),
+          NOW,
+        ).secondary.map((s) => s.action),
       ).toEqual(["withdraw"]);
     }
     for (const status of ["accepted", "rejected"] as const) {
@@ -199,13 +206,27 @@ describe("actions per status", () => {
   it("EARS-7: a draft stays editable until its kind closes; a revision until its deadline", () => {
     expect(editable(sub(), intake(), NOW)).toBe(true);
     expect(editable(sub(), intake({ state: "not-yet-open" }), NOW)).toBe(true);
-    expect(editable(sub(), intake({ state: "not-announced", opensAt: null, closesAt: null, lastDay: null }), NOW)).toBe(true);
+    expect(
+      editable(
+        sub(),
+        intake({
+          state: "not-announced",
+          opensAt: null,
+          closesAt: null,
+          lastDay: null,
+        }),
+        NOW,
+      ),
+    ).toBe(true);
     expect(editable(sub(), intake({ state: "closed" }), NOW)).toBe(false);
     expect(editable(sub(), intake({ offered: false }), NOW)).toBe(false);
     expect(editable(sub({ status: "submitted" }), intake(), NOW)).toBe(false);
     expect(
       editable(
-        sub({ status: "needs_revision", revisionDueAt: "2026-12-22T21:00:00.000Z" }),
+        sub({
+          status: "needs_revision",
+          revisionDueAt: "2026-12-22T21:00:00.000Z",
+        }),
         intake({ state: "closed" }),
         NOW,
       ),
@@ -229,7 +250,9 @@ describe("row meta and date line", () => {
   it("EARS-11: the detail date line", () => {
     expect(dateLine(sub())).toBe("черновик изменён 18 декабря 2026");
     expect(
-      dateLine(sub({ status: "submitted", submittedAt: "2026-12-16T15:40:00.000Z" })),
+      dateLine(
+        sub({ status: "submitted", submittedAt: "2026-12-16T15:40:00.000Z" }),
+      ),
     ).toBe("отправлена 16 декабря 2026, 18:40");
     expect(dateLine(sub({ status: "withdrawn" }))).toBe(
       "отозвана 18 декабря 2026",
@@ -240,7 +263,11 @@ describe("row meta and date line", () => {
 describe("send checks", () => {
   it("EARS-8: an empty oral draft names every unmet field, the consent included", () => {
     const errs = draftErrors(
-      { title: "", authors: [{ surname: "", firstName: "", workplace: "" }], body: {} },
+      {
+        title: "",
+        authors: [{ surname: "", firstName: "", workplace: "" }],
+        body: {},
+      },
       { consentRequired: true, consentChecked: false },
     );
     expect(errs.map((e) => e.message)).toEqual([
@@ -265,6 +292,33 @@ describe("send checks", () => {
     expect(errs.map((e) => e.message)).toEqual(["Отметьте одного докладчика"]);
   });
 
+  it("046 EARS-30: a resend refused after the revision deadline names it in the canvas words", () => {
+    const msgs = problemMessages(
+      [
+        {
+          code: "revision-closed",
+          params: { revisionDueAt: "2026-12-22T21:00:00.000Z" },
+        },
+      ],
+      intake(),
+    );
+    expect(msgs.map((m) => m.message)).toEqual([
+      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+    ]);
+  });
+
+  it("046 EARS-9: every refusal code the API can return reads as a visible message — none is dropped", () => {
+    for (const code of CONGRESS_SUBMISSION_PROBLEM_CODES) {
+      const field = code === "field-invalid" ? "body.unknown" : undefined;
+      const msgs = problemMessages(
+        [{ code, ...(field ? { field } : {}) }],
+        intake(),
+      );
+      expect(msgs, code).toHaveLength(1);
+      expect(msgs[0]!.message.length, code).toBeGreaterThan(0);
+    }
+  });
+
   it("EARS-17: a server refusal names the limit and the closed window", () => {
     const msgs = problemMessages(
       [
@@ -287,14 +341,22 @@ describe("kind choice", () => {
     expect(kindStartable(intake())).toBe(true);
     expect(kindStartable(intake({ state: "not-yet-open" }))).toBe(true);
     expect(kindStartable(intake({ state: "closed" }))).toBe(false);
-    expect(kindStartable(intake({ kind: "poster", offered: false }))).toBe(false);
+    expect(kindStartable(intake({ kind: "poster", offered: false }))).toBe(
+      false,
+    );
   });
 
   it("EARS-17: a limited kind counts its sends and says when no more can be sent", () => {
     expect(limitLine(intake())).toBeNull();
-    expect(limitLine(intake({ submitLimit: 3, used: 1 }))).toBe("Отправлено 1 из 3");
-    expect(limitLine(intake({ submitLimit: 3, used: 3 }))).toBe(
-      "Отправлено 3 из 3 — больше подать нельзя",
+    expect(limitLine(intake({ submitLimit: 3, used: 1 }))).toBe(
+      "Отправлено 1 устный доклад из 3",
     );
+    expect(limitLine(intake({ submitLimit: 5, used: 5 }))).toBe(
+      "Отправлено 5 устных докладов из 5 — больше подать нельзя",
+    );
+    // 046 EARS-17 — the canvas line names the kind in its count form.
+    expect(
+      limitLine(intake({ kind: "abstract", submitLimit: 3, used: 3 })),
+    ).toBe("Отправлено 3 тезиса из 3 — больше подать нельзя");
   });
 });

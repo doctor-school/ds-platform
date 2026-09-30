@@ -9,6 +9,8 @@ The author's congress submissions API (046 EARS-5…13, 16, 17, #2433):
 talk draft with author 1 from the 044 registration answers, autosaves it, sends
 it through one cascade (registration, kind window, field set, limit over every
 sent status, submission consent), takes it back to a draft or withdraws it to
-«Отозвана», and deletes a draft by retiring the row. Migration 0043 adds
+«Отозвана», resends a `needs_revision` talk before its revision deadline
+(`revision-closed` after it; a new receipt, never counted against the limit a
+second time), and deletes a draft by retiring the row. Migration 0043 adds
 `congress_submissions` with `revision_due_at`. Each submission carries
 `statusChangedAt`, the date its committee comment is shown with.

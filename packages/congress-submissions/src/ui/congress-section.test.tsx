@@ -53,7 +53,9 @@ function sub(over: Partial<CongressSubmission> = {}): CongressSubmission {
   };
 }
 
-function section(over: Partial<CongressSubmissionSection> = {}): CongressSubmissionSection {
+function section(
+  over: Partial<CongressSubmissionSection> = {},
+): CongressSubmissionSection {
   return {
     eventId: EVENT_ID,
     event: {
@@ -90,13 +92,22 @@ describe("CongressSection", () => {
   it("EARS-4: the heading names the section and the event, with the account and congress links", async () => {
     fetchMock.mockResolvedValue(answer(section({ submissions: [sub()] })));
     render(<CongressSection host={HOST} />);
-    expect(await screen.findByRole("heading", { level: 1, name: "Мои заявки на Конгресс" })).toBeInTheDocument();
-    expect(screen.getByText("VIII конгресс «Ортобиология» · 23–24 апреля 2027")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "← Аккаунт" })).toHaveAttribute("href", "/account");
-    expect(screen.getByRole("link", { name: "Страница Конгресса ↗" })).toHaveAttribute(
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Мои заявки на Конгресс",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("VIII конгресс «Ортобиология» · 23–24 апреля 2027"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "← Аккаунт" })).toHaveAttribute(
       "href",
-      "/events/orthobio-2027",
+      "/account",
     );
+    expect(
+      screen.getByRole("link", { name: "Страница Конгресса ↗" }),
+    ).toHaveAttribute("href", "/events/orthobio-2027");
     // The host shell owns the page's one `main` landmark (V-18 axe: no nested main).
     expect(screen.queryByRole("main")).toBeNull();
   });
@@ -104,11 +115,12 @@ describe("CongressSection", () => {
   it("EARS-5: without a registration only the line and the registration link show", async () => {
     fetchMock.mockResolvedValue(answer(section({ registered: false })));
     render(<CongressSection host={HOST} />);
-    expect(await screen.findByText("Сначала зарегистрируйтесь участником Конгресса")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Регистрация на сайте Конгресса ↗" })).toHaveAttribute(
-      "href",
-      "https://orthobio.ru/#join",
-    );
+    expect(
+      await screen.findByText("Сначала зарегистрируйтесь участником Конгресса"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Регистрация на сайте Конгресса ↗" }),
+    ).toHaveAttribute("href", "https://orthobio.ru/#join");
     expect(screen.queryByText("Новая заявка")).not.toBeInTheDocument();
   });
 
@@ -116,9 +128,13 @@ describe("CongressSection", () => {
     fetchMock.mockResolvedValueOnce(answer({}, 503));
     fetchMock.mockResolvedValueOnce(answer(section({ submissions: [sub()] })));
     render(<CongressSection host={HOST} />);
-    expect(await screen.findByText("Не удалось загрузить заявки")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Не удалось загрузить заявки"),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Повторить" }));
-    expect(await screen.findByText("PRP при латеральном эпикондилите")).toBeInTheDocument();
+    expect(
+      await screen.findByText("PRP при латеральном эпикондилите"),
+    ).toBeInTheDocument();
   });
 
   it("EARS-4: a guest whose session is gone goes to the sign-in door", async () => {
@@ -133,13 +149,23 @@ describe("CongressSection", () => {
     fetchMock.mockResolvedValue(answer(section()));
     render(<CongressSection host={HOST} />);
     const oral = await screen.findByTestId("congress-pick-oral");
-    expect(within(oral).getByText("Приём до 15 января 2027 включительно")).toBeInTheDocument();
-    expect(within(oral).getByRole("button", { name: "Начать заявку →" })).toBeEnabled();
-    expect(within(oral).getByRole("button", { name: "Начать заявку →" })).toHaveClass("text-sm");
+    expect(
+      within(oral).getByText("Приём до 15 января 2027 включительно"),
+    ).toBeInTheDocument();
+    expect(
+      within(oral).getByRole("button", { name: "Начать заявку →" }),
+    ).toBeEnabled();
+    expect(
+      within(oral).getByRole("button", { name: "Начать заявку →" }),
+    ).toHaveClass("text-sm");
     for (const k of ["poster", "abstract"]) {
-      expect(within(screen.getByTestId(`congress-pick-${k}`)).queryByRole("button")).toBeNull();
+      expect(
+        within(screen.getByTestId(`congress-pick-${k}`)).queryByRole("button"),
+      ).toBeNull();
     }
-    expect(screen.getByText("Приём постерных докладов и тезисов откроется позже")).toBeInTheDocument();
+    expect(
+      screen.getByText("Приём постерных докладов и тезисов откроется позже"),
+    ).toBeInTheDocument();
   });
 
   it("EARS-11: rows carry status, meta, the committee comment and the revision deadline; the filter narrows them", async () => {
@@ -166,12 +192,20 @@ describe("CongressSection", () => {
     expect(within(rows[0]!).getByText("Отправлена")).toBeInTheDocument();
     // The row's text action is the canvas `textAction` step (14px), not the
     // row title's body size.
-    expect(within(rows[0]!).getByRole("button", { name: "Забрать на исправление →" })).toHaveClass(
-      "text-sm",
-    );
-    expect(within(rows[1]!).getByText("Уточните дизайн исследования")).toBeInTheDocument();
-    expect(within(rows[1]!).getByText(/^Исправить и отправить до .* · осталось/)).toBeInTheDocument();
-    expect(within(rows[1]!).getByRole("button", { name: "Отозвать" })).toBeInTheDocument();
+    expect(
+      within(rows[0]!).getByRole("button", {
+        name: "Забрать на исправление →",
+      }),
+    ).toHaveClass("text-sm");
+    expect(
+      within(rows[1]!).getByText("Уточните дизайн исследования"),
+    ).toBeInTheDocument();
+    expect(
+      within(rows[1]!).getByText(/^Исправить и отправить до .* · осталось/),
+    ).toBeInTheDocument();
+    expect(
+      within(rows[1]!).getByRole("button", { name: "Отозвать" }),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /На доработке/ }));
     expect(screen.getAllByTestId("congress-row")).toHaveLength(1);
@@ -182,9 +216,20 @@ describe("CongressSection", () => {
       status: "draft",
       title: "",
       submittedAt: null,
-      authors: [{ surname: "Орлов", firstName: "Виктор", workplace: "ГКБ № 12", presenting: true }],
+      authors: [
+        {
+          surname: "Орлов",
+          firstName: "Виктор",
+          workplace: "ГКБ № 12",
+          presenting: true,
+        },
+      ],
     });
-    window.history.replaceState(null, "", `/account/congress?submission=${draft.id}`);
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${draft.id}`,
+    );
     fetchMock.mockResolvedValueOnce(answer(section({ submissions: [draft] })));
     render(<CongressSection host={HOST} />);
     const topic = await screen.findByLabelText("Тема");
@@ -194,34 +239,193 @@ describe("CongressSection", () => {
     await userEvent.type(topic, "PRP");
     await userEvent.tab();
     await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, i]) => (i as RequestInit | undefined)?.method === "PATCH")).toBe(true),
+      expect(
+        fetchMock.mock.calls.some(
+          ([, i]) => (i as RequestInit | undefined)?.method === "PATCH",
+        ),
+      ).toBe(true),
     );
-    const patch = fetchMock.mock.calls.find(([, i]) => (i as RequestInit | undefined)?.method === "PATCH")!;
-    expect(JSON.parse(String((patch[1] as RequestInit).body))).toMatchObject({ title: "PRP" });
+    const patch = fetchMock.mock.calls.find(
+      ([, i]) => (i as RequestInit | undefined)?.method === "PATCH",
+    )!;
+    expect(JSON.parse(String((patch[1] as RequestInit).body))).toMatchObject({
+      title: "PRP",
+    });
 
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
     const summary = await screen.findByRole("alert");
-    expect(within(summary).getByText("Заявка не отправлена. Исправьте 3 ошибки:")).toBeInTheDocument();
-    expect(within(summary).getByText("Заполните поле «Образовательная цель»")).toBeInTheDocument();
-    expect(within(summary).getByText("Дайте согласие на обработку персональных данных")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "обработку персональных данных" })).toHaveAttribute(
-      "href",
-      "https://orthobio.ru/privacy",
+    expect(
+      within(summary).getByText("Заявка не отправлена. Исправьте 3 ошибки:"),
+    ).toBeInTheDocument();
+    expect(
+      within(summary).getByText("Заполните поле «Образовательная цель»"),
+    ).toBeInTheDocument();
+    expect(
+      within(summary).getByText(
+        "Дайте согласие на обработку персональных данных",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "обработку персональных данных" }),
+    ).toHaveAttribute("href", "https://orthobio.ru/privacy");
+  });
+
+  const complete = {
+    title: "PRP при латеральном эпикондилите",
+    authors: [
+      {
+        surname: "Орлов",
+        firstName: "Виктор",
+        workplace: "ГКБ № 12",
+        presenting: true,
+      },
+    ],
+    body: { goal: "Разобрать показания.", summary: "Краткое содержание." },
+  };
+
+  it("046 EARS-30: a needs_revision talk before its deadline is resent; a refusal after the deadline is named, not swallowed", async () => {
+    const revision = sub({
+      ...complete,
+      status: "needs_revision",
+      committeeComment: "Уточните цель",
+      revisionDueAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${revision.id}`,
     );
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ consentRequired: false, submissions: [revision] })),
+    );
+    render(<CongressSection host={HOST} />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Отправить снова" }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        {
+          problems: [
+            {
+              code: "revision-closed",
+              params: { revisionDueAt: "2026-12-22T21:00:00.000Z" },
+            },
+          ],
+        },
+        422,
+      ),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить снова" }),
+    );
+    const summary = await screen.findByRole("alert");
+    expect(
+      within(summary).getByText(
+        "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("046 EARS-30: after the revision deadline the talk is read-only with the canvas line, no «Отправить снова»", async () => {
+    const late = sub({
+      ...complete,
+      status: "needs_revision",
+      committeeComment: "Уточните цель",
+      revisionDueAt: "2025-12-22T21:00:00.000Z",
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${late.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(answer(section({ submissions: [late] })));
+    render(<CongressSection host={HOST} />);
+    expect(
+      (
+        await screen.findAllByText(
+          "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "Отправить снова" }),
+    ).toBeNull();
+  });
+
+  it("046 EARS-9: a send refused because the status changed meanwhile reads the section again", async () => {
+    const revision = sub({
+      ...complete,
+      status: "needs_revision",
+      committeeComment: "Уточните цель",
+      revisionDueAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${revision.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ consentRequired: false, submissions: [revision] })),
+    );
+    render(<CongressSection host={HOST} />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Отправить снова" }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        {
+          problems: [
+            { code: "status-conflict", params: { status: "accepted" } },
+          ],
+        },
+        409,
+      ),
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          consentRequired: false,
+          submissions: [
+            { ...revision, status: "accepted", committeeComment: null },
+          ],
+        }),
+      ),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить снова" }),
+    );
+    expect(await screen.findByText("Принята")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Отправить снова" }),
+    ).toBeNull();
   });
 
   it("EARS-12: «Отозвать» asks first; confirming withdraws with the status the author saw", async () => {
     const inReview = sub({ status: "in_review" });
-    fetchMock.mockResolvedValueOnce(answer(section({ submissions: [inReview] })));
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ submissions: [inReview] })),
+    );
     render(<CongressSection host={HOST} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Отозвать" }));
-    expect(screen.getByText("Отозвать заявку? Комитет её не рассмотрит, вернуть будет нельзя.")).toBeInTheDocument();
-    fetchMock.mockResolvedValueOnce(answer({ ...inReview, status: "withdrawn" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Отозвать" }),
+    );
+    expect(
+      screen.getByText(
+        "Отозвать заявку? Комитет её не рассмотрит, вернуть будет нельзя.",
+      ),
+    ).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...inReview, status: "withdrawn" }),
+    );
     const ask = screen.getByRole("group", { name: /Отозвать заявку\?/ });
-    await userEvent.click(within(ask).getByRole("button", { name: "Отозвать" }));
+    await userEvent.click(
+      within(ask).getByRole("button", { name: "Отозвать" }),
+    );
     await screen.findByText("Отозвана");
     const [url, init] = fetchMock.mock.calls[1]!;
     expect(url).toBe(`/v1/me/congress-submissions/${inReview.id}/withdraw`);
-    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ expectedStatus: "in_review" });
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      expectedStatus: "in_review",
+    });
   });
 });

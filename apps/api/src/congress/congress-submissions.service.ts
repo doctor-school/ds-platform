@@ -98,8 +98,10 @@ function statusConflict(status: CongressSubmissionStatus): never {
  * a submission and when — that ledger is the status history (EARS-28).
  *
  * The send runs the whole cascade in one transaction before any change
- * (EARS-9): registration, kind window, complete field set, limit under an
- * advisory lock (EARS-17) and the submission consent (EARS-16). A refusal
+ * (EARS-9): registration, kind window — for a `needs_revision` resend its own
+ * revision deadline instead (EARS-30) —, complete field set, limit under an
+ * advisory lock (EARS-17; the row being sent is never counted, so a resend is
+ * not counted twice) and the submission consent (EARS-16). A refusal
  * throws inside the transaction, so nothing is written.
  */
 @Injectable()
@@ -141,7 +143,11 @@ export class CongressSubmissionsService {
       .where(eq(events.id, eventId))
       .limit(1);
     if (!event) throw new NotFoundException("no congress section");
-    const registration = await this.activeRegistration(this.db, user.id, eventId);
+    const registration = await this.activeRegistration(
+      this.db,
+      user.id,
+      eventId,
+    );
     const now = this.now();
 
     const rows = registration
@@ -219,7 +225,10 @@ export class CongressSubmissionsService {
       const w = (await this.windows(tx, body.eventId)).get(body.kind);
       if (w?.closesAt && this.now().getTime() >= w.closesAt.getTime()) {
         refuse([
-          { code: "kind-closed", params: { closesAt: w.closesAt.toISOString() } },
+          {
+            code: "kind-closed",
+            params: { closesAt: w.closesAt.toISOString() },
+          },
         ]);
       }
 
@@ -278,7 +287,7 @@ export class CongressSubmissionsService {
     });
   }
 
-  /** EARS-9, EARS-16, EARS-17 — the send cascade, all-or-nothing. */
+  /** EARS-9, EARS-16, EARS-17, EARS-30 — the send cascade, all-or-nothing. */
   async send(
     sub: string,
     id: string,
@@ -287,9 +296,11 @@ export class CongressSubmissionsService {
     const user = await this.account(sub);
     const submitted = await withRequestAuditContext(this.db, async (tx) => {
       const row = await this.ownRow(tx, user.id, id, true);
-      // The resend of a `needs_revision` submission is the committee work
-      // package's (EARS-30); here the author sends drafts.
-      if (row.status !== "draft") statusConflict(row.status);
+      // EARS-9, EARS-30 — the author sends a draft, or resends a submission
+      // the committee returned for revision.
+      if (row.status !== "draft" && row.status !== "needs_revision") {
+        statusConflict(row.status);
+      }
 
       // EARS-17 — serialise concurrent sends of one account, event and kind.
       const lockKey = `congress-submission:${user.id}:${row.eventId}:${row.kind}`;
@@ -308,9 +319,22 @@ export class CongressSubmissionsService {
         problems.push({ code: "registration-required" });
       }
 
-      const w = (await this.windows(tx, row.eventId)).get(row.kind) ?? NO_WINDOW;
+      const w =
+        (await this.windows(tx, row.eventId)).get(row.kind) ?? NO_WINDOW;
       const state = congressKindIntakeState(w, this.now());
-      if (state === "not-announced" || state === "not-yet-open") {
+      if (row.status === "needs_revision") {
+        // EARS-9, EARS-30 — a resend checks its own revision deadline instead
+        // of the kind's intake.
+        if (
+          row.revisionDueAt === null ||
+          this.now().getTime() >= row.revisionDueAt.getTime()
+        ) {
+          problems.push({
+            code: "revision-closed",
+            params: { revisionDueAt: row.revisionDueAt?.toISOString() ?? null },
+          });
+        }
+      } else if (state === "not-announced" || state === "not-yet-open") {
         problems.push({
           code: "kind-not-open",
           params: { opensAt: w.opensAt?.toISOString() ?? null },
@@ -352,6 +376,11 @@ export class CongressSubmissionsService {
       }
 
       const version = this.consentVersion();
+      // EARS-16 — one row per account and version: serialise the check and
+      // the insert per account, across events and kinds.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`congress-submission-consent:${user.id}`}, 0))`,
+      );
       const consentMissing = !(await this.hasConsent(tx, user.id, version));
       const consentAccepted = request.acceptedConsents.includes(
         CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
@@ -388,7 +417,7 @@ export class CongressSubmissionsService {
         .where(
           and(
             eq(congressSubmissions.id, row.id),
-            eq(congressSubmissions.status, "draft"),
+            eq(congressSubmissions.status, row.status),
           ),
         )
         .returning();
@@ -554,9 +583,7 @@ export class CongressSubmissionsService {
 
   // ---------------------------------------------------------------- helpers
 
-  private async account(
-    sub: string,
-  ): Promise<{ id: string }> {
+  private async account(sub: string): Promise<{ id: string }> {
     const [user] = await this.db
       .select({ id: users.id })
       .from(users)
@@ -580,7 +607,8 @@ export class CongressSubmissionsService {
 
   /** The event's congress settings; none ⇒ no congress section (EARS-1). */
   private async settings(db: Reader, eventId: string) {
-    if (!UUID_RE.test(eventId)) throw new NotFoundException("no congress section");
+    if (!UUID_RE.test(eventId))
+      throw new NotFoundException("no congress section");
     const [row] = await db
       .select()
       .from(congressSubmissionSettings)
@@ -601,12 +629,20 @@ export class CongressSubmissionsService {
     return new Map(
       rows.map((r) => [
         r.kind,
-        { opensAt: r.opensAt, closesAt: r.closesAt, submitLimit: r.submitLimit },
+        {
+          opensAt: r.opensAt,
+          closesAt: r.closesAt,
+          submitLimit: r.submitLimit,
+        },
       ]),
     );
   }
 
-  private async activeRegistration(db: Reader, userId: string, eventId: string) {
+  private async activeRegistration(
+    db: Reader,
+    userId: string,
+    eventId: string,
+  ) {
     const [row] = await db
       .select({ id: registrations.id, answers: registrations.answers })
       .from(registrations)
@@ -699,8 +735,15 @@ export class CongressSubmissionsService {
     return row !== undefined;
   }
 
+  /**
+   * EARS-16 — whether the section asks for the consent. An unconfigured
+   * version asks for it and leaves the refusal to the send (503), so a config
+   * gap never hides the author's list and drafts.
+   */
   private async consentRequired(db: Reader, userId: string): Promise<boolean> {
-    return !(await this.hasConsent(db, userId, this.consentVersion()));
+    const resolved = resolveCongressConsentVersion(this.env());
+    if (!resolved.ok) return true;
+    return !(await this.hasConsent(db, userId, resolved.version));
   }
 }
 

@@ -37,6 +37,8 @@ export interface KindCopy {
   gen: string;
   /** Plural forms for a count — one, few, many. */
   forms: readonly [string, string, string];
+  /** Count forms after a number — «отправлено {3 тезиса}» — one, few, many. */
+  countForms: readonly [string, string, string];
 }
 
 export const KIND_COPY: Record<CongressSubmissionKind, KindCopy> = {
@@ -44,16 +46,19 @@ export const KIND_COPY: Record<CongressSubmissionKind, KindCopy> = {
     label: "Устный доклад",
     gen: "устных докладов",
     forms: ["устного доклада", "устных докладов", "устных докладов"],
+    countForms: ["устный доклад", "устных доклада", "устных докладов"],
   },
   poster: {
     label: "Постерный доклад",
     gen: "постерных докладов",
     forms: ["постерного доклада", "постерных докладов", "постерных докладов"],
+    countForms: ["постерный доклад", "постерных доклада", "постерных докладов"],
   },
   abstract: {
     label: "Тезисы",
     gen: "тезисов",
     forms: ["тезиса", "тезисов", "тезисов"],
+    countForms: ["тезис", "тезиса", "тезисов"],
   },
 };
 
@@ -65,7 +70,8 @@ export const COPY = {
   noRegistration: "Сначала зарегистрируйтесь участником Конгресса",
   registrationLink: "Регистрация на сайте Конгресса ↗",
   loadErrorTitle: "Не удалось загрузить заявки",
-  loadErrorText: "Сервер не ответил. Черновики и отправленные заявки сохранены.",
+  loadErrorText:
+    "Сервер не ответил. Черновики и отправленные заявки сохранены.",
   retry: "Повторить",
   newSubmission: "Новая заявка",
   newSubmissionButton: "+ Новая заявка",
@@ -120,8 +126,7 @@ export const COPY = {
   sectionConfirmations: "Подтверждения",
   consentBefore: "Согласие на ",
   consentLink: "обработку персональных данных",
-  consentAfter:
-    " для рассмотрения заявки программным комитетом Конгресса",
+  consentAfter: " для рассмотрения заявки программным комитетом Конгресса",
   saved: "Сохранено",
   saving: "Сохраняем…",
   saveFailed: "Не удалось сохранить — повторим",
@@ -140,6 +145,17 @@ export const COPY = {
   sentNotice:
     "Заявка отправлена. Рассмотрит программный комитет, ответ придёт на почту.",
   summarySaved: "Текст заявки сохранён.",
+  /** lead-proposed — refusals the canvas draws no string for (046 EARS-9). */
+  errStatusChanged: "Статус заявки изменился — отправить её сейчас нельзя",
+  errWithdrawNotAllowed: "Статус заявки изменился — отозвать её сейчас нельзя",
+  errKindNotAvailable: "Заявки этого вида пока не принимаются",
+  errFirstAuthorLimit:
+    "Лимит заявок, где вы первый автор, исчерпан — отправить заявку нельзя",
+  errAgeLimit:
+    "Возраст первого автора не подходит под условия этого вида заявок",
+  errStatement: "Подтвердите обязательные заявления",
+  errFieldInvalid: "Проверьте заполнение формы",
+  errRevisionClosed: "Срок доработки истёк — отправить заявку нельзя",
   errTopic: "Укажите тему",
   errAuthors: "Заполните фамилию, имя и место работы у каждого автора",
   errSpeaker: "Отметьте одного докладчика",

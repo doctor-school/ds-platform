@@ -30,6 +30,7 @@ const AUTH = {
   routes: {
     login: "/login",
     register: "/register",
+    verify: "/verify",
     reset: "/reset",
     account: "/account",
     allowAuthenticated: ["/reset"],

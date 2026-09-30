@@ -63,7 +63,10 @@ export function eventLine(event: CongressSubmissionSectionEvent): string {
 }
 
 /** Russian plural: one / few / many. */
-export function plural(n: number, forms: readonly [string, string, string]): string {
+export function plural(
+  n: number,
+  forms: readonly [string, string, string],
+): string {
   const m10 = n % 10;
   const m100 = n % 100;
   if (m10 === 1 && m100 !== 11) return forms[0];
@@ -81,7 +84,8 @@ export function countdownText(ms: number): string {
   const h = Math.floor((mins % 1440) / 60);
   const m = mins % 60;
   const H = ["час", "часа", "часов"] as const;
-  if (d) return withN(d, ["день", "дня", "дней"]) + (h ? ` ${withN(h, H)}` : "");
+  if (d)
+    return withN(d, ["день", "дня", "дней"]) + (h ? ` ${withN(h, H)}` : "");
   return `${withN(h, H)} ${withN(m, ["минута", "минуты", "минут"])}`;
 }
 
@@ -112,8 +116,10 @@ export function intakeLine(intake: CongressSubmissionKindIntake): string {
 /** The picker's count line of a limited kind (046 EARS-17; canvas `pk.count` / `reason`). */
 export function limitLine(intake: CongressSubmissionKindIntake): string | null {
   if (!intake.offered || intake.submitLimit === null) return null;
-  const line = `Отправлено ${intake.used} из ${intake.submitLimit}`;
-  return intake.used >= intake.submitLimit ? `${line} — больше подать нельзя` : line;
+  const line = `Отправлено ${intake.used} ${plural(intake.used, KIND_COPY[intake.kind].countForms)} из ${intake.submitLimit}`;
+  return intake.used >= intake.submitLimit
+    ? `${line} — больше подать нельзя`
+    : line;
 }
 
 /** Why a draft of this kind cannot be sent now (046 EARS-10). */
@@ -208,14 +214,25 @@ export function actionsFor(
           action: "open",
           label: kindStartable(intake) ? COPY.continue : COPY.open,
         },
-        secondary: [{ action: "delete", label: COPY.deleteDraft, danger: true }],
+        secondary: [
+          { action: "delete", label: COPY.deleteDraft, danger: true },
+        ],
       };
     case "submitted":
       return intake.state === "open"
-        ? { primary: { action: "take-back", label: COPY.takeBack }, secondary: [] }
-        : { primary: { action: "open", label: COPY.open }, secondary: [withdraw] };
+        ? {
+            primary: { action: "take-back", label: COPY.takeBack },
+            secondary: [],
+          }
+        : {
+            primary: { action: "open", label: COPY.open },
+            secondary: [withdraw],
+          };
     case "in_review":
-      return { primary: { action: "open", label: COPY.open }, secondary: [withdraw] };
+      return {
+        primary: { action: "open", label: COPY.open },
+        secondary: [withdraw],
+      };
     case "needs_revision":
       return {
         primary: {
@@ -388,10 +405,44 @@ export function problemMessages(
         push({ key: null, message: COPY.noRegistration });
         break;
       case "field-invalid":
-        push(fieldProblem(p.field));
+        push(
+          fieldProblem(p.field) ?? { key: null, message: COPY.errFieldInvalid },
+        );
         break;
-      default:
+      case "revision-closed": {
+        const due = p.params?.revisionDueAt;
+        push({
+          key: null,
+          message:
+            typeof due === "string"
+              ? revisionView({ revisionDueAt: due }, new Date(due)).text
+              : COPY.errRevisionClosed,
+        });
         break;
+      }
+      case "status-conflict":
+        push({ key: null, message: COPY.errStatusChanged });
+        break;
+      case "withdraw-not-allowed":
+        push({ key: null, message: COPY.errWithdrawNotAllowed });
+        break;
+      case "kind-not-available":
+        push({ key: null, message: COPY.errKindNotAvailable });
+        break;
+      case "first-author-limit-reached":
+        push({ key: null, message: COPY.errFirstAuthorLimit });
+        break;
+      case "age-limit":
+        push({ key: null, message: COPY.errAgeLimit });
+        break;
+      case "statement-required":
+        push({ key: null, message: COPY.errStatement });
+        break;
+      default: {
+        // Every code the API can return is named above — a new one fails here.
+        const unmapped: never = p.code;
+        push({ key: null, message: String(unmapped) });
+      }
     }
   }
   return out;
@@ -403,7 +454,9 @@ export function summaryTitle(n: number): string {
 }
 
 /** The picker's note, drawn only when the limits are the ones it states. */
-export function pickerNote(kinds: CongressSubmissionKindIntake[]): string | null {
+export function pickerNote(
+  kinds: CongressSubmissionKindIntake[],
+): string | null {
   const by = new Map(kinds.map((k) => [k.kind, k]));
   const abstractLimit = by.get("abstract")?.submitLimit;
   if (

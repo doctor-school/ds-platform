@@ -178,6 +178,13 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
   set, the limit and the consent are all checked and every failure named; a
   refusal throws inside the transaction, so nothing is written. Author names
   are normalised by the 044 EARS-33 rule on send.
+- **Resend after revision (EARS-9, EARS-30).** A `needs_revision` submission is
+  sent again through the same cascade, which checks its own `revision_due_at`
+  instead of the kind window (`revision-closed` from that instant) and writes
+  `submitted` conditional on the status seen; it gets a new receipt letter, the
+  limit never counts it a second time (the row being sent is excluded), and the
+  consent is asked again only for a new version. Any other non-draft status is
+  `status-conflict`.
 - **Limit (EARS-17).** Counts the account's submissions of the event and kind in
   any status except `draft` — `rejected` and `withdrawn` included — the one being
   sent excluded, under the advisory lock, so two tabs cannot both take the last

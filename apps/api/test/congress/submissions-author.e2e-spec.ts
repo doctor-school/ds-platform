@@ -147,7 +147,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `UPDATE congress_submission_kind_settings
             SET opens_at = $2, closes_at = $3
           WHERE event_id = $1 AND kind = 'oral'`,
-        [eventId, new Date(Date.now() - 2 * DAY), new Date(Date.now() - 60_000)],
+        [
+          eventId,
+          new Date(Date.now() - 2 * DAY),
+          new Date(Date.now() - 60_000),
+        ],
       );
     }
 
@@ -306,7 +310,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("EARS-5: a guest is refused and an event without intake settings has no section", async () => {
-      const guest = await app.inject({ method: "GET", url: `${BASE}?event=${randomUUID()}` });
+      const guest = await app.inject({
+        method: "GET",
+        url: `${BASE}?event=${randomUUID()}`,
+      });
       expect(guest.statusCode).toBe(401);
       const d = await doctor("sub-nosettings");
       const none = await app.inject({
@@ -322,7 +329,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const eventId = await congress(openWindow(), "2099-04-23T09:00:00.000Z");
       await register(d, eventId);
 
-      const res = await app.inject({ method: "GET", url: BASE, headers: d.headers });
+      const res = await app.inject({
+        method: "GET",
+        url: BASE,
+        headers: d.headers,
+      });
       expect(res.statusCode, res.payload).toBe(200);
       const s = CongressSubmissionSectionSchema.parse(res.json());
       expect(s.eventId).toBe(eventId);
@@ -370,7 +381,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-6: without registration answers author 1's name is left empty (the display name is never split); creating is refused only after the closing instant", async () => {
       const d = await doctor("sub-display");
-      await pool.query("UPDATE users SET display_name = 'Мария Иванова' WHERE id = $1", [d.userId]);
+      await pool.query(
+        "UPDATE users SET display_name = 'Мария Иванова' WHERE id = $1",
+        [d.userId],
+      );
       const future = await congress({
         opensAt: new Date(Date.now() + 5 * DAY),
         closesAt: new Date(Date.now() + 30 * DAY),
@@ -403,9 +417,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const d = await doctor("sub-autosave");
       const eventId = await congress(openWindow());
       await register(d, eventId);
-      const id = CongressSubmissionSchema.parse((await create(d, eventId)).json()).id;
+      const id = CongressSubmissionSchema.parse(
+        (await create(d, eventId)).json(),
+      ).id;
 
-      const partial = await autosave(d, id, { title: "Черно", body: { goal: "" } });
+      const partial = await autosave(d, id, {
+        title: "Черно",
+        body: { goal: "" },
+      });
       expect(partial.statusCode).toBe(200);
       expect(CongressSubmissionSchema.parse(partial.json())).toMatchObject({
         title: "Черно",
@@ -461,7 +480,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         Date.parse("2027-02-10T12:30:00+03:00"),
       );
       const oral = s.kinds.find((k) => k.kind === "oral")!;
-      expect(oral).toMatchObject({ state: "open", submitLimit: 3, used: 1, offered: true });
+      expect(oral).toMatchObject({
+        state: "open",
+        submitLimit: 3,
+        used: 1,
+        offered: true,
+      });
 
       const foreign = await autosave(other, mine, { title: "чужая" });
       expect(foreign.statusCode).toBe(404);
@@ -486,14 +510,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const early = await send(d, a);
       expect(early.statusCode).toBe(422);
-      expect(CongressSubmissionRefusalSchema.parse(early.json()).problems).toEqual([
+      expect(
+        CongressSubmissionRefusalSchema.parse(early.json()).problems,
+      ).toEqual([
         { code: "kind-not-open", params: { opensAt: expect.any(String) } },
       ]);
       const none = await send(d, b);
       expect(none.statusCode).toBe(422);
-      expect(CongressSubmissionRefusalSchema.parse(none.json()).problems).toEqual([
-        { code: "kind-not-open", params: { opensAt: null } },
-      ]);
+      expect(
+        CongressSubmissionRefusalSchema.parse(none.json()).problems,
+      ).toEqual([{ code: "kind-not-open", params: { opensAt: null } }]);
       const late = await send(d, c);
       expect(late.statusCode).toBe(422);
       expect(codes(late)).toEqual(["kind-closed"]);
@@ -510,7 +536,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const d = await doctor("sub-send");
       const eventId = await congress(openWindow());
       await register(d, eventId);
-      const id = CongressSubmissionSchema.parse((await create(d, eventId)).json()).id;
+      const id = CongressSubmissionSchema.parse(
+        (await create(d, eventId)).json(),
+      ).id;
       await autosave(d, id, { title: "", authors: [], body: { goal: "Цель" } });
 
       const incomplete = await send(d, id);
@@ -518,7 +546,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const fields = CongressSubmissionRefusalSchema.parse(incomplete.json())
         .problems.filter((p) => p.code === "field-invalid")
         .map((p) => p.field);
-      expect(fields).toEqual(expect.arrayContaining(["title", "authors", "body.summary"]));
+      expect(fields).toEqual(
+        expect.arrayContaining(["title", "authors", "body.summary"]),
+      );
       expect(await statusOf(id)).toBe("draft");
 
       await autosave(d, id, completeOral);
@@ -527,7 +557,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(sent.statusCode).toBe(200);
       const body = CongressSubmissionSchema.parse(sent.json());
       expect(body.status).toBe("submitted");
-      expect(Date.parse(body.submittedAt!)).toBeGreaterThanOrEqual(before - 1000);
+      expect(Date.parse(body.submittedAt!)).toBeGreaterThanOrEqual(
+        before - 1000,
+      );
       // EARS-8 — names are normalised by the 044 EARS-33 rule on send.
       expect(body.authors[0]).toMatchObject({
         surname: "Иванова",
@@ -634,7 +666,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const first = await readyDraft(d, e1);
       const refused = await send(d, first, false);
       expect(refused.statusCode).toBe(422);
-      expect(CongressSubmissionRefusalSchema.parse(refused.json()).problems).toEqual([
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json()).problems,
+      ).toEqual([
         {
           code: "consent-required",
           params: { purpose: CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE },
@@ -671,6 +705,40 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
+    it("046 EARS-16: two parallel first sends of one account (different events) record one consent row", async () => {
+      const d = await doctor("sub-consent-race");
+      const e1 = await congress(openWindow());
+      const e2 = await congress(openWindow());
+      await register(d, e1);
+      await register(d, e2);
+      const a = await readyDraft(d, e1);
+      const b = await readyDraft(d, e2);
+      const results = await Promise.all([send(d, a), send(d, b)]);
+      expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM consent_records WHERE user_id = $1 AND purpose = $2",
+        [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it("046 EARS-16: without a configured consent version the section still reads (consent asked) and only the send is refused", async () => {
+      const d = await doctor("sub-consent-unset");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+      delete process.env.CONGRESS_SIGNUP_CONSENT_VERSION;
+      try {
+        const read = await section(d, eventId);
+        expect(read.consentRequired).toBe(true);
+        expect(read.submissions.map((s) => s.id)).toEqual([id]);
+        expect((await send(d, id)).statusCode).toBe(503);
+        expect(await statusOf(id)).toBe("draft");
+      } finally {
+        process.env.CONGRESS_SIGNUP_CONSENT_VERSION = VERSION_A;
+      }
+    });
+
     // ------------------------------------------------------------------ V-6
 
     it("EARS-17: rejected and withdrawn submissions count toward the limit, drafts and one returned to draft do not", async () => {
@@ -687,9 +755,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const full = await send(d, c);
       expect(full.statusCode).toBe(422);
-      expect(CongressSubmissionRefusalSchema.parse(full.json()).problems).toEqual([
-        { code: "limit-reached", params: { limit: 2 } },
-      ]);
+      expect(
+        CongressSubmissionRefusalSchema.parse(full.json()).problems,
+      ).toEqual([{ code: "limit-reached", params: { limit: 2 } }]);
 
       // b back to draft: it no longer counts, so c fits.
       expect((await withdraw(d, b, "submitted")).statusCode).toBe(200);
@@ -721,6 +789,109 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(rows).toHaveLength(1);
     });
 
+    // ----------------------------------------------- V-12 — the author resend
+
+    /** The committee's `needs_revision` with a deadline, as S5 will set it. */
+    async function needsRevision(id: string, dueAt: Date): Promise<void> {
+      await pool.query(
+        `UPDATE congress_submissions
+            SET status = 'needs_revision', committee_comment = 'Уточните цель',
+                revision_due_at = $2, last_letter_kind = NULL,
+                last_letter_status = NULL, last_letter_at = NULL
+          WHERE id = $1`,
+        [id, dueAt],
+      );
+    }
+
+    it("046 EARS-9: a needs_revision talk resent before its revision deadline — after the oral closing — becomes submitted with a new receipt, is not counted against the limit a second time and takes no second consent", async () => {
+      const d = await doctor("sub-resend");
+      const eventId = await congress({ ...openWindow(), submitLimit: 1 });
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+      expect((await send(d, id)).statusCode).toBe(200);
+      await waitForLetter(id);
+
+      await needsRevision(id, new Date(Date.now() + 2 * DAY));
+      await closeOral(eventId);
+      const edited = await autosave(d, id, {
+        body: {
+          goal: "Разобрать показания и осложнения.",
+          summary: "Краткое содержание.",
+        },
+      });
+      expect(edited.statusCode).toBe(200);
+
+      const before = Date.now();
+      const resent = await send(d, id, false);
+      expect(resent.statusCode).toBe(200);
+      const body = CongressSubmissionSchema.parse(resent.json());
+      expect(body.status).toBe("submitted");
+      expect(Date.parse(body.submittedAt!)).toBeGreaterThanOrEqual(
+        before - 1000,
+      );
+
+      const outcome = await waitForLetter(id);
+      expect(outcome).toMatchObject({ kind: "receipt", status: "sent" });
+      expect(receiptsTo(d.email.toLowerCase())).toHaveLength(2);
+
+      const oral = (await section(d, eventId)).kinds.find(
+        (k) => k.kind === "oral",
+      )!;
+      expect(oral.used).toBe(1);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM consent_records WHERE user_id = $1 AND purpose = $2",
+        [d.userId, CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it("046 EARS-30: from the revision deadline the send is refused with revision-closed, autosave is refused, and the status stays needs_revision", async () => {
+      const d = await doctor("sub-resend-late");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+      expect((await send(d, id)).statusCode).toBe(200);
+      await waitForLetter(id);
+
+      const dueAt = new Date(Date.now() - 60_000);
+      await needsRevision(id, dueAt);
+      const sentBefore = receiptsTo(d.email.toLowerCase()).length;
+
+      const late = await send(d, id);
+      expect(late.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(late.json()).problems,
+      ).toEqual([
+        {
+          code: "revision-closed",
+          params: { revisionDueAt: dueAt.toISOString() },
+        },
+      ]);
+      expect((await autosave(d, id, { title: "Другое" })).statusCode).toBe(409);
+      expect(await statusOf(id)).toBe("needs_revision");
+      expect(receiptsTo(d.email.toLowerCase())).toHaveLength(sentBefore);
+    });
+
+    it("046 EARS-9: statuses other than draft and needs_revision cannot be sent", async () => {
+      const d = await doctor("sub-send-status");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+      expect((await send(d, id)).statusCode).toBe(200);
+      for (const status of [
+        "submitted",
+        "in_review",
+        "accepted",
+        "rejected",
+        "withdrawn",
+      ]) {
+        await setStatus(id, status);
+        const refused = await send(d, id);
+        expect(refused.statusCode).toBe(409);
+        expect(codes(refused)).toEqual(["status-conflict"]);
+      }
+    });
+
     // ------------------------------------------------------------------ V-9
 
     it("EARS-12: withdrawing in_review, needs_revision, or submitted after closing sets withdrawn — read-only, never sent again", async () => {
@@ -743,7 +914,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ] as const) {
         const res = await withdraw(d, id, seen);
         expect(res.statusCode).toBe(200);
-        expect(CongressSubmissionSchema.parse(res.json()).status).toBe("withdrawn");
+        expect(CongressSubmissionSchema.parse(res.json()).status).toBe(
+          "withdrawn",
+        );
       }
 
       const resend = await send(d, late);
@@ -783,7 +956,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const res = await withdraw(d, id, "submitted");
       expect(res.statusCode).toBe(409);
-      expect(CongressSubmissionRefusalSchema.parse(res.json()).problems).toEqual([
+      expect(
+        CongressSubmissionRefusalSchema.parse(res.json()).problems,
+      ).toEqual([
         { code: "withdraw-not-allowed", params: { status: "in_review" } },
       ]);
       expect(await statusOf(id)).toBe("in_review");
@@ -798,7 +973,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await send(d, sent)).statusCode).toBe(200);
 
       const del = (id: string) =>
-        app.inject({ method: "DELETE", url: `${BASE}/${id}`, headers: d.headers });
+        app.inject({
+          method: "DELETE",
+          url: `${BASE}/${id}`,
+          headers: d.headers,
+        });
       expect((await del(draft)).statusCode).toBe(204);
       // ADR-0003 §3.6 — the row is retired, not removed, and gone for the author.
       const { rows } = await pool.query<{ record_status: string }>(
@@ -806,7 +985,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         [draft],
       );
       expect(rows).toEqual([{ record_status: "retired" }]);
-      expect((await section(d, eventId)).submissions.map((s) => s.id)).toEqual([sent]);
+      expect((await section(d, eventId)).submissions.map((s) => s.id)).toEqual([
+        sent,
+      ]);
       expect((await autosave(d, draft, { title: "x" })).statusCode).toBe(404);
       expect((await del(draft)).statusCode).toBe(404);
 

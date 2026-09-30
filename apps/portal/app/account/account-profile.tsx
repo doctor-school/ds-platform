@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import type { MyProfile } from "@ds/schemas";
 
 import { AuthError } from "@ds/auth-flow/client";
+import { SIGN_OUT_DESTINATION } from "@ds/auth-flow/host-config";
 import { authClient } from "@/lib/auth-flow-client";
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { authErrorMessage } from "@ds/auth-flow/errors";
@@ -111,7 +112,9 @@ export function AccountProfile() {
       // Whether or not the revoke round-trip succeeded, the user intends to leave.
       // #1004: the navigation renders the persistent header on the server again,
       // which finds no session — the avatar is gone without a hard reload.
-      router.replace("/login");
+      // #2488: the destination is the package's one sign-out destination, the
+      // same on both storefronts.
+      router.replace(SIGN_OUT_DESTINATION);
       // 008 EARS-5 (#2281): the header is server-rendered in the persistent
       // `@chrome` slot, so every page visited while signed in sits in the client
       // Router Cache with the signed-in chip. Browser Back is a soft navigation

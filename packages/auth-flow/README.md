@@ -70,8 +70,9 @@ challenge itself is package behaviour, rendered wherever a key is configured.
 **Mechanics are not host data (#2443).** The sign-in-code channels
 (`AUTH_FLOW_CHANNELS` — e-mail and SMS), the auth routes a signed-in visitor
 may still complete (`authenticatedAllowedRoutes(routes)` — the reset route,
-003 EARS-28) and the return-target parking (`RETURN_TARGET_PARKING`) are package
-constants, so two storefronts cannot diverge on them.
+003 EARS-28), the return-target parking (`RETURN_TARGET_PARKING`) and where
+sign-out lands (`SIGN_OUT_DESTINATION` — the storefront home `/`, 003 EARS-10,
+#2488) are package constants, so two storefronts cannot diverge on them.
 The fields whose values MAY differ per storefront are exported as
 `AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS`, each naming the spec clauses of its row in
 021's «Differences between storefronts» table: `register.promoField`,

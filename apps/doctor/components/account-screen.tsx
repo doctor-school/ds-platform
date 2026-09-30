@@ -12,6 +12,7 @@ import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
 import { AuthError } from "@ds/auth-flow/client";
 import { withReturnContext } from "@ds/auth-flow/server";
+import { SIGN_OUT_DESTINATION } from "@ds/auth-flow/host-config";
 
 import { authClient } from "@/lib/auth-flow-client";
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
@@ -166,8 +167,9 @@ export function AccountScreen() {
       // Whether or not the revoke round-trip succeeded, the doctor intends to
       // leave. `refresh()` re-runs the SERVER render, which is where the 017
       // header decides its cluster (EARS-1) — without it the signed-in cluster
-      // would survive this soft navigation.
-      router.replace("/");
+      // would survive this soft navigation. #2488: the destination is the
+      // package's one sign-out destination, the same on both storefronts.
+      router.replace(SIGN_OUT_DESTINATION);
       router.refresh();
     }
   }

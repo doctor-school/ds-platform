@@ -12,6 +12,7 @@ import {
   AUTH_FLOW_CHANNELS,
   AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS,
   RETURN_TARGET_PARKING,
+  SIGN_OUT_DESTINATION,
   authenticatedAllowedRoutes,
 } from "./host-config";
 import {
@@ -138,6 +139,16 @@ describe("#2443 auth-flow mechanics are package constants, product differences a
     expectTypeOf<AuthFlowHostConfig>().not.toHaveProperty("channels");
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
       expect(config).not.toHaveProperty("channels");
+    }
+  });
+
+  it("003 EARS-10: the post-sign-out destination is one package constant — the storefront home — and no host states it (#2488)", () => {
+    expect(SIGN_OUT_DESTINATION).toBe("/");
+    expectTypeOf<AuthFlowHostConfig>().not.toHaveProperty("signOut");
+    expectTypeOf<AuthFlowRoutes>().not.toHaveProperty("signOut");
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      expect(config).not.toHaveProperty("signOut");
+      expect(config.routes).not.toHaveProperty("signOut");
     }
   });
 

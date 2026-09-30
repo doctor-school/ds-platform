@@ -408,7 +408,8 @@ test.describe("#2456 a staff session on the Academy account page", () => {
     ).toHaveCount(0);
 
     await page.getByTestId("logout").click();
-    await expect(page).toHaveURL(/\/login/);
+    // #2488: sign-out lands on the storefront home, the same on both storefronts.
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/$/);
     const after = await page.evaluate(async () => {
       const res = await fetch("/v1/me/profile", { credentials: "include" });
       return res.status;

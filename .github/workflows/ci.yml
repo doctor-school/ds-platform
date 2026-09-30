@@ -723,10 +723,16 @@ jobs:
       # shares with every other run and every agent `gh` call. That made a BLOCK
       # gate depend on a resource it cannot reserve (#1268). Links to anywhere
       # else, including inside the generated CHANGELOG.md files, are still checked.
+      #
+      # `.lycheeignore` holds URL regexes only; it cannot stop a FILE from being
+      # scanned. Input files are excluded with `--exclude-path` (a regex matched
+      # against the input path, lychee README "Ignoring and excluding links"): the
+      # lint-guard test fixtures are test data carrying deliberate placeholder,
+      # broken or refusing links, not docs (#293, #2497).
       - name: markdown-links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --no-progress --include-fragments .
+          args: --no-progress --include-fragments --exclude-path 'tools/lint/guard-tests/fixtures/' .
           fail: true
 
   # ─── WARN light guards ────────────────────────────────────────────────

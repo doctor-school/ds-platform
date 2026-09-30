@@ -611,6 +611,19 @@ export type AuthFlowHostConfig = {
 export const AUTH_FLOW_CHANNELS: readonly OtpChannel[] = ["email", "sms"];
 
 /**
+ * #2488 / 003 EARS-10 — where a visitor lands after signing out from `/account`:
+ * the storefront home, the same on both storefronts.
+ *
+ * A package constant, not host data. Where sign-out leads is auth-flow
+ * MECHANICS, not a storefront difference (owner, 2026-09-30); a per-app literal
+ * once sent Academy visitors to `/login` and doctor.school visitors to `/`, so
+ * the value now has one home and each account screen navigates to it. Bare: a
+ * visitor who deliberately signed out carries no return target back into the
+ * cabinet (014 EARS-6 is the guest bounce, not the deliberate exit).
+ */
+export const SIGN_OUT_DESTINATION = "/" as const;
+
+/**
  * #2443 / Q3 (rows 26–28) — the auth routes an AUTHENTICATED visitor may still be
  * shown, derived from the host's own route table rather than stated beside it.
  *

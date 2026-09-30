@@ -137,7 +137,8 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     // ── Logout (EARS-10) ─────────────────────────────────────────────────
     await page.getByTestId("logout").click();
-    await page.waitForURL(/\/login/);
+    // #2488: sign-out lands on the storefront home, the same on both storefronts.
+    await page.waitForURL((url) => url.pathname === "/");
     const after = await page.context().cookies();
     expect(after.find((c) => c.name === SESSION_COOKIE)?.value || "").toBe("");
   });
@@ -211,7 +212,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     // Sign out so the OTP-login challenge below starts from a clean session.
     await page.getByTestId("logout").click();
-    await page.waitForURL(/\/login/);
+    // #2488: sign-out lands on the storefront home; the OTP journey opens the door itself.
+    await page.waitForURL((url) => url.pathname === "/");
+    await page.goto("/login");
 
     // ── Request an email OTP (EARS-6 step 1) ─────────────────────────────
     // #179: /login now starts on the Password method tab; select the
@@ -418,7 +421,8 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // it deliberately — the default post-auth landing is `/webinars` (013 EARS-15).
     await page.goto("/account");
     await page.getByTestId("logout").click();
-    await page.waitForURL(/\/login/);
+    // #2488: sign-out lands on the storefront home, the same on both storefronts.
+    await page.waitForURL((url) => url.pathname === "/");
 
     // ── Register #2 (same, already-registered email) ──────────────────────
     await page.goto("/register");

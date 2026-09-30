@@ -195,17 +195,17 @@ describe("003 EARS-28 /account profile surface", () => {
     );
   });
 
-  it("logout revokes server-side then routes to /login (EARS-10, stable data-testid)", async () => {
+  it("logout revokes server-side then routes to the storefront home (EARS-10, #2488, stable data-testid)", async () => {
     const user = userEvent.setup();
     render(<AccountProfile />);
     await screen.findByTestId("logout");
 
     await user.click(screen.getByTestId("logout"));
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
-    // Bare: a doctor who signed OUT asked to leave the cabinet, so the door
+    // Bare: a doctor who signed OUT asked to leave the cabinet, so the home
     // carries no return target back into it (014 EARS-6 is the guest bounce,
-    // not the deliberate exit).
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+    // not the deliberate exit). #2488: the same `/` on both storefronts.
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
   it("008 EARS-5: logout drops the client Router Cache, so browser Back re-reads the server header as guest (#2281)", async () => {

@@ -6,7 +6,7 @@
  *
  * It drives the PRODUCTION standalone build of the branch head against the dev
  * stand (api on the branch database): it provisions a doctor through the
- * doctor host's own register/confirm commands (Mailpit code), writes the
+ * doctor host register command and the 003 verify (Mailpit code), writes the
  * congress event, its intake settings and the 044 registration on the branch
  * database (the same rows `support/congress-stand.ts` documents), creates the
  * talks through the section's API and sets the committee statuses the S5
@@ -96,25 +96,33 @@ await db(async (c) => {
   );
 });
 
-const email = `e2e-2433-evidence-${Date.now()}@ds.test`;
-const password = `Doc-${Date.now()}-aA1!`;
-const sentAt = Date.now();
-await post("/v1/storefront/doctor/register", {
-  email,
-  password,
-  medicalWorkerDeclaration: true,
-  consent: [{ purpose: "partner-data-sharing", version: "v1" }],
-});
-await post("/v1/storefront/doctor/confirm", { email, code: await verifyCode(email, sentAt) });
-// The throwaway dev-stand account, for a follow-up manual drive of the same list.
-console.log(`account ${email} ${password}`);
-await db((c) =>
-  c.query(
-    `INSERT INTO registrations (user_id, event_id, answers)
-     SELECT id, $2, $3 FROM users WHERE email = $1`,
-    [email, eventId, { surname: "Иванова", firstName: "Мария", patronymic: "Петровна", workplace: "ГКБ № 1, Москва" }],
-  ),
-);
+/** A confirmed doctor registered for the congress (044 answers on the row). */
+async function provision(tag) {
+  const email = `e2e-2433-${tag}-${Date.now()}@ds.test`;
+  const password = `Doc-${Date.now()}-aA1!`;
+  const sentAt = Date.now();
+  await post("/v1/storefront/doctor/register", {
+    email,
+    password,
+    medicalWorkerDeclaration: true,
+    consent: [{ purpose: "partner-data-sharing", version: "v1" }],
+  });
+  await post("/v1/auth/verify", { email, code: await verifyCode(email, sentAt) });
+  // The throwaway dev-stand account, for a follow-up manual drive of the same list.
+  console.log(`account ${email} ${password}`);
+  await db((c) =>
+    c.query(
+      `INSERT INTO registrations (user_id, event_id, answers)
+       SELECT id, $2, $3 FROM users WHERE email = $1`,
+      [email, eventId, { surname: "Иванова", firstName: "Мария", patronymic: "Петровна", workplace: "ГКБ № 1, Москва" }],
+    ),
+  );
+  return { email, password };
+}
+const author = await provision("evidence");
+// First-time authors (one per viewport — each starts its own draft): no
+// submission consent row yet, so the form asks for it.
+const newcomers = { desktop: await provision("consent-d"), mobile: await provision("consent-m") };
 
 const TALKS = [
   { title: "PRP при латеральном эпикондилите: результаты 120 пациентов", status: "needs_revision",
@@ -127,7 +135,7 @@ const TALKS = [
   { title: "Комбинация PRP и гиалуроновой кислоты при гонартрозе: проспективное исследование", status: "withdrawn" },
 ];
 
-async function signIn(page) {
+async function signIn(page, who = author) {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   const status = await page.evaluate(
     async ([identifier, pw]) =>
@@ -137,7 +145,7 @@ async function signIn(page) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ identifier, password: pw }),
       })).status,
-    [email, password],
+    [who.email, who.password],
   );
   if (status !== 200) throw new Error(`sign-in ${status}`);
 }
@@ -189,7 +197,7 @@ await db(async (c) => {
 });
 
 // ---- captures ----------------------------------------------------------------
-async function themed(viewport, theme) {
+async function themed(viewport, theme, who = author) {
   const ctx = await browser.newContext({ viewport, locale: "ru-RU" });
   await ctx.addInitScript(
     ([key, value]) => {
@@ -202,7 +210,7 @@ async function themed(viewport, theme) {
     ["ds-theme", theme],
   );
   const page = await ctx.newPage();
-  await signIn(page);
+  await signIn(page, who);
   return { ctx, page };
 }
 
@@ -315,6 +323,45 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
     .click();
   await page.getByLabel("Тема").waitFor();
   await shot(page, "interactions-needs-revision-mobile-dark", "dark");
+  await ctx.close();
+}
+
+// The consent row («Подтверждения», checkbox + policy link) of a first-time
+// author (EARS-16), desktop and mobile light: refused without it, then ticked.
+for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
+  const { ctx, page } = await themed(viewport, "light", newcomers[vp]);
+  await page.goto(`${BASE}/account/congress`);
+  await page.getByTestId("congress-pick-oral").getByRole("button", { name: "Начать заявку →" }).click();
+  await page.getByLabel("Тема").waitFor();
+  await page.getByLabel("Тема").fill("Возвращение в спорт после PRP-терапии: критерии допуска");
+  await page.getByLabel("Образовательная цель").fill("Критерии допуска к нагрузкам.");
+  await page.getByLabel("Краткое содержание").fill("Материал, случаи, выводы.");
+  await page.getByLabel("Краткое содержание").blur();
+  await page.getByTestId("congress-save-state").getByText("Сохранено").waitFor();
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await page.getByText("Дайте согласие на обработку персональных данных").first().waitFor();
+  await shot(page, `interactions-consent-${vp}`, "light");
+  await ctx.close();
+}
+
+// The author resend (EARS-30): the needs-revision talk sent again before its
+// deadline → «Отправить исправленную заявку?» → «Отправлена».
+{
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "light");
+  await page.goto(`${BASE}/account/congress`);
+  await page
+    .getByTestId("congress-row")
+    .filter({ hasText: "PRP при латеральном эпикондилите" })
+    .getByRole("button", { name: /Продолжить/ })
+    .click();
+  await page.getByRole("button", { name: "Отправить снова" }).click();
+  await page.getByText("Отправить исправленную заявку?").waitFor();
+  await page.getByText("Отправить исправленную заявку?").scrollIntoViewIfNeeded();
+  await shot(page, "interactions-resend-confirm", "light", false);
+  await page.getByRole("button", { name: "Да, отправить снова" }).click();
+  await page.getByTestId("congress-status-plate").getByText("Отправлена").waitFor();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, "interactions-resent", "light", false);
   await ctx.close();
 }
 

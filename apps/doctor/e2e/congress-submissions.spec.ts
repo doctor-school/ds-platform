@@ -41,7 +41,9 @@ import {
  * green; a half-exported env fails loudly by variable name
  * (`support/live-stand-env.ts`), whose stand preconditions apply (raised
  * rate-limit ceilings; bot protection in its stand bypass mode, the doctor host
- * built with an empty `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`).
+ * built with an empty `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`), and the api booted
+ * with `CONGRESS_SIGNUP_CONSENT_VERSION` (the send stamps it, 046 EARS-16) and
+ * `MAILER_DOCTOR_BASE_URL` (a required api variable, 046 EARS-15).
  *
  * STAND TRAP — bind the doctor server to IPv4 (`HOSTNAME=127.0.0.1`): bound
  * dual-stack it forwards the client as `::ffff:127.0.0.1`, the session

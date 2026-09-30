@@ -112,7 +112,7 @@ export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
     });
     expect(reg.ok(), `register — ${reg.status()}: ${await reg.text()}`).toBe(true);
     const code = await mailedCode(email, "verify", sentAt);
-    const confirm = await api.post("/v1/storefront/doctor/confirm", {
+    const confirm = await api.post("/v1/auth/verify", {
       data: { email, code },
     });
     expect(confirm.ok(), `confirm — ${confirm.status()}: ${await confirm.text()}`).toBe(true);

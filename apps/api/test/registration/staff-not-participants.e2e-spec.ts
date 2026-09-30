@@ -23,7 +23,7 @@ import {
 // dev-stand Postgres; skips when DATABASE_URL or IDP_ISSUER is absent, like the
 // sibling e2e suites.
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
-  "#2456 staff accounts are filtered out of participant queries (e2e)",
+  "003 EARS-26 staff accounts are filtered out of participant queries (#2456, e2e)",
   () => {
     let moduleRef: TestingModule;
     let pool: pg.Pool;
@@ -120,7 +120,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await moduleRef.close();
     });
 
-    it("#2456: the storefront sign-up count counts the doctor, never the staff member", async () => {
+    it("EARS-26: the storefront sign-up count counts the doctor, never the staff member", async () => {
       const { eventId } = await mixedEvent();
 
       const counts = await doctorEvents.countSignUps([eventId]);
@@ -128,7 +128,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(counts.get(eventId)).toBe(1);
     });
 
-    it("#2456: the roster read model lists only participants", async () => {
+    it("EARS-26: the roster read model lists only participants", async () => {
       const { eventId, doctorId } = await mixedEvent();
 
       const roster = await registrationRepo.findEventRoster(eventId);
@@ -136,7 +136,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(roster.map((r) => r.userId)).toEqual([doctorId]);
     });
 
-    it("#2456: the registrar's roster page excludes staff rows from both the rows and the total", async () => {
+    it("EARS-26: the registrar's roster page excludes staff rows from both the rows and the total", async () => {
       const { eventId } = await mixedEvent();
 
       const page = await registrationRepo.findEventRosterPage(
@@ -149,13 +149,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(page.total).toBe(1);
     });
 
-    it("#2456: the live room population counts the doctor, never the staff member", async () => {
+    it("EARS-26: the live room population counts the doctor, never the staff member", async () => {
       const { eventId } = await mixedEvent();
 
       expect(await presence.countLivePresence(eventId, 60)).toBe(1);
     });
 
-    it("#2456: derived presence minutes carry no staff rows", async () => {
+    it("EARS-26: derived presence minutes carry no staff rows", async () => {
       const { eventId, doctorId } = await mixedEvent();
 
       const minutes = await presence.deriveEventMinutes(eventId, 30);

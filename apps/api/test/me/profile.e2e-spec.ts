@@ -272,7 +272,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!.role;
     }
 
-    it("#2456: a staff session holding ONLY platform_admin reads and edits its own account — the account page never locks a signed-in user out", async () => {
+    it("EARS-27: a staff session holding ONLY platform_admin reads its own profile and signs out — the account page never locks a signed-in user out", async () => {
       const email = uniqueEmail("staff-only");
       await accountWithRoles(email, ["platform_admin"]);
       const cookie = await login(email);
@@ -280,6 +280,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const profile = await getProfile(cookieHeader(cookie));
       expect(profile.statusCode).toBe(200);
       expect(MyProfileSchema.parse(profile.json()).email).toBe(email);
+
+      const out = await app.inject({
+        method: "POST",
+        url: "/v1/auth/logout",
+        headers: cookieHeader(cookie),
+      });
+      expect(out.statusCode).toBe(200);
+    });
+
+    it("EARS-16: a staff session holding ONLY platform_admin reads and writes its own display name", async () => {
+      const email = uniqueEmail("staff-name");
+      await accountWithRoles(email, ["platform_admin"]);
+      const cookie = await login(email);
 
       const name = await app.inject({
         method: "GET",
@@ -296,15 +309,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(put.statusCode).toBe(200);
 
-      const out = await app.inject({
-        method: "POST",
-        url: "/v1/auth/logout",
+      const saved = await app.inject({
+        method: "GET",
+        url: "/v1/me/display-name",
         headers: cookieHeader(cookie),
       });
-      expect(out.statusCode).toBe(200);
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json()).toMatchObject({ displayName: "Служебная Учётка" });
     });
 
-    it("#2456: a registrar who is also a site user (doctor_guest + event-registrar) reads its own account; a registrar-only principal stays refused (044 EARS-19)", async () => {
+    it("EARS-27: a registrar who is also a site user (doctor_guest + event-registrar) reads its own account; a registrar-only principal stays refused (044 registrar confinement)", async () => {
       const both = uniqueEmail("registrar-user");
       await accountWithRoles(both, ["doctor_guest", "event-registrar"]);
       expect(
@@ -319,7 +333,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       ).toBe(403);
     });
 
-    it("#2456: a signed-in staff session marks the mirror row staff, and losing the staff role returns it to the visitor role", async () => {
+    it("EARS-26: a signed-in staff session marks the mirror row staff, and losing the staff role returns it to the visitor role", async () => {
       const email = uniqueEmail("staff-marker");
       const sub = await accountWithRoles(email, [
         "doctor_guest",

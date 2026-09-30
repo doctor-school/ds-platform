@@ -143,7 +143,7 @@ describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () =>
     await expect(svc.ensureMirrored("orphan-2")).resolves.toBeUndefined();
   });
 
-  describe("#2456 staff marker — users.role mirrors the session's project-roles claim", () => {
+  describe("EARS-26: staff marker (#2456) — users.role mirrors the session's project-roles claim", () => {
     const idpUser = {
       sub: "staff-1",
       email: "staff@ds.test",
@@ -151,7 +151,7 @@ describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () =>
       phoneVerified: false,
     };
 
-    it("#2456: a visitor row whose session carries platform_admin is marked staff — the mirror records the staff role", async () => {
+    it("EARS-26: a visitor row whose session carries platform_admin is marked staff — the mirror records the staff role", async () => {
       const { idp } = fakeIdp(idpUser);
       const { mirror, roleWrites } = fakeMirror(true, "doctor_guest");
       const svc = new MirrorSelfHealService(idp, mirror);
@@ -161,7 +161,7 @@ describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () =>
       expect(roleWrites).toEqual([["staff-1", "platform_admin"]]);
     });
 
-    it("#2456: a staff row whose session no longer carries a staff role is returned to the visitor role", async () => {
+    it("EARS-26: a staff row whose session no longer carries a staff role is returned to the visitor role", async () => {
       const { idp } = fakeIdp(idpUser);
       const { mirror, roleWrites } = fakeMirror(true, "platform_admin");
       const svc = new MirrorSelfHealService(idp, mirror);
@@ -171,7 +171,7 @@ describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () =>
       expect(roleWrites).toEqual([["staff-1", "doctor_guest"]]);
     });
 
-    it("#2456: a row already matching the claim is not written (hot path stays one read)", async () => {
+    it("EARS-26: a row already matching the claim is not written (hot path stays one read)", async () => {
       const { idp, getUserCalls } = fakeIdp(idpUser);
       const { mirror, roleWrites } = fakeMirror(true, "event-registrar");
       const svc = new MirrorSelfHealService(idp, mirror);
@@ -182,7 +182,7 @@ describe("003 EARS-26 MirrorSelfHealService — #709 read-path self-heal", () =>
       expect(getUserCalls).toEqual([]);
     });
 
-    it("#2456: a freshly healed staff row is marked staff in the same pass", async () => {
+    it("EARS-26: a freshly healed staff row is marked staff in the same pass", async () => {
       const { idp } = fakeIdp(idpUser);
       const { mirror, upserted, roleWrites } = fakeMirror(false);
       const svc = new MirrorSelfHealService(idp, mirror);

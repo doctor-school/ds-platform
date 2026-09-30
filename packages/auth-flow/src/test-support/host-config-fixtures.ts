@@ -63,10 +63,6 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
     ],
     wordingVersion: "2026-01",
   },
-  // 014 EARS-6 - this host parks the carried target for the trip through the
-  // verification mail. The doctor fixture below states none: row 29, that host
-  // carries the target on the query param alone.
-  returnTo: { parkingCookie: { name: "ds_return_to", maxAgeSeconds: 900 } },
 };
 
 /** The doctor storefront: promo box on the form, specialty-aware landing, two consent tiers. */
@@ -147,5 +143,4 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
     marketingOptIn: true,
     wordingVersion: "2026-09-22",
   },
-  // It parks nothing (row 29), so there is no `returnTo` here.
 };

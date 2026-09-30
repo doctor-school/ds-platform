@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ReturnTargetParking } from "../return-target";
+import { RETURN_TARGET_PARKING } from "../host-config";
 import {
   clearStoredReturnTarget,
   readStoredReturnTarget,
@@ -20,16 +20,11 @@ import {
  * then cleared, so a later unrelated sign-in cannot teleport the visitor into a
  * stale page.
  *
- * What the move CHANGES: the cookie name is no longer a module constant but the
- * host's own `returnTo.parkingCookie` - the same declaration the parking rule
- * writes through - and `undefined` parking (row 29, the doctor storefront) makes
- * every read a no-op instead of reaching for a cookie that host never sets.
+ * The cookie name is the package `RETURN_TARGET_PARKING` declaration - the same
+ * one the parking rule writes through, on both storefronts (row 29, #2443).
  */
 
-const parking: ReturnTargetParking = {
-  name: "ds_return_to",
-  maxAgeSeconds: 900,
-};
+const parking = RETURN_TARGET_PARKING;
 
 function park(rawCookieValue: string): void {
   document.cookie = `${parking.name}=${rawCookieValue}; Path=/`;
@@ -37,28 +32,28 @@ function park(rawCookieValue: string): void {
 
 describe("014 EARS-6 shared return-target store", () => {
   afterEach(() => {
-    clearStoredReturnTarget(parking);
+    clearStoredReturnTarget();
   });
 
   it("014 EARS-6.5: the parked target survives the interruption of the verification mail", () => {
     park(encodeURIComponent("/webinars/ahilles-042"));
-    expect(readStoredReturnTarget(parking)).toBe("/webinars/ahilles-042");
-    expect(resolveReturnTarget(null, parking)).toBe("/webinars/ahilles-042");
+    expect(readStoredReturnTarget()).toBe("/webinars/ahilles-042");
+    expect(resolveReturnTarget(null)).toBe("/webinars/ahilles-042");
   });
 
   it("014 EARS-6.6: the target is consumed exactly once and then cleared", () => {
     park(encodeURIComponent("/account/events"));
-    expect(resolveReturnTarget(null, parking)).toBe("/account/events");
-    expect(readStoredReturnTarget(parking)).toBeNull();
-    expect(resolveReturnTarget(null, parking)).toBeNull();
+    expect(resolveReturnTarget(null)).toBe("/account/events");
+    expect(readStoredReturnTarget()).toBeNull();
+    expect(resolveReturnTarget(null)).toBeNull();
   });
 
   it("014 EARS-6.7: a still-present query target wins over the parked one, and clears it", () => {
     park(encodeURIComponent("/webinars/stale-042"));
-    expect(resolveReturnTarget("/webinars/fresh-042", parking)).toBe(
+    expect(resolveReturnTarget("/webinars/fresh-042")).toBe(
       "/webinars/fresh-042",
     );
-    expect(readStoredReturnTarget(parking)).toBeNull();
+    expect(readStoredReturnTarget()).toBeNull();
   });
 
   it("014 EARS-6.8: a tampered parked target is dropped rather than followed", () => {
@@ -70,27 +65,22 @@ describe("014 EARS-6 shared return-target store", () => {
       "%E0%A4%A",
     ]) {
       park(evil);
-      expect(readStoredReturnTarget(parking), `must reject: ${evil}`).toBeNull();
+      expect(readStoredReturnTarget(), `must reject: ${evil}`).toBeNull();
       park(evil);
-      expect(resolveReturnTarget(null, parking)).toBeNull();
+      expect(resolveReturnTarget(null)).toBeNull();
     }
   });
 
   it("014 EARS-6.8: a hostile query target is dropped even with no parked target", () => {
-    expect(resolveReturnTarget("https://example.invalid/", parking)).toBeNull();
-    expect(resolveReturnTarget("//example.invalid/", parking)).toBeNull();
-    expect(resolveReturnTarget(null, parking)).toBeNull();
+    expect(resolveReturnTarget("https://example.invalid/")).toBeNull();
+    expect(resolveReturnTarget("//example.invalid/")).toBeNull();
+    expect(resolveReturnTarget(null)).toBeNull();
   });
 
-  it("014 EARS-6.9: a host that parks nothing reads nothing - only the carried query target", () => {
-    park(encodeURIComponent("/webinars/ahilles-042"));
-    expect(readStoredReturnTarget(undefined)).toBeNull();
-    expect(resolveReturnTarget(null, undefined)).toBeNull();
-    expect(resolveReturnTarget("/events/ahilles-042", undefined)).toBe(
-      "/events/ahilles-042",
-    );
-    // The other host's cookie is left untouched, never cleared by a host that
-    // does not own it.
-    expect(readStoredReturnTarget(parking)).toBe("/webinars/ahilles-042");
+  it("014 EARS-6.9 (#2443): the store reads the ONE package cookie — the name the parking rule writes on both storefronts", () => {
+    expect(parking.name).toBe("ds_return_to");
+    document.cookie = `ds_other_park=${encodeURIComponent("/webinars/x-042")}; Path=/`;
+    expect(readStoredReturnTarget()).toBeNull();
+    document.cookie = "ds_other_park=; Path=/; Max-Age=0";
   });
 });

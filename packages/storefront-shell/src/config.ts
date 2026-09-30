@@ -188,3 +188,37 @@ export function isHiddenPath(
   if (!patterns) return false;
   return patterns.some((pattern) => matchesPathPattern(pathname, pattern));
 }
+
+/** One agreed product difference between the two storefronts' chrome and what decides it. */
+export type ShellProductDifference = {
+  /** The {@link StorefrontShellConfig} field. */
+  readonly field: keyof StorefrontShellConfig;
+  /** The owning requirements file, repo-relative. */
+  readonly spec: string;
+  /** The clauses of that spec the row cites (`NNN EARS-N`). */
+  readonly clauses: readonly string[];
+  /** The owner decision the per-storefront value was taken in. */
+  readonly decision: string;
+};
+
+/**
+ * #2443 — the shell fields whose values are allowed to DIFFER between the two
+ * storefronts. Every other field is presentation, brand or route data; each
+ * entry here is a row of 017's «Differences between storefronts» table.
+ *
+ * `search`: the header search is on for the doctor storefront (submitting to
+ * its events listing) and absent on the Academy — the host map of the vendored
+ * shell canvas (`design-source/ds-shell.dc.html`, `search: true` / `false`),
+ * which the owner accepted when the shared shell shipped (#2180, Stage-B on PR
+ * #2198); 017 EARS-1 names the search target as a host value.
+ */
+export const SHELL_PRODUCT_DIFFERENCE_FIELDS: readonly ShellProductDifference[] =
+  [
+    {
+      field: "search",
+      spec: "apps/docs/content/specs/features/017-doctor-shell-specialties/017-requirements-en.md",
+      clauses: ["017 EARS-1"],
+      decision:
+        "design-source/ds-shell.dc.html host map (search: doctor true, academy false), accepted at #2180 (owner Stage-B on PR #2198)",
+    },
+  ];

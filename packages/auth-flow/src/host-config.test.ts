@@ -6,12 +6,12 @@ import type {
   AuthFlowHostConfig,
   AuthFlowLandingConfig,
   AuthFlowLoginCopy,
-  AuthFlowReturnToConfig,
   AuthFlowRoutes,
 } from "./host-config";
 import {
   AUTH_FLOW_CHANNELS,
   AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS,
+  RETURN_TARGET_PARKING,
   authenticatedAllowedRoutes,
 } from "./host-config";
 import {
@@ -57,15 +57,15 @@ describe("#2027 PR 1.5 host config — the sign-in door data", () => {
     expect(DOCTOR_FIXTURE.routes.room).toBe("/events/:slug/room");
   });
 
-  it("rows 29, 46 (#2455): parking is optional inside returnTo, and the return-context card is no host field — the canvas draws it on both hosts", () => {
-    expectTypeOf<AuthFlowReturnToConfig["parkingCookie"]>().toMatchTypeOf<
-      { name: string; maxAgeSeconds: number } | undefined
-    >();
-    expectTypeOf<
-      keyof AuthFlowReturnToConfig
-    >().toEqualTypeOf<"parkingCookie">();
-    expect(DOCTOR_FIXTURE.returnTo).toBeUndefined();
-    expect(ACADEMY_FIXTURE.returnTo?.parkingCookie?.name).toBe("ds_return_to");
+  it("rows 29, 46 (#2443, #2455): return-target parking is ONE package mechanism — no host states it, and the return-context card is no host field", () => {
+    expect(RETURN_TARGET_PARKING).toEqual({
+      name: "ds_return_to",
+      maxAgeSeconds: 900,
+    });
+    expectTypeOf<AuthFlowHostConfig>().not.toHaveProperty("returnTo");
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      expect(config).not.toHaveProperty("returnTo");
+    }
   });
 
   it("row 33: login copy crosses the server→client boundary — templates are strings with placeholders", () => {

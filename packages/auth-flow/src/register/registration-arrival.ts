@@ -106,7 +106,7 @@ export async function resolveRegistrationArrival({
   // `routes.account` (014 EARS-6.5).
   const accountLanding = isAccountReturnTarget(config, returnTo);
   // 006 EARS-6 · 020 EARS-7 — a room arrival is the same kind of landing: no
-  // эфир card, and a host with no parking cookie has no other carrier.
+  // эфир card, and the parked cookie is only the lost-query fallback.
   const roomLanding = isRoomReturnTarget(config, returnTo);
 
   const landsOnCarriedTarget = Boolean(

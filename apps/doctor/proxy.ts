@@ -4,7 +4,9 @@ import {
   SESSION_COOKIE_NAME,
   forwardedHeaders,
   forwardedSessionFrom,
+  parkReturnTarget,
 } from "@ds/auth-flow/server";
+import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import {
   SPECIALTY_CHOICE_COOKIE_NAME,
   SPECIALTY_CHOICE_ME_PATH,
@@ -30,13 +32,16 @@ export async function consumeGuestSpecialtyBeforeRender(
   }
 
   try {
-    const upstream = await fetchImpl(`${serverApiBase()}${SPECIALTY_CHOICE_ME_PATH}`, {
-      // The adoption read runs on the doctor's own session, so it carries the
-      // full fingerprint surface — client chain included, or the api re-derives a
-      // different fingerprint and 401s a valid session (#2054).
-      headers: forwardedHeaders(forwardedSessionFrom(request.headers)),
-      cache: "no-store",
-    });
+    const upstream = await fetchImpl(
+      `${serverApiBase()}${SPECIALTY_CHOICE_ME_PATH}`,
+      {
+        // The adoption read runs on the doctor's own session, so it carries the
+        // full fingerprint surface — client chain included, or the api re-derives a
+        // different fingerprint and 401s a valid session (#2054).
+        headers: forwardedHeaders(forwardedSessionFrom(request.headers)),
+        cache: "no-store",
+      },
+    );
     if (!upstream.ok) return deferredResponse(request);
 
     const setCookie = upstream.headers.get("set-cookie");
@@ -51,8 +56,22 @@ export async function consumeGuestSpecialtyBeforeRender(
   return deferredResponse(request);
 }
 
-export function proxy(request: NextRequest): Promise<NextResponse> {
-  return consumeGuestSpecialtyBeforeRender(request);
+/**
+ * 014 EARS-6 (#2443) — the auth entries that park a carried return target: the
+ * same three routes the Academy middleware matches, read from this host's route
+ * table. The parking RULE and the cookie are `@ds/auth-flow/server`'s, the same
+ * on both storefronts; this host only wires its entries to it.
+ */
+const PARKING_ENTRIES: readonly string[] = [
+  DOCTOR_AUTH_ROUTES.login,
+  DOCTOR_AUTH_ROUTES.register,
+  DOCTOR_AUTH_ROUTES.verify,
+];
+
+export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const response = await consumeGuestSpecialtyBeforeRender(request);
+  if (!PARKING_ENTRIES.includes(request.nextUrl.pathname)) return response;
+  return parkReturnTarget(request, response) ?? response;
 }
 
 export const config = {

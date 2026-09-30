@@ -73,8 +73,6 @@ export const DOCTOR_AUTH_FLOW = {
     // (the same literal `lib/room-config.ts` states; pinned by the test).
     room: "/events/:slug/room",
   },
-  // No `returnTo`: this storefront parks no cookie and carries the target on
-  // the canonical `returnTo` param (wave-1 gate row 29).
   // 021 EARS-3 / LD-4 — a remembered specialty lands on the events feed; no
   // specialty, or an unresolved read, lands on the storefront home. The two reads
   // are named as paths (the same ones `lib/specialty-choice.ts` issues from the

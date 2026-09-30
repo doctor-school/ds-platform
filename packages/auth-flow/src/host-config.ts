@@ -12,9 +12,8 @@ import type { ConsentTier, OtpChannel } from "@ds/schemas";
  *
  * The type grows ONE PR at a time, with the surfaces that consume it. PR 1.3
  * declared the transport, the copy, the bot-protection value and the promo
- * box; PR 1.4 adds the route table and the `returnTo` parking, which
- * are what the server session read, the signed-in guard and the return-target
- * codec consume. PR 1.5 adds what the sign-in door reads: the landing table
+ * box; PR 1.4 adds the route table, which is what the server session read,
+ * the signed-in guard and the return-target codec consume. PR 1.5 adds what the sign-in door reads: the landing table
  * (with the remembered-specialty reads named as paths), the event and room route
  * templates and the door's copy as plain string
  * templates (the copy crosses the server-mount → client boundary, so it can hold
@@ -24,8 +23,9 @@ import type { ConsentTier, OtpChannel } from "@ds/schemas";
  * the registration and confirmation copy, and the two optional framing lines
  * above the submit. A field nothing reads yet would be a claim, not a contract.
  *
- * What is NOT here is the flow's MECHANICS (#2443): the sign-in-code channels
- * and the auth routes open to a signed-in visitor are package constants below,
+ * What is NOT here is the flow's MECHANICS (#2443): the sign-in-code channels,
+ * the auth routes open to a signed-in visitor and the return-target parking are
+ * package constants below,
  * so the two storefronts cannot diverge on them by construction. The fields
  * whose values may legitimately differ per storefront are listed, with their
  * spec clauses, in {@link AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS}.
@@ -485,21 +485,23 @@ export type AuthFlowLandingConfig =
     };
 
 /**
- * `returnTo` parking (rows 29–31). `undefined` on a host that parks nothing —
- * the doctor storefront carries the target on the canonical query param and has
- * no cookie at all, which is a host fact and not a missing feature.
+ * #2443 / 014 EARS-6 — the ONE return-target parking of the shared auth flow
+ * (rows 29–31), the same on both storefronts.
+ *
+ * The carried target travels on the canonical `returnTo` query param, which
+ * wins whenever it is present; the parked copy is the fallback for an auth hop
+ * that arrives without it. Package mechanics, not host data: a per-host switch
+ * once let one storefront park and the other not. The cookie is host-only (no
+ * `Domain`), so the two storefronts' origins never share it.
  */
-export type AuthFlowReturnToConfig = {
-  /** Absent = this host parks nothing and carries the target on the query param alone. */
-  readonly parkingCookie?: {
-    readonly name: string;
-    /**
-     * Long enough to open a verification mail and come back, short enough that
-     * an abandoned flow does not resurface days later on an unrelated sign-in.
-     */
-    readonly maxAgeSeconds: number;
-  };
-};
+export const RETURN_TARGET_PARKING = {
+  name: "ds_return_to",
+  /**
+   * Long enough to finish a sign-up and come back, short enough that an
+   * abandoned flow does not resurface days later on an unrelated sign-in.
+   */
+  maxAgeSeconds: 900,
+} as const;
 
 /**
  * The consent block a host renders on its registration door (rows 56–60, 62).
@@ -595,8 +597,6 @@ export type AuthFlowHostConfig = {
   };
   /** The consent block of the registration door; absent = this host asks for no consent here. */
   readonly consents?: AuthFlowConsentsConfig;
-  /** Absent = this host parks no return target (row 29). */
-  readonly returnTo?: AuthFlowReturnToConfig;
 };
 
 /**

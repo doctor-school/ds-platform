@@ -21,7 +21,7 @@ import {
 } from "../test-support/host-config-fixtures";
 import { clearStoredReturnTarget } from "./return-target-store";
 
-const ACADEMY_PARKING = ACADEMY_FIXTURE.returnTo!.parkingCookie!;
+import { RETURN_TARGET_PARKING } from "../host-config";
 import {
   completeResolvedReturnTarget,
   completeReturnTarget,
@@ -29,13 +29,13 @@ import {
 
 /** Park a target the way the auth-flow entry does: the same-origin cookie. */
 function park(target: string) {
-  document.cookie = `${ACADEMY_PARKING.name}=${encodeURIComponent(target)}; Path=/`;
+  document.cookie = `${RETURN_TARGET_PARKING.name}=${encodeURIComponent(target)}; Path=/`;
 }
 
 beforeEach(() => {
   registerForEvent.mockReset();
   registerForEvent.mockResolvedValue({ registered: true });
-  clearStoredReturnTarget(ACADEMY_PARKING);
+  clearStoredReturnTarget();
 });
 
 describe("014 EARS-6 academy return-target consumption (registration resume)", () => {
@@ -150,4 +150,27 @@ describe("021 EARS-10: a target the server mount already resolved (the /verify s
       completeResolvedReturnTarget(DOCTOR_FIXTURE, "//evil.example", "/events"),
     ).resolves.toBe("/events");
   });
+
+  it("014 EARS-6 (#2443): on the doctor storefront a hop that lost the query param lands on the parked target too", async () => {
+    park("/events/ahilles-042");
+
+    await expect(completeReturnTarget(DOCTOR_FIXTURE, null)).resolves.toBe(
+      "/events/ahilles-042",
+    );
+  });
+
+  it.each([
+    ["Академия", ACADEMY_FIXTURE, "/webinars/fresh-042", "/webinars/stale-042"],
+    ["Витрина", DOCTOR_FIXTURE, "/events/fresh-042", "/events/stale-042"],
+  ])(
+    "014 EARS-6 (#2443): on %s the query-carried target still wins over the parked one, which is consumed",
+    async (_host, config, fresh, stale) => {
+      park(stale);
+
+      await expect(completeReturnTarget(config, fresh)).resolves.toBe(fresh);
+      await expect(completeReturnTarget(config, null)).resolves.toBe(
+        config.landing.afterLogin,
+      );
+    },
+  );
 });

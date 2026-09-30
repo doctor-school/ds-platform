@@ -97,9 +97,9 @@ export async function LoginRoute({
   // host's own `routes.account`, not just the cabinet index (014 EARS-6.5).
   const accountLanding = isAccountReturnTarget(config, returnTo);
   // 006 EARS-6 · 020 EARS-7 — a room arrival is the same kind of landing: no эфир
-  // card, and a host with no parking cookie (the doctor storefront) has no other
-  // carrier, so without it the door would drop a guest the room sent here on the
-  // default landing instead of back in the room.
+  // card, and the parked cookie is only the fallback for a hop that lost the
+  // query param, so without it the door would drop a guest the room sent here on
+  // the default landing instead of back in the room.
   const roomLanding = isRoomReturnTarget(config, returnTo);
 
   const landsOnCarriedTarget = Boolean(

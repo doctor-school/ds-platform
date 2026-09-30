@@ -49,7 +49,6 @@ these fields is a question for the owner, never a host-local variant.
 | `api.basePath`                                      | The 003 auth root — `/v1/auth` on both hosts today.                                                                                                                                                                                                                                   |
 | `api.registerPath`                                  | `/v1/auth/register` vs the storefront registration command.                                                                                                                                                                                                                           |
 | `routes`                                            | Which paths ARE this host's auth screens, where `/account` is. `verify` is required: every host confirms on its own route.                                                                                                                                                            |
-| `returnTo`                                          | The parking cookie (name, `maxAgeSeconds`) the middleware parks a return target in — stated only by a host whose middleware parks one.                                                                                                                                                |
 | `copy.errors`                                       | Each host keeps its own sentences; the package keeps the branch.                                                                                                                                                                                                                      |
 | `copy.botProtection`                                | The four-state challenge copy the shared block's failures map onto.                                                                                                                                                                                                                   |
 | `copy.fields`                                       | One entry per field the host SERVES; `promoCode` iff `register.promoField`.                                                                                                                                                                                                           |
@@ -69,9 +68,10 @@ The site key is ENVELOPE (which SmartCaptcha resource this build talks to); the
 challenge itself is package behaviour, rendered wherever a key is configured.
 
 **Mechanics are not host data (#2443).** The sign-in-code channels
-(`AUTH_FLOW_CHANNELS` — e-mail and SMS) and the auth routes a signed-in visitor
+(`AUTH_FLOW_CHANNELS` — e-mail and SMS), the auth routes a signed-in visitor
 may still complete (`authenticatedAllowedRoutes(routes)` — the reset route,
-003 EARS-28) are package constants, so two storefronts cannot diverge on them.
+003 EARS-28) and the return-target parking (`RETURN_TARGET_PARKING`) are package
+constants, so two storefronts cannot diverge on them.
 The fields whose values MAY differ per storefront are exported as
 `AUTH_FLOW_PRODUCT_DIFFERENCE_FIELDS`, each naming the spec clauses of its row in
 021's «Differences between storefronts» table: `register.promoField`,
@@ -115,8 +115,11 @@ Three rules live there, each stated once for both storefronts:
   auth screen BEFORE it renders — a server decision, never a post-paint client
   flash (#675). The one exception is derived from the host's reset route (`authenticatedAllowedRoutes`).
 - **The `returnTo` parking rule.** `parkReturnTarget` parks a validated return
-  target in the host's own cookie from middleware; `@ds/auth-flow/client` reads
-  and clears the same cookie in the browser.
+  target in the package cookie `RETURN_TARGET_PARKING` (`ds_return_to`, 900 s,
+  host-only) from each host's middleware/proxy on `/login`, `/register` and
+  `/verify` — the same on both storefronts (#2443); `@ds/auth-flow/client` reads
+  and clears the same cookie in the browser. The query param wins when present;
+  the parked copy is the fallback for a hop that lost it (014 EARS-6).
 
 ## The five rules of the auth flow (S1–S5)
 

@@ -1,7 +1,6 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { describe, expect, it } from "vitest";
 
-import type { AuthFlowReturnToConfig } from "../host-config";
 import { parkReturnTarget } from "./return-target-parking";
 
 /**
@@ -12,15 +11,10 @@ import { parkReturnTarget } from "./return-target-parking";
  * cases pin only the parking half: a guard-clean target is parked in a
  * short-lived same-origin cookie the moment the visitor enters the auth flow.
  *
- * Row 29 is why this is a rule and not a middleware: the doctor storefront parks
- * NOTHING - it carries the target on the canonical query param and has no cookie
- * at all. That host states no `returnTo` in its config and the same rule then
- * parks nothing, instead of the host owning a second, absent copy of the rule.
+ * Row 29 (#2443): the parking is package mechanics, the same on both
+ * storefronts - one cookie name, one lifetime, host-only - and neither host
+ * states whether or where it parks.
  */
-
-const parking: AuthFlowReturnToConfig = {
-  parkingCookie: { name: "ds_return_to", maxAgeSeconds: 900 },
-};
 
 function requestFor(url: string): NextRequest {
   return new NextRequest(new Request(url));
@@ -36,28 +30,26 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
       requestFor(
         "https://academy.doctor.school/login?returnTo=%2Fwebinars%2Fahilles-042",
       ),
-      parking,
     );
     expect(response?.cookies.get("ds_return_to")?.value).toBe(
       "/webinars/ahilles-042",
     );
   });
 
-  it("014 EARS-6.1: the cookie NAME is host data - a host that names it otherwise gets that name", () => {
-    const response = parkReturnTarget(
-      requestFor("https://academy.doctor.school/login?returnTo=%2Faccount"),
-      { parkingCookie: { name: "ds_other_park", maxAgeSeconds: 60 } },
+  it("014 EARS-6.1 (#2443): the cookie is host-only - no Domain, so the two storefronts' origins never share a parked target", () => {
+    const header = setCookieOf(
+      parkReturnTarget(
+        requestFor("https://academy.doctor.school/login?returnTo=%2Faccount"),
+      ) as Response,
     );
-    expect(response?.cookies.get("ds_other_park")?.value).toBe("/account");
-    expect(response?.cookies.get("ds_return_to")).toBeUndefined();
-    expect(setCookieOf(response as Response)).toMatch(/Max-Age=60/i);
+    expect(header).toMatch(/^ds_return_to=/);
+    expect(header).not.toMatch(/Domain=/i);
   });
 
   it("014 EARS-6.2: the parked cookie is Lax, readable by the client consumer, and Secure only on https", () => {
     const secure = setCookieOf(
       parkReturnTarget(
         requestFor("https://academy.doctor.school/login?returnTo=%2Faccount"),
-        parking,
       ) as Response,
     );
     expect(secure).toMatch(/SameSite=lax/i);
@@ -71,7 +63,6 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
     const insecure = setCookieOf(
       parkReturnTarget(
         requestFor("http://localhost:3001/login?returnTo=%2Faccount"),
-        parking,
       ) as Response,
     );
     expect(insecure).not.toMatch(/Secure/i);
@@ -88,7 +79,6 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
         requestFor(
           `https://academy.doctor.school/login?returnTo=${encodeURIComponent(evil)}`,
         ),
-        parking,
       );
       expect(response, `must not park: ${evil}`).toBeUndefined();
     }
@@ -96,31 +86,42 @@ describe("014 EARS-6 shared returnTo parking rule", () => {
 
   it("014 EARS-6.3: no carried target at all parks nothing", () => {
     expect(
-      parkReturnTarget(
-        requestFor("https://academy.doctor.school/login"),
-        parking,
-      ),
+      parkReturnTarget(requestFor("https://academy.doctor.school/login")),
     ).toBeUndefined();
   });
 
-  it("014 EARS-6.4: a host that parks nothing (row 29, the doctor storefront) parks nothing", () => {
-    expect(
-      parkReturnTarget(
-        requestFor(
-          "https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042",
-        ),
-        undefined,
+  it("014 EARS-6.4 (#2443): the doctor storefront parks exactly as the Academy does", () => {
+    const response = parkReturnTarget(
+      requestFor(
+        "https://doctor.school/login?returnTo=%2Fevents%2Fahilles-042",
       ),
-    ).toBeUndefined();
+    );
+    expect(response?.cookies.get("ds_return_to")?.value).toBe(
+      "/events/ahilles-042",
+    );
+    expect(setCookieOf(response as Response)).toMatch(/Max-Age=900/i);
   });
 });
 
-describe("#2027 PR 1.5 returnTo without parking", () => {
-  it("014 EARS-6.4: a host whose returnTo states no parking cookie parks nothing", async () => {
-    const { NextRequest } = await import("next/server");
-    const request = new NextRequest(
-      "https://doctor.test/login?returnTo=%2Fevents%2Fslug",
+describe("014 EARS-6 (#2443): parking onto a response the host already minted", () => {
+  it("014 EARS-6.5: the cookie is written onto the host's response, keeping what that response already carries", () => {
+    const hostResponse = NextResponse.next();
+    hostResponse.headers.append("set-cookie", "host_cookie=kept; Path=/");
+
+    const response = parkReturnTarget(
+      requestFor(
+        "https://doctor.school/verify?returnTo=%2Fevents%2Fahilles-042",
+      ),
+      hostResponse,
     );
-    expect(parkReturnTarget(request, {})).toBeUndefined();
+
+    expect(response).toBe(hostResponse);
+    const headers = (response as Response).headers.getSetCookie();
+    expect(headers).toContain("host_cookie=kept; Path=/");
+    expect(
+      headers.some((header) =>
+        header.startsWith("ds_return_to=%2Fevents%2Fahilles-042;"),
+      ),
+    ).toBe(true);
   });
 });

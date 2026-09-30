@@ -27,10 +27,11 @@ import {
  * The completion rule itself - room return before event intent, best-effort
  * `RegisterForEvent`, any other safe same-origin page honoured as-is, default
  * landing otherwise - lives once in `@ds/events-storefront`. What this module
- * adds is the CARRY side and the host shapes, all read from the host config:
+ * adds is the CARRY side and the host shapes:
  *
  *   - the parked-target consume (014 EARS-6): query wins, the parked value is
- *     re-validated and consumed exactly once, from `returnTo.parkingCookie`;
+ *     re-validated and consumed exactly once, from the package
+ *     `RETURN_TARGET_PARKING` cookie (the same on both storefronts, #2443);
  *   - the room return shape (006 EARS-6) from `routes.room` (absent = no room);
  *   - the event intent guard from `routes.eventPathTemplate` - a closed set, so
  *     each template maps to its host-scoped `@ds/schemas` parser and the doctor
@@ -48,10 +49,7 @@ const EVENT_INTENT_PARSERS: Record<
   "/events/:slug": parseDoctorEventReturnTarget,
 };
 
-type ReturnCompletionHost = Pick<
-  AuthFlowHostConfig,
-  "routes" | "landing" | "returnTo"
->;
+type ReturnCompletionHost = Pick<AuthFlowHostConfig, "routes" | "landing">;
 
 function returnHostOf(
   host: ReturnCompletionHost,
@@ -84,7 +82,7 @@ export async function completeReturnTarget(
   // Resolve + consume once. Everything below sees a guard-clean same-origin path
   // or `null`; a hostile value never reaches a navigation.
   return completeSharedReturnTarget(
-    resolveReturnTarget(rawReturnTo, host.returnTo?.parkingCookie),
+    resolveReturnTarget(rawReturnTo),
     returnHostOf(host, defaultLanding),
   );
 }
@@ -104,7 +102,7 @@ export async function completeResolvedReturnTarget(
   resolvedTarget: string | null,
   defaultLanding?: string,
 ): Promise<string> {
-  clearStoredReturnTarget(host.returnTo?.parkingCookie);
+  clearStoredReturnTarget();
   return completeSharedReturnTarget(
     parseSameOriginReturnTarget(resolvedTarget),
     returnHostOf(host, defaultLanding),

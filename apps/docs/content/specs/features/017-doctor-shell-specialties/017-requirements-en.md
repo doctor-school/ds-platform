@@ -127,6 +127,14 @@ The canvas **state** props are not forks — they are content-driven obligations
 - **Feature 012:** owns the taxonomy row family that ADR-0016 §5 extends into `directions`. 017 reads it; it does not re-model it.
 - **Feature 019:** owns the events feed 017's calendar block links to; 017 renders the nearest events on the home page and does not build the feed.
 
+## Differences between storefronts
+
+The storefront chrome is one package, `@ds/storefront-shell`, mounted by both storefronts from `design-source/ds-shell.dc.html` with a `host` value (`doctor` / `academy`). A shell config value may differ between the doctor storefront (Витрина) and the Academy **only** where a row below cites what decides it; the package lists the same fields in `SHELL_PRODUCT_DIFFERENCE_FIELDS` (`packages/storefront-shell/src/config.ts`). Presentation, brand and route values (logo, nav items, footer sections, cross-link, copy) are host values by EARS-1 and are not listed here. A difference without a row is a defect, not a product fact.
+
+| Field    | Витрина (doctor storefront)                                                    | Академия (Academy)              | Clause and decision                                                                                                                                                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search` | on — the header search field, submitting `q` to the events listing (`/events`) | `null` — no header search field | EARS-1 (the host supplies the search target); the canvas host map (`design-source/ds-shell.dc.html`, `search: true` for `doctor`, `false` for `academy`), accepted at [#2180](https://github.com/doctor-school/ds-platform/issues/2180) — owner Stage-B on PR [#2198](https://github.com/doctor-school/ds-platform/pull/2198) |
+
 ## Lead technical decisions
 
 Each records a call the PRD left open. They are lead decisions in the AGENTS.md §6 decision-debt sense — reversible behind a stated contract, and named here rather than buried in the design.

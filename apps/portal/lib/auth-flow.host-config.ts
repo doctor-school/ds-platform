@@ -55,21 +55,6 @@ export const ACADEMY_AUTH_FLOW = {
     // `@ds/room` reads from `lib/room-config.ts`.
     room: "/webinars/:slug/room",
   },
-  /**
-   * 014 EARS-6 — the Academy parks the carried return target in a short-lived
-   * same-origin cookie, so an auth hop that arrives with no `returnTo` query
-   * still completes it. The name and the lifetime are host values; the parking
-   * RULE lives in `@ds/auth-flow/server`.
-   */
-  returnTo: {
-    parkingCookie: {
-      name: "ds_return_to",
-      /** Long enough to open a verification mail and come back, short enough
-       *  that an abandoned flow never resurfaces on an unrelated sign-in days
-       *  later. */
-      maxAgeSeconds: 900,
-    },
-  },
   // 013 EARS-15 — no carried target lands on the discovery listing, never the
   // marketing landing; this host keeps no specialty memory (row 38).
   landing: { afterLogin: "/webinars", specialtyAware: false },

@@ -83,7 +83,7 @@ vi.mock("../server", async (importOriginal) => {
 });
 
 import { resolveAuthFlowCopy } from "../copy";
-import type { AuthFlowHostConfig } from "../host-config";
+import { RETURN_TARGET_PARKING, type AuthFlowHostConfig } from "../host-config";
 import {
   ACADEMY_FIXTURE,
   DOCTOR_FIXTURE,
@@ -305,8 +305,9 @@ describe("#1987: an /account arrival comes back to /account", () => {
 /**
  * 006 EARS-6 · 020 EARS-7 — a guest the room sent to sign in comes back to the
  * ROOM. The room return is a landing in its own right, like the account family:
- * it resolves no эфир card, and the doctor host parks nothing in a cookie, so the
- * mount itself must hand the room back as the landing — otherwise the door drops
+ * it resolves no эфир card, and the parked cookie is only a fallback for a hop
+ * that lost the query param, so the mount itself must hand the room back as the
+ * landing — otherwise the door drops
  * the doctor on the LD-4 default. Asked of the shared room codec with this host's
  * own `routes.room`, never a host-local parser.
  */
@@ -537,11 +538,11 @@ describe("017 #1955 (Academy): the same rules over the other host config", () =>
  * carrier, and the rule must hold across both.
  */
 describe("021 EARS-10 (#2455): where a sign-in on the Академия lands", () => {
-  const PARKING = ACADEMY_FIXTURE.returnTo?.parkingCookie;
+  const PARKING = RETURN_TARGET_PARKING;
   const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).login;
 
   function park(target: string): void {
-    document.cookie = `${PARKING?.name}=${encodeURIComponent(target)}; Path=/`;
+    document.cookie = `${PARKING.name}=${encodeURIComponent(target)}; Path=/`;
   }
 
   async function signInThrough(params: Params): Promise<void> {
@@ -561,7 +562,7 @@ describe("021 EARS-10 (#2455): where a sign-in on the Академия lands", (
   }
 
   afterEach(() => {
-    document.cookie = `${PARKING?.name}=; Path=/; Max-Age=0`;
+    document.cookie = `${PARKING.name}=; Path=/; Max-Age=0`;
   });
 
   it("021 EARS-10: an эфир that no longer exists is dropped on /login too — the parked copy is consumed, not used, and the visitor lands on the default", async () => {
@@ -573,7 +574,7 @@ describe("021 EARS-10 (#2455): where a sign-in on the Академия lands", (
     expect(push).toHaveBeenCalledWith(ACADEMY_FIXTURE.landing.afterLogin);
     expect(registerForEvent).not.toHaveBeenCalled();
     // Consumed exactly once: the dead page cannot come back on a later sign-in.
-    expect(document.cookie).not.toContain(`${PARKING?.name}=%2F`);
+    expect(document.cookie).not.toContain(`${PARKING.name}=%2F`);
   });
 
   it("014 EARS-6: an arrival the mount did not judge still lands on the parked target", async () => {

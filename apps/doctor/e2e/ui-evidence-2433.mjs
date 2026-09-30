@@ -357,7 +357,8 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await ctx.close();
 }
 
-// The read-only details: a withdrawn talk (EARS-12 — the notice dated by the
+// The read-only details (opened by the row topic — a withdrawn row has no
+// action): a withdrawn talk (EARS-12 — the notice dated by the
 // status moment, under the canvas «—» icon) and the needs-revision talk past
 // its deadline (EARS-30 — «Срок доработки истёк …» in the committee box and in
 // the canvas ⚠ notice). The deadline is moved into the past for the frame and
@@ -368,7 +369,7 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await page
     .getByTestId("congress-row")
     .filter({ hasText: "Комбинация PRP и гиалуроновой кислоты" })
-    .getByRole("button", { name: "Открыть" })
+    .getByRole("button", { name: /^Комбинация PRP и гиалуроновой кислоты/ })
     .click();
   await page.getByText(/^Заявка отозвана /).waitFor();
   await shot(page, "interactions-withdrawn", "light");
@@ -385,9 +386,9 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await page
     .getByTestId("congress-row")
     .filter({ hasText: "PRP при латеральном эпикондилите" })
-    .getByRole("button", { name: "Открыть" })
+    .getByRole("button", { name: /^PRP при латеральном эпикондилите/ })
     .click();
-  await page.getByText(/^Срок доработки истёк /).waitFor();
+  await page.getByText(/^Срок доработки истёк /).first().waitFor();
   await shot(page, "interactions-revision-expired", "light");
   await db((c) =>
     c.query(

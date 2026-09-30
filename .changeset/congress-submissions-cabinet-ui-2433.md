@@ -14,4 +14,5 @@ A guest is sent to the login and lands back on the section. The account page
 shows the row «Мои заявки на Конгресс» for an account registered for the
 congress. `@ds/design-system`: the account card takes an optional `congressHref`
 row, and `Link` gains the `muted` and `danger` tones, the `caption` size and the
-`semibold` weight (the canvas quiet action, 13px/600).
+`semibold` weight (the canvas quiet action, 13px/600); `cn()` keeps the
+`text-lead` size beside a text colour instead of dropping it.

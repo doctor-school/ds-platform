@@ -151,7 +151,24 @@ describe("CongressSection", () => {
   });
 
   it("EARS-6: with no submissions the kind choice shows; only the oral talk can be started", async () => {
-    fetchMock.mockResolvedValue(answer(section()));
+    fetchMock.mockResolvedValue(
+      answer(
+        section({
+          kinds: [
+            kind("oral"),
+            kind("poster", {
+              state: "not-yet-open",
+              opensAt: "2027-01-19T21:00:00.000Z",
+            }),
+            kind("abstract", {
+              state: "not-announced",
+              opensAt: null,
+              submitLimit: 3,
+            }),
+          ],
+        }),
+      ),
+    );
     render(<CongressSection host={HOST} />);
     const oral = await screen.findByTestId("congress-pick-oral");
     expect(
@@ -177,9 +194,19 @@ describe("CongressSection", () => {
         within(screen.getByTestId(`congress-pick-${k}`)).queryByRole("button"),
       ).toBeNull();
     }
+    // EARS-10: every kind card carries its own intake line from the read —
+    // a kind whose form is not offered yet shows it too, just with no start.
     expect(
-      screen.getByText("Приём постерных докладов и тезисов откроется позже"),
+      within(screen.getByTestId("congress-pick-poster")).getByText(
+        "Приём откроется 20 января 2027",
+      ),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("congress-pick-abstract")).getByText(
+        "Дату открытия приёма объявят позже",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/откроется позже/)).toBeNull();
   });
 
   it("EARS-11: rows carry status, meta, the committee comment and the revision deadline; the filter narrows them", async () => {

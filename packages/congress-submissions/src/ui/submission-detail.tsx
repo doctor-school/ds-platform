@@ -38,6 +38,7 @@ import {
   problemMessages,
   revisionView,
   summaryTitle,
+  localTime,
   withdrawnNotice,
 } from "../model/model";
 import {
@@ -97,9 +98,6 @@ const clip = (v: string, max: number) => {
   const cps = Array.from(v);
   return cps.length > max ? cps.slice(0, max).join("") : v;
 };
-
-const hhmm = (d: Date) =>
-  d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 
 export function SubmissionDetail({
   submission: s,
@@ -700,7 +698,7 @@ function SaveLine({
           ? COPY.saveFailed
           : state === "saving"
             ? COPY.saving
-            : `${COPY.saved} · ${hhmm(savedAt)}`}
+            : `${COPY.saved} · ${localTime(savedAt)}`}
       </span>
     </span>
   );

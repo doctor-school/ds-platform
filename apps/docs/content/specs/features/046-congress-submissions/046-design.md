@@ -175,6 +175,10 @@ The advisory lock serialises concurrent sends of one account, event and kind so 
 
 **Autosave.** The hook debounces 1.5 s after the last keystroke and flushes on blur and on page hide; the PATCH carries the full draft object (last write wins for one author). The saved state reads «Сохранено» / «Сохраняем…» / «Не удалось сохранить — повторим» with automatic retry.
 
+**Two clocks in the section.** A rule date — a kind's intake line (EARS-10), the revision deadline «до {дата}, 23:59 МСК», its countdown and «Срок доработки истёк …» (EARS-11, EARS-30, EARS-34) — is the congress's Moscow date and carries «МСК». A user-action time — the row's «изменён/изменено {дата}», the detail line «черновик изменён / отправлена {дата, время} / отозвана {дата}», the withdrawn notice and the autosave stamp «Сохранено · ЧЧ:ММ» — is the author's own communication and renders in the browser's time zone with no zone label, through one local formatter in the package model (owner decision 2026-09-30). The section reads its data in the browser after mount, so no viewer-zone string is rendered on the server.
+
+**Kind choice.** Every kind card shows its own EARS-10 intake line from the section read; a kind whose form this release does not offer yet (`offered: false`) shows the line with no start action, and no generic «opens later» line is drawn.
+
 **Age rule.** `age = full years between users.birth_date and events.starts_at` as dates in Europe/Moscow. For the 2027 congress (`starts_at` 2027-04-23) a birth date of 1987-04-23 gives 40 → refused; 1987-04-24 gives 39 → allowed.
 
 ## Consents and statements

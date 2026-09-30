@@ -77,8 +77,6 @@ export const COPY = {
   newSubmissionButton: "+ Новая заявка",
   collapse: "Свернуть",
   start: "Начать заявку →",
-  /** lead-proposed — the kinds whose forms arrive in later slices. */
-  laterKinds: "Приём постерных докладов и тезисов откроется позже",
   mySubmissions: "Мои заявки",
   all: "Все",
   untitled: "Без темы",

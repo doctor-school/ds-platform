@@ -150,8 +150,10 @@ test.describe("a registered participant", () => {
 
     const oral = page.getByTestId("congress-pick-oral");
     await expect(oral).toContainText("Устный доклад");
-    // S2 offers only the oral form: poster and abstracts are not startable.
-    await expect(page.getByText("Приём постерных докладов и тезисов откроется позже")).toBeVisible();
+    // S2 offers only the oral form: poster and abstracts show their EARS-10
+    // intake line but are not startable; no generic «opens later» line.
+    await expect(page.getByTestId("congress-pick-poster")).toContainText("Приём");
+    await expect(page.getByText(/откроется позже/)).toHaveCount(0);
     await expect(
       page.getByTestId("congress-pick-poster").getByRole("button", { name: "Начать заявку →" }),
     ).toHaveCount(0);

@@ -17,9 +17,21 @@ import { COPY, KIND_COPY } from "../copy";
 
 const MSK = "Europe/Moscow";
 
-function parts(iso: string, withTime: boolean): Record<string, string> {
+/**
+ * Two clocks, never mixed: a RULE date (intake open/close, the revision
+ * deadline, its countdown — 046 EARS-3/10/30/34) is the congress's Moscow date
+ * and says so; a USER-ACTION time (changed, sent, withdrawn, autosaved) is the
+ * viewer's own communication and renders in the browser's zone with no label.
+ * The section reads its data client-side after mount, so the server never
+ * renders a viewer-zone string (no hydration drift).
+ */
+function parts(
+  iso: string | Date,
+  withTime: boolean,
+  timeZone: string | undefined,
+): Record<string, string> {
   const fmt = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: MSK,
+    ...(timeZone ? { timeZone } : {}),
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -30,16 +42,34 @@ function parts(iso: string, withTime: boolean): Record<string, string> {
   return out;
 }
 
-/** «16 декабря 2026» in Moscow time. */
+/** «16 декабря 2026» in Moscow time — a rule date. */
 export function mskDate(iso: string): string {
-  const p = parts(iso, false);
+  const p = parts(iso, false, MSK);
   return `${p.day} ${p.month} ${p.year}`;
 }
 
-/** «16 декабря 2026, 18:40» in Moscow time. */
+/** «16 декабря 2026, 18:40» in Moscow time — a rule date with its time. */
 export function mskDateTime(iso: string): string {
-  const p = parts(iso, true);
+  const p = parts(iso, true, MSK);
   return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
+}
+
+/** «16 декабря 2026» in the viewer's zone — a user-action date. */
+export function localDate(iso: string): string {
+  const p = parts(iso, false, undefined);
+  return `${p.day} ${p.month} ${p.year}`;
+}
+
+/** «16 декабря 2026, 18:40» in the viewer's zone — a user-action time. */
+export function localDateTime(iso: string): string {
+  const p = parts(iso, true, undefined);
+  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
+}
+
+/** «18:40» in the viewer's zone — the autosave stamp. */
+export function localTime(at: Date): string {
+  const p = parts(at, true, undefined);
+  return `${p.hour}:${p.minute}`;
 }
 
 /** A Moscow calendar day `YYYY-MM-DD` as «15 января 2027». */
@@ -49,8 +79,8 @@ export function mskDay(day: string): string {
 
 /** The heading line under the title — «{event} · 23–24 апреля 2027». */
 export function eventLine(event: CongressSubmissionSectionEvent): string {
-  const a = parts(event.startsAt, false);
-  const b = parts(event.endsAt, false);
+  const a = parts(event.startsAt, false, MSK);
+  const b = parts(event.endsAt, false, MSK);
   let days: string;
   if (a.day === b.day && a.month === b.month && a.year === b.year) {
     days = `${a.day} ${a.month} ${a.year}`;
@@ -149,7 +179,7 @@ export function revisionView(
 ): RevisionView {
   if (!s.revisionDueAt) return { open: true, urgent: false, text: "" };
   const due = new Date(s.revisionDueAt);
-  const p = parts(new Date(due.getTime() - 1).toISOString(), false);
+  const p = parts(new Date(due.getTime() - 1).toISOString(), false, MSK);
   const day = `${p.day} ${p.month}, 23:59 МСК`;
   const left = due.getTime() - now.getTime();
   if (left > 0) {
@@ -254,7 +284,7 @@ export function rowMeta(
 ): string {
   const out = [
     KIND_COPY[s.kind].label,
-    `${s.status === "draft" ? "изменён" : "изменено"} ${mskDate(s.updatedAt)}`,
+    `${s.status === "draft" ? "изменён" : "изменено"} ${localDate(s.updatedAt)}`,
   ];
   if (s.status === "submitted") out.push(COPY.sentMeta);
   if (s.status === "draft" && !kindSendable(intake)) {
@@ -265,14 +295,14 @@ export function rowMeta(
 
 /** The detail header's date line. */
 export function dateLine(s: CongressSubmission): string {
-  if (s.status === "draft") return `черновик изменён ${mskDate(s.updatedAt)}`;
-  if (s.status === "withdrawn") return `отозвана ${mskDate(s.updatedAt)}`;
-  return `отправлена ${mskDateTime(s.submittedAt ?? s.updatedAt)}`;
+  if (s.status === "draft") return `черновик изменён ${localDate(s.updatedAt)}`;
+  if (s.status === "withdrawn") return `отозвана ${localDate(s.updatedAt)}`;
+  return `отправлена ${localDateTime(s.submittedAt ?? s.updatedAt)}`;
 }
 
 /** The withdrawn notice (046 EARS-12). */
 export function withdrawnNotice(s: CongressSubmission): string {
-  return `Заявка отозвана ${mskDate(s.updatedAt)}. Программный комитет её не рассмотрит; изменить или отправить её снова нельзя.`;
+  return `Заявка отозвана ${localDate(s.updatedAt)}. Программный комитет её не рассмотрит; изменить или отправить её снова нельзя.`;
 }
 
 // ---------------------------------------------------------------------------

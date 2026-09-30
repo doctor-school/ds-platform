@@ -382,7 +382,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   const shown = subs.filter((x) => !active || x.status === active);
   const showPicker = subs.length === 0 || pickerOpen;
   const note = pickerNote(section.kinds);
-  const laterKinds = section.kinds.some((k) => !k.offered);
 
   return (
     <>
@@ -403,11 +402,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
               {note ? (
                 <p className="mb-3 text-sm leading-relaxed text-foreground layout:mb-4">
                   {note}
-                </p>
-              ) : null}
-              {laterKinds ? (
-                <p className="mb-3 text-sm leading-relaxed text-foreground layout:mb-4">
-                  {COPY.laterKinds}
                 </p>
               ) : null}
               <div className="-mx-4 flex flex-col border-y border-hairline bg-card layout:mx-0 layout:grid layout:grid-cols-3 layout:border-2 layout:border-border">
@@ -436,11 +430,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                       >
                         {KIND_COPY[k].label}
                       </h3>
-                      {it.offered ? (
-                        <p className="text-sm leading-normal text-muted-foreground">
-                          {intakeLine(it)}
-                        </p>
-                      ) : null}
+                      <p className="text-sm leading-normal text-muted-foreground">
+                        {intakeLine(it)}
+                      </p>
                       {limitLine(it) ? (
                         <p className="text-sm font-semibold text-foreground">
                           {limitLine(it)}

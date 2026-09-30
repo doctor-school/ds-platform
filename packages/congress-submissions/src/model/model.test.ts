@@ -15,12 +15,20 @@ import {
   intakeLine,
   kindStartable,
   limitLine,
+  localDate,
+  localDateTime,
+  localTime,
   mskDate,
   mskDateTime,
   problemMessages,
   revisionView,
   rowMeta,
+  withdrawnNotice,
 } from "./model";
+
+// The package's test runtime zone is Vladivostok (UTC+10, `vitest.setup.ts`),
+// deliberately NOT Moscow: a user-action timestamp must follow the viewer's
+// zone while every rule date (intake, revision deadline) stays pinned to МСК.
 
 const NOW = new Date("2026-12-20T11:32:00.000Z"); // 14:32 МСК
 
@@ -84,6 +92,16 @@ describe("dates in Moscow time", () => {
         endsAt: "2027-04-23T15:00:00.000Z",
       }),
     ).toBe("Конгресс · 23 апреля 2027");
+  });
+});
+
+describe("user-action timestamps in the viewer's zone", () => {
+  it("EARS-11: a day, a day with time and a time follow the browser zone", () => {
+    expect(localDate("2026-12-16T15:40:00.000Z")).toBe("17 декабря 2026");
+    expect(localDateTime("2026-12-16T15:40:00.000Z")).toBe(
+      "17 декабря 2026, 01:40",
+    );
+    expect(localTime(new Date("2026-12-16T15:40:00.000Z"))).toBe("01:40");
   });
 });
 
@@ -247,13 +265,32 @@ describe("row meta and date line", () => {
     );
   });
 
+  it("EARS-11: the change, send and withdrawal times are the viewer's, not Moscow", () => {
+    const late = "2026-12-18T20:00:00.000Z"; // 23:00 МСК, 06:00 19 Dec local
+    expect(rowMeta(sub({ updatedAt: late }), intake(), NOW)).toBe(
+      "Устный доклад · изменён 19 декабря 2026",
+    );
+    expect(dateLine(sub({ updatedAt: late }))).toBe(
+      "черновик изменён 19 декабря 2026",
+    );
+    expect(dateLine(sub({ status: "withdrawn", updatedAt: late }))).toBe(
+      "отозвана 19 декабря 2026",
+    );
+    expect(
+      withdrawnNotice(sub({ status: "withdrawn", updatedAt: late })),
+    ).toMatch(/^Заявка отозвана 19 декабря 2026\. /);
+    expect(dateLine(sub({ status: "submitted", submittedAt: late }))).toBe(
+      "отправлена 19 декабря 2026, 06:00",
+    );
+  });
+
   it("EARS-11: the detail date line", () => {
     expect(dateLine(sub())).toBe("черновик изменён 18 декабря 2026");
     expect(
       dateLine(
         sub({ status: "submitted", submittedAt: "2026-12-16T15:40:00.000Z" }),
       ),
-    ).toBe("отправлена 16 декабря 2026, 18:40");
+    ).toBe("отправлена 17 декабря 2026, 01:40");
     expect(dateLine(sub({ status: "withdrawn" }))).toBe(
       "отозвана 18 декабря 2026",
     );

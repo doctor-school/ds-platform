@@ -32,9 +32,12 @@
  *      row lands on its own. The row must ALSO still be present on the HEAD
  *      (working) tree: a spec-only PR that drops a row while the values still
  *      differ is RED in that PR, not on main after it merges.
- *   4. Value rule, for a DIFFERING field only: when its base row's Витрина /
+ *   4. Value rule, for a DIFFERING field only: when its HEAD row's Витрина /
  *      Академия cell LEADS with a backticked literal (`true`, `false`, `null`,
- *      a number or a bare token), that host's value must equal it. A cell with
+ *      a number or a bare token), that host's value must equal it. The base
+ *      row already proves the difference is approved; changing the value of an
+ *      approved difference is a spec edit reviewed in the same PR as the host
+ *      values, so a literal swap lands in one PR and main never goes red. A cell with
  *      no leading literal (a composite value such as the consent row set, or
  *      «on — …») needs the row's presence only — so a composite cell opens
  *      with prose, never with a backticked path.
@@ -482,24 +485,31 @@ async function checkPair(
       continue;
     }
     const headText = readHeadSpec(entry.spec);
-    if (!(headText ? differenceRows(headText)?.has(entry.field) : false)) {
+    const headRow = headText
+      ? differenceRows(headText)?.get(entry.field)
+      : undefined;
+    if (!headRow) {
       errors.push(
         `${pair.config}: \`${entry.field}\` still differs between the storefronts, but the head tree ` +
           `drops its row from ${entry.spec} (origin/${baseRefName()} still cites it).\n${values}\n` +
           `    keep the row while the values differ — make the hosts equal first, then remove the row.`,
       );
+      continue;
     }
+    // (4) literals come from the HEAD row: the base row already proves the
+    // difference is approved; changing its value is a spec edit reviewed in
+    // the same PR as the host values.
     for (const [label, cell, value] of [
-      ["Витрина", row.doctor, d],
-      ["Академия", row.academy, a],
+      ["Витрина", headRow.doctor, d],
+      ["Академия", headRow.academy, a],
     ] as const) {
       const lit = leadingLiteral(cell);
       if (lit.none) continue;
       if (canonical(lit.value) !== canonical(value)) {
         errors.push(
           `${pair.config}: \`${entry.field}\` on ${label} is ${show(value)}, but its row in ${entry.spec} ` +
-            `on origin/${baseRefName()} states \`${lit.text}\` for ${label}.\n${values}\n` +
-            `    row states \`${lit.text}\` — fix the host value, or land the spec change first.`,
+            `on the head tree states \`${lit.text}\` for ${label}.\n${values}\n` +
+            `    row states \`${lit.text}\` — fix the host value, or change the row in the same PR.`,
         );
       }
     }

@@ -65,7 +65,13 @@ describe("host-config-parity-lint", () => {
     expect(stderr).toContain("no row");
   });
 
-  it("red: a host value disagrees with the literal its spec row leads with → exit 1", () => {
+  it("green: an approved difference swaps its literals in the head row and the hosts swap with it (one PR) → exit 0", () => {
+    const { code, stderr } = run("green-literal-swapped-with-row");
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+  });
+
+  it("red: a host value disagrees with the literal its HEAD spec row leads with (the base row agrees) → exit 1", () => {
     const { code, stderr } = run("red-value-mismatch");
     expect(code).toBe(1);
     expect(stderr).toContain("`register.promoField`");

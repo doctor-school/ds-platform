@@ -1,10 +1,10 @@
-# 021 — fixture (base branch)
+# 021 — fixture (head tree)
 
 ## Differences between storefronts
 
 | Field                    | Витрина (doctor storefront) | Академия (Academy)  | Clause     |
 | ------------------------ | --------------------------- | ------------------- | ---------- |
-| `register.promoField`    | `true` — the promo box      | `false` — no box    | 021 EARS-1 |
+| `register.promoField`    | `true` — the promo box      | `true` — a box      | 021 EARS-1 |
 | `landing.specialtyAware` | `true` — lands on the feed  | `false` — /webinars | 021 EARS-3 |
 | `consents` (row set)     | declaration + partner data  | one ToS sentence    | 021 EARS-5 |
 

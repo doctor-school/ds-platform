@@ -779,7 +779,7 @@ function agentRoutes({ factorReads, extra = {} }) {
   };
 }
 
-function agentHarness({ routes, secrets = {} }) {
+function agentHarness({ routes, secrets = {}, goldenSubjects = {} }) {
   const calls = [];
   const writes = [];
   const lines = [];
@@ -798,6 +798,7 @@ function agentHarness({ routes, secrets = {} }) {
       now: () => 59_000,
       randomPassword: () => "Generated-Pw-1!",
       log: (line) => lines.push(line),
+      goldenSubjects,
     });
   return { calls, writes, lines, run };
 }
@@ -871,6 +872,30 @@ test("a ready factor WITHOUT a stored secret is removed on the agent account onl
       .filter((c) => /totp|auth_factors/.test(c.key))
       .every((c) => c.key.includes("/id-agent/")),
   );
+});
+
+test("an agent search that resolves to a golden subject id is refused before any factor call", async () => {
+  const h = agentHarness({
+    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!" },
+    goldenSubjects: { DS_GOLDEN_SUB_ADMIN: "id-agent", DS_GOLDEN_SUB_DOCTOR_MFA: "id-mfa" },
+    routes: agentRoutes({ factorReads: ["AUTH_FACTOR_STATE_READY"] }),
+  });
+  await assert.rejects(h.run(), /golden subject DS_GOLDEN_SUB_ADMIN/);
+  assert.ok(!h.calls.some((c) => /totp|auth_factors/.test(c.key)));
+});
+
+test("the live factor shape (state beside an empty `otp`) reads as READY and is kept", async () => {
+  const routes = {
+    ...agentRoutes({ factorReads: [] }),
+    "POST /management/v1/users/id-agent/auth_factors/_search": {
+      body: { result: [{ otp: {}, state: "AUTH_FACTOR_STATE_READY" }] },
+    },
+  };
+  const h = agentHarness({
+    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!", DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET },
+    routes,
+  });
+  assert.equal((await h.run()).totp, "kept");
 });
 
 test("a removal the re-read cannot confirm is a hard failure, never an enrol on top", async () => {

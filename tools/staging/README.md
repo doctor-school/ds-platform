@@ -334,7 +334,10 @@ Its password and TOTP secret are tool-minted into `/etc/ds-platform/stage-agent-
 run that dies halfway is put right by the next one. Neither is ever logged. No mirror row
 is seeded for it: the api heals a missing mirror row for an authenticated subject on the
 first request and marks its staff role from the session's claims, so the sign-in survives
-every `sync` that re-seeds the slot database.
+every `sync` that re-seeds the slot database. The file is tool-owned: never hand-edit it,
+except after a factor reset outside the tool (for example an admin MFA reset in the
+console) — then delete its TOTP line and re-run `reset-identities`, which replaces the
+factor; otherwise the `keep` row would hold on to a dead secret.
 
 The TOTP factors of the golden `doctorMfa` and `admin` are NOT converged and never touched
 by this command: they are enrolled in the owner's authenticator. The command guarantees

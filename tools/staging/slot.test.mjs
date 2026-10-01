@@ -271,6 +271,15 @@ test("a remote write is a root-owned heredoc, never a redirect the caller owns",
   assert.ok(!/cat >/.test(script));
 });
 
+test("a 0600 write sets the mode before any byte lands — no umask window (#2531)", () => {
+  const path = "/etc/ds-platform/stage-agent-admin.env";
+  const lines = remoteWriteScript(path, "K=secret\n", 0o600).split("\n");
+  const create = lines.indexOf(`sudo test -e ${path} || sudo install -m 0600 /dev/null ${path}`);
+  const chmod = lines.indexOf(`sudo chmod 0600 ${path}`);
+  const tee = lines.findIndex((line) => line.startsWith(`sudo tee ${path} `));
+  assert.ok(create > 0 && chmod > create && tee > chmod, lines.join("\n"));
+});
+
 test("an append never truncates, and the delimiter can never be forged", () => {
   const appended = remoteWriteScript("/var/log/ds-platform/slot.log", "line\n", 0o640, {
     append: true,
@@ -1217,6 +1226,7 @@ test("`reset-identities` converges the agent admin too (#2531)", async () => {
     append: async () => {},
     idp: async (step) => {
       ops.push(step.op);
+      if (step.op === "agent-admin") assert.deepEqual(step.goldenSubjects, SUBJECTS);
       return step.op === "golden-identities" ? SUBJECTS : undefined;
     },
   };

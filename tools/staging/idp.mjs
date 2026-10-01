@@ -904,6 +904,7 @@ export async function convergeAgentAdmin({
   now = () => Date.now(),
   randomPassword = defaultRandomPassword,
   log = () => {},
+  goldenSubjects = {},
 }) {
   const account = STAGE_AGENT_ADMIN;
   if (GOLDEN_IDP_ACCOUNTS.some((golden) => golden.username === account.username)) {
@@ -925,6 +926,14 @@ export async function convergeAgentAdmin({
     log,
   });
   const userId = subjects[account.subjectEnvVar];
+  // The fence holds on the id, not only the name: an email search is not unique on
+  // Zitadel, so a hit resolving to a golden subject (the owner's factors) stops here.
+  const clash = Object.entries(goldenSubjects ?? {}).find(([, id]) => id === userId);
+  if (!userId || clash) {
+    throw new IdpError(
+      `${account.username} resolved to ${clash ? `the golden subject ${clash[0]}` : "no subject"} — refusing to touch a factor`,
+    );
+  }
 
   const factor = await readTotpFactorState(client, userId);
   const action = planAgentAdminTotp({

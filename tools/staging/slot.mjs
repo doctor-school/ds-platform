@@ -433,7 +433,8 @@ export function quoteCommand(argv) {
 export const REMOTE_HEREDOC_DELIMITER = "DS_SLOT_EOF";
 
 /**
- * A file placed on the box as root: `mkdir -p`, `tee` from a quoted heredoc, `chmod`.
+ * A file placed on the box as root: `mkdir -p`, the mode first (`install -m`, `chmod`),
+ * then `tee` from a quoted heredoc.
  *
  * `sudo cat > path` would open the redirect as the CALLING user and fail on a
  * root-owned directory, so the write goes through `tee`, whose stdout is discarded.
@@ -461,11 +462,16 @@ export function remoteWriteScript(path, contents, mode, { append = false } = {})
   const slash = path.lastIndexOf("/");
   const dir = slash > 0 ? path.slice(0, slash) : "/";
   const octal = (Number(mode) & 0o7777).toString(8).padStart(4, "0");
+  // The mode is set BEFORE the contents arrive: `install -m` creates an absent file
+  // empty at that mode, and `tee` keeps the mode of the file it opens — so a 0600
+  // secret is never readable under root's umask, not even between two lines. An
+  // existing file (an append target included) keeps its bytes; `chmod` tightens it.
   return [
     `sudo mkdir -p ${dir}`,
+    `sudo test -e ${path} || sudo install -m ${octal} /dev/null ${path}`,
+    `sudo chmod ${octal} ${path}`,
     `sudo tee ${append ? "-a " : ""}${path} >/dev/null <<'${REMOTE_HEREDOC_DELIMITER}'`,
     `${text}${REMOTE_HEREDOC_DELIMITER}`,
-    `sudo chmod ${octal} ${path}`,
   ].join("\n");
 }
 
@@ -1734,7 +1740,11 @@ export async function runSlotCommand({
   });
   // #2531: the stage-only agent admin and its TOTP factor, on every identity converge,
   // so a fresh box and a drifted one both end with an admin an agent can sign in as.
-  await effects.idp({ op: "agent-admin", label: "converge the agent admin and its TOTP" });
+  await effects.idp({
+    op: "agent-admin",
+    label: "converge the agent admin and its TOTP",
+    goldenSubjects: subjects,
+  });
 
   if (options.command === "reset-identities") {
     const plan = planResetIdentities({
@@ -2537,6 +2547,7 @@ function realEffects(boxEnv) {
         // other box file, and never echoed.
         await convergeAgentAdmin({
           client,
+          goldenSubjects: step.goldenSubjects,
           readSecrets: async () =>
             parseAgentAdminSecrets(
               await sshCapture(

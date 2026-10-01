@@ -1119,11 +1119,11 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
     expect(counter).toHaveTextContent("больше на 3");
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
     const summary = await errorSummary();
-    await userEvent.click(
-      within(summary).getByRole("button", {
-        name: /^Сократите текст тезисов до 5 000 знаков — сейчас 5\s003$/,
-      }),
-    );
+    const overLink = within(summary).getByRole("link", {
+      name: /^Сократите текст тезисов до 5 000 знаков — сейчас 5\s003$/,
+    });
+    expect(overLink).toHaveAttribute("href", "#in-results");
+    await userEvent.click(overLink);
     expect(results).toHaveFocus();
   });
 
@@ -1145,6 +1145,22 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       "Подтвердите, что в тексте нет торговых наименований",
       "Дайте согласие на обработку персональных данных",
     ]);
+    // The DS summary links each statement to its box; the box is invalid.
+    expect(
+      within(summary).getByRole("link", {
+        name: "Подтвердите, что в тексте нет некорректных заимствований",
+      }),
+    ).toHaveAttribute("href", "#chk-plag");
+    expect(
+      within(summary).getByRole("link", {
+        name: "Подтвердите, что в тексте нет торговых наименований",
+      }),
+    ).toHaveAttribute("href", "#chk-trade");
+    expect(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет некорректных заимствований",
+      }),
+    ).toHaveAttribute("aria-invalid", "true");
     await userEvent.click(
       screen.getByRole("checkbox", {
         name: "В тексте нет некорректных заимствований",

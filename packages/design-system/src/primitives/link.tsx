@@ -35,10 +35,13 @@ import { cn } from "../lib/utils";
  *  - `mobile-nav-row` — one full-bleed row of the mobile nav sheet.
  *
  * `tone` carries the ink (`default`, `on-primary`, `header-nav` for the navy
- * band's muted nav tier, `neutral` for page ink), `size` the type step
- * (`default`, `sm` = the canvas 13.5px nav/footer link) and `weight` the stroke
- * (`default` = 700, `strong` = the canvas 800 cross-storefront link). Every one
- * of them is backed by `design-source/ds-shell.dc.html`; the storefront chrome
+ * band's muted nav tier, `neutral` for page ink, `muted` / `danger` for quiet secondary and
+ * destructive text actions), `size` the type step
+ * (`default`, `sm` = the canvas 13.5px nav/footer link, `caption` = the 13px
+ * quiet action) and `weight` the stroke (`default` = 700, `strong` = the canvas
+ * 800 cross-storefront link, `semibold` = the 600 quiet action). Every one
+ * of them is backed by a canvas (`design-source/ds-shell.dc.html`,
+ * `design-source/doctor-lk-congress.dc.html`); the storefront chrome
  * composes them instead of re-styling this primitive at the call site (#2180).
  *
  * `asChild` (Radix `Slot`, same contract as `Button`) lets it wrap `next/link`:
@@ -71,6 +74,13 @@ const linkVariants = cva(
         // Page ink: a link that reads as a ROW of a surface (the mobile nav
         // sheet, canvas line 46) rather than as an inline action.
         neutral: "text-foreground",
+        // A quiet secondary action beside a primary one
+        // (`design-source/doctor-lk-congress.dc.html` `quietBtn`): muted ink,
+        // a resting underline in the dash colour, page ink on hover.
+        muted:
+          "text-muted-foreground underline decoration-muted-2 hover:text-foreground hover:decoration-foreground",
+        // A destructive text action (the same canvas, danger detail actions).
+        danger: "text-destructive-text active:text-destructive-text/80",
       },
       variant: {
         standalone: "",
@@ -87,12 +97,18 @@ const linkVariants = cva(
         // The canvas nav/footer link type size, 13.5px (`ds-shell.dc.html`
         // lines 85/95) — the `sm` step of the scale.
         sm: "text-sm",
+        // The canvas quiet secondary action, 13px
+        // (`design-source/doctor-lk-congress.dc.html` `quietBtn`) — the
+        // `caption` step of the scale.
+        caption: "text-caption",
       },
       weight: {
         default: "font-bold",
         // The canvas cross-storefront link, weight 800 (`ds-shell.dc.html`
         // line 99).
         strong: "font-extrabold",
+        // The canvas quiet secondary action, weight 600 (`quietBtn`).
+        semibold: "font-semibold",
       },
     },
     defaultVariants: {

@@ -63,6 +63,7 @@ const config: NextConfig = {
   // «useState is not a function».
   transpilePackages: [
     "@ds/auth-flow",
+    "@ds/congress-submissions",
     "@ds/design-system",
     "@ds/events-storefront",
     "@ds/room",

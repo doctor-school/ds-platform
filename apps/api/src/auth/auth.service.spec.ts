@@ -334,6 +334,8 @@ describe("AuthService.register — account-exists notice (#207, EARS-23)", () =>
       sendLoginCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendCongressRegistrationConfirmation: () =>
         Promise.reject(new Error("smtp down")),
+      sendCongressSubmissionReceipt: () =>
+        Promise.reject(new Error("smtp down")),
     };
     const service = buildRegisterService({
       idp,
@@ -966,6 +968,8 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
       sendLoginCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendCongressRegistrationConfirmation: () =>
+        Promise.reject(new Error("smtp down")),
+      sendCongressSubmissionReceipt: () =>
         Promise.reject(new Error("smtp down")),
     };
     const idp = new FakeIdpClient(exploding);

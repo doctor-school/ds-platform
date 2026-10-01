@@ -37,14 +37,12 @@ describe("cn() keeps a custom font-size AND a text colour (no group collision)",
     "title-lg",
     "chip",
     "topbar",
-  ])(
-    "keeps text-%s alongside a colour",
-    (size) => {
-      const out = cn("text-destructive-foreground", `text-${size}`);
-      expect(out).toContain("text-destructive-foreground");
-      expect(out).toContain(`text-${size}`);
-    },
-  );
+    "lead",
+  ])("keeps text-%s alongside a colour", (size) => {
+    const out = cn("text-destructive-foreground", `text-${size}`);
+    expect(out).toContain("text-destructive-foreground");
+    expect(out).toContain(`text-${size}`);
+  });
 
   /**
    * The #1052/#1065 regression: the month-grid pill composes `text-eyebrow`

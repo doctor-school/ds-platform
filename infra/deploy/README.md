@@ -96,6 +96,17 @@ never touches it.
 
 Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
 
+**Mail link origins (api).** `MAILER_PORTAL_BASE_URL` (optional) is the Academy
+origin of the sign-in / verification links. `MAILER_DOCTOR_BASE_URL` is
+**required** — the api refuses to boot without it, like `DATABASE_URL` — and is
+the doctor storefront origin every congress letter links to
+(`{origin}/account/congress`: the 046 submission letters and the 044
+confirmation's «Подать материалы в кабинете»). Production:
+`MAILER_DOCTOR_BASE_URL=https://new.doctor.school` in `/etc/ds-platform/api.env`,
+set **before** the release that first requires it restarts the api; it flips to
+`https://doctor.school` at the #1430 root-domain cut-over. Stage slots render it
+from the slot's doctor host (`tools/staging/slot.mjs`).
+
 Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine at
 0 users (pre-pilot); tune per ADR-0003 §6 as a tracked follow-up, not an on-box edit.
 
@@ -1141,7 +1152,9 @@ Order:
    `academy.doctor.school`, so every transactional link (verification, OTP,
    notifications) keeps pointing at the academy origin even after a doctor
    registration surface ships on `new.doctor.school` (#1558/021). Re-pointing it
-   is a separate, deliberate decision — not part of the routing change.
+   is a separate, deliberate decision — not part of the routing change. The
+   congress letters use their own key, `MAILER_DOCTOR_BASE_URL` (runtime
+   contract above), which already points at `new.doctor.school`.
 
 5. **Release-gate sequencing.** Both `apps/doctor` routes are still `deferred` in
    `tools/lint/prod-surface-manifest.yaml` and #1440's "no public placeholder on

@@ -70,6 +70,13 @@ export interface AccountProfileCardCopy {
   eventsLabel: string;
   eventsTitle: string;
   eventsHelper: string;
+  /**
+   * The congress-cabinet row (046 EARS-4). Optional: only a host that mounts the
+   * section supplies it, and the row renders only with both the copy and
+   * {@link AccountProfileCardProps.congressHref}. The row carries no small-caps
+   * caption: its one visible label is the section name itself.
+   */
+  congressTitle?: string;
   signOut: string;
 }
 
@@ -95,6 +102,12 @@ export interface AccountProfileCardProps {
    * a route the host has not shipped: an honest empty beats a 404 (017 EARS-3).
    */
   eventsHref?: string | null;
+  /**
+   * The «Мои заявки на Конгресс» target (046 EARS-4). The host passes it only
+   * when the account has a registration for the congress event; `null` HIDES the
+   * row.
+   */
+  congressHref?: string | null;
   /**
    * Host anchor renderer — the apps pass the Next.js `<Link>` so client-side
    * navigation survives the lift. Defaults to a plain `<a>`.
@@ -186,9 +199,10 @@ function RowLink({
   renderLink,
 }: {
   href: string;
-  label: string;
+  /** Small-caps caption column; absent → a desktop spacer keeps titles aligned. */
+  label?: string;
   title: string;
-  helper: string;
+  helper?: string;
   renderLink: NonNullable<AccountProfileCardProps["renderLink"]>;
 }) {
   return (
@@ -200,14 +214,20 @@ function RowLink({
         href,
         children: (
           <>
-            <span className="w-36 shrink-0 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
-              {label}
-            </span>
+            {label ? (
+              <span className="w-36 shrink-0 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
+                {label}
+              </span>
+            ) : (
+              <span aria-hidden className="hidden w-36 shrink-0 layout:block" />
+            )}
             <span className="min-w-0 flex-1">
               <span className="block font-bold">{title}</span>
-              <span className="mt-1 block text-caption font-semibold text-muted-foreground">
-                {helper}
-              </span>
+              {helper ? (
+                <span className="mt-1 block text-caption font-semibold text-muted-foreground">
+                  {helper}
+                </span>
+              ) : null}
             </span>
             <span
               aria-hidden
@@ -228,6 +248,7 @@ export function AccountProfileCard({
   initials = null,
   passwordHref = null,
   eventsHref = null,
+  congressHref = null,
   renderLink = defaultRenderLink,
   onSaveDisplayName,
   resolveSaveError,
@@ -414,6 +435,13 @@ export function AccountProfileCard({
               label={copy.eventsLabel}
               title={copy.eventsTitle}
               helper={copy.eventsHelper}
+              renderLink={renderLink}
+            />
+          ) : null}
+          {congressHref && copy.congressTitle ? (
+            <RowLink
+              href={congressHref}
+              title={copy.congressTitle}
               renderLink={renderLink}
             />
           ) : null}

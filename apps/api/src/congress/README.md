@@ -10,13 +10,14 @@ Spec: `apps/docs/content/specs/features/044-congress-signup/`.
 
 ## What lives here
 
-| File                         | Role                                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `congress-signup.controller` | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`).   |
-| `congress-signup.service`    | The order of the checks and the one transaction the accepted path writes in — for both doors (`site`, and the registrar's `desk`, EARS-35).      |
-| `congress-signup.config`     | Every configured setting the intake needs — the event, the consent version, the venue, the registration window and the timing floor — validated. |
-| `congress-signup.tokens`     | The injected clock and the per-request configuration reader.                                                                                     |
-| `congress-signup.dto`        | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                              |
+| File                          | Role                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `congress-signup.controller`  | The public route and the protections it carries (`@Public`, `@BotProtected`, `@RateLimited` under the intake's own scope, `@TimingEqualized`).   |
+| `congress-signup.service`     | The order of the checks and the one transaction the accepted path writes in — for both doors (`site`, and the registrar's `desk`, EARS-35).      |
+| `congress-signup.config`      | Every configured setting the intake needs — the event, the consent version, the venue, the registration window and the timing floor — validated. |
+| `congress-submission-consent` | The submission consent version (046 EARS-16), stamped from its `@ds/legal-content` document.                                                     |
+| `congress-signup.tokens`      | The injected clock and the per-request configuration reader.                                                                                     |
+| `congress-signup.dto`         | The nestjs-zod adapter over the `@ds/schemas` SSOT.                                                                                              |
 
 ## What this module deliberately does NOT own
 
@@ -94,7 +95,9 @@ same published version.
 
 The confirmation email is live too. It is dispatched AFTER the transaction has
 committed and is never awaited by the response: a slow or unreachable relay can
-neither delay an accepted submission nor turn it into a refusal.
+neither delay an accepted submission nor turn it into a refusal. Its one action
+is «Подать материалы в кабинете», the absolute cabinet link on
+`MAILER_DOCTOR_BASE_URL` (046 EARS-15; see «Letter link origin» below).
 
 **Mail outcome, and why there is no retry queue.** The outcome is recorded on the
 registration itself — `registrations.confirmation_mail_status` (`sent` |
@@ -149,3 +152,89 @@ the one conversion in `@ds/schemas` (`congress-intake-settings.schema.ts`): the
 opening day at 00:00 Moscow, each last day at 00:00 Moscow of the day after.
 The same file holds `isCongressKindIntakeOpen`, the intake rule every later
 surface of 046 uses.
+
+## Congress submissions — the author's cabinet (feature 046, EARS-5…EARS-17)
+
+| File                                 | Role                                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `congress-submissions.me.controller` | `/v1/me/congress-submissions*` — `authenticated` / `doctor_guest` / `fast-path`, every row self-scoped. |
+| `congress-submissions.service`       | The section read, draft create/autosave/delete, the send cascade and the withdraw.                      |
+
+Endpoints: `GET [?event=]` (the section: the event's slug, title and dates,
+registration presence, per-kind intake state and limit usage, the next send's
+consent requirement, the account's submissions; without `event` — the event
+with intake settings that starts latest, which `/account/congress` shows),
+`POST` (create a draft), `PATCH /:id` (autosave), `POST /:id/send`,
+`POST /:id/withdraw {expectedStatus}`, `DELETE /:id` (drafts only). A row of
+another account, or one whose registration is no longer active, is 404.
+Refusals carry `{problems: [{code, field?, params?}]}` — 422 for an unmet send
+condition, 409 for a status the action does not apply to; the codes live in
+`@ds/schemas` (`congress-submission.schema.ts`) with the field limits, the
+length rule and the per-kind forms. A kind is offered once its form is
+registered there (oral now; posters and abstracts with their slices); creating
+a draft of a kind not offered yet is 422 `kind-not-available`.
+
+- **Send cascade (EARS-9).** One transaction: the row locked, an advisory lock on
+  (account, event, kind), then registration, the kind window, the complete field
+  set, the limit and the consent are all checked and every failure named; a
+  refusal throws inside the transaction, so nothing is written. Author names
+  are normalised by the 044 EARS-33 rule on send.
+- **Resend after revision (EARS-9, EARS-30).** A `needs_revision` submission is
+  sent again through the same cascade, which checks its own `revision_due_at`
+  instead of the kind window (`revision-closed` from that instant) and writes
+  `submitted` conditional on the status seen; it gets a new receipt letter, the
+  limit never counts it a second time (the row being sent is excluded), and the
+  consent is asked again only for a new version. Any other non-draft status is
+  `status-conflict`.
+- **Limit (EARS-17).** Counts the account's submissions of the event and kind in
+  any status except `draft` — `rejected` and `withdrawn` included — the one being
+  sent excluded, under the advisory lock, so two tabs cannot both take the last
+  slot.
+- **Submission consent (EARS-16).** Purpose `congress-submission-personal-data`,
+  the organising committee's own consent — one for every submission kind,
+  abstracts publication included. Its text is the `@ds/legal-content` document
+  `consent-congress-submissions` (published at `/documents/<slug>`, which the
+  form's checkbox links to), and its version is stamped from that file by
+  `congress-submission-consent` — the document's `edition` plus the sha256 of
+  its text (ADR-0009 §2.1), the same shape as the 044 stamp but independent of
+  `CONGRESS_SIGNUP_CONSENT_VERSION`, which versions the congress site policy.
+  The send asks for it while the account has no row of that purpose at the
+  current version — one row per account and version, whatever the event or
+  kind — so a new edition asks every author again. The store enforces it: a
+  partial unique index on `(user_id, version)` for this purpose (migration 0044) and `ON CONFLICT DO NOTHING`, so concurrent first sends write one row.
+  The section read never fails on it: if the document is not published or is
+  malformed `consentRequired` reads `true` (the consent is asked) and only the
+  send is refused (503).
+- **Withdraw (EARS-12).** `submitted` while the kind is open → `draft`;
+  `in_review`, `needs_revision`, or `submitted` after closing → `withdrawn`. The
+  update matches only a row still in `expectedStatus`, so a concurrent committee
+  change wins and the withdraw is refused with the current status.
+- **Delete (EARS-13).** Retires the draft (`record_status = 'retired'`,
+  `deleted_at` set — the ADR-0003 §3.6 retained-row rule; no physical delete);
+  a retired draft is excluded from every list, count and the kind's limit. Any
+  other status is 409.
+- **Author 1 (EARS-6).** Prefilled from the 044 registration answers; without
+  answers its name fields stay empty for the author to fill — the display name
+  is never split into a first name and a surname.
+- **Receipt letter (EARS-14).** After the send transaction commits, the receipt
+  («Doctor.School — заявка получена») is dispatched off the response path to
+  the account email, the letter built from the committed row (kind label from
+  `CONGRESS_SUBMISSION_KIND_LABELS`, the title, `events.title`). The outcome is
+  recorded on the submission — `last_letter_kind = 'receipt'`,
+  `last_letter_status` `sent` | `failed`, `last_letter_at` — and a relay
+  failure never rolls back or delays the `submitted`. No retry queue: the
+  section always shows the status.
+
+**Letter link origin (046 «Letters»).** Every congress letter — the 046 letters
+and the 044 confirmation's single action «Подать материалы в кабинете»
+(EARS-15, the site form and the desk alike) — links to
+`{MAILER_DOCTOR_BASE_URL}/account/congress`, resolved once at boot into the
+`CONGRESS_CABINET_URL` provider. `MAILER_DOCTOR_BASE_URL` is a REQUIRED api
+key (`z.url()`, no default, like `DATABASE_URL`): an api without it refuses to
+boot rather than mail a link to the wrong site. Values per environment:
+046-design «Letters».
+
+`congress_submissions` (migration 0043) carries the 010 `audit_row_change()`
+trigger — the ledger is the status history — and `authors` is a PD-masked
+column. `revision_due_at` is read by the section and the autosave rule; the
+committee's status route writes it.

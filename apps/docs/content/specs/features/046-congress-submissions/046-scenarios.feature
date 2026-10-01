@@ -58,10 +58,10 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
   Scenario: Sending the first oral talk
     Given the participant's oral talk draft is complete
     When the participant sends it
-    Then the form asks for the congress submission personal-data consent
+    Then the form asks for the congress submission personal-data consent, linking to the document "Согласие на обработку персональных данных для заявок на Конгресс"
     When the participant accepts it and sends
     Then the submission status becomes "Отправлена" with the send instant
-    And one consent record is written under the purpose "congress-submission-personal-data" with the server-stamped version
+    And one consent record is written under the purpose "congress-submission-personal-data" with the version of that document
     And a receipt letter naming the talk is sent after commit and its outcome is recorded on the submission
     When the participant sends a second oral talk
     Then the consent is not asked again
@@ -120,22 +120,22 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the section asks for the birth date before creating the draft
     When the participant enters 1987-04-23
     Then the birth date is stored on the account
-    And the poster is refused with "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса (23 апреля 2027)"
+    And the poster is refused with "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 40 лет."
     And oral talks and abstracts stay available
     When the participant corrects the birth date to 1987-04-24 and starts a poster
     Then a poster draft is created with the title, authors, goal and content fields and no file field
 
   @EARS-21 @EARS-22 @EARS-23
-  Scenario: Abstracts with the total counter, the publication consent and the statements
+  Scenario: Abstracts with the total counter and the statements
     Given the participant creates abstracts
     Then the form shows the sections "Актуальность", "Цель", "Материалы и методы", "Результаты и обсуждение", "Выводы" as plain-text fields and one total counter
     When the five sections together reach 5001 characters including spaces
     Then the counter is marked and a send is refused naming the 5000-character limit
-    When the participant shortens the text to 5000 characters and sends without the РИНЦ consent
-    Then the send is refused naming the consent and both statements
-    When the participant accepts the РИНЦ publication consent, confirms both statements and sends
-    Then one consent record is written under the purpose "congress-abstract-publication" and referenced from the submission
-    And both statements are stored on the submission with their instant
+    When the participant shortens the text to 5000 characters and sends without the statements
+    Then the send is refused naming both statements
+    When the participant confirms both statements and sends
+    Then both statements are stored on the submission with their instant
+    And no consent other than the congress submission personal-data consent is asked
 
   @EARS-24
   Scenario: First-author rule when the organisers turn it on
@@ -203,7 +203,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Given the author's oral talk is "На доработке" with the revision deadline 2027-02-20T00:00+03:00
     And the current time is 2027-02-20T00:00+03:00
     When the author opens the talk
-    Then it is read-only with "Срок доработки истёк — ждите решения программного комитета"
+    Then it is read-only with "Срок доработки истёк 19 февраля, 23:59 МСК (меньше часа назад) — отправить заявку нельзя"
     And an autosave or a send request reaching the API is refused and the status stays "На доработке"
     When a committee member sets "Отклонена" with a comment
     Then the status becomes "rejected" and the author receives the rejection letter

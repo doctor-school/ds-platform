@@ -20,4 +20,11 @@ export type CongressSignUpClock = () => Date;
  * branch without booting a second application.
  */
 export const CONGRESS_SIGN_UP_ENV = Symbol("CONGRESS_SIGN_UP_ENV");
+
+/**
+ * 046 «Letters» — the absolute «Мои заявки на Конгресс» URL every congress
+ * letter links to, `{MAILER_DOCTOR_BASE_URL}/account/congress`. A string
+ * resolved at boot (the key is required, so there is nothing to re-read).
+ */
+export const CONGRESS_CABINET_URL = Symbol("CONGRESS_CABINET_URL");
 export type CongressSignUpEnvReader = () => CongressSignUpEnv;

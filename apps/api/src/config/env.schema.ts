@@ -183,6 +183,11 @@ export const ApiEnvSchema = z.looseObject({
   // Portal origin the notice's sign-in / reset links point at (`/login`,
   // `/reset`). Optional — defaults to the local portal in the adapter.
   MAILER_PORTAL_BASE_URL: z.url().optional(),
+  // 046 «Letters» — the doctor storefront origin every congress letter links to
+  // (`{origin}/account/congress`: the 046 letters and the 044 confirmation's
+  // cabinet link, EARS-14/15). REQUIRED with no default, like DATABASE_URL: an
+  // api without it refuses to boot rather than mail a link to the wrong site.
+  MAILER_DOCTOR_BASE_URL: z.url(),
 
   // Shared BFF/native SMTP configuration. Validated by real-smtp.ts on selection:
   // explicit postbox or mail.ru, matching canonical host:465, complete credentials.

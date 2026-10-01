@@ -54,6 +54,9 @@ export const PACKAGE_GRAPH = {
   "design-system": ["schemas"],
   room: ["schemas", "design-system"],
   "events-storefront": ["schemas", "design-system"],
+  // The congress-submissions section (046): primitives, the shared schemas and
+  // the auth-flow server helpers its route mount decides a guest with.
+  "congress-submissions": ["schemas", "design-system", "auth-flow"],
   // The shared storefront chrome (#2180): primitives only — it must never
   // reach for a sibling capability package, or the two storefronts would inherit
   // that dependency through their shell.

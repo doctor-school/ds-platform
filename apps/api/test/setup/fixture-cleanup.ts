@@ -20,6 +20,9 @@ import type pg from "pg";
 
 /** Child tables of `events`, in the order they must be removed. */
 const EVENT_CHILDREN = [
+  // 046 EARS-6 (#2433) — a submission names its event, registration and user
+  // (FK `ON DELETE RESTRICT`), so it goes before the registrations do.
+  "congress_submissions",
   // 046 EARS-1 (#2432) — the per-kind intake settings hang off the event-level
   // settings row (FK `ON DELETE RESTRICT`), so they go first.
   "congress_submission_kind_settings",
@@ -43,6 +46,8 @@ const EVENT_CHILDREN = [
 
 /** Child tables of `users`, in the order they must be removed. */
 const USER_CHILDREN = [
+  // 046 EARS-6 (#2433) — a submission names its author and registration.
+  "congress_submissions",
   // 044 EARS-38 (#2384) — a registrar's event binding names its user.
   "event_role_grants",
   "presence_beats",

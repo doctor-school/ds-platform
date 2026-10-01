@@ -9,7 +9,10 @@ import { loadEnv } from "../config/env.schema.js";
  * and the api fallback can never drift apart (no parallel boolean env var).
  */
 describe("delivery-reconcile env defaults (single source of truth)", () => {
-  const base = { DATABASE_URL: "postgres://u:p@localhost:5432/db" };
+  const base = {
+    DATABASE_URL: "postgres://u:p@localhost:5432/db",
+    MAILER_DOCTOR_BASE_URL: "http://localhost:3004",
+  };
 
   const derive = (
     source: Record<string, string>,

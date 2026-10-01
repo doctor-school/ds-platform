@@ -4,7 +4,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 /**
  * Our design tokens add font-size utilities that tailwind-merge does not ship in
  * its default config: `text-chip`, `text-topbar`, `text-2xs`, `text-eyebrow`,
- * `text-caption`, `text-body-compact`, `text-title-lg` (the custom `--text-*`
+ * `text-caption`, `text-body-compact`, `text-title-lg`, `text-lead` (the custom `--text-*`
  * theme keys generated from `tokens/*.json`). tailwind-merge classifies
  * an unknown `text-*` class into the **text-COLOUR** group by default — so a
  * naïve `twMerge` treats `text-caption` as a colour and, in a `cn(...)` where a
@@ -38,6 +38,7 @@ const twMerge = extendTailwindMerge({
             "caption",
             "body-compact",
             "title-lg",
+            "lead",
           ],
         },
       ],

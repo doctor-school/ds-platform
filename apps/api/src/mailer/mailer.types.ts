@@ -31,6 +31,26 @@ export interface CongressConfirmationRequest {
   eventStartsAt: Date;
   /** The congress venue (a per-deployment constant, 044 EARS-13). */
   eventVenue: string;
+  /**
+   * 046 EARS-15 — the absolute «Мои заявки на Конгресс» URL on the doctor
+   * storefront, `{MAILER_DOCTOR_BASE_URL}/account/congress`
+   * ({@link import("./notice-emails.js").congressCabinetUrl}).
+   */
+  cabinetUrl: string;
+}
+
+/** 046 EARS-14 — what the congress submission receipt is rendered from. */
+export interface CongressSubmissionReceiptRequest {
+  /** The account email of the submission's author. */
+  email: string;
+  /** The submission's title («тема»). */
+  title: string;
+  /** The kind's Russian name as the section shows it. */
+  kindLabel: string;
+  /** `events.title` of the congress, as the 044 confirmation names it. */
+  eventTitle: string;
+  /** `{MAILER_DOCTOR_BASE_URL}/account/congress`. */
+  cabinetUrl: string;
 }
 
 export interface Mailer {
@@ -98,6 +118,20 @@ export interface Mailer {
    */
   sendCongressRegistrationConfirmation(
     input: CongressConfirmationRequest,
+  ): Promise<void>;
+
+  /**
+   * 046 EARS-14: send the author the receipt for a congress submission that
+   * has just become `submitted` — a **product notice**, like the 044
+   * confirmation. The caller dispatches it after commit and off the response
+   * path and records the outcome on the submission; this method resolves on
+   * acceptance and rejects on a relay failure after failover.
+   *
+   * Implementations MUST reject an empty / blank / syntactically invalid email
+   * (contract parity: the fake is no more permissive than the real adapter).
+   */
+  sendCongressSubmissionReceipt(
+    input: CongressSubmissionReceiptRequest,
   ): Promise<void>;
 }
 

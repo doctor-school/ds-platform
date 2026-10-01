@@ -4,6 +4,7 @@ import {
   CONGRESS_INTAKE_CLOSING_NOT_AFTER_OPENING,
   CONGRESS_INTAKE_DEFAULTS,
   CONGRESS_INTAKE_OPENING_WITHOUT_CLOSING,
+  CONGRESS_SUBMISSION_KIND_LABELS,
   CongressIntakeSettingsRequestSchema,
   type CongressIntakeSettingsRequest,
   instantToMskDay,
@@ -160,5 +161,15 @@ describe("046 congress intake settings — contract and day rules", () => {
       "2026-11-01",
     );
     expect(() => mskDayStartInstant("2026-02-30")).toThrow(RangeError);
+  });
+});
+
+describe("046 kind labels", () => {
+  it("EARS-14: every kind has the Russian name the section shows", () => {
+    expect(CONGRESS_SUBMISSION_KIND_LABELS).toEqual({
+      oral: "Устный доклад",
+      poster: "Постерный доклад",
+      abstract: "Тезисы",
+    });
   });
 });

@@ -47,6 +47,7 @@ const copy: AccountProfileCardCopy = {
   eventsLabel: "События",
   eventsTitle: "Мои события",
   eventsHelper: "Эфиры, записи и сертификаты",
+  congressTitle: "Мои заявки на Конгресс",
   signOut: "Выйти из аккаунта",
 };
 
@@ -62,6 +63,7 @@ function renderCard(
   overrides: {
     profile?: MyProfile;
     eventsHref?: string | null;
+    congressHref?: string | null;
     passwordHref?: string | null;
     initials?: string | null;
     onSaveDisplayName?: (name: string) => Promise<void>;
@@ -85,6 +87,7 @@ function renderCard(
           ? "/account/events"
           : overrides.eventsHref
       }
+      congressHref={overrides.congressHref ?? null}
       onSaveDisplayName={onSaveDisplayName}
       resolveSaveError={overrides.resolveSaveError ?? (() => "mapped-error")}
       onSignOut={onSignOut}
@@ -200,5 +203,22 @@ describe("AccountProfileCard", () => {
     // The rest of the «Сессия» section still renders.
     expect(screen.getByTestId("logout")).toBeInTheDocument();
     expect(screen.getByText("Сменить пароль")).toBeInTheDocument();
+  });
+
+  it("046 EARS-4: a congressHref renders the «Мои заявки на Конгресс» row linking at the section", () => {
+    renderCard({ congressHref: "/account/congress" });
+
+    // The visible row label is exactly the section name the owner was told —
+    // no separate small-caps «Конгресс» caption beside it.
+    const row = screen.getByRole("link", { name: /Мои заявки на Конгресс/ });
+    expect(row).toHaveAttribute("href", "/account/congress");
+    expect(row.textContent?.replace("→", "").trim()).toBe("Мои заявки на Конгресс");
+  });
+
+  it("046 EARS-4: without a congressHref (no registration for the congress) the row is absent", () => {
+    renderCard({ congressHref: null });
+
+    expect(screen.queryByText("Мои заявки на Конгресс")).toBeNull();
+    expect(screen.getByTestId("logout")).toBeInTheDocument();
   });
 });

@@ -8,3 +8,4 @@ export * from "./contact-phone.js";
 export * from "./name-answer.js";
 export * from "./congress-participant-card.schema.js";
 export * from "./congress-intake-settings.schema.js";
+export * from "./congress-submission.schema.js";

@@ -1025,6 +1025,9 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     `IDP_ISSUER=https://${idpHostname(baseDomain)}`,
     `IDP_REDIRECT_URI=https://${hosts.api}/auth/callback`,
     `MAILER_PORTAL_BASE_URL=https://${hosts.academy}`,
+    // 046 «Letters» — the congress letters link to the slot's own doctor
+    // storefront; a required api boot key.
+    `MAILER_DOCTOR_BASE_URL=https://${hosts.doctor}`,
     // Sink partitioning is by sender local part, not by a Mailpit per slot
     // (spec §3 «Sink partitioning across slots»).
     `MAILER_SMTP_FROM=no-reply+${slot}@${baseDomain}`,

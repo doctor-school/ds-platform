@@ -76,9 +76,9 @@ describe("@ds/legal-content loader", () => {
   });
 
   it("028 EARS-12: list enumerates only files present — an empty documents dir lists nothing", () => {
-    expect(listDocuments(undefined, { documentsDir: fixtures("empty") })).toEqual(
-      [],
-    );
+    expect(
+      listDocuments(undefined, { documentsDir: fixtures("empty") }),
+    ).toEqual([]);
   });
 
   it("028 EARS-12: a traversal-shaped slug never escapes the documents dir", () => {
@@ -124,11 +124,24 @@ describe("@ds/legal-content loader", () => {
     ]);
   });
 
-  it("028 EARS-9: the real documents directory publishes privacy-policy and consent-photo-video", () => {
+  it("028 EARS-9: the real documents directory publishes privacy-policy, consent-photo-video and the congress submission consent", () => {
     expect(listDocuments().map((entry) => entry.slug)).toEqual([
+      "consent-congress-submissions",
       "consent-photo-video",
       "privacy-policy",
     ]);
     expect(loadDocument("privacy-policy")?.body).toContain("Ивекскон");
+  });
+
+  it("046 EARS-16: the congress submission consent is the organising committee's own consent document", () => {
+    const consent = loadDocument("consent-congress-submissions");
+    expect(consent?.frontmatter).toMatchObject({
+      kind: "consent",
+      title: "Согласие на обработку персональных данных для заявок на Конгресс",
+    });
+    expect(consent?.body).toContain(
+      "Организационному комитету VIII Конгресса «Ортобиология 2027»",
+    );
+    expect(consent?.body).toContain("публикация тезисов");
   });
 });

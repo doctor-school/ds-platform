@@ -94,16 +94,22 @@ describe("golden seed re-pinning (#2262)", () => {
             },
           ])
           .returning();
-        // No inbound FK can cascade-delete non-golden child data. Exactly one
-        // child references `registrations`: the per-day attendance marks of
-        // 044 EARS-34 (#2381), `ON DELETE RESTRICT` (#1278), which the plan
-        // declares as the replacement's ordered child cleanup
+        // No inbound FK can cascade-delete non-golden child data. Exactly two
+        // children reference `registrations`: the per-day attendance marks of
+        // 044 EARS-34 (#2381) and the congress submissions of 046 EARS-5
+        // (#2433), both `ON DELETE RESTRICT` (#1278), which the plan declares
+        // as the replacement's ordered child cleanup
         // (`volumeNamespaceChildren`). Any further relation requires
         // revisiting this staging replacement.
         const inbound = await tx.execute(
-          sql`select conname, confdeltype from pg_constraint where contype = 'f' and confrelid = 'registrations'::regclass`,
+          sql`select conname, confdeltype from pg_constraint where contype = 'f' and confrelid = 'registrations'::regclass order by conname`,
         );
         expect(inbound.rows).toEqual([
+          {
+            conname:
+              "congress_submissions_registration_id_registrations_id_fk",
+            confdeltype: "r",
+          },
           {
             conname: "registration_attendance_registration_id_registrations_id_fk",
             confdeltype: "r",

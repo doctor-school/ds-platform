@@ -368,7 +368,14 @@ export function SubmissionDetail({
   // §7): `FormError` owns the inline ⚠ tone, `FormErrorSummary` links each
   // message to its field. A refusal tied to no field (limit, deadline, closed
   // intake) is the operation-level `FormError` banner.
-  const fieldError = (key: string) => <DsFormError>{errOf(key)}</DsFormError>;
+  // The field's error line is referenced by its control's `aria-describedby`
+  // (`errId`), so assistive tech reads it with the field, not only as an alert.
+  const errId = (controlId: string) => `${controlId}-error`;
+  const describedBy = (key: string, controlId: string) =>
+    errOf(key) ? errId(controlId) : undefined;
+  const fieldError = (key: string, controlId: string) => (
+    <DsFormError id={errId(controlId)}>{errOf(key)}</DsFormError>
+  );
   const summaryErrors = shown.flatMap((e) =>
     e.focusId ? [{ fieldId: e.focusId, message: e.message }] : [],
   );
@@ -523,6 +530,7 @@ export function SubmissionDetail({
                     maxLength={CONGRESS_SUBMISSION_LIMITS.title}
                     placeholder={COPY.topicPlaceholder}
                     aria-invalid={errOf("title") ? true : undefined}
+                    aria-describedby={describedBy("title", "in-topic")}
                     onChange={(e) => {
                       const v = e.target.value;
                       update((d) => ({ ...d, title: v }));
@@ -532,7 +540,7 @@ export function SubmissionDetail({
                 ) : (
                   roText(draft.title)
                 )}
-                {fieldError("title")}
+                {fieldError("title", "in-topic")}
               </FormItem>
 
               {showBirth ? (
@@ -581,6 +589,7 @@ export function SubmissionDetail({
                         maxLength={max}
                         showCounter={Array.from(v).length >= max * 0.9}
                         aria-invalid={errOf(f.key) ? true : undefined}
+                        aria-describedby={describedBy(f.key, `in-${f.key}`)}
                         onChange={(e) => {
                           const nv = clip(e.target.value, max);
                           update((d) => ({
@@ -593,7 +602,7 @@ export function SubmissionDetail({
                     ) : (
                       roText(v)
                     )}
-                    {fieldError(f.key)}
+                    {fieldError(f.key, `in-${f.key}`)}
                   </FormItem>
                 );
               })}

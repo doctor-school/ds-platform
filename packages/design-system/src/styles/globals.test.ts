@@ -14,3 +14,15 @@ describe("theme root color-scheme (#2434)", () => {
     expect(dark).toMatch(/color-scheme:\s*dark\s*;/);
   });
 });
+
+describe("embedded frames keep the UA color-scheme (#2434)", () => {
+  // CSS Color Adjust 1 §2.4: when the iframe element's color scheme and the
+  // embedded document's root color scheme differ, the UA paints an opaque
+  // Canvas backdrop instead of a transparent one. A `.dark` page would hand
+  // `dark` to every third-party frame (the SmartCaptcha challenge is a light
+  // document), so the frame turned into a solid light box over the page.
+  it("resets iframe color-scheme to normal in the base layer", () => {
+    const iframe = /(?:^|[\s}])iframe\s*\{([^}]*)\}/.exec(globals)?.[1];
+    expect(iframe).toMatch(/color-scheme:\s*normal\s*;/);
+  });
+});

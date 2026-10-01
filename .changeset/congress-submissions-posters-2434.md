@@ -38,3 +38,11 @@ refusal is tied to no field (limit, revision deadline, closed intake).
 `:root`, `dark` under `.dark` — so native control parts (the date picker
 indicator, scrollbars, autofill, select chrome) follow the resolved theme; in
 dark the calendar glyph of a date input was a dark icon on the near-black field.
+Embedded frames keep the UA scheme (`iframe { color-scheme: normal }`): per
+CSS Color Adjust 1 §2.4 a frame whose scheme differs from its document's gets
+an opaque Canvas backdrop, so the inherited `dark` turned the light SmartCaptcha
+challenge into a solid light box over a dark page.
+
+A cabinet field's error line is referenced by its control's
+`aria-describedby` (topic, «Цель»/«Содержание» and the other text fields, the
+birth date with its hint).

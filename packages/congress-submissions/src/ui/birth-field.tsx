@@ -56,13 +56,15 @@ export function BirthField({
           min={CONGRESS_BIRTH_DATE_MIN}
           max={max}
           autoComplete="bday"
-          aria-describedby="in-birth-hint"
+          aria-describedby={
+            error ? "in-birth-hint in-birth-error" : "in-birth-hint"
+          }
           aria-invalid={error ? true : undefined}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
         />
       </div>
-      <FormError>{error}</FormError>
+      <FormError id="in-birth-error">{error}</FormError>
     </FormItem>
   );
 }

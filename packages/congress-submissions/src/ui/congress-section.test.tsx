@@ -718,6 +718,10 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
         .getAllByRole("listitem")
         .map((li) => li.textContent),
     ).toEqual(["Заполните поле «Цель»", "Заполните поле «Содержание»"]);
+    // The field's own error line is part of the control's description.
+    expect(screen.getByLabelText("Цель")).toHaveAccessibleDescription(
+      /Заполните поле «Цель»/,
+    );
   });
 
   it("046 EARS-19: with no birth date, «Начать заявку» creates the poster draft at once and the draft asks for the birth date — empty or impossible is refused at send, a real day is written through PUT /v1/me/birth-date on blur", async () => {
@@ -745,6 +749,10 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
       within(summary).getByRole("link", { name: "Укажите дату рождения" }),
     ).toHaveAttribute("href", "#in-birth");
     expect(field).toHaveAttribute("aria-invalid", "true");
+    // Hint and error both describe the control.
+    expect(field).toHaveAccessibleDescription(
+      /^Спрашиваем один раз.*Укажите дату рождения$/,
+    );
 
     setBirth(field, "1899-12-31");
     expect(callsTo("PUT")).toHaveLength(0);

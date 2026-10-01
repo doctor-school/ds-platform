@@ -54,14 +54,20 @@ import {
   terminateBackendsStatement,
 } from "./golden-db.mjs";
 import {
+  AGENT_ADMIN_SECRETS_PATH,
   GOLDEN_IDP_ACCOUNTS,
   GOLDEN_SUBJECTS_PATH,
   GOLDEN_SUBJECT_ENV_VARS,
   IDP_PAT_FILE,
+  STAGE_AGENT_ADMIN,
+  agentAdminCode,
+  convergeAgentAdmin,
   convergeGoldenIdentities,
   convergeRedirectUris,
   createIdpClient,
+  parseAgentAdminSecrets,
   parsePinnedUris,
+  renderAgentAdminSecrets,
   renderGoldenSubjectsEnv,
   unionUris,
 } from "./idp.mjs";
@@ -1726,6 +1732,9 @@ export async function runSlotCommand({
     op: "golden-identities",
     label: "converge the golden identities",
   });
+  // #2531: the stage-only agent admin and its TOTP factor, on every identity converge,
+  // so a fresh box and a drifted one both end with an admin an agent can sign in as.
+  await effects.idp({ op: "agent-admin", label: "converge the agent admin and its TOTP" });
 
   if (options.command === "reset-identities") {
     const plan = planResetIdentities({
@@ -1808,8 +1817,17 @@ export function parseArgs(argv) {
   if (!command) {
     throw new SlotError(
       "usage: ds-slot up|sync <slot> --ref <sha> | down <slot> | " +
-        "reset main --yes --ref <sha> | reset-identities <slot> | status | gc",
+        "reset main --yes --ref <sha> | reset-identities <slot> | status | gc | " +
+        "agent-admin-code [--json]",
     );
+  }
+  if (command === "agent-admin-code") {
+    // #2531: the stage agent admin's current TOTP code. `--json` adds the username and
+    // password for a Playwright drive; the plain form prints the code only.
+    for (const flag of rest) {
+      if (flag !== "--json") throw new SlotError(`\`agent-admin-code\` takes only \`--json\`, not ${flag}`);
+    }
+    return { command, slot: undefined, sha: undefined, json: rest.includes("--json") };
   }
   if (command === "reset") {
     // `reset` is the one destructive operator command, so both of its guards are
@@ -2513,6 +2531,31 @@ function realEffects(boxEnv) {
           log,
         });
       }
+      if (step.op === "agent-admin") {
+        // The agent admin's secrets are tool-minted into their own root-only file —
+        // read with `sudo cat`, written through the same heredoc writer as every
+        // other box file, and never echoed.
+        await convergeAgentAdmin({
+          client,
+          readSecrets: async () =>
+            parseAgentAdminSecrets(
+              await sshCapture(
+                STAGE_1,
+                `if sudo test -e ${AGENT_ADMIN_SECRETS_PATH}; then sudo cat ${AGENT_ADMIN_SECRETS_PATH}; fi`,
+              ),
+            ),
+          writeSecrets: (secrets) =>
+            sshScript(
+              STAGE_1,
+              remoteWriteScript(AGENT_ADMIN_SECRETS_PATH, renderAgentAdminSecrets(secrets), 0o600),
+              { label: `write ${AGENT_ADMIN_SECRETS_PATH}` },
+            ),
+          env: boxEnv,
+          projectName,
+          log,
+        });
+        return undefined;
+      }
       throw new SlotError(`unknown idp step op: ${step.op}`);
     },
     log: (line) => console.log(line),
@@ -2532,6 +2575,30 @@ export function requiredBaseDomain(boxEnv) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.command === "agent-admin-code") {
+    // Reads the root-only secrets file and prints to THIS terminal only — never into
+    // the slot log, a PR or a comment.
+    const secrets = parseAgentAdminSecrets(
+      await sshCapture(
+        STAGE_1,
+        `if sudo test -e ${AGENT_ADMIN_SECRETS_PATH}; then sudo cat ${AGENT_ADMIN_SECRETS_PATH}; fi`,
+      ),
+    );
+    const { code, secondsLeft } = agentAdminCode(secrets, Date.now());
+    if (options.json) {
+      console.log(
+        JSON.stringify({
+          username: STAGE_AGENT_ADMIN.username,
+          password: secrets[STAGE_AGENT_ADMIN.passwordEnvVar],
+          code,
+          secondsLeft,
+        }),
+      );
+    } else {
+      console.log(`${code}  (${STAGE_AGENT_ADMIN.username}, valid ${secondsLeft}s more)`);
+    }
+    return;
+  }
   const boxEnv = await readBoxEnvFile(STAGE_ENV_FILE);
   const liveSlots = await readLiveSlots();
   const effects = realEffects(boxEnv);

@@ -18,6 +18,14 @@ import {
   renderGoldenSubjectsEnv,
   parsePinnedUris,
   unionUris,
+  AGENT_ADMIN_SECRETS_PATH,
+  STAGE_AGENT_ADMIN,
+  agentAdminCode,
+  convergeAgentAdmin,
+  parseAgentAdminSecrets,
+  planAgentAdminTotp,
+  renderAgentAdminSecrets,
+  totpCode,
 } from "./idp.mjs";
 
 // CI is Linux and the checkout path differs per runner — never a drive-letter literal.
@@ -694,4 +702,217 @@ test("the grant converge resolves the project the box names in IDP_PROJECT_NAME,
   assert.equal(search.body.queries[0].nameQuery.name, "ds-platform-stage");
   const grant = calls.find((call) => call.key === "POST /management/v1/users/id-a/grants");
   assert.equal(grant.body.projectId, "p-stage");
+});
+
+// --- #2531: the agent admin and its converged TOTP ---------------------------
+
+// RFC 6238 Appendix B, SHA-1 seed "12345678901234567890" in base32, 6-digit truncation.
+const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+test("totpCode reproduces the RFC 6238 SHA-1 vectors", () => {
+  assert.equal(totpCode(RFC_SECRET, 59_000), "287082");
+  assert.equal(totpCode(RFC_SECRET, 1_111_111_109_000), "081804");
+  assert.equal(totpCode(RFC_SECRET, 1_234_567_890_000), "005924");
+  assert.equal(totpCode(RFC_SECRET.toLowerCase(), 59_000), "287082");
+  assert.throws(() => totpCode("not base32!", 0), IdpError);
+});
+
+test("agentAdminCode prints the current code and how long it stays valid", () => {
+  const out = agentAdminCode({ DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET }, 59_000);
+  assert.deepEqual(out, { code: "287082", secondsLeft: 1 });
+  assert.throws(() => agentAdminCode({}, 0), /reset-identities/);
+});
+
+test("the agent admin is its own account, never one of the golden five", () => {
+  assert.equal(STAGE_AGENT_ADMIN.username, "golden.admin.agent@example.test");
+  assert.deepEqual(STAGE_AGENT_ADMIN.roleKeys, ["doctor_guest", "platform_admin"]);
+  assert.ok(!GOLDEN_IDP_ACCOUNTS.some((a) => a.username === STAGE_AGENT_ADMIN.username));
+  assert.ok(!GOLDEN_IDP_ACCOUNTS.some((a) => a.key === STAGE_AGENT_ADMIN.key));
+  assert.equal(AGENT_ADMIN_SECRETS_PATH, "/etc/ds-platform/stage-agent-admin.env");
+});
+
+test("the TOTP plan: absent → enrol, provisional → enrol, ready+secret → keep, ready w/o secret → replace", () => {
+  assert.equal(planAgentAdminTotp({ factor: "absent", storedSecret: false }), "enrol");
+  assert.equal(planAgentAdminTotp({ factor: "absent", storedSecret: true }), "enrol");
+  assert.equal(planAgentAdminTotp({ factor: "not-ready", storedSecret: true }), "enrol");
+  assert.equal(planAgentAdminTotp({ factor: "ready", storedSecret: true }), "keep");
+  assert.equal(planAgentAdminTotp({ factor: "ready", storedSecret: false }), "replace");
+  assert.throws(() => planAgentAdminTotp({ factor: "weird", storedSecret: true }), IdpError);
+});
+
+test("the agent secrets file round-trips and never carries anything else", () => {
+  const text = renderAgentAdminSecrets({
+    DS_STAGE_AGENT_ADMIN_PASSWORD: "Pw-1!x",
+    DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET,
+    STRAY: "nope",
+  });
+  assert.ok(text.endsWith("\n"));
+  assert.doesNotMatch(text, /STRAY/);
+  assert.deepEqual(parseAgentAdminSecrets(text), {
+    DS_STAGE_AGENT_ADMIN_PASSWORD: "Pw-1!x",
+    DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET,
+  });
+  // A secret not yet minted is omitted, not written blank.
+  assert.doesNotMatch(renderAgentAdminSecrets({ DS_STAGE_AGENT_ADMIN_PASSWORD: "p" }), /TOTP_SECRET=/);
+});
+
+/** A live agent admin (id-agent) plus a scripted factor-read sequence. */
+function agentRoutes({ factorReads, extra = {} }) {
+  let read = 0;
+  return {
+    "POST /v2/users": {
+      body: { result: [{ userId: "id-agent", human: { email: { isVerified: true } } }] },
+    },
+    "POST /management/v1/users/grants/_search": {
+      body: {
+        result: [{ id: "g-1", projectId: "p1", roleKeys: ["doctor_guest", "platform_admin"] }],
+      },
+    },
+    "POST /v2/users/id-agent/password": { body: {} },
+    get "POST /management/v1/users/id-agent/auth_factors/_search"() {
+      const state = factorReads[Math.min(read, factorReads.length - 1)];
+      read += 1;
+      return { body: { result: state ? [{ otp: { state } }] : [] } };
+    },
+    ...APP_ROUTES,
+    ...extra,
+  };
+}
+
+function agentHarness({ routes, secrets = {} }) {
+  const calls = [];
+  const writes = [];
+  const lines = [];
+  const client = createIdpClient({
+    fetch: stubFetch(routes, calls),
+    baseUrl: "https://id.stage.example",
+    pat: "pat-value",
+  });
+  const run = () =>
+    convergeAgentAdmin({
+      client,
+      readSecrets: async () => ({ ...secrets }),
+      writeSecrets: async (next) => {
+        writes.push({ ...next, afterCalls: calls.length });
+      },
+      now: () => 59_000,
+      randomPassword: () => "Generated-Pw-1!",
+      log: (line) => lines.push(line),
+    });
+  return { calls, writes, lines, run };
+}
+
+test("an absent factor is registered, persisted BEFORE verify, verified with the derived code", async () => {
+  const h = agentHarness({
+    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!" },
+    routes: agentRoutes({
+      factorReads: [null, "AUTH_FACTOR_STATE_READY"],
+      extra: {
+        "POST /v2/users/id-agent/totp": { body: { uri: "otpauth://totp/x", secret: RFC_SECRET } },
+        "POST /v2/users/id-agent/totp/verify": { body: {} },
+      },
+    }),
+  });
+  const result = await h.run();
+  assert.equal(result.subject, "id-agent");
+  assert.equal(result.totp, "enrolled");
+  const verifyIndex = h.calls.findIndex((c) => c.key === "POST /v2/users/id-agent/totp/verify");
+  assert.deepEqual(h.calls[verifyIndex].body, { code: "287082" });
+  // The stored password is reused, never regenerated.
+  const pw = h.calls.find((c) => c.key === "POST /v2/users/id-agent/password");
+  assert.equal(pw.body.newPassword.password, "Stored-Pw-1!");
+  // Exactly one write: the secret lands on the box before the verify call is made.
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.writes[0].DS_STAGE_AGENT_ADMIN_TOTP_SECRET, RFC_SECRET);
+  assert.equal(h.writes[0].DS_STAGE_AGENT_ADMIN_PASSWORD, "Stored-Pw-1!");
+  assert.ok(h.writes[0].afterCalls <= verifyIndex);
+  assert.ok(!h.calls.some((c) => c.key.startsWith("DELETE")));
+  const log = h.lines.join("\n");
+  assert.match(log, /TOTP enrolled for golden\.admin\.agent@example\.test/);
+  assert.doesNotMatch(log, new RegExp(`${RFC_SECRET}|Stored-Pw-1!|287082|pat-value`));
+});
+
+test("a ready factor with a stored secret is kept — no TOTP write, «already enrolled»", async () => {
+  const h = agentHarness({
+    secrets: {
+      DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!",
+      DS_STAGE_AGENT_ADMIN_TOTP_SECRET: RFC_SECRET,
+    },
+    routes: agentRoutes({ factorReads: ["AUTH_FACTOR_STATE_READY"] }),
+  });
+  const result = await h.run();
+  assert.equal(result.totp, "kept");
+  assert.equal(h.writes.length, 0);
+  assert.ok(!h.calls.some((c) => /\/totp|DELETE/.test(c.key)));
+  assert.match(h.lines.join("\n"), /TOTP already enrolled for golden\.admin\.agent@example\.test/);
+});
+
+test("a ready factor WITHOUT a stored secret is removed on the agent account only, then re-enrolled", async () => {
+  const h = agentHarness({
+    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!" },
+    routes: agentRoutes({
+      factorReads: ["AUTH_FACTOR_STATE_READY", null, "AUTH_FACTOR_STATE_READY"],
+      extra: {
+        "DELETE /management/v1/users/id-agent/auth_factors/otp": { body: {} },
+        "POST /v2/users/id-agent/totp": { body: { uri: "otpauth://totp/x", secret: RFC_SECRET } },
+        "POST /v2/users/id-agent/totp/verify": { body: {} },
+      },
+    }),
+  });
+  const result = await h.run();
+  assert.equal(result.totp, "replaced");
+  assert.deepEqual(
+    h.calls.filter((c) => c.key.startsWith("DELETE")).map((c) => c.key),
+    ["DELETE /management/v1/users/id-agent/auth_factors/otp"],
+  );
+  // Every factor-touching call targets the agent's own id — the hard fence.
+  assert.ok(
+    h.calls
+      .filter((c) => /totp|auth_factors/.test(c.key))
+      .every((c) => c.key.includes("/id-agent/")),
+  );
+});
+
+test("a removal the re-read cannot confirm is a hard failure, never an enrol on top", async () => {
+  const h = agentHarness({
+    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!" },
+    routes: agentRoutes({
+      factorReads: ["AUTH_FACTOR_STATE_READY", "AUTH_FACTOR_STATE_READY"],
+      extra: { "DELETE /management/v1/users/id-agent/auth_factors/otp": { status: 404 } },
+    }),
+  });
+  await assert.rejects(h.run(), /still holds a TOTP factor/);
+  assert.ok(!h.calls.some((c) => c.key === "POST /v2/users/id-agent/totp"));
+});
+
+test("a verify the re-read does not confirm as READY is a hard failure", async () => {
+  const h = agentHarness({
+    secrets: { DS_STAGE_AGENT_ADMIN_PASSWORD: "Stored-Pw-1!" },
+    routes: agentRoutes({
+      factorReads: [null, "AUTH_FACTOR_STATE_NOT_READY"],
+      extra: {
+        "POST /v2/users/id-agent/totp": { body: { uri: "u", secret: RFC_SECRET } },
+        "POST /v2/users/id-agent/totp/verify": { body: {} },
+      },
+    }),
+  });
+  await assert.rejects(h.run(), /not READY/);
+});
+
+test("a missing password is generated and persisted BEFORE the first IdP write", async () => {
+  const h = agentHarness({
+    secrets: {},
+    routes: agentRoutes({
+      factorReads: [null, "AUTH_FACTOR_STATE_READY"],
+      extra: {
+        "POST /v2/users/id-agent/totp": { body: { uri: "u", secret: RFC_SECRET } },
+        "POST /v2/users/id-agent/totp/verify": { body: {} },
+      },
+    }),
+  });
+  await h.run();
+  assert.equal(h.writes[0].DS_STAGE_AGENT_ADMIN_PASSWORD, "Generated-Pw-1!");
+  assert.equal(h.writes[0].afterCalls, 0);
+  const pw = h.calls.find((c) => c.key === "POST /v2/users/id-agent/password");
+  assert.equal(pw.body.newPassword.password, "Generated-Pw-1!");
 });

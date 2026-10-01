@@ -196,6 +196,26 @@ export async function registerForCongress(
   });
 }
 
+/**
+ * 046 EARS-18…20 — the platform administrator opens the poster intake for a
+ * month with an age limit of `maxAgeYears` (the settings-row write). The event
+ * starts in a year, so the age rule counts on that day.
+ */
+export async function openPosterIntake(eventId: string, maxAgeYears: number): Promise<void> {
+  const now = Date.now();
+  await withDb((db) =>
+    db.query(
+      `INSERT INTO congress_submission_kind_settings
+         (event_id, kind, opens_at, closes_at, submit_limit, max_age_years)
+       VALUES ($1, 'poster', $2, $3, NULL, $4)
+       ON CONFLICT (event_id, kind) DO UPDATE
+         SET opens_at = EXCLUDED.opens_at, closes_at = EXCLUDED.closes_at,
+             max_age_years = EXCLUDED.max_age_years`,
+      [eventId, new Date(now - DAY), new Date(now + 30 * DAY), maxAgeYears],
+    ),
+  );
+}
+
 /** The platform administrator closes the oral intake (the settings-row write). */
 export async function closeOralIntake(eventId: string): Promise<void> {
   const now = Date.now();

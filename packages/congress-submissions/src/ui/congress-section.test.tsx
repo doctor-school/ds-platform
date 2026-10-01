@@ -62,6 +62,8 @@ function sub(over: Partial<CongressSubmission> = {}): CongressSubmission {
     title: "PRP при латеральном эпикондилите",
     authors: [],
     body: {},
+    derivedFromId: null,
+    statements: null,
     committeeComment: null,
     submittedAt: "2026-12-16T15:40:00.000Z",
     revisionDueAt: null,

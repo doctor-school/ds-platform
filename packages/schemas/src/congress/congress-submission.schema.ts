@@ -62,6 +62,8 @@ export const CONGRESS_SUBMISSION_LIMITS = {
   oralSummary: 3000,
   posterGoal: 1000,
   posterContent: 3000,
+  /** The five abstract sections together (EARS-21). */
+  abstractTotal: 5000,
 } as const;
 
 /**
@@ -197,11 +199,91 @@ const PosterSendSchema = z.object({
   }),
 });
 
+/**
+ * The five plain-text sections of abstracts, in the form's order (EARS-21):
+ * «Актуальность», «Цель», «Материалы и методы», «Результаты и обсуждение»,
+ * «Выводы».
+ */
+export const CONGRESS_ABSTRACT_SECTIONS = [
+  "relevance",
+  "goal",
+  "methods",
+  "results",
+  "conclusions",
+] as const;
+export type CongressAbstractSection =
+  (typeof CONGRESS_ABSTRACT_SECTIONS)[number];
+
+/**
+ * 046-design «Abstract length» — the one length of an abstract: the five
+ * sections summed, each trimmed with `\r\n` as one line break; spaces and line
+ * breaks count. The form's counter and the send schema both call it, so the
+ * number on screen is the server's number (EARS-21, EARS-22).
+ */
+export function abstractLength(
+  body: Partial<Record<string, string | undefined>>,
+): number {
+  return CONGRESS_ABSTRACT_SECTIONS.reduce(
+    (n, k) => n + congressTextLength(body[k] ?? ""),
+    0,
+  );
+}
+
+/** An abstract draft: each section up to the whole total (EARS-7). */
+const AbstractDraftBodySchema = z.strictObject(
+  Object.fromEntries(
+    CONGRESS_ABSTRACT_SECTIONS.map((k) => [
+      k,
+      draftText(CONGRESS_SUBMISSION_LIMITS.abstractTotal).optional(),
+    ]),
+  ) as Record<
+    CongressAbstractSection,
+    z.ZodOptional<ReturnType<typeof draftText>>
+  >,
+);
+
+const AbstractSendSchema = z.object({
+  title: requiredText(CONGRESS_SUBMISSION_LIMITS.title),
+  authors: unmarkedAuthors,
+  body: z
+    .strictObject(
+      Object.fromEntries(
+        CONGRESS_ABSTRACT_SECTIONS.map((k) => [
+          k,
+          requiredText(CONGRESS_SUBMISSION_LIMITS.abstractTotal),
+        ]),
+      ) as Record<CongressAbstractSection, ReturnType<typeof requiredText>>,
+    )
+    .superRefine((body, ctx) => {
+      const length = abstractLength(body);
+      const max = CONGRESS_SUBMISSION_LIMITS.abstractTotal;
+      if (length > max) {
+        ctx.addIssue({
+          code: "custom",
+          message: `max ${max} together`,
+          params: { length, max },
+        });
+      }
+    }),
+});
+
+/**
+ * The statements the author makes about the text of abstracts at send
+ * (EARS-23): `plag` «В тексте нет некорректных заимствований», `trade` «В
+ * тексте нет торговых наименований». Publication is covered by the submission
+ * consent (EARS-16) — no statement or consent of its own.
+ */
+export const CONGRESS_SUBMISSION_STATEMENTS = ["plag", "trade"] as const;
+export type CongressSubmissionStatement =
+  (typeof CONGRESS_SUBMISSION_STATEMENTS)[number];
+
 interface CongressSubmissionForm {
   /** The kind's body as a draft may hold it (EARS-7). */
   readonly draftBody: z.ZodType<Record<string, string | undefined>>;
   /** The complete send content of the kind. */
   readonly send: z.ZodType<CongressSubmissionSendContent>;
+  /** The statements the send requires (EARS-23); none when absent. */
+  readonly statements?: readonly CongressSubmissionStatement[];
 }
 
 /**
@@ -213,12 +295,48 @@ export const CONGRESS_SUBMISSION_FORMS: Partial<
 > = {
   oral: { draftBody: OralDraftBodySchema, send: OralSendSchema },
   poster: { draftBody: PosterDraftBodySchema, send: PosterSendSchema },
+  abstract: {
+    draftBody: AbstractDraftBodySchema,
+    send: AbstractSendSchema,
+    statements: CONGRESS_SUBMISSION_STATEMENTS,
+  },
 };
 
 export function hasCongressSubmissionForm(
   kind: CongressSubmissionKind,
 ): boolean {
   return CONGRESS_SUBMISSION_FORMS[kind] !== undefined;
+}
+
+/** The statements a send of the kind requires (EARS-23). */
+export function congressKindStatements(
+  kind: CongressSubmissionKind,
+): readonly CongressSubmissionStatement[] {
+  return CONGRESS_SUBMISSION_FORMS[kind]?.statements ?? [];
+}
+
+/**
+ * EARS-24 — the first author's full name normalised by the 044 EARS-33 rule
+ * (surname, first name, patronymic; an empty patronymic is no patronymic),
+ * the key the first-author rule compares; `null` without a surname and a
+ * first name.
+ */
+export function congressFirstAuthorName(
+  author:
+    | {
+        surname?: string | undefined;
+        firstName?: string | undefined;
+        patronymic?: string | undefined;
+      }
+    | undefined,
+): string | null {
+  if (!author) return null;
+  const part = (v: string | undefined) =>
+    normaliseNameAnswer(normaliseText(v ?? ""));
+  const surname = part(author.surname);
+  const firstName = part(author.firstName);
+  if (surname === "" || firstName === "") return null;
+  return [surname, firstName, part(author.patronymic)].join("|");
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +356,7 @@ export const CongressSubmissionDraftContentSchema = z.strictObject({
     .max(CONGRESS_SUBMISSION_LIMITS.authorsMax)
     .optional(),
   body: z
-    .record(z.string(), draftText(CONGRESS_SUBMISSION_LIMITS.oralSummary))
+    .record(z.string(), draftText(CONGRESS_SUBMISSION_LIMITS.abstractTotal))
     .optional(),
 });
 export type CongressSubmissionDraftContent = z.infer<
@@ -419,7 +537,13 @@ export function parseCongressSendContent(
     const field = issue.path.map(String).join(".");
     if (seen.has(field)) continue;
     seen.add(field);
-    problems.push({ code: "field-invalid", field });
+    // A rule over several fields names its numbers (EARS-21: the abstract
+    // length and its limit).
+    const params =
+      issue.code === "custom" && issue.params
+        ? (issue.params as CongressSubmissionProblem["params"])
+        : undefined;
+    problems.push({ code: "field-invalid", field, ...(params && { params }) });
   }
   return { ok: false, problems };
 }
@@ -456,6 +580,11 @@ export function congressKindIntakeState(
 export const CongressSubmissionCreateRequestSchema = z.strictObject({
   eventId: z.uuid(),
   kind: CongressSubmissionKindSchema,
+  /**
+   * «Подать тезисы по этой работе» — the author's sent oral talk or poster an
+   * abstract draft is created from (EARS-25).
+   */
+  derivedFromId: z.uuid().optional(),
 });
 export type CongressSubmissionCreateRequest = z.infer<
   typeof CongressSubmissionCreateRequestSchema
@@ -466,6 +595,8 @@ export const CongressSubmissionSendRequestSchema = z.strictObject({
   acceptedConsents: z
     .array(z.enum(CONGRESS_SUBMISSION_CONSENT_PURPOSES))
     .default([]),
+  /** The statements the author makes about the text with this send (EARS-23). */
+  statements: z.array(z.enum(CONGRESS_SUBMISSION_STATEMENTS)).default([]),
 });
 export type CongressSubmissionSendRequest = z.infer<
   typeof CongressSubmissionSendRequestSchema
@@ -488,6 +619,18 @@ export const CongressSubmissionSchema = z.object({
   title: z.string(),
   authors: z.array(CongressSubmissionDraftAuthorSchema),
   body: z.record(z.string(), z.string()),
+  /** The work an abstract was created from (EARS-25); `null` otherwise. */
+  derivedFromId: z.uuid().nullable(),
+  /**
+   * The statements made with the last send, each with its instant (EARS-23);
+   * `null` for a kind without statements or before the first send.
+   */
+  statements: z
+    .partialRecord(
+      z.enum(CONGRESS_SUBMISSION_STATEMENTS),
+      z.iso.datetime({ offset: true }),
+    )
+    .nullable(),
   /** The committee comment — carried for `rejected` and `needs_revision` only. */
   committeeComment: z.string().nullable(),
   submittedAt: z.iso.datetime({ offset: true }).nullable(),

@@ -153,7 +153,7 @@ opening day at 00:00 Moscow, each last day at 00:00 Moscow of the day after.
 The same file holds `isCongressKindIntakeOpen`, the intake rule every later
 surface of 046 uses.
 
-## Congress submissions — the author's cabinet (feature 046, EARS-5…EARS-20)
+## Congress submissions — the author's cabinet (feature 046, EARS-5…EARS-25)
 
 | File                                 | Role                                                                                                                                |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -171,8 +171,8 @@ Refusals carry `{problems: [{code, field?, params?}]}` — 422 for an unmet send
 condition, 409 for a status the action does not apply to; the codes live in
 `@ds/schemas` (`congress-submission.schema.ts`) with the field limits, the
 length rule and the per-kind forms. A kind is offered once its form is
-registered there (oral and posters now; abstracts with their slice); creating
-a draft of a kind not offered yet is 422 `kind-not-available`.
+registered there (oral, posters and abstracts — all three now); creating a
+draft of a kind without a form is 422 `kind-not-available`.
 
 - **Send cascade (EARS-9).** One transaction: the row locked, an advisory lock on
   (account, event, kind), then registration, the kind window, the complete field
@@ -202,6 +202,25 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
   any status except `draft` — `rejected` and `withdrawn` included — the one being
   sent excluded, under the advisory lock, so two tabs cannot both take the last
   slot.
+- **Abstracts (EARS-21…EARS-25).** Five plain-text sections (`relevance`,
+  `goal`, `methods`, `results`, `conclusions`), each non-empty at send, together
+  ≤ 5000 by `abstractLength` in `@ds/schemas` (the counter's function); above
+  it the send is 422 `field-invalid` on `body` with `{length, max}`. The send
+  takes `statements: ["plag", "trade"]`; each missing one is 422
+  `statement-required` with `{statement}`, and the sent row stores both with
+  their instant in `statements`. Publication is covered by the submission
+  consent — no other consent is asked. With the event's `first_author_counts`
+  on, the kind's submit limit also binds every submitter's counted
+  submissions whose first author has this one's normalised full name
+  (`congressFirstAuthorName`, the 044 EARS-33 rule) — 422
+  `first-author-limit-reached` with `{limit}`; sends naming one first author
+  are serialised by a second advisory lock on that name. `POST
+{eventId, kind: "abstract", derivedFromId}` creates the abstract draft from
+  the account's own oral talk or poster of the event — title and authors
+  copied (no presenting mark), `derived_from_id` set; a draft or withdrawn
+  source is 409 `status-conflict`, an abstract or another event's source and
+  any other kind are 422 `field-invalid` on `derivedFromId`, another account's
+  row is 404.
 - **Submission consent (EARS-16).** Purpose `congress-submission-personal-data`,
   the organising committee's own consent — one for every submission kind,
   abstracts publication included. Its text is the `@ds/legal-content` document

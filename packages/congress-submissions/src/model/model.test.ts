@@ -5,6 +5,7 @@ import {
 } from "@ds/schemas";
 
 import {
+  abstractCounter,
   actionsFor,
   ageRefusalOf,
   ageRuleText,
@@ -65,6 +66,8 @@ function sub(over: Partial<CongressSubmission> = {}): CongressSubmission {
     title: "",
     authors: [],
     body: {},
+    derivedFromId: null,
+    statements: null,
     committeeComment: null,
     submittedAt: null,
     revisionDueAt: null,
@@ -597,6 +600,164 @@ describe("046 EARS-18 — the poster form", () => {
         message: "Заполните поле «Содержание»",
         focusId: "in-content",
       },
+    ]);
+  });
+});
+
+describe("046 EARS-21…EARS-25 — abstracts", () => {
+  const sections = {
+    relevance: "Актуальность.",
+    goal: "Цель.",
+    methods: "Методы.",
+    results: "Результаты.",
+    conclusions: "Выводы.",
+  };
+  const author = { surname: "Петрова", firstName: "Анна", workplace: "НМИЦ" };
+  const noConsent = { consentRequired: false, consentChecked: false };
+
+  it("046 EARS-21: abstracts ask for the five canvas sections, each within the whole total", () => {
+    expect(
+      formFields("abstract").map((f) => [f.key, f.label, f.rows, f.max]),
+    ).toEqual([
+      ["relevance", "Актуальность", 3, 5000],
+      ["goal", "Цель", 2, 5000],
+      ["methods", "Материалы и методы", 4, 5000],
+      ["results", "Результаты и обсуждение", 4, 5000],
+      ["conclusions", "Выводы", 3, 5000],
+    ]);
+  });
+
+  it("046 EARS-22: the one total counter reads the server's length, marked near and above 5000 as the canvas draws it", () => {
+    const ru = (n: number) => n.toLocaleString("ru-RU");
+    expect(abstractCounter({ relevance: " ab\r\nc " })).toEqual({
+      length: 4,
+      text: "4 / 5 000",
+      over: false,
+      near: false,
+      note: null,
+    });
+    expect(abstractCounter({ results: "р".repeat(4500) })).toEqual({
+      length: 4500,
+      text: `${ru(4500)} / 5 000`,
+      over: false,
+      near: true,
+      note: `осталось ${ru(500)}`,
+    });
+    expect(abstractCounter({ results: "р".repeat(5000) })).toMatchObject({
+      over: false,
+      near: true,
+      note: "осталось 0",
+    });
+    expect(
+      abstractCounter({
+        relevance: "а".repeat(3000),
+        results: "р".repeat(2001),
+      }),
+    ).toEqual({
+      length: 5001,
+      text: `${ru(5001)} / 5 000`,
+      over: true,
+      near: false,
+      note: "больше на 1",
+    });
+  });
+
+  it("046 EARS-21, EARS-23: an incomplete abstract names its empty sections, the length, then each statement, then the consent", () => {
+    const errs = draftErrors(
+      {
+        title: "Тема",
+        authors: [author],
+        body: {
+          ...sections,
+          goal: " ",
+          results: "р".repeat(5001),
+        },
+      },
+      { consentRequired: true, consentChecked: false },
+      { kind: "abstract", statements: ["trade"] },
+    );
+    expect(errs.map((e) => [e.key, e.message, e.focusId])).toEqual([
+      ["goal", "Заполните поле «Цель»", "in-goal"],
+      [
+        "counter",
+        `Сократите текст тезисов до 5 000 знаков — сейчас ${(5001 + 13 + 7 + 7).toLocaleString("ru-RU")}`,
+        "in-results",
+      ],
+      [
+        "plag",
+        "Подтвердите, что в тексте нет некорректных заимствований",
+        "chk-plag",
+      ],
+      ["consent", "Дайте согласие на обработку персональных данных", "chk-pd"],
+    ]);
+    expect(
+      draftErrors(
+        { title: "Тема", authors: [author], body: sections },
+        noConsent,
+        { kind: "abstract", statements: ["plag", "trade"] },
+      ),
+    ).toEqual([]);
+    // An oral talk asks for no statement.
+    expect(
+      draftErrors(
+        {
+          title: "Тема",
+          authors: [{ ...author, presenting: true }],
+          body: { goal: "g", summary: "s" },
+        },
+        noConsent,
+        { kind: "oral" },
+      ),
+    ).toEqual([]);
+  });
+
+  it("046 EARS-21, EARS-23: the server's refusals read in the canvas words — the length with its count, each statement", () => {
+    const msgs = problemMessages(
+      [
+        {
+          code: "field-invalid",
+          field: "body",
+          params: { length: 5120, max: 5000 },
+        },
+        { code: "field-invalid", field: "body.conclusions" },
+        { code: "statement-required", params: { statement: "plag" } },
+        { code: "statement-required", params: { statement: "trade" } },
+      ],
+      intake({ kind: "abstract", submitLimit: 3 }),
+      NOW,
+    );
+    expect(msgs.map((m) => [m.key, m.message, m.focusId])).toEqual([
+      [
+        "counter",
+        `Сократите текст тезисов до 5 000 знаков — сейчас ${(5120).toLocaleString("ru-RU")}`,
+        "in-results",
+      ],
+      ["conclusions", "Заполните поле «Выводы»", "in-conclusions"],
+      [
+        "plag",
+        "Подтвердите, что в тексте нет некорректных заимствований",
+        "chk-plag",
+      ],
+      [
+        "trade",
+        "Подтвердите, что в тексте нет торговых наименований",
+        "chk-trade",
+      ],
+    ]);
+  });
+
+  it("046 EARS-17, EARS-24: the abstract limit and the first-author limit name the number in the kind's plural", () => {
+    const msgs = problemMessages(
+      [
+        { code: "limit-reached", params: { limit: 3 } },
+        { code: "first-author-limit-reached", params: { limit: 3 } },
+      ],
+      intake({ kind: "abstract", submitLimit: 3 }),
+      NOW,
+    );
+    expect(msgs.map((m) => m.message)).toEqual([
+      "Можно отправить не больше 3 тезисов",
+      "Можно отправить не больше 3 тезисов с одним и тем же первым автором",
     ]);
   });
 });

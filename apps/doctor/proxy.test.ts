@@ -73,7 +73,7 @@ function parkedTarget(response: Response): string | undefined {
 }
 
 describe("014 EARS-6 (#2443): the doctor storefront parks the carried return target like the Academy", () => {
-  it.each(["/login", "/register", "/verify"])(
+  it.each(["/login", "/register", "/verify", "/reset"])(
     "014 EARS-6: %s with a guard-clean returnTo parks it in the package cookie",
     async (path) => {
       const request = new NextRequest(
@@ -172,5 +172,47 @@ describe("014 EARS-6 (#2487): the parked land-only return stays land-only", () =
     expect(decodeURIComponent(parked ?? "")).toBe(
       "/events/ahilles-042?intent=land",
     );
+  });
+});
+
+describe("014 EARS-6 (#2495): the doctor storefront binds the parked target to the flow that carried it", () => {
+  const PARKED = "ds_return_to=%2Fevents%2Fahilles-042";
+
+  function dropsParked(response: Response): boolean {
+    return response.headers
+      .getSetCookie()
+      .some((header) => header.startsWith("ds_return_to=;") && /Max-Age=0/i.test(header));
+  }
+
+  it.each(["/login", "/register", "/verify", "/reset"])(
+    "014 EARS-6.10: a guest opening %s with no returnTo drops the parked target",
+    async (path) => {
+      const response = await proxy(
+        new NextRequest(`https://doctor.school${path}`, {
+          headers: { cookie: PARKED },
+        }),
+      );
+      expect(dropsParked(response)).toBe(true);
+    },
+  );
+
+  it("014 EARS-6.10: the reset door carrying the target keeps it parked (reset started from «Записаться»)", async () => {
+    const response = await proxy(
+      new NextRequest(
+        "https://doctor.school/reset?returnTo=%2Fevents%2Fahilles-042",
+        { headers: { cookie: PARKED } },
+      ),
+    );
+    expect(dropsParked(response)).toBe(false);
+    expect(parkedTarget(response)).toBe("%2Fevents%2Fahilles-042");
+  });
+
+  it("014 EARS-6.10: a page outside the auth doors never drops the parked target", async () => {
+    const response = await proxy(
+      new NextRequest("https://doctor.school/events/ahilles-042", {
+        headers: { cookie: PARKED },
+      }),
+    );
+    expect(dropsParked(response)).toBe(false);
   });
 });

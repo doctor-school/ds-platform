@@ -40,8 +40,9 @@ beforeEach(() => {
 
 describe("014 EARS-6 academy return-target consumption (registration resume)", () => {
   it("014 EARS-6: a target parked when the visitor entered the auth flow survives the trip and completes the carried registration", async () => {
-    // The verification-mail round-trip drops the query string, so the parked
-    // value is the ONLY carrier left by the time the session exists.
+    // Every hop inside the flow carries `returnTo` on the URL; the parked copy
+    // is the in-flow safety net for a hop that lost the query, and here it is
+    // the only carrier left by the time the session exists.
     park("/webinars/ahilles-042");
 
     await expect(completeReturnTarget(ACADEMY_FIXTURE, null)).resolves.toBe(

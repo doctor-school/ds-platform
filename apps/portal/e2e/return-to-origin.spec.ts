@@ -12,9 +12,16 @@ import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
  * trying to consume. Unit coverage pins the guard (`apps/api/test/auth/
  * return-target.e2e-spec.ts`) and the once-only consumption
  * (`apps/portal/lib/return-to-origin.test.ts`); what only a browser can prove is
- * the part the design calls out as the hard one — that the target SURVIVES the
- * registration branch leaving the browser for the verification mail and coming
- * back on a cold `/verify` with no query at all.
+ * the flow-bound lifetime of the target (014 EARS-6, amendment 2026-09-30 «a
+ * carried return target lives only inside the flow that carried it», #2495):
+ *
+ *   - IN the flow, every hop carries `returnTo` on the URL — register → verify
+ *     (the code is typed on that same screen; the mail is link-free, 003
+ *     EARS-29) → the sign-in door — and the visitor lands back on the page they
+ *     were consuming, which on a webinar page completes the registration.
+ *   - OUTSIDE it, a door opened with no `returnTo` (the header «Войти», a bare
+ *     `/login`) starts a NEW flow: the parked `ds_return_to` copy is dropped and
+ *     the sign-in lands on the default, registering nothing.
  *
  * Gating mirrors `auth-journeys.e2e.spec.ts`: the whole suite `test.skip()`s
  * unless the real-Zitadel dev-stand env and a portal base URL are present. It is
@@ -83,12 +90,11 @@ async function submitPastThrottle(
 
 /**
  * Register a fresh account from `entry` (an auth entry URL that may carry a
- * `returnTo`) and complete the email verification. The verification code is read
- * from REAL Mailpit and typed on a COLD `/verify` — a fresh navigation carrying no
- * `returnTo` query — which is exactly the shape of the mail-button open the design
- * requires the mechanism to survive. Resolves once the verify step has routed
- * onward — for a cold open that is the `/login` fallback, since no credential is
- * held in memory to auto-login with.
+ * `returnTo`) and complete the email verification IN the flow: the verification
+ * code is read from REAL Mailpit and typed on the `/verify` screen the register
+ * door pushed to — the very URL that carries `returnTo` (the mail itself is
+ * link-free, 003 EARS-29, so this is the only way a real visitor gets there).
+ * Resolves once the verify step has routed onward.
  */
 async function registerThroughMail(
   page: Page,
@@ -116,10 +122,8 @@ async function registerThroughMail(
   );
   expect(code, "registration code should reach Mailpit").toBeTruthy();
 
-  // THE interruption the design names: leave the flow for the inbox and come
-  // back in a fresh navigation — a cold `/verify?email=…` with no `returnTo`
-  // query (the mail itself is link-free, 003 EARS-29).
-  await page.goto(`/verify?email=${encodeURIComponent(email)}`);
+  // The in-flow hop: register → verify carries the target on the URL.
+  expect(new URL(page.url()).searchParams.get("returnTo")).toBe(ORIGIN_PATH);
   await page.locator('input[autocomplete="one-time-code"]').fill(code!);
   // Auto-submit on completion carries the flow (#175).
   await page.waitForURL((url) => !url.pathname.startsWith("/verify"), {
@@ -214,18 +218,45 @@ test.describe("014 EARS-6 platform-wide return-to-origin", () => {
     // The one signup this suite spends — the sign-in journeys below reuse it.
     sharedAccount = { email, password };
 
-    // Re-entering `/verify` COLD through the mail's own link shape leaves the
-    // page with no held credential to auto-login with, so the shipped 005 EARS-2
-    // fallback routes to `/login` for a manual sign-in — and, crucially, it does
-    // so with NO `returnTo` query, because the cold open carried none.
-    await expect(page).toHaveURL(/\/login$/);
-
-    // THE assertion this journey exists for: the target still survived. Nothing
-    // in the URL carries it — only the parked `ds_return_to` cookie does — so the
-    // first authenticated navigation out of that bare `/login` lands the visitor
-    // back on the page they were trying to consume.
-    await submitLogin(page, email, password);
+    // The confirmation either signs in with the credential still held in memory
+    // and navigates straight to the target (021 amendment 2026-09-17), or falls
+    // back to the sign-in door (005 EARS-2). That fallback is a hop INSIDE the
+    // flow, so it carries `returnTo` on the URL rather than relying on the
+    // parked cookie.
+    if (new URL(page.url()).pathname.startsWith("/login")) {
+      expect(new URL(page.url()).searchParams.get("returnTo")).toBe(
+        ORIGIN_PATH,
+      );
+      await submitLogin(page, email, password);
+    }
+    // Landing back on the webinar page is what completes the registration.
     await expect(page).toHaveURL(new RegExp(`${ORIGIN_PATH}$`));
+  });
+
+  test("EARS-6.10: an abandoned flow's target dies at the next bare door — a later sign-in lands on the default and registers nothing", async ({
+    page,
+  }) => {
+    const { email, password } = account();
+    await page.context().clearCookies();
+
+    // «Записаться» → the carrying door parks the target…
+    await page.goto(`/login?returnTo=${encodeURIComponent(ORIGIN_PATH)}`);
+    const parkedCookie = async () =>
+      (await page.context().cookies()).find((c) => c.name === "ds_return_to");
+    expect(await parkedCookie(), "the carrying door parks").toBeDefined();
+
+    // …the visitor abandons it and later opens a bare `/login` (the header
+    // «Войти»): a NEW flow, so the door drops the earlier flow's target.
+    await page.goto("/login");
+    expect(
+      await parkedCookie(),
+      "a bare door drops the target parked by an abandoned flow",
+    ).toBeUndefined();
+
+    // The sign-in lands on the default, never on the webinar page — so the
+    // registration the abandoned flow carried is never completed.
+    await submitLogin(page, email, password);
+    await expect(page).toHaveURL(new RegExp(`${DEFAULT_LANDING}$`));
   });
 
   test("EARS-6: signing in from the gate returns the visitor to the same page, and the target is consumed exactly once", async ({

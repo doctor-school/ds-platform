@@ -24,10 +24,12 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 /**
- * The auth entries only. A narrow matcher keeps the blast radius at the three
- * routes that actually begin or continue an authentication round-trip — no other
- * route pays for this middleware.
+ * The auth doors only. A narrow matcher keeps the blast radius at the four
+ * routes that begin or continue an authentication round-trip — no other route
+ * pays for this middleware. Each door runs the whole rule (#2495): a carried
+ * target is parked, and a guest's door without one drops a target an earlier,
+ * abandoned flow parked.
  */
 export const config = {
-  matcher: ["/login", "/register", "/verify"],
+  matcher: ["/login", "/register", "/verify", "/reset"],
 };

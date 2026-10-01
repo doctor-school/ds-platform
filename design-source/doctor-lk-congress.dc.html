@@ -318,7 +318,7 @@ class Component extends DCLogic {
           methods: 'Обследованы 86 пациентов с гонартрозом II стадии по Kellgren–Lawrence. Пациенты получали либо три инъекции PRP, либо три инъекции PRP в сочетании с гиалуроновой кислотой с интервалом 1 неделя. Оценка по WOMAC и VAS исходно, через 3 и 6 месяцев.',
           results: 'Через 6 месяцев снижение WOMAC составило 38 % в группе комбинированной терапии и 29 % в группе монотерапии. Различия по VAS между группами к 6 месяцу не достигли статистической значимости.',
           concl: 'Комбинация PRP и гиалуроновой кислоты — предпочтительный вариант лечения гонартроза II стадии.' },
-        checks: { rinc: true, plag: true, trade: true } }
+        checks: { plag: true, trade: true } }
     ];
     const KIND = {
       oral: { label: 'Устный доклад', gen: 'устных докладов', close: '15 января 2027' },
@@ -370,14 +370,14 @@ class Component extends DCLogic {
       const tot = () => Object.keys(v).reduce((n, k) => n + v[k].length, 0);
       while (tot() > 4990) { const parts = v.act.split('. '); if (parts.length < 3) break; parts.pop(); v.act = parts.join('. ') + '.'; }
       st.vals = {}; Object.keys(v).forEach(k => { st.vals['tdraft.' + k] = v[k]; });
-      st.checks = { 'tdraft.rinc': true, 'tdraft.plag': true, 'tdraft.trade': true };
+      st.checks = { 'tdraft.plag': true, 'tdraft.trade': true };
     }
     if (P.errors) {
       let res = E.results;
       const tot = () => E.act.length + E.goal.length + E.methods.length + res.length;
       while (tot() <= 5000) res = res + '\n\n' + E.results;
       st.vals = { 'tdraft.results': res, 'tdraft.concl': '' };
-      st.checks = { 'tdraft.rinc': true, 'tdraft.plag': true };
+      st.checks = { 'tdraft.plag': true };
       st.tried = { tdraft: true };
       st.thesesOverride = 3;
     }
@@ -450,7 +450,8 @@ class Component extends DCLogic {
       if (k === 'poster' && di === 1) return 'Приём откроется 1 декабря 2026';
       return open[k] ? 'Приём до ' + D.KIND[k].close + ' включительно' : 'Приём закрыт ' + D.KIND[k].close;
     };
-    const ageReason = 'Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027';
+    const ageRule = 'Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027';
+    const ageReason = ageRule + '. На эту дату вам будет 45 лет.';
     const canSend = k => open[k] && !(k === 'poster' && s.over40);
 
     const val = (id, k, def) => { const v = s.vals[id + '.' + k]; return v !== undefined ? v : (def || ''); };
@@ -595,7 +596,6 @@ class Component extends DCLogic {
       defs.forEach(f => { if (!fv(f.k).trim()) E.push({ k: f.k, msg: 'Заполните поле «' + f.label + '»', focus: 'in-' + f.k }); });
       if (a.kind === 'theses' && total > 5000) E.push({ k: 'counter', msg: 'Сократите текст тезисов до 5 000 знаков — сейчас ' + total.toLocaleString('ru-RU'), focus: 'in-results' });
       if (a.kind === 'theses') {
-        if (!chk('rinc')) E.push({ k: 'chk-rinc', msg: 'Дайте согласие на публикацию в РИНЦ', focus: 'chk-rinc' });
         if (!chk('plag')) E.push({ k: 'chk-plag', msg: 'Подтвердите, что в тексте нет некорректных заимствований', focus: 'chk-plag' });
         if (!chk('trade')) E.push({ k: 'chk-trade', msg: 'Подтвердите, что в тексте нет торговых наименований', focus: 'chk-trade' });
       }
@@ -616,7 +616,7 @@ class Component extends DCLogic {
       };
       section('О работе', a.kind === 'oral' ? 'Формат участия — очный' : '');
       field('topic', a.kind === 'theses' ? 'Название тезисов' : 'Тема', { value: topic, ph: 'Например: PRP при латеральном эпикондилите: результаты 120 пациентов' });
-      if (askBirth && editable) field('birth', 'Дата рождения', { value: val(id, 'birth'), ph: 'дд.мм.гггг', extra: 'max-width:200px', hint: 'Спрашиваем один раз — перед первым постером. ' + ageReason + '.', tag: 'новое · поле даты рождения' });
+      if (askBirth && editable) field('birth', 'Дата рождения', { value: val(id, 'birth'), ph: 'дд.мм.гггг', extra: 'max-width:200px', hint: 'Спрашиваем один раз — перед первым постером. ' + ageRule + '.', tag: 'новое · поле даты рождения' });
       section('Авторы', a.kind === 'oral' ? 'Отметьте одного докладчика' : 'Порядок — как в публикации');
       const aErr = errOf('authors');
       const ghost = dis => 'font:inherit;width:32px;height:32px;font-size:14px;font-weight:700;border:0;background:transparent;color:' + (dis ? hairline : inkMuted) + ';cursor:' + (dis ? 'default' : 'pointer') + ';--hv-bg:' + (dis ? 'transparent' : sectionGray);
@@ -654,7 +654,7 @@ class Component extends DCLogic {
         hover: editable ? 'background:' + sectionGray : '',
         btnStyle: 'font:inherit;display:flex;gap:12px;align-items:flex-start;background:none;border:0;padding:6px 8px;margin:-6px -8px;text-align:left;cursor:' + (editable ? 'pointer' : 'default') + ';--hv-bg:' + (editable ? sectionGray : 'transparent'),
         boxStyle: 'flex:none;width:20px;height:20px;box-sizing:border-box;border:2px solid ' + (err ? danger : on ? btnBg : fieldBorder) + ';background:' + (on ? btnBg : surface) + ';color:' + btnFg + ';display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800' }); };
-      if (a.kind === 'theses') { mkChk('rinc', 'Согласие на публикацию тезисов в сборнике Конгресса с размещением в РИНЦ'); mkChk('plag', 'В тексте нет некорректных заимствований'); mkChk('trade', 'В тексте нет торговых наименований'); }
+      if (a.kind === 'theses') { mkChk('plag', 'В тексте нет некорректных заимствований'); mkChk('trade', 'В тексте нет торговых наименований'); }
       if (firstSend && editable) mkChk('pd', 'Согласие на обработку персональных данных для рассмотрения заявки программным комитетом Конгресса');
       if (checkList.length) { section('Подтверждения'); blocks.push({ isChecks: true, checks: checkList, wrap: '' }); }
 

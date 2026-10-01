@@ -18,7 +18,7 @@ It sits at a **different altitude** from, and **reuses**, the existing design-sy
 - **Element-class altitude (existing, unchanged):** `build-ui-from-design-system` + the [design constitution](../../design/constitution.md) + [`research-ui-element`](../research-ui-element/SKILL.md) own the standard for each element CLASS (button, field, card, tabs …) — one researched section, owner-picked rendered options (the element-class Stage A), built into `@ds/design-system` + showcase.
 - **Screen-composition altitude (this skill):** how those covered classes are ARRANGED into a surface layout, and the owner's taste pick on that arrangement. For any element class the screen needs that is not yet covered, this skill delegates DOWN to `research-ui-element` — it never invents a primitive.
 
-The repo `@ds/design-system` stays the source of truth (ADR-0013); Claude Design is a **fed** canvas, never a second authority.
+The repo `@ds/design-system` stays the source of truth (ADR-0013); Claude Design is a canvas that **follows the repo**, never a second authority.
 
 ## When this applies
 
@@ -31,7 +31,7 @@ A `user-facing` feature during `do-product-discovery`, before EARS. **Skip** for
 
 ## Procedure
 
-**Claude Design rules:** every Claude Design step below — the canvas inventory, the prompt, its provenance and the vendoring — follows [`operate-claude-design`](../operate-claude-design/SKILL.md); read it in full first. This skill keeps only the discovery-time procedure. **Capability preflight:** discover the actual live design connector before steps 0–2; a missing inventory capability is a prerequisite — report it and stop those dependent steps, without replacing Claude Design or manufacturing approval.
+**Claude Design rules:** every Claude Design step below — the canvas inventory, the prompt, its provenance and the vendoring — follows [`operate-claude-design`](../operate-claude-design/SKILL.md); read it in full first. This skill keeps only the discovery-time procedure. **Capability preflight:** discover the actual live design connector before step 0; a missing inventory capability is a prerequisite — report it and stop the dependent steps, without replacing Claude Design or manufacturing approval.
 
 0. **Canvas-inventory precondition (hard gate — before any Stage-A ask or "new block" claim).** Run the inventory in `operate-claude-design` → «Canvas inventory first». Interaction affordances (menus, nav, account entry) written into a PRD MUST **cite the canvas element** they derive from (e.g. "avatar icon → profile, per `account-my-events.dc.html`"), never a brainstorm inference. After a reconciliation pass, `grep` the retired term across the PRD set (EN+RU) for residual stale wording.
 1. **Ground in the brand + constitution first.** Read `packages/design-system/tokens/primitive.json` (Pantone anchors, e.g. `blue.700 #114D9E` = Pantone Dark Blue C) + the brandbook (`apps/docs/brandbook/`), and skim the constitution for which element classes are already covered — so composition reuses settled standards, not re-litigates them.
@@ -51,7 +51,7 @@ A `user-facing` feature during `do-product-discovery`, before EARS. **Skip** for
 - **Claiming a "new block" or asking a Stage-A question before the canvas inventory** — step 0 runs FIRST (#779: the header + discovery front-door were already in the canvas).
 - **Originating a primitive in Claude Design** instead of delegating to `research-ui-element` — repo is SoT (ADR-0013, ADR-0014 §4).
 - **Duplicating the element-class cycle** — re-researching a covered class or re-deciding a button here; this skill is composition-altitude only.
-- **Presenting Stage A as text options or a static chat mockup** instead of the owner's pick in claude.ai/design — the owner composes and picks on the fed canvas.
+- **Presenting Stage A as text options or a static chat mockup** instead of the owner's pick in claude.ai/design — the owner composes and picks on the project canvas.
 - **Treating a handoff "approved" as sufficient** — resolve the original decision and record the artifact; re-confirm only absent, ambiguous or changed scope.
 - **Running this for a `backend-only` feature** — there is no mockup; go straight to `author-ears-spec`.
 

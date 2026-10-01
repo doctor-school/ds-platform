@@ -494,12 +494,15 @@ export function SubmissionDetail({
                 {e.message}
               </DsFormError>
             ))}
-            {summaryErrors.length ? (
+            {summaryErrors.length || operationErrors.length ? (
               <div data-screen-label="d-lk-congress · сводка ошибок">
-                <FormErrorSummary
-                  title={summaryTitle(summaryErrors.length)}
-                  errors={summaryErrors}
-                />
+                {summaryErrors.length ? (
+                  <FormErrorSummary
+                    title={summaryTitle(summaryErrors.length)}
+                    errors={summaryErrors}
+                  />
+                ) : null}
+                {/* Any failed send keeps the text (046-design-prompt-ru §8). */}
                 <p className="mt-2 text-xs text-muted-foreground">
                   {COPY.summarySaved}
                 </p>

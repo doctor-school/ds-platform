@@ -10,3 +10,12 @@ declare module "*.md?raw" {
   const content: string;
   export default content;
 }
+
+/**
+ * `?raw` stylesheet imports — the theme-root test reads the hand-authored
+ * `globals.css` base layer as text (jsdom computes no `color-scheme`).
+ */
+declare module "*.css?raw" {
+  const content: string;
+  export default content;
+}

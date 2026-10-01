@@ -24,5 +24,8 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", "dist"],
     setupFiles: ["./vitest.setup.ts"],
+    // `?raw` reads of globals.css need CSS processing on; otherwise Vitest
+    // stubs every stylesheet to "" (the theme-root test, #2434).
+    css: { include: [/\/styles\/globals\.css/] },
   },
 });

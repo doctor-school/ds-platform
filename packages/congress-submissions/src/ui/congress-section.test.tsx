@@ -421,7 +421,7 @@ describe("CongressSection", () => {
     body: { goal: "Разобрать показания.", summary: "Краткое содержание." },
   };
 
-  it("046 EARS-30: a needs_revision talk before its deadline is resent; a refusal after the deadline is named, not swallowed", async () => {
+  it("046 EARS-30: a needs_revision talk before its deadline is resent; a refusal after the deadline is named, not swallowed, and the text is kept", async () => {
     const revision = sub({
       ...complete,
       status: "needs_revision",
@@ -461,12 +461,15 @@ describe("CongressSection", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Да, отправить снова" }),
     );
-    const summary = await screen.findByRole("alert");
+    const banner = await screen.findByRole("alert");
     expect(
-      within(summary).getByText(
+      within(banner).getByText(
         /^Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(5 часов назад\) — отправить заявку нельзя$/,
       ),
     ).toBeInTheDocument();
+    // A refusal tied to no field is still a failed send: the author is told
+    // the text is kept (046-design-prompt-ru §8, canvas `hasSummary`).
+    expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
   });
 
   it("046 EARS-30: after the revision deadline the talk is read-only with the canvas line, no «Отправить снова»", async () => {

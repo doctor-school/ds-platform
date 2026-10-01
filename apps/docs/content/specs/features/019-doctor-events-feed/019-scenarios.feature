@@ -47,10 +47,12 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And no rendered string on the card states who finances the event
 
     Examples:
-      | format  |
-      | online  |
-      | offline |
-      | hybrid  |
+      | format         |
+      | webinar        |
+      | online-meeting |
+      | offline-meetup |
+      | congress       |
+      | podcast        |
 
   @EARS-2 @happy
   Scenario: An offline meet-up carries its city and remaining seats everywhere it is rendered
@@ -282,7 +284,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario: A podcast broadcast is an event of this feed rather than Academy noise
     Given an upcoming podcast broadcast in the doctor's specialty
     When the doctor opens «События»
-    Then it renders as an event card of kind «подкаст»
+    Then it renders as an event card of format podcast
     And no Academy podcast episode from the Academy media surface is listed beside it
 
   @EARS-15 @happy

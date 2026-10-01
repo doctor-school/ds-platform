@@ -26,6 +26,7 @@ import {
   countsTowardCongressLimit,
   parseCongressSendContent,
 } from "./congress-submission.schema.js";
+import { normaliseNameAnswer } from "./name-answer.js";
 
 /**
  * 046 V-1 (oral part) — the per-kind send schema accepts the complete oral set
@@ -457,6 +458,27 @@ describe("046 congress submissions — abstracts", () => {
     );
     expect(congressFirstAuthorName(undefined)).toBeNull();
     expect(congressFirstAuthorName({ surname: "Иванова" })).toBeNull();
+  });
+
+  it("046 EARS-24: the first-author comparison treats ё and е as one letter — the name itself keeps the ё", () => {
+    expect(
+      congressFirstAuthorName({
+        surname: "  ковалев ",
+        firstName: "ИГОРЬ",
+        patronymic: "Петрович",
+      }),
+    ).toBe(
+      congressFirstAuthorName({
+        surname: "Ковалёв",
+        firstName: "Игорь",
+        patronymic: "Петрович",
+      }),
+    );
+    expect(
+      congressFirstAuthorName({ surname: "ЁЖИКОВ", firstName: "Пётр" }),
+    ).toBe(congressFirstAuthorName({ surname: "Ежиков", firstName: "петр" }));
+    // Only the comparison folds: the stored and displayed name keeps the ё.
+    expect(normaliseNameAnswer("  ковалёв ")).toBe("Ковалёв");
   });
 
   it("046 EARS-25: the create request may name the work an abstract is derived from", () => {

@@ -250,7 +250,10 @@ test.describe("a registered participant", () => {
       name: "обработку персональных данных",
       exact: true,
     });
-    await expect(consentLink).toHaveAttribute("href", "/documents/consent-congress-submissions");
+    await expect(consentLink).toHaveAttribute(
+      "href",
+      "/documents/consent-congress-submissions",
+    );
     const consentPage = await page.request.get(
       new URL("/documents/consent-congress-submissions", page.url()).href,
     );
@@ -665,6 +668,63 @@ test.describe("an abstract author", () => {
     await page.getByRole("button", { name: "Да, отправить" }).click();
     await expect(page.getByTestId("congress-status-plate")).toHaveText(
       "Отправлена",
+    );
+  });
+
+  test("046 EARS-22/9: on a 390px phone the counter keeps «N / 5 000» on one line and a failed send brings the focused error summary into view", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInInPage(page, author);
+    await page.goto(SECTION);
+    // The author has sent an abstract above: a new one starts from the list.
+    await page.getByRole("button", { name: "+ Новая заявка" }).click();
+    await page
+      .getByTestId("congress-pick-abstract")
+      .getByRole("button", { name: "Начать заявку →" })
+      .click();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
+    await page.getByLabel("Название тезисов").fill("Тезисы на телефоне");
+    // A section holds at most 5 000 itself: 4 000 + 1 022 = 5 022 together.
+    await page.getByLabel("Результаты и обсуждение").fill("р".repeat(4000));
+    await page.getByLabel("Материалы и методы").fill("м".repeat(1022));
+
+    const total = page
+      .getByTestId("congress-abstract-counter")
+      .getByText(/5\s022 \/ 5\s000/);
+    await expect(total).toBeVisible();
+    // One line: the box is no taller than one line of its own text.
+    const lines = await total.evaluate((el) => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight);
+      return Math.round(el.getBoundingClientRect().height / lh);
+    });
+    expect(lines).toBe(1);
+
+    // Nothing of the counter («больше на N» included) runs under the button.
+    const send = page.getByRole("button", { name: "Отправить", exact: true });
+    const note = page
+      .getByTestId("congress-abstract-counter")
+      .getByText("больше на 22");
+    const [noteBox, sendBox] = [
+      await note.boundingBox(),
+      await send.boundingBox(),
+    ];
+    expect(noteBox && sendBox).toBeTruthy();
+    const overlaps =
+      noteBox!.x < sendBox!.x + sendBox!.width &&
+      sendBox!.x < noteBox!.x + noteBox!.width &&
+      noteBox!.y < sendBox!.y + sendBox!.height &&
+      sendBox!.y < noteBox!.y + noteBox!.height;
+    expect(overlaps).toBe(false);
+
+    await send.click();
+    const summary = page.getByRole("alert", { name: /^Заявка не отправлена/ });
+    await expect(summary).toBeFocused();
+    await expect(summary).toBeInViewport();
+    await expect(summary).toContainText(
+      /Сократите текст тезисов до 5\s000 знаков — сейчас 5\s022/,
     );
   });
 

@@ -212,7 +212,8 @@ draft of a kind without a form is 422 `kind-not-available`.
   consent — no other consent is asked. With the event's `first_author_counts`
   on, the kind's submit limit also binds every submitter's counted
   submissions whose first author has this one's normalised full name
-  (`congressFirstAuthorName`, the 044 EARS-33 rule) — 422
+  (`congressFirstAuthorName`, the 044 EARS-33 rule with «ё» compared as «е»;
+  the stored name keeps its «ё») — 422
   `first-author-limit-reached` with `{limit, used, firstAuthor}` (the count
   with that first author and their name as this submission writes it); sends naming one first author
   are serialised by a second advisory lock on that name. `POST

@@ -318,8 +318,12 @@ export function congressKindStatements(
 /**
  * EARS-24 — the first author's full name normalised by the 044 EARS-33 rule
  * (surname, first name, patronymic; an empty patronymic is no patronymic),
- * the key the first-author rule compares; `null` without a surname and a
- * first name.
+ * with «ё» folded to «е» — the key the first-author rule compares; `null`
+ * without a surname and a first name.
+ *
+ * Russian writing drops the dots over «ё» freely, so «Ковалев» and «Ковалёв»
+ * name one person. The fold lives only in this comparison key: it is never
+ * stored or shown, and the author's name keeps its «ё» as written.
  */
 export function congressFirstAuthorName(
   author:
@@ -332,7 +336,9 @@ export function congressFirstAuthorName(
 ): string | null {
   if (!author) return null;
   const part = (v: string | undefined) =>
-    normaliseNameAnswer(normaliseText(v ?? ""));
+    normaliseNameAnswer(normaliseText(v ?? ""))
+      .replace(/ё/gu, "е")
+      .replace(/Ё/gu, "Е");
   const surname = part(author.surname);
   const firstName = part(author.firstName);
   if (surname === "" || firstName === "") return null;

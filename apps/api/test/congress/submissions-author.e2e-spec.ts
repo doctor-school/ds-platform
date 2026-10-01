@@ -1614,6 +1614,41 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await sendAbstract(two, fourth)).statusCode).toBe(200);
     });
 
+    it("046 EARS-24: ё and е are one letter for the first-author rule — «ковалев» is refused after three sends naming «Ковалёв», and the refusal names the author as this submission writes them", async () => {
+      const eventId = await abstractCongress(3, true);
+      const one = await doctor("sub-fa-yo-one");
+      const two = await doctor("sub-fa-yo-two");
+      await register(one, eventId);
+      await register(two, eventId);
+      const kovalyov = {
+        surname: "Ковалёв",
+        firstName: "Игорь",
+        patronymic: "Петрович",
+        workplace: "ГКБ №1",
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const sent = await readyAbstract(one, eventId, kovalyov);
+        expect((await sendAbstract(one, sent)).statusCode).toBe(200);
+      }
+
+      const fourth = await readyAbstract(two, eventId, {
+        ...kovalyov,
+        surname: "  ковалев ",
+        firstName: "ИГОРЬ",
+      });
+      const refused = await sendAbstract(two, fourth);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json()).problems,
+      ).toEqual([
+        {
+          code: "first-author-limit-reached",
+          params: { limit: 3, used: 3, firstAuthor: "Ковалев Игорь Петрович" },
+        },
+      ]);
+      expect(await statusOf(fourth)).toBe("draft");
+    });
+
     it("046 EARS-24: two parallel sends by different submitters for the first author's last slot admit exactly one", async () => {
       const eventId = await abstractCongress(1, true);
       const one = await doctor("sub-fa-race-one");

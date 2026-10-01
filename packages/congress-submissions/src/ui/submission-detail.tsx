@@ -191,6 +191,25 @@ export function SubmissionDetail({
   const [ask, setAsk] = React.useState<"withdraw" | "delete" | null>(null);
   const [birthValue, setBirthValue] = React.useState(birthDate ?? "");
   const [birthRefused, setBirthRefused] = React.useState(false);
+  // A failed send moves focus to its errors — the first one on the page: the
+  // operation-level banner, else the summary. On a phone the send bar sits a
+  // screen below them, so focus left on «Отправить» would hide why the send
+  // failed (the DS summary is focusable for exactly this, ADR-0013 §7).
+  const errorsRef = React.useRef<HTMLElement | null>(null);
+  const errorsTarget = React.useCallback((el: HTMLElement | null) => {
+    errorsRef.current = el;
+  }, []);
+  const [failedSends, setFailedSends] = React.useState(0);
+  const sendFailedWithErrors = () => {
+    setTried(true);
+    setFailedSends((n) => n + 1);
+  };
+  React.useEffect(() => {
+    const target = errorsRef.current;
+    if (failedSends === 0 || !target) return;
+    target.scrollIntoView?.({ block: "center" });
+    target.focus({ preventScroll: true });
+  }, [failedSends]);
 
   /** Write the date control's day when it is a real day the account does not hold yet. */
   async function saveBirth(): Promise<boolean> {
@@ -266,7 +285,7 @@ export function SubmissionDetail({
     await autosave.flush();
     setSendFailed(false);
     if (localErrors.length) {
-      setTried(true);
+      sendFailedWithErrors();
       return;
     }
     if (showBirth && !(await saveBirth())) {
@@ -277,7 +296,7 @@ export function SubmissionDetail({
           now,
         ),
       );
-      setTried(true);
+      sendFailedWithErrors();
       return;
     }
     setConfirming(true);
@@ -303,7 +322,7 @@ export function SubmissionDetail({
         onStale();
       } else if (e instanceof CongressSubmissionsError && e.problems.length) {
         setServerErrors(problemMessages(e.problems, intake, now));
-        setTried(true);
+        sendFailedWithErrors();
       } else if (e instanceof CongressSubmissionsError && e.status === 409) {
         onStale();
       } else {
@@ -519,8 +538,19 @@ export function SubmissionDetail({
               />
             ) : null}
 
-            {operationErrors.map((e) => (
-              <DsFormError key={e.message} variant="banner">
+            {operationErrors.map((e, i) => (
+              <DsFormError
+                key={e.message}
+                variant="banner"
+                {...(i === 0
+                  ? {
+                      ref: errorsTarget,
+                      tabIndex: -1,
+                      className:
+                        "focus-visible:outline-none focus-visible:shadow-focus",
+                    }
+                  : {})}
+              >
                 {e.message}
               </DsFormError>
             ))}
@@ -528,6 +558,7 @@ export function SubmissionDetail({
               <div data-screen-label="d-lk-congress · сводка ошибок">
                 {summaryErrors.length ? (
                   <FormErrorSummary
+                    {...(operationErrors.length ? {} : { ref: errorsTarget })}
                     title={summaryTitle(summaryErrors.length)}
                     errors={summaryErrors}
                   />
@@ -819,7 +850,7 @@ function AbstractCounter({ body }: { body: Record<string, string> }) {
       id="in-counter"
       tabIndex={-1}
       data-testid="congress-abstract-counter"
-      className="inline-flex items-center gap-2.5 outline-none"
+      className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 outline-none"
     >
       <span
         aria-hidden="true"
@@ -833,7 +864,9 @@ function AbstractCounter({ body }: { body: Record<string, string> }) {
           style={{ width: `${pct.toFixed(1)}%` }}
         />
       </span>
-      <span className={cn("text-sm font-bold tabular-nums", ink)}>
+      <span
+        className={cn("whitespace-nowrap text-sm font-bold tabular-nums", ink)}
+      >
         {c.text}
       </span>
       {c.note ? (

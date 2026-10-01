@@ -345,7 +345,7 @@ describe("CongressSection", () => {
     expect(toggle).not.toHaveClass("font-bold");
   });
 
-  it("EARS-7/9: the oral draft saves on blur; a send with gaps lists each one, the consent included", async () => {
+  it("EARS-7/9: the oral draft saves on blur; a send with gaps lists each one, the consent included, and focus moves to the summary", async () => {
     const draft = sub({
       status: "draft",
       title: "",
@@ -388,6 +388,9 @@ describe("CongressSection", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
     const summary = await findSummary();
+    // A failed send moves focus to the summary — on a phone it sits a screen
+    // above the send bar the button lives in.
+    await waitFor(() => expect(summary).toHaveFocus());
     expect(
       within(summary).getByText("Заявка не отправлена. Исправьте 3 ошибки:"),
     ).toBeInTheDocument();
@@ -1249,7 +1252,7 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
     return screen.findByRole("alert");
   };
 
-  it("046 EARS-17: an abstract send refused at the abstracts' limit names the limit and keeps the text", async () => {
+  it("046 EARS-17: an abstract send refused at the abstracts' limit names the limit, takes the focus and keeps the text", async () => {
     const banner = await sendAbstractRefusedWith({
       code: "limit-reached",
       params: { limit: 3 },
@@ -1257,15 +1260,17 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
     expect(
       within(banner).getByText("Можно отправить не больше 3 тезисов"),
     ).toBeInTheDocument();
+    await waitFor(() => expect(banner).toHaveFocus());
     // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
     expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
   });
 
-  it("046 EARS-24: a send refused by the first-author rule names the author, the count and the limit", async () => {
+  it("046 EARS-24: a send refused by the first-author rule names the author, the count and the limit in the focused summary", async () => {
     const summary = await sendAbstractRefusedWith({
       code: "first-author-limit-reached",
       params: { limit: 3, used: 3, firstAuthor: "Иванова Мария Петровна" },
     });
+    await waitFor(() => expect(summary).toHaveFocus());
     expect(
       within(summary).getByText(
         "С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3 — эту заявку отправить нельзя.",

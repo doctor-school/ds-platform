@@ -14,8 +14,10 @@
  * with its five sections, statements, consent, the send panel with the total
  * counter); the interactions shoot the counter near the limit, the text above
  * it refused at send with the statements unmet, «Подать тезисы по этой работе»
- * on a sent talk and the prefilled draft it opens, and the first-author
- * refusal (a colleague has already sent 3 abstracts with that first author).
+ * on a sent talk and the prefilled draft it opens, the first-author
+ * refusal (a colleague has already sent 3 abstracts with that first author),
+ * and on a 390px phone the counter above the limit on one line and a failed
+ * send that brings the focused error summary into view.
  *
  *   E2E_DOCTOR_URL=http://127.0.0.1:3004 MAILPIT_URL=… DATABASE_URL=<branch db> \
  *     node apps/doctor/e2e/ui-evidence-2435.mjs .github/ui-evidence/2435
@@ -438,15 +440,24 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await shot(page, "interactions-first-author-refusal", "light", false);
   await ctx.close();
 }
-// Mobile light: the marked counter in the sticky send panel.
+// Mobile light: the counter above the limit in the sticky send panel —
+// «N / 5 000» on one line — then a failed send: the error summary, a screen
+// above the send bar, is scrolled into view and takes the focus.
 {
   const { ctx, page } = await themed(VIEWPORTS.mobile, "light", longer);
   await openDraft(page);
   await page
     .getByTestId("congress-abstract-counter")
-    .getByText(/осталось|больше на/)
+    .getByText("больше на")
     .waitFor();
   await shot(page, "interactions-counter-mobile", "light", false);
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  const summary = page.getByRole("alert", { name: /^Заявка не отправлена/ });
+  await summary.waitFor();
+  await page.waitForFunction(
+    () => document.activeElement?.getAttribute("role") === "alert",
+  );
+  await shot(page, "interactions-mobile-error-summary", "light", false);
   await ctx.close();
 }
 

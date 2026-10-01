@@ -134,7 +134,7 @@ test("046 EARS-18…20: the poster form with its birth-date field and the age re
   await scan(page, "the poster draft with the age refusal");
 });
 
-test("046 EARS-21…23: the abstract form with its statements and its total counter near and above the limit passes WCAG 2 A/AA (both themes)", async ({
+test("046 EARS-21…23: the abstract form with its statements, its total counter near and above the limit and the error summary at send passes WCAG 2 A/AA (both themes)", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -155,8 +155,7 @@ test("046 EARS-21…23: the abstract form with its statements and its total coun
   ).toBeVisible();
   await scan(page, "the abstract form");
 
-  // EARS-22 — the counter marked near the limit, then above it (no send yet:
-  // the error summary's dark-theme contrast is tracked by #2514).
+  // EARS-22 — the counter marked near the limit, then above it.
   const counter = page.getByTestId("congress-abstract-counter");
   await page.getByLabel("Результаты и обсуждение").fill("р".repeat(4600));
   await expect(counter).toContainText("осталось 400");
@@ -164,4 +163,13 @@ test("046 EARS-21…23: the abstract form with its statements and its total coun
   await page.getByLabel("Выводы").fill("в".repeat(500));
   await expect(counter).toContainText("больше на 100");
   await scan(page, "the abstract form above the limit");
+
+  // EARS-22/23 — a send above the limit with the statements unmet: the error
+  // summary over the form, the inline errors and «Текст заявки сохранён.».
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await expect(
+    page.getByText(/Сократите текст тезисов до 5 000 знаков/).first(),
+  ).toBeVisible();
+  await expect(page.getByText("Текст заявки сохранён.")).toBeVisible();
+  await scan(page, "the abstract form with the error summary");
 });

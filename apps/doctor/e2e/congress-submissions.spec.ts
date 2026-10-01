@@ -648,6 +648,7 @@ test.describe("an abstract author", () => {
     await expect(summary).toContainText(
       "Дайте согласие на обработку персональных данных",
     );
+    await expect(summary).toContainText("Текст заявки сохранён.");
 
     await page
       .getByLabel("Результаты и обсуждение")

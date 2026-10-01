@@ -1193,7 +1193,8 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
     });
   });
 
-  it("046 EARS-24: a send refused by the first-author rule names the author, the count and the limit", async () => {
+  /** Ticks both statements, sends and answers the confirmation with `problem`. */
+  const sendAbstractRefusedWith = async (problem: unknown) => {
     openDraft(abstractDraft.id);
     fetchMock.mockResolvedValueOnce(
       answer(section({ consentRequired: false, submissions: [abstractDraft] })),
@@ -1207,32 +1208,36 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       await userEvent.click(screen.getByRole("checkbox", { name }));
     }
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    fetchMock.mockResolvedValueOnce(
-      answer(
-        {
-          problems: [
-            {
-              code: "first-author-limit-reached",
-              params: {
-                limit: 3,
-                used: 3,
-                firstAuthor: "Иванова Мария Петровна",
-              },
-            },
-          ],
-        },
-        422,
-      ),
-    );
+    fetchMock.mockResolvedValueOnce(answer({ problems: [problem] }, 422));
     await userEvent.click(
       screen.getByRole("button", { name: "Да, отправить" }),
     );
-    const summary = await screen.findByRole("alert");
+    return screen.findByRole("alert");
+  };
+
+  it("046 EARS-17: an abstract send refused at the abstracts' limit names the limit and keeps the text", async () => {
+    const banner = await sendAbstractRefusedWith({
+      code: "limit-reached",
+      params: { limit: 3 },
+    });
+    expect(
+      within(banner).getByText("Можно отправить не больше 3 тезисов"),
+    ).toBeInTheDocument();
+    // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
+    expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
+  });
+
+  it("046 EARS-24: a send refused by the first-author rule names the author, the count and the limit", async () => {
+    const summary = await sendAbstractRefusedWith({
+      code: "first-author-limit-reached",
+      params: { limit: 3, used: 3, firstAuthor: "Иванова Мария Петровна" },
+    });
     expect(
       within(summary).getByText(
         "С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3 — эту заявку отправить нельзя.",
       ),
-    ).toBeInTheDocument();
+    ).toBeInTheDocument();    // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
+    expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
   });
 
   it("046 EARS-25: «Подать тезисы по этой работе» on a sent talk creates the abstract draft from it and opens it prefilled; a withdrawn talk and a draft do not offer it", async () => {

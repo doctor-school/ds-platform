@@ -33,6 +33,8 @@ statements before the consent, sent with it. The refusals read in the canvas
 words — «Сократите текст тезисов до 5 000 знаков — сейчас N», «Подтвердите,
 что в тексте нет некорректных заимствований» / «… торговых наименований» —
 and the first-author refusal names the author: «С первым автором «{ФИО}» уже
-отправлено N тезисов из N — эту заявку отправить нельзя.» A sent oral talk or
+отправлено N тезисов из N — эту заявку отправить нельзя.» Like every failed
+send, a refusal at the abstracts' limit or by the first-author rule keeps
+«Текст заявки сохранён.» under it. A sent oral talk or
 poster offers «Подать тезисы по этой работе» in the list and in its detail
 while abstracts can be started; it opens the prefilled abstract draft.

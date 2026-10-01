@@ -432,6 +432,8 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
       /С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3/,
     )
     .waitFor();
+  // A field-less refusal is still a failed send: the text is kept (EARS-30 canon).
+  await page.getByText("Текст заявки сохранён.").waitFor();
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, "interactions-first-author-refusal", "light", false);
   await ctx.close();

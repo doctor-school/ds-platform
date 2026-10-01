@@ -377,8 +377,12 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   const revisionTitle = TALKS[0].title;
   await db((c) =>
     c.query(
-      `UPDATE congress_submissions SET revision_due_at = now() - interval '1 hour'
-       WHERE event_id = $1 AND title = $2`,
+      // A real deadline is a Moscow day boundary (EARS-34): the end of the day
+      // three days back, so the line reads «… 23:59 МСК (N дня назад)».
+      `UPDATE congress_submissions
+          SET revision_due_at = (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow')
+                                 - interval '2 days') AT TIME ZONE 'Europe/Moscow'
+        WHERE event_id = $1 AND title = $2`,
       [eventId, revisionTitle],
     ),
   );

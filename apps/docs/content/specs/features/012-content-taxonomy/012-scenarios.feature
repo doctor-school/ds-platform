@@ -985,7 +985,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   @EARS-25 @happy
   Scenario: An editor adds an event kind in the admin
     Given a platform_admin signed in to the admin
-    When the admin creates the event kind «Лекция» allowing the formats online and hybrid and publishes it
+    When the admin creates the event kind «Круглый стол» allowing the formats online and hybrid and publishes it
     Then one retained event_kinds row exists with a system-generated slug and the allowed formats online and hybrid
     And the row carries no storefront attribute
     And the same row renders on the event-kind list and detail
@@ -1010,6 +1010,18 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Given the published kind «Конгресс» allows the formats offline and hybrid
     When the admin saves an event of kind «Конгресс» with the format online
     Then the event contract rejects the write with a field error on the format
+
+  @EARS-26 @failure
+  Scenario: Narrowing a kind flags an existing event and refuses its save until fixed
+    Given an event of kind «Встреча клуба» with the format online
+    When the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
+    Then the event keeps the kind «Встреча клуба» and the format online
+    And the admin event list and editor flag the event's format as not allowed by its kind
+    And the storefront still shows the event as it is
+    When the admin saves the event without changing its format or kind
+    Then the event contract rejects the write with a field error on the format
+    When the admin changes the format to offline and saves
+    Then the event is stored and no longer flagged
 
   @EARS-27 @happy
   Scenario: The dictionary starts with the five seed kinds
@@ -1050,12 +1062,23 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then the event contract rejects the write
 
   @EARS-29 @happy
-  Scenario: The forward migration assigns the audience of existing events
-    When the forward migration introducing the event audience has run
-    Then the congress event has the kind «Конгресс» and the audience doctors
-    And the Orthobio School events have the audience doctors
-    And the BBM.Academy and «Академия смыслов» events have the kind «Эфир» and the audience experts
-    And every existing event carries exactly one audience
+  Scenario: The forward migration applies the reviewed row-by-row mapping
+    Given the migration carries a reviewed mapping of every existing event id to a kind and an audience and of every existing project id to a default audience
+    When the forward migration introducing the event kind and audience has run
+    Then the Orthobio School project has the default audience doctors
+    And the BBM.Academy and «Академия смыслов» projects have the default audience experts
+    And the congress event has the kind «Конгресс» and the audience doctors
+    And an online event of a doctors-audience project has the kind «Вебинар»
+    And an online event of an experts-audience project has the kind «Эфир»
+    And an event with no project has the audience doctors
+    And every existing event carries exactly one kind whose allowed formats include its format and exactly one audience
+
+  @EARS-29 @failure
+  Scenario: The forward migration aborts on an unmapped row
+    Given an existing event or project whose id is absent from the reviewed mapping
+    When the forward migration introducing the event kind and audience runs
+    Then the migration aborts for explicit per-row review
+    And no event or project is assigned a kind or an audience by inference
 
   @EARS-30 @happy
   Scenario: A project's default audience prefills a new event and stays overridable

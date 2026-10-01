@@ -1,0 +1,9 @@
+/* design-sync: compile the @ds/design-system stylesheet (Tailwind 4) into plain CSS
+   for the Claude Design bundle. Same entry the apps import, plus the authored
+   preview sources so their utility classes are emitted too.
+   Inter comes from Google Fonts - the same source the apps use (next/font/google);
+   the reserved brand faces (Tactic Sans Extended, Century Gothic, Montserrat) are
+   never loaded by any product surface (brand-token-map spec), so none ship here. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap");
+@import "../packages/design-system/src/styles/globals.css";
+@source "./previews";

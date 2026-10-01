@@ -13,7 +13,9 @@
  * consent, send panel); the interactions shoot the birth date asked in a new
  * first poster draft, the authors section with no speaker pick, the
  * «Укажите дату рождения» error at send, a poster draft of a holder above the
- * limit (the refusal in place of the send) and that holder's kind choice.
+ * limit (the refusal in place of the send) and that holder's kind choice; in
+ * dark, the birth ask and the error summary (contrast printed for both themes);
+ * and a send refused for a reason tied to no field (intake closed meanwhile).
  *
  *   E2E_DOCTOR_URL=http://127.0.0.1:3004 MAILPIT_URL=… DATABASE_URL=<branch db> \
  *     node apps/doctor/e2e/ui-evidence-2434.mjs .github/ui-evidence/2434
@@ -23,7 +25,7 @@
  * docblock of `e2e/congress-submissions.spec.ts`.
  */
 
-/* global localStorage, document */
+/* global localStorage, document, getComputedStyle */
 // The identifiers above are referenced only inside `page.evaluate` callbacks,
 // which run in the BROWSER, not in this Node process.
 
@@ -251,9 +253,72 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
     const { ctx, page } = await themed(viewport, theme, authors[`${vp}-${theme}`]);
     await openDraft(page);
     await page.getByLabel("Цель").waitFor();
+    // The native date control draws its picker indicator from the UA colour
+    // scheme: the DS theme root sets it per theme (#2434 review).
+    const scheme = await page.getByLabel("Дата рождения").evaluate((el) => getComputedStyle(el).colorScheme);
+    if (scheme !== theme) throw new Error(`${vp}-${theme}: color-scheme ${scheme}`);
     await shot(page, `${vp}-${theme}`, theme);
     await ctx.close();
   }
+}
+
+/**
+ * WCAG contrast of the error summary parts against the summary's own
+ * background (walks up to the first opaque ancestor). Colours go through a
+ * 1px canvas so `oklch()` resolves to the rendered sRGB.
+ */
+async function summaryContrast(page, label) {
+  const out = await page.locator('[data-screen-label="d-lk-congress · сводка ошибок"]').evaluate((wrap) => {
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const rgb = (c) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = "#000";
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return { r, g, b, a };
+    };
+    const bgOf = (el) => {
+      for (let n = el; n; n = n.parentElement) {
+        const c = rgb(getComputedStyle(n).backgroundColor);
+        if (c.a === 255) return c;
+      }
+      return rgb("#fff");
+    };
+    const lum = ({ r, g, b }) =>
+      [r, g, b]
+        .map((v) => v / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+        .reduce((acc, v, i) => acc + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => {
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return Math.round(((x + 0.05) / (y + 0.05)) * 100) / 100;
+    };
+    const alert = wrap.querySelector('[role="alert"]') ?? wrap.firstElementChild;
+    const bg = bgOf(alert);
+    const parts = { frame: [alert, "borderTopColor"] };
+    const title = alert.querySelector("p, h2, h3, strong, div");
+    if (title) parts.title = [title, "color"];
+    const item = alert.querySelector("a") ?? alert.querySelector("li");
+    if (item) parts.item = [item, "color"];
+    const saved = [...wrap.querySelectorAll("p")].at(-1);
+    if (saved) parts.saved = [saved, "color", bgOf(saved)];
+    return Object.fromEntries(
+      Object.entries(parts).map(([k, [el, prop, own]]) => {
+        const back = own ?? bg;
+        const raw = rgb(getComputedStyle(el)[prop]);
+        // A translucent colour is composited over its background first.
+        const a = raw.a / 255;
+        const fg = {
+          r: raw.r * a + back.r * (1 - a),
+          g: raw.g * a + back.g * (1 - a),
+          b: raw.b * a + back.b * (1 - a),
+        };
+        return [k, `${getComputedStyle(el)[prop]} ${ratio(fg, back)}:1`];
+      }),
+    );
+  });
+  console.log(`contrast ${label}: ${JSON.stringify(out)}`);
 }
 
 /** Bring `locator` to the middle of the viewport before a viewport shot. */
@@ -278,8 +343,27 @@ async function centre(page, locator) {
   await shot(page, "interactions-poster-authors", "light", false);
   await page.getByRole("button", { name: "Отправить", exact: true }).click();
   await page.getByText("Укажите дату рождения").first().waitFor();
+  await summaryContrast(page, "light");
   await centre(page, birth);
   await shot(page, "interactions-birth-error", "light", false);
+  await ctx.close();
+}
+// Dark: the birth ask (the picker indicator follows the dark scheme) and the
+// error summary at send.
+{
+  const who = await provision("ask-d");
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "dark", who);
+  await page.goto(`${BASE}/account/congress`);
+  await page.getByTestId("congress-pick-poster").getByRole("button", { name: "Начать заявку →" }).click();
+  const birth = page.getByLabel("Дата рождения");
+  await birth.waitFor();
+  await centre(page, birth);
+  await shot(page, "interactions-birth-ask-dark", "dark", false);
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await page.getByText("Укажите дату рождения").first().waitFor();
+  await summaryContrast(page, "dark");
+  await centre(page, page.locator('[data-screen-label="d-lk-congress · сводка ошибок"]'));
+  await shot(page, "interactions-summary-dark", "dark", false);
   await ctx.close();
 }
 {
@@ -312,6 +396,30 @@ async function centre(page, locator) {
   await card.getByRole("button", { name: "Начать заявку →" }).click();
   await page.getByLabel("Дата рождения").waitFor();
   await shot(page, "interactions-birth-ask-mobile", "light");
+  await ctx.close();
+}
+
+// A refusal tied to no field: the poster intake closes while a complete draft
+// is open; the send is refused with the banner and «Текст заявки сохранён.»
+// stays (046-design-prompt-ru §8). Last, because it closes the event's intake.
+{
+  const { ctx, page } = await themed(VIEWPORTS.desktop, "light", authors["desktop-light"]);
+  await openDraft(page);
+  await page.getByLabel("Цель").waitFor();
+  await db((c) =>
+    c.query(
+      `UPDATE congress_submission_kind_settings SET closes_at = $2 WHERE event_id = $1 AND kind = 'poster'`,
+      [eventId, new Date(Date.now() - 60_000)],
+    ),
+  );
+  const consent = page.getByRole("checkbox", { name: /Согласие/ });
+  if (await consent.count()) await consent.check({ force: true });
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  const confirm = page.getByRole("button", { name: /Да, отправить/ });
+  if (await confirm.count()) await confirm.click();
+  await page.getByText("Текст заявки сохранён.").waitFor();
+  await centre(page, page.getByText("Текст заявки сохранён."));
+  await shot(page, "interactions-operation-refusal", "light", false);
   await ctx.close();
 }
 

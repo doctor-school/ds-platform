@@ -13,7 +13,8 @@ import {
 /**
  * 046 V-18 (#2433) — axe-core WCAG 2 A/AA scan of «Мои заявки на Конгресс»
  * (`/account/congress`), its oral-talk form and — 046 V-16 (#2434) — the poster
- * flow (poster form with its birth-date field, age refusal), in both themes.
+ * flow (poster form with its birth-date field, the error summary at send, age
+ * refusal), in both themes.
  *
  * The showcase `playwright-axe` gate scans the DS primitives in isolation; this
  * scan covers the composed signed-in section a doctor actually reaches — the
@@ -107,6 +108,13 @@ test("046 EARS-18…20: the poster form with its birth-date field and the age re
   await expect(page.getByLabel("Цель")).toBeVisible();
   await expect(page.getByLabel("Дата рождения")).toBeVisible();
   await scan(page, "the poster form");
+
+  // EARS-9/19 — a send with gaps: the error summary over the form and the
+  // inline field errors (the empty birth date among them).
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await expect(page.getByText("Укажите дату рождения").first()).toBeVisible();
+  await expect(page.getByText("Текст заявки сохранён.")).toBeVisible();
+  await scan(page, "the poster form with the error summary");
 
   // EARS-20 — the draft of a holder above the limit: the refusal in place of the send.
   await page.getByLabel("Дата рождения").fill(`${new Date().getFullYear() - 50}-06-15`);

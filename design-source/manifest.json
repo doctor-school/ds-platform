@@ -159,8 +159,8 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "doctor-lk-congress.dc.html": {
-      "sha256": "935bc30dfe7a189e34dd738a32caf3840f71b3acaa2ab2175444fd65681dfba0",
-      "pulledAt": "2026-09-30T01:58:54.197Z",
+      "sha256": "ef4c054f1ad561944c08e01dedb0608afc8b551092a1c9bc58105057242b2b58",
+      "pulledAt": "2026-10-01T04:35:30.781Z",
       "remotePath": "doctor-lk-congress.dc.html"
     },
     "doctor-school.dc.html": {

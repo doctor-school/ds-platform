@@ -69,7 +69,7 @@ Consequences that are part of the contract rather than side effects:
 
 ## 3. Read topology
 
-Within Doctor, one host projection serves the feed; the month grid and the calendar page project the same result. Across storefronts, `/v1/public/events` and `/v1/storefront/doctor/events` are thin adapters over the same `EventsService` / repository query core and portable schemas, not duplicate engines. Each adapter selects its storefront's **content set** server-side (LD-11): the doctor adapter passes every published event of every kind to targeting (EARS-16); the Academy adapter adds two predicates to the same state/date rules — the event is linked to at least one project through `eventProjects`, and its kind's «shown on Academy» flag is true (004, Amendment 2026-10-01). The client never receives an event to hide.
+Within Doctor, one host projection serves the feed; the month grid and the calendar page project the same result. Across storefronts, `/v1/public/events` and `/v1/storefront/doctor/events` are thin adapters over the same `EventsService` / repository query core and portable schemas, not duplicate engines. Each adapter selects its storefront's **content set** server-side (LD-11): both adapters add one predicate to the same state/date rules — the event audience (012 LD-12, EARS-29): the doctor adapter passes every published event whose audience is `doctors`, of any kind, to targeting (EARS-16), and the mobile app reads that same set; the Academy adapter selects only events whose audience is `experts` (004, Amendment 2026-10-01). Neither the kind nor the project link selects a storefront. The client never receives an event to hide.
 
 ```mermaid
 graph LR

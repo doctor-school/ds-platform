@@ -59,7 +59,8 @@ Two consequences the downstream EARS spec inherits:
 - **US-16** — As a **content operator**, I can attach every cross-link from either endpoint page, while one canonical relationship row remains the storage owner.
 - **US-17** — As a **content operator**, every list is paginated and every search/filter applies immediately, with active chips and one Reset all action; controls with no possible effect are not actionable.
 - **US-18** — As a **product owner**, I cut the platform over from `event_speakers` to `event_experts` in one release, after which the Tech Lead re-creates the sixteen rows by hand and I simply look at the live event cards, with no automatic name merge and no indefinite merged projection.
-- **US-19** — As a **content editor**, I maintain the list of event kinds (вебинар, разбор, подкаст, …) in the admin and mark which kinds are shown on the Academy, so a new kind of event needs no developer and every event carries exactly one kind.
+- **US-19** — As a **content editor**, I maintain the list of event kinds (Вебинар, Эфир, Конгресс, Встреча клуба, Мастер-класс, …) in the admin and set which participation formats each kind allows, so a new kind of event needs no developer, every event carries exactly one kind and no event gets a format its kind does not allow.
+- **US-20** — As a **content editor**, I set each event's audience — doctors or market experts — prefilled from its project's default audience and overridable per event, so the audience alone decides whether the event appears on the doctor storefront (web and mobile app) or on the Academy.
 
 ## Flows
 

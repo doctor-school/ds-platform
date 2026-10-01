@@ -313,12 +313,14 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Then the lesson appears in no block of the events feed
 
   @EARS-16 @happy
-  Scenario: The doctor storefront reads every published event of every kind
-    Given a published congress linked to no Academy project
-    And a published offline meet-up whose kind is not shown on the Academy
-    And a published webinar linked to an Academy school
+  Scenario: The doctor storefront reads every doctors-audience event of any kind
+    Given a published «Конгресс» event with the audience doctors linked to no project
+    And a published «Встреча клуба» event with the audience doctors
+    And a published «Вебинар» event with the audience doctors linked to a school project
+    And a published «Эфир» event with the audience experts
     When the doctor opens «События»
-    Then all three events are listed in the doctor's targeted feed
+    Then the three doctors-audience events are listed in the doctor's targeted feed
+    And the experts-audience event is not listed
     And the selection was made by the doctor read contract on the server
 
   @EARS-16 @failure
@@ -337,9 +339,9 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
 
   @EARS-17 @failure
   Scenario: A retired kind is no longer offered
-    Given an editor retires the kind «Doctor Club»
+    Given an editor retires the kind «Мастер-класс»
     When the doctor opens the facet panel
-    Then «Doctor Club» is not offered as a kind facet value
+    Then «Мастер-класс» is not offered as a kind facet value
     And the panel holds 3 and 9 published kinds without breaking the screen grid
 
   @EARS-18 @happy

@@ -985,8 +985,9 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   @EARS-25 @happy
   Scenario: An editor adds an event kind in the admin
     Given a platform_admin signed in to the admin
-    When the admin creates the event kind «Клинический разбор с пациентом» with «shown on Academy» set and publishes it
-    Then one retained event_kinds row exists with a system-generated slug
+    When the admin creates the event kind «Круглый стол» allowing the formats online and hybrid and publishes it
+    Then one retained event_kinds row exists with a system-generated slug and the allowed formats online and hybrid
+    And the row carries no storefront attribute
     And the same row renders on the event-kind list and detail
 
   @EARS-25 @failure
@@ -996,7 +997,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-26 @happy
   Scenario: Every event carries exactly one kind
-    When the admin creates an event with the published kind «вебинар»
+    When the admin creates an event with the published kind «Вебинар» and the format online
     Then the event references exactly that kind
 
   @EARS-26 @failure
@@ -1004,11 +1005,34 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the admin saves an event with no kind, an unknown kind or a retired kind
     Then the event contract rejects the write
 
+  @EARS-26 @failure
+  Scenario: A format the kind does not allow is refused
+    Given the published kind «Конгресс» allows the formats offline and hybrid
+    When the admin saves an event of kind «Конгресс» with the format online
+    Then the event contract rejects the write with a field error on the format
+
+  @EARS-26 @failure
+  Scenario: Narrowing a kind flags an existing event and refuses its save until fixed
+    Given an event of kind «Встреча клуба» with the format online
+    When the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
+    Then the event keeps the kind «Встреча клуба» and the format online
+    And the admin event list and editor flag the event's format as not allowed by its kind
+    And the storefront still shows the event as it is
+    When the admin saves the event without changing its format or kind
+    Then the event contract rejects the write with a field error on the format
+    When the admin changes the format to offline and saves
+    Then the event is stored and no longer flagged
+
   @EARS-27 @happy
-  Scenario: The dictionary starts with the seed kinds
+  Scenario: The dictionary starts with the five seed kinds
     When the forward migration introducing event kinds has run
-    Then вебинар, разбор, подкаст, Doctor Club and офлайн-встреча are published with «shown on Academy» true
-    And конгресс is published with «shown on Academy» false
+    Then exactly these kinds are published with these allowed formats:
+      | kind          | allowed formats         |
+      | Вебинар       | online                  |
+      | Эфир          | online                  |
+      | Конгресс      | offline, hybrid         |
+      | Встреча клуба | online, offline, hybrid |
+      | Мастер-класс  | offline, hybrid         |
     And every existing event references exactly one kind
 
   @EARS-28 @happy
@@ -1023,3 +1047,54 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the public kind list and the event-form kind selector are read
     Then the retired kind is offered by neither
     And the events that carry it keep their kind reference
+
+  @EARS-29 @happy
+  Scenario: The audience alone places an event on one storefront
+    Given a published event with the audience doctors
+    And a published event with the audience experts
+    When the doctor storefront and the Academy read their events
+    Then the doctors-audience event is read only by the doctor storefront
+    And the experts-audience event is read only by the Academy
+
+  @EARS-29 @failure
+  Scenario: An event without a valid audience is refused
+    When the admin saves an event with no audience or an unknown audience
+    Then the event contract rejects the write
+
+  @EARS-29 @happy
+  Scenario: The forward migration applies the reviewed row-by-row mapping
+    Given the migration carries a reviewed mapping of every existing event id to a kind and an audience and of every existing project id to a default audience
+    When the forward migration introducing the event kind and audience has run
+    Then the Orthobio School project has the default audience doctors
+    And the BBM.Academy and «Академия смыслов» projects have the default audience experts
+    And the congress event has the kind «Конгресс» and the audience doctors
+    And an online event of a doctors-audience project has the kind «Вебинар»
+    And an online event of an experts-audience project has the kind «Эфир»
+    And an event with no project has the audience doctors
+    And every existing event carries exactly one kind whose allowed formats include its format and exactly one audience
+
+  @EARS-29 @failure
+  Scenario: The forward migration aborts on an unmapped row
+    Given an existing event or project whose id is absent from the reviewed mapping
+    When the forward migration introducing the event kind and audience runs
+    Then the migration aborts for explicit per-row review
+    And no event or project is assigned a kind or an audience by inference
+
+  @EARS-30 @happy
+  Scenario: A project's default audience prefills a new event and stays overridable
+    Given a published project with the default audience experts
+    When the admin creates an event linked to that project
+    Then the event form shows the audience experts
+    When the admin changes the audience to doctors and saves
+    Then the event is stored with the audience doctors
+
+  @EARS-30 @failure
+  Scenario: A changed project default does not rewrite existing events
+    Given an event with the audience doctors linked to a project with the default audience doctors
+    When the admin changes the project default audience to experts
+    Then the event keeps the audience doctors
+
+  @EARS-30 @failure
+  Scenario: A project without a default audience is refused
+    When the admin saves a project with no default audience
+    Then the project contract rejects the write

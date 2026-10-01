@@ -9,7 +9,7 @@ status: "Proposal — §F forks closed/deferred by the owner 2026-08-22; awaitin
 lang: ru
 ---
 
-> **Этап 3 эпика «Doctor.School relaunch — two-site IA»** ([#1430](https://github.com/doctor-school/ds-platform/issues/1430) → [#1435](https://github.com/doctor-school/ds-platform/issues/1435)), 2026-08-22, часть 1 из двух: **функциональная карта**. Часть 2 (продуктовый бриф эпика, PRD фич, пакет промптов `design-prompts-ru/`) пишется после того, как владелец выберет волну 1. Навигация по пакету: [`README-ru.md`](./README-ru.md).
+> **Этап 3 эпика «Doctor.School relaunch — two-site IA»** ([#1430](https://github.com/doctor-school/ds-platform/issues/1430) → [#1435](https://github.com/doctor-school/ds-platform/issues/1435)), 2026-08-22, часть 1 из двух: **функциональная карта**. Часть 2 (продуктовый бриф эпика, PRD фич, канвасы экранов) пишется после того, как владелец выберет волну 1. Навигация по пакету: [`README-ru.md`](./README-ru.md).
 
 # Функциональная карта: экран → REQ → фича
 

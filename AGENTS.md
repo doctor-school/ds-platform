@@ -12,6 +12,7 @@ Read the indexed reference in full before its action, once per session and after
 
 - `.claude/rules/repo-conventions.md`: Branches (branch naming, closure, `pr:land`); Commits, versioning, PRs (PR creation, changesets, preflight, merge gate); Release train + skill `run-prod-deploy` (prod deploy/release); Dependency bumps; Issue conventions (Issues, claims, dependencies, resume checks); ADRs & specs (ADR/spec/PRD placement).
 - `.claude/rules/dev-stand.md`: Endpoints, DX commands (`dev:*`, stand endpoints); Snapshot before migrate (migration); Shared-stand discipline (DB/volume operations, stand-capable brief); Parallel sessions (ports, listeners, branch DB); Rules for agents + `build-ui-from-design-system` (browser/live UI/Stage-B handback, staging slot).
+- `apps/docs/content/skills/operate-claude-design/SKILL.md`: any Claude Design prompt, canvas request, canvas review or vendoring.
 
 ---
 

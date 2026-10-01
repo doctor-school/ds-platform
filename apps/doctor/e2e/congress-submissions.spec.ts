@@ -318,5 +318,5 @@ test("046 EARS-11: a talk returned for revision shows its deadline with the coun
   await expect(open.getByRole("button", { name: /Продолжить/ })).toBeVisible();
 
   const expired = row(page, "Доклад с истёкшим сроком");
-  await expect(expired).toContainText(/Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК — отправить заявку нельзя/);
+  await expect(expired).toContainText(/Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(1 час назад\) — отправить заявку нельзя/);
 });

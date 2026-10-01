@@ -119,6 +119,15 @@ export function countdownText(ms: number): string {
   return `${withN(h, H)} ${withN(m, ["минута", "минуты", "минут"])}`;
 }
 
+/** «… назад» — whole days, whole hours under a day, «меньше часа» under an hour. */
+export function agoText(ms: number): string {
+  const hours = Math.floor(Math.max(0, ms) / 3_600_000);
+  if (hours >= 24)
+    return `${withN(Math.floor(hours / 24), ["день", "дня", "дней"])} назад`;
+  if (hours >= 1) return `${withN(hours, ["час", "часа", "часов"])} назад`;
+  return "меньше часа назад";
+}
+
 /** A draft of this kind can be started now (046 EARS-6: refused only after closing). */
 export function kindStartable(intake: CongressSubmissionKindIntake): boolean {
   return intake.offered && intake.state !== "closed";
@@ -192,7 +201,7 @@ export function revisionView(
   return {
     open: false,
     urgent: true,
-    text: `Срок доработки истёк ${day} — отправить заявку нельзя`,
+    text: `Срок доработки истёк ${day} (${agoText(-left)}) — отправить заявку нельзя`,
   };
 }
 
@@ -407,6 +416,7 @@ function fieldProblem(field: string | undefined): FormError | null {
 export function problemMessages(
   problems: CongressSubmissionProblem[],
   intake: CongressSubmissionKindIntake,
+  now: Date,
 ): FormError[] {
   const out: FormError[] = [];
   const seen = new Set<string>();
@@ -441,12 +451,17 @@ export function problemMessages(
         );
         break;
       case "revision-closed": {
+        // The server has refused: the deadline is past even when the
+        // viewer's clock lags behind it — then it passed «меньше часа назад».
         const due = p.params?.revisionDueAt;
         push({
           key: null,
           message:
             typeof due === "string"
-              ? revisionView({ revisionDueAt: due }, new Date(due)).text
+              ? revisionView(
+                  { revisionDueAt: due },
+                  new Date(Math.max(now.getTime(), new Date(due).getTime())),
+                ).text
               : COPY.errRevisionClosed,
         });
         break;

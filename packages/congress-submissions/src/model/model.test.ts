@@ -6,6 +6,7 @@ import {
 
 import {
   actionsFor,
+  agoText,
   closedText,
   countdownText,
   dateLine,
@@ -153,15 +154,49 @@ describe("revision deadline", () => {
     });
   });
 
-  it("EARS-11: after the deadline — expired, nothing to send", () => {
+  it("046 EARS-11: after the deadline — expired, how long ago, nothing to send", () => {
     const v = revisionView(
       sub({ status: "needs_revision", revisionDueAt: due }),
       new Date("2027-02-25T09:00:00.000Z"),
     );
     expect(v.open).toBe(false);
     expect(v.text).toBe(
-      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+      "Срок доработки истёк 22 декабря, 23:59 МСК (64 дня назад) — отправить заявку нельзя",
     );
+  });
+
+  it("046 EARS-11: the elapsed part counts whole days from the deadline instant", () => {
+    const after = (ms: number) =>
+      revisionView(
+        sub({ status: "needs_revision", revisionDueAt: due }),
+        new Date(new Date(due).getTime() + ms),
+      ).text;
+    expect(after(3 * 86_400_000 + 5 * 3_600_000)).toBe(
+      "Срок доработки истёк 22 декабря, 23:59 МСК (3 дня назад) — отправить заявку нельзя",
+    );
+    expect(after(5 * 3_600_000)).toBe(
+      "Срок доработки истёк 22 декабря, 23:59 МСК (5 часов назад) — отправить заявку нельзя",
+    );
+    expect(after(0)).toBe(
+      "Срок доработки истёк 22 декабря, 23:59 МСК (меньше часа назад) — отправить заявку нельзя",
+    );
+  });
+
+  it("046 EARS-11: the elapsed part pluralises days and hours, floors, and says «меньше часа» under an hour", () => {
+    const D = 86_400_000;
+    const H = 3_600_000;
+    expect(agoText(1 * D)).toBe("1 день назад");
+    expect(agoText(2 * D)).toBe("2 дня назад");
+    expect(agoText(5 * D)).toBe("5 дней назад");
+    expect(agoText(11 * D)).toBe("11 дней назад");
+    expect(agoText(21 * D)).toBe("21 день назад");
+    expect(agoText(2 * D - 1)).toBe("1 день назад");
+    expect(agoText(1 * H)).toBe("1 час назад");
+    expect(agoText(2 * H)).toBe("2 часа назад");
+    expect(agoText(5 * H)).toBe("5 часов назад");
+    expect(agoText(D - 1)).toBe("23 часа назад");
+    expect(agoText(H - 1)).toBe("меньше часа назад");
+    expect(agoText(0)).toBe("меньше часа назад");
   });
 
   it("EARS-11: the countdown pluralises days, hours and minutes", () => {
@@ -342,9 +377,26 @@ describe("send checks", () => {
         },
       ],
       intake(),
+      new Date("2026-12-25T23:00:00.000Z"),
     );
     expect(msgs.map((m) => m.message)).toEqual([
-      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+      "Срок доработки истёк 22 декабря, 23:59 МСК (3 дня назад) — отправить заявку нельзя",
+    ]);
+  });
+
+  it("046 EARS-11: a revision-closed refusal read on a clock behind the server's still reads as expired", () => {
+    const msgs = problemMessages(
+      [
+        {
+          code: "revision-closed",
+          params: { revisionDueAt: "2026-12-22T21:00:00.000Z" },
+        },
+      ],
+      intake(),
+      new Date("2026-12-22T20:59:00.000Z"),
+    );
+    expect(msgs.map((m) => m.message)).toEqual([
+      "Срок доработки истёк 22 декабря, 23:59 МСК (меньше часа назад) — отправить заявку нельзя",
     ]);
   });
 
@@ -354,6 +406,7 @@ describe("send checks", () => {
       const msgs = problemMessages(
         [{ code, ...(field ? { field } : {}) }],
         intake(),
+        NOW,
       );
       expect(msgs, code).toHaveLength(1);
       expect(msgs[0]!.message.length, code).toBeGreaterThan(0);
@@ -368,6 +421,7 @@ describe("send checks", () => {
         { code: "field-invalid", field: "title" },
       ],
       intake({ state: "closed" }),
+      NOW,
     );
     expect(msgs.map((m) => m.message)).toEqual([
       "Можно отправить не больше 3 устных докладов",

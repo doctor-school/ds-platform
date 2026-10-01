@@ -420,7 +420,12 @@ describe("CongressSection", () => {
           problems: [
             {
               code: "revision-closed",
-              params: { revisionDueAt: "2026-12-22T21:00:00.000Z" },
+              // The server's deadline passed 5 hours ago.
+              params: {
+                revisionDueAt: new Date(
+                  Date.now() - 5 * 3_600_000 - 60_000,
+                ).toISOString(),
+              },
             },
           ],
         },
@@ -433,7 +438,7 @@ describe("CongressSection", () => {
     const summary = await screen.findByRole("alert");
     expect(
       within(summary).getByText(
-        "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя",
+        /^Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(5 часов назад\) — отправить заявку нельзя$/,
       ),
     ).toBeInTheDocument();
   });
@@ -443,7 +448,10 @@ describe("CongressSection", () => {
       ...complete,
       status: "needs_revision",
       committeeComment: "Уточните цель",
-      revisionDueAt: "2025-12-22T21:00:00.000Z",
+      // The deadline passed three days and two hours ago.
+      revisionDueAt: new Date(
+        Date.now() - 3 * 86_400_000 - 2 * 3_600_000,
+      ).toISOString(),
     });
     window.history.replaceState(
       null,
@@ -455,7 +463,7 @@ describe("CongressSection", () => {
     // The canvas draws the line twice: in the committee box and as the
     // separate ⚠ warn notice of the detail.
     const line =
-      "Срок доработки истёк 22 декабря, 23:59 МСК — отправить заявку нельзя";
+      /^Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(3 дня назад\) — отправить заявку нельзя$/;
     const lines = await screen.findAllByText(line);
     expect(lines).toHaveLength(2);
     expect(

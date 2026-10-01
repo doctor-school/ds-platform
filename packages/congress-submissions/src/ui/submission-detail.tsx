@@ -207,7 +207,7 @@ export function SubmissionDetail({
         // again and shows where it stands now (046 EARS-9).
         onStale();
       } else if (e instanceof CongressSubmissionsError && e.problems.length) {
-        setServerErrors(problemMessages(e.problems, intake));
+        setServerErrors(problemMessages(e.problems, intake, now));
         setTried(true);
       } else if (e instanceof CongressSubmissionsError && e.status === 409) {
         onStale();

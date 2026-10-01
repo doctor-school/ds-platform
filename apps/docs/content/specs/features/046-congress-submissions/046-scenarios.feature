@@ -120,7 +120,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the section asks for the birth date before creating the draft
     When the participant enters 1987-04-23
     Then the birth date is stored on the account
-    And the poster is refused with "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса (23 апреля 2027)"
+    And the poster is refused with "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 40 лет."
     And oral talks and abstracts stay available
     When the participant corrects the birth date to 1987-04-24 and starts a poster
     Then a poster draft is created with the title, authors, goal and content fields and no file field
@@ -203,7 +203,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Given the author's oral talk is "На доработке" with the revision deadline 2027-02-20T00:00+03:00
     And the current time is 2027-02-20T00:00+03:00
     When the author opens the talk
-    Then it is read-only with "Срок доработки истёк — ждите решения программного комитета"
+    Then it is read-only with "Срок доработки истёк 19 февраля, 23:59 МСК (меньше часа назад) — отправить заявку нельзя"
     And an autosave or a send request reaching the API is refused and the status stays "На доработке"
     When a committee member sets "Отклонена" with a comment
     Then the status becomes "rejected" and the author receives the rejection letter

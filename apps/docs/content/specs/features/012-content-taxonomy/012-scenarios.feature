@@ -981,3 +981,45 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       And event_speakers itself no longer exists
       And legacy_speaker_id is absent from the event-expert admin contract
       And the deploy rollback floor guard and its deploy hook and the migration fence suite are gone from the tree
+
+  @EARS-25 @happy
+  Scenario: An editor adds an event kind in the admin
+    Given a platform_admin signed in to the admin
+    When the admin creates the event kind «Клинический разбор с пациентом» with «shown on Academy» set and publishes it
+    Then one retained event_kinds row exists with a system-generated slug
+    And the same row renders on the event-kind list and detail
+
+  @EARS-25 @failure
+  Scenario: A kind slug cannot be authored
+    When the admin submits an event-kind mutation carrying a slug
+    Then the mutation is rejected
+
+  @EARS-26 @happy
+  Scenario: Every event carries exactly one kind
+    When the admin creates an event with the published kind «вебинар»
+    Then the event references exactly that kind
+
+  @EARS-26 @failure
+  Scenario: An event without a valid kind is refused
+    When the admin saves an event with no kind, an unknown kind or a retired kind
+    Then the event contract rejects the write
+
+  @EARS-27 @happy
+  Scenario: The dictionary starts with the seed kinds
+    When the forward migration introducing event kinds has run
+    Then вебинар, разбор, подкаст, Doctor Club and офлайн-встреча are published with «shown on Academy» true
+    And конгресс is published with «shown on Academy» false
+    And every existing event references exactly one kind
+
+  @EARS-28 @happy
+  Scenario: A new kind reaches the public reads with no code change
+    Given the admin publishes a new event kind
+    When the public kind list is read
+    Then the new kind is listed as id, slug and title
+
+  @EARS-28 @failure
+  Scenario: A retired kind is no longer offered
+    Given the admin retires a kind through the signed lifecycle-impact preview
+    When the public kind list and the event-form kind selector are read
+    Then the retired kind is offered by neither
+    And the events that carry it keep their kind reference

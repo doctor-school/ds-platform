@@ -55,7 +55,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 
 **Filter (US-6, US-7, US-8, US-9):**
 
-1. The first facet row is the wave-1 pair — view and Будущие/Прошедшие. The second row carries the rest of REQ-138: format, kind, specialty (default «моя и смежные»), city for offline, «только с НМО», «бесплатно по Pul», name search.
+1. The first facet row is the wave-1 pair — view and Будущие/Прошедшие. The second row carries the rest of the doctor's set: format (online / offline / hybrid), kind (an open list editors extend), specialty (default «моя и смежные», changeable), city for offline, «только с НМО», direction, name search. There is no «бесплатно по Pul» facet — owner 2026-10-01: «"бесплатно по Pul" - это можно убрать, они все будут бесплатными для врачей».
 2. Applied facets stay visible with a reset; at 390 the panel collapses behind «Фильтры» with a count.
 3. An empty result names the condition that emptied it and proposes weakening it; an empty **specialty** offers adjacent areas instead.
 

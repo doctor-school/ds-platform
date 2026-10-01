@@ -18,7 +18,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And Feature 004's shared WebinarCard unit is in place
     And Feature 004 / #1050's shared MonthCalendarGrid and MonthDotGrid units are in place
     And the specialty «Травматология и ортопедия» exists in specialties_minzdrav
-    And that specialty has upcoming and past events of every format
+    And that specialty has upcoming and past events of every format and of every seed kind of the event-kind dictionary
 
   @EARS-1 @happy
   Scenario: The events screen renders inside 017's shell in the canvas composition order
@@ -47,12 +47,10 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And no rendered string on the card states who finances the event
 
     Examples:
-      | format         |
-      | webinar        |
-      | online-meeting |
-      | offline-meetup |
-      | congress       |
-      | podcast        |
+      | format  |
+      | online  |
+      | offline |
+      | hybrid  |
 
   @EARS-2 @happy
   Scenario: An offline meet-up carries its city and remaining seats everywhere it is rendered
@@ -144,7 +142,8 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     Given the viewport is 1440 wide
     When the doctor opens «События»
     Then the facet panel renders as a sidebar beside the feed body
-    And it offers format, kind, specialty, city, «только с НМО», «бесплатно по Pul» and name search
+    And it offers format, kind, specialty, city, «только с НМО», direction and name search
+    And it offers no «бесплатно по Pul» facet
     And the specialty facet defaults to «моя и смежные»
     When the doctor applies a format and a city
     Then both applied facets stay visible with the applied count and a working reset
@@ -208,6 +207,8 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     When the doctor switches the tense to «Прошедшие»
     Then the same card unit renders in its «прошло — есть запись» state
     And the card offers the recording and the published materials instead of a sign-up action
+    And the past events are grouped by month, newest first
+    And no separate archive page, tab or block below the feed is rendered
 
   @EARS-10 @failure
   Scenario: A past event with no recording renders without a dead link
@@ -281,7 +282,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
   Scenario: A podcast broadcast is an event of this feed rather than Academy noise
     Given an upcoming podcast broadcast in the doctor's specialty
     When the doctor opens «События»
-    Then it renders as an event card of format podcast
+    Then it renders as an event card of kind «подкаст»
     And no Academy podcast episode from the Academy media surface is listed beside it
 
   @EARS-15 @happy
@@ -302,3 +303,51 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     When the cross-front ownership gate compares it with 019-design section 1.1
     Then the proposal is rejected before production code is written
     And a different host response envelope alone is not treated as permission to duplicate the shared core
+
+  @EARS-14 @failure
+  Scenario: A lesson is not an event of this feed
+    Given a lesson published to the specialty feed of «Травматология и ортопедия»
+    When the doctor opens «События»
+    Then the lesson appears in no block of the events feed
+
+  @EARS-16 @happy
+  Scenario: The doctor storefront reads every published event of every kind
+    Given a published congress linked to no Academy project
+    And a published offline meet-up whose kind is not shown on the Academy
+    And a published webinar linked to an Academy school
+    When the doctor opens «События»
+    Then all three events are listed in the doctor's targeted feed
+    And the selection was made by the doctor read contract on the server
+
+  @EARS-16 @failure
+  Scenario: The doctor feed never hides delivered events in the client
+    When the doctor read contract answers a feed request
+    Then every event in the response is rendered or excluded only by the applied facets in the URL
+    And no event is delivered to the client and hidden there
+
+  @EARS-17 @happy
+  Scenario: A kind added by an editor appears without a code change
+    Given an editor publishes the kind «Клинический разбор с пациентом» in the admin
+    And a published event of that kind in the doctor's specialty
+    When the doctor opens «События»
+    Then the kind facet offers «Клинический разбор с пациентом»
+    And the event card carries that kind label without breaking the card or the panel
+
+  @EARS-17 @failure
+  Scenario: A retired kind is no longer offered
+    Given an editor retires the kind «Doctor Club»
+    When the doctor opens the facet panel
+    Then «Doctor Club» is not offered as a kind facet value
+    And the panel holds 3 and 9 published kinds without breaking the screen grid
+
+  @EARS-18 @happy
+  Scenario: Both storefronts mount one events feed module
+    When the doctor storefront and the Academy render their events feed
+    Then both render the same shared module
+    And they differ only in the content set, the filter set and the header copy listed in «Differences between storefronts»
+
+  @EARS-18 @failure
+  Scenario: An uncited storefront difference is a defect
+    Given a build in which one storefront's events feed differs from the other outside the three cited rows
+    When the cross-front reuse review runs
+    Then the difference is reported as a defect

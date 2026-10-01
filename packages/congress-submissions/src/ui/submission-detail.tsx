@@ -7,12 +7,19 @@ import {
   type CongressSubmission,
   type CongressSubmissionDraftContent,
   type CongressSubmissionKindIntake,
+  congressKindMarksPresenting,
 } from "@ds/schemas";
 import { Alert } from "@ds/design-system/alert";
 import { Button } from "@ds/design-system/button";
 import { Checkbox } from "@ds/design-system/checkbox";
 import { Container } from "@ds/design-system/container";
+import {
+  FormError as DsFormError,
+  FormErrorSummary,
+  FormItem,
+} from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
+import { Label } from "@ds/design-system/label";
 import { Link } from "@ds/design-system/link";
 import { Textarea } from "@ds/design-system/textarea";
 import { cn } from "@ds/design-system/lib/utils";
@@ -20,6 +27,7 @@ import { cn } from "@ds/design-system/lib/utils";
 import {
   CongressSubmissionsError,
   deleteDraft,
+  putBirthDate,
   saveDraft,
   sendSubmission,
   withdrawSubmission,
@@ -27,15 +35,17 @@ import {
 import { COPY, CONGRESS_SUBMISSION_CONSENT_HREF, KIND_COPY } from "../copy";
 import {
   type FormError,
-  ORAL_FIELDS,
   actionsFor,
   closedText,
   dateLine,
   draftErrors,
   editable as isEditable,
+  formFields,
   kindSendable,
+  kindStartable,
   localDate,
   problemMessages,
+  readBirthDate,
   revisionView,
   summaryTitle,
   localTime,
@@ -47,6 +57,7 @@ import {
   withUids,
   withoutUids,
 } from "./authors-editor";
+import { BirthField } from "./birth-field";
 import { PosterBand } from "./poster-band";
 import { useAutosave } from "./use-autosave";
 
@@ -54,9 +65,12 @@ import { useAutosave } from "./use-autosave";
  * One open submission (canvas artboard «d-lk-congress · заявка»): the poster
  * band with its kind, topic and status plate, the committee comment, the
  * notices, the detail actions with the inline withdrawal and deletion asks,
- * the error summary, the oral form — editable for a draft of a sendable kind
- * or a revision before its deadline, read-only otherwise — and the sticky
- * send panel with the autosave line and the send confirmation (046 EARS-7…16).
+ * the error summary, the kind's form (oral talk or poster) — editable for a
+ * draft of a sendable kind or a revision before its deadline, read-only
+ * otherwise — and the sticky send panel with the autosave line and the send
+ * confirmation (046 EARS-7…20). The first poster draft carries the birth-date
+ * field for correction (EARS-19); a poster draft of a holder at or above the
+ * kind's age limit reads as closed with the refusal (EARS-20).
  */
 
 export interface SubmissionDetailProps {
@@ -67,6 +81,21 @@ export interface SubmissionDetailProps {
   /** The submission was sent in this visit — the sent notice shows. */
   justSent: boolean;
   now: Date;
+  /** The account's birth date (EARS-19). */
+  birthDate: string | null;
+  /**
+   * The poster flow shows the birth-date field here: a poster draft while no
+   * poster of the holder has left the draft state (canvas `askBirth`).
+   */
+  askBirth: boolean;
+  /** The birth-date hint with the kind's age rule. */
+  birthHint: string;
+  /** The holder's age refusal for this kind, or `null` (EARS-20). */
+  ageRefusal: string | null;
+  /** The Moscow day a birth date may not pass (the API's own check). */
+  today: string;
+  /** The holder wrote a new birth date. */
+  onBirthDate: (birthDate: string) => void;
   /** The api returned a newer copy (autosave, take-back, withdrawal). */
   onReplace: (s: CongressSubmission) => void;
   onSent: (s: CongressSubmission) => void;
@@ -88,11 +117,6 @@ const toContent = (d: Draft): CongressSubmissionDraftContent => ({
   body: d.body,
 });
 
-const LIMIT: Record<string, number> = {
-  goal: CONGRESS_SUBMISSION_LIMITS.oralGoal,
-  summary: CONGRESS_SUBMISSION_LIMITS.oralSummary,
-};
-
 /** Keep a value inside its code-point budget so every autosave stays valid. */
 const clip = (v: string, max: number) => {
   const cps = Array.from(v);
@@ -106,17 +130,33 @@ export function SubmissionDetail({
   consentRequired,
   justSent,
   now,
+  birthDate,
+  askBirth,
+  birthHint,
+  ageRefusal,
+  today,
+  onBirthDate,
   onReplace,
   onSent,
   onRemoved,
   onStale,
   onClose,
 }: SubmissionDetailProps) {
-  const canEdit = isEditable(s, intake, now);
+  // A draft of a holder at or above the kind's age limit cannot become a
+  // submission: read-only with the refusal, like the canvas `over40` (EARS-20).
+  const ageLocked = s.status === "draft" && ageRefusal !== null;
+  const canEdit = isEditable(s, intake, now) && !ageLocked;
   // A draft whose kind is not open: why it cannot be sent, and no active send
   // (046 EARS-10) — still editable before the opening, read-only after closing.
-  const readDraft = s.status === "draft" && !kindSendable(intake);
+  const readDraft =
+    s.status === "draft" && (!kindSendable(intake) || ageLocked);
   const sendable = canEdit && !readDraft;
+  const blockedText = ageLocked ? ageRefusal : closedText(intake);
+  // The birth date stays correctable in the first poster draft, the age-locked
+  // one included — a mistyped date must not lock the holder out (EARS-19).
+  const showBirth = askBirth && s.status === "draft" && kindStartable(intake);
+  const fields = formFields(s.kind);
+  const speakerPick = congressKindMarksPresenting(s.kind);
   const rev = revisionView(s, now);
   const kind = KIND_COPY[s.kind];
 
@@ -132,6 +172,22 @@ export function SubmissionDetail({
   const [busy, setBusy] = React.useState(false);
   const [sendFailed, setSendFailed] = React.useState(false);
   const [ask, setAsk] = React.useState<"withdraw" | "delete" | null>(null);
+  const [birthValue, setBirthValue] = React.useState(birthDate ?? "");
+  const [birthRefused, setBirthRefused] = React.useState(false);
+
+  /** Write the date control's day when it is a real day the account does not hold yet. */
+  async function saveBirth(): Promise<boolean> {
+    const iso = readBirthDate(birthValue, today);
+    if (!iso) return false;
+    if (iso === birthDate) return true;
+    try {
+      onBirthDate((await putBirthDate(iso)).birthDate);
+      return true;
+    } catch {
+      setBirthRefused(true);
+      return false;
+    }
+  }
 
   const autosave = useAutosave<CongressSubmissionDraftContent>(
     async (content, { keepalive }) => {
@@ -168,6 +224,11 @@ export function SubmissionDetail({
     ? draftErrors(
         { title: draft.title, authors: draft.authors, body: draft.body },
         { consentRequired, consentChecked: consent },
+        {
+          kind: s.kind,
+          ...(showBirth ? { birthValue } : {}),
+          today,
+        },
       )
     : [];
   const shown: FormError[] = [];
@@ -181,11 +242,23 @@ export function SubmissionDetail({
   }
   const errOf = (key: string) =>
     shown.find((e) => e.key === key)?.message ?? null;
+  const birthError = errOf("birth") ?? (birthRefused ? COPY.errBirth : null);
 
   async function onSubmit() {
     await autosave.flush();
     setSendFailed(false);
     if (localErrors.length) {
+      setTried(true);
+      return;
+    }
+    if (showBirth && !(await saveBirth())) {
+      setServerErrors(
+        problemMessages(
+          [{ code: "field-invalid", field: "birthDate" }],
+          intake,
+          now,
+        ),
+      );
       setTried(true);
       return;
     }
@@ -255,7 +328,7 @@ export function SubmissionDetail({
     }
   }
 
-  const acts = actionsFor(s, intake, now);
+  const acts = actionsFor(s, intake, now, ageRefusal);
   const detailActions = [
     ...(acts.primary?.action === "take-back" ? [acts.primary] : []),
     ...acts.secondary,
@@ -286,22 +359,27 @@ export function SubmissionDetail({
     </div>
   );
 
-  const labelClass = canEdit
-    ? "text-sm font-bold text-foreground"
-    : "text-caption font-bold text-muted-foreground";
   const roText = (v: string) => (
     <div className="max-w-prose whitespace-pre-wrap text-base leading-relaxed text-foreground">
       {v.trim() ? v : "—"}
     </div>
   );
-  const fieldError = (key: string) => {
-    const e = errOf(key);
-    return e ? (
-      <p className="mt-1.5 text-caption font-semibold text-destructive-text">
-        {e}
-      </p>
-    ) : null;
-  };
+  // Field errors and the error summary are the DS form primitives (ADR-0013
+  // §7): `FormError` owns the inline ⚠ tone, `FormErrorSummary` links each
+  // message to its field. A refusal tied to no field (limit, deadline, closed
+  // intake) is the operation-level `FormError` banner.
+  // The field's error line is referenced by its control's `aria-describedby`
+  // (`errId`), so assistive tech reads it with the field, not only as an alert.
+  const errId = (controlId: string) => `${controlId}-error`;
+  const describedBy = (key: string, controlId: string) =>
+    errOf(key) ? errId(controlId) : undefined;
+  const fieldError = (key: string, controlId: string) => (
+    <DsFormError id={errId(controlId)}>{errOf(key)}</DsFormError>
+  );
+  const summaryErrors = shown.flatMap((e) =>
+    e.focusId ? [{ fieldId: e.focusId, message: e.message }] : [],
+  );
+  const operationErrors = shown.filter((e) => !e.focusId);
 
   return (
     <>
@@ -365,7 +443,7 @@ export function SubmissionDetail({
             {justSent ? (
               <Alert variant="success">{COPY.sentNotice}</Alert>
             ) : readDraft ? (
-              <Alert variant="warn">{closedText(intake)}</Alert>
+              <Alert variant="warn">{blockedText}</Alert>
             ) : s.status === "needs_revision" && !rev.open ? (
               <Alert variant="warn">{rev.text}</Alert>
             ) : s.status === "withdrawn" ? (
@@ -418,42 +496,23 @@ export function SubmissionDetail({
               />
             ) : null}
 
-            {shown.length ? (
-              <div
-                role="alert"
-                data-screen-label="d-lk-congress · сводка ошибок"
-                className="-mx-4 bg-destructive-tint px-4 py-4.5 layout:mx-0 layout:px-5.5"
-              >
-                <div className="text-sm font-bold text-foreground">
-                  {summaryTitle(shown.length)}
-                </div>
-                <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5">
-                  {shown.map((e) => (
-                    <li
-                      key={e.message}
-                      className="text-body-compact text-destructive-text"
-                    >
-                      {e.focusId ? (
-                        <Link asChild tone="danger" variant="inline">
-                          <button
-                            type="button"
-                            className="text-left"
-                            onClick={() =>
-                              document.getElementById(e.focusId!)?.focus()
-                            }
-                          >
-                            {e.message}
-                          </button>
-                        </Link>
-                      ) : (
-                        <span className="font-bold">{e.message}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-2 text-xs text-muted-foreground">
+            {operationErrors.map((e) => (
+              <DsFormError key={e.message} variant="banner">
+                {e.message}
+              </DsFormError>
+            ))}
+            {summaryErrors.length || operationErrors.length ? (
+              <div data-screen-label="d-lk-congress · сводка ошибок">
+                {summaryErrors.length ? (
+                  <FormErrorSummary
+                    title={summaryTitle(summaryErrors.length)}
+                    errors={summaryErrors}
+                  />
+                ) : null}
+                {/* Any failed send keeps the text (046-design-prompt-ru §8). */}
+                <p className="mt-2 text-xs text-muted-foreground">
                   {COPY.summarySaved}
-                </div>
+                </p>
               </div>
             ) : null}
 
@@ -462,13 +521,8 @@ export function SubmissionDetail({
                 COPY.sectionAbout,
                 s.kind === "oral" ? COPY.onSite : undefined,
               )}
-              <div>
-                <label
-                  htmlFor="in-topic"
-                  className={cn("mb-2 block", labelClass)}
-                >
-                  {COPY.topic}
-                </label>
+              <FormItem>
+                <Label htmlFor="in-topic">{COPY.topic}</Label>
                 {canEdit ? (
                   <Input
                     id="in-topic"
@@ -476,6 +530,7 @@ export function SubmissionDetail({
                     maxLength={CONGRESS_SUBMISSION_LIMITS.title}
                     placeholder={COPY.topicPlaceholder}
                     aria-invalid={errOf("title") ? true : undefined}
+                    aria-describedby={describedBy("title", "in-topic")}
                     onChange={(e) => {
                       const v = e.target.value;
                       update((d) => ({ ...d, title: v }));
@@ -485,34 +540,46 @@ export function SubmissionDetail({
                 ) : (
                   roText(draft.title)
                 )}
-                {fieldError("title")}
-              </div>
+                {fieldError("title", "in-topic")}
+              </FormItem>
+
+              {showBirth ? (
+                <BirthField
+                  value={birthValue}
+                  max={today}
+                  hint={birthHint}
+                  error={birthError}
+                  onChange={(v) => {
+                    setBirthValue(v);
+                    setBirthRefused(false);
+                    setServerErrors([]);
+                    setConfirming(false);
+                  }}
+                  onBlur={() => void saveBirth()}
+                />
+              ) : null}
 
               {sectionHead(
                 COPY.sectionAuthors,
-                s.kind === "oral" ? COPY.pickSpeaker : undefined,
+                speakerPick ? COPY.pickSpeaker : COPY.authorOrder,
               )}
               <AuthorsEditor
                 authors={draft.authors}
                 editable={canEdit}
                 tried={tried}
                 error={errOf("authors")}
+                speakerPick={speakerPick}
                 onChange={(authors) => update((d) => ({ ...d, authors }))}
                 onBlur={flush}
               />
 
               {sectionHead(COPY.sectionContent)}
-              {ORAL_FIELDS.map((f) => {
+              {fields.map((f) => {
                 const v = draft.body[f.key] ?? "";
-                const max = LIMIT[f.key]!;
+                const max = f.max;
                 return (
-                  <div key={f.key}>
-                    <label
-                      htmlFor={`in-${f.key}`}
-                      className={cn("mb-2 block", labelClass)}
-                    >
-                      {f.label}
-                    </label>
+                  <FormItem key={f.key}>
+                    <Label htmlFor={`in-${f.key}`}>{f.label}</Label>
                     {canEdit ? (
                       <Textarea
                         id={`in-${f.key}`}
@@ -522,6 +589,7 @@ export function SubmissionDetail({
                         maxLength={max}
                         showCounter={Array.from(v).length >= max * 0.9}
                         aria-invalid={errOf(f.key) ? true : undefined}
+                        aria-describedby={describedBy(f.key, `in-${f.key}`)}
                         onChange={(e) => {
                           const nv = clip(e.target.value, max);
                           update((d) => ({
@@ -534,8 +602,8 @@ export function SubmissionDetail({
                     ) : (
                       roText(v)
                     )}
-                    {fieldError(f.key)}
-                  </div>
+                    {fieldError(f.key, `in-${f.key}`)}
+                  </FormItem>
                 );
               })}
 
@@ -565,11 +633,9 @@ export function SubmissionDetail({
                         </Link>
                       </span>
                     </Checkbox>
-                    {errOf("consent") ? (
-                      <p className="ml-8 mt-1.5 text-caption font-semibold text-destructive-text">
-                        {errOf("consent")}
-                      </p>
-                    ) : null}
+                    <DsFormError className="ml-8 mt-1.5">
+                      {errOf("consent")}
+                    </DsFormError>
                   </div>
                 </>
               ) : null}
@@ -628,7 +694,7 @@ export function SubmissionDetail({
                         ) : null}
                         {readDraft ? (
                           <span className="text-caption text-muted-foreground">
-                            {closedText(intake).split(" — ")[0]}
+                            {blockedText.split(" — ")[0]}
                           </span>
                         ) : null}
                         {sendFailed ? (

@@ -142,6 +142,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         submitLimit?: number | null;
       },
       startsAt = "2027-04-23T09:00:00.000Z",
+      poster: { maxAgeYears: number | null } | null = null,
     ): Promise<string> {
       const id = randomUUID();
       createdEventIds.push(id);
@@ -166,6 +167,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
          VALUES ($1, 'oral', $2, $3, $4)`,
         [id, oral.opensAt, oral.closesAt, oral.submitLimit ?? null],
       );
+      if (poster) {
+        await pool.query(
+          `INSERT INTO congress_submission_kind_settings
+             (event_id, kind, opens_at, closes_at, submit_limit, max_age_years)
+           VALUES ($1, 'poster', $2, $3, NULL, $4)`,
+          [id, oral.opensAt, oral.closesAt, poster.maxAgeYears],
+        );
+      }
       return id;
     }
 
@@ -440,9 +449,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const d = await doctor("sub-kind-na");
       const eventId = await congress(openWindow());
       await register(d, eventId);
-      const poster = await create(d, eventId, "poster");
-      expect(poster.statusCode).toBe(422);
-      expect(codes(poster)).toEqual(["kind-not-available"]);
+      const abstract = await create(d, eventId, "abstract");
+      expect(abstract.statusCode).toBe(422);
+      expect(codes(abstract)).toEqual(["kind-not-available"]);
     });
 
     it("EARS-7: an autosave stores incomplete content, enforces maximum lengths, and is refused on a submitted submission", async () => {
@@ -1070,6 +1079,224 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(refused.statusCode).toBe(409);
       expect(codes(refused)).toEqual(["status-conflict"]);
       expect(await statusOf(sent)).toBe("submitted");
+    });
+
+    // ------------------------------------------------------------------ V-7
+
+    const putBirthDate = (headers: Record<string, string>, payload: unknown) =>
+      app.inject({
+        method: "PUT",
+        url: "/v1/me/birth-date",
+        headers,
+        payload,
+      });
+
+    const birthDateOf = async (userId: string) => {
+      const { rows } = await pool.query<{ birth_date: string | null }>(
+        "SELECT to_char(birth_date, 'YYYY-MM-DD') AS birth_date FROM users WHERE id = $1",
+        [userId],
+      );
+      return rows[0]!.birth_date;
+    };
+
+    const completePoster = {
+      title: "Ревизионное эндопротезирование",
+      authors: completeOral.authors,
+      body: { goal: "Показать результаты.", content: "Содержание постера." },
+    };
+
+    const posterCongress = (maxAgeYears: number | null = 40) =>
+      congress(openWindow(), "2027-04-23T09:00:00.000Z", { maxAgeYears });
+
+    it("046 EARS-19: the holder writes the birth date through PUT /v1/me/birth-date, it is validated, and the section shows it back to them", async () => {
+      const d = await doctor("sub-birth");
+      const eventId = await posterCongress();
+      expect((await section(d, eventId)).birthDate).toBeNull();
+
+      const ok = await putBirthDate(d.headers, { birthDate: "1987-04-24" });
+      expect(ok.statusCode, ok.payload).toBe(200);
+      expect(ok.json()).toEqual({ birthDate: "1987-04-24" });
+      expect(ok.headers["cache-control"]).toBe("no-store");
+      expect(await birthDateOf(d.userId)).toBe("1987-04-24");
+      expect((await section(d, eventId)).birthDate).toBe("1987-04-24");
+
+      // Corrected by the holder — the account keeps one value.
+      expect(
+        (await putBirthDate(d.headers, { birthDate: "1987-04-23" })).statusCode,
+      ).toBe(200);
+      expect(await birthDateOf(d.userId)).toBe("1987-04-23");
+
+      for (const birthDate of [
+        "1987-02-30",
+        "24.04.1987",
+        "1899-12-31",
+        "2999-01-01",
+        null,
+      ]) {
+        const bad = await putBirthDate(d.headers, { birthDate });
+        expect(bad.statusCode, String(birthDate)).toBe(400);
+      }
+      expect(
+        (await putBirthDate(d.headers, { birthDate: "1987-04-24", x: 1 }))
+          .statusCode,
+      ).toBe(400);
+      expect(await birthDateOf(d.userId)).toBe("1987-04-23");
+    });
+
+    it("046 EARS-19: a guest cannot write a birth date", async () => {
+      const guest = await putBirthDate(device, { birthDate: "1987-04-24" });
+      expect(guest.statusCode).toBe(401);
+    });
+
+    it("046 EARS-19: a poster draft is created without a birth date; its send names the missing birth date until it is stored", async () => {
+      const d = await doctor("sub-poster-nobd");
+      const eventId = await posterCongress();
+      await register(d, eventId);
+
+      const created = await create(d, eventId, "poster");
+      expect(created.statusCode, created.payload).toBe(201);
+      const id = CongressSubmissionSchema.parse(created.json()).id;
+      expect((await autosave(d, id, completePoster)).statusCode).toBe(200);
+
+      const refused = await send(d, id);
+      expect(refused.statusCode).toBe(422);
+      expect(CongressSubmissionRefusalSchema.parse(refused.json())).toEqual({
+        problems: [{ code: "field-invalid", field: "birthDate" }],
+      });
+      expect(await statusOf(id)).toBe("draft");
+
+      await putBirthDate(d.headers, { birthDate: "1987-04-24" });
+      const sent = await send(d, id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+    });
+
+    it("046 EARS-18: a poster has no presenting author — it is not set at creation, and a poster without the holder's row sends", async () => {
+      const d = await doctor("sub-poster-nopresent");
+      const eventId = await posterCongress();
+      await register(d, eventId);
+      await putBirthDate(d.headers, { birthDate: "1990-01-01" });
+      const poster = CongressSubmissionSchema.parse(
+        (await create(d, eventId, "poster")).json(),
+      );
+      expect(poster.authors.map((a) => a.presenting ?? false)).toEqual([
+        false,
+      ]);
+
+      const coAuthor = {
+        surname: "Петрова",
+        firstName: "Анна",
+        workplace: "НМИЦ ТО им. Н. Н. Приорова",
+      };
+      expect(
+        (
+          await autosave(d, poster.id, {
+            ...completePoster,
+            authors: [coAuthor],
+          })
+        ).statusCode,
+      ).toBe(200);
+      const sent = await send(d, poster.id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+      expect(
+        CongressSubmissionSchema.parse(sent.json()).authors.map(
+          (a) => a.presenting ?? false,
+        ),
+      ).toEqual([false]);
+    });
+
+    it("046 EARS-20: born 1987-04-23 is refused a poster for the 2027-04-23 congress with the limit, the start day and the age; 1987-04-24 is allowed; oral stays available", async () => {
+      const d = await doctor("sub-poster-age");
+      const eventId = await posterCongress(40);
+      await register(d, eventId);
+      await putBirthDate(d.headers, { birthDate: "1987-04-23" });
+
+      const refused = await create(d, eventId, "poster");
+      expect(refused.statusCode).toBe(422);
+      expect(CongressSubmissionRefusalSchema.parse(refused.json())).toEqual({
+        problems: [
+          {
+            code: "age-limit",
+            params: { maxAgeYears: 40, eventStartDate: "2027-04-23", age: 40 },
+          },
+        ],
+      });
+      expect((await section(d, eventId)).submissions).toEqual([]);
+      expect((await create(d, eventId, "oral")).statusCode).toBe(201);
+
+      await putBirthDate(d.headers, { birthDate: "1987-04-24" });
+      const created = await create(d, eventId, "poster");
+      expect(created.statusCode).toBe(201);
+      const poster = CongressSubmissionSchema.parse(created.json());
+      expect(poster.kind).toBe("poster");
+      const kinds = (await section(d, eventId)).kinds;
+      expect(kinds.find((k) => k.kind === "poster")).toMatchObject({
+        offered: true,
+        maxAgeYears: 40,
+      });
+      expect(kinds.find((k) => k.kind === "oral")?.maxAgeYears).toBeNull();
+    });
+
+    it("046 EARS-20: the age rule is checked again at send — a birth date corrected over the limit refuses it and changes nothing", async () => {
+      const d = await doctor("sub-poster-send");
+      const eventId = await posterCongress(40);
+      await register(d, eventId);
+      await putBirthDate(d.headers, { birthDate: "1987-04-24" });
+      const created = await create(d, eventId, "poster");
+      const id = CongressSubmissionSchema.parse(created.json()).id;
+      expect((await autosave(d, id, completePoster)).statusCode).toBe(200);
+
+      await putBirthDate(d.headers, { birthDate: "1987-04-23" });
+      const refused = await send(d, id);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json()).problems,
+      ).toEqual([
+        {
+          code: "age-limit",
+          params: { maxAgeYears: 40, eventStartDate: "2027-04-23", age: 40 },
+        },
+      ]);
+      expect(await statusOf(id)).toBe("draft");
+
+      await putBirthDate(d.headers, { birthDate: "1987-04-24" });
+      const sent = await send(d, id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+      expect(CongressSubmissionSchema.parse(sent.json())).toMatchObject({
+        status: "submitted",
+        body: completePoster.body,
+      });
+    });
+
+    it("046 EARS-18: a poster send names its missing goal and content; a file field is not accepted", async () => {
+      const d = await doctor("sub-poster-fields");
+      const eventId = await posterCongress(40);
+      await register(d, eventId);
+      await putBirthDate(d.headers, { birthDate: "1990-01-01" });
+      const id = CongressSubmissionSchema.parse(
+        (await create(d, eventId, "poster")).json(),
+      ).id;
+      expect(
+        (await autosave(d, id, { ...completePoster, body: { file: "p.pdf" } }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await autosave(d, id, { ...completePoster, body: {} })).statusCode,
+      ).toBe(200);
+      const refused = await send(d, id);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json())
+          .problems.map((p) => p.field)
+          .sort(),
+      ).toEqual(["body.content", "body.goal"]);
+    });
+
+    it("046 EARS-20: a kind with no age limit has no age rule", async () => {
+      const d = await doctor("sub-poster-nolimit");
+      const eventId = await posterCongress(null);
+      await register(d, eventId);
+      await putBirthDate(d.headers, { birthDate: "1950-01-01" });
+      expect((await create(d, eventId, "poster")).statusCode).toBe(201);
     });
   },
 );

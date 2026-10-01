@@ -7,7 +7,9 @@ import {
   type CongressSubmissionDraftAuthor,
 } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
+import { FormError, FormItem } from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
+import { Label } from "@ds/design-system/label";
 import { Link } from "@ds/design-system/link";
 import { Radio } from "@ds/design-system/radio";
 import { cn } from "@ds/design-system/lib/utils";
@@ -15,8 +17,9 @@ import { cn } from "@ds/design-system/lib/utils";
 import { COPY } from "../copy";
 
 /**
- * The authors editor of the oral form (046 EARS-8; canvas block `isAuthors`):
- * numbered rows with the name and workplace, the one «Докладчик» choice, and —
+ * The authors editor of the oral and poster forms (046 EARS-8, EARS-18; canvas
+ * block `isAuthors`): numbered rows with the name and workplace, the one
+ * «Докладчик» choice of an oral talk, and —
  * while editing — «Изменить/Готово», reorder ↑ ↓ and remove ✕, with the four
  * name inputs unfolding under a row. The first author is the account holder
  * the API pre-filled from the congress registration.
@@ -51,6 +54,11 @@ export interface AuthorsEditorProps {
   /** The send was tried — incomplete rows unfold and missing inputs go red. */
   tried: boolean;
   error: string | null;
+  /**
+   * The «Докладчик» choice — drawn for an oral talk only (canvas `showSp`);
+   * a poster lists its authors in publication order.
+   */
+  speakerPick?: boolean;
   onChange: (next: AuthorRow[]) => void;
   onBlur: () => void;
 }
@@ -60,6 +68,7 @@ export function AuthorsEditor({
   editable,
   tried,
   error,
+  speakerPick = true,
   onChange,
   onBlur,
 }: AuthorsEditorProps) {
@@ -160,8 +169,9 @@ export function AuthorsEditor({
                     {(a.workplace ?? "").trim() || COPY.noWorkplace}
                   </div>
                 </div>
-                {editable || a.presenting ? (
+                {speakerPick && (editable || a.presenting) ? (
                   <Radio
+                    id={`in-a${i}-sp`}
                     name="congress-speaker"
                     checked={!!a.presenting}
                     disabled={!editable}
@@ -239,17 +249,11 @@ export function AuthorsEditor({
                       f.key !== "patronymic" &&
                       blank(a[f.key] as string);
                     return (
-                      <label
+                      <FormItem
                         key={f.key}
-                        htmlFor={id}
-                        className={cn(
-                          "block min-w-0",
-                          f.wide && "layout:col-span-3",
-                        )}
+                        className={cn("min-w-0", f.wide && "layout:col-span-3")}
                       >
-                        <span className="mb-1.5 block text-caption font-semibold text-foreground">
-                          {f.label}
-                        </span>
+                        <Label htmlFor={id}>{f.label}</Label>
                         <Input
                           id={id}
                           value={(a[f.key] as string | undefined) ?? ""}
@@ -258,7 +262,7 @@ export function AuthorsEditor({
                           onChange={(e) => set(i, f.key, e.target.value)}
                           onBlur={onBlur}
                         />
-                      </label>
+                      </FormItem>
                     );
                   })}
                 </div>
@@ -274,11 +278,7 @@ export function AuthorsEditor({
           </button>
         </Link>
       ) : null}
-      {error ? (
-        <p className="mt-2 text-caption font-semibold text-destructive-text">
-          {error}
-        </p>
-      ) : null}
+      <FormError className="mt-2">{error}</FormError>
     </div>
   );
 }

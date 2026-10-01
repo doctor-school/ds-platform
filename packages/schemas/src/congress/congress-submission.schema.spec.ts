@@ -8,7 +8,13 @@ import {
   CONGRESS_SUBMISSION_LIMITS,
   CONGRESS_SUBMISSION_STATUSES,
   CongressSubmissionDraftContentSchema,
+  CongressAgeLimitParamsSchema,
+  CongressBirthDateRequestSchema,
   CongressSubmissionProblemSchema,
+  congressAgeOnDay,
+  congressAgeLimitParams,
+  congressKindMarksPresenting,
+  parseCongressDraftBody,
   congressTextLength,
   countsTowardCongressLimit,
   parseCongressSendContent,
@@ -176,5 +182,95 @@ describe("046 congress submissions — oral send and draft schemas", () => {
     expect(CONGRESS_SUBMISSION_CONSENT_PURPOSES).toEqual([
       "congress-submission-personal-data",
     ]);
+  });
+});
+
+const completePoster = () => ({
+  title: "Ревизионное эндопротезирование",
+  authors: [author({ presenting: true })],
+  body: { goal: "Показать результаты.", content: "Содержание постера." },
+});
+
+const posterFields = (content: unknown) => {
+  const result = parseCongressSendContent("poster", content);
+  return result.ok ? [] : result.problems.map((p) => p.field);
+};
+
+describe("046 congress submissions — posters, birth date and the age rule", () => {
+  it("046 EARS-18: the poster send schema takes the title, the authors without a presenting mark, the goal and the content", () => {
+    const result = parseCongressSendContent("poster", completePoster());
+    expect(result.ok).toBe(true);
+    // A stray presenting mark is dropped, never stored.
+    expect(
+      result.ok && result.content.authors.map((a) => a.presenting),
+    ).toEqual([false]);
+    expect(posterFields({ ...completePoster(), body: { goal: "g" } })).toEqual([
+      "body.content",
+    ]);
+    expect(
+      posterFields({
+        ...completePoster(),
+        authors: [author(), author({ surname: "Петров" })],
+      }),
+    ).toEqual([]);
+    expect(posterFields({ ...completePoster(), authors: [] })).toEqual([
+      "authors",
+    ]);
+    expect(congressKindMarksPresenting("poster")).toBe(false);
+    expect(congressKindMarksPresenting("oral")).toBe(true);
+  });
+
+  it("046 EARS-18: the goal and the content are refused over their 046-design limits (1000 / 3000)", () => {
+    expect(CONGRESS_SUBMISSION_LIMITS.posterGoal).toBe(1000);
+    expect(CONGRESS_SUBMISSION_LIMITS.posterContent).toBe(3000);
+    expect(
+      posterFields({
+        ...completePoster(),
+        body: { goal: "ц".repeat(1001), content: "с".repeat(3001) },
+      }),
+    ).toEqual(["body.goal", "body.content"]);
+    expect(
+      posterFields({
+        ...completePoster(),
+        body: { goal: "ц".repeat(1000), content: "с".repeat(3000) },
+      }),
+    ).toEqual([]);
+  });
+
+  it("046 EARS-18: no file is accepted — the poster draft body holds only the goal and the content", () => {
+    expect(parseCongressDraftBody("poster", { goal: "g" })).toEqual({
+      goal: "g",
+    });
+    expect(parseCongressDraftBody("poster", { file: "x.pdf" })).toBeNull();
+    expect(parseCongressDraftBody("poster", { summary: "s" })).toBeNull();
+  });
+
+  it("046 EARS-19: the birth date is a real calendar day", () => {
+    const ok = (birthDate: unknown) =>
+      CongressBirthDateRequestSchema.safeParse({ birthDate }).success;
+    expect(ok("1987-04-24")).toBe(true);
+    expect(ok("1987-02-30")).toBe(false);
+    expect(ok("24.04.1987")).toBe(false);
+    expect(ok("1899-12-31")).toBe(false);
+    expect(ok(null)).toBe(false);
+  });
+
+  it("046 EARS-20: the age is the full years on the event's start day — a birthday on that day counts", () => {
+    expect(congressAgeOnDay("1987-04-23", "2027-04-23")).toBe(40);
+    expect(congressAgeOnDay("1987-04-24", "2027-04-23")).toBe(39);
+    expect(congressAgeOnDay("1988-02-29", "2027-02-28")).toBe(38);
+    expect(congressAgeOnDay("1988-02-29", "2027-03-01")).toBe(39);
+  });
+
+  it("046 EARS-20: the age-limit params carry the limit, the event start day and the age", () => {
+    const params = { maxAgeYears: 40, eventStartDate: "2027-04-23", age: 40 };
+    expect(CongressAgeLimitParamsSchema.parse(params)).toEqual(params);
+    expect(
+      CongressSubmissionProblemSchema.safeParse({ code: "age-limit", params })
+        .success,
+    ).toBe(true);
+    expect(congressAgeLimitParams(params)).toEqual(params);
+    expect(congressAgeLimitParams(undefined)).toBeNull();
+    expect(congressAgeLimitParams({ maxAgeYears: 40 })).toBeNull();
   });
 });

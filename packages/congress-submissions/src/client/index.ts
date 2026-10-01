@@ -1,4 +1,5 @@
 import {
+  type CongressBirthDateResponse,
   type CongressSubmission,
   type CongressSubmissionDraftContent,
   type CongressSubmissionKind,
@@ -10,7 +11,8 @@ import {
 } from "@ds/schemas";
 
 /**
- * Same-origin client of `/v1/me/congress-submissions*` (046-design «Send
+ * Same-origin client of `/v1/me/congress-submissions*` and the poster flow's
+ * `/v1/me/birth-date` (046-design «Send
  * cascade»). Relative paths with `credentials: "include"`: each storefront
  * rewrites `/v1/*` to the api and holds its own session cookie, so one client
  * serves whichever host mounts the section.
@@ -29,12 +31,19 @@ export class CongressSubmissionsError extends Error {
   }
 }
 
-async function call<T>(
+function call<T>(
   path: string,
   init: RequestInit & { json?: unknown } = {},
 ): Promise<T> {
+  return request<T>(`${BASE}${path}`, init);
+}
+
+async function request<T>(
+  url: string,
+  init: RequestInit & { json?: unknown } = {},
+): Promise<T> {
   const { json, ...rest } = init;
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(url, {
     ...rest,
     credentials: "include",
     headers: {
@@ -46,7 +55,9 @@ async function call<T>(
   if (!res.ok) {
     let problems: CongressSubmissionProblem[] = [];
     try {
-      const parsed = CongressSubmissionRefusalSchema.safeParse(await res.json());
+      const parsed = CongressSubmissionRefusalSchema.safeParse(
+        await res.json(),
+      );
       if (parsed.success) problems = parsed.data.problems;
     } catch {
       // A body that is not a refusal carries no problems to name.
@@ -104,6 +115,19 @@ export function withdrawSubmission(
   expectedStatus: CongressSubmissionStatus,
 ): Promise<CongressSubmission> {
   return call(`/${id}/withdraw`, { method: "POST", json: { expectedStatus } });
+}
+
+/**
+ * 046 EARS-19 — the holder writes their own birth date, asked once in the
+ * poster flow; a 400 means the API took it for no real day or a future one.
+ */
+export function putBirthDate(
+  birthDate: string,
+): Promise<CongressBirthDateResponse> {
+  return request("/v1/me/birth-date", {
+    method: "PUT",
+    json: { birthDate },
+  });
 }
 
 export function deleteDraft(id: string): Promise<void> {

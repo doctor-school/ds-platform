@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { requireLiveStandEnv } from "../support/live-stand-env";
 import {
   createCongressEvent,
+  openPosterIntake,
   provisionDoctor,
   registerForCongress,
   sendTalkThroughApi,
@@ -11,7 +12,9 @@ import {
 
 /**
  * 046 V-18 (#2433) — axe-core WCAG 2 A/AA scan of «Мои заявки на Конгресс»
- * (`/account/congress`) and its oral-talk form, in both themes.
+ * (`/account/congress`), its oral-talk form and — 046 V-16 (#2434) — the poster
+ * flow (poster form with its birth-date field, the error summary at send, age
+ * refusal), in both themes.
  *
  * The showcase `playwright-axe` gate scans the DS primitives in isolation; this
  * scan covers the composed signed-in section a doctor actually reaches — the
@@ -86,4 +89,36 @@ test("046 EARS-11: the section list and the kind choice pass WCAG 2 A/AA (both t
   await page.getByTestId("congress-author").first().getByRole("button", { name: "Изменить" }).click();
   await expect(page.getByLabel("Фамилия")).toBeVisible();
   await scan(page, "the oral form");
+});
+
+test("046 EARS-18…20: the poster form with its birth-date field and the age refusal pass WCAG 2 A/AA (both themes)", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const eventId = await createCongressEvent();
+  await openPosterIntake(eventId, 40);
+  const doctor = await provisionDoctor("axe-poster");
+  await registerForCongress(doctor, eventId);
+  await signInInPage(page, doctor);
+
+  await page.goto("/account/congress");
+  const poster = page.getByTestId("congress-pick-poster");
+  // EARS-18 — the poster form, with the birth date asked in the draft (EARS-19).
+  await poster.getByRole("button", { name: "Начать заявку →" }).click();
+  await expect(page.getByLabel("Цель")).toBeVisible();
+  await expect(page.getByLabel("Дата рождения")).toBeVisible();
+  await scan(page, "the poster form");
+
+  // EARS-9/19 — a send with gaps: the error summary over the form and the
+  // inline field errors (the empty birth date among them).
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await expect(page.getByText("Укажите дату рождения").first()).toBeVisible();
+  await expect(page.getByText("Текст заявки сохранён.")).toBeVisible();
+  await scan(page, "the poster form with the error summary");
+
+  // EARS-20 — the draft of a holder above the limit: the refusal in place of the send.
+  await page.getByLabel("Дата рождения").fill(`${new Date().getFullYear() - 50}-06-15`);
+  await page.getByLabel("Дата рождения").blur();
+  await expect(page.getByText(/На эту дату вам будет/).first()).toBeVisible();
+  await scan(page, "the poster draft with the age refusal");
 });

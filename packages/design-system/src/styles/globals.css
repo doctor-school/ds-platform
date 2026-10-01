@@ -12,7 +12,8 @@
  * `pnpm --filter @ds/design-system build`. (#233, ADR-0004 §6.3 / spec §2.)
  *
  * This file owns only the NON-generated pieces: the Tailwind import, the
- * component-source scan, the caret-blink keyframes, and the base layer.
+ * component-source scan, the caret-blink keyframes, and the base layer (incl.
+ * the theme-root `color-scheme` and the iframe `color-scheme: normal` reset).
  *
  * `@source` makes Tailwind scan the component sources living in this package
  * (resolved through the workspace symlink) so their utility classes are emitted
@@ -53,6 +54,33 @@
 }
 
 @layer base {
+  /*
+   * Theme root `color-scheme` (#2434). The tokens repaint our own surfaces, but
+   * native control parts — the date/time picker indicator, scrollbars, autofill,
+   * checkbox/radio/select chrome — draw from the UA colour scheme. `.dark` sets
+   * `dark` so those parts follow the resolved theme (an explicit choice, not
+   * `prefers-color-scheme`); `:root` pins `light` for the light theme.
+   */
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+  /*
+   * Embedded frames keep the UA colour scheme. CSS Color Adjust 1 §2.4: "if the
+   * element color scheme of the element and the element color scheme of the
+   * embedded document's root element do not match, then the UA must use an
+   * opaque canvas of the Canvas color appropriate to the embedded document's
+   * root element's element color scheme instead of a transparent canvas." The
+   * inherited `dark` would make every light third-party frame (the SmartCaptcha
+   * challenge overlay) an opaque light box over the page; `normal` keeps it
+   * transparent. Our own controls still follow the theme from `.dark`.
+   */
+  iframe {
+    color-scheme: normal;
+  }
+
   * {
     border-color: var(--color-border);
     outline-color: color-mix(in oklch, var(--color-ring) 50%, transparent);

@@ -25,6 +25,7 @@ import {
   CONGRESS_SUBMISSION_KINDS,
   CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
   type CongressSubmission,
+  type CongressBirthDateResponse,
   type CongressSubmissionCreateRequest,
   type CongressSubmissionDraftAuthor,
   type CongressSubmissionDraftContent,
@@ -35,8 +36,12 @@ import {
   type CongressSubmissionSendRequest,
   type CongressSubmissionStatus,
   type CongressSubmissionWithdrawRequest,
+  congressAgeOnDay,
   congressKindIntakeState,
+  congressKindMarksPresenting,
+  congressKindNeedsBirthDate,
   hasCongressSubmissionForm,
+  instantToMskDay,
   lastDayOfClosingInstant,
   parseCongressDraftBody,
   parseCongressSendContent,
@@ -66,12 +71,14 @@ interface KindWindow {
   opensAt: Date | null;
   closesAt: Date | null;
   submitLimit: number | null;
+  maxAgeYears: number | null;
 }
 
 const NO_WINDOW: KindWindow = {
   opensAt: null,
   closesAt: null,
   submitLimit: null,
+  maxAgeYears: null,
 };
 
 /** A refusal naming every unmet condition (EARS-9). */
@@ -176,6 +183,7 @@ export class CongressSubmissionsService {
           used: rows.filter((r) => r.kind === kind && r.status !== "draft")
             .length,
           offered: hasCongressSubmissionForm(kind),
+          maxAgeYears: w.maxAgeYears,
         };
       },
     );
@@ -193,6 +201,7 @@ export class CongressSubmissionsService {
       registered: registration !== null,
       registrationUrl: settings.registrationUrl,
       consentRequired: await this.consentRequired(this.db, user.id),
+      birthDate: user.birthDate,
       kinds,
       submissions: rows.map(project),
     };
@@ -229,6 +238,19 @@ export class CongressSubmissionsService {
         ]);
       }
 
+      // EARS-20 — a kind with an age limit refuses creating for an account
+      // whose stored birth date is over it. A missing birth date does not
+      // block the draft: the poster draft asks for it (EARS-19).
+      const eligibility = await this.eligibility(
+        tx,
+        body.eventId,
+        body.kind,
+        w ?? NO_WINDOW,
+        user.birthDate,
+        "create",
+      );
+      if (eligibility.length > 0) refuse(eligibility);
+
       const [row] = await tx
         .insert(congressSubmissions)
         .values({
@@ -236,7 +258,12 @@ export class CongressSubmissionsService {
           registrationId: registration.id,
           userId: user.id,
           kind: body.kind,
-          authors: [firstAuthor(registration.answers)],
+          authors: [
+            firstAuthor(
+              registration.answers,
+              congressKindMarksPresenting(body.kind),
+            ),
+          ],
         })
         .returning();
       return project(row!);
@@ -371,6 +398,19 @@ export class CongressSubmissionsService {
           });
         }
       }
+
+      // EARS-9, EARS-20 — the kind's eligibility, on the birth date as it
+      // stands at the send.
+      problems.push(
+        ...(await this.eligibility(
+          tx,
+          row.eventId,
+          row.kind,
+          w,
+          user.birthDate,
+          "send",
+        )),
+      );
 
       const version = this.consentVersion();
       const consentMissing = !(await this.hasConsent(tx, user.id, version));
@@ -584,11 +624,71 @@ export class CongressSubmissionsService {
     });
   }
 
+  /**
+   * EARS-19 — the holder writes their own birth date, once per account and
+   * correctable; a day after today in Moscow is not a birth date.
+   */
+  async setBirthDate(
+    sub: string,
+    birthDate: string,
+  ): Promise<CongressBirthDateResponse> {
+    const user = await this.account(sub);
+    if (birthDate > instantToMskDay(this.now())) {
+      throw new BadRequestException("the birth date is in the future");
+    }
+    await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(users)
+        .set({ birthDate, updatedAt: sql`now()` })
+        .where(eq(users.id, user.id)),
+    );
+    return { birthDate };
+  }
+
   // ---------------------------------------------------------------- helpers
 
-  private async account(sub: string): Promise<{ id: string }> {
+  /**
+   * EARS-19, EARS-20 — the kind's eligibility for the account: the birth date
+   * the send needs, and its age limit applied to the full years on the event's
+   * start day in Europe/Moscow (046-design «Age rule»). At creation only a
+   * stored birth date is checked against the limit. Other kinds pass untouched.
+   */
+  private async eligibility(
+    db: Reader,
+    eventId: string,
+    kind: CongressSubmissionKind,
+    w: KindWindow,
+    birthDate: string | null,
+    stage: "create" | "send",
+  ): Promise<CongressSubmissionProblem[]> {
+    if (!congressKindNeedsBirthDate(kind, w.maxAgeYears)) return [];
+    if (birthDate === null)
+      return stage === "send"
+        ? [{ code: "field-invalid", field: "birthDate" }]
+        : [];
+    if (w.maxAgeYears === null) return [];
+    const [event] = await db
+      .select({ startsAt: events.startsAt })
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    if (!event) throw new NotFoundException("no congress section");
+    const eventStartDate = instantToMskDay(event.startsAt);
+    const age = congressAgeOnDay(birthDate, eventStartDate);
+    if (age < w.maxAgeYears) return [];
+    return [
+      {
+        code: "age-limit",
+        params: { maxAgeYears: w.maxAgeYears, eventStartDate, age },
+      },
+    ];
+  }
+
+  private async account(
+    sub: string,
+  ): Promise<{ id: string; birthDate: string | null }> {
     const [user] = await this.db
-      .select({ id: users.id })
+      .select({ id: users.id, birthDate: users.birthDate })
       .from(users)
       .where(eq(users.zitadelSub, sub))
       .limit(1);
@@ -636,6 +736,7 @@ export class CongressSubmissionsService {
           opensAt: r.opensAt,
           closesAt: r.closesAt,
           submitLimit: r.submitLimit,
+          maxAgeYears: r.maxAgeYears,
         },
       ]),
     );
@@ -753,7 +854,8 @@ export class CongressSubmissionsService {
 /**
  * EARS-6 — author 1 from the registration answers. The account has no
  * structured name, so without answers the name fields stay empty for the
- * author to fill; the display name is never split into name parts.
+ * author to fill; the display name is never split into name parts. Author 1
+ * presents only where the kind has a presenting mark (oral — EARS-8, EARS-18).
  */
 function firstAuthor(
   answers: {
@@ -762,14 +864,15 @@ function firstAuthor(
     patronymic?: string | undefined;
     workplace: string;
   } | null,
+  presenting: boolean,
 ): CongressSubmissionDraftAuthor {
-  if (!answers) return { presenting: true };
+  if (!answers) return { presenting };
   return {
     surname: answers.surname,
     firstName: answers.firstName,
     ...(answers.patronymic ? { patronymic: answers.patronymic } : {}),
     workplace: answers.workplace,
-    presenting: true,
+    presenting,
   };
 }
 

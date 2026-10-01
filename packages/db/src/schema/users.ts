@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   customType,
   index,
   pgTable,
@@ -38,6 +39,11 @@ export const users = pgTable(
     // registration. No backfill: existing users hit the prompt on first entry.
     // Served only to the owner's own session (EARS-16); never in chat payloads.
     displayName: text("display_name"),
+    // 046 EARS-19 (#2434) — the holder's birth date, asked once in the poster
+    // flow and reused across events; written only by the holder through
+    // `PUT /v1/me/birth-date`, never shown to the congress partner. Nullable:
+    // no backfill, an account without it is asked before its first poster.
+    birthDate: date("birth_date", { mode: "string" }),
     emailVerified: boolean("email_verified").notNull().default(false),
     phoneVerified: boolean("phone_verified").notNull().default(false),
     role: text("role").notNull().default("doctor_guest"),

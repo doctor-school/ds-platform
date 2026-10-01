@@ -60,6 +60,8 @@ export const CONGRESS_SUBMISSION_LIMITS = {
   workplace: 300,
   oralGoal: 1000,
   oralSummary: 3000,
+  posterGoal: 1000,
+  posterContent: 3000,
 } as const;
 
 /**
@@ -135,14 +137,32 @@ const SendAuthorSchema = z.object({
   presenting: z.boolean().default(false),
 });
 
-/** 1…20 ordered authors, exactly one presenting (oral, poster — EARS-8). */
-const presentingAuthors = z
+/** 1…20 ordered authors (EARS-8). */
+const orderedAuthors = z
   .array(SendAuthorSchema)
   .min(1)
-  .max(CONGRESS_SUBMISSION_LIMITS.authorsMax)
-  .refine((as) => as.filter((a) => a.presenting).length === 1, {
-    message: "exactly one presenting author",
-  });
+  .max(CONGRESS_SUBMISSION_LIMITS.authorsMax);
+
+/** An oral talk's authors: exactly one of them presents (EARS-8). */
+const presentingAuthors = orderedAuthors.refine(
+  (as) => as.filter((a) => a.presenting).length === 1,
+  { message: "exactly one presenting author" },
+);
+
+/**
+ * A poster's authors (EARS-18): in publication order, with no presenting
+ * mark — a stray mark is dropped, never stored.
+ */
+const unmarkedAuthors = orderedAuthors.transform((as) =>
+  as.map((a) => ({ ...a, presenting: false })),
+);
+
+/** Whether the kind's authors carry a presenting mark — oral only (EARS-8, EARS-18). */
+export function congressKindMarksPresenting(
+  kind: CongressSubmissionKind,
+): boolean {
+  return kind === "oral";
+}
 
 // ---------------------------------------------------------------------------
 // Per-kind forms — a kind joins by adding its entry (posters S3, abstracts S4)
@@ -162,6 +182,21 @@ const OralSendSchema = z.object({
   }),
 });
 
+/** A poster's body (EARS-18): the goal and the content — no file field. */
+const PosterDraftBodySchema = z.strictObject({
+  goal: draftText(CONGRESS_SUBMISSION_LIMITS.posterGoal).optional(),
+  content: draftText(CONGRESS_SUBMISSION_LIMITS.posterContent).optional(),
+});
+
+const PosterSendSchema = z.object({
+  title: requiredText(CONGRESS_SUBMISSION_LIMITS.title),
+  authors: unmarkedAuthors,
+  body: z.object({
+    goal: requiredText(CONGRESS_SUBMISSION_LIMITS.posterGoal),
+    content: requiredText(CONGRESS_SUBMISSION_LIMITS.posterContent),
+  }),
+});
+
 interface CongressSubmissionForm {
   /** The kind's body as a draft may hold it (EARS-7). */
   readonly draftBody: z.ZodType<Record<string, string | undefined>>;
@@ -177,6 +212,7 @@ export const CONGRESS_SUBMISSION_FORMS: Partial<
   Record<CongressSubmissionKind, CongressSubmissionForm>
 > = {
   oral: { draftBody: OralDraftBodySchema, send: OralSendSchema },
+  poster: { draftBody: PosterDraftBodySchema, send: PosterSendSchema },
 };
 
 export function hasCongressSubmissionForm(
@@ -256,6 +292,84 @@ export const CongressSubmissionProblemSchema = z.object({
 export type CongressSubmissionProblem = z.infer<
   typeof CongressSubmissionProblemSchema
 >;
+
+/**
+ * The params of an `age-limit` refusal (EARS-20): the kind's limit, the
+ * event's start day in Europe/Moscow and the holder's age on that day.
+ */
+export const CongressAgeLimitParamsSchema = z.object({
+  maxAgeYears: z.number().int().positive(),
+  eventStartDate: MskCalendarDaySchema,
+  age: z.number().int().nonnegative(),
+});
+export type CongressAgeLimitParams = z.infer<
+  typeof CongressAgeLimitParamsSchema
+>;
+
+/** The typed `age-limit` params, or `null` when a refusal carries none. */
+export function congressAgeLimitParams(
+  params: CongressSubmissionProblem["params"],
+): CongressAgeLimitParams | null {
+  const parsed = CongressAgeLimitParamsSchema.safeParse(params);
+  return parsed.success ? parsed.data : null;
+}
+
+// ---------------------------------------------------------------------------
+// Birth date and the age rule (EARS-19, EARS-20; 046-design «Age rule»)
+// ---------------------------------------------------------------------------
+
+/** The earliest birth date the account accepts. */
+export const CONGRESS_BIRTH_DATE_MIN = "1900-01-01";
+
+/** A birth date: a real calendar day `YYYY-MM-DD`, not before 1900. */
+export const CongressBirthDateSchema = z.iso
+  .date()
+  .refine((d) => d >= CONGRESS_BIRTH_DATE_MIN, {
+    message: `not before ${CONGRESS_BIRTH_DATE_MIN}`,
+  });
+
+/** `PUT /v1/me/birth-date` — the holder writes their own birth date (EARS-19). */
+export const CongressBirthDateRequestSchema = z.strictObject({
+  birthDate: CongressBirthDateSchema,
+});
+export type CongressBirthDateRequest = z.infer<
+  typeof CongressBirthDateRequestSchema
+>;
+
+/** The account's birth date as its holder reads it back. */
+export const CongressBirthDateResponseSchema = z.object({
+  birthDate: z.iso.date(),
+});
+export type CongressBirthDateResponse = z.infer<
+  typeof CongressBirthDateResponseSchema
+>;
+
+/**
+ * Full years between two calendar days — the age rule counts the holder's age
+ * on the event's start day in Europe/Moscow, so a birthday on that day counts.
+ */
+export function congressAgeOnDay(birthDate: string, onDay: string): number {
+  const [by, bm, bd] = birthDate.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const [y, m, d] = onDay.split("-").map(Number) as [number, number, number];
+  const beforeBirthday = m < bm || (m === bm && d < bd);
+  return y - by - (beforeBirthday ? 1 : 0);
+}
+
+/**
+ * Whether starting or sending a submission of the kind needs the account's
+ * birth date: a poster always asks for it (EARS-19), and any kind with an age
+ * limit needs it to apply the rule (EARS-20).
+ */
+export function congressKindNeedsBirthDate(
+  kind: CongressSubmissionKind,
+  maxAgeYears: number | null,
+): boolean {
+  return kind === "poster" || maxAgeYears !== null;
+}
 
 /** The body of every refusal: each unmet condition, named (EARS-9). */
 export const CongressSubmissionRefusalSchema = z.object({
@@ -403,6 +517,8 @@ export const CongressSubmissionKindIntakeSchema = z.object({
   used: z.number().int().nonnegative(),
   /** Whether the cabinet offers this kind yet. */
   offered: z.boolean(),
+  /** The kind's age limit in whole years; `null` = no age rule (EARS-20). */
+  maxAgeYears: z.number().int().positive().nullable(),
 });
 export type CongressSubmissionKindIntake = z.infer<
   typeof CongressSubmissionKindIntakeSchema
@@ -433,6 +549,11 @@ export const CongressSubmissionSectionSchema = z.object({
   registrationUrl: z.string().nullable(),
   /** The next send asks for the submission consent (EARS-16). */
   consentRequired: z.boolean(),
+  /**
+   * The account's birth date, shown to its holder for correction in the
+   * poster flow (EARS-19); `null` until they give it.
+   */
+  birthDate: z.iso.date().nullable(),
   kinds: z.array(CongressSubmissionKindIntakeSchema),
   submissions: z.array(CongressSubmissionSchema),
 });

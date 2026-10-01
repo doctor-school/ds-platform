@@ -153,12 +153,12 @@ opening day at 00:00 Moscow, each last day at 00:00 Moscow of the day after.
 The same file holds `isCongressKindIntakeOpen`, the intake rule every later
 surface of 046 uses.
 
-## Congress submissions — the author's cabinet (feature 046, EARS-5…EARS-17)
+## Congress submissions — the author's cabinet (feature 046, EARS-5…EARS-20)
 
-| File                                 | Role                                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `congress-submissions.me.controller` | `/v1/me/congress-submissions*` — `authenticated` / `doctor_guest` / `fast-path`, every row self-scoped. |
-| `congress-submissions.service`       | The section read, draft create/autosave/delete, the send cascade and the withdraw.                      |
+| File                                 | Role                                                                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `congress-submissions.me.controller` | `/v1/me/congress-submissions*` and `PUT /v1/me/birth-date` — `authenticated` / `doctor_guest` / `fast-path`, every row self-scoped. |
+| `congress-submissions.service`       | The section read, draft create/autosave/delete, the send cascade and the withdraw.                                                  |
 
 Endpoints: `GET [?event=]` (the section: the event's slug, title and dates,
 registration presence, per-kind intake state and limit usage, the next send's
@@ -171,7 +171,7 @@ Refusals carry `{problems: [{code, field?, params?}]}` — 422 for an unmet send
 condition, 409 for a status the action does not apply to; the codes live in
 `@ds/schemas` (`congress-submission.schema.ts`) with the field limits, the
 length rule and the per-kind forms. A kind is offered once its form is
-registered there (oral now; posters and abstracts with their slices); creating
+registered there (oral and posters now; abstracts with their slice); creating
 a draft of a kind not offered yet is 422 `kind-not-available`.
 
 - **Send cascade (EARS-9).** One transaction: the row locked, an advisory lock on
@@ -186,6 +186,18 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
   limit never counts it a second time (the row being sent is excluded), and the
   consent is asked again only for a new version. Any other non-draft status is
   `status-conflict`.
+- **Birth date and the age rule (EARS-18…EARS-20).**
+  `PUT /v1/me/birth-date {birthDate}` writes the holder's own
+  `users.birth_date` (migration 0045; a real day from 1900, never after today
+  in Moscow); the section returns it as `birthDate` and each kind's
+  `maxAgeYears`. A poster draft is created without it (the draft asks for it);
+  sending a poster without it is 422 `field-invalid` on `birthDate`. A kind
+  with an age limit refuses an account whose full years on the event's Moscow
+  start day reach the limit — at create when a birth date is stored, and in
+  the send cascade — 422 `age-limit` with
+  `{maxAgeYears, eventStartDate, age}`. A poster's authors carry no presenting
+  mark (author 1 is created unmarked; a stray mark is dropped at send). Other
+  kinds are untouched.
 - **Limit (EARS-17).** Counts the account's submissions of the event and kind in
   any status except `draft` — `rejected` and `withdrawn` included — the one being
   sent excluded, under the advisory lock, so two tabs cannot both take the last

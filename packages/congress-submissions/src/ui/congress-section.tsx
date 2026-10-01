@@ -2,12 +2,13 @@
 
 import * as React from "react";
 
-import type {
-  CongressSubmission,
-  CongressSubmissionKind,
-  CongressSubmissionKindIntake,
-  CongressSubmissionSection,
-  CongressSubmissionStatus,
+import {
+  type CongressSubmission,
+  type CongressSubmissionKind,
+  type CongressSubmissionKindIntake,
+  type CongressSubmissionSection,
+  type CongressSubmissionStatus,
+  instantToMskDay,
 } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
@@ -27,7 +28,11 @@ import { COPY, KIND_COPY, STATUS_PLURAL } from "../copy";
 import {
   type RowAction,
   actionsFor,
+  ageLimitText,
+  ageRefusalOf,
+  birthHint,
   eventLine,
+  eventStartDay,
   intakeLine,
   kindStartable,
   limitLine,
@@ -249,6 +254,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
       submitLimit: null,
       used: 0,
       offered: false,
+      maxAgeYears: null,
     };
 
   if (!section.registered) {
@@ -279,6 +285,19 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
 
   const subs = section.submissions;
   const opened = openId ? (subs.find((x) => x.id === openId) ?? null) : null;
+  const startDay = eventStartDay(section.event);
+  // The Moscow day a birth date may not pass — the API's own check.
+  const today = instantToMskDay(now);
+  const refusalOf = (k: CongressSubmissionKind) => {
+    const age = ageRefusalOf(intakeOf(k), section.birthDate, startDay);
+    return age ? ageLimitText(age) : null;
+  };
+  const setBirthDate = (birthDate: string) =>
+    setLoad((l) =>
+      l.kind === "ready"
+        ? { kind: "ready", section: { ...l.section, birthDate } }
+        : l,
+    );
 
   if (opened) {
     return (
@@ -290,6 +309,16 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
         consentRequired={section.consentRequired}
         justSent={!!sentNow[opened.id]}
         now={now}
+        birthDate={section.birthDate}
+        askBirth={
+          opened.kind === "poster" &&
+          opened.status === "draft" &&
+          !subs.some((x) => x.kind === "poster" && x.status !== "draft")
+        }
+        birthHint={birthHint(intakeOf(opened.kind), startDay)}
+        ageRefusal={refusalOf(opened.kind)}
+        today={today}
+        onBirthDate={setBirthDate}
         onReplace={replace}
         onSent={(s) => {
           replace(s);
@@ -314,6 +343,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
     );
   }
 
+  // 046 EARS-19 — the draft is created at once; a poster draft asks for the
+  // birth date itself (canvas `askBirth`).
   async function start(kind: CongressSubmissionKind) {
     setBusy(true);
     try {
@@ -409,7 +440,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                   const it = intakeOf(k);
                   const limitReached =
                     it.submitLimit !== null && it.used >= it.submitLimit;
-                  const avail = kindStartable(it) && !limitReached;
+                  // EARS-20: the canvas `ageReason` replaces the start.
+                  const refusal = kindStartable(it) ? refusalOf(k) : null;
+                  const avail = kindStartable(it) && !limitReached && !refusal;
                   return (
                     <div
                       key={k}
@@ -436,6 +469,11 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                       {limitLine(it) ? (
                         <p className="text-sm font-semibold text-foreground">
                           {limitLine(it)}
+                        </p>
+                      ) : null}
+                      {refusal ? (
+                        <p className="text-pretty text-caption leading-normal text-muted-foreground">
+                          {refusal}
                         </p>
                       ) : null}
                       {avail ? (
@@ -496,7 +534,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
               <ul className="-mx-4 flex flex-col border-t border-hairline bg-card layout:mx-0 layout:border-2 layout:border-border layout:shadow-lg">
                 {shown.map((s, i) => {
                   const it = intakeOf(s.kind);
-                  const acts = actionsFor(s, it, now);
+                  const refusal = refusalOf(s.kind);
+                  const acts = actionsFor(s, it, now, refusal);
                   const rev =
                     s.status === "needs_revision" ? revisionView(s, now) : null;
                   return (
@@ -538,7 +577,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                             </button>
                           </Link>
                           <div className="text-caption leading-normal text-faint">
-                            {rowMeta(s, it, now)}
+                            {rowMeta(s, it, now, refusal)}
                           </div>
                           {s.committeeComment ? (
                             <div className="mt-1 flex min-w-0 flex-col items-start gap-1">

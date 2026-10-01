@@ -16,7 +16,7 @@ lang: en
 
 > **EN (this)** · **RU:** [`045-requirements-ru.md`](./045-requirements-ru.md)
 >
-> PRD source: Issue #2360 body + design prompt [`23-a-index-demo-ru.md`](../../product/two-site-ia/design-prompts-ru/23-a-index-demo-ru.md); temporary demo, no `045-product.md`.
+> PRD source: Issue #2360 body + the canvas [`design-source/academy-index-demo.dc.html`](../../../../../../design-source/academy-index-demo.dc.html) drawn from design prompt 23; temporary demo, no `045-product.md`.
 
 # 045 — Education index demo (Requirements)
 

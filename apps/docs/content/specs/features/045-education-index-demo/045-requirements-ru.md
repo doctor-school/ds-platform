@@ -16,7 +16,7 @@ lang: ru
 
 > **RU (этот файл)** · **EN:** [`045-requirements-en.md`](./045-requirements-en.md)
 >
-> Источник PRD: тело задачи #2360 + промпт [`23-a-index-demo-ru.md`](../../product/two-site-ia/design-prompts-ru/23-a-index-demo-ru.md); временное демо, файла `045-product.md` нет.
+> Источник PRD: тело задачи #2360 + канвас [`design-source/academy-index-demo.dc.html`](../../../../../../design-source/academy-index-demo.dc.html), нарисованный по промпту 23; временное демо, файла `045-product.md` нет.
 
 # 045 — Образовательный индекс · демо (Требования)
 

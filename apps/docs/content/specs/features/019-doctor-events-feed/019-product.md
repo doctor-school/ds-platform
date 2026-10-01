@@ -123,7 +123,7 @@ The canvas [`design-source/doctor-events.dc.html`](../../../../../../design-sour
 
 ## Approved-mockup reference
 
-**Canvas:** [`design-source/doctor-events.dc.html`](../../../../../../design-source/doctor-events.dc.html) — drawn by the owner from the screen prompt [`03-d-events-ru.md`](../../product/two-site-ia/design-prompts-ru/03-d-events-ru.md) and vendored into the repo (#1450). It is the **single source of truth for composition, geometry and states**; this PRD's prose never overrides it (ADR-0013).
+**Canvas:** [`design-source/doctor-events.dc.html`](../../../../../../design-source/doctor-events.dc.html) — drawn by the owner and vendored into the repo (#1450). It is the **single source of truth for composition, geometry and states**; this PRD's prose never overrides it (ADR-0013).
 
 **Canvas defaults are the working assumption for reading the design; the Stage-A pick is this PRD's fork table above.** Where a fork is still `PENDING`, the canvas default only documents what the drawing happens to show — it is **not** build authorisation: an explicit owner pick is required before implementation of that row, and no variant may be inferred from what the canvas renders (AGENTS.md §6, Stage A).
 

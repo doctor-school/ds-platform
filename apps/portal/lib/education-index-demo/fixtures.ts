@@ -4,9 +4,10 @@
  * or DB call reads or writes anything here; the pages import these constants at
  * build time and render them.
  *
- * Source of every number: design prompt 23
- * (`specs/product/two-site-ia/design-prompts-ru/23-a-index-demo-ru.md`) as drawn
- * by the vendored canvas `design-source/academy-index-demo.dc.html`. Fixture
+ * Source of every number: the vendored canvas
+ * `design-source/academy-index-demo.dc.html`, drawn from design prompt 23
+ * (Issue #2360). The prompt is not a repository file (#2511); the `prompt l.N`
+ * references below cite its text as of commit 5d8cee94. Fixture
  * invariants (045 requirements «Invariants», prompt l.97): investment shares sum
  * to 100, attention shares sum to 100, investments sum to 13 600 000 ₽, top-5 =
  * 80 % of investment.

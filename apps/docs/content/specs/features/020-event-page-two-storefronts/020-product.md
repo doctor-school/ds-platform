@@ -139,7 +139,7 @@ The `board` prop (`выкл` by default) is the fork stand: F-1…F-4 are drawn 
 
 ## Approved-mockup reference
 
-**Canvas:** [`design-source/event-page.dc.html`](../../../../../../design-source/event-page.dc.html) — the **re-drawn** version of the live event-page canvas, produced by the owner from the screen prompt [`04-d-event-ru.md`](../../product/two-site-ia/design-prompts-ru/04-d-event-ru.md) and vendored into the repo (#1450). Per decision **D-4 one canvas serves both storefronts**: `#a-event` on the Academy is the same page under the `header: Академия` variant, and no separate Academy canvas exists or is to be built.
+**Canvas:** [`design-source/event-page.dc.html`](../../../../../../design-source/event-page.dc.html) — the **re-drawn** version of the live event-page canvas, produced by the owner and vendored into the repo (#1450). Per decision **D-4 one canvas serves both storefronts**: `#a-event` on the Academy is the same page under the `header: Академия` variant, and no separate Academy canvas exists or is to be built.
 
 **Canvas defaults are the working assumption; the Stage-A pick is this PRD's fork table above.** For F-1…F-4 there is no canvas default at all — the variants sit on a stand — so those picks genuinely gate implementation rather than merely confirming it.
 

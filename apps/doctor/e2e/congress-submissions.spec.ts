@@ -5,6 +5,7 @@ import {
   closeOralIntake,
   createCongressEvent,
   mailedCode,
+  openAbstractIntake,
   openPosterIntake,
   provisionDoctor,
   registerForCongress,
@@ -33,7 +34,10 @@ import {
  *       expired one the «Срок доработки истёк» line (EARS-11);
  *   (e) V-16 poster part (#2434): the birth date asked inside the first poster
  *       draft and kept there, the poster sent, and the age refusal in a poster
- *       draft and on the kind choice (EARS-18…EARS-20).
+ *       draft and on the kind choice (EARS-18…EARS-20);
+ *   (f) V-16 abstracts part (#2435): the live total counter over 5 000, the
+ *       statements and the consent at send, and «Подать тезисы по этой
+ *       работе» from a sent talk (EARS-21…EARS-25).
  *
  * Why a LIVE tier: every state is an api decision over real rows (intake window,
  * registration, status machine); a double would assert its own fixture. The
@@ -60,7 +64,12 @@ import {
  *   DATABASE_URL=<branch database> pnpm --filter @ds/doctor test:e2e:congress
  */
 
-requireLiveStandEnv(["E2E_DOCTOR_URL", "MAILPIT_URL", "IDP_ISSUER", "DATABASE_URL"]);
+requireLiveStandEnv([
+  "E2E_DOCTOR_URL",
+  "MAILPIT_URL",
+  "IDP_ISSUER",
+  "DATABASE_URL",
+]);
 
 const SECTION = "/account/congress";
 
@@ -86,14 +95,18 @@ function row(page: Page, title: string) {
  */
 async function tickConsent(page: Page) {
   const box = page.getByRole("checkbox", { name: /Согласие на обработку/ });
-  await box.locator("xpath=ancestor::label[1]").click({ position: { x: 8, y: 10 } });
+  await box
+    .locator("xpath=ancestor::label[1]")
+    .click({ position: { x: 8, y: 10 } });
   await expect(box).toBeChecked();
 }
 
 /** Back from a talk to the section's list. */
 async function toList(page: Page) {
   await page.getByRole("button", { name: "← Мои заявки" }).first().click();
-  await expect(page.getByRole("heading", { name: "Мои заявки", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Мои заявки", exact: true }),
+  ).toBeVisible();
 }
 
 test("046 EARS-4: a guest is sent to the login door, signs in by the emailed code and lands back on the section", async ({
@@ -118,7 +131,9 @@ test("046 EARS-4: a guest is sent to the login door, signs in by the emailed cod
   await page.getByRole("textbox").first().fill(code);
 
   await expect(page).toHaveURL(new RegExp(`${SECTION}$`));
-  await expect(page.getByRole("heading", { level: 1, name: "Мои заявки на Конгресс" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Мои заявки на Конгресс" }),
+  ).toBeVisible();
 });
 
 test("046 EARS-5: without a congress registration the section shows only the line and the registration link", async ({
@@ -129,7 +144,9 @@ test("046 EARS-5: without a congress registration the section shows only the lin
   await signInInPage(page, doctor);
   await page.goto(SECTION);
 
-  await expect(page.getByText("Сначала зарегистрируйтесь участником Конгресса")).toBeVisible();
+  await expect(
+    page.getByText("Сначала зарегистрируйтесь участником Конгресса"),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Регистрация на сайте Конгресса/ }),
   ).toHaveAttribute("href", REGISTRATION_URL);
@@ -156,18 +173,22 @@ test.describe("a registered participant", () => {
     const oral = page.getByTestId("congress-pick-oral");
     await expect(oral).toContainText("Устный доклад");
     // Every kind shows its EARS-10 intake line; no generic «opens later» line.
-    // The poster form is offered (S3) — a draft may be written before its
-    // opening (EARS-6); abstracts are not offered yet and are not startable.
+    // The poster (S3) and abstract (S4) forms are offered — a draft may be
+    // written before the kind's opening (EARS-6).
     await expect(page.getByTestId("congress-pick-poster")).toContainText(
       "Дату открытия приёма объявят позже",
     );
     await expect(page.getByText(/откроется позже/)).toHaveCount(0);
     await expect(
-      page.getByTestId("congress-pick-abstract").getByRole("button", { name: "Начать заявку →" }),
-    ).toHaveCount(0);
+      page
+        .getByTestId("congress-pick-abstract")
+        .getByRole("button", { name: "Начать заявку →" }),
+    ).toHaveCount(1);
     await oral.getByRole("button", { name: "Начать заявку →" }).click();
 
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
     await expect(page.getByText("Формат участия — очный")).toBeVisible();
     const first = page.getByTestId("congress-author").first();
     await expect(first).toContainText("Иванова Мария Петровна");
@@ -179,20 +200,34 @@ test.describe("a registered participant", () => {
   }) => {
     await signInInPage(page, author);
     await page.goto(SECTION);
-    await row(page, "Без темы").getByRole("button", { name: "Продолжить" }).click();
+    await row(page, "Без темы")
+      .getByRole("button", { name: "Продолжить" })
+      .click();
 
     await page.getByLabel("Тема").fill(TALK);
-    await page.getByLabel("Образовательная цель").fill("Показания и отбор пациентов.");
-    await page.getByLabel("Краткое содержание").fill("Материал, случаи, выводы.");
+    await page
+      .getByLabel("Образовательная цель")
+      .fill("Показания и отбор пациентов.");
+    await page
+      .getByLabel("Краткое содержание")
+      .fill("Материал, случаи, выводы.");
     await page.getByLabel("Краткое содержание").blur();
-    await expect(page.getByTestId("congress-save-state")).toContainText("Сохранено");
-    await expect(page.getByRole("button", { name: /Сохранить/ })).toHaveCount(0);
+    await expect(page.getByTestId("congress-save-state")).toContainText(
+      "Сохранено",
+    );
+    await expect(page.getByRole("button", { name: /Сохранить/ })).toHaveCount(
+      0,
+    );
 
     // The open talk is in the URL, so the reload comes back to the same form.
     await page.reload();
     await expect(page.getByLabel("Тема")).toHaveValue(TALK);
-    await expect(page.getByLabel("Образовательная цель")).toHaveValue("Показания и отбор пациентов.");
-    await expect(page.getByLabel("Краткое содержание")).toHaveValue("Материал, случаи, выводы.");
+    await expect(page.getByLabel("Образовательная цель")).toHaveValue(
+      "Показания и отбор пациентов.",
+    );
+    await expect(page.getByLabel("Краткое содержание")).toHaveValue(
+      "Материал, случаи, выводы.",
+    );
   });
 
   test("046 EARS-9: sending with the consent and the confirmation sets «Отправлена»", async ({
@@ -204,7 +239,9 @@ test.describe("a registered participant", () => {
 
     // Without the consent the send is refused next to the form.
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
-    await expect(page.getByText("Дайте согласие на обработку персональных данных").first()).toBeVisible();
+    await expect(
+      page.getByText("Дайте согласие на обработку персональных данных").first(),
+    ).toBeVisible();
 
     // EARS-16 — the checkbox links to the organising committee's consent,
     // published as a platform document (feature 028) on this storefront.
@@ -224,11 +261,17 @@ test.describe("a registered participant", () => {
 
     await tickConsent(page);
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
-    await expect(page.getByText("Отправить заявку в программный комитет?")).toBeVisible();
+    await expect(
+      page.getByText("Отправить заявку в программный комитет?"),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Да, отправить" }).click();
 
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Отправлена");
-    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Отправлена",
+    );
+    await expect(
+      page.getByRole("button", { name: "Отправить", exact: true }),
+    ).toHaveCount(0);
     await toList(page);
     await expect(row(page, TALK)).toHaveAttribute("data-status", "submitted");
   });
@@ -239,9 +282,13 @@ test.describe("a registered participant", () => {
     await signInInPage(page, author);
     await page.goto(SECTION);
 
-    await row(page, TALK).getByRole("button", { name: "Забрать на исправление" }).click();
+    await row(page, TALK)
+      .getByRole("button", { name: "Забрать на исправление" })
+      .click();
     // The talk opens again as an editable draft (the canvas «withdraw» frame).
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
     await expect(page.getByLabel("Тема")).toBeEditable();
     await toList(page);
     await expect(row(page, TALK)).toHaveAttribute("data-status", "draft");
@@ -250,10 +297,15 @@ test.describe("a registered participant", () => {
     // Send it again, and leave a second draft unsent for the closed-kind leg.
     await sendAgainFromList(page, TALK);
     await page.getByRole("button", { name: "+ Новая заявка" }).click();
-    await page.getByTestId("congress-pick-oral").getByRole("button", { name: "Начать заявку →" }).click();
+    await page
+      .getByTestId("congress-pick-oral")
+      .getByRole("button", { name: "Начать заявку →" })
+      .click();
     await page.getByLabel("Тема").fill(LATE);
     await page.getByLabel("Тема").blur();
-    await expect(page.getByTestId("congress-save-state")).toContainText("Сохранено");
+    await expect(page.getByTestId("congress-save-state")).toContainText(
+      "Сохранено",
+    );
   });
 
   test("046 EARS-10: after the intake closes a draft says why and offers no send", async ({
@@ -263,11 +315,21 @@ test.describe("a registered participant", () => {
     await signInInPage(page, author);
     await page.goto(SECTION);
 
-    await row(page, LATE).getByRole("button", { name: /Открыть|Продолжить/ }).click();
-    await expect(page.getByText(/Приём устных докладов закрыт .* — отправить заявку нельзя/).first()).toBeVisible();
+    await row(page, LATE)
+      .getByRole("button", { name: /Открыть|Продолжить/ })
+      .click();
+    await expect(
+      page
+        .getByText(/Приём устных докладов закрыт .* — отправить заявку нельзя/)
+        .first(),
+    ).toBeVisible();
     // No ACTIVE send action: the panel keeps the button, disabled (canvas «приём закрыт»).
-    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeDisabled();
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(
+      page.getByRole("button", { name: "Отправить", exact: true }),
+    ).toBeDisabled();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
   });
 
   test("046 EARS-12: after the intake closes «Отозвать» sets «Отозвана», which offers no action", async ({
@@ -278,7 +340,9 @@ test.describe("a registered participant", () => {
 
     const sent = row(page, TALK);
     await expect(sent).toHaveAttribute("data-status", "submitted");
-    await expect(sent.getByRole("button", { name: "Забрать на исправление" })).toHaveCount(0);
+    await expect(
+      sent.getByRole("button", { name: "Забрать на исправление" }),
+    ).toHaveCount(0);
     await sent.getByRole("button", { name: "Отозвать" }).click();
     const ask = sent.getByRole("group", {
       name: "Отозвать заявку? Комитет её не рассмотрит, вернуть будет нельзя.",
@@ -288,17 +352,25 @@ test.describe("a registered participant", () => {
 
     await expect(sent).toHaveAttribute("data-status", "withdrawn");
     await expect(sent).toContainText("Отозвана");
-    await expect(sent.getByRole("button", { name: /Отозвать|Забрать на исправление|Продолжить|Удалить/ })).toHaveCount(0);
+    await expect(
+      sent.getByRole("button", {
+        name: /Отозвать|Забрать на исправление|Продолжить|Удалить/,
+      }),
+    ).toHaveCount(0);
   });
 
   /** Open a draft from the list and send it through the confirmation. */
   async function sendAgainFromList(page: Page, title: string) {
     await row(page, title).getByRole("button", { name: "Продолжить" }).click();
     // The consent was taken with the first send (EARS-16: asked once per version).
-    await expect(page.getByRole("checkbox", { name: /Согласие на обработку/ })).toHaveCount(0);
+    await expect(
+      page.getByRole("checkbox", { name: /Согласие на обработку/ }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     await page.getByRole("button", { name: "Да, отправить" }).click();
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Отправлена");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Отправлена",
+    );
     await toList(page);
   }
 });
@@ -342,7 +414,8 @@ test.describe("a poster author", () => {
     const birth = page.getByLabel("Дата рождения");
     await birth.fill(date);
     const saved = page.waitForResponse(
-      (r) => r.url().endsWith("/v1/me/birth-date") && r.request().method() === "PUT",
+      (r) =>
+        r.url().endsWith("/v1/me/birth-date") && r.request().method() === "PUT",
     );
     await birth.blur();
     expect((await saved).status()).toBe(200);
@@ -355,7 +428,9 @@ test.describe("a poster author", () => {
     await page.goto(SECTION);
 
     await startPoster(page);
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
     const birth = page.getByLabel("Дата рождения");
     await expect(birth).toHaveValue("");
     // The DS date control (owner Stage-B 2026-10-01): free text cannot land in it.
@@ -373,7 +448,9 @@ test.describe("a poster author", () => {
     await expect(page.getByText("Отметьте одного докладчика")).toHaveCount(0);
     await expect(page.getByText("Формат участия — очный")).toHaveCount(0);
     await expect(page.getByRole("radio", { name: "Докладчик" })).toHaveCount(0);
-    await expect(page.getByTestId("congress-author").first()).toContainText("Иванова Мария Петровна");
+    await expect(page.getByTestId("congress-author").first()).toContainText(
+      "Иванова Мария Петровна",
+    );
 
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     await expect(page.getByText("Укажите дату рождения").first()).toBeVisible();
@@ -392,29 +469,41 @@ test.describe("a poster author", () => {
   }) => {
     await signInInPage(page, author);
     await page.goto(SECTION);
-    await row(page, "Без темы").getByRole("button", { name: "Продолжить" }).click();
+    await row(page, "Без темы")
+      .getByRole("button", { name: "Продолжить" })
+      .click();
 
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     await expect(page.getByText("Заполните поле «Цель»").first()).toBeVisible();
-    await expect(page.getByText("Заполните поле «Содержание»").first()).toBeVisible();
+    await expect(
+      page.getByText("Заполните поле «Содержание»").first(),
+    ).toBeVisible();
 
     await page.getByLabel("Тема").fill(POSTER);
     await page.getByLabel("Цель").fill("Оценить эффект через 12 месяцев.");
-    await page.getByLabel("Содержание").fill("Материал, методы, результаты, выводы.");
+    await page
+      .getByLabel("Содержание")
+      .fill("Материал, методы, результаты, выводы.");
     await page.getByLabel("Содержание").blur();
-    await expect(page.getByTestId("congress-save-state")).toContainText("Сохранено");
+    await expect(page.getByTestId("congress-save-state")).toContainText(
+      "Сохранено",
+    );
     await tickConsent(page);
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     await page.getByRole("button", { name: "Да, отправить" }).click();
 
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Отправлена");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Отправлена",
+    );
     await toList(page);
     await expect(row(page, POSTER)).toHaveAttribute("data-status", "submitted");
 
     // Asked once: with a poster sent, a new poster draft does not ask again.
     await page.getByRole("button", { name: "+ Новая заявка" }).click();
     await startPoster(page);
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
     await expect(page.getByLabel("Дата рождения")).toHaveCount(0);
   });
 
@@ -425,20 +514,26 @@ test.describe("a poster author", () => {
     await page.goto(SECTION);
 
     await startPoster(page);
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
     await writeBirth(page, bornYearsAgo(50));
     const refusal = new RegExp(
       `Постерные доклады принимают от участников младше ${MAX_AGE} лет на дату начала Конгресса — \\d{1,2} [а-я]+ \\d{4}\\. На эту дату вам будет 5\\d (год|года|лет)\\.`,
     );
     await expect(page.getByText(refusal).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Отправить", exact: true }),
+    ).toBeDisabled();
 
     await toList(page);
     await page.getByRole("button", { name: "+ Новая заявка" }).click();
     await expect(posterCard(page)).toContainText(refusal);
     await expect(posterCard(page).getByRole("button")).toHaveCount(0);
     await expect(
-      page.getByTestId("congress-pick-oral").getByRole("button", { name: "Начать заявку →" }),
+      page
+        .getByTestId("congress-pick-oral")
+        .getByRole("button", { name: "Начать заявку →" }),
     ).toBeEnabled();
   });
 
@@ -452,7 +547,9 @@ test.describe("a poster author", () => {
     await signInInPage(page, fresh);
     await page.goto(SECTION);
     await startPoster(page);
-    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
     await writeBirth(page, bornYearsAgo(30));
 
     const birth = page.getByLabel("Дата рождения");
@@ -462,13 +559,132 @@ test.describe("a poster author", () => {
     await expect(
       page.getByText(/На эту дату вам будет 4\d (год|года|лет)\./).first(),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Отправить", exact: true }),
+    ).toBeDisabled();
     await expect(page.getByRole("textbox", { name: "Тема" })).toHaveCount(0);
     // The date stays correctable: back under the limit, the form opens again.
     await birth.fill(bornYearsAgo(30));
     await birth.blur();
     await expect(page.getByRole("textbox", { name: "Тема" })).toBeEditable();
-    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Отправить", exact: true }),
+    ).toBeEnabled();
+  });
+});
+
+/**
+ * 046 V-16, abstracts part (#2435) — the abstract form with its live total
+ * counter over 5 000, the two statements and the consent at send, and
+ * «Подать тезисы по этой работе» from a sent talk (EARS-21…25). On a congress
+ * event of its own the oral and abstract intakes are open, abstracts limited
+ * to 3 per account with the first-author rule on.
+ */
+test.describe("an abstract author", () => {
+  const TALK = "PRP при латеральном эпикондилите: результаты 120 пациентов";
+  let author: CongressDoctor;
+  let abstractEventId = "";
+
+  test.beforeAll(async () => {
+    abstractEventId = await createCongressEvent();
+    await openAbstractIntake(abstractEventId, 3);
+    author = await provisionDoctor("abstract");
+    await registerForCongress(author, abstractEventId);
+  });
+
+  const statement = (page: Page, name: string) =>
+    page.getByRole("checkbox", { name });
+  const tick = async (page: Page, name: string) => {
+    const box = statement(page, name);
+    await box
+      .locator("xpath=ancestor::label[1]")
+      .click({ position: { x: 8, y: 10 } });
+    await expect(box).toBeChecked();
+  };
+
+  test("046 EARS-21…23: the abstract form counts its five sections together, refuses a text over 5 000 and a send without the statements, then sends", async ({
+    page,
+  }) => {
+    await signInInPage(page, author);
+    await page.goto(SECTION);
+    await page
+      .getByTestId("congress-pick-abstract")
+      .getByRole("button", { name: "Начать заявку →" })
+      .click();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
+    await expect(
+      page.getByRole("heading", { name: "Текст тезисов" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Пять разделов, всего до 5 000 знаков"),
+    ).toBeVisible();
+
+    const counter = page.getByTestId("congress-abstract-counter");
+    await page.getByLabel("Название тезисов").fill("Тезисы о PRP");
+    await page.getByLabel("Актуальность").fill("Актуальность.");
+    await page.getByLabel("Цель", { exact: true }).fill("Цель.");
+    await page.getByLabel("Материалы и методы").fill("Методы.");
+    await page.getByLabel("Результаты и обсуждение").fill("р".repeat(4980));
+    await page.getByLabel("Выводы").fill("Выводы.");
+    // 13 + 5 + 7 + 4 980 + 7 = 5 012 — above the limit, counted live.
+    await expect(counter).toContainText(/5\s012 \/ 5 000/);
+    await expect(counter).toContainText("больше на 12");
+
+    await page.getByRole("button", { name: "Отправить", exact: true }).click();
+    const summary = page.locator(
+      '[data-screen-label="d-lk-congress · сводка ошибок"]',
+    );
+    await expect(summary).toContainText(
+      /Сократите текст тезисов до 5 000 знаков — сейчас 5\s012/,
+    );
+    await expect(summary).toContainText(
+      "Подтвердите, что в тексте нет некорректных заимствований",
+    );
+    await expect(summary).toContainText(
+      "Подтвердите, что в тексте нет торговых наименований",
+    );
+    await expect(summary).toContainText(
+      "Дайте согласие на обработку персональных данных",
+    );
+
+    await page
+      .getByLabel("Результаты и обсуждение")
+      .fill("Результаты и обсуждение.");
+    await page.getByLabel("Результаты и обсуждение").blur();
+    await expect(counter).not.toContainText("больше на");
+    await expect(page.getByTestId("congress-save-state")).toContainText(
+      "Сохранено",
+    );
+    await tick(page, "В тексте нет некорректных заимствований");
+    await tick(page, "В тексте нет торговых наименований");
+    await tickConsent(page);
+    await page.getByRole("button", { name: "Отправить", exact: true }).click();
+    await page.getByRole("button", { name: "Да, отправить" }).click();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Отправлена",
+    );
+  });
+
+  test("046 EARS-25: «Подать тезисы по этой работе» on a sent talk creates the abstract draft prefilled with its title and authors", async ({
+    page,
+  }) => {
+    await signInInPage(page, author);
+    await sendTalkThroughApi(page, abstractEventId, TALK);
+    await page.goto(SECTION);
+    await row(page, TALK)
+      .getByRole("button", { name: "Подать тезисы по этой работе" })
+      .click();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
+    await expect(page.getByLabel("Название тезисов")).toHaveValue(TALK);
+    await expect(page.getByTestId("congress-author").first()).toContainText(
+      "Иванова Мария",
+    );
+    await expect(page.getByRole("radio", { name: "Докладчик" })).toHaveCount(0);
+    await expect(page.getByLabel("Актуальность")).toHaveValue("");
   });
 });
 
@@ -483,18 +699,34 @@ test("046 EARS-11: a talk returned for revision shows its deadline with the coun
 
   await sendTalkThroughApi(page, reviewEvent, "Доклад на доработке");
   await sendTalkThroughApi(page, reviewEvent, "Доклад с истёкшим сроком");
-  await returnForRevision(reviewEvent, "Доклад на доработке", "Уточните выборку.", 2 * 86_400_000 + 5 * 3_600_000);
-  await returnForRevision(reviewEvent, "Доклад с истёкшим сроком", "Добавьте выводы.", -3_600_000);
+  await returnForRevision(
+    reviewEvent,
+    "Доклад на доработке",
+    "Уточните выборку.",
+    2 * 86_400_000 + 5 * 3_600_000,
+  );
+  await returnForRevision(
+    reviewEvent,
+    "Доклад с истёкшим сроком",
+    "Добавьте выводы.",
+    -3_600_000,
+  );
 
   await page.goto(SECTION);
   const open = row(page, "Доклад на доработке");
   await expect(open).toContainText("На доработке");
   await expect(open).toContainText("Уточните выборку.");
   // The date as the canvas writes it («2 октября»), the countdown beside it.
-  await expect(open).toContainText(/Исправить и отправить до \d{1,2} [а-я]+, 23:59 МСК/);
-  await expect(open).toContainText(/осталось \d+ (день|дня|дней) \d+ (час|часа|часов)/);
+  await expect(open).toContainText(
+    /Исправить и отправить до \d{1,2} [а-я]+, 23:59 МСК/,
+  );
+  await expect(open).toContainText(
+    /осталось \d+ (день|дня|дней) \d+ (час|часа|часов)/,
+  );
   await expect(open.getByRole("button", { name: /Продолжить/ })).toBeVisible();
 
   const expired = row(page, "Доклад с истёкшим сроком");
-  await expect(expired).toContainText(/Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(1 час назад\) — отправить заявку нельзя/);
+  await expect(expired).toContainText(
+    /Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(1 час назад\) — отправить заявку нельзя/,
+  );
 });

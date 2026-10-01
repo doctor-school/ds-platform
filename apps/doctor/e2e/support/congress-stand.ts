@@ -52,7 +52,8 @@ export interface CongressDoctor {
 
 async function withDb<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("the congress tier needs DATABASE_URL");
+  if (!connectionString)
+    throw new Error("the congress tier needs DATABASE_URL");
   const client = new pg.Client({ connectionString });
   await client.connect();
   try {
@@ -110,12 +111,17 @@ export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
         consent: [{ purpose: "partner-data-sharing", version: "v1" }],
       },
     });
-    expect(reg.ok(), `register — ${reg.status()}: ${await reg.text()}`).toBe(true);
+    expect(reg.ok(), `register — ${reg.status()}: ${await reg.text()}`).toBe(
+      true,
+    );
     const code = await mailedCode(email, "verify", sentAt);
     const confirm = await api.post("/v1/auth/verify", {
       data: { email, code },
     });
-    expect(confirm.ok(), `confirm — ${confirm.status()}: ${await confirm.text()}`).toBe(true);
+    expect(
+      confirm.ok(),
+      `confirm — ${confirm.status()}: ${await confirm.text()}`,
+    ).toBe(true);
   } finally {
     await api.dispose();
   }
@@ -126,7 +132,10 @@ export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
  * Sign `page` in through the same-origin BFF, leaving it on the doctor origin
  * (the in-page call keeps the session fingerprint of the navigations after it).
  */
-export async function signInInPage(page: Page, doctor: CongressDoctor): Promise<void> {
+export async function signInInPage(
+  page: Page,
+  doctor: CongressDoctor,
+): Promise<void> {
   await page.goto(`${DOCTOR_URL}/`, { waitUntil: "domcontentloaded" });
   const outcome = await page.evaluate(
     async ([identifier, password]) => {
@@ -155,7 +164,12 @@ export async function createCongressEvent(): Promise<string> {
        VALUES ($1, $2, 'Конгресс ортобиологии', 'Конгресс', $3, 480,
                'Ежегодный конгресс.', $4, 'sponsor:congress', NULL, 'published',
                'offline')`,
-      [id, `congress-2433-${id.slice(0, 8)}`, new Date(now + 365 * DAY), ["cardiology"]],
+      [
+        id,
+        `congress-2433-${id.slice(0, 8)}`,
+        new Date(now + 365 * DAY),
+        ["cardiology"],
+      ],
     );
     await db.query(
       `INSERT INTO congress_submission_settings (event_id, registration_url)
@@ -201,7 +215,10 @@ export async function registerForCongress(
  * month with an age limit of `maxAgeYears` (the settings-row write). The event
  * starts in a year, so the age rule counts on that day.
  */
-export async function openPosterIntake(eventId: string, maxAgeYears: number): Promise<void> {
+export async function openPosterIntake(
+  eventId: string,
+  maxAgeYears: number,
+): Promise<void> {
   const now = Date.now();
   await withDb((db) =>
     db.query(
@@ -214,6 +231,33 @@ export async function openPosterIntake(eventId: string, maxAgeYears: number): Pr
       [eventId, new Date(now - DAY), new Date(now + 30 * DAY), maxAgeYears],
     ),
   );
+}
+
+/**
+ * 046 EARS-21…25 — the platform administrator opens the abstracts intake for a
+ * month with a per-account limit of `submitLimit` and switches the event's
+ * first-author rule on (the settings-row writes).
+ */
+export async function openAbstractIntake(
+  eventId: string,
+  submitLimit: number,
+): Promise<void> {
+  const now = Date.now();
+  await withDb(async (db) => {
+    await db.query(
+      `INSERT INTO congress_submission_kind_settings
+         (event_id, kind, opens_at, closes_at, submit_limit)
+       VALUES ($1, 'abstract', $2, $3, $4)
+       ON CONFLICT (event_id, kind) DO UPDATE
+         SET opens_at = EXCLUDED.opens_at, closes_at = EXCLUDED.closes_at,
+             submit_limit = EXCLUDED.submit_limit`,
+      [eventId, new Date(now - DAY), new Date(now + 30 * DAY), submitLimit],
+    );
+    await db.query(
+      `UPDATE congress_submission_settings SET first_author_counts = true WHERE event_id = $1`,
+      [eventId],
+    );
+  });
 }
 
 /** The platform administrator closes the oral intake (the settings-row write). */
@@ -249,7 +293,8 @@ export async function sendTalkThroughApi(
         headers: json,
         body: JSON.stringify({ eventId: event, kind: "oral" }),
       });
-      if (created.status !== 201) return `create ${created.status}: ${await created.text()}`;
+      if (created.status !== 201)
+        return `create ${created.status}: ${await created.text()}`;
       const { id } = (await created.json()) as { id: string };
       const saved = await fetch(`${base}/${id}`, {
         method: "PATCH",
@@ -265,10 +310,14 @@ export async function sendTalkThroughApi(
               presenting: true,
             },
           ],
-          body: { goal: "Разобрать показания.", summary: "Краткое содержание." },
+          body: {
+            goal: "Разобрать показания.",
+            summary: "Краткое содержание.",
+          },
         }),
       });
-      if (saved.status !== 200) return `autosave ${saved.status}: ${await saved.text()}`;
+      if (saved.status !== 200)
+        return `autosave ${saved.status}: ${await saved.text()}`;
       const sent = await fetch(`${base}/${id}/send`, {
         method: "POST",
         credentials: "include",

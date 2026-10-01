@@ -16,7 +16,7 @@ lang: en
 
 > **EN (this)** · **RU:** [`045-requirements-ru.md`](./045-requirements-ru.md)
 >
-> PRD source: Issue #2360 body + the canvas [`design-source/academy-index-demo.dc.html`](../../../../../../design-source/academy-index-demo.dc.html) drawn from design prompt 23; temporary demo, no `045-product.md`.
+> PRD source: Issue #2360 body + the canvas [`design-source/academy-index-demo.dc.html`](../../../../../../design-source/academy-index-demo.dc.html) drawn from design prompt 23 (the prompt is not a repository file since #2511; its text is pinned at commit 5d8cee94); temporary demo, no `045-product.md`.
 
 # 045 — Education index demo (Requirements)
 
@@ -29,7 +29,7 @@ A potential pharma/medtech partner sees, on production, a demo of the public edu
 **In:**
 
 - Two public, unauthenticated static routes in `apps/portal`: `/education-index` (public leaderboard) and `/education-index/partner-demo` (cabinet, org Ortella Biotech).
-- Deterministic fixtures reproducing the dataset in design prompt 23 (12 fictional organisations, weekly index series, cabinet metrics).
+- Deterministic fixtures reproducing the dataset of the vendored canvas `design-source/academy-index-demo.dc.html` (12 fictional organisations, weekly index series, cabinet metrics).
 - Static bars/scales/plates built from `@ds/design-system` tokens (no chart library, no chart primitive in the design system).
 - Temporary: both routes are deleted in the release that ships 032 and 035.
 
@@ -61,14 +61,14 @@ Trivial — no commands, no events, no write path. The read model is a static fi
 ## EARS requirements
 
 - **EARS-1** — THE SYSTEM SHALL serve `/education-index` and `/education-index/partner-demo` in `apps/portal` as public routes reachable without authentication and without any session check.
-- **EARS-2** — THE SYSTEM SHALL render the public leaderboard from a static fixture module carrying exactly the 12 organisations of design prompt 23, with no network, API or DB call.
+- **EARS-2** — THE SYSTEM SHALL render the public leaderboard from a static fixture module carrying exactly the 12 organisations of the vendored canvas `design-source/academy-index-demo.dc.html`, with no network, API or DB call.
 - **EARS-3** — THE SYSTEM SHALL display, per organisation, the composite index (average of investment share and doctor-attention share, rescaled to the leader of that week as 100), week-over-week rank delta, investment amount and share (REQ-D2, REQ-D7), doctors trained, lessons created and events held, per REQ-D1 through REQ-D3.
 - **EARS-4** — THE SYSTEM SHALL render the leaderboard WITHOUT a top-3 podium above the table (fork podium = canvas default A), the market-wide table being the whole leaderboard.
 - **EARS-5** — THE SYSTEM SHALL show investment as both the absolute ruble amount and its percentage share (fork money = canvas default A), never share alone.
 - **EARS-6** — WHEN the visitor clicks any leaderboard row, THE SYSTEM SHALL toggle that row's two sub-metric bars (education investment share, doctor attention share) open or closed independently of every other row, and THE SYSTEM SHALL render the Ortella Biotech row already open on page load, showing its sub-metric bars (education investment share 15 percent, doctor attention share 19 percent) that compose its index of 72.
 - **EARS-7** — THE SYSTEM SHALL render index dynamics for the top-3 organisations as 4 weekly bars starting at the index launch date (1 September 2026), captioned as the launch being the baseline, and SHALL NOT render any value before that date.
 - **EARS-8** — THE SYSTEM SHALL render the /education-index/partner-demo cabinet from the same fixture module: plan/fact progress scale, 4 KPI tiles (doctors trained, lessons created, average funnel depth out of 7, events held), an awareness before/after block using the two-bar variant (fork awareness = canvas default A) across the 4 fixed topics, the 7-step engagement funnel in the exact order series to micro-learning to webinar to podcast to club to practical school to mentorship, weekly attention dynamics, and the research-request unit with one already-submitted request.
-- **EARS-9** — THE SYSTEM SHALL render the audience table on the cabinet page with a header naming the project audience and the total of 1240 doctors, exactly the 5 fixture rows of design prompt 23, and a caption stating 5 of 1240 are shown and the full list is in the reporting export.
+- **EARS-9** — THE SYSTEM SHALL render the audience table on the cabinet page with a header naming the project audience and the total of 1240 doctors, exactly the 5 fixture rows of the vendored canvas `design-source/academy-index-demo.dc.html`, and a caption stating 5 of 1240 are shown and the full list is in the reporting export.
 - **EARS-10** — THE SYSTEM SHALL render the show-more and export-for-reporting controls on the cabinet audience table, and the "request a study" button on the research-request unit, in a disabled state carrying a label stating the control is unavailable in the demo, and SHALL NOT wire any of them to any further data.
 - **EARS-11** — THE SYSTEM SHALL render a sticky demo plaque under the header on both pages naming the data as demonstration data, with page-specific wording for the public leaderboard versus the partner cabinet.
 - **EARS-12** — THE SYSTEM SHALL render both pages correctly in light and dark theme and at the 1440 and 390 viewports, per the vendored canvas.
@@ -80,7 +80,7 @@ Trivial — no commands, no events, no write path. The read model is a static fi
 - Neither route ever issues a network request beyond the initial page load (no API, no DB, no telemetry endpoint specific to the demo).
 - No forbidden compliance word (patient, saved life, help to relatives, sales linkage, drug trade name, sponsor, advertiser, contributor, mining) ever renders on either page.
 - The audience table never renders more than the 5 fixture rows; the show-more control never becomes enabled.
-- Investment shares across all 12 organisations sum to 100 percent; attention shares sum to 100 percent (fixture-level invariant, carried from design prompt 23).
+- Investment shares across all 12 organisations sum to 100 percent; attention shares sum to 100 percent (fixture-level invariant, carried from the vendored canvas `design-source/academy-index-demo.dc.html`).
 
 ## Verification
 

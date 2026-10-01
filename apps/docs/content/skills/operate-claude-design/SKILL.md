@@ -54,7 +54,7 @@ Canvas naming (title = vendored file name, group prefixes `ds-*` / no prefix + `
 
 ## Reuse units
 
-Change in one place, apply everywhere. If a drawing shows one of these things, it shows **that** unit from the named canvas, inserted as is. The prompt never re-describes its anatomy and never asks for "something similar": it names the canvas file and states **only what differs** (facet set, content, state). "Rebuild", "inspired by", "similar to" for an existing unit are banned words. A new value or a new primitive is a deliberate exception named in words on the artboard (ADR-0013).
+Change in one place, apply everywhere. If a drawing shows one of these things, it shows **that** unit from the named canvas, inserted as is. The prompt never re-describes its anatomy and never asks for "something similar": it names the canvas file and states **only what differs** (facet set, content, state). "Rebuild", "inspired by", "similar to" for an existing unit are banned words. **A canvas never creates a new primitive.** `@ds/design-system` is the source of truth for components: a primitive a screen needs is built in the design system first, as its own task, and only then appears on a canvas (ADR-0013, ADR-0014 §4). Build screens from existing elements; a new value or element is a deliberate exception named in words on the artboard.
 
 | Unit                            | Canvas file                                                                         | How it is used                                                                                                                          |
 | ------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -82,9 +82,11 @@ A new unit has one owner canvas — the one where it is the main subject and its
 ## Copy rules
 
 - **UI strings stay Russian, verbatim.** Every label, heading and placeholder the prompt quotes is product text in Russian, in «guillemets», exactly as it should render. Everything else in the prompt is English.
+- **Brand words:** «Doctor.School» is the platform brand as a whole; «витрина врача» is the site `doctor.school`; «Академия» is the site `academy.doctor.school`. «Doctor.School» alone never means the doctor storefront.
 - **Who pays is never written in the interface.** The model "doctors learn for free because pharma and medical-device companies fund the education" is designer background only. No heading, kicker, placeholder or diagram caption states it in any form. The interface says only «бесплатно для врача»; partner material carries the legally required mark «Партнёрский материал · Партнёр» (leave room for it in the layout). Where a screen must explain the model, it describes roles and the path (the expert produces, the investor takes part in a project, the doctor learns), never a money flow.
+- **Advertising marking.** Partner and educational-advertising material carries a visible mark («Партнёрский материал · Партнёр А», «реклама»). It is a legal requirement, not decoration; every layout that can show such material leaves room for it.
 - **Forbidden words:** «спонсор», «рекламодатель», «вкладчик», «создатель», «вложения», and any wording about who pays («оплачивают партнёры», «за счёт партнёров», «платят партнёры», «покупают внимание врачей», «оплачивает проекты», «платят за показы», «спонсируется»). «Верификация» means only confirming a doctor's status by documents; content quality review is «медицинская экспертиза».
-- **Role words:** «автор», «соавтор», «инвестор» (the same party is «партнёр» in partnership contexts), «участник» (a BBM participant entitled to payouts — a doctor taking courses is a doctor, never «участник»).
+- **Role words:** «автор», «соавтор», «инвестор» (the same party is «партнёр» in partnership contexts), «первоинвестор» (a smart-contract role — the party who invested in a specific unit), «участник» (a BBM participant entitled to payouts — a doctor taking courses is a doctor, never «участник»).
 - **Pul is not money** (owner 2026-10-01). Never pair Pul with «бесплатно» or any price wording; write «N Pul» only where the amount is required.
 - **Register:** calm, medical-educational, «вы». No exclamation marks, no «успей» / «только сегодня» / «эксклюзив» / «прокачай», no emoji in headings or buttons. Promises are concrete and checkable; numbers are realistic in magnitude.
 
@@ -125,7 +127,7 @@ Output rules the template encodes: both breakpoints (1440, 390) and both themes 
 **Do not put into a prompt:**
 
 - paste or preamble meta lines («insert after the project preamble», "read the rules above") — there is no preamble;
-- tokens, colours, spacing values or design-system constraints — the design system holds them;
+- tokens, colours, spacing values or design-system constraints — once synced they come from the design system (see «Workspace state»); a prompt never restates them;
 - Russian prose outside quoted UI copy;
 - options for a decision the owner has already made — name the decision and its date instead;
 - the anatomy of a reuse unit — name its canvas file and the delta.

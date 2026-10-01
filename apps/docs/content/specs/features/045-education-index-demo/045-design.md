@@ -27,8 +27,8 @@ flowchart LR
 
 One TypeScript module under `apps/portal` (e.g. `lib/education-index-demo/fixtures.ts`) exporting:
 
-- `organizations`: 12 entries (id, name, emblem plate/monogram/shape, investment amount+share, attention share, doctors, lessons, events, index, rank-delta) — the table in design prompt 23.
-- `weeklySeries`: index values per organisation per week. The prompt gives the full week 1–4 series only for the top-3 organisations (the dynamics chart's subjects, EARS-7) and a single week-3 index value for all 12 places (the source of the rank-delta column, EARS-3); the fixture carries exactly that — full series for places 1–3, one week-3 value for places 4–12 — with no invented interpolation for weeks the canvas never renders.
+- `organizations`: 12 entries (id, name, emblem plate/monogram/shape, investment amount+share, attention share, doctors, lessons, events, index, rank-delta) — the table in the vendored canvas `design-source/academy-index-demo.dc.html` (data `orgs`).
+- `weeklySeries`: index values per organisation per week. The canvas dataset (drawn from design prompt 23, text pinned at commit 5d8cee94) gives the full week 1–4 series only for the top-3 organisations (the dynamics chart's subjects, EARS-7) and a single week-3 index value for all 12 places (the source of the rank-delta column, EARS-3); the fixture carries exactly that — full series for places 1–3, one week-3 value for places 4–12 — with no invented interpolation for weeks the canvas never renders.
 - `cabinet`: the Ortella Biotech KPI tiles, awareness before/after rows, funnel steps, weekly attention totals, audience summary chips and the 5-row audience table.
 
 ## No chart primitive

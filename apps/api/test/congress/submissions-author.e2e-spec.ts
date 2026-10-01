@@ -1586,7 +1586,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(refused.statusCode).toBe(422);
       expect(
         CongressSubmissionRefusalSchema.parse(refused.json()).problems,
-      ).toEqual([{ code: "first-author-limit-reached", params: { limit: 3 } }]);
+      ).toEqual([
+        {
+          code: "first-author-limit-reached",
+          params: {
+            limit: 3,
+            used: 3,
+            firstAuthor: "Иванова Мария Петровна",
+          },
+        },
+      ]);
       expect(await statusOf(fourth)).toBe("draft");
 
       // Another first author (no patronymic is another name) passes.

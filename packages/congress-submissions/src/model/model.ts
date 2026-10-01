@@ -308,7 +308,8 @@ export function editable(
   return false;
 }
 
-export type RowAction = "open" | "take-back" | "withdraw" | "delete";
+export type RowAction =
+  "open" | "take-back" | "withdraw" | "delete" | "abstract-from";
 
 export interface ActionView {
   action: RowAction;
@@ -325,12 +326,40 @@ export interface Actions {
  * What a submission offers in the list and in the detail (046 EARS-11…13).
  * `ageRefusal` — the holder's age-limit refusal for this kind (046 EARS-20,
  * `ageLimitText`), or `null`; an age-locked draft opens rather than continues.
+ * `abstractIntake` — the abstracts' intake: while an abstract draft can be
+ * started, a sent talk or poster offers «Подать тезисы по этой работе» before
+ * its withdrawal (046 EARS-25, canvas `thesesFrom`).
  */
 export function actionsFor(
   s: CongressSubmission,
   intake: CongressSubmissionKindIntake,
   now: Date,
   ageRefusal: string | null = null,
+  abstractIntake: CongressSubmissionKindIntake | null = null,
+): Actions {
+  const acts = baseActions(s, intake, now, ageRefusal);
+  if (
+    s.kind !== "abstract" &&
+    s.status !== "draft" &&
+    s.status !== "withdrawn" &&
+    abstractIntake !== null &&
+    kindStartable(abstractIntake)
+  ) {
+    const from: ActionView = {
+      action: "abstract-from",
+      label: COPY.abstractFrom,
+    };
+    const wd = acts.secondary.findIndex((a) => a.action === "withdraw");
+    acts.secondary.splice(wd < 0 ? acts.secondary.length : wd, 0, from);
+  }
+  return acts;
+}
+
+function baseActions(
+  s: CongressSubmission,
+  intake: CongressSubmissionKindIntake,
+  now: Date,
+  ageRefusal: string | null,
 ): Actions {
   const withdraw: ActionView = {
     action: "withdraw",
@@ -748,10 +777,17 @@ export function problemMessages(
         push({ key: null, message: COPY.errKindNotAvailable });
         break;
       case "first-author-limit-reached": {
+        // 046 EARS-24 — the first author as written, the counted sends with
+        // them first and the limit (copy pending the owner's confirmation).
         const n = Number(p.params?.limit ?? intake.submitLimit ?? 0);
+        const used = Number(p.params?.used ?? n);
+        const name = p.params?.firstAuthor;
         push({
           key: null,
-          message: `Можно отправить не больше ${n} ${plural(n, KIND_COPY[intake.kind].forms)} с одним и тем же первым автором`,
+          message:
+            typeof name === "string" && name
+              ? `С первым автором «${name}» уже отправлено ${used} ${plural(used, KIND_COPY[intake.kind].countForms)} из ${n} — эту заявку отправить нельзя.`
+              : `Можно отправить не больше ${n} ${plural(n, KIND_COPY[intake.kind].forms)} с одним и тем же первым автором`,
         });
         break;
       }

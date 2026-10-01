@@ -746,19 +746,66 @@ describe("046 EARS-21…EARS-25 — abstracts", () => {
     ]);
   });
 
-  it("046 EARS-17, EARS-24: the abstract limit and the first-author limit name the number in the kind's plural", () => {
+  it("046 EARS-17, EARS-24: the abstract limit names the number in the kind's plural; the first-author refusal names the author, the count and the limit", () => {
     const msgs = problemMessages(
       [
         { code: "limit-reached", params: { limit: 3 } },
-        { code: "first-author-limit-reached", params: { limit: 3 } },
+        {
+          code: "first-author-limit-reached",
+          params: {
+            limit: 3,
+            used: 3,
+            firstAuthor: "Иванова Мария Петровна",
+          },
+        },
       ],
       intake({ kind: "abstract", submitLimit: 3 }),
       NOW,
     );
     expect(msgs.map((m) => m.message)).toEqual([
       "Можно отправить не больше 3 тезисов",
-      "Можно отправить не больше 3 тезисов с одним и тем же первым автором",
+      "С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3 — эту заявку отправить нельзя.",
     ]);
+    const five = problemMessages(
+      [
+        {
+          code: "first-author-limit-reached",
+          params: { limit: 5, used: 5, firstAuthor: "Орлов Виктор" },
+        },
+      ],
+      intake({ kind: "abstract", submitLimit: 5 }),
+      NOW,
+    );
+    expect(five[0]!.message).toBe(
+      "С первым автором «Орлов Виктор» уже отправлено 5 тезисов из 5 — эту заявку отправить нельзя.",
+    );
+  });
+
+  it("046 EARS-25: «Подать тезисы по этой работе» sits on a sent talk or poster while abstracts can be started — never on a draft, a withdrawn one or an abstract", () => {
+    const abstracts = intake({ kind: "abstract", submitLimit: 3 });
+    const labels = (s: Parameters<typeof actionsFor>[0], a = abstracts) =>
+      actionsFor(s, intake(), NOW, null, a).secondary.map((x) => x.label);
+    expect(labels(sub({ status: "submitted" }))).toEqual([
+      "Подать тезисы по этой работе",
+    ]);
+    expect(labels(sub({ status: "accepted" }))).toEqual([
+      "Подать тезисы по этой работе",
+    ]);
+    expect(labels(sub({ status: "in_review", kind: "poster" }))).toEqual([
+      "Подать тезисы по этой работе",
+      "Отозвать",
+    ]);
+    expect(labels(sub({ status: "draft" }))).not.toContain(
+      "Подать тезисы по этой работе",
+    );
+    expect(labels(sub({ status: "withdrawn" }))).toEqual([]);
+    expect(labels(sub({ status: "submitted", kind: "abstract" }))).toEqual([]);
+    expect(
+      labels(sub({ status: "submitted" }), { ...abstracts, state: "closed" }),
+    ).toEqual([]);
+    expect(
+      actionsFor(sub({ status: "submitted" }), intake(), NOW).secondary,
+    ).toEqual([]);
   });
 });
 

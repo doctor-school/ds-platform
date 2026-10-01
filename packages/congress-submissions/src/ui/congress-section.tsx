@@ -319,6 +319,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
         ageRefusal={refusalOf(opened.kind)}
         today={today}
         onBirthDate={setBirthDate}
+        abstractIntake={intakeOf("abstract")}
+        onAbstractFrom={() => void start("abstract", opened.id)}
         onReplace={replace}
         onSent={(s) => {
           replace(s);
@@ -344,11 +346,12 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   }
 
   // 046 EARS-19 — the draft is created at once; a poster draft asks for the
-  // birth date itself (canvas `askBirth`).
-  async function start(kind: CongressSubmissionKind) {
+  // birth date itself (canvas `askBirth`). `derivedFromId` — «Подать тезисы по
+  // этой работе»: the abstract draft comes prefilled from that work (EARS-25).
+  async function start(kind: CongressSubmissionKind, derivedFromId?: string) {
     setBusy(true);
     try {
-      const draft = await createDraft(section.eventId, kind);
+      const draft = await createDraft(section.eventId, kind, derivedFromId);
       setLoad((l) =>
         l.kind === "ready"
           ? {
@@ -371,6 +374,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
 
   async function rowAction(s: CongressSubmission, action: RowAction) {
     if (action === "open") return open(s.id);
+    if (action === "abstract-from") return start("abstract", s.id);
     if (action === "withdraw" || action === "delete") {
       setAsk({ id: s.id, what: action });
       return;
@@ -535,7 +539,13 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                 {shown.map((s, i) => {
                   const it = intakeOf(s.kind);
                   const refusal = refusalOf(s.kind);
-                  const acts = actionsFor(s, it, now, refusal);
+                  const acts = actionsFor(
+                    s,
+                    it,
+                    now,
+                    refusal,
+                    intakeOf("abstract"),
+                  );
                   const rev =
                     s.status === "needs_revision" ? revisionView(s, now) : null;
                   return (

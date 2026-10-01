@@ -131,6 +131,12 @@ export const COPY = {
   abstractMethods: "Материалы и методы",
   abstractResults: "Результаты и обсуждение",
   abstractConclusions: "Выводы",
+  /** 046 EARS-21 — the abstract form's title label and text section (canvas). */
+  abstractTitle: "Название тезисов",
+  abstractText: "Текст тезисов",
+  abstractTextSub: "Пять разделов, всего до 5 000 знаков",
+  /** 046 EARS-25 — the canvas `thesesFrom` action. */
+  abstractFrom: "Подать тезисы по этой работе",
   /** 046 EARS-23 — the statements (canvas `mkChk`, owner decision 2026-09-30). */
   statementPlag: "В тексте нет некорректных заимствований",
   statementTrade: "В тексте нет торговых наименований",

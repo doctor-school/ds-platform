@@ -7,7 +7,9 @@ import {
   type CongressSubmission,
   type CongressSubmissionDraftContent,
   type CongressSubmissionKindIntake,
+  type CongressSubmissionStatement,
   congressKindMarksPresenting,
+  congressKindStatements,
 } from "@ds/schemas";
 import { Alert } from "@ds/design-system/alert";
 import { Button } from "@ds/design-system/button";
@@ -35,6 +37,7 @@ import {
 import { COPY, CONGRESS_SUBMISSION_CONSENT_HREF, KIND_COPY } from "../copy";
 import {
   type FormError,
+  abstractCounter,
   actionsFor,
   closedText,
   dateLine,
@@ -65,12 +68,15 @@ import { useAutosave } from "./use-autosave";
  * One open submission (canvas artboard «d-lk-congress · заявка»): the poster
  * band with its kind, topic and status plate, the committee comment, the
  * notices, the detail actions with the inline withdrawal and deletion asks,
- * the error summary, the kind's form (oral talk or poster) — editable for a
- * draft of a sendable kind or a revision before its deadline, read-only
- * otherwise — and the sticky send panel with the autosave line and the send
- * confirmation (046 EARS-7…20). The first poster draft carries the birth-date
- * field for correction (EARS-19); a poster draft of a holder at or above the
- * kind's age limit reads as closed with the refusal (EARS-20).
+ * the error summary, the kind's form (oral talk, poster or abstracts) —
+ * editable for a draft of a sendable kind or a revision before its deadline,
+ * read-only otherwise — and the sticky send panel with the autosave line and
+ * the send confirmation (046 EARS-7…25). The first poster draft carries the
+ * birth-date field for correction (EARS-19); a poster draft of a holder at or
+ * above the kind's age limit reads as closed with the refusal (EARS-20). The
+ * abstract form has its five sections under one total counter in the send
+ * panel (EARS-21/22) and the kind's statements before the consent (EARS-23);
+ * a sent talk or poster offers «Подать тезисы по этой работе» (EARS-25).
  */
 
 export interface SubmissionDetailProps {
@@ -96,6 +102,10 @@ export interface SubmissionDetailProps {
   today: string;
   /** The holder wrote a new birth date. */
   onBirthDate: (birthDate: string) => void;
+  /** The abstracts' intake — whether a talk or poster offers abstracts from it (EARS-25). */
+  abstractIntake: CongressSubmissionKindIntake | null;
+  /** «Подать тезисы по этой работе» — create the abstract draft from this one. */
+  onAbstractFrom: () => void;
   /** The api returned a newer copy (autosave, take-back, withdrawal). */
   onReplace: (s: CongressSubmission) => void;
   onSent: (s: CongressSubmission) => void;
@@ -136,6 +146,8 @@ export function SubmissionDetail({
   ageRefusal,
   today,
   onBirthDate,
+  abstractIntake,
+  onAbstractFrom,
   onReplace,
   onSent,
   onRemoved,
@@ -157,6 +169,8 @@ export function SubmissionDetail({
   const showBirth = askBirth && s.status === "draft" && kindStartable(intake);
   const fields = formFields(s.kind);
   const speakerPick = congressKindMarksPresenting(s.kind);
+  const isAbstract = s.kind === "abstract";
+  const kindStatements = congressKindStatements(s.kind);
   const rev = revisionView(s, now);
   const kind = KIND_COPY[s.kind];
 
@@ -166,6 +180,9 @@ export function SubmissionDetail({
     body: { ...s.body },
   }));
   const [consent, setConsent] = React.useState(false);
+  const [statements, setStatements] = React.useState<
+    CongressSubmissionStatement[]
+  >([]);
   const [tried, setTried] = React.useState(false);
   const [serverErrors, setServerErrors] = React.useState<FormError[]>([]);
   const [confirming, setConfirming] = React.useState(false);
@@ -228,6 +245,7 @@ export function SubmissionDetail({
           kind: s.kind,
           ...(showBirth ? { birthValue } : {}),
           today,
+          statements,
         },
       )
     : [];
@@ -268,7 +286,11 @@ export function SubmissionDetail({
   async function onConfirm() {
     setBusy(true);
     try {
-      const sent = await sendSubmission(s.id, consentRequired && consent);
+      const sent = await sendSubmission(
+        s.id,
+        consentRequired && consent,
+        statements,
+      );
       onSent(sent);
     } catch (e) {
       setConfirming(false);
@@ -328,7 +350,7 @@ export function SubmissionDetail({
     }
   }
 
-  const acts = actionsFor(s, intake, now, ageRefusal);
+  const acts = actionsFor(s, intake, now, ageRefusal, abstractIntake);
   const detailActions = [
     ...(acts.primary?.action === "take-back" ? [acts.primary] : []),
     ...acts.secondary,
@@ -337,6 +359,7 @@ export function SubmissionDetail({
     if (a.action === "take-back") void onTakeBack();
     else if (a.action === "withdraw") setAsk("withdraw");
     else if (a.action === "delete") setAsk("delete");
+    else if (a.action === "abstract-from") onAbstractFrom();
   };
 
   const topic = draft.title.trim() ? draft.title : COPY.untitled;
@@ -522,7 +545,9 @@ export function SubmissionDetail({
                 s.kind === "oral" ? COPY.onSite : undefined,
               )}
               <FormItem>
-                <Label htmlFor="in-topic">{COPY.topic}</Label>
+                <Label htmlFor="in-topic">
+                  {isAbstract ? COPY.abstractTitle : COPY.topic}
+                </Label>
                 {canEdit ? (
                   <Input
                     id="in-topic"
@@ -573,7 +598,9 @@ export function SubmissionDetail({
                 onBlur={flush}
               />
 
-              {sectionHead(COPY.sectionContent)}
+              {isAbstract
+                ? sectionHead(COPY.abstractText, COPY.abstractTextSub)
+                : sectionHead(COPY.sectionContent)}
               {fields.map((f) => {
                 const v = draft.body[f.key] ?? "";
                 const max = f.max;
@@ -587,7 +614,11 @@ export function SubmissionDetail({
                         rows={f.rows}
                         placeholder={f.placeholder}
                         maxLength={max}
-                        showCounter={Array.from(v).length >= max * 0.9}
+                        // Abstracts count their five sections together in
+                        // the send panel (EARS-22), not field by field.
+                        showCounter={
+                          !isAbstract && Array.from(v).length >= max * 0.9
+                        }
                         aria-invalid={errOf(f.key) ? true : undefined}
                         aria-describedby={describedBy(f.key, `in-${f.key}`)}
                         onChange={(e) => {
@@ -607,36 +638,65 @@ export function SubmissionDetail({
                 );
               })}
 
-              {canEdit && consentRequired ? (
+              {canEdit && (consentRequired || kindStatements.length > 0) ? (
                 <>
                   {sectionHead(COPY.sectionConfirmations)}
-                  <div>
-                    <Checkbox
-                      id="chk-pd"
-                      checked={consent}
-                      aria-invalid={errOf("consent") ? true : undefined}
-                      onChange={(e) => {
-                        setConsent(e.target.checked);
-                        setServerErrors([]);
-                        setConfirming(false);
-                      }}
-                    >
-                      <span className="text-sm leading-normal text-foreground">
-                        {COPY.consentBefore}
-                        <Link
-                          href={CONGRESS_SUBMISSION_CONSENT_HREF}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          variant="inline"
+                  {kindStatements.map((st) => {
+                    const err = errOf(st);
+                    return (
+                      <div key={st}>
+                        <Checkbox
+                          id={`chk-${st}`}
+                          checked={statements.includes(st)}
+                          aria-invalid={err ? true : undefined}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setStatements((prev) =>
+                              on
+                                ? kindStatements.filter(
+                                    (x) => x === st || prev.includes(x),
+                                  )
+                                : prev.filter((x) => x !== st),
+                            );
+                            setServerErrors([]);
+                            setConfirming(false);
+                          }}
                         >
-                          {COPY.consentLink}
-                        </Link>
-                      </span>
-                    </Checkbox>
-                    <DsFormError className="ml-8 mt-1.5">
-                      {errOf("consent")}
-                    </DsFormError>
-                  </div>
+                          {STATEMENT_LABEL[st]}
+                        </Checkbox>
+                        <DsFormError className="ml-8 mt-1.5">{err}</DsFormError>
+                      </div>
+                    );
+                  })}
+                  {consentRequired ? (
+                    <div>
+                      <Checkbox
+                        id="chk-pd"
+                        checked={consent}
+                        aria-invalid={errOf("consent") ? true : undefined}
+                        onChange={(e) => {
+                          setConsent(e.target.checked);
+                          setServerErrors([]);
+                          setConfirming(false);
+                        }}
+                      >
+                        <span className="text-sm leading-normal text-foreground">
+                          {COPY.consentBefore}
+                          <Link
+                            href={CONGRESS_SUBMISSION_CONSENT_HREF}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="inline"
+                          >
+                            {COPY.consentLink}
+                          </Link>
+                        </span>
+                      </Checkbox>
+                      <DsFormError className="ml-8 mt-1.5">
+                        {errOf("consent")}
+                      </DsFormError>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
 
@@ -692,6 +752,9 @@ export function SubmissionDetail({
                         {canEdit ? (
                           <SaveLine state={autosave.state} savedAt={savedAt} />
                         ) : null}
+                        {isAbstract ? (
+                          <AbstractCounter body={draft.body} />
+                        ) : null}
                         {readDraft ? (
                           <span className="text-caption text-muted-foreground">
                             {blockedText.split(" — ")[0]}
@@ -724,6 +787,52 @@ export function SubmissionDetail({
         </Container>
       </div>
     </>
+  );
+}
+
+const STATEMENT_LABEL: Record<CongressSubmissionStatement, string> = {
+  plag: COPY.statementPlag,
+  trade: COPY.statementTrade,
+};
+
+/**
+ * 046 EARS-22 — the one total counter of the five abstract sections (canvas
+ * `hasCounter`): a 96×4 bar, «N / 5 000» and «осталось N» from 4 500 /
+ * «больше на N» above 5 000. Above the limit the text takes the danger ink;
+ * near it the bar alone takes the warning colour — the warning ink fails the
+ * text contrast on the page background (recorded parity delta).
+ */
+function AbstractCounter({ body }: { body: Record<string, string> }) {
+  const c = abstractCounter(body);
+  const pct =
+    Math.min(c.length / CONGRESS_SUBMISSION_LIMITS.abstractTotal, 1) * 100;
+  const ink = c.over ? "text-destructive-text" : "text-foreground";
+  return (
+    <span
+      id="in-counter"
+      tabIndex={-1}
+      data-testid="congress-abstract-counter"
+      className="inline-flex items-center gap-2.5 outline-none"
+    >
+      <span
+        aria-hidden="true"
+        className="relative h-1 w-24 flex-none bg-hairline"
+      >
+        <span
+          className={cn(
+            "absolute inset-y-0 left-0",
+            c.over ? "bg-destructive" : c.near ? "bg-warning" : "bg-primary",
+          )}
+          style={{ width: `${pct.toFixed(1)}%` }}
+        />
+      </span>
+      <span className={cn("text-sm font-bold tabular-nums", ink)}>
+        {c.text}
+      </span>
+      {c.note ? (
+        <span className={cn("text-caption font-semibold", ink)}>{c.note}</span>
+      ) : null}
+    </span>
   );
 }
 

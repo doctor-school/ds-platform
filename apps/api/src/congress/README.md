@@ -213,7 +213,8 @@ draft of a kind without a form is 422 `kind-not-available`.
   on, the kind's submit limit also binds every submitter's counted
   submissions whose first author has this one's normalised full name
   (`congressFirstAuthorName`, the 044 EARS-33 rule) — 422
-  `first-author-limit-reached` with `{limit}`; sends naming one first author
+  `first-author-limit-reached` with `{limit, used, firstAuthor}` (the count
+  with that first author and their name as this submission writes it); sends naming one first author
   are serialised by a second advisory lock on that name. `POST
 {eventId, kind: "abstract", derivedFromId}` creates the abstract draft from
   the account's own oral talk or poster of the event — title and authors

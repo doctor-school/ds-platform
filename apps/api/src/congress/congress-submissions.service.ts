@@ -464,9 +464,23 @@ export class CongressSubmissionsService {
               ) === firstName,
           ).length;
           if (sameFirst >= w.submitLimit) {
+            // The refusal names the first author as this submission writes
+            // them and the counted sends with that first author.
+            const first = parsed.ok ? parsed.content.authors[0] : undefined;
             problems.push({
               code: "first-author-limit-reached",
-              params: { limit: w.submitLimit },
+              params: {
+                limit: w.submitLimit,
+                used: sameFirst,
+                firstAuthor: [
+                  first?.surname,
+                  first?.firstName,
+                  first?.patronymic,
+                ]
+                  .map((v) => (v ?? "").trim())
+                  .filter(Boolean)
+                  .join(" "),
+              },
             });
           }
         }

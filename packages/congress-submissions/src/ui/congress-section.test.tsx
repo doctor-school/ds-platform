@@ -29,7 +29,8 @@ function kind(
     lastDay: "2027-01-15",
     submitLimit: null,
     used: 0,
-    offered: k === "oral",
+    // Oral talks (S2) and posters (S3) have their forms; abstracts come in S4.
+    offered: k !== "abstract",
     maxAgeYears: null,
     ...over,
   };
@@ -152,7 +153,7 @@ describe("CongressSection", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(HOST.signInHref));
   });
 
-  it("EARS-6: with no submissions the kind choice shows; only the oral talk can be started", async () => {
+  it("EARS-6: with no submissions the kind choice shows; the offered kinds can be started, a poster before its opening too", async () => {
     fetchMock.mockResolvedValue(
       answer(
         section({
@@ -191,11 +192,17 @@ describe("CongressSection", () => {
       expect(name).toHaveClass("text-lead", "font-extrabold");
       expect(name).not.toHaveClass("text-lg");
     }
-    for (const k of ["poster", "abstract"]) {
-      expect(
-        within(screen.getByTestId(`congress-pick-${k}`)).queryByRole("button"),
-      ).toBeNull();
-    }
+    // EARS-6: a draft may be written before the opening, it just cannot be sent.
+    expect(
+      within(screen.getByTestId("congress-pick-poster")).getByRole("button", {
+        name: "Начать заявку →",
+      }),
+    ).toBeEnabled();
+    expect(
+      within(screen.getByTestId("congress-pick-abstract")).queryByRole(
+        "button",
+      ),
+    ).toBeNull();
     // EARS-10: every kind card carries its own intake line from the read —
     // a kind whose form is not offered yet shows it too, just with no start.
     expect(
@@ -606,5 +613,330 @@ describe("CongressSection", () => {
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       expectedStatus: "in_review",
     });
+  });
+});
+
+describe("CongressSection — posters (046 EARS-18…20)", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/account/congress");
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const me = {
+    surname: "Орлов",
+    firstName: "Виктор",
+    workplace: "ГКБ № 12",
+    presenting: true,
+  };
+  const posterDraft = sub({
+    id: "00000000-0000-4000-8000-0000000000a1",
+    kind: "poster",
+    status: "draft",
+    title: "",
+    submittedAt: null,
+    authors: [me],
+  });
+  const kinds40 = [
+    kind("oral"),
+    kind("poster", { maxAgeYears: 40 }),
+    kind("abstract", { submitLimit: 3 }),
+  ];
+  const callsTo = (method: string) =>
+    fetchMock.mock.calls.filter(
+      ([, i]) => (i as RequestInit | undefined)?.method === method,
+    );
+  const openDraft = (id: string) =>
+    window.history.replaceState(null, "", `/account/congress?submission=${id}`);
+
+  it("046 EARS-18: the poster form asks for the topic, the authors in publication order with no speaker pick, «Цель» and «Содержание» — no on-site line", async () => {
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ birthDate: "1990-04-24", kinds: kinds40 })),
+    );
+    render(<CongressSection host={HOST} />);
+    const pick = await screen.findByTestId("congress-pick-poster");
+    fetchMock.mockResolvedValueOnce(answer(posterDraft));
+    await userEvent.click(
+      within(pick).getByRole("button", { name: "Начать заявку →" }),
+    );
+    expect(await screen.findByLabelText("Цель")).toBeInTheDocument();
+    expect(screen.getByLabelText("Содержание")).toBeInTheDocument();
+    expect(screen.getByLabelText("Тема")).toBeInTheDocument();
+    expect(screen.getByText("Порядок — как в публикации")).toBeInTheDocument();
+    expect(screen.queryByText("Формат участия — очный")).toBeNull();
+    expect(screen.queryByText("Отметьте одного докладчика")).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Докладчик" })).toBeNull();
+    expect(screen.queryByLabelText("Образовательная цель")).toBeNull();
+    const [url, init] = callsTo("POST")[0]!;
+    expect(url).toBe("/v1/me/congress-submissions");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      eventId: EVENT_ID,
+      kind: "poster",
+    });
+  });
+
+  it("046 EARS-18: a poster sent with gaps names its own fields", async () => {
+    openDraft(posterDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          birthDate: "1990-04-24",
+          kinds: kinds40,
+          consentRequired: false,
+          submissions: [{ ...posterDraft, title: "Постер" }],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Цель");
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    const summary = await screen.findByRole("alert");
+    expect(
+      within(summary)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Заполните поле «Цель»", "Заполните поле «Содержание»"]);
+  });
+
+  it("046 EARS-19: with no birth date, starting a poster asks for it first — empty is refused, a real day is written through PUT /v1/me/birth-date before the draft is created", async () => {
+    fetchMock.mockResolvedValueOnce(answer(section({ kinds: kinds40 })));
+    render(<CongressSection host={HOST} />);
+    const pick = await screen.findByTestId("congress-pick-poster");
+    const startBtn = () =>
+      within(pick).getByRole("button", { name: "Начать заявку →" });
+    await userEvent.click(startBtn());
+    const field = within(pick).getByLabelText("Дата рождения");
+    expect(field).toHaveAttribute("placeholder", "дд.мм.гггг");
+    expect(
+      within(pick).getByText(
+        "Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027.",
+      ),
+    ).toBeInTheDocument();
+    expect(callsTo("POST")).toHaveLength(0);
+
+    await userEvent.click(startBtn());
+    expect(within(pick).getByText("Укажите дату рождения")).toBeInTheDocument();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    await userEvent.type(field, "31.02.1990");
+    await userEvent.click(startBtn());
+    expect(within(pick).getByText("Укажите дату рождения")).toBeInTheDocument();
+    expect(callsTo("PUT")).toHaveLength(0);
+
+    await userEvent.clear(field);
+    await userEvent.type(field, "24.04.1990");
+    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1990-04-24" }));
+    fetchMock.mockResolvedValueOnce(answer(posterDraft));
+    await userEvent.click(startBtn());
+    expect(await screen.findByLabelText("Цель")).toBeInTheDocument();
+    const [putUrl, putInit] = callsTo("PUT")[0]!;
+    expect(putUrl).toBe("/v1/me/birth-date");
+    expect(JSON.parse(String((putInit as RequestInit).body))).toEqual({
+      birthDate: "1990-04-24",
+    });
+    // The write precedes the draft (EARS-19: asked before creating it).
+    const order = fetchMock.mock.calls.map(
+      ([, i]) => (i as RequestInit | undefined)?.method ?? "GET",
+    );
+    expect(order.indexOf("PUT")).toBeLessThan(order.indexOf("POST"));
+    // The first poster draft shows the stored date back for correction.
+    expect(screen.getByLabelText("Дата рождения")).toHaveValue("24.04.1990");
+  });
+
+  it("046 EARS-19: a birth date the API refuses sits on the field and no draft is created", async () => {
+    fetchMock.mockResolvedValueOnce(answer(section({ kinds: kinds40 })));
+    render(<CongressSection host={HOST} />);
+    const pick = await screen.findByTestId("congress-pick-poster");
+    const startBtn = () =>
+      within(pick).getByRole("button", { name: "Начать заявку →" });
+    await userEvent.click(startBtn());
+    await userEvent.type(
+      within(pick).getByLabelText("Дата рождения"),
+      "01.01.1990",
+    );
+    fetchMock.mockResolvedValueOnce(answer({ message: "bad" }, 400));
+    await userEvent.click(startBtn());
+    expect(
+      await within(pick).findByText("Укажите дату рождения"),
+    ).toBeInTheDocument();
+    expect(callsTo("POST")).toHaveLength(0);
+  });
+
+  it("046 EARS-19: in the first poster draft the holder corrects the stored date — written on blur; a send refused on `birthDate` names the field", async () => {
+    openDraft(posterDraft.id);
+    const complete = {
+      ...posterDraft,
+      title: "Постер",
+      body: { goal: "Цель работы.", content: "Содержание работы." },
+    };
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          birthDate: "1990-04-24",
+          kinds: kinds40,
+          consentRequired: false,
+          submissions: [complete],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    const field = await screen.findByLabelText("Дата рождения");
+    expect(field).toHaveValue("24.04.1990");
+    await userEvent.clear(field);
+    await userEvent.type(field, "25.04.1990");
+    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1990-04-25" }));
+    await userEvent.tab();
+    await waitFor(() => expect(callsTo("PUT")).toHaveLength(1));
+    expect(
+      JSON.parse(String((callsTo("PUT")[0]![1] as RequestInit).body)),
+    ).toEqual({
+      birthDate: "1990-04-25",
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        { problems: [{ code: "field-invalid", field: "birthDate" }] },
+        422,
+      ),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Да, отправить" }),
+    );
+    const summary = await screen.findByRole("alert");
+    expect(
+      within(summary).getByRole("button", { name: "Укажите дату рождения" }),
+    ).toBeInTheDocument();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("046 EARS-20: an over-limit holder sees the refusal on the poster card with no start; the other kinds stay available", async () => {
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ birthDate: "1980-01-01", kinds: kinds40 })),
+    );
+    render(<CongressSection host={HOST} />);
+    const pick = await screen.findByTestId("congress-pick-poster");
+    expect(
+      within(pick).getByText(
+        "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 47 лет.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(pick).queryByRole("button")).toBeNull();
+    expect(
+      within(screen.getByTestId("congress-pick-oral")).getByRole("button", {
+        name: "Начать заявку →",
+      }),
+    ).toBeEnabled();
+  });
+
+  it("046 EARS-20: a birth date given at the start that reaches the limit turns the card into the refusal, no draft is created", async () => {
+    fetchMock.mockResolvedValueOnce(answer(section({ kinds: kinds40 })));
+    render(<CongressSection host={HOST} />);
+    const pick = await screen.findByTestId("congress-pick-poster");
+    await userEvent.click(
+      within(pick).getByRole("button", { name: "Начать заявку →" }),
+    );
+    await userEvent.type(
+      within(pick).getByLabelText("Дата рождения"),
+      "23.04.1987",
+    );
+    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1987-04-23" }));
+    await userEvent.click(
+      within(pick).getByRole("button", { name: "Начать заявку →" }),
+    );
+    expect(
+      await within(pick).findByText(/На эту дату вам будет 40 лет\.$/),
+    ).toBeInTheDocument();
+    expect(within(pick).queryByRole("button")).toBeNull();
+    expect(callsTo("POST")).toHaveLength(0);
+  });
+
+  it("046 EARS-20: a poster draft of an over-limit holder shows the refusal in the send block and no active send; the date stays correctable", async () => {
+    openDraft(posterDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          birthDate: "1980-01-01",
+          kinds: kinds40,
+          submissions: [{ ...posterDraft, title: "Постер" }],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    expect(
+      await screen.findByText(
+        "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 47 лет.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отправить" })).toBeDisabled();
+    expect(screen.queryByRole("textbox", { name: "Тема" })).toBeNull();
+    expect(screen.getByLabelText("Дата рождения")).toHaveValue("01.01.1980");
+  });
+
+  it("046 EARS-20: a send the API refuses for age shows its limit, day and age", async () => {
+    openDraft(posterDraft.id);
+    const complete = {
+      ...posterDraft,
+      title: "Постер",
+      body: { goal: "Цель работы.", content: "Содержание работы." },
+    };
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          birthDate: "1990-04-24",
+          kinds: kinds40,
+          consentRequired: false,
+          submissions: [complete],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Цель");
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        {
+          problems: [
+            {
+              code: "age-limit",
+              params: {
+                maxAgeYears: 40,
+                eventStartDate: "2027-04-23",
+                age: 41,
+              },
+            },
+          ],
+        },
+        422,
+      ),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Да, отправить" }),
+    );
+    expect(
+      await screen.findByText(
+        "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 41 год.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("046 EARS-19: once a poster has been sent, a new poster draft does not ask for the birth date again", async () => {
+    openDraft(posterDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          birthDate: "1990-04-24",
+          kinds: kinds40,
+          submissions: [
+            posterDraft,
+            sub({ id: "00000000-0000-4000-8000-0000000000a2", kind: "poster" }),
+          ],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Цель");
+    expect(screen.queryByLabelText("Дата рождения")).toBeNull();
   });
 });

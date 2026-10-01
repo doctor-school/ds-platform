@@ -6,13 +6,19 @@ import {
 
 import {
   actionsFor,
+  ageRefusalOf,
+  ageRuleText,
   agoText,
+  birthHint,
   closedText,
   countdownText,
   dateLine,
   draftErrors,
   editable,
   eventLine,
+  eventStartDay,
+  formatBirthDate,
+  formFields,
   intakeLine,
   kindStartable,
   limitLine,
@@ -21,6 +27,7 @@ import {
   localTime,
   mskDate,
   mskDateTime,
+  parseBirthInput,
   problemMessages,
   revisionView,
   rowMeta,
@@ -491,5 +498,129 @@ describe("046 EARS-20 — the age-limit refusal in the owner-approved words", ()
     expect(msgs.map((m) => m.message)).toEqual([
       "Возраст первого автора не подходит под условия этого вида заявок",
     ]);
+  });
+});
+
+describe("046 EARS-18 — the poster form", () => {
+  it("046 EARS-18: a poster asks for «Цель» and «Содержание» within their limits, an oral talk keeps its own pair", () => {
+    expect(formFields("poster").map((f) => [f.key, f.label, f.max])).toEqual([
+      ["goal", "Цель", 1000],
+      ["content", "Содержание", 3000],
+    ]);
+    expect(formFields("oral").map((f) => [f.key, f.label, f.max])).toEqual([
+      ["goal", "Образовательная цель", 1000],
+      ["summary", "Краткое содержание", 3000],
+    ]);
+  });
+
+  it("046 EARS-18: an empty poster draft names its own fields; the birth date the flow asks for comes after the authors", () => {
+    const errs = draftErrors(
+      {
+        title: "",
+        authors: [{ surname: "", firstName: "", workplace: "" }],
+        body: {},
+      },
+      { consentRequired: false, consentChecked: false },
+      { kind: "poster", birthText: "", today: "2026-12-20" },
+    );
+    expect(errs.map((e) => [e.key, e.message, e.focusId])).toEqual([
+      ["title", "Укажите тему", "in-topic"],
+      [
+        "authors",
+        "Заполните фамилию, имя и место работы у каждого автора",
+        "in-a0-sn",
+      ],
+      ["birth", "Укажите дату рождения", "in-birth"],
+      ["goal", "Заполните поле «Цель»", "in-goal"],
+      ["content", "Заполните поле «Содержание»", "in-content"],
+    ]);
+  });
+
+  it("046 EARS-18: a refused poster field is named by its own label", () => {
+    const msgs = problemMessages(
+      [{ code: "field-invalid", field: "body.content" }],
+      intake({ kind: "poster" }),
+      NOW,
+    );
+    expect(msgs).toEqual([
+      {
+        key: "content",
+        message: "Заполните поле «Содержание»",
+        focusId: "in-content",
+      },
+    ]);
+  });
+});
+
+describe("046 EARS-19 — the birth date", () => {
+  it("046 EARS-19: «дд.мм.гггг» reads as a real day from 1900 up to today in Moscow", () => {
+    expect(parseBirthInput("24.04.1987", "2026-12-20")).toBe("1987-04-24");
+    expect(parseBirthInput(" 1.2.1990 ", "2026-12-20")).toBe("1990-02-01");
+    expect(parseBirthInput("", "2026-12-20")).toBeNull();
+    expect(parseBirthInput("31.02.1990", "2026-12-20")).toBeNull();
+    expect(parseBirthInput("1990-02-01", "2026-12-20")).toBeNull();
+    expect(parseBirthInput("31.12.1899", "2026-12-20")).toBeNull();
+    expect(parseBirthInput("21.12.2026", "2026-12-20")).toBeNull();
+    expect(parseBirthInput("20.12.2026", "2026-12-20")).toBe("2026-12-20");
+  });
+
+  it("046 EARS-19: the stored day shows back as «дд.мм.гггг»", () => {
+    expect(formatBirthDate("1987-04-24")).toBe("24.04.1987");
+    expect(formatBirthDate(null)).toBe("");
+  });
+
+  it("046 EARS-19: a refusal on `birthDate` sits next to the birth-date field", () => {
+    const msgs = problemMessages(
+      [{ code: "field-invalid", field: "birthDate" }],
+      intake({ kind: "poster" }),
+      NOW,
+    );
+    expect(msgs).toEqual([
+      { key: "birth", message: "Укажите дату рождения", focusId: "in-birth" },
+    ]);
+  });
+
+  it("046 EARS-19: the hint says it is asked once and states the kind's age rule when it has one", () => {
+    const start = "2027-04-23";
+    expect(birthHint(intake({ kind: "poster", maxAgeYears: 40 }), start)).toBe(
+      "Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027.",
+    );
+    expect(birthHint(intake({ kind: "poster" }), start)).toBe(
+      "Спрашиваем один раз — перед первым постером.",
+    );
+  });
+});
+
+describe("046 EARS-20 — the age rule in the cabinet", () => {
+  const event = {
+    slug: "orthobio-2027",
+    title: "VIII конгресс «Ортобиология»",
+    // 02:30 МСК on 23 April, still the 22nd in UTC.
+    startsAt: "2027-04-22T23:30:00.000Z",
+    endsAt: "2027-04-24T15:00:00.000Z",
+  };
+
+  it("046 EARS-20: the event's start day is its Moscow calendar day", () => {
+    expect(eventStartDay(event)).toBe("2027-04-23");
+  });
+
+  it("046 EARS-20: the holder at or above the limit on the start day is refused with the limit, the day and the age", () => {
+    const poster = intake({ kind: "poster", maxAgeYears: 40 });
+    expect(ageRefusalOf(poster, "1987-04-23", "2027-04-23")).toEqual({
+      maxAgeYears: 40,
+      eventStartDate: "2027-04-23",
+      age: 40,
+    });
+    expect(ageRefusalOf(poster, "1987-04-24", "2027-04-23")).toBeNull();
+    expect(ageRefusalOf(poster, null, "2027-04-23")).toBeNull();
+    expect(
+      ageRefusalOf(intake({ kind: "oral" }), "1950-01-01", "2027-04-23"),
+    ).toBeNull();
+  });
+
+  it("046 EARS-20: the rule line is the refusal without the age", () => {
+    expect(ageRuleText({ maxAgeYears: 40, eventStartDate: "2027-04-23" })).toBe(
+      "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027",
+    );
   });
 });

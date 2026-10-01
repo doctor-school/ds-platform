@@ -15,8 +15,9 @@ import { cn } from "@ds/design-system/lib/utils";
 import { COPY } from "../copy";
 
 /**
- * The authors editor of the oral form (046 EARS-8; canvas block `isAuthors`):
- * numbered rows with the name and workplace, the one «Докладчик» choice, and —
+ * The authors editor of the oral and poster forms (046 EARS-8, EARS-18; canvas
+ * block `isAuthors`): numbered rows with the name and workplace, the one
+ * «Докладчик» choice of an oral talk, and —
  * while editing — «Изменить/Готово», reorder ↑ ↓ and remove ✕, with the four
  * name inputs unfolding under a row. The first author is the account holder
  * the API pre-filled from the congress registration.
@@ -51,6 +52,11 @@ export interface AuthorsEditorProps {
   /** The send was tried — incomplete rows unfold and missing inputs go red. */
   tried: boolean;
   error: string | null;
+  /**
+   * The «Докладчик» choice — drawn for an oral talk only (canvas `showSp`);
+   * a poster lists its authors in publication order.
+   */
+  speakerPick?: boolean;
   onChange: (next: AuthorRow[]) => void;
   onBlur: () => void;
 }
@@ -60,6 +66,7 @@ export function AuthorsEditor({
   editable,
   tried,
   error,
+  speakerPick = true,
   onChange,
   onBlur,
 }: AuthorsEditorProps) {
@@ -160,7 +167,7 @@ export function AuthorsEditor({
                     {(a.workplace ?? "").trim() || COPY.noWorkplace}
                   </div>
                 </div>
-                {editable || a.presenting ? (
+                {speakerPick && (editable || a.presenting) ? (
                   <Radio
                     name="congress-speaker"
                     checked={!!a.presenting}

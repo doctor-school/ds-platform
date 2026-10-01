@@ -18,3 +18,12 @@ whose full years on the event's Moscow start day reach it, with an
 cabinet reads as «Постерные доклады принимают от участников младше {N} лет на
 дату начала Конгресса — {дата}. На эту дату вам будет {возраст} лет.». The
 section's kinds carry `maxAgeYears`; other kinds are unaffected.
+
+The cabinet offers the poster: the kind choice starts it, and when the account
+has no birth date the card first asks for it («Дата рождения», дд.мм.гггг,
+«Укажите дату рождения» on an empty or impossible day) and writes it before
+the draft is created. The poster form holds the topic, the authors in
+publication order (no speaker choice, no on-site line), «Цель» and
+«Содержание»; the first poster draft shows the stored birth date back for
+correction. A holder at or above the age limit sees the refusal on the poster
+card with no start and on a poster draft in place of the send.

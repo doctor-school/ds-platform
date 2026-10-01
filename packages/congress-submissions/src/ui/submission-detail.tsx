@@ -20,6 +20,7 @@ import { cn } from "@ds/design-system/lib/utils";
 import {
   CongressSubmissionsError,
   deleteDraft,
+  putBirthDate,
   saveDraft,
   sendSubmission,
   withdrawSubmission,
@@ -27,14 +28,17 @@ import {
 import { COPY, CONGRESS_SUBMISSION_CONSENT_HREF, KIND_COPY } from "../copy";
 import {
   type FormError,
-  ORAL_FIELDS,
   actionsFor,
   closedText,
   dateLine,
   draftErrors,
   editable as isEditable,
+  formFields,
+  formatBirthDate,
   kindSendable,
+  kindStartable,
   localDate,
+  parseBirthInput,
   problemMessages,
   revisionView,
   summaryTitle,
@@ -47,6 +51,7 @@ import {
   withUids,
   withoutUids,
 } from "./authors-editor";
+import { BirthField } from "./birth-field";
 import { PosterBand } from "./poster-band";
 import { useAutosave } from "./use-autosave";
 
@@ -54,9 +59,12 @@ import { useAutosave } from "./use-autosave";
  * One open submission (canvas artboard «d-lk-congress · заявка»): the poster
  * band with its kind, topic and status plate, the committee comment, the
  * notices, the detail actions with the inline withdrawal and deletion asks,
- * the error summary, the oral form — editable for a draft of a sendable kind
- * or a revision before its deadline, read-only otherwise — and the sticky
- * send panel with the autosave line and the send confirmation (046 EARS-7…16).
+ * the error summary, the kind's form (oral talk or poster) — editable for a
+ * draft of a sendable kind or a revision before its deadline, read-only
+ * otherwise — and the sticky send panel with the autosave line and the send
+ * confirmation (046 EARS-7…20). The first poster draft carries the birth-date
+ * field for correction (EARS-19); a poster draft of a holder at or above the
+ * kind's age limit reads as closed with the refusal (EARS-20).
  */
 
 export interface SubmissionDetailProps {
@@ -67,6 +75,21 @@ export interface SubmissionDetailProps {
   /** The submission was sent in this visit — the sent notice shows. */
   justSent: boolean;
   now: Date;
+  /** The account's birth date (EARS-19). */
+  birthDate: string | null;
+  /**
+   * The poster flow shows the birth-date field here: a poster draft while no
+   * poster of the holder has left the draft state (canvas `askBirth`).
+   */
+  askBirth: boolean;
+  /** The birth-date hint with the kind's age rule. */
+  birthHint: string;
+  /** The holder's age refusal for this kind, or `null` (EARS-20). */
+  ageRefusal: string | null;
+  /** The Moscow day a birth date may not pass (the API's own check). */
+  today: string;
+  /** The holder wrote a new birth date. */
+  onBirthDate: (birthDate: string) => void;
   /** The api returned a newer copy (autosave, take-back, withdrawal). */
   onReplace: (s: CongressSubmission) => void;
   onSent: (s: CongressSubmission) => void;
@@ -88,11 +111,6 @@ const toContent = (d: Draft): CongressSubmissionDraftContent => ({
   body: d.body,
 });
 
-const LIMIT: Record<string, number> = {
-  goal: CONGRESS_SUBMISSION_LIMITS.oralGoal,
-  summary: CONGRESS_SUBMISSION_LIMITS.oralSummary,
-};
-
 /** Keep a value inside its code-point budget so every autosave stays valid. */
 const clip = (v: string, max: number) => {
   const cps = Array.from(v);
@@ -106,17 +124,32 @@ export function SubmissionDetail({
   consentRequired,
   justSent,
   now,
+  birthDate,
+  askBirth,
+  birthHint,
+  ageRefusal,
+  today,
+  onBirthDate,
   onReplace,
   onSent,
   onRemoved,
   onStale,
   onClose,
 }: SubmissionDetailProps) {
-  const canEdit = isEditable(s, intake, now);
+  // A draft of a holder at or above the kind's age limit cannot become a
+  // submission: read-only with the refusal, like the canvas `over40` (EARS-20).
+  const ageLocked = s.status === "draft" && ageRefusal !== null;
+  const canEdit = isEditable(s, intake, now) && !ageLocked;
   // A draft whose kind is not open: why it cannot be sent, and no active send
   // (046 EARS-10) — still editable before the opening, read-only after closing.
-  const readDraft = s.status === "draft" && !kindSendable(intake);
+  const readDraft =
+    s.status === "draft" && (!kindSendable(intake) || ageLocked);
   const sendable = canEdit && !readDraft;
+  const blockedText = ageLocked ? ageRefusal : closedText(intake);
+  // The birth date stays correctable in the first poster draft, the age-locked
+  // one included — a mistyped date must not lock the holder out (EARS-19).
+  const showBirth = askBirth && s.status === "draft" && kindStartable(intake);
+  const fields = formFields(s.kind);
   const rev = revisionView(s, now);
   const kind = KIND_COPY[s.kind];
 
@@ -132,6 +165,24 @@ export function SubmissionDetail({
   const [busy, setBusy] = React.useState(false);
   const [sendFailed, setSendFailed] = React.useState(false);
   const [ask, setAsk] = React.useState<"withdraw" | "delete" | null>(null);
+  const [birthText, setBirthText] = React.useState(() =>
+    formatBirthDate(birthDate),
+  );
+  const [birthRefused, setBirthRefused] = React.useState(false);
+
+  /** Write the field's date when it is a real day the account does not hold yet. */
+  async function saveBirth(): Promise<boolean> {
+    const iso = parseBirthInput(birthText, today);
+    if (!iso) return false;
+    if (iso === birthDate) return true;
+    try {
+      onBirthDate((await putBirthDate(iso)).birthDate);
+      return true;
+    } catch {
+      setBirthRefused(true);
+      return false;
+    }
+  }
 
   const autosave = useAutosave<CongressSubmissionDraftContent>(
     async (content, { keepalive }) => {
@@ -168,6 +219,11 @@ export function SubmissionDetail({
     ? draftErrors(
         { title: draft.title, authors: draft.authors, body: draft.body },
         { consentRequired, consentChecked: consent },
+        {
+          kind: s.kind,
+          ...(showBirth ? { birthText } : {}),
+          today,
+        },
       )
     : [];
   const shown: FormError[] = [];
@@ -181,11 +237,23 @@ export function SubmissionDetail({
   }
   const errOf = (key: string) =>
     shown.find((e) => e.key === key)?.message ?? null;
+  const birthError = errOf("birth") ?? (birthRefused ? COPY.errBirth : null);
 
   async function onSubmit() {
     await autosave.flush();
     setSendFailed(false);
     if (localErrors.length) {
+      setTried(true);
+      return;
+    }
+    if (showBirth && !(await saveBirth())) {
+      setServerErrors(
+        problemMessages(
+          [{ code: "field-invalid", field: "birthDate" }],
+          intake,
+          now,
+        ),
+      );
       setTried(true);
       return;
     }
@@ -365,7 +433,7 @@ export function SubmissionDetail({
             {justSent ? (
               <Alert variant="success">{COPY.sentNotice}</Alert>
             ) : readDraft ? (
-              <Alert variant="warn">{closedText(intake)}</Alert>
+              <Alert variant="warn">{blockedText}</Alert>
             ) : s.status === "needs_revision" && !rev.open ? (
               <Alert variant="warn">{rev.text}</Alert>
             ) : s.status === "withdrawn" ? (
@@ -488,23 +556,39 @@ export function SubmissionDetail({
                 {fieldError("title")}
               </div>
 
+              {showBirth ? (
+                <BirthField
+                  value={birthText}
+                  hint={birthHint}
+                  error={birthError}
+                  onChange={(v) => {
+                    setBirthText(v);
+                    setBirthRefused(false);
+                    setServerErrors([]);
+                    setConfirming(false);
+                  }}
+                  onBlur={() => void saveBirth()}
+                />
+              ) : null}
+
               {sectionHead(
                 COPY.sectionAuthors,
-                s.kind === "oral" ? COPY.pickSpeaker : undefined,
+                s.kind === "oral" ? COPY.pickSpeaker : COPY.authorOrder,
               )}
               <AuthorsEditor
                 authors={draft.authors}
                 editable={canEdit}
                 tried={tried}
                 error={errOf("authors")}
+                speakerPick={s.kind === "oral"}
                 onChange={(authors) => update((d) => ({ ...d, authors }))}
                 onBlur={flush}
               />
 
               {sectionHead(COPY.sectionContent)}
-              {ORAL_FIELDS.map((f) => {
+              {fields.map((f) => {
                 const v = draft.body[f.key] ?? "";
-                const max = LIMIT[f.key]!;
+                const max = f.max;
                 return (
                   <div key={f.key}>
                     <label
@@ -628,7 +712,7 @@ export function SubmissionDetail({
                         ) : null}
                         {readDraft ? (
                           <span className="text-caption text-muted-foreground">
-                            {closedText(intake).split(" — ")[0]}
+                            {blockedText.split(" — ")[0]}
                           </span>
                         ) : null}
                         {sendFailed ? (

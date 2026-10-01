@@ -1,11 +1,17 @@
 import {
+  CONGRESS_SUBMISSION_LIMITS,
+  type CongressAgeLimitParams,
+  CongressBirthDateSchema,
   type CongressSubmission,
   type CongressSubmissionDraftAuthor,
+  type CongressSubmissionKind,
   type CongressSubmissionKindIntake,
   type CongressSubmissionProblem,
   type CongressSubmissionSectionEvent,
   congressAgeLimitParams,
+  congressAgeOnDay,
   congressTextLength,
+  instantToMskDay,
 } from "@ds/schemas";
 
 import { COPY, KIND_COPY } from "../copy";
@@ -113,19 +119,83 @@ const YEARS = ["год", "года", "лет"] as const;
 const YEARS_GENITIVE = ["года", "лет", "лет"] as const;
 
 /**
- * 046 EARS-20 — the age-limit refusal (owner decision 2026-10-01): the limit,
- * the event's start day as a Moscow day with no zone label, and the age.
+ * 046 EARS-20 — the age rule of a kind: its limit and the event's start day as
+ * a Moscow day with no zone label (the canvas `ageRule`).
  */
-export function ageLimitText(p: {
+export function ageRuleText(p: {
   maxAgeYears: number;
   eventStartDate: string;
-  age: number;
 }): string {
   return (
     `Постерные доклады принимают от участников младше ${withN(p.maxAgeYears, YEARS_GENITIVE)} ` +
-    `на дату начала Конгресса — ${mskDay(p.eventStartDate)}. ` +
-    `На эту дату вам будет ${withN(p.age, YEARS)}.`
+    `на дату начала Конгресса — ${mskDay(p.eventStartDate)}`
   );
+}
+
+/**
+ * 046 EARS-20 — the age-limit refusal (owner decision 2026-10-01): the rule
+ * and the age the holder will be on that day.
+ */
+export function ageLimitText(p: CongressAgeLimitParams): string {
+  return `${ageRuleText(p)}. На эту дату вам будет ${withN(p.age, YEARS)}.`;
+}
+
+/** The event's start as its Moscow calendar day — the day the age rule counts on. */
+export function eventStartDay(
+  event: Pick<CongressSubmissionSectionEvent, "startsAt">,
+): string {
+  return instantToMskDay(new Date(event.startsAt));
+}
+
+/**
+ * 046 EARS-20 — the refusal the API gives the holder for this kind: the kind
+ * has an age limit and the holder's full years on the event's Moscow start day
+ * reach it. `null` — the kind is open to them, or the birth date is not known
+ * yet (EARS-19 asks for it first).
+ */
+export function ageRefusalOf(
+  intake: Pick<CongressSubmissionKindIntake, "maxAgeYears">,
+  birthDate: string | null,
+  startDay: string,
+): CongressAgeLimitParams | null {
+  if (intake.maxAgeYears === null || !birthDate) return null;
+  const age = congressAgeOnDay(birthDate, startDay);
+  return age < intake.maxAgeYears
+    ? null
+    : { maxAgeYears: intake.maxAgeYears, eventStartDate: startDay, age };
+}
+
+/** 046 EARS-19 — the birth-date hint: asked once, and the kind's age rule. */
+export function birthHint(
+  intake: Pick<CongressSubmissionKindIntake, "maxAgeYears">,
+  startDay: string,
+): string {
+  if (intake.maxAgeYears === null) return COPY.birthAskedOnce;
+  const rule = ageRuleText({
+    maxAgeYears: intake.maxAgeYears,
+    eventStartDate: startDay,
+  });
+  return `${COPY.birthAskedOnce} ${rule}.`;
+}
+
+/**
+ * 046 EARS-19 — the birth-date field reads «дд.мм.гггг» as a real calendar day
+ * from 1900 up to `today` (the Moscow day, as the API checks it); anything
+ * else is `null`.
+ */
+export function parseBirthInput(text: string, today: string): string | null {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(text.trim());
+  if (!m) return null;
+  const iso = `${m[3]}-${m[2]!.padStart(2, "0")}-${m[1]!.padStart(2, "0")}`;
+  if (!CongressBirthDateSchema.safeParse(iso).success) return null;
+  return iso > today ? null : iso;
+}
+
+/** A stored birth date `YYYY-MM-DD` as the field shows it — «дд.мм.гггг». */
+export function formatBirthDate(iso: string | null): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
 }
 
 /** «осталось …» — days and hours, or hours and minutes under a day. */
@@ -354,15 +424,59 @@ export interface OralDraft {
   body: Record<string, string | undefined>;
 }
 
-export const ORAL_FIELDS = [
-  { key: "goal", label: COPY.goal, placeholder: COPY.goalPlaceholder, rows: 2 },
+/** One text field of a kind's body (canvas `DEFS`). */
+export interface FormField {
+  key: string;
+  label: string;
+  placeholder?: string;
+  rows: number;
+  /** The code-point budget (046-design «Field set and limits»). */
+  max: number;
+}
+
+export const ORAL_FIELDS: readonly FormField[] = [
+  {
+    key: "goal",
+    label: COPY.goal,
+    placeholder: COPY.goalPlaceholder,
+    rows: 2,
+    max: CONGRESS_SUBMISSION_LIMITS.oralGoal,
+  },
   {
     key: "summary",
     label: COPY.summary,
     placeholder: COPY.summaryPlaceholder,
     rows: 5,
+    max: CONGRESS_SUBMISSION_LIMITS.oralSummary,
   },
-] as const;
+];
+
+/** 046 EARS-18 — the poster's goal and content; the canvas draws no placeholders. */
+export const POSTER_FIELDS: readonly FormField[] = [
+  {
+    key: "goal",
+    label: COPY.posterGoal,
+    rows: 2,
+    max: CONGRESS_SUBMISSION_LIMITS.posterGoal,
+  },
+  {
+    key: "content",
+    label: COPY.posterContent,
+    rows: 5,
+    max: CONGRESS_SUBMISSION_LIMITS.posterContent,
+  },
+];
+
+/** The body fields of a kind's form. */
+export function formFields(kind: CongressSubmissionKind): readonly FormField[] {
+  return kind === "poster" ? POSTER_FIELDS : ORAL_FIELDS;
+}
+
+const BIRTH_ERROR: FormError = {
+  key: "birth",
+  message: COPY.errBirth,
+  focusId: "in-birth",
+};
 
 const filled = (v: string | undefined) => congressTextLength(v ?? "") > 0;
 
@@ -371,12 +485,19 @@ function authorIncomplete(a: CongressSubmissionDraftAuthor): boolean {
 }
 
 /**
- * The oral form's unmet send conditions, before the server is asked
- * (046 EARS-8, EARS-16) — the server repeats every one of them.
+ * The form's unmet send conditions, before the server is asked (046 EARS-8,
+ * EARS-16, EARS-18, EARS-19) — the server repeats every one of them.
+ * `birthText` is the birth-date field's text when the poster flow asks for it;
+ * `today` is the Moscow day the API checks it against.
  */
 export function draftErrors(
   d: OralDraft,
   consent: { consentRequired: boolean; consentChecked: boolean },
+  form: {
+    kind?: CongressSubmissionKind;
+    birthText?: string;
+    today?: string;
+  } = {},
 ): FormError[] {
   const out: FormError[] = [];
   if (!filled(d.title)) {
@@ -392,7 +513,11 @@ export function draftErrors(
   } else if (d.authors.filter((a) => a.presenting).length !== 1) {
     out.push({ key: "authors", message: COPY.errSpeaker });
   }
-  for (const f of ORAL_FIELDS) {
+  if (form.birthText !== undefined) {
+    const today = form.today ?? instantToMskDay(new Date());
+    if (!parseBirthInput(form.birthText, today)) out.push(BIRTH_ERROR);
+  }
+  for (const f of formFields(form.kind ?? "oral")) {
     if (!filled(d.body[f.key])) {
       out.push({
         key: f.key,
@@ -407,8 +532,12 @@ export function draftErrors(
   return out;
 }
 
-function fieldProblem(field: string | undefined): FormError | null {
+function fieldProblem(
+  field: string | undefined,
+  kind: CongressSubmissionKind,
+): FormError | null {
   if (!field) return null;
+  if (field === "birthDate") return BIRTH_ERROR;
   if (field === "title") {
     return { key: "title", message: COPY.errTopic, focusId: "in-topic" };
   }
@@ -422,7 +551,9 @@ function fieldProblem(field: string | undefined): FormError | null {
   }
   if (field === "authors") return { key: "authors", message: COPY.errSpeaker };
   const body = /^body\.(\w+)/.exec(field);
-  const def = body ? ORAL_FIELDS.find((f) => f.key === body[1]) : undefined;
+  const def = body
+    ? formFields(kind).find((f) => f.key === body[1])
+    : undefined;
   if (def) {
     return {
       key: def.key,
@@ -468,7 +599,10 @@ export function problemMessages(
         break;
       case "field-invalid":
         push(
-          fieldProblem(p.field) ?? { key: null, message: COPY.errFieldInvalid },
+          fieldProblem(p.field, intake.kind) ?? {
+            key: null,
+            message: COPY.errFieldInvalid,
+          },
         );
         break;
       case "revision-closed": {

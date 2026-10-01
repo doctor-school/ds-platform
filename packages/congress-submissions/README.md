@@ -2,9 +2,10 @@
 
 The one implementation of «Мои заявки на Конгресс» (feature 046): the author's
 section of the congress event — the list of submissions with their status
-labels, the kind choice, the talk form with its authors editor, autosave, the
-send panel with its error summary and confirmation, return to draft, withdrawal
-and draft deletion. Spec: `apps/docs/content/specs/features/046-congress-submissions/`.
+labels, the kind choice, the oral-talk and poster forms with their authors
+editor, the poster flow's birth-date step and age refusal, autosave, the send
+panel with its error summary and confirmation, return to draft, withdrawal and
+draft deletion. Spec: `apps/docs/content/specs/features/046-congress-submissions/`.
 Look: the canvas `design-source/doctor-lk-congress.dc.html`. Registry row:
 «Congress submissions cabinet» in
 `apps/docs/content/specs/product/two-site-ia/capability-ownership.md`.
@@ -15,12 +16,12 @@ config, never a second section.
 
 ## Layering
 
-| Entry      | Path                          | Holds                                                                                                                            |
-| ---------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `.`        | `src/copy.ts`, `src/model/**` | the RU copy and the pure decisions: dates, intake lines, the revision countdown, the actions a submission offers, send checks    |
-| `./client` | `src/client/index.ts`         | the same-origin `/v1/me/congress-submissions*` transport (`credentials: "include"`), `CongressSubmissionsError`                  |
-| `./ui`     | `src/ui/**`                   | `CongressSection` and its parts over `@ds/design-system` primitives; `useAutosave` (1.5 s debounce, flush on blur and page hide) |
-| `./route`  | `src/route/section-route.tsx` | `CongressSectionRoute` — the server mount: a guest goes to the host login with the section as its return target                  |
+| Entry      | Path                          | Holds                                                                                                                                   |
+| ---------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `.`        | `src/copy.ts`, `src/model/**` | the RU copy and the pure decisions: dates, intake lines, the revision countdown, the actions a submission offers, send checks           |
+| `./client` | `src/client/index.ts`         | the same-origin `/v1/me/congress-submissions*` and `/v1/me/birth-date` transport (`credentials: "include"`), `CongressSubmissionsError` |
+| `./ui`     | `src/ui/**`                   | `CongressSection` and its parts over `@ds/design-system` primitives; `useAutosave` (1.5 s debounce, flush on blur and page hide)        |
+| `./route`  | `src/route/section-route.tsx` | `CongressSectionRoute` — the server mount: a guest goes to the host login with the section as its return target                         |
 
 The model imports only `@ds/schemas`; the UI is tokens-only (`no-arbitrary-tailwind-value`,
 `no-primitive-style-override`). Field sets and limits come from `@ds/schemas`

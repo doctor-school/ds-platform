@@ -376,3 +376,13 @@ Every mutating recording endpoint and every legacy-lifecycle command require a c
 **The parked copy stays as the in-flow safety net.** Every in-flow hop carries `returnTo` and the query wins, so the parked `ds_return_to` copy is read only if an in-flow hop ever loses the query; it is kept so that such a hop still lands on the flow's own guard-validated target instead of silently dropping the registration, and it cannot resurrect an abandoned flow because a bare door has already expired it.
 
 **Verification.** `packages/auth-flow/src/server/return-target-parking.test.ts`, `packages/auth-flow/src/login/login-door.intent-lifetime.test.tsx`, `apps/doctor/proxy.test.ts`, `apps/portal/middleware.test.ts` (`014 EARS-6.10`).
+
+## Amendment — 2026-10-01 — «Прошедшие» is the tense of the shared events feed, not a separate archive tab (source: [#2509](https://github.com/doctor-school/ds-platform/issues/2509), owner decision 2026-10-01)
+
+> **Status:** EARS-11 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). EARS-11 above remains the decision as originally taken, read under this amendment. The RU twin is [`014-requirements-ru.md`](./014-requirements-ru.md) → «Amendment — 2026-10-01». The live behaviour is unchanged until the implementation step of #2509 lands.
+
+**Provenance.** The owner decided on 2026-10-01 that past events are the same events feed filtered to past dates on both storefronts — not a separate archive page or tab — and that the feed is one module on both storefronts (019 LD-11, LD-13).
+
+**The rule.** The «Предстоящие · N | Прошедшие · N» tabs of EARS-11 become the «Будущие / Прошедшие» tense switch of the shared events-feed module (019 EARS-10, LD-13): the past reading is the same feed, the same card unit in its post-live state with the recording action, the same facet panel (EARS-12…EARS-14) and the same URL-state contract (LD-11 here, 019 LD-1), grouped by month newest first, over the Academy content set of 004 «Amendment — 2026-10-01». No separate archive tab, page or block («Архив записей») is rendered. What `ended` and `in_archive` events the past reading includes, and what `draft` and `hidden` events it excludes, stays exactly as EARS-11 states.
+
+**What does not change.** Recording publication and the post-live event page (EARS-1…EARS-10, EARS-15…EARS-29), the facets and their contract (EARS-12…EARS-14), and the personal «Мои события» page with its own «Предстоящие | Записи» tabs, which is a viewer's history and not the events feed.

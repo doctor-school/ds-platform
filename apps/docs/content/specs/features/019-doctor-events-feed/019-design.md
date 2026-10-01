@@ -6,7 +6,7 @@ status: In dev
 lang: en
 ---
 
-> Companion to [`019-requirements-en.md`](./019-requirements-en.md). Engineer-facing, EN-only per ADR-0006 §4. Composition source of truth is the vendored canvas [`design-source/doctor-events.dc.html`](../../../../../../design-source/doctor-events.dc.html); where this document and the canvas disagree on geometry, the canvas wins, and where they disagree on behaviour, the requirements win.
+> Companion to [`019-requirements-en.md`](./019-requirements-en.md). Engineer-facing, EN-only per ADR-0006 §4. Composition source of truth is the one events-feed canvas of both storefronts — [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) with [`events-feed-month.dc.html`](../../../../../../design-source/events-feed-month.dc.html), switched by its `host` prop; `doctor-events.dc.html` is the Stage-A record whose doctor-only blocks that canvas absorbs, after which it is archived (LD-11). Where this document and the canvas disagree on geometry, the canvas wins, and where they disagree on behaviour, the requirements win.
 
 # 019 — Design
 
@@ -69,7 +69,7 @@ Consequences that are part of the contract rather than side effects:
 
 ## 3. Read topology
 
-Within Doctor, one host projection serves the feed; the month grid and the calendar page project the same result. Across storefronts, `/v1/public/events` and `/v1/storefront/doctor/events` are thin adapters over the same `EventsService` / repository query core and portable schemas, not duplicate engines.
+Within Doctor, one host projection serves the feed; the month grid and the calendar page project the same result. Across storefronts, `/v1/public/events` and `/v1/storefront/doctor/events` are thin adapters over the same `EventsService` / repository query core and portable schemas, not duplicate engines. Each adapter selects its storefront's **content set** server-side (LD-11): the doctor adapter passes every published event of every kind to targeting (EARS-16); the Academy adapter adds two predicates to the same state/date rules — the event is linked to at least one project through `eventProjects`, and its kind's «shown on Academy» flag is true (004, Amendment 2026-10-01). The client never receives an event to hide.
 
 ```mermaid
 graph LR
@@ -144,7 +144,7 @@ stateDiagram-v2
   }
 ```
 
-The card unit is the same in both tenses; only the action and the state change. `WithoutRecording` renders the card with no recording action — never a link that resolves to nothing. The community-discussion affordance of PRD US-11 is **not drawn in either state** (deferred; see the requirements' Scope → Out).
+The card unit is the same in both tenses; only the action, the state and the grouping change — days in `Upcoming`, months newest-first in `Past`, one rule on both storefronts (LD-13). `Past` is the only archive of the shared feed: neither storefront renders a separate archive page, tab or block below the feed. `WithoutRecording` renders the card with no recording action — never a link that resolves to nothing. The community-discussion affordance of PRD US-11 is **not drawn in either state** (deferred; see the requirements' Scope → Out).
 
 ## 6. Facet panel — form and fill states (F-019-1 Б, D-1, LD-4)
 
@@ -154,9 +154,9 @@ graph TD
   Unit --> Mob["mobile: «Фильтры» control with applied count → sheet"]
   Unit --> W1["fill: wave-1 — view + tense only"]
   Unit --> Int["fill: intermediate — + format, kind"]
-  Unit --> Full["fill: full — + specialty, city, НМО, free-by-Pul, query"]
+  Unit --> Full["fill: full — + specialty, city, НМО, direction, query"]
   Full --> Grid019["019 mounts the full set (LD-4)"]
-  W1 --> Academy["030 / 031 mount fewer facets later"]
+  W1 --> Academy["Academy host mounts project, expert, topic (LD-11)"]
   Int --> Academy
 ```
 
@@ -172,11 +172,11 @@ The fill states are a property of the **unit**, not of this screen: 019 mounts `
 | `tense`     | `upcoming` \| `past`                                                         | drives the 014 join                                                                                                                                                                                                                                                                                                                             |
 | `from/to`   | ISO dates                                                                    | the LD-2 horizon; «показать ещё» widens it                                                                                                                                                                                                                                                                                                      |
 | `format`    | `webinar` \| `online-meeting` \| `offline-meetup` \| `congress` \| `podcast` | repeatable                                                                                                                                                                                                                                                                                                                                      |
-| `kind`      | reference ids                                                                | repeatable                                                                                                                                                                                                                                                                                                                                      |
+| `kind`      | event-kind dictionary slugs (012)                                            | repeatable; the facet's options are the published dictionary entries, never a code enum (LD-12, EARS-17)                                                                                                                                                                                                                                        |
 | `specialty` | `mine-and-adjacent` \| `all` \| ids                                          | default `mine-and-adjacent`                                                                                                                                                                                                                                                                                                                     |
 | `city`      | reference ids                                                                | offline events only                                                                                                                                                                                                                                                                                                                             |
 | `nmo`       | boolean                                                                      | badge-backed facet                                                                                                                                                                                                                                                                                                                              |
-| `free`      | boolean                                                                      | `pulCost = 0`                                                                                                                                                                                                                                                                                                                                   |
+| `direction` | direction ids (012 `directions`)                                             | repeatable; the topic facet until a medical-topic taxonomy carries content (LD-4)                                                                                                                                                                                                                                                               |
 | `q`         | string                                                                       | name search                                                                                                                                                                                                                                                                                                                                     |
 
 Response shape is the read-model set of the requirements' Event Model. Errors are RFC 7807 Problem Details (ADR-0002) and are rendered per block in Russian with a retry that re-runs only that read.

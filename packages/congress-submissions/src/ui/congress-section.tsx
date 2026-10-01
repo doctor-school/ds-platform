@@ -534,7 +534,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
               <ul className="-mx-4 flex flex-col border-t border-hairline bg-card layout:mx-0 layout:border-2 layout:border-border layout:shadow-lg">
                 {shown.map((s, i) => {
                   const it = intakeOf(s.kind);
-                  const acts = actionsFor(s, it, now);
+                  const refusal = refusalOf(s.kind);
+                  const acts = actionsFor(s, it, now, refusal);
                   const rev =
                     s.status === "needs_revision" ? revisionView(s, now) : null;
                   return (
@@ -576,7 +577,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                             </button>
                           </Link>
                           <div className="text-caption leading-normal text-faint">
-                            {rowMeta(s, it, now)}
+                            {rowMeta(s, it, now, refusal)}
                           </div>
                           {s.committeeComment ? (
                             <div className="mt-1 flex min-w-0 flex-col items-start gap-1">

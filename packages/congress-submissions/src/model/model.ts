@@ -181,13 +181,23 @@ export function birthHint(
 
 /**
  * 046 EARS-19 — the birth-date field reads «дд.мм.гггг» as a real calendar day
- * from 1900 up to `today` (the Moscow day, as the API checks it); anything
- * else is `null`.
+ * from 1900 up to `today` (the Moscow day, as the API checks it). The parts may
+ * also be separated by one `/`, `-` or space (the same one throughout), or
+ * typed as eight bare digits `ддммгггг` — a phone keypad may lack «.».
+ * Anything else is `null`.
  */
 export function parseBirthInput(text: string, today: string): string | null {
-  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(text.trim());
-  if (!m) return null;
-  const iso = `${m[3]}-${m[2]!.padStart(2, "0")}-${m[1]!.padStart(2, "0")}`;
+  const t = text.trim();
+  const sep = /^(\d{1,2})([./\- ])(\d{1,2})\2(\d{4})$/.exec(t);
+  const bare = /^(\d{2})(\d{2})(\d{4})$/.exec(t);
+  const parts = sep
+    ? [sep[1]!, sep[3]!, sep[4]!]
+    : bare
+      ? [bare[1]!, bare[2]!, bare[3]!]
+      : null;
+  if (!parts) return null;
+  const [d, mo, y] = parts as [string, string, string];
+  const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
   if (!CongressBirthDateSchema.safeParse(iso).success) return null;
   return iso > today ? null : iso;
 }
@@ -325,11 +335,16 @@ export interface Actions {
   secondary: ActionView[];
 }
 
-/** What a submission offers in the list and in the detail (046 EARS-11…13). */
+/**
+ * What a submission offers in the list and in the detail (046 EARS-11…13).
+ * `ageRefusal` — the holder's age-limit refusal for this kind (046 EARS-20,
+ * `ageLimitText`), or `null`; an age-locked draft opens rather than continues.
+ */
 export function actionsFor(
   s: CongressSubmission,
   intake: CongressSubmissionKindIntake,
   now: Date,
+  ageRefusal: string | null = null,
 ): Actions {
   const withdraw: ActionView = {
     action: "withdraw",
@@ -343,7 +358,10 @@ export function actionsFor(
       return {
         primary: {
           action: "open",
-          label: kindStartable(intake) ? COPY.continue : COPY.open,
+          label:
+            kindStartable(intake) && ageRefusal === null
+              ? COPY.continue
+              : COPY.open,
         },
         secondary: [
           { action: "delete", label: COPY.deleteDraft, danger: true },
@@ -377,19 +395,25 @@ export function actionsFor(
   }
 }
 
-/** The list row's meta line (046 EARS-11). */
+/**
+ * The list row's meta line (046 EARS-11). A draft that cannot be sent carries
+ * why, lower-cased up to « — »: the age rule first (046 EARS-20, `ageRefusal`
+ * as in `actionsFor`), else the closed intake (canvas `closedText`).
+ */
 export function rowMeta(
   s: CongressSubmission,
   intake: CongressSubmissionKindIntake,
   _now: Date,
+  ageRefusal: string | null = null,
 ): string {
   const out = [
     KIND_COPY[s.kind].label,
     `${s.status === "draft" ? "изменён" : "изменено"} ${localDate(s.updatedAt)}`,
   ];
   if (s.status === "submitted") out.push(COPY.sentMeta);
-  if (s.status === "draft" && !kindSendable(intake)) {
-    out.push(closedText(intake).split(" — ")[0]!.toLowerCase());
+  if (s.status === "draft" && (ageRefusal !== null || !kindSendable(intake))) {
+    const why = ageRefusal ?? closedText(intake);
+    out.push(why.split(" — ")[0]!.toLowerCase());
   }
   return out.join(" · ");
 }

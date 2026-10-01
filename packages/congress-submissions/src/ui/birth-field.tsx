@@ -44,7 +44,6 @@ export function BirthField({
         <Input
           id="in-birth"
           value={value}
-          inputMode="numeric"
           autoComplete="bday"
           placeholder={COPY.birthPlaceholder}
           aria-describedby="in-birth-hint"

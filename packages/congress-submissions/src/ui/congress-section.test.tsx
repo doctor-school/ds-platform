@@ -755,7 +755,9 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     await userEvent.type(field, "01.01.1990");
     fetchMock.mockResolvedValueOnce(answer({ message: "bad" }, 400));
     await userEvent.tab();
-    expect(await screen.findByText("Укажите дату рождения")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Укажите дату рождения"),
+    ).toBeInTheDocument();
     expect(field).toHaveAttribute("aria-invalid", "true");
   });
 
@@ -872,6 +874,42 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     expect(screen.getByRole("button", { name: "Отправить" })).toBeDisabled();
     expect(screen.queryByRole("textbox", { name: "Тема" })).toBeNull();
     expect(screen.getByLabelText("Дата рождения")).toHaveValue("01.01.1980");
+  });
+
+  it("046 EARS-20: in the list an age-locked poster draft reads «Открыть» with the age rule on its meta line", async () => {
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          birthDate: "1980-01-01",
+          kinds: kinds40,
+          submissions: [{ ...posterDraft, title: "Постер" }],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    const row = (await screen.findAllByTestId("congress-row"))[0]!;
+    expect(
+      within(row).getByText(
+        /^Постерный доклад · изменён .+ · постерные доклады принимают от участников младше 40 лет на дату начала конгресса$/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "Открыть →" }),
+    ).toBeEnabled();
+    expect(
+      within(row).queryByRole("button", { name: "Продолжить →" }),
+    ).toBeNull();
+  });
+
+  it("046 EARS-19: the birth-date field is plain text — no numeric keypad that lacks «.»", async () => {
+    openDraft(posterDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ kinds: kinds40, submissions: [posterDraft] })),
+    );
+    render(<CongressSection host={HOST} />);
+    const field = await screen.findByLabelText("Дата рождения");
+    expect(field).not.toHaveAttribute("inputmode");
+    expect(field).toHaveAttribute("autocomplete", "bday");
   });
 
   it("046 EARS-20: a send the API refuses for age shows its limit, day and age", async () => {

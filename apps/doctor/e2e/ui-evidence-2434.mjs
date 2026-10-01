@@ -282,6 +282,13 @@ async function centre(page, locator) {
 }
 {
   const { ctx, page } = await themed(VIEWPORTS.desktop, "light", senior);
+  // The list row of an age-locked poster draft: «Открыть» and the age rule on
+  // the meta line (canvas `draftClosed`, 046 EARS-20).
+  await page.goto(`${BASE}/account/congress`);
+  const row = page.getByTestId("congress-row").first();
+  await row.getByRole("button", { name: "Открыть →" }).waitFor();
+  await row.getByText(/постерные доклады принимают от участников младше 40 лет/).waitFor();
+  await shot(page, "interactions-list-age-locked", "light", false);
   await openDraft(page);
   await page.getByText(/На эту дату вам будет/).first().waitFor();
   await shot(page, "interactions-send-age-refusal", "light");

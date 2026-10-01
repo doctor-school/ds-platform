@@ -308,6 +308,27 @@ describe("row meta and date line", () => {
     );
   });
 
+  it("046 EARS-20: an age-locked poster draft row reads «Открыть» and carries the lower-cased age rule (canvas `draftClosed`)", () => {
+    const refusal =
+      "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 47 лет.";
+    const poster = sub({ kind: "poster" });
+    const open = intake({ kind: "poster", maxAgeYears: 40 });
+    expect(actionsFor(poster, open, NOW, refusal).primary).toEqual({
+      action: "open",
+      label: "Открыть",
+    });
+    expect(actionsFor(poster, open, NOW).primary?.label).toBe("Продолжить");
+    expect(rowMeta(poster, open, NOW, refusal)).toBe(
+      "Постерный доклад · изменён 18 декабря 2026 · постерные доклады принимают от участников младше 40 лет на дату начала конгресса",
+    );
+    // A sent poster keeps its own meta — the age lock speaks only for drafts.
+    expect(
+      rowMeta(sub({ kind: "poster", status: "submitted" }), open, NOW, refusal),
+    ).toBe(
+      "Постерный доклад · изменено 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+    );
+  });
+
   it("EARS-11: the change, send and withdrawal times are the viewer's, not Moscow", () => {
     const late = "2026-12-18T20:00:00.000Z"; // 23:00 МСК, 06:00 19 Dec local
     expect(rowMeta(sub({ updatedAt: late }), intake(), NOW)).toBe(
@@ -589,6 +610,25 @@ describe("046 EARS-19 — the birth date", () => {
     expect(parseBirthInput("31.12.1899", "2026-12-20")).toBeNull();
     expect(parseBirthInput("21.12.2026", "2026-12-20")).toBeNull();
     expect(parseBirthInput("20.12.2026", "2026-12-20")).toBe("2026-12-20");
+  });
+
+  it("046 EARS-19: «/», «-» and spaces separate the parts too, and eight bare digits read as ддммгггг", () => {
+    const today = "2026-12-20";
+    expect(parseBirthInput("24/04/1987", today)).toBe("1987-04-24");
+    expect(parseBirthInput("24-04-1987", today)).toBe("1987-04-24");
+    expect(parseBirthInput("24 04 1987", today)).toBe("1987-04-24");
+    expect(parseBirthInput("1/2/1990", today)).toBe("1990-02-01");
+    expect(parseBirthInput("24041987", today)).toBe("1987-04-24");
+    // Still refused: ISO order, mixed or doubled separators, wrong digit
+    // counts, two-digit years, impossible days and days after today.
+    expect(parseBirthInput("1987-04-24", today)).toBeNull();
+    expect(parseBirthInput("24.04/1987", today)).toBeNull();
+    expect(parseBirthInput("24..04.1987", today)).toBeNull();
+    expect(parseBirthInput("2404198", today)).toBeNull();
+    expect(parseBirthInput("240419870", today)).toBeNull();
+    expect(parseBirthInput("24.04.87", today)).toBeNull();
+    expect(parseBirthInput("31021990", today)).toBeNull();
+    expect(parseBirthInput("21122026", today)).toBeNull();
   });
 
   it("046 EARS-19: the stored day shows back as «дд.мм.гггг»", () => {

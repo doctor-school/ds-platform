@@ -325,7 +325,7 @@ export function SubmissionDetail({
     }
   }
 
-  const acts = actionsFor(s, intake, now);
+  const acts = actionsFor(s, intake, now, ageRefusal);
   const detailActions = [
     ...(acts.primary?.action === "take-back" ? [acts.primary] : []),
     ...acts.secondary,

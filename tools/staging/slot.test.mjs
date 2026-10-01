@@ -271,6 +271,15 @@ test("a remote write is a root-owned heredoc, never a redirect the caller owns",
   assert.ok(!/cat >/.test(script));
 });
 
+test("a 0600 write sets the mode before any byte lands — no umask window (#2531)", () => {
+  const path = "/etc/ds-platform/stage-agent-admin.env";
+  const lines = remoteWriteScript(path, "K=secret\n", 0o600).split("\n");
+  const create = lines.indexOf(`sudo test -e ${path} || sudo install -m 0600 /dev/null ${path}`);
+  const chmod = lines.indexOf(`sudo chmod 0600 ${path}`);
+  const tee = lines.findIndex((line) => line.startsWith(`sudo tee ${path} `));
+  assert.ok(create > 0 && chmod > create && tee > chmod, lines.join("\n"));
+});
+
 test("an append never truncates, and the delimiter can never be forged", () => {
   const appended = remoteWriteScript("/var/log/ds-platform/slot.log", "line\n", 0o640, {
     append: true,
@@ -1200,10 +1209,45 @@ test("`up` converges the golden identities FIRST — its subjects are the plan's
     effects,
   });
   assert.equal(seen[0][1], "golden-identities");
+  // #2531: the agent admin (account + TOTP) converges right behind the golden five.
+  assert.equal(seen[1][1], "agent-admin");
   const env = seen.find(([path]) => path === slotEnvPath("pr-7"));
   assert.ok(env, "the slot env was written");
   assert.match(env[1], new RegExp(`${GOLDEN_SUBJECT_ENV_VARS[0]}=${SUBJECTS[GOLDEN_SUBJECT_ENV_VARS[0]]}`));
   assert.match(line, /slot pr-7 converged/);
+});
+
+test("`reset-identities` converges the agent admin too (#2531)", async () => {
+  const ops = [];
+  const effects = {
+    sql: async () => {},
+    sh: async () => {},
+    write: async () => {},
+    append: async () => {},
+    idp: async (step) => {
+      ops.push(step.op);
+      if (step.op === "agent-admin") assert.deepEqual(step.goldenSubjects, SUBJECTS);
+      return step.op === "golden-identities" ? SUBJECTS : undefined;
+    },
+  };
+  await runSlotCommand({
+    options: { command: "reset-identities", slot: "pr-7", actor: "tech-lead" },
+    liveSlots: live({ "pr-7": [] }),
+    baseDomain: BASE,
+    effects,
+  });
+  assert.deepEqual(ops, ["golden-identities", "agent-admin"]);
+});
+
+test("`agent-admin-code` parses with an optional `--json` and nothing else", () => {
+  assert.deepEqual(parseArgs(["agent-admin-code"]), {
+    command: "agent-admin-code",
+    slot: undefined,
+    sha: undefined,
+    json: false,
+  });
+  assert.equal(parseArgs(["agent-admin-code", "--json"]).json, true);
+  assert.throws(() => parseArgs(["agent-admin-code", "pr-7"]), SlotError);
 });
 
 test("`down` needs no golden identities — a teardown must never be blocked by them", async () => {

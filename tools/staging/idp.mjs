@@ -1,7 +1,7 @@
 /**
  * The staging box's converge against the ONE shared Zitadel instance.
  *
- * Two jobs, both whole-set and both idempotent:
+ * Three jobs, all idempotent:
  *
  * 1. **Redirect URIs.** §3 «Identity» gives the stand one Zitadel, one project, one
  *    OIDC client, so a slot's `/auth/callback` works only if it is registered on that
@@ -14,6 +14,10 @@
  *    are the fixture every regression scenario signs in as. `reset-identities`
  *    guarantees their existence, their password and their email-verified state.
  *
+ * 3. **The agent admin** (#2531). A stage-only admin outside the golden catalogue whose
+ *    password and TOTP factor this file converges, so an agent can pass the admin's
+ *    second-factor challenge on a slot without the owner's authenticator.
+ *
  * Shape of every function here: the PLANS are pure (`planRedirectUriConverge`,
  * `planGoldenIdentities`) and the effects arrive injected (`fetch`, `readFile`,
  * `log`), which is what lets the whole file be unit-tested without a Zitadel.
@@ -25,7 +29,7 @@
  * The PAT, the golden passwords and the `Authorization` header are NEVER logged and
  * never put into an error message — only presence flags are.
  */
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 /** Every failure this module raises. Never carries a credential in its message. */
@@ -94,10 +98,10 @@ export const GOLDEN_IDP_ACCOUNTS = Object.freeze([
     role: "doctor_guest",
     roleKeys: ["doctor_guest"],
     emailVerified: true,
-    // MFA enrolment is NOT converged here. `reset-identities` guarantees existence,
-    // password and email-verified state only; enrolling the TOTP factor for
-    // `doctorMfa` / `admin` belongs to the scenario contract of step 7 (#2067),
-    // which is where the challenge is actually driven (#2064 addendum 3 and 5).
+    // MFA enrolment is NOT converged here: the `doctorMfa` / `admin` factors are
+    // enrolled in the owner's authenticator and `reset-identities` guarantees only
+    // existence, password and email-verified state. The account agents pass a TOTP
+    // challenge with is `STAGE_AGENT_ADMIN` below, whose factor IS converged (#2531).
     mfaEnrolled: true,
     idpAccountExpected: true,
     subjectEnvVar: "DS_GOLDEN_SUB_DOCTOR_MFA",
@@ -415,7 +419,7 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
   const origin = String(baseUrl).replace(/\/$/, "");
   return {
     origin,
-    async request(method, path, body) {
+    async request(method, path, body, { allowStatus = [] } = {}) {
       let res;
       try {
         res = await fetchImpl(`${origin}${path}`, {
@@ -431,6 +435,8 @@ export function createIdpClient({ fetch: fetchImpl, baseUrl, pat }) {
           `${method} ${path} could not reach the IdP at ${origin}: ${err?.message ?? err}`,
         );
       }
+      // `allowStatus` is only for a caller that proves the outcome by its own re-read.
+      if (!res.ok && allowStatus.includes(res.status)) return null;
       if (!res.ok) {
         throw new IdpError(`${method} ${path} answered ${res.status} (IdP at ${origin})`);
       }
@@ -574,8 +580,9 @@ async function resolveOrgId(client, env) {
  * actually runs must succeed. The only «nothing to do» outcomes are membership facts
  * (already present / already absent), never a swallowed error.
  *
- * What is deliberately NOT converged: the TOTP enrolment of `doctorMfa` and `admin`.
- * That belongs to the scenario contract of step 7 (#2067) — see the catalogue above.
+ * What is deliberately NOT converged: the TOTP enrolment of `doctorMfa` and `admin` —
+ * the owner's authenticator holds those factors. `convergeAgentAdmin` below is the one
+ * converge that touches a factor, and only that of `STAGE_AGENT_ADMIN` (#2531).
  */
 export async function convergeGoldenIdentities({
   client,
@@ -722,4 +729,255 @@ export async function convergeGoldenIdentities({
     subjects[account.subjectEnvVar] = userId;
   }
   return subjects;
+}
+
+// --- the agent admin (#2531) -------------------------------------------------
+
+/**
+ * The staging-only admin agents sign in as.
+ *
+ * NOT part of the golden catalogue above, and deliberately so: the golden five mirror
+ * `packages/db/src/seed/golden/idp.ts` and are what the seeded dataset references,
+ * while this account exists only on the shared stage IdP so that an agent can pass the
+ * admin's TOTP challenge without the owner's authenticator. Its mirror row is not
+ * seeded: the api heals a missing mirror for an authenticated subject on the first
+ * request (`apps/api/src/auth/mirror-self-heal.service.ts`) and marks the staff role
+ * from the session's claims in the same pass, which is also what makes the sign-in
+ * survive a `sync` that re-seeds the slot database.
+ *
+ * Same roles as the golden admin; its own username and its own secrets file. The
+ * golden `admin` and `doctorMfa` factors belong to the owner's authenticator and are
+ * never read, removed or enrolled by this file.
+ */
+export const STAGE_AGENT_ADMIN = Object.freeze({
+  key: "agentAdmin",
+  username: "golden.admin.agent@example.test",
+  role: "platform_admin",
+  roleKeys: Object.freeze(["doctor_guest", "platform_admin"]),
+  emailVerified: true,
+  mfaEnrolled: true,
+  idpAccountExpected: true,
+  subjectEnvVar: "DS_STAGE_AGENT_ADMIN_SUB",
+  passwordEnvVar: "DS_STAGE_AGENT_ADMIN_PASSWORD",
+});
+
+/** The TOTP secret's key in the agent secrets file. */
+export const AGENT_ADMIN_TOTP_ENV_VAR = "DS_STAGE_AGENT_ADMIN_TOTP_SECRET";
+
+/**
+ * Root-only (0600) and TOOL-owned, unlike the owner-placed golden passwords in
+ * `stage.env`: the converge mints the password and the TOTP secret itself, so no
+ * owner step stands between an agent and an admin sign-in.
+ */
+export const AGENT_ADMIN_SECRETS_PATH = "/etc/ds-platform/stage-agent-admin.env";
+
+const AGENT_SECRET_KEYS = Object.freeze([
+  STAGE_AGENT_ADMIN.passwordEnvVar,
+  AGENT_ADMIN_TOTP_ENV_VAR,
+]);
+
+/** The secrets file body. Only the two known keys; an unminted one is omitted. */
+export function renderAgentAdminSecrets(secrets) {
+  const lines = [
+    "# generated by tools/staging/idp.mjs (`ds-slot reset-identities`) — do not edit by hand",
+    "# The stage agent admin's password and TOTP secret (#2531). root:root 0600.",
+  ];
+  for (const key of AGENT_SECRET_KEYS) {
+    const value = secrets?.[key];
+    if (value) lines.push(`${key}=${value}`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
+/** The same file, read back; unknown names are ignored. */
+export function parseAgentAdminSecrets(text) {
+  const secrets = {};
+  for (const line of String(text ?? "").split(/\r?\n/)) {
+    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+    if (match && AGENT_SECRET_KEYS.includes(match[1]) && match[2]) secrets[match[1]] = match[2];
+  }
+  return secrets;
+}
+
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+function base32Decode(text) {
+  const clean = String(text ?? "")
+    .replace(/\s+/g, "")
+    .replace(/=+$/, "")
+    .toUpperCase();
+  if (!clean || /[^A-Z2-7]/.test(clean)) throw new IdpError("the TOTP secret is not base32");
+  let bits = 0;
+  let value = 0;
+  const out = [];
+  for (const char of clean) {
+    value = ((value << 5) | BASE32_ALPHABET.indexOf(char)) & 0xffff;
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+
+/**
+ * RFC 6238 TOTP — SHA-1, 30-second step, six digits: the parameters Zitadel's
+ * `POST /v2/users/{id}/totp` registration issues. Pure: the clock arrives as `nowMs`.
+ */
+export function totpCode(secret, nowMs) {
+  const key = base32Decode(secret);
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Number(nowMs) / 1000 / 30)));
+  const digest = createHmac("sha1", key).update(counter).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary = digest.readUInt32BE(offset) & 0x7fffffff;
+  return String(binary % 1_000_000).padStart(6, "0");
+}
+
+/** The code to type right now, and how many seconds it stays valid. */
+export function agentAdminCode(secrets, nowMs) {
+  const secret = secrets?.[AGENT_ADMIN_TOTP_ENV_VAR];
+  if (!secret) {
+    throw new IdpError(
+      `${AGENT_ADMIN_SECRETS_PATH} holds no TOTP secret — run \`ds-slot reset-identities <slot>\` first`,
+    );
+  }
+  const secondsLeft = 30 - (Math.floor(Number(nowMs) / 1000) % 30);
+  return { code: totpCode(secret, nowMs), secondsLeft };
+}
+
+/**
+ * What the agent admin's TOTP factor needs.
+ *
+ * - `absent`, or `not-ready` (a provisional registration nobody verified) → `enrol`:
+ *   a repeat `POST /v2/users/{id}/totp` replaces a provisional one.
+ * - `ready` with a stored secret → `keep`.
+ * - `ready` WITHOUT a stored secret → `replace`: a factor nobody can produce a code
+ *   for is a locked door, so it is removed and enrolled again.
+ */
+export function planAgentAdminTotp({ factor, storedSecret }) {
+  if (factor === "absent" || factor === "not-ready") return "enrol";
+  if (factor === "ready") return storedSecret ? "keep" : "replace";
+  throw new IdpError(`unknown TOTP factor state: ${factor}`);
+}
+
+/**
+ * The factor, read through the one route family the deployed Zitadel proved it
+ * routes (`…/auth_factors/_search`, #1208) — the read `apps/api`'s `hasTotpFactor` does.
+ */
+async function readTotpFactorState(client, userId) {
+  const data = await client.request(
+    "POST",
+    `/management/v1/users/${encodeURIComponent(userId)}/auth_factors/_search`,
+    {},
+  );
+  const otp = (data?.result ?? []).find((factor) => factor.otp !== undefined);
+  if (!otp) return "absent";
+  return (otp.otp.state ?? otp.state) === "AUTH_FACTOR_STATE_READY" ? "ready" : "not-ready";
+}
+
+/** A password Zitadel's default complexity policy accepts: upper, lower, digit, symbol. */
+function defaultRandomPassword() {
+  return `Ag7!${randomBytes(18).toString("base64url")}`;
+}
+
+/**
+ * Converge the agent admin: the account (through `convergeGoldenIdentities`, so it
+ * gets the same create / password / verify-email / grant verbs as the golden five),
+ * then its TOTP factor — probe → act only when needed → re-read to prove the act.
+ *
+ * Persistence order keeps a crash recoverable: a minted password is written BEFORE
+ * the first IdP write, and a minted TOTP secret BEFORE its verify — so a run that dies
+ * halfway leaves either a stored secret for a provisional factor (the next run
+ * re-enrols) or no stored secret for a ready one (the next run replaces it).
+ *
+ * The secrets never reach `log`, an error message, or the return value.
+ */
+export async function convergeAgentAdmin({
+  client,
+  readSecrets,
+  writeSecrets,
+  env = {},
+  projectName = env.IDP_PROJECT_NAME || DEFAULT_PROJECT_NAME,
+  now = () => Date.now(),
+  randomPassword = defaultRandomPassword,
+  log = () => {},
+  goldenSubjects = {},
+}) {
+  const account = STAGE_AGENT_ADMIN;
+  if (GOLDEN_IDP_ACCOUNTS.some((golden) => golden.username === account.username)) {
+    throw new IdpError(`${account.username} is a golden account — refusing to converge its factor`);
+  }
+  let secrets = { ...((await readSecrets()) ?? {}) };
+  if (!secrets[account.passwordEnvVar]) {
+    secrets = { ...secrets, [account.passwordEnvVar]: randomPassword() };
+    await writeSecrets(secrets);
+    log(`  ↳ minted a password for ${account.username} (stored in ${AGENT_ADMIN_SECRETS_PATH})`);
+  }
+
+  const subjects = await convergeGoldenIdentities({
+    client,
+    accounts: [account],
+    passwords: { [account.passwordEnvVar]: secrets[account.passwordEnvVar] },
+    env,
+    projectName,
+    log,
+  });
+  const userId = subjects[account.subjectEnvVar];
+  // The fence holds on the id, not only the name: an email search is not unique on
+  // Zitadel, so a hit resolving to a golden subject (the owner's factors) stops here.
+  const clash = Object.entries(goldenSubjects ?? {}).find(([, id]) => id === userId);
+  if (!userId || clash) {
+    throw new IdpError(
+      `${account.username} resolved to ${clash ? `the golden subject ${clash[0]}` : "no subject"} — refusing to touch a factor`,
+    );
+  }
+
+  const factor = await readTotpFactorState(client, userId);
+  const action = planAgentAdminTotp({
+    factor,
+    storedSecret: Boolean(secrets[AGENT_ADMIN_TOTP_ENV_VAR]),
+  });
+  if (action === "keep") {
+    log(`  ↳ TOTP already enrolled for ${account.username}`);
+    return { subject: userId, totp: "kept" };
+  }
+
+  if (action === "replace") {
+    // A 404 is ambiguous on this instance (absent factor vs unrouted verb, #1208), so
+    // neither it nor a 2xx is the answer — the re-read is.
+    await client.request(
+      "DELETE",
+      `/management/v1/users/${encodeURIComponent(userId)}/auth_factors/otp`,
+      undefined,
+      { allowStatus: [404] },
+    );
+    if ((await readTotpFactorState(client, userId)) === "ready") {
+      throw new IdpError(
+        `${account.username} still holds a TOTP factor after its removal — not enrolling on top`,
+      );
+    }
+    log(`  ↳ removed the TOTP factor of ${account.username} (no stored secret for it)`);
+  }
+
+  const registration = await client.request(
+    "POST",
+    `/v2/users/${encodeURIComponent(userId)}/totp`,
+    {},
+  );
+  if (!registration?.secret) {
+    throw new IdpError(`the TOTP registration of ${account.username} returned no secret`);
+  }
+  secrets = { ...secrets, [AGENT_ADMIN_TOTP_ENV_VAR]: registration.secret };
+  await writeSecrets(secrets);
+  await client.request("POST", `/v2/users/${encodeURIComponent(userId)}/totp/verify`, {
+    code: totpCode(registration.secret, now()),
+  });
+  if ((await readTotpFactorState(client, userId)) !== "ready") {
+    throw new IdpError(`the TOTP factor of ${account.username} is not READY after its verify`);
+  }
+  log(`  ↳ TOTP enrolled for ${account.username} (secret stored in ${AGENT_ADMIN_SECRETS_PATH})`);
+  return { subject: userId, totp: action === "replace" ? "replaced" : "enrolled" };
 }

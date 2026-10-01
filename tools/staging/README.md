@@ -6,12 +6,12 @@ for production: the operator ships a committed tree over SSH and **the box build
 images**. There is no registry anywhere in the path, no on-box deployer, no timer, and no
 Node runtime of ours on the host — the box runs containers and nothing else.
 
-| script          | what it owns                                                                                 | Issue |
-| --------------- | -------------------------------------------------------------------------------------------- | ----- |
-| `golden-db.mjs` | builds and rebuilds `ds_golden`, the template every slot database is cloned from             | #2063 |
-| `slot.mjs`      | the lifecycle of one slot: `up`, `sync`, `down`, `reset`, `reset-identities`, `status`, `gc` | #2064 |
-| `idp.mjs`       | the two shared-Zitadel converges (whole redirect-URI set; golden identities)                 | #2064 |
-| `e2e-stage.mjs` | the regression run over a CONVERGED slot: the C6 suite (+ the a11y suites) from your machine | #2067 |
+| script          | what it owns                                                                                                     | Issue        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------ |
+| `golden-db.mjs` | builds and rebuilds `ds_golden`, the template every slot database is cloned from                                 | #2063        |
+| `slot.mjs`      | the lifecycle of one slot: `up`, `sync`, `down`, `reset`, `reset-identities`, `status`, `gc`, `agent-admin-code` | #2064, #2531 |
+| `idp.mjs`       | the two shared-Zitadel converges (whole redirect-URI set; golden identities + agent admin TOTP)                  | #2064, #2531 |
+| `e2e-stage.mjs` | the regression run over a CONVERGED slot: the C6 suite (+ the a11y suites) from your machine                     | #2067        |
 
 Both entry points ship as package scripts, so nothing is invoked by path:
 
@@ -291,7 +291,7 @@ With neither route resolvable the command refuses, naming both.
 The golden dataset's four live accounts (two doctors, the MFA doctor, the admin) and the
 soft-deleted doctor live on the SHARED stage Zitadel, not per slot, and nothing else
 provisions them — without this command `slot up` refuses at its `seed:golden` one-shot.
-One run does four things, in order:
+One run does four things, in order (plus the agent admin, below):
 
 1. **Converge the accounts** through `idp.mjs`: each `idpAccountExpected: true` account is
    created when absent, then always has its password set from the `DS_GOLDEN_PASSWORD_*`
@@ -316,9 +316,47 @@ One run does four things, in order:
    assigns), so no session or rate-limit key survives an identity reset.
 4. **Append one audit line** to `/var/log/ds-platform/slot.log`.
 
-MFA/TOTP enrolment for `doctorMfa` and `admin` is deliberately NOT converged: TOTP secrets
-are minted by Zitadel at enrolment and belong to the scenario runner's secret set, which
-step 7 (#2067) owns. The command guarantees existence, password and email state.
+The same run converges one more account that is not part of the golden dataset: the
+**agent admin** `golden.admin.agent@example.test` (`STAGE_AGENT_ADMIN` in `idp.mjs`), with
+the golden admin's roles (`doctor_guest`, `platform_admin`), so an agent can sign in to a
+slot's admin without the owner's authenticator. Its account goes through the same
+create / password / email / grant verbs as the golden five; then its **TOTP factor** is
+converged, probe → act → re-read:
+
+| Factor at the IdP                       | Secret stored on the box | Action                                                                                                                        |
+| --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| absent, or provisional (never verified) | any                      | register (`POST /v2/users/{id}/totp`), store the secret, verify with the derived code, re-read READY                          |
+| READY                                   | yes                      | keep — logs `TOTP already enrolled for golden.admin.agent@example.test`                                                       |
+| READY                                   | no                       | remove THIS account's factor (`DELETE /management/v1/users/{id}/auth_factors/otp`, proven by re-read), then register as above |
+
+Its password and TOTP secret are tool-minted into `/etc/ds-platform/stage-agent-admin.env`
+(root, 0600) — the password before the first IdP write, the secret before its verify, so a
+run that dies halfway is put right by the next one. Neither is ever logged. No mirror row
+is seeded for it: the api heals a missing mirror row for an authenticated subject on the
+first request and marks its staff role from the session's claims, so the sign-in survives
+every `sync` that re-seeds the slot database. The file is tool-owned: never hand-edit it,
+except after a factor reset outside the tool (for example an admin MFA reset in the
+console) — then delete its TOTP line and re-run `reset-identities`, which replaces the
+factor; otherwise the `keep` row would hold on to a dead secret.
+
+The TOTP factors of the golden `doctorMfa` and `admin` are NOT converged and never touched
+by this command: they are enrolled in the owner's authenticator. The command guarantees
+their existence, password and email state only.
+
+### Agent admin sign-in recipe
+
+1. `pnpm stage:slot up pr-<N> --ref <sha>` (or `reset-identities pr-<N>`) — the log shows
+   either `TOTP enrolled for golden.admin.agent@example.test` or `TOTP already enrolled …`.
+2. `pnpm stage:slot agent-admin-code` prints the current six-digit code and how many seconds
+   it stays valid; `pnpm stage:slot agent-admin-code --json` prints
+   `{username, password, code, secondsLeft}` for a Playwright drive. Run it at the moment
+   of the challenge, not ahead of it — and wait for the next window when `secondsLeft` is
+   under ~5.
+3. Open `https://admin-pr-<N>.<base-domain>/` (Basic-auth gate first), sign in with the
+   username and password, enter the code at `/mfa/challenge`; the admin home follows.
+
+The output goes to your terminal only — never paste the password or the code into a PR,
+a comment or a log.
 
 ## Redirect-URI convergence
 

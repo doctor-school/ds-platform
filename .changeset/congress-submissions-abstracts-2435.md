@@ -37,4 +37,5 @@ and the first-author refusal names the author: «С первым автором 
 send, a refusal at the abstracts' limit or by the first-author rule keeps
 «Текст заявки сохранён.» under it. A sent oral talk or
 poster offers «Подать тезисы по этой работе» in the list and in its detail
-while abstracts can be started; it opens the prefilled abstract draft.
+while abstracts can be started; it opens the prefilled abstract draft. Each statement's and the consent's error line is part of its box's
+aria-describedby, like the title and section fields.

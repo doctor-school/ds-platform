@@ -1089,6 +1089,18 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       eventId: EVENT_ID,
       kind: "abstract",
     });
+    // A refused send: the title's and each section's own error line is part
+    // of the control's description.
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await errorSummary();
+    expect(
+      screen.getByLabelText("Название тезисов"),
+    ).toHaveAccessibleDescription("Укажите тему");
+    for (const label of SECTIONS) {
+      expect(screen.getByLabelText(label)).toHaveAccessibleDescription(
+        `Заполните поле «${label}»`,
+      );
+    }
   });
 
   it("046 EARS-22: the counter follows typing over all five sections — marked from 4 500 with «осталось N», above 5 000 with «больше на N» and a send refused with the canvas line", async () => {
@@ -1161,6 +1173,28 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
         name: "В тексте нет некорректных заимствований",
       }),
     ).toHaveAttribute("aria-invalid", "true");
+    // Each box's own error line is part of its description.
+    expect(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет некорректных заимствований",
+      }),
+    ).toHaveAccessibleDescription(
+      "Подтвердите, что в тексте нет некорректных заимствований",
+    );
+    expect(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет торговых наименований",
+      }),
+    ).toHaveAccessibleDescription(
+      "Подтвердите, что в тексте нет торговых наименований",
+    );
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Согласие на обработку персональных данных",
+      }),
+    ).toHaveAccessibleDescription(
+      "Дайте согласие на обработку персональных данных",
+    );
     await userEvent.click(
       screen.getByRole("checkbox", {
         name: "В тексте нет некорректных заимствований",
@@ -1236,7 +1270,7 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       within(summary).getByText(
         "С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3 — эту заявку отправить нельзя.",
       ),
-    ).toBeInTheDocument();    // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
+    ).toBeInTheDocument(); // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
     expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
   });
 

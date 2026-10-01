@@ -649,6 +649,7 @@ export function SubmissionDetail({
                           id={`chk-${st}`}
                           checked={statements.includes(st)}
                           aria-invalid={err ? true : undefined}
+                          aria-describedby={describedBy(st, `chk-${st}`)}
                           onChange={(e) => {
                             const on = e.target.checked;
                             setStatements((prev) =>
@@ -664,7 +665,12 @@ export function SubmissionDetail({
                         >
                           {STATEMENT_LABEL[st]}
                         </Checkbox>
-                        <DsFormError className="ml-8 mt-1.5">{err}</DsFormError>
+                        <DsFormError
+                          id={errId(`chk-${st}`)}
+                          className="ml-8 mt-1.5"
+                        >
+                          {err}
+                        </DsFormError>
                       </div>
                     );
                   })}
@@ -674,6 +680,7 @@ export function SubmissionDetail({
                         id="chk-pd"
                         checked={consent}
                         aria-invalid={errOf("consent") ? true : undefined}
+                        aria-describedby={describedBy("consent", "chk-pd")}
                         onChange={(e) => {
                           setConsent(e.target.checked);
                           setServerErrors([]);
@@ -692,7 +699,7 @@ export function SubmissionDetail({
                           </Link>
                         </span>
                       </Checkbox>
-                      <DsFormError className="ml-8 mt-1.5">
+                      <DsFormError id={errId("chk-pd")} className="ml-8 mt-1.5">
                         {errOf("consent")}
                       </DsFormError>
                     </div>

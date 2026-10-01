@@ -1,0 +1,438 @@
+{
+  "projectId": "1366789c-9a05-4137-952e-61147c7a9550",
+  "shape": "package",
+  "pkg": "@ds/design-system",
+  "buildCmd": "pnpm -F @ds/schemas build && pnpm -F @ds/design-system build && node .design-sync/prepare.mjs",
+  "srcDir": "../src",
+  "cssEntry": "ds.css",
+  "tsconfig": "../tsconfig.json",
+  "componentSrcMap": {
+    "CurrentPasswordFieldSchema": null,
+    "EmailFieldSchema": null,
+    "IdentifierFieldSchema": null,
+    "NewPasswordFieldSchema": null,
+    "OtpCodeFieldSchema": null,
+    "PhoneFieldSchema": null,
+    "AlertDialogAction": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogCancel": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogContent": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogDescription": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogFooter": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogHeader": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogOverlay": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogPortal": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogTitle": "../src/primitives/alert-dialog.tsx",
+    "AlertDialogTrigger": "../src/primitives/alert-dialog.tsx",
+    "CardContent": "../src/primitives/card.tsx",
+    "CardDescription": "../src/primitives/card.tsx",
+    "CardFooter": "../src/primitives/card.tsx",
+    "CardHeader": "../src/primitives/card.tsx",
+    "CardTitle": "../src/primitives/card.tsx",
+    "DialogClose": "../src/primitives/dialog.tsx",
+    "DialogContent": "../src/primitives/dialog.tsx",
+    "DialogDescription": "../src/primitives/dialog.tsx",
+    "DialogFooter": "../src/primitives/dialog.tsx",
+    "DialogHeader": "../src/primitives/dialog.tsx",
+    "DialogOverlay": "../src/primitives/dialog.tsx",
+    "DialogPortal": "../src/primitives/dialog.tsx",
+    "DialogTitle": "../src/primitives/dialog.tsx",
+    "DialogTrigger": "../src/primitives/dialog.tsx",
+    "EventAboutSection": "../src/blocks/event-left-flow.tsx",
+    "EventPageHero": "../src/blocks/event-page-shell.tsx",
+    "EventPageKicker": "../src/blocks/event-left-flow.tsx",
+    "EventProgrammeSection": "../src/blocks/event-left-flow.tsx",
+    "EventSectionHeading": "../src/blocks/event-page-shell.tsx",
+    "FormActions": "../src/blocks/field-group.tsx",
+    "FormControl": "../src/primitives/form.tsx",
+    "FormDerivedNote": "../src/blocks/field-group.tsx",
+    "FormDescription": "../src/primitives/form.tsx",
+    "FormErrorSummary": "../src/primitives/form.tsx",
+    "FormField": "../src/primitives/form.tsx",
+    "FormFieldGroup": "../src/blocks/field-group.tsx",
+    "FormItem": "../src/primitives/form.tsx",
+    "FormLabel": "../src/primitives/form.tsx",
+    "FormMessage": "../src/primitives/form.tsx",
+    "FormSection": "../src/blocks/field-group.tsx",
+    "FormSeparator": "../src/blocks/field-group.tsx",
+    "InputOTPGroup": "../src/primitives/input-otp.tsx",
+    "InputOTPSeparator": "../src/primitives/input-otp.tsx",
+    "InputOTPSlot": "../src/primitives/input-otp.tsx",
+    "SheetBody": "../src/primitives/sheet.tsx",
+    "SheetClose": "../src/primitives/sheet.tsx",
+    "SheetContent": "../src/primitives/sheet.tsx",
+    "SheetDescription": "../src/primitives/sheet.tsx",
+    "SheetFooter": "../src/primitives/sheet.tsx",
+    "SheetHeader": "../src/primitives/sheet.tsx",
+    "SheetOverlay": "../src/primitives/sheet.tsx",
+    "SheetPortal": "../src/primitives/sheet.tsx",
+    "SheetTitle": "../src/primitives/sheet.tsx",
+    "SheetTrigger": "../src/primitives/sheet.tsx",
+    "TableBody": "../src/blocks/table.tsx",
+    "TableCaption": "../src/blocks/table.tsx",
+    "TableCell": "../src/blocks/table.tsx",
+    "TableFooter": "../src/blocks/table.tsx",
+    "TableHead": "../src/blocks/table.tsx",
+    "TableHeader": "../src/blocks/table.tsx",
+    "TableRow": "../src/blocks/table.tsx",
+    "TabsContent": "../src/primitives/tabs.tsx",
+    "TabsList": "../src/primitives/tabs.tsx",
+    "TabsTrigger": "../src/primitives/tabs.tsx",
+    "WebinarRoomLayout": "../src/primitives/webinar-room.tsx"
+  },
+  "runtimeFontPrefixes": ["Tactic Sans", "Century Gothic", "Montserrat"],
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "WebinarCard": {
+      "cardMode": "column"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogAction": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogCancel": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogContent": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogDescription": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogFooter": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogHeader": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogOverlay": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogPortal": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogTitle": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "AlertDialogTrigger": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogClose": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogContent": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogDescription": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogFooter": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogHeader": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogOverlay": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogPortal": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogTitle": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "DialogTrigger": {
+      "cardMode": "single",
+      "viewport": "720x480"
+    },
+    "Sheet": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetBody": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetClose": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetContent": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetDescription": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetFooter": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetHeader": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetOverlay": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetPortal": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetTitle": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "SheetTrigger": {
+      "cardMode": "single",
+      "viewport": "1100x640"
+    },
+    "WebinarPageContent": {
+      "cardMode": "column"
+    },
+    "WebinarRoomLayout": {
+      "cardMode": "column"
+    },
+    "EventPageShell": {
+      "cardMode": "column",
+      "viewport": "1280x1800"
+    },
+    "EventPageHero": {
+      "cardMode": "column",
+      "viewport": "1100x700"
+    },
+    "DataTable": {
+      "cardMode": "column",
+      "viewport": "1100x700"
+    },
+    "Table": {
+      "cardMode": "column"
+    },
+    "LegalDocument": {
+      "cardMode": "column",
+      "viewport": "1280x1600"
+    },
+    "EventsFilter": {
+      "cardMode": "column"
+    },
+    "FilterBar": {
+      "cardMode": "column"
+    },
+    "MonthCalendarGrid": {
+      "cardMode": "column"
+    },
+    "AuthLayout": {
+      "cardMode": "column",
+      "viewport": "1280x640"
+    },
+    "AuthShell": {
+      "cardMode": "column",
+      "viewport": "1280x640"
+    },
+    "OtpFocusScreen": {
+      "cardMode": "column"
+    },
+    "EventList": {
+      "cardMode": "column"
+    },
+    "LiveEventStrip": {
+      "cardMode": "column"
+    },
+    "Container": {
+      "cardMode": "column",
+      "viewport": "1440x320"
+    },
+    "DayAgenda": {
+      "cardMode": "column"
+    },
+    "RegisterCard": {
+      "cardMode": "column",
+      "viewport": "900x1100"
+    },
+    "AccountProfileCard": {
+      "cardMode": "column",
+      "viewport": "900x1120"
+    },
+    "WebinarStatusCard": {
+      "cardMode": "column",
+      "viewport": "1100x700"
+    },
+    "WebinarRecordingPlaque": {
+      "cardMode": "column",
+      "viewport": "1100x700"
+    },
+    "AuthCard": {
+      "cardMode": "column"
+    },
+    "Combobox": {
+      "cardMode": "column"
+    },
+    "EmailConfirmCard": {
+      "cardMode": "column"
+    },
+    "EventAboutSection": {
+      "cardMode": "column"
+    },
+    "EventFormatBlock": {
+      "cardMode": "column"
+    },
+    "EventPageKicker": {
+      "cardMode": "column"
+    },
+    "EventProgrammeSection": {
+      "cardMode": "column"
+    },
+    "EventSectionHeading": {
+      "cardMode": "column"
+    },
+    "EventSignupCard": {
+      "cardMode": "column"
+    },
+    "EventSpeakerCard": {
+      "cardMode": "column"
+    },
+    "FormActions": {
+      "cardMode": "column"
+    },
+    "FormDerivedNote": {
+      "cardMode": "column"
+    },
+    "FormFieldGroup": {
+      "cardMode": "column"
+    },
+    "FormSection": {
+      "cardMode": "column"
+    },
+    "LoginCard": {
+      "cardMode": "column"
+    },
+    "MonthDotGrid": {
+      "cardMode": "column"
+    },
+    "MonthPicker": {
+      "cardMode": "column"
+    },
+    "PasswordRecoveryCard": {
+      "cardMode": "column"
+    },
+    "RecordingSpoiler": {
+      "cardMode": "column"
+    },
+    "RegistrationSuccessCard": {
+      "cardMode": "column"
+    },
+    "EmailField": {
+      "cardMode": "column"
+    },
+    "IdentifierField": {
+      "cardMode": "column"
+    },
+    "OtpField": {
+      "cardMode": "column"
+    },
+    "PasswordField": {
+      "cardMode": "column"
+    },
+    "PhoneField": {
+      "cardMode": "column"
+    },
+    "Alert": {
+      "cardMode": "column"
+    },
+    "Card": {
+      "cardMode": "column"
+    },
+    "CardContent": {
+      "cardMode": "column"
+    },
+    "CardDescription": {
+      "cardMode": "column"
+    },
+    "CardFooter": {
+      "cardMode": "column"
+    },
+    "CardHeader": {
+      "cardMode": "column"
+    },
+    "CardTitle": {
+      "cardMode": "column"
+    },
+    "DayBand": {
+      "cardMode": "column"
+    },
+    "FilterChip": {
+      "cardMode": "column"
+    },
+    "Form": {
+      "cardMode": "column"
+    },
+    "FormControl": {
+      "cardMode": "column"
+    },
+    "FormErrorSummary": {
+      "cardMode": "column"
+    },
+    "FormField": {
+      "cardMode": "column"
+    },
+    "FormLabel": {
+      "cardMode": "column"
+    },
+    "FormMessage": {
+      "cardMode": "column"
+    },
+    "Input": {
+      "cardMode": "column"
+    },
+    "Link": {
+      "cardMode": "column"
+    },
+    "MediaDropzone": {
+      "cardMode": "column"
+    },
+    "Skeleton": {
+      "cardMode": "column"
+    },
+    "Tabs": {
+      "cardMode": "column"
+    },
+    "TabsContent": {
+      "cardMode": "column"
+    },
+    "TabsList": {
+      "cardMode": "column"
+    },
+    "TabsTrigger": {
+      "cardMode": "column"
+    },
+    "Textarea": {
+      "cardMode": "column"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

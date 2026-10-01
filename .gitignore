@@ -106,3 +106,14 @@ apps/*/public/__contour/
 # to it, so nothing can be staged (or unstaged) through the link. No-op on POSIX,
 # where the bridge is a real symlink git never traverses.
 /.agents/skills/**
+
+# design-sync (Claude Design DS upload, #2530): staged converter scripts, build
+# output, compiled bundle CSS and machine state. Only the durable set under
+# .design-sync/ (config, NOTES, conventions, prepare.mjs, tailwind-input.css,
+# previews/) is tracked.
+.ds-sync/
+ds-bundle/
+packages/design-system/.ds-sync-pkg/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

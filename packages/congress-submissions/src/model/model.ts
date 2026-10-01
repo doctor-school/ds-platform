@@ -180,33 +180,14 @@ export function birthHint(
 }
 
 /**
- * 046 EARS-19 — the birth-date field reads «дд.мм.гггг» as a real calendar day
- * from 1900 up to `today` (the Moscow day, as the API checks it). The parts may
- * also be separated by one `/`, `-` or space (the same one throughout), or
- * typed as eight bare digits `ддммгггг` — a phone keypad may lack «.».
- * Anything else is `null`.
+ * 046 EARS-19 — the birth-date field is the browser's date control (DS
+ * `Input type="date"`), which owns entry and hands over `YYYY-MM-DD` or "". The
+ * value counts only as a real calendar day from 1900 up to `today` (the Moscow
+ * day, as the API checks it); anything else is `null`.
  */
-export function parseBirthInput(text: string, today: string): string | null {
-  const t = text.trim();
-  const sep = /^(\d{1,2})([./\- ])(\d{1,2})\2(\d{4})$/.exec(t);
-  const bare = /^(\d{2})(\d{2})(\d{4})$/.exec(t);
-  const parts = sep
-    ? [sep[1]!, sep[3]!, sep[4]!]
-    : bare
-      ? [bare[1]!, bare[2]!, bare[3]!]
-      : null;
-  if (!parts) return null;
-  const [d, mo, y] = parts as [string, string, string];
-  const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  if (!CongressBirthDateSchema.safeParse(iso).success) return null;
-  return iso > today ? null : iso;
-}
-
-/** A stored birth date `YYYY-MM-DD` as the field shows it — «дд.мм.гггг». */
-export function formatBirthDate(iso: string | null): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
+export function readBirthDate(value: string, today: string): string | null {
+  if (!CongressBirthDateSchema.safeParse(value).success) return null;
+  return value > today ? null : value;
 }
 
 /** «осталось …» — days and hours, or hours and minutes under a day. */
@@ -503,6 +484,13 @@ const BIRTH_ERROR: FormError = {
   focusId: "in-birth",
 };
 
+/** The one-speaker refusal, linked to the first author's «Докладчик» choice. */
+const SPEAKER_ERROR: FormError = {
+  key: "authors",
+  message: COPY.errSpeaker,
+  focusId: "in-a0-sp",
+};
+
 const filled = (v: string | undefined) => congressTextLength(v ?? "") > 0;
 
 function authorIncomplete(a: CongressSubmissionDraftAuthor): boolean {
@@ -512,15 +500,15 @@ function authorIncomplete(a: CongressSubmissionDraftAuthor): boolean {
 /**
  * The form's unmet send conditions, before the server is asked (046 EARS-8,
  * EARS-16, EARS-18, EARS-19) — the server repeats every one of them.
- * `birthText` is the birth-date field's text when the poster flow asks for it;
- * `today` is the Moscow day the API checks it against.
+ * `birthValue` is the birth-date control's value (`YYYY-MM-DD` or "") when the
+ * poster flow asks for it; `today` is the Moscow day the API checks it against.
  */
 export function draftErrors(
   d: OralDraft,
   consent: { consentRequired: boolean; consentChecked: boolean },
   form: {
     kind?: CongressSubmissionKind;
-    birthText?: string;
+    birthValue?: string;
     today?: string;
   } = {},
 ): FormError[] {
@@ -539,11 +527,11 @@ export function draftErrors(
     congressKindMarksPresenting(form.kind ?? "oral") &&
     d.authors.filter((a) => a.presenting).length !== 1
   ) {
-    out.push({ key: "authors", message: COPY.errSpeaker });
+    out.push(SPEAKER_ERROR);
   }
-  if (form.birthText !== undefined) {
+  if (form.birthValue !== undefined) {
     const today = form.today ?? instantToMskDay(new Date());
-    if (!parseBirthInput(form.birthText, today)) out.push(BIRTH_ERROR);
+    if (!readBirthDate(form.birthValue, today)) out.push(BIRTH_ERROR);
   }
   for (const f of formFields(form.kind ?? "oral")) {
     if (!filled(d.body[f.key])) {
@@ -579,7 +567,7 @@ function fieldProblem(
   }
   if (field === "authors") {
     return congressKindMarksPresenting(kind)
-      ? { key: "authors", message: COPY.errSpeaker }
+      ? SPEAKER_ERROR
       : { key: "authors", message: COPY.errAuthors, focusId: "in-a0-sn" };
   }
   const body = /^body\.(\w+)/.exec(field);

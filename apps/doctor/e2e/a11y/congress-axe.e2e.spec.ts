@@ -109,7 +109,7 @@ test("046 EARS-18…20: the poster form with its birth-date field and the age re
   await scan(page, "the poster form");
 
   // EARS-20 — the draft of a holder above the limit: the refusal in place of the send.
-  await page.getByLabel("Дата рождения").fill(`15.06.${new Date().getFullYear() - 50}`);
+  await page.getByLabel("Дата рождения").fill(`${new Date().getFullYear() - 50}-06-15`);
   await page.getByLabel("Дата рождения").blur();
   await expect(page.getByText(/На эту дату вам будет/).first()).toBeVisible();
   await scan(page, "the poster draft with the age refusal");

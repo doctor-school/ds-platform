@@ -17,7 +17,6 @@ import {
   editable,
   eventLine,
   eventStartDay,
-  formatBirthDate,
   formFields,
   intakeLine,
   kindStartable,
@@ -27,7 +26,7 @@ import {
   localTime,
   mskDate,
   mskDateTime,
-  parseBirthInput,
+  readBirthDate,
   problemMessages,
   revisionView,
   rowMeta,
@@ -395,6 +394,8 @@ describe("send checks", () => {
       { consentRequired: false, consentChecked: false },
     );
     expect(errs.map((e) => e.message)).toEqual(["Отметьте одного докладчика"]);
+    // The DS error summary links it to the first «Докладчик» choice.
+    expect(errs[0]!.focusId).toBe("in-a0-sp");
   });
 
   it("046 EARS-30: a resend refused after the revision deadline names it in the canvas words", () => {
@@ -542,7 +543,7 @@ describe("046 EARS-18 — the poster form", () => {
         body: {},
       },
       { consentRequired: false, consentChecked: false },
-      { kind: "poster", birthText: "", today: "2026-12-20" },
+      { kind: "poster", birthValue: "", today: "2026-12-20" },
     );
     expect(errs.map((e) => [e.key, e.message, e.focusId])).toEqual([
       ["title", "Укажите тему", "in-topic"],
@@ -601,39 +602,18 @@ describe("046 EARS-18 — the poster form", () => {
 });
 
 describe("046 EARS-19 — the birth date", () => {
-  it("046 EARS-19: «дд.мм.гггг» reads as a real day from 1900 up to today in Moscow", () => {
-    expect(parseBirthInput("24.04.1987", "2026-12-20")).toBe("1987-04-24");
-    expect(parseBirthInput(" 1.2.1990 ", "2026-12-20")).toBe("1990-02-01");
-    expect(parseBirthInput("", "2026-12-20")).toBeNull();
-    expect(parseBirthInput("31.02.1990", "2026-12-20")).toBeNull();
-    expect(parseBirthInput("1990-02-01", "2026-12-20")).toBeNull();
-    expect(parseBirthInput("31.12.1899", "2026-12-20")).toBeNull();
-    expect(parseBirthInput("21.12.2026", "2026-12-20")).toBeNull();
-    expect(parseBirthInput("20.12.2026", "2026-12-20")).toBe("2026-12-20");
-  });
-
-  it("046 EARS-19: «/», «-» and spaces separate the parts too, and eight bare digits read as ддммгггг", () => {
+  it("046 EARS-19: the date control's value counts only as a real day from 1900 up to today in Moscow", () => {
     const today = "2026-12-20";
-    expect(parseBirthInput("24/04/1987", today)).toBe("1987-04-24");
-    expect(parseBirthInput("24-04-1987", today)).toBe("1987-04-24");
-    expect(parseBirthInput("24 04 1987", today)).toBe("1987-04-24");
-    expect(parseBirthInput("1/2/1990", today)).toBe("1990-02-01");
-    expect(parseBirthInput("24041987", today)).toBe("1987-04-24");
-    // Still refused: ISO order, mixed or doubled separators, wrong digit
-    // counts, two-digit years, impossible days and days after today.
-    expect(parseBirthInput("1987-04-24", today)).toBeNull();
-    expect(parseBirthInput("24.04/1987", today)).toBeNull();
-    expect(parseBirthInput("24..04.1987", today)).toBeNull();
-    expect(parseBirthInput("2404198", today)).toBeNull();
-    expect(parseBirthInput("240419870", today)).toBeNull();
-    expect(parseBirthInput("24.04.87", today)).toBeNull();
-    expect(parseBirthInput("31021990", today)).toBeNull();
-    expect(parseBirthInput("21122026", today)).toBeNull();
-  });
-
-  it("046 EARS-19: the stored day shows back as «дд.мм.гггг»", () => {
-    expect(formatBirthDate("1987-04-24")).toBe("24.04.1987");
-    expect(formatBirthDate(null)).toBe("");
+    expect(readBirthDate("1987-04-24", today)).toBe("1987-04-24");
+    expect(readBirthDate("2026-12-20", today)).toBe("2026-12-20");
+    expect(readBirthDate("1900-01-01", today)).toBe("1900-01-01");
+    expect(readBirthDate("", today)).toBeNull();
+    expect(readBirthDate("1899-12-31", today)).toBeNull();
+    expect(readBirthDate("2026-12-21", today)).toBeNull();
+    expect(readBirthDate("1990-02-31", today)).toBeNull();
+    // The native date control hands over ISO only — typed text never parses.
+    expect(readBirthDate("24.04.1987", today)).toBeNull();
+    expect(readBirthDate("1010122111122", today)).toBeNull();
   });
 
   it("046 EARS-19: a refusal on `birthDate` sits next to the birth-date field", () => {

@@ -7,7 +7,9 @@ import {
   type CongressSubmissionDraftAuthor,
 } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
+import { FormError, FormItem } from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
+import { Label } from "@ds/design-system/label";
 import { Link } from "@ds/design-system/link";
 import { Radio } from "@ds/design-system/radio";
 import { cn } from "@ds/design-system/lib/utils";
@@ -169,6 +171,7 @@ export function AuthorsEditor({
                 </div>
                 {speakerPick && (editable || a.presenting) ? (
                   <Radio
+                    id={`in-a${i}-sp`}
                     name="congress-speaker"
                     checked={!!a.presenting}
                     disabled={!editable}
@@ -246,17 +249,11 @@ export function AuthorsEditor({
                       f.key !== "patronymic" &&
                       blank(a[f.key] as string);
                     return (
-                      <label
+                      <FormItem
                         key={f.key}
-                        htmlFor={id}
-                        className={cn(
-                          "block min-w-0",
-                          f.wide && "layout:col-span-3",
-                        )}
+                        className={cn("min-w-0", f.wide && "layout:col-span-3")}
                       >
-                        <span className="mb-1.5 block text-caption font-semibold text-foreground">
-                          {f.label}
-                        </span>
+                        <Label htmlFor={id}>{f.label}</Label>
                         <Input
                           id={id}
                           value={(a[f.key] as string | undefined) ?? ""}
@@ -265,7 +262,7 @@ export function AuthorsEditor({
                           onChange={(e) => set(i, f.key, e.target.value)}
                           onBlur={onBlur}
                         />
-                      </label>
+                      </FormItem>
                     );
                   })}
                 </div>
@@ -281,11 +278,7 @@ export function AuthorsEditor({
           </button>
         </Link>
       ) : null}
-      {error ? (
-        <p className="mt-2 text-caption font-semibold text-destructive-text">
-          {error}
-        </p>
-      ) : null}
+      <FormError className="mt-2">{error}</FormError>
     </div>
   );
 }

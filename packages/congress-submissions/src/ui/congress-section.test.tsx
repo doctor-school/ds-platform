@@ -1,10 +1,17 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type {
-  CongressSubmission,
-  CongressSubmissionKindIntake,
-  CongressSubmissionSection,
+import {
+  type CongressSubmission,
+  type CongressSubmissionKindIntake,
+  type CongressSubmissionSection,
+  instantToMskDay,
 } from "@ds/schemas";
 
 import { CongressSection } from "./congress-section";
@@ -16,6 +23,16 @@ const HOST = {
 };
 
 const EVENT_ID = "00000000-0000-4000-8000-00000000000e";
+
+/** The DS error summary of a refused send — named by its «Заявка не отправлена» title. */
+const findSummary = () =>
+  screen.findByRole("alert", { name: /^Заявка не отправлена/ });
+
+/** Pick a day in the native date control and leave it — the field saves on blur. */
+function setBirth(field: HTMLElement, iso: string) {
+  fireEvent.change(field, { target: { value: iso } });
+  fireEvent.blur(field);
+}
 
 function kind(
   k: CongressSubmissionKindIntake["kind"],
@@ -367,7 +384,7 @@ describe("CongressSection", () => {
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    const summary = await screen.findByRole("alert");
+    const summary = await findSummary();
     expect(
       within(summary).getByText("Заявка не отправлена. Исправьте 3 ошибки:"),
     ).toBeInTheDocument();
@@ -692,7 +709,7 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     render(<CongressSection host={HOST} />);
     await screen.findByLabelText("Цель");
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    const summary = await screen.findByRole("alert");
+    const summary = await findSummary();
     expect(
       within(summary)
         .getAllByRole("listitem")
@@ -715,28 +732,22 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     expect(callsTo("POST")).toHaveLength(1);
     expect(callsTo("PUT")).toHaveLength(0);
     expect(field).toHaveValue("");
-    expect(field).toHaveAttribute("placeholder", "дд.мм.гггг");
-    expect(
-      screen.getByText(
-        "Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027.",
-      ),
-    ).toBeInTheDocument();
+    expect(field).toHaveAccessibleDescription(
+      "Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027.",
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    const summary = await screen.findByRole("alert");
+    const summary = await findSummary();
     expect(
-      within(summary).getByRole("button", { name: "Укажите дату рождения" }),
-    ).toBeInTheDocument();
+      within(summary).getByRole("link", { name: "Укажите дату рождения" }),
+    ).toHaveAttribute("href", "#in-birth");
     expect(field).toHaveAttribute("aria-invalid", "true");
 
-    await userEvent.type(field, "31.02.1990");
-    await userEvent.tab();
+    setBirth(field, "1899-12-31");
     expect(callsTo("PUT")).toHaveLength(0);
 
-    await userEvent.clear(field);
-    await userEvent.type(field, "24.04.1990");
     fetchMock.mockResolvedValueOnce(answer({ birthDate: "1990-04-24" }));
-    await userEvent.tab();
+    setBirth(field, "1990-04-24");
     await waitFor(() => expect(callsTo("PUT")).toHaveLength(1));
     const [putUrl, putInit] = callsTo("PUT")[0]!;
     expect(putUrl).toBe("/v1/me/birth-date");
@@ -745,32 +756,23 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     });
   });
 
-  it("046 EARS-19: on blur a real day typed as «23/04/1987» or «23041987» is rewritten to дд.мм.гггг in the field; an impossible one stays as typed", async () => {
+  it("046 EARS-19: the birth-date field is the DS date control — a calendar day from 1900 up to today in Moscow, free text cannot land in it", async () => {
     openDraft(posterDraft.id);
     fetchMock.mockResolvedValueOnce(
       answer(section({ kinds: kinds40, submissions: [posterDraft] })),
     );
     render(<CongressSection host={HOST} />);
     const field = await screen.findByLabelText("Дата рождения");
+    expect(field).toHaveAttribute("type", "date");
+    expect(field).toHaveAttribute("min", "1900-01-01");
+    expect(field).toHaveAttribute("max", instantToMskDay(new Date()));
+    expect(field).toHaveAttribute("autocomplete", "bday");
 
-    await userEvent.type(field, "23/04/1987");
-    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1987-04-23" }));
-    await userEvent.tab();
-    await waitFor(() => expect(field).toHaveValue("23.04.1987"));
-    await waitFor(() => expect(callsTo("PUT")).toHaveLength(1));
-
-    await userEvent.clear(field);
-    await userEvent.type(field, "24041987");
-    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1987-04-24" }));
-    await userEvent.tab();
-    await waitFor(() => expect(field).toHaveValue("24.04.1987"));
-    await waitFor(() => expect(callsTo("PUT")).toHaveLength(2));
-
-    await userEvent.clear(field);
-    await userEvent.type(field, "31/02/1990");
-    await userEvent.tab();
-    expect(field).toHaveValue("31/02/1990");
-    expect(callsTo("PUT")).toHaveLength(2);
+    // The owner's Stage-B case: digits typed as text never become a value.
+    fireEvent.change(field, { target: { value: "1010122111122" } });
+    fireEvent.blur(field);
+    expect(field).toHaveValue("");
+    expect(callsTo("PUT")).toHaveLength(0);
   });
 
   it("046 EARS-19: a birth date the API refuses sits on the field of the draft", async () => {
@@ -780,9 +782,8 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     );
     render(<CongressSection host={HOST} />);
     const field = await screen.findByLabelText("Дата рождения");
-    await userEvent.type(field, "01.01.1990");
     fetchMock.mockResolvedValueOnce(answer({ message: "bad" }, 400));
-    await userEvent.tab();
+    setBirth(field, "1990-01-01");
     expect(
       await screen.findByText("Укажите дату рождения"),
     ).toBeInTheDocument();
@@ -808,11 +809,9 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     );
     render(<CongressSection host={HOST} />);
     const field = await screen.findByLabelText("Дата рождения");
-    expect(field).toHaveValue("24.04.1990");
-    await userEvent.clear(field);
-    await userEvent.type(field, "25.04.1990");
+    expect(field).toHaveValue("1990-04-24");
     fetchMock.mockResolvedValueOnce(answer({ birthDate: "1990-04-25" }));
-    await userEvent.tab();
+    setBirth(field, "1990-04-25");
     await waitFor(() => expect(callsTo("PUT")).toHaveLength(1));
     expect(
       JSON.parse(String((callsTo("PUT")[0]![1] as RequestInit).body)),
@@ -830,10 +829,10 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Да, отправить" }),
     );
-    const summary = await screen.findByRole("alert");
+    const summary = await findSummary();
     expect(
-      within(summary).getByRole("button", { name: "Укажите дату рождения" }),
-    ).toBeInTheDocument();
+      within(summary).getByRole("link", { name: "Укажите дату рождения" }),
+    ).toHaveAttribute("href", "#in-birth");
     expect(field).toHaveAttribute("aria-invalid", "true");
   });
 
@@ -869,9 +868,8 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     render(<CongressSection host={HOST} />);
     const field = await screen.findByLabelText("Дата рождения");
     expect(screen.getByRole("button", { name: "Отправить" })).toBeEnabled();
-    await userEvent.type(field, "23.04.1987");
     fetchMock.mockResolvedValueOnce(answer({ birthDate: "1987-04-23" }));
-    await userEvent.tab();
+    setBirth(field, "1987-04-23");
     expect(
       await screen.findByText(
         "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 40 лет.",
@@ -879,7 +877,7 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Отправить" })).toBeDisabled();
     expect(screen.getByLabelText("Дата рождения")).toBeEnabled();
-    expect(screen.getByLabelText("Дата рождения")).toHaveValue("23.04.1987");
+    expect(screen.getByLabelText("Дата рождения")).toHaveValue("1987-04-23");
   });
 
   it("046 EARS-20: a poster draft of an over-limit holder shows the refusal in the send block and no active send; the date stays correctable", async () => {
@@ -901,7 +899,7 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Отправить" })).toBeDisabled();
     expect(screen.queryByRole("textbox", { name: "Тема" })).toBeNull();
-    expect(screen.getByLabelText("Дата рождения")).toHaveValue("01.01.1980");
+    expect(screen.getByLabelText("Дата рождения")).toHaveValue("1980-01-01");
   });
 
   it("046 EARS-20: in the list an age-locked poster draft reads «Открыть» with the age rule on its meta line", async () => {
@@ -927,17 +925,6 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     expect(
       within(row).queryByRole("button", { name: "Продолжить →" }),
     ).toBeNull();
-  });
-
-  it("046 EARS-19: the birth-date field is plain text — no numeric keypad that lacks «.»", async () => {
-    openDraft(posterDraft.id);
-    fetchMock.mockResolvedValueOnce(
-      answer(section({ kinds: kinds40, submissions: [posterDraft] })),
-    );
-    render(<CongressSection host={HOST} />);
-    const field = await screen.findByLabelText("Дата рождения");
-    expect(field).not.toHaveAttribute("inputmode");
-    expect(field).toHaveAttribute("autocomplete", "bday");
   });
 
   it("046 EARS-20: a send the API refuses for age shows its limit, day and age", async () => {

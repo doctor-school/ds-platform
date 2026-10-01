@@ -208,7 +208,11 @@ test.describe("a registered participant", () => {
 
     // EARS-16 — the checkbox links to the organising committee's consent,
     // published as a platform document (feature 028) on this storefront.
-    const consentLink = page.getByRole("link", { name: "обработку персональных данных" });
+    // `exact`: the DS error summary links «Дайте согласие на обработку …» to the box.
+    const consentLink = page.getByRole("link", {
+      name: "обработку персональных данных",
+      exact: true,
+    });
     await expect(consentLink).toHaveAttribute("href", "/documents/consent-congress-submissions");
     const consentPage = await page.request.get(
       new URL("/documents/consent-congress-submissions", page.url()).href,
@@ -309,10 +313,10 @@ test.describe("a registered participant", () => {
 test.describe("a poster author", () => {
   const POSTER = "Аутологичная жировая ткань при гонартрозе II стадии";
   const MAX_AGE = 40;
-  /** «дд.мм.гггг» of a birth `years` years before today. */
+  /** The date control's `YYYY-MM-DD` of a birth `years` years before today. */
   const bornYearsAgo = (years: number) => {
     const d = new Date();
-    return `15.06.${d.getFullYear() - years}`;
+    return `${d.getFullYear() - years}-06-15`;
   };
   let author: CongressDoctor;
   let senior: CongressDoctor;
@@ -354,7 +358,9 @@ test.describe("a poster author", () => {
     await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
     const birth = page.getByLabel("Дата рождения");
     await expect(birth).toHaveValue("");
-    await expect(birth).toHaveAttribute("placeholder", "дд.мм.гггг");
+    // The DS date control (owner Stage-B 2026-10-01): free text cannot land in it.
+    await expect(birth).toHaveAttribute("type", "date");
+    await expect(birth).toHaveAttribute("min", "1900-01-01");
     await expect(
       page.getByText(
         `Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше ${MAX_AGE} лет на дату начала Конгресса — `,

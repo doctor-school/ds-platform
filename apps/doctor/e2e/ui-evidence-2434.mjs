@@ -136,7 +136,9 @@ async function signIn(page, who) {
   if (status !== 200) throw new Error(`sign-in ${status}`);
 }
 
-const browser = await chromium.launch();
+// `--lang`: the native date control draws its format from the browser's UI
+// language, not the context locale — a Russian browser shows «дд.мм.гггг».
+const browser = await chromium.launch({ args: ["--lang=ru-RU"] });
 
 /**
  * Through the section's own API as `who`: write the birth date, start a poster

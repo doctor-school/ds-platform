@@ -13,7 +13,13 @@ import { Alert } from "@ds/design-system/alert";
 import { Button } from "@ds/design-system/button";
 import { Checkbox } from "@ds/design-system/checkbox";
 import { Container } from "@ds/design-system/container";
+import {
+  FormError as DsFormError,
+  FormErrorSummary,
+  FormItem,
+} from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
+import { Label } from "@ds/design-system/label";
 import { Link } from "@ds/design-system/link";
 import { Textarea } from "@ds/design-system/textarea";
 import { cn } from "@ds/design-system/lib/utils";
@@ -35,12 +41,11 @@ import {
   draftErrors,
   editable as isEditable,
   formFields,
-  formatBirthDate,
   kindSendable,
   kindStartable,
   localDate,
-  parseBirthInput,
   problemMessages,
+  readBirthDate,
   revisionView,
   summaryTitle,
   localTime,
@@ -167,19 +172,13 @@ export function SubmissionDetail({
   const [busy, setBusy] = React.useState(false);
   const [sendFailed, setSendFailed] = React.useState(false);
   const [ask, setAsk] = React.useState<"withdraw" | "delete" | null>(null);
-  const [birthText, setBirthText] = React.useState(() =>
-    formatBirthDate(birthDate),
-  );
+  const [birthValue, setBirthValue] = React.useState(birthDate ?? "");
   const [birthRefused, setBirthRefused] = React.useState(false);
 
-  /**
-   * Write the field's date when it is a real day the account does not hold
-   * yet; a real day is shown back as дд.мм.гггг whatever form it was typed in.
-   */
+  /** Write the date control's day when it is a real day the account does not hold yet. */
   async function saveBirth(): Promise<boolean> {
-    const iso = parseBirthInput(birthText, today);
+    const iso = readBirthDate(birthValue, today);
     if (!iso) return false;
-    setBirthText(formatBirthDate(iso));
     if (iso === birthDate) return true;
     try {
       onBirthDate((await putBirthDate(iso)).birthDate);
@@ -227,7 +226,7 @@ export function SubmissionDetail({
         { consentRequired, consentChecked: consent },
         {
           kind: s.kind,
-          ...(showBirth ? { birthText } : {}),
+          ...(showBirth ? { birthValue } : {}),
           today,
         },
       )
@@ -360,22 +359,20 @@ export function SubmissionDetail({
     </div>
   );
 
-  const labelClass = canEdit
-    ? "text-sm font-bold text-foreground"
-    : "text-caption font-bold text-muted-foreground";
   const roText = (v: string) => (
     <div className="max-w-prose whitespace-pre-wrap text-base leading-relaxed text-foreground">
       {v.trim() ? v : "—"}
     </div>
   );
-  const fieldError = (key: string) => {
-    const e = errOf(key);
-    return e ? (
-      <p className="mt-1.5 text-caption font-semibold text-destructive-text">
-        {e}
-      </p>
-    ) : null;
-  };
+  // Field errors and the error summary are the DS form primitives (ADR-0013
+  // §7): `FormError` owns the inline ⚠ tone, `FormErrorSummary` links each
+  // message to its field. A refusal tied to no field (limit, deadline, closed
+  // intake) is the operation-level `FormError` banner.
+  const fieldError = (key: string) => <DsFormError>{errOf(key)}</DsFormError>;
+  const summaryErrors = shown.flatMap((e) =>
+    e.focusId ? [{ fieldId: e.focusId, message: e.message }] : [],
+  );
+  const operationErrors = shown.filter((e) => !e.focusId);
 
   return (
     <>
@@ -492,42 +489,20 @@ export function SubmissionDetail({
               />
             ) : null}
 
-            {shown.length ? (
-              <div
-                role="alert"
-                data-screen-label="d-lk-congress · сводка ошибок"
-                className="-mx-4 bg-destructive-tint px-4 py-4.5 layout:mx-0 layout:px-5.5"
-              >
-                <div className="text-sm font-bold text-foreground">
-                  {summaryTitle(shown.length)}
-                </div>
-                <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5">
-                  {shown.map((e) => (
-                    <li
-                      key={e.message}
-                      className="text-body-compact text-destructive-text"
-                    >
-                      {e.focusId ? (
-                        <Link asChild tone="danger" variant="inline">
-                          <button
-                            type="button"
-                            className="text-left"
-                            onClick={() =>
-                              document.getElementById(e.focusId!)?.focus()
-                            }
-                          >
-                            {e.message}
-                          </button>
-                        </Link>
-                      ) : (
-                        <span className="font-bold">{e.message}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-2 text-xs text-muted-foreground">
+            {operationErrors.map((e) => (
+              <DsFormError key={e.message} variant="banner">
+                {e.message}
+              </DsFormError>
+            ))}
+            {summaryErrors.length ? (
+              <div data-screen-label="d-lk-congress · сводка ошибок">
+                <FormErrorSummary
+                  title={summaryTitle(summaryErrors.length)}
+                  errors={summaryErrors}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
                   {COPY.summarySaved}
-                </div>
+                </p>
               </div>
             ) : null}
 
@@ -536,13 +511,8 @@ export function SubmissionDetail({
                 COPY.sectionAbout,
                 s.kind === "oral" ? COPY.onSite : undefined,
               )}
-              <div>
-                <label
-                  htmlFor="in-topic"
-                  className={cn("mb-2 block", labelClass)}
-                >
-                  {COPY.topic}
-                </label>
+              <FormItem>
+                <Label htmlFor="in-topic">{COPY.topic}</Label>
                 {canEdit ? (
                   <Input
                     id="in-topic"
@@ -560,15 +530,16 @@ export function SubmissionDetail({
                   roText(draft.title)
                 )}
                 {fieldError("title")}
-              </div>
+              </FormItem>
 
               {showBirth ? (
                 <BirthField
-                  value={birthText}
+                  value={birthValue}
+                  max={today}
                   hint={birthHint}
                   error={birthError}
                   onChange={(v) => {
-                    setBirthText(v);
+                    setBirthValue(v);
                     setBirthRefused(false);
                     setServerErrors([]);
                     setConfirming(false);
@@ -596,13 +567,8 @@ export function SubmissionDetail({
                 const v = draft.body[f.key] ?? "";
                 const max = f.max;
                 return (
-                  <div key={f.key}>
-                    <label
-                      htmlFor={`in-${f.key}`}
-                      className={cn("mb-2 block", labelClass)}
-                    >
-                      {f.label}
-                    </label>
+                  <FormItem key={f.key}>
+                    <Label htmlFor={`in-${f.key}`}>{f.label}</Label>
                     {canEdit ? (
                       <Textarea
                         id={`in-${f.key}`}
@@ -625,7 +591,7 @@ export function SubmissionDetail({
                       roText(v)
                     )}
                     {fieldError(f.key)}
-                  </div>
+                  </FormItem>
                 );
               })}
 
@@ -655,11 +621,9 @@ export function SubmissionDetail({
                         </Link>
                       </span>
                     </Checkbox>
-                    {errOf("consent") ? (
-                      <p className="ml-8 mt-1.5 text-caption font-semibold text-destructive-text">
-                        {errOf("consent")}
-                      </p>
-                    ) : null}
+                    <DsFormError className="ml-8 mt-1.5">
+                      {errOf("consent")}
+                    </DsFormError>
                   </div>
                 </>
               ) : null}

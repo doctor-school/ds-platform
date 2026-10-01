@@ -126,7 +126,6 @@ export const COPY = {
   posterGoal: "Цель",
   posterContent: "Содержание",
   birthDate: "Дата рождения",
-  birthPlaceholder: "дд.мм.гггг",
   birthAskedOnce: "Спрашиваем один раз — перед первым постером.",
   errBirth: "Укажите дату рождения",
   sectionConfirmations: "Подтверждения",

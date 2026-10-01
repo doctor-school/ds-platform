@@ -71,6 +71,16 @@ that handed in its own node would re-open the divergence #2180 closed: two
 storefronts drew two different chips into the same bar and the header itself came
 out 4px taller on one of them.
 
+On an event page the guest link carries that page as a LAND-ONLY return (#2487,
+017 / 014 amendments 2026-09-30): a small client half (`GuestLoginLink`) reads
+`usePathname` and asks `@ds/schemas` `formatLandOnlyReturnTarget` for the value —
+the event page (`/events/<slug>`, `/webinars/<slug>`) as the return whitelist
+reconstructs it, plus the fixed `?intent=land` marker. After sign-in the visitor
+is back on the page and is NOT registered; registration stays the page's own
+button, whose bare-page return still means «register me». Home, feeds, the room
+and the auth doors are no event page and keep the bare route, so the door lands
+on the surface default. Hosts supply only the base route.
+
 The `doctor` branch picks its shape from `initials`: present → the initials
 avatar chip (the Academy), absent → the labelled text chip (the Doctor
 showcase’s «Личный кабинет», 017 EARS-1). Each storefront still reads its own

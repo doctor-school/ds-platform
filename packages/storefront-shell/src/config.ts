@@ -34,7 +34,13 @@
  */
 export type ShellAuthState =
   | { status: "loading" }
-  | { status: "guest"; loginHref: string; label: string }
+  | {
+      status: "guest";
+      /** The host's sign-in route — the BASE link; on an event page the
+       *  package appends that page as `returnTo` (#2487). */
+      loginHref: string;
+      label: string;
+    }
   | {
       status: "doctor";
       profileHref: string;

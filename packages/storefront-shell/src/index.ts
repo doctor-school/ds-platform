@@ -18,6 +18,7 @@
  * drives.
  */
 export { StorefrontHeader } from "./storefront-header";
+export { guestLoginHref } from "./guest-login-link";
 export { StorefrontFooter } from "./storefront-footer";
 export { ThemeToggle, type ThemeToggleLabels } from "./theme-toggle";
 export {

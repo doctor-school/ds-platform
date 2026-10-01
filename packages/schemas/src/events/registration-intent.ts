@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LAND_ONLY_RETURN_QUERY } from "../auth/return-target.js";
 import {
   encodeDoctorEventsFeedQueryEntries,
   parseDoctorEventsFeedQuery,
@@ -473,6 +474,74 @@ export function mintDoctorEventsFeedReturnTarget(
   return parsed.eventSlug === eventSlug && parsed.returnTo === target
     ? target
     : null;
+}
+
+/**
+ * 014 EARS-6 amendment 2026-09-30 (#2487) — the LAND-ONLY эфир return: an event
+ * page the visitor is brought BACK to after sign-in, with no registration.
+ *
+ * A bare event page carried through auth is a {@link RegistrationIntent} — the
+ * page's own «Участвовать» (005 EARS-2 / 014 EARS-6 / 021 EARS-10) — and the
+ * completion fires `RegisterForEvent` for it. The shell header's «Войти /
+ * Регистрация» asks for something else: come back, register nothing. That is the
+ * same page followed by the one fixed marker `?intent=land`
+ * ({@link LAND_ONLY_RETURN_QUERY}), chosen because it needs no second param and
+ * no new validator:
+ *
+ *   - every registration parser already rejects it (a slug admits no `?`), so a
+ *     land-only value can never be completed as a registration;
+ *   - this parser admits ONLY the marked value, so a registration intent never
+ *     degrades into land-only;
+ *   - the same-origin guard keeps exactly this marker, so the parked copy (014
+ *     EARS-6) stays land-only through both storefronts' parking cookie.
+ *
+ * Only an event PAGE shape takes the marker — the academy `/webinars/<slug>` or
+ * the doctor `/events/<slug>`, reconstructed by their own parsers; the feed and
+ * the room already mean something else.
+ */
+export interface LandOnlyReturn {
+  /** The slug of the event page the visitor is brought back to. */
+  readonly eventSlug: string;
+  /** The canonical event page, where the visitor lands. */
+  readonly page: string;
+  /** The canonical carried value: `page` + `?intent=land`. */
+  readonly returnTo: string;
+}
+
+/** The event-page intent under a land-only marker, from either host's shape. */
+function parseEventPage(page: unknown): RegistrationIntent | null {
+  return (
+    parseAcademyEventReturnTarget(page) ?? parseDoctorEventReturnTarget(page)
+  );
+}
+
+/**
+ * Build the land-only value for an event page (`/events/<slug>`,
+ * `/webinars/<slug>`), or `null` when the page is no event page.
+ */
+export function formatLandOnlyReturnTarget(page: unknown): string | null {
+  const intent = parseEventPage(page);
+  return intent ? `${intent.returnTo}?${LAND_ONLY_RETURN_QUERY}` : null;
+}
+
+/**
+ * Parse a carried value into a {@link LandOnlyReturn}, or `null` unless it is
+ * exactly a canonical event page followed by `?intent=land`.
+ */
+export function parseLandOnlyReturnTarget(
+  returnTo: unknown,
+): LandOnlyReturn | null {
+  if (typeof returnTo !== "string") return null;
+  if (returnTo.length > MAX_RETURN_TARGET_LENGTH) return null;
+  const suffix = `?${LAND_ONLY_RETURN_QUERY}`;
+  if (!returnTo.endsWith(suffix)) return null;
+  const intent = parseEventPage(returnTo.slice(0, -suffix.length));
+  if (!intent) return null;
+  return {
+    eventSlug: intent.eventSlug,
+    page: intent.returnTo,
+    returnTo: `${intent.returnTo}${suffix}`,
+  };
 }
 
 /** `true` iff `returnTo` is a safe same-origin event return target (EARS-2). */

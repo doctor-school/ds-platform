@@ -174,3 +174,29 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     expect(currentReturnTarget()).toBeNull();
   });
 });
+
+describe("014 EARS-6 (#2487): the land-only event return lands and never registers", () => {
+  it("014 EARS-6: a land-only return lands on the event page on both hosts and fires NO RegisterForEvent", async () => {
+    expect(
+      await completeReturnTarget("/events/ahilles-042?intent=land", DOCTOR),
+    ).toBe("/events/ahilles-042");
+    expect(
+      await completeReturnTarget("/webinars/ahilles-042?intent=land", ACADEMY),
+    ).toBe("/webinars/ahilles-042");
+    expect(registerForEvent).not.toHaveBeenCalled();
+  });
+
+  it("014 EARS-6: the unmarked event page stays a registration intent", async () => {
+    expect(await completeReturnTarget("/events/ahilles-042", DOCTOR)).toBe(
+      "/events/ahilles-042",
+    );
+    expect(registerForEvent).toHaveBeenCalledWith("ahilles-042");
+  });
+
+  it("019 EARS-12: a land-only return of the OTHER storefront lands on the default and registers nothing", async () => {
+    expect(
+      await completeReturnTarget("/webinars/ahilles-042?intent=land", DOCTOR),
+    ).toBe("/events");
+    expect(registerForEvent).not.toHaveBeenCalled();
+  });
+});

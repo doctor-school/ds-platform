@@ -1,6 +1,6 @@
 "use client";
 
-import type { RegistrationIntent } from "@ds/schemas";
+import { parseLandOnlyReturnTarget, type RegistrationIntent } from "@ds/schemas";
 
 import { registerForEvent } from "./registration-client";
 
@@ -87,6 +87,9 @@ function isSafeSameOriginPath(value: string): boolean {
  * Given the raw (already host-resolved) `returnTo` carried through auth, complete
  * the registration and return WHERE to land:
  *   • a room-return → land back on the room, fire NO registration (006 EARS-6);
+ *   • a land-only event return (`<event page>?intent=land`, the shell header's
+ *     sign-in, 014 EARS-6 amendment 2026-09-30) → land on that page of THIS host,
+ *     fire NO registration — registration stays the page's own button;
  *   • a SAFE event intent → fire `RegisterForEvent` for its slug, then land on the
  *     event page (`intent.returnTo`), already registered (EARS-2);
  *   • any other safe same-origin page → land there, register nothing (014 EARS-6);
@@ -116,6 +119,15 @@ export async function completeReturnTarget(
   // the room's trailing `/room` is not mistaken for an event-page intent.
   const roomReturn = host.parseRoomReturn(carried);
   if (roomReturn) return roomReturn.returnTo;
+
+  // 014 EARS-6 amendment 2026-09-30 (#2487) — «bring me back, register
+  // nothing». The page is asked of THIS host's own event shape, so another
+  // storefront's page lands on the default, exactly as its intent would not be
+  // honoured here (019 EARS-12).
+  const landOnly = parseLandOnlyReturnTarget(carried);
+  if (landOnly) {
+    return host.parseIntent(landOnly.page)?.returnTo ?? host.defaultLanding;
+  }
 
   const intent = host.parseIntent(carried);
   if (!intent) {

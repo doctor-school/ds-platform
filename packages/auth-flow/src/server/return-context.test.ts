@@ -435,3 +435,29 @@ describe("021 EARS-10 (#2455): readReturnEvent tells «gone» from «could not t
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("014 EARS-6 (#2487): the doors carry the land-only return end-to-end", () => {
+  it("014 EARS-6: the carry keeps the land-only value, and the landing is the plain host event page", () => {
+    const value = "/events/prp-pri-gonartroze?intent=land";
+    expect(resolveCarriedReturnTarget(DOCTOR_FIXTURE, value)).toBe(value);
+    expect(resolveReturnLandingPath(DOCTOR_FIXTURE, value)).toBe(
+      "/events/prp-pri-gonartroze",
+    );
+    // The academy shape is re-homed onto this host's event route, as an intent is.
+    expect(
+      resolveReturnLandingPath(
+        DOCTOR_FIXTURE,
+        "/webinars/prp-pri-gonartroze?intent=land",
+      ),
+    ).toBe("/events/prp-pri-gonartroze");
+  });
+
+  it("014 EARS-6: a land-only value never becomes the эфир registration target, nor an intent a land-only one", () => {
+    expect(
+      resolveReturnTargetPath("/events/prp-pri-gonartroze?intent=land"),
+    ).toBeNull();
+    expect(
+      resolveCarriedReturnTarget(DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"),
+    ).toBe("/events/prp-pri-gonartroze");
+  });
+});

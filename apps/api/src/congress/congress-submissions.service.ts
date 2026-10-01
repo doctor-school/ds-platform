@@ -37,9 +37,11 @@ import {
   type CongressSubmissionStatus,
   type CongressSubmissionWithdrawRequest,
   congressAgeOnDay,
+  congressFirstAuthorName,
   congressKindIntakeState,
   congressKindMarksPresenting,
   congressKindNeedsBirthDate,
+  congressKindStatements,
   hasCongressSubmissionForm,
   instantToMskDay,
   lastDayOfClosingInstant,
@@ -106,7 +108,9 @@ function statusConflict(status: CongressSubmissionStatus): never {
  * (EARS-9): registration, kind window — for a `needs_revision` resend its own
  * revision deadline instead (EARS-30) —, complete field set, limit under an
  * advisory lock (EARS-17; the row being sent is never counted, so a resend is
- * not counted twice) and the submission consent (EARS-16). A refusal
+ * not counted twice) and, with the event's rule on, per first author
+ * (EARS-24), the kind's statements (EARS-23) and the submission consent
+ * (EARS-16). A refusal
  * throws inside the transaction, so nothing is written.
  */
 @Injectable()
@@ -251,6 +255,20 @@ export class CongressSubmissionsService {
       );
       if (eligibility.length > 0) refuse(eligibility);
 
+      // EARS-25 — «Подать тезисы по этой работе»: the abstract draft takes
+      // the title and the authors of the account's own sent oral talk or
+      // poster of this event, and links to it.
+      const source =
+        body.derivedFromId === undefined
+          ? null
+          : await this.derivationSource(
+              tx,
+              user.id,
+              body.eventId,
+              body.kind,
+              body.derivedFromId,
+            );
+
       const [row] = await tx
         .insert(congressSubmissions)
         .values({
@@ -258,12 +276,25 @@ export class CongressSubmissionsService {
           registrationId: registration.id,
           userId: user.id,
           kind: body.kind,
-          authors: [
-            firstAuthor(
-              registration.answers,
-              congressKindMarksPresenting(body.kind),
-            ),
-          ],
+          ...(source
+            ? {
+                title: source.title,
+                authors: source.authors.map((a) => ({
+                  ...a,
+                  presenting: congressKindMarksPresenting(body.kind)
+                    ? a.presenting
+                    : false,
+                })),
+                derivedFromId: source.id,
+              }
+            : {
+                authors: [
+                  firstAuthor(
+                    registration.answers,
+                    congressKindMarksPresenting(body.kind),
+                  ),
+                ],
+              }),
         })
         .returning();
       return project(row!);
@@ -343,6 +374,7 @@ export class CongressSubmissionsService {
         problems.push({ code: "registration-required" });
       }
 
+      const settings = await this.settings(tx, row.eventId);
       const w =
         (await this.windows(tx, row.eventId)).get(row.kind) ?? NO_WINDOW;
       const state = congressKindIntakeState(w, this.now());
@@ -396,6 +428,69 @@ export class CongressSubmissionsService {
             code: "limit-reached",
             params: { limit: w.submitLimit },
           });
+        }
+
+        // EARS-24 — with the event's first-author rule on, the same limit
+        // also binds every submitter's counted submissions of the kind whose
+        // first author has this one's normalised full name.
+        const firstName = parsed.ok
+          ? congressFirstAuthorName(parsed.content.authors[0])
+          : null;
+        if (firstName !== null && settings.firstAuthorCounts) {
+          // Sends of different accounts naming one first author are
+          // serialised on that name, as one account's are on its own key.
+          const nameKey = `congress-first-author:${row.eventId}:${row.kind}:${firstName}`;
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtextextended(${nameKey}, 0))`,
+          );
+          const others = await tx
+            .select({
+              first: sql<unknown>`${congressSubmissions.authors} -> 0`,
+            })
+            .from(congressSubmissions)
+            .where(
+              and(
+                eq(congressSubmissions.eventId, row.eventId),
+                eq(congressSubmissions.kind, row.kind),
+                ne(congressSubmissions.status, "draft"),
+                ne(congressSubmissions.id, row.id),
+                eq(congressSubmissions.recordStatus, "active"),
+              ),
+            );
+          const sameFirst = others.filter(
+            (o) =>
+              congressFirstAuthorName(
+                o.first as CongressSubmissionDraftAuthor | undefined,
+              ) === firstName,
+          ).length;
+          if (sameFirst >= w.submitLimit) {
+            // The refusal names the first author as this submission writes
+            // them and the counted sends with that first author.
+            const first = parsed.ok ? parsed.content.authors[0] : undefined;
+            problems.push({
+              code: "first-author-limit-reached",
+              params: {
+                limit: w.submitLimit,
+                used: sameFirst,
+                firstAuthor: [
+                  first?.surname,
+                  first?.firstName,
+                  first?.patronymic,
+                ]
+                  .map((v) => (v ?? "").trim())
+                  .filter(Boolean)
+                  .join(" "),
+              },
+            });
+          }
+        }
+      }
+
+      // EARS-23 — the kind's statements about the text, each named.
+      const statements = congressKindStatements(row.kind);
+      for (const statement of statements) {
+        if (!request.statements.includes(statement)) {
+          problems.push({ code: "statement-required", params: { statement } });
         }
       }
 
@@ -453,6 +548,13 @@ export class CongressSubmissionsService {
           title: parsed.content.title,
           authors: parsed.content.authors,
           body: parsed.content.body,
+          // EARS-23 — the statements with the instant they were made.
+          ...(statements.length > 0 && {
+            statements: (() => {
+              const at = this.now().toISOString();
+              return Object.fromEntries(statements.map((s) => [s, at]));
+            })(),
+          }),
           submittedAt: sql`now()`,
           statusChangedAt: sql`now()`,
           updatedAt: sql`now()`,
@@ -795,6 +897,29 @@ export class CongressSubmissionsService {
     return found.s;
   }
 
+  /**
+   * EARS-25 — the work an abstract is derived from: the account's own
+   * submission of the same event, an oral talk or a poster, sent and not
+   * withdrawn. Another account's row is «not found» (`ownRow`).
+   */
+  private async derivationSource(
+    tx: AuditedTransaction,
+    userId: string,
+    eventId: string,
+    kind: CongressSubmissionKind,
+    derivedFromId: string,
+  ): Promise<CongressSubmissionRow> {
+    const invalid = (): never =>
+      refuse([{ code: "field-invalid", field: "derivedFromId" }]);
+    if (kind !== "abstract") invalid();
+    const source = await this.ownRow(tx, userId, derivedFromId, false);
+    if (source.eventId !== eventId || source.kind === "abstract") invalid();
+    if (source.status === "draft" || source.status === "withdrawn") {
+      statusConflict(source.status);
+    }
+    return source;
+  }
+
   /** EARS-7 — a draft, or a `needs_revision` before its revision deadline. */
   private editable(row: CongressSubmissionRow): boolean {
     if (row.status === "draft") return true;
@@ -888,6 +1013,8 @@ function project(row: CongressSubmissionRow): CongressSubmission {
     title: row.title,
     authors: row.authors,
     body: row.body,
+    derivedFromId: row.derivedFromId,
+    statements: row.statements,
     committeeComment: commented ? row.committeeComment : null,
     submittedAt: row.submittedAt?.toISOString() ?? null,
     revisionDueAt: row.revisionDueAt?.toISOString() ?? null,

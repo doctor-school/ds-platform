@@ -39,6 +39,7 @@ import {
   pickerNote,
   revisionView,
   rowMeta,
+  withSubmissions,
 } from "../model/model";
 import { PosterBand } from "./poster-band";
 import { StatusDot, StatusLabel } from "./status";
@@ -143,32 +144,31 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
     window.scrollTo(0, 0);
   };
 
-  const replace = (next: CongressSubmission) =>
+  // Every change to the list goes through `withSubmissions`, so the kinds'
+  // send counts (EARS-17) move with it — no reload needed for the picker.
+  const setSubmissions = (
+    change: (list: CongressSubmission[]) => CongressSubmission[],
+  ) =>
     setLoad((l) =>
       l.kind === "ready"
         ? {
             kind: "ready",
-            section: {
-              ...l.section,
-              submissions: l.section.submissions.map((x) =>
-                x.id === next.id ? next : x,
-              ),
-            },
+            section: withSubmissions(l.section, change(l.section.submissions)),
           }
         : l,
     );
+  const replace = (next: CongressSubmission) => {
+    setSubmissions((list) => list.map((x) => (x.id === next.id ? next : x)));
+    // The send notice belongs to the sent state: a take-back ends it.
+    if (next.status !== "submitted")
+      setSentNow((m) => {
+        if (!m[next.id]) return m;
+        const { [next.id]: _gone, ...rest } = m;
+        return rest;
+      });
+  };
   const remove = (id: string) =>
-    setLoad((l) =>
-      l.kind === "ready"
-        ? {
-            kind: "ready",
-            section: {
-              ...l.section,
-              submissions: l.section.submissions.filter((x) => x.id !== id),
-            },
-          }
-        : l,
-    );
+    setSubmissions((list) => list.filter((x) => x.id !== id));
 
   const listBand = (section: CongressSubmissionSection | null) => (
     <PosterBand
@@ -319,6 +319,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
         ageRefusal={refusalOf(opened.kind)}
         today={today}
         onBirthDate={setBirthDate}
+        abstractIntake={intakeOf("abstract")}
+        onAbstractFrom={() => void start("abstract", opened.id)}
         onReplace={replace}
         onSent={(s) => {
           replace(s);
@@ -344,22 +346,13 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   }
 
   // 046 EARS-19 — the draft is created at once; a poster draft asks for the
-  // birth date itself (canvas `askBirth`).
-  async function start(kind: CongressSubmissionKind) {
+  // birth date itself (canvas `askBirth`). `derivedFromId` — «Подать тезисы по
+  // этой работе»: the abstract draft comes prefilled from that work (EARS-25).
+  async function start(kind: CongressSubmissionKind, derivedFromId?: string) {
     setBusy(true);
     try {
-      const draft = await createDraft(section.eventId, kind);
-      setLoad((l) =>
-        l.kind === "ready"
-          ? {
-              kind: "ready",
-              section: {
-                ...l.section,
-                submissions: [draft, ...l.section.submissions],
-              },
-            }
-          : l,
-      );
+      const draft = await createDraft(section.eventId, kind, derivedFromId);
+      setSubmissions((list) => [draft, ...list]);
       setFilter(null);
       open(draft.id);
     } catch {
@@ -371,6 +364,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
 
   async function rowAction(s: CongressSubmission, action: RowAction) {
     if (action === "open") return open(s.id);
+    if (action === "abstract-from") return start("abstract", s.id);
     if (action === "withdraw" || action === "delete") {
       setAsk({ id: s.id, what: action });
       return;
@@ -535,7 +529,13 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                 {shown.map((s, i) => {
                   const it = intakeOf(s.kind);
                   const refusal = refusalOf(s.kind);
-                  const acts = actionsFor(s, it, now, refusal);
+                  const acts = actionsFor(
+                    s,
+                    it,
+                    now,
+                    refusal,
+                    intakeOf("abstract"),
+                  );
                   const rev =
                     s.status === "needs_revision" ? revisionView(s, now) : null;
                   return (

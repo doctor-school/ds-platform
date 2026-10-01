@@ -5,6 +5,7 @@ import {
 } from "@ds/schemas";
 
 import {
+  abstractCounter,
   actionsFor,
   ageRefusalOf,
   ageRuleText,
@@ -27,6 +28,7 @@ import {
   mskDate,
   mskDateTime,
   readBirthDate,
+  withSubmissions,
   problemMessages,
   revisionView,
   rowMeta,
@@ -65,6 +67,8 @@ function sub(over: Partial<CongressSubmission> = {}): CongressSubmission {
     title: "",
     authors: [],
     body: {},
+    derivedFromId: null,
+    statements: null,
     committeeComment: null,
     submittedAt: null,
     revisionDueAt: null,
@@ -462,6 +466,27 @@ describe("send checks", () => {
 });
 
 describe("kind choice", () => {
+  it("046 EARS-17: the section's per-kind count follows its submissions — every sent state counts, a draft does not", () => {
+    const base = {
+      kinds: [
+        intake({ kind: "oral" }),
+        intake({ kind: "abstract", submitLimit: 3, used: 0 }),
+      ],
+      submissions: [] as CongressSubmission[],
+    };
+    const next = withSubmissions(base, [
+      sub({ id: "a1", kind: "abstract", status: "submitted" }),
+      sub({ id: "a2", kind: "abstract", status: "withdrawn" }),
+      sub({ id: "a3", kind: "abstract", status: "draft" }),
+      sub({ id: "o1", kind: "oral", status: "needs_revision" }),
+    ]);
+    expect(next.kinds.map((k) => [k.kind, k.used])).toEqual([
+      ["oral", 1],
+      ["abstract", 2],
+    ]);
+    expect(next.submissions).toHaveLength(4);
+  });
+
   it("EARS-6: a draft can be started until the kind closes, only for an offered kind", () => {
     expect(kindStartable(intake())).toBe(true);
     expect(kindStartable(intake({ state: "not-yet-open" }))).toBe(true);
@@ -598,6 +623,211 @@ describe("046 EARS-18 — the poster form", () => {
         focusId: "in-content",
       },
     ]);
+  });
+});
+
+describe("046 EARS-21…EARS-25 — abstracts", () => {
+  const sections = {
+    relevance: "Актуальность.",
+    goal: "Цель.",
+    methods: "Методы.",
+    results: "Результаты.",
+    conclusions: "Выводы.",
+  };
+  const author = { surname: "Петрова", firstName: "Анна", workplace: "НМИЦ" };
+  const noConsent = { consentRequired: false, consentChecked: false };
+
+  it("046 EARS-21: abstracts ask for the five canvas sections, each within the whole total", () => {
+    expect(
+      formFields("abstract").map((f) => [f.key, f.label, f.rows, f.max]),
+    ).toEqual([
+      ["relevance", "Актуальность", 3, 5000],
+      ["goal", "Цель", 2, 5000],
+      ["methods", "Материалы и методы", 4, 5000],
+      ["results", "Результаты и обсуждение", 4, 5000],
+      ["conclusions", "Выводы", 3, 5000],
+    ]);
+  });
+
+  it("046 EARS-22: the one total counter reads the server's length, marked near and above 5000 as the canvas draws it", () => {
+    const ru = (n: number) => n.toLocaleString("ru-RU");
+    expect(abstractCounter({ relevance: " ab\r\nc " })).toEqual({
+      length: 4,
+      text: "4 / 5 000",
+      over: false,
+      near: false,
+      note: null,
+    });
+    expect(abstractCounter({ results: "р".repeat(4500) })).toEqual({
+      length: 4500,
+      text: `${ru(4500)} / 5 000`,
+      over: false,
+      near: true,
+      note: `осталось ${ru(500)}`,
+    });
+    expect(abstractCounter({ results: "р".repeat(5000) })).toMatchObject({
+      over: false,
+      near: true,
+      note: "осталось 0",
+    });
+    expect(
+      abstractCounter({
+        relevance: "а".repeat(3000),
+        results: "р".repeat(2001),
+      }),
+    ).toEqual({
+      length: 5001,
+      text: `${ru(5001)} / 5 000`,
+      over: true,
+      near: false,
+      note: "больше на 1",
+    });
+  });
+
+  it("046 EARS-21, EARS-23: an incomplete abstract names its empty sections, the length, then each statement, then the consent", () => {
+    const errs = draftErrors(
+      {
+        title: "Тема",
+        authors: [author],
+        body: {
+          ...sections,
+          goal: " ",
+          results: "р".repeat(5001),
+        },
+      },
+      { consentRequired: true, consentChecked: false },
+      { kind: "abstract", statements: ["trade"] },
+    );
+    expect(errs.map((e) => [e.key, e.message, e.focusId])).toEqual([
+      ["goal", "Заполните поле «Цель»", "in-goal"],
+      [
+        "counter",
+        `Сократите текст тезисов до 5 000 знаков — сейчас ${(5001 + 13 + 7 + 7).toLocaleString("ru-RU")}`,
+        "in-results",
+      ],
+      [
+        "plag",
+        "Подтвердите, что в тексте нет некорректных заимствований",
+        "chk-plag",
+      ],
+      ["consent", "Дайте согласие на обработку персональных данных", "chk-pd"],
+    ]);
+    expect(
+      draftErrors(
+        { title: "Тема", authors: [author], body: sections },
+        noConsent,
+        { kind: "abstract", statements: ["plag", "trade"] },
+      ),
+    ).toEqual([]);
+    // An oral talk asks for no statement.
+    expect(
+      draftErrors(
+        {
+          title: "Тема",
+          authors: [{ ...author, presenting: true }],
+          body: { goal: "g", summary: "s" },
+        },
+        noConsent,
+        { kind: "oral" },
+      ),
+    ).toEqual([]);
+  });
+
+  it("046 EARS-21, EARS-23: the server's refusals read in the canvas words — the length with its count, each statement", () => {
+    const msgs = problemMessages(
+      [
+        {
+          code: "field-invalid",
+          field: "body",
+          params: { length: 5120, max: 5000 },
+        },
+        { code: "field-invalid", field: "body.conclusions" },
+        { code: "statement-required", params: { statement: "plag" } },
+        { code: "statement-required", params: { statement: "trade" } },
+      ],
+      intake({ kind: "abstract", submitLimit: 3 }),
+      NOW,
+    );
+    expect(msgs.map((m) => [m.key, m.message, m.focusId])).toEqual([
+      [
+        "counter",
+        `Сократите текст тезисов до 5 000 знаков — сейчас ${(5120).toLocaleString("ru-RU")}`,
+        "in-results",
+      ],
+      ["conclusions", "Заполните поле «Выводы»", "in-conclusions"],
+      [
+        "plag",
+        "Подтвердите, что в тексте нет некорректных заимствований",
+        "chk-plag",
+      ],
+      [
+        "trade",
+        "Подтвердите, что в тексте нет торговых наименований",
+        "chk-trade",
+      ],
+    ]);
+  });
+
+  it("046 EARS-17, EARS-24: the abstract limit names the number in the kind's plural; the first-author refusal names the author, the count and the limit", () => {
+    const msgs = problemMessages(
+      [
+        { code: "limit-reached", params: { limit: 3 } },
+        {
+          code: "first-author-limit-reached",
+          params: {
+            limit: 3,
+            used: 3,
+            firstAuthor: "Иванова Мария Петровна",
+          },
+        },
+      ],
+      intake({ kind: "abstract", submitLimit: 3 }),
+      NOW,
+    );
+    expect(msgs.map((m) => m.message)).toEqual([
+      "Можно отправить не больше 3 тезисов",
+      "С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3 — эту заявку отправить нельзя.",
+    ]);
+    const five = problemMessages(
+      [
+        {
+          code: "first-author-limit-reached",
+          params: { limit: 5, used: 5, firstAuthor: "Орлов Виктор" },
+        },
+      ],
+      intake({ kind: "abstract", submitLimit: 5 }),
+      NOW,
+    );
+    expect(five[0]!.message).toBe(
+      "С первым автором «Орлов Виктор» уже отправлено 5 тезисов из 5 — эту заявку отправить нельзя.",
+    );
+  });
+
+  it("046 EARS-25: «Подать тезисы по этой работе» sits on a sent talk or poster while abstracts can be started — never on a draft, a withdrawn one or an abstract", () => {
+    const abstracts = intake({ kind: "abstract", submitLimit: 3 });
+    const labels = (s: Parameters<typeof actionsFor>[0], a = abstracts) =>
+      actionsFor(s, intake(), NOW, null, a).secondary.map((x) => x.label);
+    expect(labels(sub({ status: "submitted" }))).toEqual([
+      "Подать тезисы по этой работе",
+    ]);
+    expect(labels(sub({ status: "accepted" }))).toEqual([
+      "Подать тезисы по этой работе",
+    ]);
+    expect(labels(sub({ status: "in_review", kind: "poster" }))).toEqual([
+      "Подать тезисы по этой работе",
+      "Отозвать",
+    ]);
+    expect(labels(sub({ status: "draft" }))).not.toContain(
+      "Подать тезисы по этой работе",
+    );
+    expect(labels(sub({ status: "withdrawn" }))).toEqual([]);
+    expect(labels(sub({ status: "submitted", kind: "abstract" }))).toEqual([]);
+    expect(
+      labels(sub({ status: "submitted" }), { ...abstracts, state: "closed" }),
+    ).toEqual([]);
+    expect(
+      actionsFor(sub({ status: "submitted" }), intake(), NOW).secondary,
+    ).toEqual([]);
   });
 });
 

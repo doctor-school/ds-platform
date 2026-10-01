@@ -1,6 +1,11 @@
 import {
+  CONGRESS_ABSTRACT_SECTIONS,
   CONGRESS_SUBMISSION_LIMITS,
+  type CongressAbstractSection,
   type CongressAgeLimitParams,
+  type CongressSubmissionStatement,
+  abstractLength,
+  congressKindStatements,
   CongressBirthDateSchema,
   type CongressSubmission,
   type CongressSubmissionDraftAuthor,
@@ -216,6 +221,31 @@ export function kindStartable(intake: CongressSubmissionKindIntake): boolean {
   return intake.offered && intake.state !== "closed";
 }
 
+/**
+ * 046 EARS-17 — the section with `submissions` as its list and each kind's
+ * `used` recounted from it. The API counts every submission of the kind that
+ * has left the draft (`congress-submissions.service` section read); a send, a
+ * take-back, a withdrawal, a new draft or a deletion changes the list the
+ * section holds, so the picker's «Отправлено N из M» and the start it allows
+ * are derived from that same list rather than kept from the first read.
+ */
+export function withSubmissions<
+  S extends {
+    kinds: CongressSubmissionKindIntake[];
+    submissions: CongressSubmission[];
+  },
+>(section: S, submissions: CongressSubmission[]): S {
+  return {
+    ...section,
+    submissions,
+    kinds: section.kinds.map((k) => ({
+      ...k,
+      used: submissions.filter((x) => x.kind === k.kind && x.status !== "draft")
+        .length,
+    })),
+  };
+}
+
 /** The kind can take a send: its form is offered and its window is open. */
 export function kindSendable(intake: CongressSubmissionKindIntake): boolean {
   return intake.offered && intake.state === "open";
@@ -303,7 +333,8 @@ export function editable(
   return false;
 }
 
-export type RowAction = "open" | "take-back" | "withdraw" | "delete";
+export type RowAction =
+  "open" | "take-back" | "withdraw" | "delete" | "abstract-from";
 
 export interface ActionView {
   action: RowAction;
@@ -320,12 +351,40 @@ export interface Actions {
  * What a submission offers in the list and in the detail (046 EARS-11…13).
  * `ageRefusal` — the holder's age-limit refusal for this kind (046 EARS-20,
  * `ageLimitText`), or `null`; an age-locked draft opens rather than continues.
+ * `abstractIntake` — the abstracts' intake: while an abstract draft can be
+ * started, a sent talk or poster offers «Подать тезисы по этой работе» before
+ * its withdrawal (046 EARS-25, canvas `thesesFrom`).
  */
 export function actionsFor(
   s: CongressSubmission,
   intake: CongressSubmissionKindIntake,
   now: Date,
   ageRefusal: string | null = null,
+  abstractIntake: CongressSubmissionKindIntake | null = null,
+): Actions {
+  const acts = baseActions(s, intake, now, ageRefusal);
+  if (
+    s.kind !== "abstract" &&
+    s.status !== "draft" &&
+    s.status !== "withdrawn" &&
+    abstractIntake !== null &&
+    kindStartable(abstractIntake)
+  ) {
+    const from: ActionView = {
+      action: "abstract-from",
+      label: COPY.abstractFrom,
+    };
+    const wd = acts.secondary.findIndex((a) => a.action === "withdraw");
+    acts.secondary.splice(wd < 0 ? acts.secondary.length : wd, 0, from);
+  }
+  return acts;
+}
+
+function baseActions(
+  s: CongressSubmission,
+  intake: CongressSubmissionKindIntake,
+  now: Date,
+  ageRefusal: string | null,
 ): Actions {
   const withdraw: ActionView = {
     action: "withdraw",
@@ -473,10 +532,87 @@ export const POSTER_FIELDS: readonly FormField[] = [
   },
 ];
 
+const ABSTRACT_LABELS: Record<CongressAbstractSection, [string, number]> = {
+  relevance: [COPY.abstractRelevance, 3],
+  goal: [COPY.abstractGoal, 2],
+  methods: [COPY.abstractMethods, 4],
+  results: [COPY.abstractResults, 4],
+  conclusions: [COPY.abstractConclusions, 3],
+};
+
+/**
+ * 046 EARS-21 — the five abstract sections in the canvas order; each may take
+ * the whole total, which the one counter guards (EARS-22).
+ */
+export const ABSTRACT_FIELDS: readonly FormField[] =
+  CONGRESS_ABSTRACT_SECTIONS.map((key) => ({
+    key,
+    label: ABSTRACT_LABELS[key][0],
+    rows: ABSTRACT_LABELS[key][1],
+    max: CONGRESS_SUBMISSION_LIMITS.abstractTotal,
+  }));
+
 /** The body fields of a kind's form. */
 export function formFields(kind: CongressSubmissionKind): readonly FormField[] {
+  if (kind === "abstract") return ABSTRACT_FIELDS;
   return kind === "poster" ? POSTER_FIELDS : ORAL_FIELDS;
 }
+
+/** A count as the canvas prints it — `toLocaleString('ru-RU')`. */
+const ru = (n: number) => n.toLocaleString("ru-RU");
+const ABSTRACT_MAX_TEXT = "5 000";
+/** The canvas marks the counter from 4 500 on (`near`). */
+const ABSTRACT_NEAR = 4500;
+
+export interface AbstractCounterView {
+  /** The server's length (`abstractLength`). */
+  length: number;
+  /** «4 998 / 5 000». */
+  text: string;
+  over: boolean;
+  near: boolean;
+  /** «осталось N» near the limit, «больше на N» above it. */
+  note: string | null;
+}
+
+/**
+ * 046 EARS-22 — the one total counter of the five sections, from the same
+ * `abstractLength` the server refuses by (046-design «Abstract length»).
+ */
+export function abstractCounter(
+  body: Record<string, string | undefined>,
+): AbstractCounterView {
+  const length = abstractLength(body);
+  const max = CONGRESS_SUBMISSION_LIMITS.abstractTotal;
+  const over = length > max;
+  const near = !over && length >= ABSTRACT_NEAR;
+  return {
+    length,
+    text: `${ru(length)} / ${ABSTRACT_MAX_TEXT}`,
+    over,
+    near,
+    note: over
+      ? `больше на ${ru(length - max)}`
+      : near
+        ? `осталось ${ru(max - length)}`
+        : null,
+  };
+}
+
+const abstractTooLong = (length: number): FormError => ({
+  key: "counter",
+  message: `Сократите текст тезисов до ${ABSTRACT_MAX_TEXT} знаков — сейчас ${ru(length)}`,
+  focusId: "in-results",
+});
+
+const STATEMENT_ERRORS: Record<CongressSubmissionStatement, FormError> = {
+  plag: { key: "plag", message: COPY.errStatementPlag, focusId: "chk-plag" },
+  trade: {
+    key: "trade",
+    message: COPY.errStatementTrade,
+    focusId: "chk-trade",
+  },
+};
 
 const BIRTH_ERROR: FormError = {
   key: "birth",
@@ -510,6 +646,8 @@ export function draftErrors(
     kind?: CongressSubmissionKind;
     birthValue?: string;
     today?: string;
+    /** The statements the author has ticked (046 EARS-23). */
+    statements?: readonly CongressSubmissionStatement[];
   } = {},
 ): FormError[] {
   const out: FormError[] = [];
@@ -542,6 +680,15 @@ export function draftErrors(
       });
     }
   }
+  if (form.kind === "abstract") {
+    const length = abstractLength(d.body);
+    if (length > CONGRESS_SUBMISSION_LIMITS.abstractTotal) {
+      out.push(abstractTooLong(length));
+    }
+  }
+  for (const s of congressKindStatements(form.kind ?? "oral")) {
+    if (!form.statements?.includes(s)) out.push(STATEMENT_ERRORS[s]);
+  }
   if (consent.consentRequired && !consent.consentChecked) {
     out.push({ key: "consent", message: COPY.errConsent, focusId: "chk-pd" });
   }
@@ -551,9 +698,13 @@ export function draftErrors(
 function fieldProblem(
   field: string | undefined,
   kind: CongressSubmissionKind,
+  params: CongressSubmissionProblem["params"],
 ): FormError | null {
   if (!field) return null;
   if (field === "birthDate") return BIRTH_ERROR;
+  if (field === "body" && typeof params?.length === "number") {
+    return abstractTooLong(params.length);
+  }
   if (field === "title") {
     return { key: "title", message: COPY.errTopic, focusId: "in-topic" };
   }
@@ -619,7 +770,7 @@ export function problemMessages(
         break;
       case "field-invalid":
         push(
-          fieldProblem(p.field, intake.kind) ?? {
+          fieldProblem(p.field, intake.kind, p.params) ?? {
             key: null,
             message: COPY.errFieldInvalid,
           },
@@ -650,9 +801,21 @@ export function problemMessages(
       case "kind-not-available":
         push({ key: null, message: COPY.errKindNotAvailable });
         break;
-      case "first-author-limit-reached":
-        push({ key: null, message: COPY.errFirstAuthorLimit });
+      case "first-author-limit-reached": {
+        // 046 EARS-24 — the first author as written, the counted sends with
+        // them first and the limit (copy pending the owner's confirmation).
+        const n = Number(p.params?.limit ?? intake.submitLimit ?? 0);
+        const used = Number(p.params?.used ?? n);
+        const name = p.params?.firstAuthor;
+        push({
+          key: null,
+          message:
+            typeof name === "string" && name
+              ? `С первым автором «${name}» уже отправлено ${used} ${plural(used, KIND_COPY[intake.kind].countForms)} из ${n} — эту заявку отправить нельзя.`
+              : `Можно отправить не больше ${n} ${plural(n, KIND_COPY[intake.kind].forms)} с одним и тем же первым автором`,
+        });
         break;
+      }
       case "age-limit": {
         const age = congressAgeLimitParams(p.params);
         push({
@@ -661,9 +824,15 @@ export function problemMessages(
         });
         break;
       }
-      case "statement-required":
-        push({ key: null, message: COPY.errStatement });
+      case "statement-required": {
+        const s = p.params?.statement;
+        push(
+          s === "plag" || s === "trade"
+            ? STATEMENT_ERRORS[s]
+            : { key: null, message: COPY.errStatement },
+        );
         break;
+      }
       default: {
         // Every code the API can return is named above — a new one fails here.
         const unmapped: never = p.code;

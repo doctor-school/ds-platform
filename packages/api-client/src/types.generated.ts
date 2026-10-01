@@ -2250,6 +2250,8 @@ export interface components {
         };
         CongressSubmissionCreateRequestDto: {
             /** Format: uuid */
+            derivedFromId?: string;
+            /** Format: uuid */
             eventId: string;
             /** @enum {string} */
             kind: "oral" | "poster" | "abstract";
@@ -2281,6 +2283,7 @@ export interface components {
             committeeComment: string | null;
             /** Format: date-time */
             createdAt: string;
+            derivedFromId: string | null;
             /** Format: uuid */
             eventId: string;
             /** Format: uuid */
@@ -2288,6 +2291,9 @@ export interface components {
             /** @enum {string} */
             kind: "oral" | "poster" | "abstract";
             revisionDueAt: string | null;
+            statements: {
+                [key: string]: string;
+            } | null;
             /** @enum {string} */
             status: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
             /** Format: date-time */
@@ -2349,6 +2355,7 @@ export interface components {
                 committeeComment: string | null;
                 /** Format: date-time */
                 createdAt: string;
+                derivedFromId: string | null;
                 /** Format: uuid */
                 eventId: string;
                 /** Format: uuid */
@@ -2356,6 +2363,9 @@ export interface components {
                 /** @enum {string} */
                 kind: "oral" | "poster" | "abstract";
                 revisionDueAt: string | null;
+                statements: {
+                    [key: string]: string;
+                } | null;
                 /** @enum {string} */
                 status: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
                 /** Format: date-time */
@@ -2369,6 +2379,8 @@ export interface components {
         CongressSubmissionSendRequestDto: {
             /** @default [] */
             acceptedConsents: "congress-submission-personal-data"[];
+            /** @default [] */
+            statements: ("plag" | "trade")[];
         };
         CongressSubmissionWithdrawRequestDto: {
             /** @enum {string} */

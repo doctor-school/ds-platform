@@ -445,13 +445,26 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(codes(late)).toEqual(["kind-closed"]);
     });
 
-    it("EARS-5: a kind whose form the cabinet does not offer yet is refused with a named problem", async () => {
-      const d = await doctor("sub-kind-na");
+    it("046 EARS-21: every kind's form is offered — an abstract draft is created with no presenting mark", async () => {
+      const d = await doctor("sub-kind-abstract");
       const eventId = await congress(openWindow());
-      await register(d, eventId);
-      const abstract = await create(d, eventId, "abstract");
-      expect(abstract.statusCode).toBe(422);
-      expect(codes(abstract)).toEqual(["kind-not-available"]);
+      await register(d, eventId, {
+        surname: "Иванова",
+        firstName: "Мария",
+        workplace: "ГКБ №1",
+      });
+      const created = await create(d, eventId, "abstract");
+      expect(created.statusCode, created.payload).toBe(201);
+      const draft = CongressSubmissionSchema.parse(created.json());
+      expect(draft).toMatchObject({
+        kind: "abstract",
+        status: "draft",
+        derivedFromId: null,
+        statements: null,
+      });
+      expect(draft.authors[0]!.presenting).toBe(false);
+      const s = await section(d, eventId);
+      expect(s.kinds.every((k) => k.offered)).toBe(true);
     });
 
     it("EARS-7: an autosave stores incomplete content, enforces maximum lengths, and is refused on a submitted submission", async () => {
@@ -1178,9 +1191,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const poster = CongressSubmissionSchema.parse(
         (await create(d, eventId, "poster")).json(),
       );
-      expect(poster.authors.map((a) => a.presenting ?? false)).toEqual([
-        false,
-      ]);
+      expect(poster.authors.map((a) => a.presenting ?? false)).toEqual([false]);
 
       const coAuthor = {
         surname: "Петрова",
@@ -1297,6 +1308,445 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await register(d, eventId);
       await putBirthDate(d.headers, { birthDate: "1950-01-01" });
       expect((await create(d, eventId, "poster")).statusCode).toBe(201);
+    });
+
+    // ------------------------------------------- V-1, V-6, V-8 — abstracts
+
+    /** A congress whose abstract intake is open with the given limit and rule. */
+    async function abstractCongress(
+      submitLimit: number | null = 3,
+      firstAuthorCounts = false,
+    ): Promise<string> {
+      const eventId = await congress(openWindow());
+      const w = openWindow();
+      await pool.query(
+        `INSERT INTO congress_submission_kind_settings
+           (event_id, kind, opens_at, closes_at, submit_limit)
+         VALUES ($1, 'abstract', $2, $3, $4)`,
+        [eventId, w.opensAt, w.closesAt, submitLimit],
+      );
+      await pool.query(
+        `UPDATE congress_submission_settings SET first_author_counts = $2
+          WHERE event_id = $1`,
+        [eventId, firstAuthorCounts],
+      );
+      return eventId;
+    }
+
+    const abstractSections = {
+      relevance: "Гонартроз остаётся частой причиной боли.",
+      goal: "Оценить комбинацию PRP и гиалуроновой кислоты.",
+      methods: "Проспективное исследование, 120 пациентов.",
+      results: "Боль по ВАШ снизилась на 40 %.",
+      conclusions: "Комбинация эффективна.",
+    };
+
+    const abstractAuthor = (surname = "Иванова") => ({
+      surname,
+      firstName: "Мария",
+      patronymic: "Петровна",
+      workplace: "ГКБ №1",
+    });
+
+    const sendAbstract = (
+      d: Doctor,
+      id: string,
+      statements: string[] = ["plag", "trade"],
+      accept = true,
+    ) =>
+      app.inject({
+        method: "POST",
+        url: `${BASE}/${id}/send`,
+        headers: d.headers,
+        payload: {
+          acceptedConsents: accept
+            ? [CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE]
+            : [],
+          statements,
+        },
+      });
+
+    /** A complete abstract draft with the given first author, ready to send. */
+    async function readyAbstract(
+      d: Doctor,
+      eventId: string,
+      first: Record<string, string> = abstractAuthor(),
+    ): Promise<string> {
+      const created = await create(d, eventId, "abstract");
+      expect(created.statusCode, created.payload).toBe(201);
+      const id = CongressSubmissionSchema.parse(created.json()).id;
+      const saved = await autosave(d, id, {
+        title: "PRP и гиалуроновая кислота при гонартрозе",
+        authors: [first, abstractAuthor("Петров")],
+        body: abstractSections,
+      });
+      expect(saved.statusCode, saved.payload).toBe(200);
+      return id;
+    }
+
+    it("046 EARS-21: an abstract send names each empty section; 5000 characters exactly — a CRLF counted as one — sends", async () => {
+      const d = await doctor("sub-abs-len");
+      const eventId = await abstractCongress();
+      await register(d, eventId);
+      const id = await readyAbstract(d, eventId);
+
+      const others =
+        abstractSections.relevance.length +
+        abstractSections.goal.length +
+        abstractSections.methods.length +
+        abstractSections.conclusions.length;
+      expect(
+        (
+          await autosave(d, id, {
+            body: { ...abstractSections, goal: "  ", conclusions: "" },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const refused = await sendAbstract(d, id);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json())
+          .problems.map((p) => p.field)
+          .sort(),
+      ).toEqual(["body.conclusions", "body.goal"]);
+      expect(await statusOf(id)).toBe("draft");
+
+      // Spaces and line breaks count, a CRLF as one line break: this text is
+      // 5000 characters by the rule (5001 UTF-16 units) and sends.
+      const body = {
+        ...abstractSections,
+        results: "р".repeat(5000 - others - 2) + "\r\nр",
+      };
+      expect((await autosave(d, id, { body })).statusCode).toBe(200);
+      const sent = await sendAbstract(d, id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+      expect(CongressSubmissionSchema.parse(sent.json()).status).toBe(
+        "submitted",
+      );
+    });
+
+    it("046 EARS-21: 5001 characters together are refused with the server's count", async () => {
+      const d = await doctor("sub-abs-5001");
+      const eventId = await abstractCongress();
+      await register(d, eventId);
+      const id = await readyAbstract(d, eventId);
+      const others =
+        abstractSections.relevance.length +
+        abstractSections.goal.length +
+        abstractSections.methods.length +
+        abstractSections.conclusions.length;
+      expect(
+        (
+          await autosave(d, id, {
+            body: { ...abstractSections, results: "р".repeat(5001 - others) },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const refused = await sendAbstract(d, id);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json()).problems,
+      ).toEqual([
+        {
+          code: "field-invalid",
+          field: "body",
+          params: { length: 5001, max: 5000 },
+        },
+      ]);
+    });
+
+    it("046 EARS-22: the abstract contract takes plain-text sections only — no other field", async () => {
+      const d = await doctor("sub-abs-plain");
+      const eventId = await abstractCongress();
+      await register(d, eventId);
+      const id = await readyAbstract(d, eventId);
+      for (const body of [
+        { image: "data:image/png;base64,AAAA" },
+        { results: { table: [["a", "b"]] } },
+      ]) {
+        expect((await autosave(d, id, { body })).statusCode).toBe(400);
+      }
+    });
+
+    it("046 EARS-23: an abstract send without a statement is refused naming each one, and no consent other than the submission consent is asked", async () => {
+      const d = await doctor("sub-abs-stmt");
+      const eventId = await abstractCongress();
+      await register(d, eventId);
+      const id = await readyAbstract(d, eventId);
+
+      const none = await sendAbstract(d, id, [], false);
+      expect(none.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(none.json()).problems,
+      ).toEqual([
+        { code: "statement-required", params: { statement: "plag" } },
+        { code: "statement-required", params: { statement: "trade" } },
+        {
+          code: "consent-required",
+          params: { purpose: CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE },
+        },
+      ]);
+      const one = await sendAbstract(d, id, ["plag"]);
+      expect(one.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(one.json()).problems,
+      ).toEqual([
+        { code: "statement-required", params: { statement: "trade" } },
+      ]);
+      expect(await statusOf(id)).toBe("draft");
+
+      const before = Date.now();
+      const sent = await sendAbstract(d, id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+      const view = CongressSubmissionSchema.parse(sent.json());
+      expect(Object.keys(view.statements ?? {}).sort()).toEqual([
+        "plag",
+        "trade",
+      ]);
+      const { rows } = await pool.query<{
+        statements: Record<string, string>;
+      }>("SELECT statements FROM congress_submissions WHERE id = $1", [id]);
+      for (const at of Object.values(rows[0]!.statements)) {
+        expect(new Date(at).getTime()).toBeGreaterThanOrEqual(before - 1000);
+        expect(new Date(at).getTime()).toBeLessThanOrEqual(Date.now() + 1000);
+      }
+      // One consent — the submission consent — and nothing written for the
+      // publication of the abstracts (it is covered by that consent).
+      const consents = await pool.query<{ purpose: string }>(
+        "SELECT purpose FROM consent_records WHERE user_id = $1 AND purpose <> 'tos'",
+        [d.userId],
+      );
+      expect(consents.rows.map((r) => r.purpose)).toEqual([
+        CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
+      ]);
+    });
+
+    it("046 EARS-23: an oral talk takes no statements", async () => {
+      const d = await doctor("sub-oral-stmt");
+      const eventId = await congress(openWindow());
+      await register(d, eventId);
+      const id = await readyDraft(d, eventId);
+      const sent = await send(d, id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+      expect(CongressSubmissionSchema.parse(sent.json()).statements).toBeNull();
+    });
+
+    it("046 EARS-17: abstract limit 3 — rejected and withdrawn count, a draft and one returned to draft do not; the fourth send is refused", async () => {
+      const d = await doctor("sub-abs-limit");
+      const eventId = await abstractCongress(3);
+      await register(d, eventId);
+      const ids = [];
+      for (let i = 0; i < 5; i += 1) ids.push(await readyAbstract(d, eventId));
+      const [a, b, c, e, f] = ids as [string, string, string, string, string];
+
+      for (const id of [a, b, c])
+        expect((await sendAbstract(d, id)).statusCode).toBe(200);
+      await setStatus(a, "rejected");
+      await setStatus(b, "withdrawn");
+      // c back to draft: it does not count, so e takes the third slot.
+      expect((await withdraw(d, c, "submitted")).statusCode).toBe(200);
+      expect((await sendAbstract(d, e)).statusCode).toBe(200);
+
+      const fourth = await sendAbstract(d, f);
+      expect(fourth.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(fourth.json()).problems,
+      ).toEqual([{ code: "limit-reached", params: { limit: 3 } }]);
+      // Two parallel fourth sends admit none.
+      const both = await Promise.all([sendAbstract(d, c), sendAbstract(d, f)]);
+      expect(both.map((r) => r.statusCode)).toEqual([422, 422]);
+      const s = await section(d, eventId);
+      expect(s.kinds.find((k) => k.kind === "abstract")?.used).toBe(3);
+    });
+
+    it("046 EARS-24: first-author rule on — a second submitter whose first author has the same normalised name is refused at the limit; a draft does not count; another first author and the rule off pass", async () => {
+      const eventId = await abstractCongress(3, true);
+      const one = await doctor("sub-fa-one");
+      const two = await doctor("sub-fa-two");
+      await register(one, eventId);
+      await register(two, eventId);
+
+      // Two sent by one submitter, one rejected (still counted), one draft.
+      const a = await readyAbstract(one, eventId);
+      const b = await readyAbstract(one, eventId);
+      expect((await sendAbstract(one, a)).statusCode).toBe(200);
+      expect((await sendAbstract(one, b)).statusCode).toBe(200);
+      await setStatus(b, "rejected");
+      await readyAbstract(one, eventId);
+      const c = await readyAbstract(two, eventId, {
+        ...abstractAuthor(),
+        surname: "  иванова ",
+        firstName: "МАРИЯ",
+      });
+      expect((await sendAbstract(two, c)).statusCode).toBe(200);
+
+      // Three counted with Иванова Мария Петровна first: the fourth is refused.
+      const fourth = await readyAbstract(two, eventId);
+      const refused = await sendAbstract(two, fourth);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json()).problems,
+      ).toEqual([
+        {
+          code: "first-author-limit-reached",
+          params: {
+            limit: 3,
+            used: 3,
+            firstAuthor: "Иванова Мария Петровна",
+          },
+        },
+      ]);
+      expect(await statusOf(fourth)).toBe("draft");
+
+      // Another first author (no patronymic is another name) passes.
+      const other = await readyAbstract(two, eventId, {
+        surname: "Иванова",
+        firstName: "Мария",
+        workplace: "ГКБ №1",
+      });
+      expect((await sendAbstract(two, other)).statusCode).toBe(200);
+
+      // The rule off: the same first author passes.
+      await pool.query(
+        "UPDATE congress_submission_settings SET first_author_counts = false WHERE event_id = $1",
+        [eventId],
+      );
+      expect((await sendAbstract(two, fourth)).statusCode).toBe(200);
+    });
+
+    it("046 EARS-24: ё and е are one letter for the first-author rule — «ковалев» is refused after three sends naming «Ковалёв», and the refusal names the author as this submission writes them", async () => {
+      const eventId = await abstractCongress(3, true);
+      const one = await doctor("sub-fa-yo-one");
+      const two = await doctor("sub-fa-yo-two");
+      await register(one, eventId);
+      await register(two, eventId);
+      const kovalyov = {
+        surname: "Ковалёв",
+        firstName: "Игорь",
+        patronymic: "Петрович",
+        workplace: "ГКБ №1",
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const sent = await readyAbstract(one, eventId, kovalyov);
+        expect((await sendAbstract(one, sent)).statusCode).toBe(200);
+      }
+
+      const fourth = await readyAbstract(two, eventId, {
+        ...kovalyov,
+        surname: "  ковалев ",
+        firstName: "ИГОРЬ",
+      });
+      const refused = await sendAbstract(two, fourth);
+      expect(refused.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(refused.json()).problems,
+      ).toEqual([
+        {
+          code: "first-author-limit-reached",
+          params: { limit: 3, used: 3, firstAuthor: "Ковалев Игорь Петрович" },
+        },
+      ]);
+      expect(await statusOf(fourth)).toBe("draft");
+    });
+
+    it("046 EARS-24: two parallel sends by different submitters for the first author's last slot admit exactly one", async () => {
+      const eventId = await abstractCongress(1, true);
+      const one = await doctor("sub-fa-race-one");
+      const two = await doctor("sub-fa-race-two");
+      await register(one, eventId);
+      await register(two, eventId);
+      const a = await readyAbstract(one, eventId);
+      const b = await readyAbstract(two, eventId);
+      const results = await Promise.all([
+        sendAbstract(one, a),
+        sendAbstract(two, b),
+      ]);
+      expect(results.map((r) => r.statusCode).sort()).toEqual([200, 422]);
+    });
+
+    const createFrom = (d: Doctor, eventId: string, derivedFromId: string) =>
+      app.inject({
+        method: "POST",
+        url: BASE,
+        headers: d.headers,
+        payload: { eventId, kind: "abstract", derivedFromId },
+      });
+
+    it("046 EARS-25: «Подать тезисы по этой работе» on a sent oral talk creates an abstract draft with its title and authors, linked to it", async () => {
+      const d = await doctor("sub-abs-from");
+      const eventId = await abstractCongress();
+      await register(d, eventId);
+      const talk = await readyDraft(d, eventId);
+      expect((await send(d, talk)).statusCode).toBe(200);
+      await setStatus(talk, "accepted");
+
+      const created = await createFrom(d, eventId, talk);
+      expect(created.statusCode, created.payload).toBe(201);
+      const draft = CongressSubmissionSchema.parse(created.json());
+      expect(draft).toMatchObject({
+        kind: "abstract",
+        status: "draft",
+        derivedFromId: talk,
+        title: completeOral.title,
+        body: {},
+      });
+      expect(draft.authors).toEqual([
+        {
+          surname: "Иванова",
+          firstName: "Мария",
+          patronymic: "Петровна",
+          workplace: "ГКБ №1",
+          presenting: false,
+        },
+      ]);
+      const { rows } = await pool.query<{ derived_from_id: string }>(
+        "SELECT derived_from_id FROM congress_submissions WHERE id = $1",
+        [draft.id],
+      );
+      expect(rows[0]!.derived_from_id).toBe(talk);
+    });
+
+    it("046 EARS-25: the action is refused on a draft or a withdrawn talk, on abstracts, for another kind, and on another account's work", async () => {
+      const d = await doctor("sub-abs-from-no");
+      const stranger = await doctor("sub-abs-from-stranger");
+      const eventId = await abstractCongress();
+      await register(d, eventId);
+      await register(stranger, eventId);
+
+      const draftTalk = await readyDraft(d, eventId);
+      const refusedDraft = await createFrom(d, eventId, draftTalk);
+      expect(refusedDraft.statusCode).toBe(409);
+      expect(codes(refusedDraft)).toEqual(["status-conflict"]);
+
+      const withdrawnTalk = await readyDraft(d, eventId);
+      expect((await send(d, withdrawnTalk)).statusCode).toBe(200);
+      await setStatus(withdrawnTalk, "withdrawn");
+      expect((await createFrom(d, eventId, withdrawnTalk)).statusCode).toBe(
+        409,
+      );
+
+      const sentAbstract = await readyAbstract(d, eventId);
+      expect((await sendAbstract(d, sentAbstract)).statusCode).toBe(200);
+      const fromAbstract = await createFrom(d, eventId, sentAbstract);
+      expect(fromAbstract.statusCode).toBe(422);
+      expect(
+        CongressSubmissionRefusalSchema.parse(fromAbstract.json()).problems,
+      ).toEqual([{ code: "field-invalid", field: "derivedFromId" }]);
+
+      const sentTalk = await readyDraft(d, eventId);
+      expect((await send(d, sentTalk)).statusCode).toBe(200);
+      const asOral = await app.inject({
+        method: "POST",
+        url: BASE,
+        headers: d.headers,
+        payload: { eventId, kind: "oral", derivedFromId: sentTalk },
+      });
+      expect(asOral.statusCode).toBe(422);
+      expect(codes(asOral)).toEqual(["field-invalid"]);
+
+      expect((await createFrom(stranger, eventId, sentTalk)).statusCode).toBe(
+        404,
+      );
     });
   },
 );

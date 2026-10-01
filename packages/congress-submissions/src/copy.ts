@@ -125,6 +125,23 @@ export const COPY = {
   summaryPlaceholder: "О чём доклад: материал, случаи, выводы",
   posterGoal: "Цель",
   posterContent: "Содержание",
+  /** 046 EARS-21 — the five abstract sections (canvas `DEFS.theses`). */
+  abstractRelevance: "Актуальность",
+  abstractGoal: "Цель",
+  abstractMethods: "Материалы и методы",
+  abstractResults: "Результаты и обсуждение",
+  abstractConclusions: "Выводы",
+  /** 046 EARS-21 — the abstract form's title label and text section (canvas). */
+  abstractTitle: "Название тезисов",
+  abstractText: "Текст тезисов",
+  abstractTextSub: "Пять разделов, всего до 5 000 знаков",
+  /** 046 EARS-25 — the canvas `thesesFrom` action. */
+  abstractFrom: "Подать тезисы по этой работе",
+  /** 046 EARS-23 — the statements (canvas `mkChk`, owner decision 2026-09-30). */
+  statementPlag: "В тексте нет некорректных заимствований",
+  statementTrade: "В тексте нет торговых наименований",
+  errStatementPlag: "Подтвердите, что в тексте нет некорректных заимствований",
+  errStatementTrade: "Подтвердите, что в тексте нет торговых наименований",
   birthDate: "Дата рождения",
   birthAskedOnce: "Спрашиваем один раз — перед первым постером.",
   errBirth: "Укажите дату рождения",
@@ -153,8 +170,6 @@ export const COPY = {
   errStatusChanged: "Статус заявки изменился — отправить её сейчас нельзя",
   errWithdrawNotAllowed: "Статус заявки изменился — отозвать её сейчас нельзя",
   errKindNotAvailable: "Заявки этого вида пока не принимаются",
-  errFirstAuthorLimit:
-    "Лимит заявок, где вы первый автор, исчерпан — отправить заявку нельзя",
   errAgeLimit:
     "Возраст первого автора не подходит под условия этого вида заявок",
   errStatement: "Подтвердите обязательные заявления",

@@ -46,8 +46,7 @@ function kind(
     lastDay: "2027-01-15",
     submitLimit: null,
     used: 0,
-    // Oral talks (S2) and posters (S3) have their forms; abstracts come in S4.
-    offered: k !== "abstract",
+    offered: true,
     maxAgeYears: null,
     ...over,
   };
@@ -62,6 +61,8 @@ function sub(over: Partial<CongressSubmission> = {}): CongressSubmission {
     title: "PRP при латеральном эпикондилите",
     authors: [],
     body: {},
+    derivedFromId: null,
+    statements: null,
     committeeComment: null,
     submittedAt: "2026-12-16T15:40:00.000Z",
     revisionDueAt: null,
@@ -180,10 +181,12 @@ describe("CongressSection", () => {
               state: "not-yet-open",
               opensAt: "2027-01-19T21:00:00.000Z",
             }),
+            // A kind the event does not offer: its card has no start.
             kind("abstract", {
               state: "not-announced",
               opensAt: null,
               submitLimit: 3,
+              offered: false,
             }),
           ],
         }),
@@ -342,7 +345,7 @@ describe("CongressSection", () => {
     expect(toggle).not.toHaveClass("font-bold");
   });
 
-  it("EARS-7/9: the oral draft saves on blur; a send with gaps lists each one, the consent included", async () => {
+  it("EARS-7/9: the oral draft saves on blur; a send with gaps lists each one, the consent included, and focus moves to the summary", async () => {
     const draft = sub({
       status: "draft",
       title: "",
@@ -385,6 +388,9 @@ describe("CongressSection", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
     const summary = await findSummary();
+    // A failed send moves focus to the summary — on a phone it sits a screen
+    // above the send bar the button lives in.
+    await waitFor(() => expect(summary).toHaveFocus());
     expect(
       within(summary).getByText("Заявка не отправлена. Исправьте 3 ошибки:"),
     ).toBeInTheDocument();
@@ -1002,5 +1008,438 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     render(<CongressSection host={HOST} />);
     await screen.findByLabelText("Цель");
     expect(screen.queryByLabelText("Дата рождения")).toBeNull();
+  });
+});
+
+describe("CongressSection — abstracts (046 EARS-21…25)", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/account/congress");
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const author = {
+    surname: "Иванова",
+    firstName: "Мария",
+    patronymic: "Петровна",
+    workplace: "ГКБ № 1",
+    presenting: false,
+  };
+  const SECTIONS = [
+    "Актуальность",
+    "Цель",
+    "Материалы и методы",
+    "Результаты и обсуждение",
+    "Выводы",
+  ];
+  const fullBody = {
+    relevance: "Актуальность.",
+    goal: "Цель.",
+    methods: "Методы.",
+    results: "Результаты.",
+    conclusions: "Выводы.",
+  };
+  const abstractDraft = sub({
+    id: "00000000-0000-4000-8000-0000000000b1",
+    kind: "abstract",
+    status: "draft",
+    title: "Тезисы о PRP",
+    submittedAt: null,
+    authors: [author],
+    body: fullBody,
+  });
+  const callsTo = (method: string) =>
+    fetchMock.mock.calls.filter(
+      ([, i]) => (i as RequestInit | undefined)?.method === method,
+    );
+  const openDraft = (id: string) =>
+    window.history.replaceState(null, "", `/account/congress?submission=${id}`);
+  /** The send's error summary — each unmet statement also alerts on its box. */
+  const errorSummary = async () =>
+    (await screen.findByText(/^Заявка не отправлена/)).parentElement!;
+
+  it("046 EARS-21: «Начать заявку» on «Тезисы» opens the abstract form — «Название тезисов», authors in publication order with no speaker pick, «Текст тезисов» with its five sections and one total counter", async () => {
+    fetchMock.mockResolvedValueOnce(answer(section()));
+    render(<CongressSection host={HOST} />);
+    const pick = await screen.findByTestId("congress-pick-abstract");
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, title: "", body: {} }),
+    );
+    await userEvent.click(
+      within(pick).getByRole("button", { name: "Начать заявку →" }),
+    );
+    expect(
+      await screen.findByLabelText("Название тезисов"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Тема")).toBeNull();
+    for (const label of SECTIONS) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Текст тезисов" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Пять разделов, всего до 5 000 знаков"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Порядок — как в публикации")).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Докладчик" })).toBeNull();
+    expect(screen.getByTestId("congress-abstract-counter")).toHaveTextContent(
+      "0 / 5 000",
+    );
+    expect(JSON.parse(String(callsTo("POST")[0]![1]!.body))).toEqual({
+      eventId: EVENT_ID,
+      kind: "abstract",
+    });
+    // A refused send: the title's and each section's own error line is part
+    // of the control's description.
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await errorSummary();
+    expect(
+      screen.getByLabelText("Название тезисов"),
+    ).toHaveAccessibleDescription("Укажите тему");
+    for (const label of SECTIONS) {
+      expect(screen.getByLabelText(label)).toHaveAccessibleDescription(
+        `Заполните поле «${label}»`,
+      );
+    }
+  });
+
+  it("046 EARS-22: the counter follows typing over all five sections — marked from 4 500 with «осталось N», above 5 000 with «больше на N» and a send refused with the canvas line", async () => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          consentRequired: false,
+          submissions: [
+            {
+              ...abstractDraft,
+              // 4 480 + the other four sections' 32 = 4 512.
+              body: { ...fullBody, results: "р".repeat(4480) },
+            },
+          ],
+        }),
+      ),
+    );
+    fetchMock.mockResolvedValue(answer(abstractDraft));
+    render(<CongressSection host={HOST} />);
+    const counter = await screen.findByTestId("congress-abstract-counter");
+    expect(counter).toHaveTextContent("4 512 / 5 000");
+    expect(counter).toHaveTextContent("осталось 488");
+    const results = screen.getByLabelText("Результаты и обсуждение");
+    await userEvent.click(screen.getByLabelText("Выводы"));
+    await userEvent.paste("в".repeat(491));
+    expect(counter).toHaveTextContent("5 003 / 5 000");
+    expect(counter).toHaveTextContent("больше на 3");
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    const summary = await errorSummary();
+    const overLink = within(summary).getByRole("link", {
+      name: /^Сократите текст тезисов до 5 000 знаков — сейчас 5\s003$/,
+    });
+    expect(overLink).toHaveAttribute("href", "#in-results");
+    await userEvent.click(overLink);
+    expect(results).toHaveFocus();
+  });
+
+  it("046 EARS-23: a send asks for both statements and the consent; ticked, they go with the send", async () => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ submissions: [abstractDraft] })),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Название тезисов");
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    const summary = await errorSummary();
+    expect(
+      within(summary)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "Подтвердите, что в тексте нет некорректных заимствований",
+      "Подтвердите, что в тексте нет торговых наименований",
+      "Дайте согласие на обработку персональных данных",
+    ]);
+    // The DS summary links each statement to its box; the box is invalid.
+    expect(
+      within(summary).getByRole("link", {
+        name: "Подтвердите, что в тексте нет некорректных заимствований",
+      }),
+    ).toHaveAttribute("href", "#chk-plag");
+    expect(
+      within(summary).getByRole("link", {
+        name: "Подтвердите, что в тексте нет торговых наименований",
+      }),
+    ).toHaveAttribute("href", "#chk-trade");
+    expect(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет некорректных заимствований",
+      }),
+    ).toHaveAttribute("aria-invalid", "true");
+    // Each box's own error line is part of its description.
+    expect(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет некорректных заимствований",
+      }),
+    ).toHaveAccessibleDescription(
+      "Подтвердите, что в тексте нет некорректных заимствований",
+    );
+    expect(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет торговых наименований",
+      }),
+    ).toHaveAccessibleDescription(
+      "Подтвердите, что в тексте нет торговых наименований",
+    );
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Согласие на обработку персональных данных",
+      }),
+    ).toHaveAccessibleDescription(
+      "Дайте согласие на обработку персональных данных",
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет некорректных заимствований",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "В тексте нет торговых наименований",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Согласие на обработку персональных данных",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, status: "submitted" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить" }),
+    );
+    await screen.findByText(
+      "Заявка отправлена. Рассмотрит программный комитет, ответ придёт на почту.",
+    );
+    const send = callsTo("POST").find(([u]) => String(u).endsWith("/send"))!;
+    expect(JSON.parse(String((send[1] as RequestInit).body))).toEqual({
+      acceptedConsents: ["congress-submission-personal-data"],
+      statements: ["plag", "trade"],
+    });
+  });
+
+  /** Ticks both statements, sends and answers the confirmation with `problem`. */
+  const sendAbstractRefusedWith = async (problem: unknown) => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ consentRequired: false, submissions: [abstractDraft] })),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Название тезисов");
+    for (const name of [
+      "В тексте нет некорректных заимствований",
+      "В тексте нет торговых наименований",
+    ]) {
+      await userEvent.click(screen.getByRole("checkbox", { name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    fetchMock.mockResolvedValueOnce(answer({ problems: [problem] }, 422));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить" }),
+    );
+    return screen.findByRole("alert");
+  };
+
+  it("046 EARS-17: an abstract send refused at the abstracts' limit names the limit, takes the focus and keeps the text", async () => {
+    const banner = await sendAbstractRefusedWith({
+      code: "limit-reached",
+      params: { limit: 3 },
+    });
+    expect(
+      within(banner).getByText("Можно отправить не больше 3 тезисов"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(banner).toHaveFocus());
+    // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
+    expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
+  });
+
+  it("046 EARS-24: a send refused by the first-author rule names the author, the count and the limit in the focused summary", async () => {
+    const summary = await sendAbstractRefusedWith({
+      code: "first-author-limit-reached",
+      params: { limit: 3, used: 3, firstAuthor: "Иванова Мария Петровна" },
+    });
+    await waitFor(() => expect(summary).toHaveFocus());
+    expect(
+      within(summary).getByText(
+        "С первым автором «Иванова Мария Петровна» уже отправлено 3 тезиса из 3 — эту заявку отправить нельзя.",
+      ),
+    ).toBeInTheDocument(); // A refusal tied to no field is still a failed send (046-design-prompt-ru §8).
+    expect(screen.getByText("Текст заявки сохранён.")).toBeInTheDocument();
+  });
+
+  it("046 EARS-25: «Подать тезисы по этой работе» on a sent talk creates the abstract draft from it and opens it prefilled; a withdrawn talk and a draft do not offer it", async () => {
+    const talk = sub({
+      id: "00000000-0000-4000-8000-0000000000c1",
+      authors: [{ ...author, presenting: true }],
+    });
+    const withdrawn = sub({
+      id: "00000000-0000-4000-8000-0000000000c2",
+      status: "withdrawn",
+      title: "Отозванный доклад",
+    });
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ submissions: [talk, withdrawn] })),
+    );
+    render(<CongressSection host={HOST} />);
+    const rows = await screen.findAllByTestId("congress-row");
+    expect(
+      within(rows[1]!).queryByRole("button", {
+        name: "Подать тезисы по этой работе",
+      }),
+    ).toBeNull();
+    fetchMock.mockResolvedValueOnce(
+      answer({
+        ...abstractDraft,
+        title: talk.title,
+        body: {},
+        authors: [author],
+        derivedFromId: talk.id,
+      }),
+    );
+    await userEvent.click(
+      within(rows[0]!).getByRole("button", {
+        name: "Подать тезисы по этой работе",
+      }),
+    );
+    expect(await screen.findByLabelText("Название тезисов")).toHaveValue(
+      talk.title,
+    );
+    expect(JSON.parse(String(callsTo("POST")[0]![1]!.body))).toEqual({
+      eventId: EVENT_ID,
+      kind: "abstract",
+      derivedFromId: talk.id,
+    });
+  });
+
+  it("046 EARS-25: the sent talk's detail offers «Подать тезисы по этой работе» too", async () => {
+    const talk = sub({ id: "00000000-0000-4000-8000-0000000000c3" });
+    openDraft(talk.id);
+    fetchMock.mockResolvedValueOnce(answer(section({ submissions: [talk] })));
+    render(<CongressSection host={HOST} />);
+    const action = await screen.findByRole("button", {
+      name: "Подать тезисы по этой работе",
+    });
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, title: talk.title, derivedFromId: talk.id }),
+    );
+    await userEvent.click(action);
+    expect(await screen.findByLabelText("Название тезисов")).toHaveValue(
+      talk.title,
+    );
+  });
+
+  /** The picker tile of a kind, reached the author's way: back to the list, «+ Новая заявка». */
+  const pickerTileAfterBack = async (k: string) => {
+    await userEvent.click(screen.getByRole("button", { name: "← Мои заявки" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "+ Новая заявка" }),
+    );
+    return screen.getByTestId(`congress-pick-${k}`);
+  };
+  const sentAbstract = (n: number) =>
+    sub({
+      id: `00000000-0000-4000-8000-0000000000d${n}`,
+      kind: "abstract",
+      title: `Тезисы ${n}`,
+    });
+
+  it("046 EARS-17: a send counts at once — the picker reached without a reload reads the new count and closes the kind at its limit", async () => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          consentRequired: false,
+          kinds: [
+            kind("oral"),
+            kind("poster"),
+            kind("abstract", { submitLimit: 3, used: 2 }),
+          ],
+          submissions: [abstractDraft, sentAbstract(1), sentAbstract(2)],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Название тезисов");
+    for (const name of [
+      "В тексте нет некорректных заимствований",
+      "В тексте нет торговых наименований",
+    ]) {
+      await userEvent.click(screen.getByRole("checkbox", { name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, status: "submitted" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить" }),
+    );
+    await screen.findByText(/^Заявка отправлена/);
+    const tile = await pickerTileAfterBack("abstract");
+    expect(tile).toHaveTextContent(
+      "Отправлено 3 тезиса из 3 — больше подать нельзя",
+    );
+    expect(
+      within(tile).queryByRole("button", { name: "Начать заявку →" }),
+    ).toBeNull();
+    // The section was read once — the count came from the send, not a reload.
+    expect(
+      fetchMock.mock.calls.filter(
+        ([, i]) => ((i as RequestInit | undefined)?.method ?? "GET") === "GET",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("046 EARS-17: «Забрать на исправление» takes the send back off the count and clears the sent notice", async () => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          consentRequired: false,
+          kinds: [
+            kind("oral"),
+            kind("poster"),
+            kind("abstract", { submitLimit: 3, used: 0 }),
+          ],
+          submissions: [abstractDraft],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Название тезисов");
+    for (const name of [
+      "В тексте нет некорректных заимствований",
+      "В тексте нет торговых наименований",
+    ]) {
+      await userEvent.click(screen.getByRole("checkbox", { name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, status: "submitted" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить" }),
+    );
+    await screen.findByText(/^Заявка отправлена/);
+    fetchMock.mockResolvedValueOnce(answer(abstractDraft));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Забрать на исправление" }),
+    );
+    await screen.findByLabelText("Название тезисов");
+    expect(screen.queryByText(/^Заявка отправлена/)).toBeNull();
+    expect(await pickerTileAfterBack("abstract")).toHaveTextContent(
+      "Отправлено 0 тезисов из 3",
+    );
   });
 });

@@ -5,6 +5,7 @@ import {
   type CongressSubmissionKind,
   type CongressSubmissionProblem,
   type CongressSubmissionSection,
+  type CongressSubmissionStatement,
   type CongressSubmissionStatus,
   CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE,
   CongressSubmissionRefusalSchema,
@@ -73,11 +74,19 @@ export function fetchSection(): Promise<CongressSubmissionSection> {
   return call<CongressSubmissionSection>("");
 }
 
+/**
+ * A new draft of a kind (046 EARS-6); `derivedFromId` — «Подать тезисы по этой
+ * работе»: the abstract draft created from that talk or poster (EARS-25).
+ */
 export function createDraft(
   eventId: string,
   kind: CongressSubmissionKind,
+  derivedFromId?: string,
 ): Promise<CongressSubmission> {
-  return call("", { method: "POST", json: { eventId, kind } });
+  return call("", {
+    method: "POST",
+    json: { eventId, kind, ...(derivedFromId ? { derivedFromId } : {}) },
+  });
 }
 
 /**
@@ -96,9 +105,11 @@ export function saveDraft(
   });
 }
 
+/** Send a draft or a revision with the consent and the statements made (046 EARS-16, EARS-23). */
 export function sendSubmission(
   id: string,
   acceptConsent: boolean,
+  statements: readonly CongressSubmissionStatement[] = [],
 ): Promise<CongressSubmission> {
   return call(`/${id}/send`, {
     method: "POST",
@@ -106,6 +117,7 @@ export function sendSubmission(
       acceptedConsents: acceptConsent
         ? [CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE]
         : [],
+      ...(statements.length ? { statements: [...statements] } : {}),
     },
   });
 }

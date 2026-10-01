@@ -745,6 +745,34 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     });
   });
 
+  it("046 EARS-19: on blur a real day typed as «23/04/1987» or «23041987» is rewritten to дд.мм.гггг in the field; an impossible one stays as typed", async () => {
+    openDraft(posterDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ kinds: kinds40, submissions: [posterDraft] })),
+    );
+    render(<CongressSection host={HOST} />);
+    const field = await screen.findByLabelText("Дата рождения");
+
+    await userEvent.type(field, "23/04/1987");
+    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1987-04-23" }));
+    await userEvent.tab();
+    await waitFor(() => expect(field).toHaveValue("23.04.1987"));
+    await waitFor(() => expect(callsTo("PUT")).toHaveLength(1));
+
+    await userEvent.clear(field);
+    await userEvent.type(field, "24041987");
+    fetchMock.mockResolvedValueOnce(answer({ birthDate: "1987-04-24" }));
+    await userEvent.tab();
+    await waitFor(() => expect(field).toHaveValue("24.04.1987"));
+    await waitFor(() => expect(callsTo("PUT")).toHaveLength(2));
+
+    await userEvent.clear(field);
+    await userEvent.type(field, "31/02/1990");
+    await userEvent.tab();
+    expect(field).toHaveValue("31/02/1990");
+    expect(callsTo("PUT")).toHaveLength(2);
+  });
+
   it("046 EARS-19: a birth date the API refuses sits on the field of the draft", async () => {
     openDraft(posterDraft.id);
     fetchMock.mockResolvedValueOnce(

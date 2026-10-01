@@ -172,10 +172,14 @@ export function SubmissionDetail({
   );
   const [birthRefused, setBirthRefused] = React.useState(false);
 
-  /** Write the field's date when it is a real day the account does not hold yet. */
+  /**
+   * Write the field's date when it is a real day the account does not hold
+   * yet; a real day is shown back as дд.мм.гггг whatever form it was typed in.
+   */
   async function saveBirth(): Promise<boolean> {
     const iso = parseBirthInput(birthText, today);
     if (!iso) return false;
+    setBirthText(formatBirthDate(iso));
     if (iso === birthDate) return true;
     try {
       onBirthDate((await putBirthDate(iso)).birthDate);

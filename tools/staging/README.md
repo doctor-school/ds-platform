@@ -326,7 +326,7 @@ converged, probe → act → re-read:
 | Factor at the IdP                       | Secret stored on the box | Action                                                                                                                        |
 | --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | absent, or provisional (never verified) | any                      | register (`POST /v2/users/{id}/totp`), store the secret, verify with the derived code, re-read READY                          |
-| READY                                   | yes                      | keep — logs «TOTP already enrolled for golden.admin.agent@example.test»                                                       |
+| READY                                   | yes                      | keep — logs `TOTP already enrolled for golden.admin.agent@example.test`                                                       |
 | READY                                   | no                       | remove THIS account's factor (`DELETE /management/v1/users/{id}/auth_factors/otp`, proven by re-read), then register as above |
 
 Its password and TOTP secret are tool-minted into `/etc/ds-platform/stage-agent-admin.env`
@@ -343,7 +343,7 @@ their existence, password and email state only.
 ### Agent admin sign-in recipe
 
 1. `pnpm stage:slot up pr-<N> --ref <sha>` (or `reset-identities pr-<N>`) — the log shows
-   either «TOTP enrolled for golden.admin.agent@example.test» or «TOTP already enrolled».
+   either `TOTP enrolled for golden.admin.agent@example.test` or `TOTP already enrolled …`.
 2. `pnpm stage:slot agent-admin-code` prints the current six-digit code and how many seconds
    it stays valid; `pnpm stage:slot agent-admin-code --json` prints
    `{username, password, code, secondsLeft}` for a Playwright drive. Run it at the moment

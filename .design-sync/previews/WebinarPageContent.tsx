@@ -5,12 +5,12 @@ const labels = {
   programLabel: 'Программа',
   programDownloadLabel: 'Скачать программу (PDF)',
   speakersLabel: 'Спикеры',
-  sponsorEyebrow: 'При поддержке',
+  sponsorEyebrow: 'Партнёрский материал · Партнёр',
   sponsorNote:
-    'Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа.',
+    'Партнёр не влияет на программу: содержание определяют спикеры.',
 };
 
-export const FullWithSponsorAndProgram = () => (
+export const FullWithPartnerAndProgram = () => (
   <div className="w-full">
     <WebinarPageContent
       {...labels}
@@ -24,7 +24,7 @@ export const FullWithSponsorAndProgram = () => (
   </div>
 );
 
-export const NoProgramNoSponsorTwoSpeakers = () => (
+export const NoProgramNoPartnerTwoSpeakers = () => (
   <div className="w-full">
     <WebinarPageContent
       {...labels}

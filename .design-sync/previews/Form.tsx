@@ -26,7 +26,7 @@ export const ProfileField = () => {
                 <FormControl>
                   <Input placeholder="Д-р Анна Смирнова" {...field} />
                 </FormControl>
-                <FormDescription>Видно участникам вебинаров и в сертификате НМО.</FormDescription>
+                <FormDescription>Видно коллегам на вебинарах и в сертификате НМО.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

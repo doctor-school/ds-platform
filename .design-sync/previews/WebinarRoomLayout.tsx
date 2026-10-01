@@ -42,10 +42,10 @@ const chat = (
     </div>
     <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 py-3">
       <div className="text-sm leading-relaxed text-foreground break-words">
-        <span className="font-bold text-foreground">Участник B2</span> Уже в эфире, коллеги!
+        <span className="font-bold text-foreground">Ирина К.</span> Уже в эфире, коллеги!
       </div>
       <div className="text-sm leading-relaxed text-foreground break-words">
-        <span className="font-bold text-foreground">Участник C7</span> Отличный разбор доступов, спасибо!
+        <span className="font-bold text-foreground">Дмитрий П.</span> Отличный разбор доступов, спасибо!
       </div>
       <div className="text-sm leading-relaxed text-foreground break-words">
         <span className="font-bold text-primary-action">Вы</span> Ждём блок вопросов по реабилитации.

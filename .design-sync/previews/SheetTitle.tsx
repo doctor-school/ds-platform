@@ -45,7 +45,7 @@ export const EntryForm = () => (
       <SheetHeader>
         <SheetTitle>Новая заявка</SheetTitle>
         <SheetDescription>
-          Регистрация участника за стойкой. Поля — в теле, действия — внизу.
+          Регистрация врача за стойкой. Поля — в теле, действия — внизу.
         </SheetDescription>
       </SheetHeader>
       <SheetBody>

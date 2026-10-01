@@ -7,6 +7,7 @@ import {
   type CongressSubmission,
   type CongressSubmissionDraftContent,
   type CongressSubmissionKindIntake,
+  congressKindMarksPresenting,
 } from "@ds/schemas";
 import { Alert } from "@ds/design-system/alert";
 import { Button } from "@ds/design-system/button";
@@ -150,6 +151,7 @@ export function SubmissionDetail({
   // one included — a mistyped date must not lock the holder out (EARS-19).
   const showBirth = askBirth && s.status === "draft" && kindStartable(intake);
   const fields = formFields(s.kind);
+  const speakerPick = congressKindMarksPresenting(s.kind);
   const rev = revisionView(s, now);
   const kind = KIND_COPY[s.kind];
 
@@ -573,14 +575,14 @@ export function SubmissionDetail({
 
               {sectionHead(
                 COPY.sectionAuthors,
-                s.kind === "oral" ? COPY.pickSpeaker : COPY.authorOrder,
+                speakerPick ? COPY.pickSpeaker : COPY.authorOrder,
               )}
               <AuthorsEditor
                 authors={draft.authors}
                 editable={canEdit}
                 tried={tried}
                 error={errOf("authors")}
-                speakerPick={s.kind === "oral"}
+                speakerPick={speakerPick}
                 onChange={(authors) => update((d) => ({ ...d, authors }))}
                 onBlur={flush}
               />

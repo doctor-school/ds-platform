@@ -8,7 +8,6 @@ import {
   type CongressSubmissionKindIntake,
   type CongressSubmissionSection,
   type CongressSubmissionStatus,
-  congressKindNeedsBirthDate,
   instantToMskDay,
 } from "@ds/schemas";
 import { Button } from "@ds/design-system/button";
@@ -23,7 +22,6 @@ import {
   createDraft,
   deleteDraft,
   fetchSection,
-  putBirthDate,
   withdrawSubmission,
 } from "../client";
 import { COPY, KIND_COPY, STATUS_PLURAL } from "../copy";
@@ -38,12 +36,10 @@ import {
   intakeLine,
   kindStartable,
   limitLine,
-  parseBirthInput,
   pickerNote,
   revisionView,
   rowMeta,
 } from "../model/model";
-import { BirthField } from "./birth-field";
 import { PosterBand } from "./poster-band";
 import { StatusDot, StatusLabel } from "./status";
 import { InlineAsk, SubmissionDetail } from "./submission-detail";
@@ -110,10 +106,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   const [busy, setBusy] = React.useState(false);
   const [sentNow, setSentNow] = React.useState<Record<string, boolean>>({});
   const [now, setNow] = React.useState(() => new Date());
-  // 046 EARS-19 — the birth-date step before the first poster draft.
-  const [birthStep, setBirthStep] = React.useState(false);
-  const [birthText, setBirthText] = React.useState("");
-  const [birthError, setBirthError] = React.useState(false);
 
   const read = React.useCallback(async () => {
     setLoad({ kind: "loading" });
@@ -296,11 +288,8 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
   const startDay = eventStartDay(section.event);
   // The Moscow day a birth date may not pass — the API's own check.
   const today = instantToMskDay(now);
-  const refusalOf = (
-    k: CongressSubmissionKind,
-    birthDate = section.birthDate,
-  ) => {
-    const age = ageRefusalOf(intakeOf(k), birthDate, startDay);
+  const refusalOf = (k: CongressSubmissionKind) => {
+    const age = ageRefusalOf(intakeOf(k), section.birthDate, startDay);
     return age ? ageLimitText(age) : null;
   };
   const setBirthDate = (birthDate: string) =>
@@ -354,43 +343,11 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
     );
   }
 
-  /**
-   * 046 EARS-19 — a kind that needs the birth date asks for it before the
-   * draft exists: the first «Начать заявку» unfolds the field, the next writes
-   * a real day through `PUT /v1/me/birth-date`; a date at or above the age
-   * limit turns the card into the refusal (EARS-20) and creates nothing.
-   */
-  async function birthFirst(kind: CongressSubmissionKind): Promise<boolean> {
-    if (
-      section.birthDate ||
-      !congressKindNeedsBirthDate(kind, intakeOf(kind).maxAgeYears)
-    ) {
-      return true;
-    }
-    if (!birthStep) {
-      setBirthStep(true);
-      return false;
-    }
-    const iso = parseBirthInput(birthText, today);
-    if (!iso) {
-      setBirthError(true);
-      return false;
-    }
-    try {
-      const { birthDate } = await putBirthDate(iso);
-      setBirthDate(birthDate);
-      setBirthStep(false);
-      return refusalOf(kind, birthDate) === null;
-    } catch {
-      setBirthError(true);
-      return false;
-    }
-  }
-
+  // 046 EARS-19 — the draft is created at once; a poster draft asks for the
+  // birth date itself (canvas `askBirth`).
   async function start(kind: CongressSubmissionKind) {
     setBusy(true);
     try {
-      if (!(await birthFirst(kind))) return;
       const draft = await createDraft(section.eventId, kind);
       setLoad((l) =>
         l.kind === "ready"
@@ -486,11 +443,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                   // EARS-20: the canvas `ageReason` replaces the start.
                   const refusal = kindStartable(it) ? refusalOf(k) : null;
                   const avail = kindStartable(it) && !limitReached && !refusal;
-                  const askBirth =
-                    avail &&
-                    birthStep &&
-                    !section.birthDate &&
-                    congressKindNeedsBirthDate(k, it.maxAgeYears);
                   return (
                     <div
                       key={k}
@@ -523,19 +475,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                         <p className="text-pretty text-caption leading-normal text-muted-foreground">
                           {refusal}
                         </p>
-                      ) : null}
-                      {askBirth ? (
-                        <div className="mt-2 mb-1">
-                          <BirthField
-                            value={birthText}
-                            hint={birthHint(it, startDay)}
-                            error={birthError ? COPY.errBirth : null}
-                            onChange={(v) => {
-                              setBirthText(v);
-                              setBirthError(false);
-                            }}
-                          />
-                        </div>
                       ) : null}
                       {avail ? (
                         <Link asChild size="sm" className="mt-auto self-start">

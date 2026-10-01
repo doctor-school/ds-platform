@@ -3,7 +3,7 @@
 The one implementation of «Мои заявки на Конгресс» (feature 046): the author's
 section of the congress event — the list of submissions with their status
 labels, the kind choice, the oral-talk and poster forms with their authors
-editor, the poster flow's birth-date step and age refusal, autosave, the send
+editor, the poster draft's birth-date field and age refusal, autosave, the send
 panel with its error summary and confirmation, return to draft, withdrawal and
 draft deletion. Spec: `apps/docs/content/specs/features/046-congress-submissions/`.
 Look: the canvas `design-source/doctor-lk-congress.dc.html`. Registry row:

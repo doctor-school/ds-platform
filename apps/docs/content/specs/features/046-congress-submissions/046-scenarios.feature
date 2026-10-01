@@ -117,13 +117,15 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
   Scenario: Poster eligibility by birth date
     Given the participant's account has no birth date
     When the participant starts a poster
-    Then the section asks for the birth date before creating the draft
+    Then a poster draft is created with the title, authors without a presenting mark, goal and content fields, no file field, and the birth-date field
+    When the participant sends the draft without a birth date
+    Then the birth-date field says "Укажите дату рождения" and the draft stays a draft
     When the participant enters 1987-04-23
     Then the birth date is stored on the account
-    And the poster is refused with "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 40 лет."
+    And the send is refused with "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 40 лет."
     And oral talks and abstracts stay available
-    When the participant corrects the birth date to 1987-04-24 and starts a poster
-    Then a poster draft is created with the title, authors, goal and content fields and no file field
+    When the participant corrects the birth date to 1987-04-24 and sends the poster
+    Then it becomes "Отправлена"
 
   @EARS-21 @EARS-22 @EARS-23
   Scenario: Abstracts with the total counter and the statements

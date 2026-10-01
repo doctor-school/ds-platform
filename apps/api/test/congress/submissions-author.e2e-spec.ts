@@ -1148,21 +1148,60 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(guest.statusCode).toBe(401);
     });
 
-    it("046 EARS-19: a poster is refused before the draft exists while the account has no birth date; oral is not", async () => {
+    it("046 EARS-19: a poster draft is created without a birth date; its send names the missing birth date until it is stored", async () => {
       const d = await doctor("sub-poster-nobd");
       const eventId = await posterCongress();
       await register(d, eventId);
 
-      const refused = await create(d, eventId, "poster");
+      const created = await create(d, eventId, "poster");
+      expect(created.statusCode, created.payload).toBe(201);
+      const id = CongressSubmissionSchema.parse(created.json()).id;
+      expect((await autosave(d, id, completePoster)).statusCode).toBe(200);
+
+      const refused = await send(d, id);
       expect(refused.statusCode).toBe(422);
       expect(CongressSubmissionRefusalSchema.parse(refused.json())).toEqual({
         problems: [{ code: "field-invalid", field: "birthDate" }],
       });
-      expect((await section(d, eventId)).submissions).toEqual([]);
-      expect((await create(d, eventId, "oral")).statusCode).toBe(201);
+      expect(await statusOf(id)).toBe("draft");
 
       await putBirthDate(d.headers, { birthDate: "1987-04-24" });
-      expect((await create(d, eventId, "poster")).statusCode).toBe(201);
+      const sent = await send(d, id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+    });
+
+    it("046 EARS-18: a poster has no presenting author — it is not set at creation, and a poster without the holder's row sends", async () => {
+      const d = await doctor("sub-poster-nopresent");
+      const eventId = await posterCongress();
+      await register(d, eventId);
+      await putBirthDate(d.headers, { birthDate: "1990-01-01" });
+      const poster = CongressSubmissionSchema.parse(
+        (await create(d, eventId, "poster")).json(),
+      );
+      expect(poster.authors.map((a) => a.presenting ?? false)).toEqual([
+        false,
+      ]);
+
+      const coAuthor = {
+        surname: "Петрова",
+        firstName: "Анна",
+        workplace: "НМИЦ ТО им. Н. Н. Приорова",
+      };
+      expect(
+        (
+          await autosave(d, poster.id, {
+            ...completePoster,
+            authors: [coAuthor],
+          })
+        ).statusCode,
+      ).toBe(200);
+      const sent = await send(d, poster.id);
+      expect(sent.statusCode, sent.payload).toBe(200);
+      expect(
+        CongressSubmissionSchema.parse(sent.json()).authors.map(
+          (a) => a.presenting ?? false,
+        ),
+      ).toEqual([false]);
     });
 
     it("046 EARS-20: born 1987-04-23 is refused a poster for the 2027-04-23 congress with the limit, the start day and the age; 1987-04-24 is allowed; oral stays available", async () => {

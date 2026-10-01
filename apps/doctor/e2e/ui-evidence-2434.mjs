@@ -10,10 +10,10 @@
  * provisions confirmed doctors registered for it (the same rows
  * `support/congress-stand.ts` documents). The four profiles shoot a first
  * poster draft (topic, birth date shown back, authors, «Цель», «Содержание»,
- * consent, send panel); the interactions shoot the birth-date ask before the
- * first poster draft, its «Укажите дату рождения» error, the kind choice of a
- * holder above the limit and a poster draft of such a holder (the refusal in
- * place of the send).
+ * consent, send panel); the interactions shoot the birth date asked in a new
+ * first poster draft, the authors section with no speaker pick, the
+ * «Укажите дату рождения» error at send, a poster draft of a holder above the
+ * limit (the refusal in place of the send) and that holder's kind choice.
  *
  *   E2E_DOCTOR_URL=http://127.0.0.1:3004 MAILPIT_URL=… DATABASE_URL=<branch db> \
  *     node apps/doctor/e2e/ui-evidence-2434.mjs .github/ui-evidence/2434
@@ -38,8 +38,6 @@ const OUT = process.argv[2] ?? ".github/ui-evidence/2434";
 mkdirSync(OUT, { recursive: true });
 const DAY = 86_400_000;
 const YEAR = new Date().getFullYear();
-/** «дд.мм.гггг» of a birth `years` years before this year. */
-const born = (years) => `15.06.${YEAR - years}`;
 const isoBorn = (years) => `${YEAR - years}-06-15`;
 
 const VIEWPORTS = {
@@ -256,22 +254,30 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   }
 }
 
-// Interactions (desktop light).
+/** Bring `locator` to the middle of the viewport before a viewport shot. */
+async function centre(page, locator) {
+  await locator.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await page.waitForTimeout(200);
+}
+
+// Interactions (desktop light). «Начать заявку» creates the poster draft at
+// once; the draft asks for the birth date (canvas `askBirth`, 046 EARS-19).
 {
   const { ctx, page } = await themed(VIEWPORTS.desktop, "light", asker);
   await page.goto(`${BASE}/account/congress`);
   const card = page.getByTestId("congress-pick-poster");
-  const start = card.getByRole("button", { name: "Начать заявку →" });
-  await start.click();
-  await card.getByLabel("Дата рождения").waitFor();
+  await card.getByRole("button", { name: "Начать заявку →" }).click();
+  const birth = page.getByLabel("Дата рождения");
+  await birth.waitFor();
+  await centre(page, birth);
   await shot(page, "interactions-birth-ask", "light", false);
-  await start.click();
-  await card.getByText("Укажите дату рождения").waitFor();
+  // The authors in publication order, with no speaker pick (EARS-18).
+  await centre(page, page.getByText("Порядок — как в публикации"));
+  await shot(page, "interactions-poster-authors", "light", false);
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  await page.getByText("Укажите дату рождения").first().waitFor();
+  await centre(page, birth);
   await shot(page, "interactions-birth-error", "light", false);
-  await card.getByLabel("Дата рождения").fill(born(52));
-  await start.click();
-  await card.getByText(/На эту дату вам будет/).waitFor();
-  await shot(page, "interactions-picker-age-refusal", "light", false);
   await ctx.close();
 }
 {
@@ -279,16 +285,23 @@ for (const [vp, viewport] of Object.entries(VIEWPORTS)) {
   await openDraft(page);
   await page.getByText(/На эту дату вам будет/).first().waitFor();
   await shot(page, "interactions-send-age-refusal", "light");
+  // Back on the kind choice, the stored date over the limit refuses the poster.
+  await page.getByRole("button", { name: "← Мои заявки" }).first().click();
+  await page.getByRole("button", { name: "+ Новая заявка" }).click();
+  const card = page.getByTestId("congress-pick-poster");
+  await card.getByText(/На эту дату вам будет/).waitFor();
+  await centre(page, card);
+  await shot(page, "interactions-picker-age-refusal", "light", false);
   await ctx.close();
 }
-// Mobile light: the birth-date ask on the kind choice.
+// Mobile light: the birth date asked in the first poster draft.
 {
   const who = await provision("ask-m");
   const { ctx, page } = await themed(VIEWPORTS.mobile, "light", who);
   await page.goto(`${BASE}/account/congress`);
   const card = page.getByTestId("congress-pick-poster");
   await card.getByRole("button", { name: "Начать заявку →" }).click();
-  await card.getByLabel("Дата рождения").waitFor();
+  await page.getByLabel("Дата рождения").waitFor();
   await shot(page, "interactions-birth-ask-mobile", "light");
   await ctx.close();
 }

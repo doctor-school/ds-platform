@@ -31,9 +31,9 @@ import {
  *       offers «Отозвать» → «Отозвана» with no action left (EARS-6…EARS-13);
  *   (d) a talk returned for revision shows its deadline with the countdown, an
  *       expired one the «Срок доработки истёк» line (EARS-11);
- *   (e) V-16 poster part (#2434): the birth date asked before the first poster
- *       draft and shown back in it, the poster sent, and the age refusal on the
- *       kind choice and in a poster draft (EARS-18…EARS-20).
+ *   (e) V-16 poster part (#2434): the birth date asked inside the first poster
+ *       draft and kept there, the poster sent, and the age refusal in a poster
+ *       draft and on the kind choice (EARS-18…EARS-20).
  *
  * Why a LIVE tier: every state is an api decision over real rows (intake window,
  * registration, status machine); a double would assert its own fixture. The
@@ -300,9 +300,9 @@ test.describe("a registered participant", () => {
 });
 
 /**
- * 046 V-16, poster part (#2434) — the birth date asked once before the first
- * poster draft, the poster form sent, and the age refusal on the kind choice
- * and in a poster draft (EARS-18…EARS-20). On a congress event of its own the
+ * 046 V-16, poster part (#2434) — the birth date asked once inside the first
+ * poster draft, the poster form sent, and the age refusal in a poster draft and
+ * on the kind choice (EARS-18…EARS-20). On a congress event of its own the
  * oral and poster intakes are open, the poster with an age limit of 40 years;
  * the event starts in a year.
  */
@@ -333,33 +333,48 @@ test.describe("a poster author", () => {
   const startPoster = (page: Page) =>
     posterCard(page).getByRole("button", { name: "Начать заявку →" }).click();
 
-  test("046 EARS-19: starting a poster asks for the birth date first; an empty one is refused; the written date shows back in the draft", async ({
+  /** Write the birth date in the draft: the field saves on blur (EARS-19). */
+  const writeBirth = async (page: Page, date: string) => {
+    const birth = page.getByLabel("Дата рождения");
+    await birth.fill(date);
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith("/v1/me/birth-date") && r.request().method() === "PUT",
+    );
+    await birth.blur();
+    expect((await saved).status()).toBe(200);
+  };
+
+  test("046 EARS-19: starting a poster creates the draft at once; the draft asks for the birth date, refuses a send without it, and keeps the written date", async ({
     page,
   }) => {
     await signInInPage(page, author);
     await page.goto(SECTION);
 
     await startPoster(page);
-    const birth = posterCard(page).getByLabel("Дата рождения");
-    await expect(birth).toHaveAttribute("placeholder", "дд.мм.гггг");
-    await expect(posterCard(page)).toContainText(
-      `Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше ${MAX_AGE} лет на дату начала Конгресса — `,
-    );
-    await startPoster(page);
-    await expect(posterCard(page).getByText("Укажите дату рождения")).toBeVisible();
-    await expect(page.getByTestId("congress-status-plate")).toHaveCount(0);
-
-    const date = bornYearsAgo(30);
-    await birth.fill(date);
-    await startPoster(page);
-
     await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    const birth = page.getByLabel("Дата рождения");
+    await expect(birth).toHaveValue("");
+    await expect(birth).toHaveAttribute("placeholder", "дд.мм.гггг");
+    await expect(
+      page.getByText(
+        `Спрашиваем один раз — перед первым постером. Постерные доклады принимают от участников младше ${MAX_AGE} лет на дату начала Конгресса — `,
+      ),
+    ).toBeVisible();
+    // EARS-18 — the poster form: authors in publication order, no speaker pick.
     await expect(page.getByLabel("Цель")).toBeVisible();
     await expect(page.getByLabel("Содержание")).toBeVisible();
     await expect(page.getByText("Порядок — как в публикации")).toBeVisible();
+    await expect(page.getByText("Отметьте одного докладчика")).toHaveCount(0);
     await expect(page.getByText("Формат участия — очный")).toHaveCount(0);
     await expect(page.getByRole("radio", { name: "Докладчик" })).toHaveCount(0);
     await expect(page.getByTestId("congress-author").first()).toContainText("Иванова Мария Петровна");
+
+    await page.getByRole("button", { name: "Отправить", exact: true }).click();
+    await expect(page.getByText("Укажите дату рождения").first()).toBeVisible();
+    await expect(birth).toHaveAttribute("aria-invalid", "true");
+
+    const date = bornYearsAgo(30);
+    await writeBirth(page, date);
 
     // Stored on the account: the reload reads it back into the first poster draft.
     await page.reload();
@@ -397,23 +412,25 @@ test.describe("a poster author", () => {
     await expect(page.getByLabel("Дата рождения")).toHaveCount(0);
   });
 
-  test("046 EARS-20: a birth date at or above the limit turns the poster card into the refusal; the other kinds stay available", async ({
+  test("046 EARS-20: a birth date at or above the limit refuses the draft's send, then turns the poster card into the refusal; the other kinds stay available", async ({
     page,
   }) => {
     await signInInPage(page, senior);
     await page.goto(SECTION);
 
     await startPoster(page);
-    await posterCard(page).getByLabel("Дата рождения").fill(bornYearsAgo(50));
-    await startPoster(page);
-
-    await expect(posterCard(page)).toContainText(
-      new RegExp(
-        `Постерные доклады принимают от участников младше ${MAX_AGE} лет на дату начала Конгресса — \\d{1,2} [а-я]+ \\d{4}\\. На эту дату вам будет 5\\d (год|года|лет)\\.`,
-      ),
+    await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await writeBirth(page, bornYearsAgo(50));
+    const refusal = new RegExp(
+      `Постерные доклады принимают от участников младше ${MAX_AGE} лет на дату начала Конгресса — \\d{1,2} [а-я]+ \\d{4}\\. На эту дату вам будет 5\\d (год|года|лет)\\.`,
     );
+    await expect(page.getByText(refusal).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeDisabled();
+
+    await toList(page);
+    await page.getByRole("button", { name: "+ Новая заявка" }).click();
+    await expect(posterCard(page)).toContainText(refusal);
     await expect(posterCard(page).getByRole("button")).toHaveCount(0);
-    await expect(page.getByTestId("congress-status-plate")).toHaveCount(0);
     await expect(
       page.getByTestId("congress-pick-oral").getByRole("button", { name: "Начать заявку →" }),
     ).toBeEnabled();
@@ -429,9 +446,8 @@ test.describe("a poster author", () => {
     await signInInPage(page, fresh);
     await page.goto(SECTION);
     await startPoster(page);
-    await posterCard(page).getByLabel("Дата рождения").fill(bornYearsAgo(30));
-    await startPoster(page);
     await expect(page.getByTestId("congress-status-plate")).toHaveText("Черновик");
+    await writeBirth(page, bornYearsAgo(30));
 
     const birth = page.getByLabel("Дата рождения");
     await birth.fill(bornYearsAgo(45));

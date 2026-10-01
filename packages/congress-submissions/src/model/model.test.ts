@@ -536,6 +536,33 @@ describe("046 EARS-18 — the poster form", () => {
     ]);
   });
 
+  it("046 EARS-18: a poster has no presenting mark — unmarked authors pass, and a refused author list never asks for a speaker", () => {
+    const complete = {
+      title: "Тема",
+      authors: [
+        { surname: "Петрова", firstName: "Анна", workplace: "НМИЦ" },
+        { surname: "Иванов", firstName: "Пётр", workplace: "НМИЦ" },
+      ],
+      body: { goal: "Цель", content: "Содержание" },
+    };
+    const consent = { consentRequired: false, consentChecked: false };
+    expect(draftErrors(complete, consent, { kind: "poster" })).toEqual([]);
+    expect(
+      draftErrors(
+        { ...complete, body: { goal: "Цель", summary: "Сводка" } },
+        consent,
+        { kind: "oral" },
+      ).map((e) => e.message),
+    ).toEqual(["Отметьте одного докладчика"]);
+    expect(
+      problemMessages(
+        [{ code: "field-invalid", field: "authors" }],
+        intake({ kind: "poster" }),
+        NOW,
+      ).map((e) => e.message),
+    ).toEqual(["Заполните фамилию, имя и место работы у каждого автора"]);
+  });
+
   it("046 EARS-18: a refused poster field is named by its own label", () => {
     const msgs = problemMessages(
       [{ code: "field-invalid", field: "body.content" }],

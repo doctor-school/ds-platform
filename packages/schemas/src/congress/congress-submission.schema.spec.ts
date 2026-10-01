@@ -13,6 +13,7 @@ import {
   CongressSubmissionProblemSchema,
   congressAgeOnDay,
   congressAgeLimitParams,
+  congressKindMarksPresenting,
   parseCongressDraftBody,
   congressTextLength,
   countsTowardCongressLimit,
@@ -196,9 +197,13 @@ const posterFields = (content: unknown) => {
 };
 
 describe("046 congress submissions — posters, birth date and the age rule", () => {
-  it("046 EARS-18: the poster send schema takes the title, the authors as an oral talk, the goal and the content", () => {
+  it("046 EARS-18: the poster send schema takes the title, the authors without a presenting mark, the goal and the content", () => {
     const result = parseCongressSendContent("poster", completePoster());
     expect(result.ok).toBe(true);
+    // A stray presenting mark is dropped, never stored.
+    expect(
+      result.ok && result.content.authors.map((a) => a.presenting),
+    ).toEqual([false]);
     expect(posterFields({ ...completePoster(), body: { goal: "g" } })).toEqual([
       "body.content",
     ]);
@@ -207,7 +212,12 @@ describe("046 congress submissions — posters, birth date and the age rule", ()
         ...completePoster(),
         authors: [author(), author({ surname: "Петров" })],
       }),
-    ).toEqual(["authors"]);
+    ).toEqual([]);
+    expect(posterFields({ ...completePoster(), authors: [] })).toEqual([
+      "authors",
+    ]);
+    expect(congressKindMarksPresenting("poster")).toBe(false);
+    expect(congressKindMarksPresenting("oral")).toBe(true);
   });
 
   it("046 EARS-18: the goal and the content are refused over their 046-design limits (1000 / 3000)", () => {

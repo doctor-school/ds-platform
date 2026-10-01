@@ -38,6 +38,7 @@ import {
   type CongressSubmissionWithdrawRequest,
   congressAgeOnDay,
   congressKindIntakeState,
+  congressKindMarksPresenting,
   congressKindNeedsBirthDate,
   hasCongressSubmissionForm,
   instantToMskDay,
@@ -237,14 +238,16 @@ export class CongressSubmissionsService {
         ]);
       }
 
-      // EARS-19, EARS-20 — a poster asks for the birth date before the draft
-      // exists, and a kind with an age limit refuses an account over it.
+      // EARS-20 — a kind with an age limit refuses creating for an account
+      // whose stored birth date is over it. A missing birth date does not
+      // block the draft: the poster draft asks for it (EARS-19).
       const eligibility = await this.eligibility(
         tx,
         body.eventId,
         body.kind,
         w ?? NO_WINDOW,
         user.birthDate,
+        "create",
       );
       if (eligibility.length > 0) refuse(eligibility);
 
@@ -255,7 +258,12 @@ export class CongressSubmissionsService {
           registrationId: registration.id,
           userId: user.id,
           kind: body.kind,
-          authors: [firstAuthor(registration.answers)],
+          authors: [
+            firstAuthor(
+              registration.answers,
+              congressKindMarksPresenting(body.kind),
+            ),
+          ],
         })
         .returning();
       return project(row!);
@@ -400,6 +408,7 @@ export class CongressSubmissionsService {
           row.kind,
           w,
           user.birthDate,
+          "send",
         )),
       );
 
@@ -640,8 +649,9 @@ export class CongressSubmissionsService {
 
   /**
    * EARS-19, EARS-20 — the kind's eligibility for the account: the birth date
-   * it needs, and its age limit applied to the full years on the event's start
-   * day in Europe/Moscow (046-design «Age rule»). Other kinds pass untouched.
+   * the send needs, and its age limit applied to the full years on the event's
+   * start day in Europe/Moscow (046-design «Age rule»). At creation only a
+   * stored birth date is checked against the limit. Other kinds pass untouched.
    */
   private async eligibility(
     db: Reader,
@@ -649,10 +659,13 @@ export class CongressSubmissionsService {
     kind: CongressSubmissionKind,
     w: KindWindow,
     birthDate: string | null,
+    stage: "create" | "send",
   ): Promise<CongressSubmissionProblem[]> {
     if (!congressKindNeedsBirthDate(kind, w.maxAgeYears)) return [];
     if (birthDate === null)
-      return [{ code: "field-invalid", field: "birthDate" }];
+      return stage === "send"
+        ? [{ code: "field-invalid", field: "birthDate" }]
+        : [];
     if (w.maxAgeYears === null) return [];
     const [event] = await db
       .select({ startsAt: events.startsAt })
@@ -841,7 +854,8 @@ export class CongressSubmissionsService {
 /**
  * EARS-6 — author 1 from the registration answers. The account has no
  * structured name, so without answers the name fields stay empty for the
- * author to fill; the display name is never split into name parts.
+ * author to fill; the display name is never split into name parts. Author 1
+ * presents only where the kind has a presenting mark (oral — EARS-8, EARS-18).
  */
 function firstAuthor(
   answers: {
@@ -850,14 +864,15 @@ function firstAuthor(
     patronymic?: string | undefined;
     workplace: string;
   } | null,
+  presenting: boolean,
 ): CongressSubmissionDraftAuthor {
-  if (!answers) return { presenting: true };
+  if (!answers) return { presenting };
   return {
     surname: answers.surname,
     firstName: answers.firstName,
     ...(answers.patronymic ? { patronymic: answers.patronymic } : {}),
     workplace: answers.workplace,
-    presenting: true,
+    presenting,
   };
 }
 

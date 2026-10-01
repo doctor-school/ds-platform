@@ -13,7 +13,7 @@ import {
 /**
  * 046 V-18 (#2433) — axe-core WCAG 2 A/AA scan of «Мои заявки на Конгресс»
  * (`/account/congress`), its oral-talk form and — 046 V-16 (#2434) — the poster
- * flow (birth-date step, poster form, age refusal), in both themes.
+ * flow (poster form with its birth-date field, age refusal), in both themes.
  *
  * The showcase `playwright-axe` gate scans the DS primitives in isolation; this
  * scan covers the composed signed-in section a doctor actually reaches — the
@@ -90,7 +90,7 @@ test("046 EARS-11: the section list and the kind choice pass WCAG 2 A/AA (both t
   await scan(page, "the oral form");
 });
 
-test("046 EARS-18…20: the poster birth-date step with its error, the poster form and the age refusal pass WCAG 2 A/AA (both themes)", async ({
+test("046 EARS-18…20: the poster form with its birth-date field and the age refusal pass WCAG 2 A/AA (both themes)", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -102,16 +102,8 @@ test("046 EARS-18…20: the poster birth-date step with its error, the poster fo
 
   await page.goto("/account/congress");
   const poster = page.getByTestId("congress-pick-poster");
-  const start = poster.getByRole("button", { name: "Начать заявку →" });
-  // EARS-19 — the birth-date step, refused empty.
-  await start.click();
-  await start.click();
-  await expect(poster.getByText("Укажите дату рождения")).toBeVisible();
-  await scan(page, "the poster birth-date step with its error");
-
-  // EARS-18 — the poster form with the birth date shown back for correction.
-  await poster.getByLabel("Дата рождения").fill(`15.06.${new Date().getFullYear() - 30}`);
-  await start.click();
+  // EARS-18 — the poster form, with the birth date asked in the draft (EARS-19).
+  await poster.getByRole("button", { name: "Начать заявку →" }).click();
   await expect(page.getByLabel("Цель")).toBeVisible();
   await expect(page.getByLabel("Дата рождения")).toBeVisible();
   await scan(page, "the poster form");

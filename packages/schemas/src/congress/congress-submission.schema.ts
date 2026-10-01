@@ -137,14 +137,32 @@ const SendAuthorSchema = z.object({
   presenting: z.boolean().default(false),
 });
 
-/** 1…20 ordered authors, exactly one presenting (oral, poster — EARS-8). */
-const presentingAuthors = z
+/** 1…20 ordered authors (EARS-8). */
+const orderedAuthors = z
   .array(SendAuthorSchema)
   .min(1)
-  .max(CONGRESS_SUBMISSION_LIMITS.authorsMax)
-  .refine((as) => as.filter((a) => a.presenting).length === 1, {
-    message: "exactly one presenting author",
-  });
+  .max(CONGRESS_SUBMISSION_LIMITS.authorsMax);
+
+/** An oral talk's authors: exactly one of them presents (EARS-8). */
+const presentingAuthors = orderedAuthors.refine(
+  (as) => as.filter((a) => a.presenting).length === 1,
+  { message: "exactly one presenting author" },
+);
+
+/**
+ * A poster's authors (EARS-18): in publication order, with no presenting
+ * mark — a stray mark is dropped, never stored.
+ */
+const unmarkedAuthors = orderedAuthors.transform((as) =>
+  as.map((a) => ({ ...a, presenting: false })),
+);
+
+/** Whether the kind's authors carry a presenting mark — oral only (EARS-8, EARS-18). */
+export function congressKindMarksPresenting(
+  kind: CongressSubmissionKind,
+): boolean {
+  return kind === "oral";
+}
 
 // ---------------------------------------------------------------------------
 // Per-kind forms — a kind joins by adding its entry (posters S3, abstracts S4)
@@ -172,7 +190,7 @@ const PosterDraftBodySchema = z.strictObject({
 
 const PosterSendSchema = z.object({
   title: requiredText(CONGRESS_SUBMISSION_LIMITS.title),
-  authors: presentingAuthors,
+  authors: unmarkedAuthors,
   body: z.object({
     goal: requiredText(CONGRESS_SUBMISSION_LIMITS.posterGoal),
     content: requiredText(CONGRESS_SUBMISSION_LIMITS.posterContent),

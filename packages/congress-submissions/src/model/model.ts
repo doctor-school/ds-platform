@@ -10,6 +10,7 @@ import {
   type CongressSubmissionSectionEvent,
   congressAgeLimitParams,
   congressAgeOnDay,
+  congressKindMarksPresenting,
   congressTextLength,
   instantToMskDay,
 } from "@ds/schemas";
@@ -510,7 +511,10 @@ export function draftErrors(
       message: COPY.errAuthors,
       focusId: `in-a${Math.max(bad, 0)}-sn`,
     });
-  } else if (d.authors.filter((a) => a.presenting).length !== 1) {
+  } else if (
+    congressKindMarksPresenting(form.kind ?? "oral") &&
+    d.authors.filter((a) => a.presenting).length !== 1
+  ) {
     out.push({ key: "authors", message: COPY.errSpeaker });
   }
   if (form.birthText !== undefined) {
@@ -549,7 +553,11 @@ function fieldProblem(
       focusId: `in-a${author[1]}-sn`,
     };
   }
-  if (field === "authors") return { key: "authors", message: COPY.errSpeaker };
+  if (field === "authors") {
+    return congressKindMarksPresenting(kind)
+      ? { key: "authors", message: COPY.errSpeaker }
+      : { key: "authors", message: COPY.errAuthors, focusId: "in-a0-sn" };
+  }
   const body = /^body\.(\w+)/.exec(field);
   const def = body
     ? formFields(kind).find((f) => f.key === body[1])

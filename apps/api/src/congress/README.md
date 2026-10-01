@@ -190,11 +190,14 @@ a draft of a kind not offered yet is 422 `kind-not-available`.
   `PUT /v1/me/birth-date {birthDate}` writes the holder's own
   `users.birth_date` (migration 0045; a real day from 1900, never after today
   in Moscow); the section returns it as `birthDate` and each kind's
-  `maxAgeYears`. Starting or sending a poster without it is 422
-  `field-invalid` on `birthDate`; a kind with an age limit refuses, at create
-  and in the send cascade, an account whose full years on the event's Moscow
-  start day reach the limit — 422 `age-limit` with
-  `{maxAgeYears, eventStartDate, age}`. Other kinds are untouched.
+  `maxAgeYears`. A poster draft is created without it (the draft asks for it);
+  sending a poster without it is 422 `field-invalid` on `birthDate`. A kind
+  with an age limit refuses an account whose full years on the event's Moscow
+  start day reach the limit — at create when a birth date is stored, and in
+  the send cascade — 422 `age-limit` with
+  `{maxAgeYears, eventStartDate, age}`. A poster's authors carry no presenting
+  mark (author 1 is created unmarked; a stray mark is dropped at send). Other
+  kinds are untouched.
 - **Limit (EARS-17).** Counts the account's submissions of the event and kind in
   any status except `draft` — `rejected` and `withdrawn` included — the one being
   sent excluded, under the advisory lock, so two tabs cannot both take the last

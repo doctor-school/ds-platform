@@ -747,6 +747,59 @@ test.describe("an abstract author", () => {
     await expect(page.getByRole("radio", { name: "Докладчик" })).toHaveCount(0);
     await expect(page.getByLabel("Актуальность")).toHaveValue("");
   });
+
+  test("046 EARS-17/12: a send counts on the kind choice at once, with no reload; «Забрать на исправление» takes it off the count and ends the sent notice", async ({
+    page,
+  }) => {
+    const SENT = "Отправлено 1 тезис из 3";
+    await signInInPage(page, author);
+    await page.goto(SECTION);
+    // One abstract was sent by the first test of this author.
+    await page.getByRole("button", { name: "+ Новая заявка" }).click();
+    const tile = page.getByTestId("congress-pick-abstract");
+    await expect(tile).toContainText(SENT);
+    await tile.getByRole("button", { name: "Начать заявку →" }).click();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
+    await page.getByLabel("Название тезисов").fill("Тезисы о счётчике");
+    await page.getByLabel("Актуальность").fill("Актуальность.");
+    await page.getByLabel("Цель", { exact: true }).fill("Цель.");
+    await page.getByLabel("Материалы и методы").fill("Методы.");
+    await page.getByLabel("Результаты и обсуждение").fill("Результаты.");
+    await page.getByLabel("Выводы").fill("Выводы.");
+    await page.getByLabel("Выводы").blur();
+    await expect(page.getByTestId("congress-save-state")).toContainText(
+      "Сохранено",
+    );
+    await tick(page, "В тексте нет некорректных заимствований");
+    await tick(page, "В тексте нет торговых наименований");
+    // The consent was given with the first send — it is not asked again.
+    await expect(
+      page.getByRole("checkbox", { name: /Согласие на обработку/ }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Отправить", exact: true }).click();
+    await page.getByRole("button", { name: "Да, отправить" }).click();
+    const notice = page.getByText(/^Заявка отправлена\./);
+    await expect(notice).toBeVisible();
+
+    // The kind choice reached the author's way reads the new count.
+    await toList(page);
+    await page.getByRole("button", { name: "+ Новая заявка" }).click();
+    await expect(tile).toContainText("Отправлено 2 тезиса из 3");
+
+    // Take it back from its detail: the draft opens without the sent notice,
+    // and the count drops on the next visit to the kind choice.
+    await row(page, "Тезисы о счётчике").click();
+    await page.getByRole("button", { name: "Забрать на исправление" }).click();
+    await expect(page.getByTestId("congress-status-plate")).toHaveText(
+      "Черновик",
+    );
+    await expect(notice).toHaveCount(0);
+    await toList(page);
+    await page.getByRole("button", { name: "+ Новая заявка" }).click();
+    await expect(tile).toContainText(SENT);
+  });
 });
 
 test("046 EARS-11: a talk returned for revision shows its deadline with the countdown; an expired one says the term is over", async ({

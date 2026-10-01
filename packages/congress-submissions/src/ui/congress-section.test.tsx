@@ -1339,4 +1339,107 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       talk.title,
     );
   });
+
+  /** The picker tile of a kind, reached the author's way: back to the list, «+ Новая заявка». */
+  const pickerTileAfterBack = async (k: string) => {
+    await userEvent.click(screen.getByRole("button", { name: "← Мои заявки" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "+ Новая заявка" }),
+    );
+    return screen.getByTestId(`congress-pick-${k}`);
+  };
+  const sentAbstract = (n: number) =>
+    sub({
+      id: `00000000-0000-4000-8000-0000000000d${n}`,
+      kind: "abstract",
+      title: `Тезисы ${n}`,
+    });
+
+  it("046 EARS-17: a send counts at once — the picker reached without a reload reads the new count and closes the kind at its limit", async () => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          consentRequired: false,
+          kinds: [
+            kind("oral"),
+            kind("poster"),
+            kind("abstract", { submitLimit: 3, used: 2 }),
+          ],
+          submissions: [abstractDraft, sentAbstract(1), sentAbstract(2)],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Название тезисов");
+    for (const name of [
+      "В тексте нет некорректных заимствований",
+      "В тексте нет торговых наименований",
+    ]) {
+      await userEvent.click(screen.getByRole("checkbox", { name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, status: "submitted" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить" }),
+    );
+    await screen.findByText(/^Заявка отправлена/);
+    const tile = await pickerTileAfterBack("abstract");
+    expect(tile).toHaveTextContent(
+      "Отправлено 3 тезиса из 3 — больше подать нельзя",
+    );
+    expect(
+      within(tile).queryByRole("button", { name: "Начать заявку →" }),
+    ).toBeNull();
+    // The section was read once — the count came from the send, not a reload.
+    expect(
+      fetchMock.mock.calls.filter(
+        ([, i]) => ((i as RequestInit | undefined)?.method ?? "GET") === "GET",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("046 EARS-17: «Забрать на исправление» takes the send back off the count and clears the sent notice", async () => {
+    openDraft(abstractDraft.id);
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        section({
+          consentRequired: false,
+          kinds: [
+            kind("oral"),
+            kind("poster"),
+            kind("abstract", { submitLimit: 3, used: 0 }),
+          ],
+          submissions: [abstractDraft],
+        }),
+      ),
+    );
+    render(<CongressSection host={HOST} />);
+    await screen.findByLabelText("Название тезисов");
+    for (const name of [
+      "В тексте нет некорректных заимствований",
+      "В тексте нет торговых наименований",
+    ]) {
+      await userEvent.click(screen.getByRole("checkbox", { name }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    fetchMock.mockResolvedValueOnce(
+      answer({ ...abstractDraft, status: "submitted" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Да, отправить" }),
+    );
+    await screen.findByText(/^Заявка отправлена/);
+    fetchMock.mockResolvedValueOnce(answer(abstractDraft));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Забрать на исправление" }),
+    );
+    await screen.findByLabelText("Название тезисов");
+    expect(screen.queryByText(/^Заявка отправлена/)).toBeNull();
+    expect(await pickerTileAfterBack("abstract")).toHaveTextContent(
+      "Отправлено 0 тезисов из 3",
+    );
+  });
 });

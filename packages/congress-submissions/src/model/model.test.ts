@@ -28,6 +28,7 @@ import {
   mskDate,
   mskDateTime,
   readBirthDate,
+  withSubmissions,
   problemMessages,
   revisionView,
   rowMeta,
@@ -465,6 +466,27 @@ describe("send checks", () => {
 });
 
 describe("kind choice", () => {
+  it("046 EARS-17: the section's per-kind count follows its submissions — every sent state counts, a draft does not", () => {
+    const base = {
+      kinds: [
+        intake({ kind: "oral" }),
+        intake({ kind: "abstract", submitLimit: 3, used: 0 }),
+      ],
+      submissions: [] as CongressSubmission[],
+    };
+    const next = withSubmissions(base, [
+      sub({ id: "a1", kind: "abstract", status: "submitted" }),
+      sub({ id: "a2", kind: "abstract", status: "withdrawn" }),
+      sub({ id: "a3", kind: "abstract", status: "draft" }),
+      sub({ id: "o1", kind: "oral", status: "needs_revision" }),
+    ]);
+    expect(next.kinds.map((k) => [k.kind, k.used])).toEqual([
+      ["oral", 1],
+      ["abstract", 2],
+    ]);
+    expect(next.submissions).toHaveLength(4);
+  });
+
   it("EARS-6: a draft can be started until the kind closes, only for an offered kind", () => {
     expect(kindStartable(intake())).toBe(true);
     expect(kindStartable(intake({ state: "not-yet-open" }))).toBe(true);

@@ -39,6 +39,7 @@ import {
   pickerNote,
   revisionView,
   rowMeta,
+  withSubmissions,
 } from "../model/model";
 import { PosterBand } from "./poster-band";
 import { StatusDot, StatusLabel } from "./status";
@@ -143,32 +144,31 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
     window.scrollTo(0, 0);
   };
 
-  const replace = (next: CongressSubmission) =>
+  // Every change to the list goes through `withSubmissions`, so the kinds'
+  // send counts (EARS-17) move with it — no reload needed for the picker.
+  const setSubmissions = (
+    change: (list: CongressSubmission[]) => CongressSubmission[],
+  ) =>
     setLoad((l) =>
       l.kind === "ready"
         ? {
             kind: "ready",
-            section: {
-              ...l.section,
-              submissions: l.section.submissions.map((x) =>
-                x.id === next.id ? next : x,
-              ),
-            },
+            section: withSubmissions(l.section, change(l.section.submissions)),
           }
         : l,
     );
+  const replace = (next: CongressSubmission) => {
+    setSubmissions((list) => list.map((x) => (x.id === next.id ? next : x)));
+    // The send notice belongs to the sent state: a take-back ends it.
+    if (next.status !== "submitted")
+      setSentNow((m) => {
+        if (!m[next.id]) return m;
+        const { [next.id]: _gone, ...rest } = m;
+        return rest;
+      });
+  };
   const remove = (id: string) =>
-    setLoad((l) =>
-      l.kind === "ready"
-        ? {
-            kind: "ready",
-            section: {
-              ...l.section,
-              submissions: l.section.submissions.filter((x) => x.id !== id),
-            },
-          }
-        : l,
-    );
+    setSubmissions((list) => list.filter((x) => x.id !== id));
 
   const listBand = (section: CongressSubmissionSection | null) => (
     <PosterBand
@@ -352,17 +352,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
     setBusy(true);
     try {
       const draft = await createDraft(section.eventId, kind, derivedFromId);
-      setLoad((l) =>
-        l.kind === "ready"
-          ? {
-              kind: "ready",
-              section: {
-                ...l.section,
-                submissions: [draft, ...l.section.submissions],
-              },
-            }
-          : l,
-      );
+      setSubmissions((list) => [draft, ...list]);
       setFilter(null);
       open(draft.id);
     } catch {

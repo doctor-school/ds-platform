@@ -221,6 +221,31 @@ export function kindStartable(intake: CongressSubmissionKindIntake): boolean {
   return intake.offered && intake.state !== "closed";
 }
 
+/**
+ * 046 EARS-17 — the section with `submissions` as its list and each kind's
+ * `used` recounted from it. The API counts every submission of the kind that
+ * has left the draft (`congress-submissions.service` section read); a send, a
+ * take-back, a withdrawal, a new draft or a deletion changes the list the
+ * section holds, so the picker's «Отправлено N из M» and the start it allows
+ * are derived from that same list rather than kept from the first read.
+ */
+export function withSubmissions<
+  S extends {
+    kinds: CongressSubmissionKindIntake[];
+    submissions: CongressSubmission[];
+  },
+>(section: S, submissions: CongressSubmission[]): S {
+  return {
+    ...section,
+    submissions,
+    kinds: section.kinds.map((k) => ({
+      ...k,
+      used: submissions.filter((x) => x.kind === k.kind && x.status !== "draft")
+        .length,
+    })),
+  };
+}
+
 /** The kind can take a send: its form is offered and its window is open. */
 export function kindSendable(intake: CongressSubmissionKindIntake): boolean {
   return intake.offered && intake.state === "open";

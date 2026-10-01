@@ -6,7 +6,10 @@ import { CongressIntakeSettingsAdminController } from "./congress-intake-setting
 import { CongressIntakeSettingsService } from "./congress-intake-settings.service.js";
 import { CongressSignUpController } from "./congress-signup.controller.js";
 import { CongressSignUpService } from "./congress-signup.service.js";
-import { CongressSubmissionsMeController } from "./congress-submissions.me.controller.js";
+import {
+  CongressBirthDateMeController,
+  CongressSubmissionsMeController,
+} from "./congress-submissions.me.controller.js";
 import { CongressSubmissionsService } from "./congress-submissions.service.js";
 import { congressCabinetUrl } from "../mailer/notice-emails.js";
 import {
@@ -37,6 +40,7 @@ import {
     CongressIntakeSettingsAdminController,
     // 046 EARS-4…17: the author's submissions cabinet.
     CongressSubmissionsMeController,
+    CongressBirthDateMeController,
   ],
   providers: [
     CongressSignUpService,

@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UnauthorizedException,
@@ -18,6 +19,7 @@ import {
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
+  ApiBadRequestResponse,
   ApiOkResponse,
   ApiQuery,
   ApiUnprocessableEntityResponse,
@@ -26,6 +28,9 @@ import type { FastifyRequest } from "fastify";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
+  CongressBirthDateRequestSchema,
+  type CongressBirthDateResponse,
+  CongressBirthDateResponseSchema,
   type CongressSubmission,
   CongressSubmissionCreateRequestSchema,
   CongressSubmissionDraftContentSchema,
@@ -218,5 +223,51 @@ export class CongressSubmissionsMeController {
     @Param("id") id: string,
   ): Promise<void> {
     await this.submissions.remove(subjectOf(req), id);
+  }
+}
+
+export class CongressBirthDateRequestDto extends createZodDto(
+  CongressBirthDateRequestSchema,
+) {}
+export class CongressBirthDateResponseDto extends createZodDto(
+  CongressBirthDateResponseSchema,
+) {}
+
+/**
+ * 046 EARS-19 (#2434) — `PUT /v1/me/birth-date`: the account holder writes
+ * their own birth date, asked once in the poster flow and reused across events
+ * (046-design «Data model», «Authorization boundary»).
+ *
+ * Self-scoped by construction like the submissions: the row written is always
+ * the session `sub`'s own, so no caller reaches another account's birth date —
+ * `authenticated` / `doctor_guest` / `fast-path`. `low-stakes`: a profile
+ * write audited by the 010 capture trigger in the request's context, not an
+ * auth/security event. Per-caller ⇒ `no-store`.
+ */
+@Controller({ path: "me/birth-date", version: "1" })
+export class CongressBirthDateMeController {
+  constructor(
+    @Inject(CongressSubmissionsService)
+    private readonly submissions: CongressSubmissionsService,
+  ) {}
+
+  /** EARS-19 — write or correct the birth date; 400 for a non-day or a future day. */
+  @Put()
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  @ApiOkResponse({ type: CongressBirthDateResponseDto })
+  @ApiBadRequestResponse()
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest"],
+    check: "fast-path",
+    audit: "low-stakes",
+    tests: ["EARS-19"],
+  })
+  async set(
+    @Req() req: FastifyRequest,
+    @Body() body: CongressBirthDateRequestDto,
+  ): Promise<CongressBirthDateResponse> {
+    return this.submissions.setBirthDate(subjectOf(req), body.birthDate);
   }
 }

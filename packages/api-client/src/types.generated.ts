@@ -1492,6 +1492,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/birth-date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["CongressBirthDateMeController_set"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/congress-submissions": {
         parameters: {
             query?: never;
@@ -2049,6 +2065,14 @@ export interface components {
             /** Format: uuid */
             registrationId: string;
         };
+        CongressBirthDateRequestDto: {
+            /** Format: date */
+            birthDate: string;
+        };
+        CongressBirthDateResponseDto: {
+            /** Format: date */
+            birthDate: string;
+        };
         CongressDeskRegistrationRequestDto: {
             city: string;
             contactPhone: string;
@@ -2284,6 +2308,7 @@ export interface components {
             }[];
         };
         CongressSubmissionSectionDto: {
+            birthDate: string | null;
             consentRequired: boolean;
             event: {
                 /** Format: date-time */
@@ -2300,6 +2325,7 @@ export interface components {
                 /** @enum {string} */
                 kind: "oral" | "poster" | "abstract";
                 lastDay: string | null;
+                maxAgeYears: number | null;
                 offered: boolean;
                 opensAt: string | null;
                 /** @enum {string} */
@@ -5004,6 +5030,35 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CongressBirthDateMeController_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CongressBirthDateRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressBirthDateResponseDto"];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

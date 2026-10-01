@@ -45,6 +45,7 @@ function intake(
     submitLimit: null,
     used: 0,
     offered: true,
+    maxAgeYears: null,
     ...over,
   };
 }
@@ -453,5 +454,42 @@ describe("kind choice", () => {
     expect(
       limitLine(intake({ kind: "abstract", submitLimit: 3, used: 3 })),
     ).toBe("Отправлено 3 тезиса из 3 — больше подать нельзя");
+  });
+});
+
+describe("046 EARS-20 — the age-limit refusal in the owner-approved words", () => {
+  const ageMsg = (maxAgeYears: number, age: number) =>
+    problemMessages(
+      [
+        {
+          code: "age-limit",
+          params: { maxAgeYears, eventStartDate: "2027-04-23", age },
+        },
+      ],
+      intake({ kind: "poster" }),
+      NOW,
+    ).map((m) => m.message);
+
+  it("046 EARS-20: names the limit, the event's Moscow start day without a zone label and the age, each with an agreeing plural", () => {
+    expect(ageMsg(40, 40)).toEqual([
+      "Постерные доклады принимают от участников младше 40 лет на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 40 лет.",
+    ]);
+    expect(ageMsg(21, 45)).toEqual([
+      "Постерные доклады принимают от участников младше 21 года на дату начала Конгресса — 23 апреля 2027. На эту дату вам будет 45 лет.",
+    ]);
+    expect(ageMsg(41, 42)[0]).toContain("младше 41 года");
+    expect(ageMsg(41, 42)[0]).toContain("вам будет 42 года.");
+    expect(ageMsg(40, 51)[0]).toContain("вам будет 51 год.");
+    expect(ageMsg(40, 1)[0]).toContain("вам будет 1 год.");
+    expect(ageMsg(40, 2)[0]).toContain("вам будет 2 года.");
+    expect(ageMsg(40, 5)[0]).toContain("вам будет 5 лет.");
+    expect(ageMsg(40, 21)[0]).toContain("вам будет 21 год.");
+  });
+
+  it("046 EARS-20: without its params the refusal keeps the generic line", () => {
+    const msgs = problemMessages([{ code: "age-limit" }], intake(), NOW);
+    expect(msgs.map((m) => m.message)).toEqual([
+      "Возраст первого автора не подходит под условия этого вида заявок",
+    ]);
   });
 });

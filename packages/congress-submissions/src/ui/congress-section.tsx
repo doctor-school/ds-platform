@@ -249,6 +249,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
       submitLimit: null,
       used: 0,
       offered: false,
+      maxAgeYears: null,
     };
 
   if (!section.registered) {

@@ -30,6 +30,7 @@ function kind(
     submitLimit: null,
     used: 0,
     offered: k === "oral",
+    maxAgeYears: null,
     ...over,
   };
 }
@@ -67,6 +68,7 @@ function section(
     registered: true,
     registrationUrl: "https://orthobio.ru/#join",
     consentRequired: true,
+    birthDate: null,
     kinds: [kind("oral"), kind("poster"), kind("abstract", { submitLimit: 3 })],
     submissions: [],
     ...over,

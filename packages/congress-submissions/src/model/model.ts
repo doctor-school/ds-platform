@@ -4,6 +4,7 @@ import {
   type CongressSubmissionKindIntake,
   type CongressSubmissionProblem,
   type CongressSubmissionSectionEvent,
+  congressAgeLimitParams,
   congressTextLength,
 } from "@ds/schemas";
 
@@ -106,6 +107,26 @@ export function plural(
 
 const withN = (n: number, forms: readonly [string, string, string]) =>
   `${n} ${plural(n, forms)}`;
+
+const YEARS = ["год", "года", "лет"] as const;
+/** «младше N …» takes the genitive: 1/21 года, every other count «лет». */
+const YEARS_GENITIVE = ["года", "лет", "лет"] as const;
+
+/**
+ * 046 EARS-20 — the age-limit refusal (owner decision 2026-10-01): the limit,
+ * the event's start day as a Moscow day with no zone label, and the age.
+ */
+export function ageLimitText(p: {
+  maxAgeYears: number;
+  eventStartDate: string;
+  age: number;
+}): string {
+  return (
+    `Постерные доклады принимают от участников младше ${withN(p.maxAgeYears, YEARS_GENITIVE)} ` +
+    `на дату начала Конгресса — ${mskDay(p.eventStartDate)}. ` +
+    `На эту дату вам будет ${withN(p.age, YEARS)}.`
+  );
+}
 
 /** «осталось …» — days and hours, or hours and minutes under a day. */
 export function countdownText(ms: number): string {
@@ -478,9 +499,14 @@ export function problemMessages(
       case "first-author-limit-reached":
         push({ key: null, message: COPY.errFirstAuthorLimit });
         break;
-      case "age-limit":
-        push({ key: null, message: COPY.errAgeLimit });
+      case "age-limit": {
+        const age = congressAgeLimitParams(p.params);
+        push({
+          key: null,
+          message: age ? ageLimitText(age) : COPY.errAgeLimit,
+        });
         break;
+      }
       case "statement-required":
         push({ key: null, message: COPY.errStatement });
         break;

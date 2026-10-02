@@ -436,7 +436,9 @@ function baseActions(
 }
 
 /**
- * The list row's meta line (046 EARS-11). A draft that cannot be sent carries
+ * The list row's meta line (046 EARS-11): the kind, then the date in the
+ * words of the detail line — a draft «изменён {date}», a sent one the send
+ * date «отправлена {date}», a withdrawn one «отозвана {date}». A draft that cannot be sent carries
  * why, lower-cased up to « — »: the age rule first (046 EARS-20, `ageRefusal`
  * as in `actionsFor`), else the closed intake (canvas `closedText`).
  */
@@ -448,7 +450,11 @@ export function rowMeta(
 ): string {
   const out = [
     KIND_COPY[s.kind].label,
-    `${s.status === "draft" ? "изменён" : "изменено"} ${localDate(s.updatedAt)}`,
+    s.status === "draft"
+      ? `изменён ${localDate(s.updatedAt)}`
+      : s.status === "withdrawn"
+        ? `отозвана ${localDate(s.statusChangedAt)}`
+        : `отправлена ${localDate(s.submittedAt ?? s.updatedAt)}`,
   ];
   if (s.status === "submitted") out.push(COPY.sentMeta);
   if (s.status === "draft" && (ageRefusal !== null || !kindSendable(intake))) {
@@ -848,18 +854,63 @@ export function summaryTitle(n: number): string {
   return `Заявка не отправлена. Исправьте ${n} ${plural(n, ["ошибку", "ошибки", "ошибок"])}:`;
 }
 
-/** The picker's note, drawn only when the limits are the ones it states. */
+/** One kind window in the chooser note — the same per-kind intake as its card line. */
+function noteWindow(k: CongressSubmissionKindIntake): string {
+  switch (k.state) {
+    case "not-announced":
+      return "дату открытия приёма объявят позже";
+    case "not-yet-open":
+      return `приём откроется ${mskDate(k.opensAt!)}`;
+    case "open":
+      return `до ${mskDay(k.lastDay!)}`;
+    case "closed":
+      return `приём закрыт ${mskDay(k.lastDay!)}`;
+  }
+}
+
+/**
+ * The picker's note (046 EARS-10, owner-approved copy 2026-10-02): the
+ * concrete window of every offered kind — kinds sharing a window grouped,
+ * «включительно» after the last «до {day}» — then the limits: «Докладов и
+ * постеров — сколько угодно», with «тезисов — не больше N» when abstracts are
+ * limited. The limits sentence is drawn only when talks and posters are
+ * unlimited; a limited kind states its count on its own card.
+ */
 export function pickerNote(
   kinds: CongressSubmissionKindIntake[],
 ): string | null {
-  const by = new Map(kinds.map((k) => [k.kind, k]));
-  const abstractLimit = by.get("abstract")?.submitLimit;
-  if (
-    by.get("oral")?.submitLimit !== null ||
-    by.get("poster")?.submitLimit !== null ||
-    typeof abstractLimit !== "number"
-  ) {
-    return null;
+  const offered = kinds.filter((k) => k.offered);
+  if (offered.length === 0) return null;
+  const groups: { window: string; open: boolean; nouns: string[] }[] = [];
+  for (const k of offered) {
+    const window = noteWindow(k);
+    const group = groups.find((g) => g.window === window);
+    if (group) group.nouns.push(KIND_COPY[k.kind].nom);
+    else
+      groups.push({
+        window,
+        open: k.state === "open",
+        nouns: [KIND_COPY[k.kind].nom],
+      });
   }
-  return `Можно подать сколько угодно докладов и постеров и до ${abstractLimit} ${plural(abstractLimit, KIND_COPY.abstract.forms)}, пока приём открыт.`;
+  const lastOpen = groups.map((g) => g.open).lastIndexOf(true);
+  const clauses = groups.map((g, i) => {
+    const nouns =
+      g.nouns.length === 1
+        ? g.nouns[0]!
+        : `${g.nouns.slice(0, -1).join(", ")} и ${g.nouns.at(-1)!}`;
+    const window = i === lastOpen ? `${g.window} включительно` : g.window;
+    if (i > 0) return `${nouns} — ${window}`;
+    const head = nouns.charAt(0).toUpperCase() + nouns.slice(1);
+    return g.open ? `${head} принимаются ${window}` : `${head} — ${window}`;
+  });
+  const by = new Map(kinds.map((k) => [k.kind, k]));
+  const abstractLimit = by.get("abstract")?.submitLimit ?? null;
+  const unlimitedTalks =
+    by.get("oral")?.submitLimit == null &&
+    by.get("poster")?.submitLimit == null;
+  const limits = unlimitedTalks
+    ? ` Докладов и постеров — сколько угодно${abstractLimit === null ? "" : `, тезисов — не больше ${abstractLimit}`}.`
+    : "";
+  return `${clauses.join(", ")}.${limits}`;
 }

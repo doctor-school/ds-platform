@@ -31,6 +31,7 @@ import {
   withSubmissions,
   problemMessages,
   revisionView,
+  pickerNote,
   rowMeta,
   withdrawnNotice,
 } from "./model";
@@ -303,12 +304,44 @@ describe("row meta and date line", () => {
     expect(rowMeta(sub(), intake(), NOW)).toBe(
       "Устный доклад · изменён 18 декабря 2026",
     );
-    expect(rowMeta(sub({ status: "submitted" }), intake(), NOW)).toBe(
-      "Устный доклад · изменено 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
-    );
     expect(rowMeta(sub(), intake({ state: "closed" }), NOW)).toBe(
       "Устный доклад · изменён 18 декабря 2026 · приём устных докладов закрыт 15 января 2027",
     );
+  });
+
+  it("046 EARS-11: a draft row reads «изменён {date}», a sent row the send date «отправлена {date}» — as the detail line, not the last edit", () => {
+    // Sent on the 16th, touched again on the 18th (a status move): the row
+    // names the send, in the words of the detail line.
+    const sent = sub({
+      status: "submitted",
+      submittedAt: "2026-12-16T09:00:00.000Z",
+      updatedAt: "2026-12-18T09:00:00.000Z",
+    });
+    expect(rowMeta(sent, intake(), NOW)).toBe(
+      "Устный доклад · отправлена 16 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+    );
+    expect(rowMeta({ ...sent, status: "in_review" }, intake(), NOW)).toBe(
+      "Устный доклад · отправлена 16 декабря 2026",
+    );
+    expect(
+      rowMeta(
+        {
+          ...sent,
+          status: "withdrawn",
+          statusChangedAt: "2026-12-19T09:00:00.000Z",
+        },
+        intake(),
+        NOW,
+      ),
+    ).toBe("Устный доклад · отозвана 19 декабря 2026");
+    expect(rowMeta(sub(), intake(), NOW)).toBe(
+      "Устный доклад · изменён 18 декабря 2026",
+    );
+    for (const status of ["submitted", "in_review", "withdrawn"] as const) {
+      expect(rowMeta({ ...sent, status }, intake(), NOW)).not.toContain(
+        "изменено",
+      );
+    }
   });
 
   it("046 EARS-20: an age-locked poster draft row reads «Открыть» and carries the lower-cased age rule (canvas `draftClosed`)", () => {
@@ -326,9 +359,18 @@ describe("row meta and date line", () => {
     );
     // A sent poster keeps its own meta — the age lock speaks only for drafts.
     expect(
-      rowMeta(sub({ kind: "poster", status: "submitted" }), open, NOW, refusal),
+      rowMeta(
+        sub({
+          kind: "poster",
+          status: "submitted",
+          submittedAt: "2026-12-18T09:00:00.000Z",
+        }),
+        open,
+        NOW,
+        refusal,
+      ),
     ).toBe(
-      "Постерный доклад · изменено 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+      "Постерный доклад · отправлена 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
     );
   });
 
@@ -364,6 +406,63 @@ describe("row meta and date line", () => {
     ).toBe("отправлена 17 декабря 2026, 01:40");
     expect(dateLine(sub({ status: "withdrawn" }))).toBe(
       "отозвана 18 декабря 2026",
+    );
+  });
+});
+
+describe("046 EARS-10 — the chooser note names the concrete deadlines", () => {
+  const prod = [
+    intake({ kind: "oral", lastDay: "2027-01-15" }),
+    intake({ kind: "poster", lastDay: "2027-01-29" }),
+    intake({ kind: "abstract", lastDay: "2027-01-29", submitLimit: 3 }),
+  ];
+
+  it("046 EARS-10: the production settings read the owner-approved note exactly", () => {
+    expect(pickerNote(prod)).toBe(
+      "Устные доклады принимаются до 15 января 2027, постерные доклады и тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
+    );
+  });
+
+  it("046 EARS-10: kinds sharing a last day are grouped; three distinct days are three clauses", () => {
+    expect(pickerNote(prod.map((k) => ({ ...k, lastDay: "2027-01-29" })))).toBe(
+      "Устные доклады, постерные доклады и тезисы принимаются до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
+    );
+    expect(
+      pickerNote([prod[0]!, { ...prod[1]!, lastDay: "2027-01-22" }, prod[2]!]),
+    ).toBe(
+      "Устные доклады принимаются до 15 января 2027, постерные доклады — до 22 января 2027, тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
+    );
+  });
+
+  it("046 EARS-10: a kind not yet open reads «приём откроется {date}» as on its card", () => {
+    expect(
+      pickerNote([
+        prod[0]!,
+        prod[1]!,
+        {
+          ...prod[2]!,
+          state: "not-yet-open",
+          opensAt: "2027-01-09T21:00:00.000Z",
+        },
+      ]),
+    ).toBe(
+      "Устные доклады принимаются до 15 января 2027, постерные доклады — до 29 января 2027 включительно, тезисы — приём откроется 10 января 2027. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
+    );
+  });
+
+  it("046 EARS-10: with no abstract limit the «тезисов — не больше N» clause is left out", () => {
+    const note = pickerNote(prod.map((k) => ({ ...k, submitLimit: null })));
+    expect(note).toBe(
+      "Устные доклады принимаются до 15 января 2027, постерные доклады и тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно.",
+    );
+  });
+
+  it("046 EARS-10: no «пока приём открыт» anywhere; a kind not offered is not named", () => {
+    expect(pickerNote(prod)).not.toContain("пока приём открыт");
+    expect(
+      pickerNote([prod[0]!, { ...prod[1]!, offered: false }, prod[2]!]),
+    ).toBe(
+      "Устные доклады принимаются до 15 января 2027, тезисы — до 29 января 2027 включительно. Докладов и постеров — сколько угодно, тезисов — не больше 3.",
     );
   });
 });

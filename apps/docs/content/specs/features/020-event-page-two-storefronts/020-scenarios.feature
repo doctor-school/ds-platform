@@ -28,6 +28,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
   Scenario: A guest reads the whole event, participates, returns to the same page and enters the room on the doctor host
     Given a guest with no account opens «#d-event» on doctor.school at "/events/vedenie-osteoartrit?mode=online"
     Then the page renders server-side with no authentication required
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02» and 020 «Amendment — 2026-10-02».
     And the open part shows the title, the school kicker, the start date and time labelled «МСК», the duration, «О чём событие», the programme, the teaser, the specialty chips, the НМО badge and both speakers
     And each speaker name links to their expert page and the school kicker links to the school page
     And the right column holds the sticky sign-up card and no other card
@@ -137,6 +138,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     When a doctor opens the event page at 1440
     Then the right column contains exactly one card and it is the sticky sign-up card
     And the «Ведёт» speaker card is in the left flow and scrolls away with the content
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02» and 020 «Amendment — 2026-10-02».
     And the conditions line above the CTA reads the format, the start time labelled «МСК», the duration, the НМО value and the cost in Pul
     And exactly one primary CTA exists in the DOM
     And no «купить», «оставить заявку» or «скачать» affordance exists in any state
@@ -218,6 +220,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And «партнёр» is never used as the money-carrier and «проект» appears in no doctor-facing string
     And НМО appears only as a badge and as a conditions-line value, never as a heading
     And a zero cost reads «бесплатно для врача»
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02» and 020 «Amendment — 2026-10-02».
     And every date and time renders in Europe/Moscow labelled «МСК»
     And no user-facing string is hardcoded outside the typed message catalog
 
@@ -281,6 +284,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And no marking field appears in the response body
     And the free-text partner reference is not rendered anywhere
 
+  # Amended 2026-10-02 (#2537): add to calendar leaves this deferral — the registered card carries «Вы записаны» plus 005 EARS-14's add-to-calendar control (see the amendment scenario at the end of this file); the add-to-calendar absence step below no longer holds once #2545 lands. Read under 020 «Amendment — 2026-10-02».
   @EARS-6 @deferred @failure
   Scenario: The registered card promises no cancel, calendar, reminder or «Мои события» link in release 3
     Given a signed-in doctor holds a registration on an upcoming event
@@ -303,3 +307,24 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And the recorded Stage-A picks F-020-1 А, F-020-2 Б, F-020-3 Б and F-020-4 А are treated as decisions rather than re-opened questions
     And the canvas «board» fork stand is not built
     And the rendered result is re-confirmed with the product owner on the live stand before merge
+
+  # --- Amendment 2026-10-02 (#2537): event time in the viewer's timezone and add to calendar on the registered card ---
+
+  @EARS-2 @EARS-19 @happy
+  Scenario: An online event's open part and conditions line read in the viewer's zone, an offline event's in МСК
+    Given an online event and an offline event, both starting at 19:00 МСК
+    And a viewer whose browser timezone is Asia/Yekaterinburg
+    When the viewer opens each event page on doctor.school
+    Then the server-rendered page shows each start as "19:00 МСК"
+    And after hydration the online event's open part and conditions line read "21:00 GMT+5" without a layout shift
+    And the offline event's open part and conditions line still read "19:00 МСК"
+
+  @EARS-6 @happy
+  Scenario: The registered card offers add to calendar and promises no cancel, reminder or «Мои события» link
+    Given a signed-in doctor holds a registration on an upcoming event
+    When the doctor opens the event page
+    Then the sticky card reads «Вы записаны» with an .ics download and a Google Calendar link (005 EARS-14) and offers no other control
+    And no cancel-sign-up affordance is rendered
+    And no reminder promise, reminder setting or reminder placeholder is rendered
+    And no «Мои события» link is rendered on the card
+    And no «Участвовать» CTA is rendered anywhere on the page

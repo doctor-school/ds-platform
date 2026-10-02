@@ -27,7 +27,7 @@ The economics stay in **attention points**: cost is a per-event Pul parameter th
 - **US-1** — As a **guest doctor arriving on a link from a medical representative**, I read the whole description, programme, speaker and teaser **without any account**, and decide whether this is worth my evening (REQ-20).
 - **US-2** — As a **guest doctor**, when I press «Участвовать» I register in a couple of steps and land **back on this exact page**, not in some cabinet.
 - **US-3** — As a **doctor**, the page has **exactly one call to action** — «Участвовать» — so there is never a choice between buying, applying and downloading.
-- **US-4** — As a **doctor**, the conditions line tells me in one glance the format, the Moscow-time start, the НМО credit, the cost in Pul and my current balance.
+- **US-4** — As a **doctor**, the conditions line tells me in one glance the format, the Moscow-time start, the НМО credit, the cost in Pul and my current balance. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — an online or hybrid event shows its time in the viewer's timezone with an explicit zone label; an offline event keeps МСК (004 EARS-12 read under [004 «Amendment — 2026-10-02»](../004-event-page-listing/004-requirements-en.md)).]**
 - **US-5** — As a **doctor who came on a partner link without enough points**, I am simply let in — the advance is granted silently and I never see a «not enough points» wall (REQ-49, REQ-39).
 - **US-6** — As a **doctor who found the event by myself without enough points**, I am shown how to earn what I lack (profile, lessons) instead of being blocked outright.
 - **US-7** — As a **registered doctor**, I see «Вы записаны», can add the event to my calendar, get a reminder before it starts, and find it later in «Мои события».
@@ -51,11 +51,11 @@ The economics stay in **attention points**: cost is a per-event Pul parameter th
 
 ## Flows
 
-**Read before deciding (US-1, US-20):** the doctor opens the page from any entry point → breadcrumbs, the storefront header, the event title with date and Moscow time; then the open part — programme, speaker (link to the expert page), teaser, the source school or project, and the sign-up count («уже записались 37 ортопедов», REQ-38). All of it renders for a guest.
+**Read before deciding (US-1, US-20):** the doctor opens the page from any entry point → breadcrumbs, the storefront header, the event title with date and Moscow time; then the open part — programme, speaker (link to the expert page), teaser, the source school or project, and the sign-up count («уже записались 37 ортопедов», REQ-38). All of it renders for a guest. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — an online or hybrid event shows its time in the viewer's timezone with an explicit zone label; an offline event keeps МСК (004 EARS-12 read under [004 «Amendment — 2026-10-02»](../004-event-page-listing/004-requirements-en.md)).]**
 
 **Take part (US-2, US-3, US-4, US-5, US-6, US-7):**
 
-1. The conditions line states format · time (МСК) · НМО · cost in Pul · the doctor's balance. Below it, the single «Участвовать».
+1. The conditions line states format · time (МСК) · НМО · cost in Pul · the doctor's balance. Below it, the single «Участвовать». **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — an online or hybrid event shows its time in the viewer's timezone with an explicit zone label; an offline event keeps МСК (004 EARS-12 read under [004 «Amendment — 2026-10-02»](../004-event-page-listing/004-requirements-en.md)).]**
 2. **Guest** → registration (feature 021 / 005) → back to this page.
 3. **Signed in, enough points** → «Вы записаны», calendar add, link into «Мои события», a reminder before the start.
 4. **Signed in, not enough points, partner-referred** → the advance is granted automatically; the button behaves as normal and no shortfall is shown.

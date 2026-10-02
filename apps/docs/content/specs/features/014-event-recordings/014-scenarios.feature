@@ -14,6 +14,7 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
       Given the golden recorded broadcast is publicly readable
       When the visitor opens "/webinars?tab=past"
       Then the public archive is selected without week or month controls
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
       And the golden recorded card shows its title, Moscow date and time and recording status in its month group
       When the visitor activates the golden recorded card's recording link
       Then the visitor lands on the recorded event page showing its matching title

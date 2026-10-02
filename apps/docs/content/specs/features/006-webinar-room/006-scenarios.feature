@@ -19,6 +19,7 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     And the event read model is seeded with events in each lifecycle state, with stream config
     And Centrifugo is available for the room chat channel
     And the heartbeat cadence N is a server-side config defaulting to 60 seconds
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
     And all absolute times are presented in Europe/Moscow labeled МСК
 
   # --- Room admission & composition (US-1, US-5) ---
@@ -280,6 +281,7 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     Then the stream is embedded as a configured frame only
     And the room does not transcode, re-host, proxy, DRM-sign, record, or telemeter the stream
 
+  # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
   @EARS-10 @happy
   Scenario: Absolute room times render in МСК regardless of the viewer's timezone
     Given a viewer whose browser timezone is not Europe/Moscow

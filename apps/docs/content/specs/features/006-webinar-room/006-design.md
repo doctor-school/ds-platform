@@ -287,7 +287,7 @@ Built from `@ds/design-system` tokens to the vendored `archive/archive-room-v1.d
 
 ### 8.2 Time, copy & i18n
 
-- **МСК (EARS-10).** Any **absolute** time in the room (the «О эфире» program schedule) is formatted in `Europe/Moscow` labeled **МСК** via the shared 004/005 formatter — never the viewer's local timezone (Playwright asserts no drift by overriding `timezoneId`). The live-elapsed indicator («В эфире · N мин») derives from the event's canonical `startsAt`.
+- **МСК (EARS-10).** Any **absolute** time in the room (the «О эфире» program schedule) is formatted in `Europe/Moscow` labeled **МСК** via the shared 004/005 formatter — never the viewer's local timezone (Playwright asserts no drift by overriding `timezoneId`). The live-elapsed indicator («В эфире · N мин») derives from the event's canonical `startsAt`. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](../004-event-page-listing/004-requirements-en.md).]**
 - **Copy & i18n (EARS-10).** All user-facing copy (the live badge, room chrome, chat placeholder/labels/empty-state, the access-branch guidance, the "stream unavailable"/ended states) resolves through the typed message catalog established in 003 (EARS-21) and reused in 004/005. RU ships now; no hardcoded string survives the `apps/portal` ESLint gate.
 
 ### 8.3 The ended state — the end card (EARS-7)

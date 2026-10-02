@@ -27,7 +27,6 @@ const CONTENT = {
   eventTitle: "Конгресс-2027",
   eventDate: "12 марта 2027 г. в 10:00",
   eventVenue: "Москва, Крокус Экспо",
-  cabinetUrl: CABINET_URL,
 } as const;
 
 const REMOVED = ["аккаунт", "Пароль не нужен", "Войти", "/login"] as const;
@@ -72,15 +71,16 @@ describe("044 EARS-13: the congress confirmation email", () => {
     ).toBe("12 марта 2027 г. в 10:00");
   });
 
-  it("EARS-15: the confirmation carries «Подать материалы в кабинете» to the cabinet as its only action", () => {
+  it("046 EARS-15: the confirmation shall carry no link, no button and no URL in either part", () => {
     const message = congressConfirmationMessage(CONTENT);
 
-    expect(htmlLinks(message.html)).toEqual([
-      { url: CABINET_URL, label: "Подать материалы в кабинете" },
-    ]);
-    expect(message.text).toContain(
-      `Подать материалы в кабинете: ${CABINET_URL}`,
-    );
+    expect(htmlLinks(message.html)).toEqual([]);
+    expect(message.html).not.toMatch(/href=/);
+    for (const part of [message.text, message.html]) {
+      expect(part).not.toMatch(/https?:\/\//);
+      expect(part).not.toContain("/account/congress");
+      expect(part).not.toContain("Подать материалы в кабинете");
+    }
   });
 });
 

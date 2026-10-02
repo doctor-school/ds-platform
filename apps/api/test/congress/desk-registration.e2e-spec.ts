@@ -339,10 +339,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       walkIn = { email, registrationId: body.registrationId };
     });
 
-    it("046 EARS-15: the confirmation from the desk carries «Подать материалы в кабинете» as an absolute link to /account/congress on MAILER_DOCTOR_BASE_URL and no other action", async () => {
-      const cabinetUrl = `${process.env.MAILER_DOCTOR_BASE_URL!.replace(/\/+$/, "")}/account/congress`;
-      expect(cabinetUrl).toMatch(/^https?:\/\/[^/]+\/account\/congress$/);
-      const email = uniqueEmail("desk-cabinet");
+    it("046 EARS-15: the confirmation from the desk carries no link, no button and no URL — neither /account/congress nor any href — in the HTML and the text part", async () => {
+      const email = uniqueEmail("desk-no-link");
 
       const res = await desk(registrar.headers, slugA, entry(email));
       expect(res.statusCode).toBe(200);
@@ -350,19 +348,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await waitForMailOutcome(body.registrationId)).toBe("sent");
 
       const [dispatched] = confirmationsFor(email);
-      expect(dispatched!.cabinetUrl).toBe(cabinetUrl);
+      expect(dispatched).not.toHaveProperty("cabinetUrl");
       const message = congressConfirmationMessage({
         eventTitle: dispatched!.eventTitle,
         eventDate: formatCongressEventDate(dispatched!.eventStartsAt),
         eventVenue: dispatched!.eventVenue,
-        cabinetUrl: dispatched!.cabinetUrl,
       });
-      const links = [
-        ...message.html.matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/g),
-      ].map(([, url, label]) => ({ url, label }));
-      expect(links).toEqual([
-        { url: cabinetUrl, label: "Подать материалы в кабинете" },
-      ]);
+      expect(message.html).not.toMatch(/href=/);
+      for (const part of [message.text, message.html]) {
+        expect(part).not.toContain("/account/congress");
+        expect(part).not.toMatch(/https?:\/\//);
+        expect(part).not.toContain("Подать материалы в кабинете");
+      }
     });
 
     it("044 EARS-35.2: the same email entered again names the existing registration and writes nothing new — no second account, registration, consent or email", async () => {

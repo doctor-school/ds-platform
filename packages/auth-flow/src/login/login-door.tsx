@@ -13,6 +13,7 @@ import {
   LoginCard,
   useBotProtectedAction,
   type LoginCardCopy,
+  type LoginCardMethod,
   type LoginCardOtpChannel,
   type LoginCardOtpProps,
   type LoginCardOtpRequestValues,
@@ -103,6 +104,12 @@ export type LoginDoorProps = {
   returnTargetGone?: boolean;
   /** The gate context the visitor arrived from — the plate beside the form (021 EARS-2). */
   returnContextPlate?: ReactNode;
+  /**
+   * 003 EARS-43 — the method tab the card OPENS on, decided by the mount from
+   * `?method=` (only `code` selects `"otp"`). A preselection, not a lock: the
+   * tab bar stays and the visitor can still switch. Absent ⇒ «Пароль».
+   */
+  defaultMethod?: LoginCardMethod;
 };
 
 /** EARS-5 — the identifier box this host serves, plus the length-only password rule. */
@@ -234,6 +241,7 @@ export function LoginDoor({
   returnTarget = null,
   returnTargetGone = false,
   returnContextPlate,
+  defaultMethod = "password",
 }: LoginDoorProps) {
   const router = useRouter();
   const { errors, login } = resolveAuthFlowCopy(config);
@@ -481,6 +489,7 @@ export function LoginDoor({
         }}
         // Next.js `<Link>` keeps the footer links on client-side navigation.
         renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
+        defaultMethod={defaultMethod}
         onMethodChange={onMethodChange}
         password={{
           resolver: passwordResolver,

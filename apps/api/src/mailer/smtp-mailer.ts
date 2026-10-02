@@ -124,7 +124,6 @@ export class SmtpMailer implements Mailer {
         eventTitle: input.eventTitle,
         eventDate: formatCongressEventDate(input.eventStartsAt),
         eventVenue: input.eventVenue,
-        cabinetUrl: input.cabinetUrl,
       }),
       "congress registration confirmation",
     );

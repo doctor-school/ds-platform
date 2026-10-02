@@ -183,9 +183,9 @@ export const ApiEnvSchema = z.looseObject({
   // Portal origin the notice's sign-in / reset links point at (`/login`,
   // `/reset`). Optional — defaults to the local portal in the adapter.
   MAILER_PORTAL_BASE_URL: z.url().optional(),
-  // 046 «Letters» — the doctor storefront origin every congress letter links to
-  // (`{origin}/account/congress`: the 046 letters and the 044 confirmation's
-  // cabinet link, EARS-14/15). REQUIRED with no default, like DATABASE_URL: an
+  // 046 «Letters» — the doctor storefront origin the 046 submission letters
+  // link to (`{origin}/account/congress`, EARS-14; the 044 confirmation carries
+  // no link, EARS-15). REQUIRED with no default, like DATABASE_URL: an
   // api without it refuses to boot rather than mail a link to the wrong site.
   MAILER_DOCTOR_BASE_URL: z.url(),
 

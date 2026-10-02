@@ -643,3 +643,89 @@ describe("021 EARS-3 (#2333): the door gets the signed-in re-decision where it c
     expect(await actionOf(ACADEMY_FIXTURE, {})).toBeUndefined();
   });
 });
+
+/**
+ * 003 EARS-43 — `/login?method=code` opens the sign-in card on the email-code
+ * method (003-design: «`/login?method=code` preselects the email-code method»).
+ * A closed allow-list: only `code` preselects «По коду»; anything else, or no
+ * param, keeps the default «Пароль». The tab bar stays — the visitor can still
+ * switch — and the carried `returnTo` is handled exactly as without the param.
+ */
+describe("003 EARS-43: /login?method=code opens sign-in by code", () => {
+  /** Which method tab the rendered door has selected. */
+  async function selectedMethodOf(
+    config: AuthFlowHostConfig,
+    params: Params,
+  ): Promise<"password" | "otp"> {
+    render(await doorOf(config, params));
+    const otp = screen.getByTestId("login-method-otp");
+    const password = screen.getByTestId("login-method-password");
+    expect(otp.getAttribute("aria-selected")).not.toBe(
+      password.getAttribute("aria-selected"),
+    );
+    return otp.getAttribute("aria-selected") === "true" ? "otp" : "password";
+  }
+
+  for (const [host, config] of [
+    ["doctor", DOCTOR_FIXTURE],
+    ["Academy", ACADEMY_FIXTURE],
+  ] as const) {
+    it(`003 EARS-43: on the ${host} host, method=code preselects «По коду» and keeps returnTo=/account`, async () => {
+      resolveServerAuth.mockResolvedValue({ status: "guest" });
+      const params = { method: "code", returnTo: "/account" };
+
+      expect(await selectedMethodOf(config, params)).toBe("otp");
+      cleanup();
+      const door = (await doorOf(config, params)) as unknown as ReactElement<{
+        landing: string;
+        returnTo?: string | null;
+      }>;
+      expect(door.props.landing).toBe("/account");
+      expect(door.props.returnTo).toBe("/account");
+    });
+
+    it(`003 EARS-43: on the ${host} host, no method param keeps «Пароль»`, async () => {
+      resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+      expect(await selectedMethodOf(config, {})).toBe("password");
+    });
+
+    it(`003 EARS-43: on the ${host} host, an unknown method value keeps «Пароль» and is not echoed`, async () => {
+      resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+      for (const method of ["bogus", "otp", "CODE", "", "<script>"]) {
+        expect(await selectedMethodOf(config, { method })).toBe("password");
+        expect(document.body.innerHTML).not.toContain("<script>");
+        cleanup();
+      }
+    });
+  }
+
+  it("003 EARS-43: a repeated method param takes its FIRST value, like returnTo", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await selectedMethodOf(DOCTOR_FIXTURE, { method: ["code", "password"] }),
+    ).toBe("otp");
+    cleanup();
+    expect(
+      await selectedMethodOf(DOCTOR_FIXTURE, { method: ["password", "code"] }),
+    ).toBe("password");
+  });
+
+  it("003 EARS-43: the preselection is not a lock — the visitor can still switch to «Пароль»", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    const user = userEvent.setup();
+
+    render(await doorOf(DOCTOR_FIXTURE, { method: "code" }));
+    await user.click(screen.getByTestId("login-method-password"));
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getByTestId("login-method-password")
+          .getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+  });
+});

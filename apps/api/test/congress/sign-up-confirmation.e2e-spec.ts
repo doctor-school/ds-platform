@@ -59,11 +59,6 @@ const EVENT_TITLE = "Конгресс-2027";
 const EVENT_STARTS_AT = "2027-03-12T07:00:00.000Z";
 /** 044 EARS-13 amendment (#2369): wording the letter must never carry. */
 const REMOVED_COPY = ["аккаунт", "Пароль не нужен", "Войти", "/login"] as const;
-/**
- * 046 EARS-15 — the cabinet on the doctor storefront origin the api booted
- * with (`MAILER_DOCTOR_BASE_URL`, supplied by the runner or the CI job).
- */
-const CABINET_URL = `${(process.env.MAILER_DOCTOR_BASE_URL ?? "").replace(/\/+$/, "")}/account/congress`;
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "044 congress sign-up - confirmation email (e2e)",
@@ -337,13 +332,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       eventTitle: string;
       eventStartsAt: Date;
       eventVenue: string;
-      cabinetUrl: string;
     }): string {
       const message = congressConfirmationMessage({
         eventTitle: dispatched.eventTitle,
         eventDate: formatCongressEventDate(dispatched.eventStartsAt),
         eventVenue: dispatched.eventVenue,
-        cabinetUrl: dispatched.cabinetUrl,
       });
       expect(message.subject).toBe(
         "Doctor.School — вы зарегистрированы на Конгресс-2027",
@@ -397,35 +390,29 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           eventTitle: EVENT_TITLE,
           eventStartsAt: new Date(EVENT_STARTS_AT),
           eventVenue: EVENT_VENUE,
-          cabinetUrl: CABINET_URL,
         }),
       );
     });
 
-    it("046 EARS-15: the confirmation from the site form carries «Подать материалы в кабинете» as an absolute link to /account/congress on MAILER_DOCTOR_BASE_URL and no other action", async () => {
-      expect(CABINET_URL).toMatch(/^https?:\/\/[^/]+\/account\/congress$/);
-      const email = uniqueEmail("congress-mail-cabinet");
+    it("046 EARS-15: the confirmation from the site form carries no link, no button and no URL — neither /account/congress nor any href — in the HTML and the text part", async () => {
+      const email = uniqueEmail("congress-mail-no-link");
 
       expect((await post(submission(email))).statusCode).toBe(200);
       await waitForMailOutcome(email, "sent");
 
       const [dispatched] = confirmationsFor(email);
-      expect(dispatched!.cabinetUrl).toBe(CABINET_URL);
+      expect(dispatched).not.toHaveProperty("cabinetUrl");
       const message = congressConfirmationMessage({
         eventTitle: dispatched!.eventTitle,
         eventDate: formatCongressEventDate(dispatched!.eventStartsAt),
         eventVenue: dispatched!.eventVenue,
-        cabinetUrl: dispatched!.cabinetUrl,
       });
-      const links = [
-        ...message.html.matchAll(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/g),
-      ].map(([, url, label]) => ({ url, label }));
-      expect(links).toEqual([
-        { url: CABINET_URL, label: "Подать материалы в кабинете" },
-      ]);
-      expect(message.text).toContain(
-        `Подать материалы в кабинете: ${CABINET_URL}`,
-      );
+      expect(message.html).not.toMatch(/href=/);
+      for (const part of [message.text, message.html]) {
+        expect(part).not.toContain("/account/congress");
+        expect(part).not.toMatch(/https?:\/\//);
+        expect(part).not.toContain("Подать материалы в кабинете");
+      }
     });
   },
 );

@@ -32,7 +32,6 @@ import {
   type CongressSignUpSettings,
 } from "./congress-signup.config.js";
 import {
-  CONGRESS_CABINET_URL,
   CONGRESS_SIGN_UP_CLOCK,
   CONGRESS_SIGN_UP_ENV,
   type CongressSignUpClock,
@@ -158,7 +157,6 @@ export class CongressSignUpService {
     // Explicit, like every other parameter: the route-scan gate and the
     // api-client codegen boot under `tsx`, which emits no `design:paramtypes`.
     @Inject(AuthService) private readonly auth: AuthService,
-    @Inject(CONGRESS_CABINET_URL) private readonly cabinetUrl: string,
   ) {}
 
   /**
@@ -364,8 +362,6 @@ export class CongressSignUpService {
             eventTitle: input.eventTitle,
             eventStartsAt: input.eventStartsAt,
             eventVenue: input.eventVenue,
-            // 046 EARS-15 — the letter's one action, for every intake door.
-            cabinetUrl: this.cabinetUrl,
           });
         } catch {
           // The mailer's own diagnostics already carry the sanitized provider

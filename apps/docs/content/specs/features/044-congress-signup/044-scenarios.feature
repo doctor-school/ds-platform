@@ -26,18 +26,18 @@ Feature: 044 — Congress sign-up
     And the participant receives the generic success response, which confirms the registration was accepted, states that a confirmation email has been sent to the address given, and states that nothing further is required
     # Production amendment 2026-09-24 (#2369, 044-requirements «Production amendment — confirmation email copy»): the line below is the running-production baseline; the amended email names the event, its date and venue
     # as ONE copy for every participant, with no account paragraph and no sign-in action (EARS-13.1 / EARS-13.2).
-    # Production amendment 2026-09-29 (#2385): that copy carries one action, the link «Подать материалы в кабинете» to /account/congress (046 EARS-15, scenario in 046-scenarios.feature).
+    # Production amendment 2026-10-02 (#2553): the 2026-09-29 link «Подать материалы в кабинете» is removed; the letter carries no action (046 EARS-15 amended).
     And a confirmation email is dispatched naming the event, the created Doctor.School account and code-based sign-in
     And the registration's confirmation-mail outcome is recorded as sent with its timestamp
 
   @EARS-14
-  Scenario: First platform entry proves the address
+  Scenario: First platform entry by one email code proves the address and signs in
     Given a congress-origin account exists for "new@example.org" with email_verified false
-    When its holder requests a one-time login code by email
-    Then no login code is issued and the verification code is re-issued instead
-    When they complete the existing email verification-code path
-    Then email_verified becomes true
-    And a subsequent email one-time-code login succeeds
+    When its holder opens "/login?method=code&returnTo=/account/congress" and requests a code for "new@example.org"
+    Then the sign-in code mail arrives carrying a six-character code
+    When they enter that code on the six-cell code step
+    Then email_verified becomes true and they are signed in on "/account/congress"
+    And a later email one-time-code sign-in also succeeds
     And no credential was ever set on that account
 
   @EARS-6 @EARS-7

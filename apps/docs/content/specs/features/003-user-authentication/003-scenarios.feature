@@ -37,42 +37,79 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And no duplicate account is created
 
   @EARS-23 @EARS-16 @happy
-  Scenario: Already-registered email receives an account-exists notice, not a verification code
-    # The legitimate owner must never be stranded waiting for a code that, by
-    # design, is never sent on this branch. The notice carries no code/token and
-    # creates nothing; the API response is identical to the never-registered case.
+  Scenario: Already-registered email receives a code mail and nothing is written before the code
+    # Production amendment 2026-10-02 (#2553): the owner receives a code, never a
+    # dead-end notice; the API response is identical to the never-registered case.
     Given an email that is already registered
     When a visitor submits the registration form with that email
-    Then an account-exists notice email (single sign-in action, no reset link, code or token) is sent to that address
-    And no verification code is sent and no account, consent, or audit_ledger row is written
+    Then a code-only mail with no link is sent to that address, saying the address is already registered
+    And no account, consent, or audit_ledger row is written before a code is accepted
     And the API response is indistinguishable in status, body, and timing from the never-registered case
+
+  @EARS-23 @EARS-41 @happy
+  Scenario: A verified password holder who re-registers is signed in by the code and keeps the password
+    Given a verified account with a password for "owner@example.org"
+    When a visitor submits the registration form for "owner@example.org" with a different password and a display name
+    Then the mail says the address is already registered and «Ваш пароль не изменился»
+    When the visitor enters the code from that mail on the code step
+    Then a BFF session is established and the return target is honoured
+    And the original password still signs in and the submitted one does not
+    And the display name is written only if the account had none
+
+  @EARS-23 @EARS-41 @happy
+  Scenario: An abandoned registrant who registers again gets the new password, not the abandoned one
+    Given an unverified account for "late@example.org" created by a registration with password "first-pass"
+    When a visitor submits the registration form for "late@example.org" with password "second-pass"
+    Then the mail says the password entered will be saved after the code, not that it is unchanged
+    When the visitor enters the code from that mail on the code step
+    Then email_verified becomes true and a BFF session is established
+    And "second-pass" signs in and "first-pass" does not
+
+  @EARS-41 @failure
+  Scenario: A password set before verification does not survive the owner's first code
+    # Lead security decision 2026-10-02: a squatter who registered the owner's address
+    # with their own password loses it at the owner's first accepted code.
+    Given an unverified account for "victim@example.org" whose password was set by someone else
+    When the mailbox owner requests a sign-in code and enters it
+    Then email_verified becomes true and the owner is signed in
+    And the pre-verification password no longer signs in
+    And every session the account held before the code is revoked
+
+  @EARS-23 @EARS-41 @happy
+  Scenario: A password-less congress account that registers gets the entered password after the code
+    Given a congress-created account for "guest@example.org" with no credential and an unverified email
+    When a visitor submits the registration form for "guest@example.org" with a policy-conforming password
+    And enters the code from the mail on the code step
+    Then email_verified becomes true and a BFF session is established
+    And the submitted password now signs in
+    And profile fields the account already holds are not overwritten
 
   @EARS-23 @failure
   Scenario: Repeated duplicate registrations do not flood the inbox
     Given an email that is already registered
-    And an account-exists notice was just sent to that address
+    And a re-registration code mail was just sent to that address
     When a visitor submits the registration form with that email again within the throttle window
-    Then no second account-exists notice is sent
+    Then no second code mail is sent
     And the API response is still indistinguishable from the never-registered case
 
-  @EARS-24 @EARS-16 @happy
-  Scenario: The post-registration screen serves both new and existing visitors without revealing which
+  @EARS-24 @EARS-42 @EARS-16 @happy
+  Scenario: The post-registration screen is the one code step for new and existing visitors
     Given a visitor has submitted the registration form
-    When the portal shows the post-registration screen
-    Then the screen frames the step as "check your email"
-    And it offers entering the email code as a co-equal affordance
-    And it offers prominent Sign in and Reset password actions
+    When the storefront shows the post-registration screen
+    Then it is the one code step: "check your email", the masked address, six code cells and a resend with cooldown
+    And it offers «← Изменить почту» back to the registration form with the entered fields kept
+    And it offers no separate Sign in or Reset password block
     And the screen never branches on whether the email was already registered
 
   @EARS-25 @EARS-16 @happy
-  Scenario: Resending the registration verification code is enumeration-resistant
-    # The /verify screen lets a visitor re-request the email code without revealing
-    # whether the identifier exists or is already verified. A code is re-issued only
-    # for an existing, unverified registrant; the response stays identical otherwise.
-    Given a visitor on the existence-agnostic /verify screen requests the verification code be re-sent
+  Scenario: Resending a code is enumeration-resistant and fits the account state
+    # Production amendment 2026-10-02 (#2553): a resend from any code step re-issues
+    # the code that fits the account state for any existing account.
+    Given a visitor on a code step requests the code be re-sent
     When the request reaches the BFF for any identifier
-    Then the response is indistinguishable in status, body, and timing from the unknown or already-verified case
-    And a Zitadel otp_email code is re-issued only if the identifier is an existing, unverified registrant
+    Then the response is indistinguishable in status, body, and timing across unknown, verified and unverified identifiers
+    And an unverified account receives a fresh verification code and a verified account a fresh login code
+    And an unknown identifier receives nothing
     And an otp.sent audit_ledger row is appended only when a code is actually issued
     And the resend is subject to the EARS-13 rate limits and writes no users or consent row
 
@@ -123,26 +160,27 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # API EARS-5 test owns the IdP failed-attempt increment assertion. The browser
     # verifies the live refusal without claiming to read Zitadel's native counter.
 
-  @EARS-6 @EARS-8 @happy
+  @EARS-6 @EARS-8 @EARS-41 @happy
   Scenario: Passwordless login with an email OTP code
     Given a verified doctor_guest user
-    When the user requests an email login code and submits the correct code
+    When the user requests an email login code and submits the correct six-character code
     Then Zitadel otp_email verifies it
     And a BFF session is established with a __Host- cookie
 
-  @EARS-34 @EARS-16 @happy
-  Scenario: A login-email-code request for an unverified account sends verification out-of-band
-    # An existing but email-unverified account cannot receive a Zitadel otp_email login
-    # code (it never arrives). Instead of the silent dead-end, the BFF sends the
-    # verify-to-sign-in verification code out-of-band by email; the API response is
-    # identical to the verified and nonexistent cases (no existence/verification oracle).
+  @EARS-34 @EARS-41 @EARS-16 @happy
+  Scenario: An unverified account signs in with the code from the sign-in mail
+    # Production amendment 2026-10-02 (#2553): Zitadel cannot arm otp_email for an
+    # unverified address, so the verification code travels in the same sign-in mail
+    # and entering it verifies the address and signs the user in.
     Given an existing doctor_guest account whose email is not yet verified
     When the user requests an email login code for that identifier
     Then no otp_email login challenge is armed for the unverified account
-    And a branded, code-only verification email is sent out-of-band via the BFF mailer
+    And the same code-only sign-in mail as for a verified account is sent, carrying the verification code
     And the response is indistinguishable in status, body, and timing from the verified and nonexistent cases
-    And an otp.sent audit_ledger row is appended only because a verification code was issued
-    And no users or consent row is written
+    And an otp.sent audit_ledger row is appended only because a code was issued
+    When the user enters that code on the six-cell code step
+    Then email_verified becomes true with one auth.account.verified audit_ledger row
+    And a BFF session is established with a __Host- cookie
 
   @EARS-34 @EARS-16 @happy
   Scenario: A login-email-code request for a verified account arms the challenge unchanged
@@ -358,22 +396,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the user completes the reset by typing the code on the /reset screen
 
   @EARS-29 @EARS-34 @happy
-  Scenario: Unverified-account sign-in receives the existing layout with neutral verification copy
+  Scenario: Unverified-account sign-in receives the sign-in code mail
     Given an existing account has an unverified email
     When its owner requests an email sign-in code
-    Then the BFF sends a verification code using the existing shared mailer layout
-    And HTML and plain text use the same neutral code-request guidance without calling the request registration
-    And the instruction directs code entry in the already-open requesting tab
+    Then the BFF sends the verification code in the sign-in code mail on the existing shared mailer layout
+    And HTML and plain text show the code, its lifetime and the instruction to use the already-open requesting tab
     And no link, button or navigation URL appears in any email block
-    And the verification code format and lifetime remain owned by Zitadel
+    And the code is six upper-case letters and digits, its lifetime owned by Zitadel
 
-  @EARS-23 @happy
-  Scenario: Account-exists notice reuses the code-email layout without a code
+  @EARS-23 @EARS-29 @happy
+  Scenario: The re-registration mail is a code mail on the shared layout
     Given registration targets an existing account
-    When the BFF composes the account-exists notice
-    Then the notice uses the existing shared mailer layout
-    And HTML and plain text offer only the configured portal sign-in action
-    And neither body contains a password-reset link, code or token
+    When the BFF composes the re-registration mail
+    Then the mail uses the existing shared mailer layout and carries the code
+    And HTML and plain text say the address is already registered, adding «Ваш пароль не изменился» only for a verified account with a password and otherwise that the entered password will be saved after the code
+    And neither body contains a link, button or navigation URL
 
   @EARS-31 @EARS-32 @happy
   Scenario: Postbox is the explicit primary for every recipient domain
@@ -455,7 +492,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: Login OTP uses the existing BFF mailer and shared code-only layout
     Given a verified account and the existing mailer delivery configuration
     When a verified user requests an email login OTP
-    Then the BFF obtains the eight-digit code through otpEmail returnCode
+    Then the BFF obtains the six-character code through otpEmail returnCode
     And Zitadel sends no native email
     And the existing BFF mailer sends the code using the shared layout and unchanged delivery route
     And HTML and plain text state a five-minute lifetime and entry in the already-open requesting tab
@@ -578,20 +615,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the password field is masked again
     And revealing emitted no network request, log entry, or storage write
 
-  @EARS-39 @happy
-  Scenario: A cold verification step verifies and then routes to sign-in with the return target
+  @EARS-39 @EARS-41 @happy
+  Scenario: A cold verification step still signs in by the code
     Given a registrant who has submitted the registration form and is on the verification step
     And the in-memory password hold is lost to a hard reload, a restored tab, or an expired hold
     When the registrant submits a valid verification code
-    Then the verification completes
-    And the registrant is routed to /login carrying the return target onward
+    Then the verification completes and a BFF session is established from the code
+    And the registrant is returned to the return target signed in, never routed to /login
+    And the password typed at registration is invalidated, leaving a code-only account until a reset
 
-  @EARS-39 @failure
-  Scenario: A refused auto-login replay keeps the registrant on the verification step
-    Given a registrant on the verification step whose held password the IdP does not accept
-    When the registrant submits a valid verification code
-    Then the verification completes but the auto-login replay is refused
-    And the registrant stays on the verification step with the generic error
+  @EARS-39 @EARS-41 @failure
+  Scenario: A refused code keeps the registrant on the verification step
+    Given a registrant on the verification step
+    When the registrant submits a wrong or expired code
+    Then the registrant stays on the verification step with the generic error
     And the registrant is not routed anywhere
 
   @EARS-39 @failure
@@ -607,3 +644,23 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the visitor is taken to /register in place of the address-less /verify
     And a same-origin returnTo on the arrival is carried onward to /register
     And no verification step without an address is ever shown
+
+  @EARS-41 @EARS-16 @failure
+  Scenario: A wrong code fails identically for every identifier
+    Given a verified account, an unverified account and an unknown identifier
+    When a wrong six-character code is submitted for each
+    Then each response is the same generic failure in status, body, and timing within 50 ms
+    And no account state changes
+
+  @EARS-42 @happy
+  Scenario: No eight-cell code step exists on either storefront
+    When a user reaches the code step from login by code, registration or re-registration
+    Then the step shows six code cells, the masked address and a resend with cooldown
+    And the back link reads «← Изменить способ» in login and «← Изменить почту» in registration
+
+  @EARS-43 @happy
+  Scenario: The code method opens directly from a link
+    Given a guest opens /login?method=code&returnTo=/account
+    Then the email-code method is shown without a method choice
+    When the guest enters their email and the code from the mail
+    Then a BFF session is established and the guest is returned to the "/account" return target

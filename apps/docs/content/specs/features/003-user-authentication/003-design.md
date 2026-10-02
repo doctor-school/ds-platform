@@ -28,6 +28,79 @@ The account classification and the mirror role column are running in production.
 - **Participant predicate.** `isParticipant(userId)` in `staff-role.ts` is one `EXISTS` probe on the `users` primary key with `role = doctor_guest`. It applies in `DoctorEventsRepository.countSignUps`, `RegistrationRepository.findEventRoster` and `findEventRosterPage` (rows and total), `PresenceRepository.countLivePresence`, its expiry query and `deriveEventMinutes`. `statistics.countDoctors` already filtered on `users.role`.
 - **Rollout.** Staff are onboarded with `doctor_guest` plus the staff role (`apps/docs/content/operations/admin-onboarding.md`, step 5). Existing production staff grants are widened after the release; each staff row flips on that person's next signed-in request.
 
+## Production amendment — one email code (2026-10-02, #2552 / #2553)
+
+Login by code, registration verification and re-registration run in production with two code kinds and two code screens. This amendment changes §2 (one boundary row), §4 (registration ends in a session from the code), §6 (one submission operation), §8.2 (code mask), §8.3 (the `/verify` step), §10 (security notes), §13.1/§13.2 (journeys), §13.3 (the verification mail is no longer the unverified sign-in artifact), §13.4 (the «8-digit login OTPs» contrast), §13.5 (the account-exists notice with «Войти», the «Eight digits, 300 s» verified-login row and the shared verification copy for unverified sign-in) and §15.6 (cold step), and the eight-digit statements of the 2026-09-11 amendment; the rest of those sections describes the deployed baseline. Requirements: the production amendment of the same date (EARS-6/7/23/24/25/29/34/39 amended, EARS-41…43, and the lead security decision on pre-verification passwords).
+
+**Code shape (#2555).** Zitadel secret generators `VERIFY_EMAIL_CODE`, `OTP_EMAIL`, `OTP_SMS` → `length: 6`, `includeUpperLetters: true`, `includeDigits: true`, `includeLowerLetters: false`, `includeSymbols: false`, set idempotently by `infra/dev-stand/idp/provision.sh` and the production converge; `PASSWORD_RESET_CODE` is asserted to carry the same shape. Expiries are not changed (`VERIFY_EMAIL_CODE` and `PASSWORD_RESET_CODE` 3600 s, `OTP_EMAIL` 300 s). The shared code field (`@ds/design-system` OTP input, consumed by `@ds/auth-flow`) has six cells, accepts `[A-Za-z0-9]`, upper-cases and auto-submits on the sixth character.
+
+**One submission operation (EARS-41).** The two submit endpoints (registration verify and login-code verify) converge on one BFF operation `submitEmailCode(identifier, code, registration?)`; both storefronts call it from the one code step (EARS-42). `registration` is present only when the step was reached from the registration form and still holds the volatile in-tab password and profile fields; a cold step sends none.
+
+```mermaid
+sequenceDiagram
+    participant S as code step (@ds/auth-flow)
+    participant B as apps/api BFF
+    participant Z as Zitadel
+    S->>B: submitEmailCode(identifier, code, registration?)
+    B->>Z: resolve identifier → sub, emailVerified (enumeration-safe wrapper)
+    alt email verified
+        B->>Z: PATCH /v2/sessions/{id} checks.otpEmail.code (challenge armed by the request, EARS-6)
+        opt registration present
+            B->>Z: GET /v2/users/{sub}/authentication_methods
+            B->>Z: no PASSWORD → POST /v2/users/{sub}/password {newPassword} (else keep)
+        end
+    else email unverified
+        B->>Z: POST /v2/users/{sub}/email/verify {verificationCode}
+        B->>B: mirror email_verified = true + auth.account.verified ledger row (EARS-3)
+        alt registration present
+            B->>Z: POST /v2/users/{sub}/password {newPassword} (replaces any pre-verification password)
+        else login by code / cold step
+            B->>Z: invalidate any pre-verification password (mechanism proven by #2556)
+        end
+        B->>Z: ensure otp_email factor (POST /v2/users/{sub}/otp_email, 409 = present)
+        B->>Z: POST /v2/sessions {checks.user, challenges.otpEmail.returnCode {}}
+        Z-->>B: sessionId, sessionToken, challenges.otpEmail (code, server-side only)
+        B->>Z: PATCH /v2/sessions/{id} checks.otpEmail.code = returned code
+    end
+    opt registration present
+        B->>B: fill only empty profile fields on the mirror / IdP profile
+    end
+    B->>Z: OIDC exchange (EARS-8)
+    B-->>S: __Host- session cookie, return target
+```
+
+**Boundary (§2).** Zitadel stays the only generator, checker, attempt counter and session authority. The arm-and-complete step is the same pair of Session API calls the login path already makes (`challenges.otpEmail.returnCode: {}` on `POST /v2/sessions`, then `checks.otpEmail` on `PATCH`, `apps/api/src/auth/idp/zitadel.idp.ts` `requestOtpChallenge` / `loginWithEmailOtp`, proven by `zitadel-login-email.spec.ts`) and the same «return a fresh code and verify it immediately» technique the reset-completion flip already uses (`zitadel.idp.ts`, `markEmailVerified`, EARS-35). The BFF neither generates nor compares a code: it relays a Zitadel-returned value back to Zitadel within one request, held in a local only, never logged, persisted, mailed or returned (EARS-30). The `otp_email` factor registration requires a verified address, which is why the verify call comes first. `authentication_methods` and `SetPassword` are documented User v2 endpoints; #2556 proves both live against the dev-stand IdP (installed v4.15) before relying on them.
+
+**Pre-verification password handling (lead security decision).** On the unverified branch the password step is part of the sign-in, not a soft tail: the session is established only after the pre-verification password has been replaced (registration path) or invalidated (login by code, cold step); if that step fails, the submission fails with the generic error and the user retries — a session must never coexist with an untrusted password. How Zitadel invalidates a password is not settled here: either `SetPassword` with a random, never-recorded value or a native credential removal, whichever #2556 proves live on the installed IdP (a removal must leave the user able to sign in by code and to set a password by reset). On the verified branch the set-if-none password and the profile fill stay fail-soft — logged, never turning an accepted code into a failed sign-in.
+
+**Request side (EARS-34/23/25).** `requestEmailLoginCode`, the re-registration mail and the resend share one fire-and-forget decision: verified → arm `otp_email` with `returnCode` and mail the code; unverified → the deployed verification re-issue hop (`POST /v2/users/{sub}/email/resend` with `returnCode`, `zitadel.idp.ts` `resendEmailCode`) and mail the code; unknown → nothing. All three use one code-mail renderer with trigger copy (§13 amendment below). The account-exists notice with its «Войти» link is retired; the EARS-23 HMAC Redis throttle keys the re-registration mail unchanged.
+
+**Mails (§13.3, §13.4, §13.5 amended).**
+
+- §13.3: the verification mail stays the artifact of a fresh registration and its resend only (subject `{{code}} — код подтверждения Doctor.School`, «Код действует 1 час»). An unverified account that asked to sign in, or that re-registered, receives the verification code in the sign-in or re-registration mail below, not in this artifact.
+- §13.4: the reset mail is unchanged; its code shape is now the same as every other code — the contrast with «8-digit login OTPs» is retired.
+- §13.5 table, amended rows:
+
+| Trigger / type                                    | Target                                                                                                                                                                                                                                         |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Registration and verification resend (unverified) | Verification mail §13.3; six `A–Z`/`0–9` characters, 3600 s                                                                                                                                                                                    |
+| Sign-in code request or resend, verified email    | Sign-in mail: subject `{{code}} — код для входа в Doctor.School`; six `A–Z`/`0–9` characters, «Код действует 5 минут» (300 s)                                                                                                                  |
+| Sign-in code request or resend, unverified email  | The same sign-in mail carrying the verification code; expiry line states 1 hour (3600 s)                                                                                                                                                       |
+| Duplicate registration (re-registration)          | Re-registration mail: the code EARS-34 would issue, «already registered» copy plus «Ваш пароль не изменился» for a verified account with a password, otherwise «the password you entered will be saved after the code»; no link, button or URL |
+| Password reset                                    | Unchanged                                                                                                                                                                                                                                      |
+
+The «single «Войти» action» of the account-exists notice and the «Registration and unverified-account sign-in share neutral verification copy» rule of §13.5 are retired with it; every code mail keeps the zero-link, HTML/text-parity and requesting-tab rules. Exact strings: #2554 / #2556 Stage-B.
+
+**UI (§8.3, §13, §15.6).** `/verify` and the login code step render one `CodeStep` component of `@ds/auth-flow`: heading, «Мы отправили код на <masked>», six cells, resend with cooldown, back link («← Изменить почту» to the registration form with the entered fields kept in the tab, «← Изменить способ» to the login method choice). The co-equal sign-in/reset block, the #175 password replay and the cold-step `/login` routing are removed; `pending-registration.ts` keeps its envelope (volatile memory, single-shot take, TTL) and now feeds only the `registration` payload of the submit. `/login?method=code` preselects the email-code method; `returnTo` is parsed by the existing `parseAccountReturnTarget`. Exact copy and the code-sent state come from the `auth` canvas redraw (#2554).
+
+**Security notes (§10).**
+
+- _Verification code → session is no weaker than login OTP._ Both prove control of the same mailbox with a Zitadel-generated, single-use, six-character code from the same alphabet (36⁶ ≈ 2.2 × 10⁹ — larger than the retired eight-digit space of 10⁸). Guessing is bounded by the EARS-13 per-user (10 / 15 min), per-IP and per-ASN windows on every branch, in addition to Zitadel's own counting where it applies (whether Zitadel counts failed email-verification checks is proven live by #2556, not assumed). The residual difference is lifetime: a verification code lives 3600 s against the login code's 300 s; it is single-use, invalidated by a resend (EARS-25), and the rate limits hold for its whole lifetime.
+- _Enumeration._ Request and submission responses are identical across unknown, verified and unverified identifiers (EARS-16); which code kind a mailbox receives is visible only to the mailbox owner. The submit path equalizes the unknown-identifier failure to the wrong-code failure in timing.
+- _Pre-account takeover (pre-registration squatting)._ EARS-1 creates the account with a password before the address is proven, so an attacker can register a victim's address with an attacker-chosen password. Under this amendment that password never survives the victim's first accepted code: login by code or a cold step invalidates it, a registration-path code replaces it with the victim's own, and the mail never tells an unverified account's owner «Ваш пароль не изменился». The window that remains is the one the baseline already had and cannot close without the mailbox: until the victim proves the address, the attacker can sign in to the unverified, empty account with their own password — it holds none of the victim's data, and the victim's first code ends it (the victim's session, profile and any password are created only after that code; the attacker's existing sessions on that account are revoked by #2556 together with the password invalidation, as EARS-12 does on reset).
+- _Re-registration as a code-spam vector._ The registration form now mails a code to an existing address, so it is throttled per address by the EARS-23 marker and protected by EARS-17 CAPTCHA, like the login-code request it mirrors. On a verified account nothing — password, profile, consent — is written before the code proves the mailbox, an existing password is never replaced, and profile values never overwrite.
+- _Password set on a credential-less account._ Only the mailbox owner, after the code is accepted, can give a congress-created account its first password; this is the same proof EARS-35 already treats as sufficient to mark the address verified.
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

@@ -57,6 +57,25 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the display name is written only if the account had none
 
   @EARS-23 @EARS-41 @happy
+  Scenario: An abandoned registrant who registers again gets the new password, not the abandoned one
+    Given an unverified account for "late@example.org" created by a registration with password "first-pass"
+    When a visitor submits the registration form for "late@example.org" with password "second-pass"
+    Then the mail says the password entered will be saved after the code, not that it is unchanged
+    When the visitor enters the code from that mail on the code step
+    Then email_verified becomes true and a BFF session is established
+    And "second-pass" signs in and "first-pass" does not
+
+  @EARS-41 @failure
+  Scenario: A password set before verification does not survive the owner's first code
+    # Lead security decision 2026-10-02: a squatter who registered the owner's address
+    # with their own password loses it at the owner's first accepted code.
+    Given an unverified account for "victim@example.org" whose password was set by someone else
+    When the mailbox owner requests a sign-in code and enters it
+    Then email_verified becomes true and the owner is signed in
+    And the pre-verification password no longer signs in
+    And every session the account held before the code is revoked
+
+  @EARS-23 @EARS-41 @happy
   Scenario: A password-less congress account that registers gets the entered password after the code
     Given a congress-created account for "guest@example.org" with no credential and an unverified email
     When a visitor submits the registration form for "guest@example.org" with a policy-conforming password
@@ -83,14 +102,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the screen never branches on whether the email was already registered
 
   @EARS-25 @EARS-16 @happy
-  Scenario: Resending the registration verification code is enumeration-resistant
-    # The /verify screen lets a visitor re-request the email code without revealing
-    # whether the identifier exists or is already verified. A code is re-issued only
-    # for an existing, unverified registrant; the response stays identical otherwise.
-    Given a visitor on the existence-agnostic /verify screen requests the verification code be re-sent
+  Scenario: Resending a code is enumeration-resistant and fits the account state
+    # Production amendment 2026-10-02 (#2553): a resend from any code step re-issues
+    # the code that fits the account state for any existing account.
+    Given a visitor on a code step requests the code be re-sent
     When the request reaches the BFF for any identifier
-    Then the response is indistinguishable in status, body, and timing from the unknown or already-verified case
-    And a Zitadel otp_email code is re-issued only if the identifier is an existing, unverified registrant
+    Then the response is indistinguishable in status, body, and timing across unknown, verified and unverified identifiers
+    And an unverified account receives a fresh verification code and a verified account a fresh login code
+    And an unknown identifier receives nothing
     And an otp.sent audit_ledger row is appended only when a code is actually issued
     And the resend is subject to the EARS-13 rate limits and writes no users or consent row
 
@@ -603,6 +622,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the registrant submits a valid verification code
     Then the verification completes and a BFF session is established from the code
     And the registrant is returned to the return target signed in, never routed to /login
+    And the password typed at registration is invalidated, leaving a code-only account until a reset
 
   @EARS-39 @EARS-41 @failure
   Scenario: A refused code keeps the registrant on the verification step

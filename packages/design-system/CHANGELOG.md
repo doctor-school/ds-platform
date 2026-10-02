@@ -1,5 +1,308 @@
 # @ds/design-system
 
+## 5.5.0
+
+### Minor Changes
+
+- [#2338](https://github.com/doctor-school/ds-platform/pull/2338) [`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One sign-up door on both storefronts ([#2027](https://github.com/doctor-school/ds-platform/issues/2027), epic [#2020](https://github.com/doctor-school/ds-platform/issues/2020) wave 1).
+  `@ds/auth-flow/register` owns the `/register` screen — the credential fields, the
+  consent block, the bot-protection challenge and the post-registration confirmation
+  step — and both hosts mount it from their own route file plus host config. The
+  Academy door is now rendered by the package rather than by
+  `apps/portal/app/register/page.tsx`, with no change a signed-in user can see.
+
+  Both doors gain the already-registered visitor's way out, «Уже есть аккаунт?
+  Войти» ([#2331](https://github.com/doctor-school/ds-platform/issues/2331)), which carries the return target forward like every other
+  transition between auth screens; the shared error dictionary now answers a
+  rate-limited (429) or failing (5xx) sign-up with the same sentence on both hosts;
+  and a return target only rides along once the shared guards have revalidated it.
+
+  Consent tiers, the medical-worker declaration and the partner-data item stay host
+  DATA, so each storefront keeps asking exactly what it asked before. The doctor
+  storefront's confirmation step is unchanged in what it does and says — it is now
+  rendered by the package.
+
+  `<RegisterCard>` draws ONE sign-up composition now. The three host-divergence
+  knobs (`submitBlock`, `spacing`, `pendingAffordance`) are gone and the block
+  follows the owner's canvas on both storefronts: no consent-withdrawal sentence
+  stands on the door (the package default `managerNote` is gone; `consentNote`
+  stays a generic slot no host fills), a hairline rule separates the conditions, the
+  read-only «продолжая, вы соглашаетесь…» statement stands after that frame and
+  above the challenge, and the optional opt-in below the submit carries no
+  «необязательно» marker — its position says it. A new `partnerPlateSlot` renders
+  the partner-link notice under the promo field. `<LoginCard>` moves the challenge
+  from the head of the sign-in-code step to directly above the button it protects,
+  as it already stood on the password method. The `Checkbox` box no longer shrinks
+  when its label wraps onto several lines.
+
+  Every auth sentence now has ONE source: the package copy defaults, taken from the
+  owner's auth canvas. A host config states the SET of fields it renders, its routes,
+  endpoints, channels and brand assets — no host words a field any more. The
+  optional `copy` deep-partial override carries exactly one host statement: the
+  Academy's brand panel (eyebrow «Академия Doctor.School», headline «Среда обитания
+  экспертов здравоохранения», sub-copy «Эфиры, программы и сертификация от
+  практикующих экспертов — в одном пространстве.», footer «© Doctor.School.»); the
+  doctor storefront keeps the package brand copy. On the doctor storefront the
+  return-context panel beside the door takes the brand panel's measures: the
+  eyebrow at .14em in the panel's pale blue, the assurance line at 14px on the 1.6
+  line in the same pale blue, capped at 44ch. `AuthFlowBrandCopy.subcopy` is
+  `string | null`, and `<AuthShell>` renders no sub-copy node when its `copy.subcopy`
+  is absent or null. The sign-in password field shows the same canvas `••••••••`
+  placeholder as sign-up on both hosts (new optional
+  `LoginCard` `copy.password.passwordPlaceholder`, package default in auth-flow).
+
+  The sign-up button is LIVE in every state, as the owner's canvas draws it. The
+  disabled submit and the reason line beside it are gone — with them the
+  `RegisterCardProps.unmetPrecondition` prop and the `RegisterCardTestIds.submitReason`
+  test id, both removed from the block's public surface (breaking for any consumer
+  that set them; both storefronts are updated here). Pressing with an access
+  condition still ungranted states it UNDER the row it belongs to — the same
+  sentence as before, now tied to its own checkbox, which turns to the danger tone
+  while the statement stands — and sends no command; granting one condition clears
+  only its own statement, and the optional opt-in never states anything. A host
+  that words a condition its read model carries no statement for says so in the
+  card's error banner instead, so a misconfiguration fails at the door rather than
+  silently at the server.
+
+  The consent block is drawn from the canvas: the access-conditions frame loses its
+  filled header bar for a quiet eyebrow inside a uniform padding, the two
+  conditions are separated by a hairline rule, and every consent label — the
+  marketing opt-in included — is bold in the ink tone above a small quiet help
+  line. `Checkbox` therefore renders its label bold everywhere it is used, and
+  paints its box in the danger tone while the control it wraps is `aria-invalid`.
+
+  The auth card family now renders to the canvas measures on both storefronts: the
+  logo, the card and the processing notice under it share a 440px column (new
+  `--container-auth` token, `max-w-auth`); the title stands 10px above its
+  sub-copy; the badge glyph is 26px and takes the tile's accent in dark mode too;
+  the «Уже есть аккаунт? Войти» line sits 24px under the form instead of 36px; an
+  error-free sign-up card no longer reserves an empty banner gap above the glyph;
+  the invisible bot-protection mount no longer adds a second gap above the submit;
+  the password hint hangs 7px under its field; the processing notice under the card
+  is a left-aligned faint 12/18 line; and the sign-up password field shows the
+  canvas `••••••••` placeholder (new `RegisterCardCopy.passwordPlaceholder`).
+
+- [#2388](https://github.com/doctor-school/ds-platform/pull/2388) [`c754a6d`](https://github.com/doctor-school/ds-platform/commit/c754a6d5a11e8d72ef26d7cc756cc26cafda3977) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One confirmation step on both storefronts ([#2027](https://github.com/doctor-school/ds-platform/issues/2027), epic [#2020](https://github.com/doctor-school/ds-platform/issues/2020) wave 1).
+  `@ds/auth-flow/verify` owns the «Проверьте почту» step — the code field, the
+  resend link with its notice line, the success banner and the «Уже
+  регистрировались?» way out — and both hosts render it: the Academy mounts
+  `@ds/auth-flow/verify/route` from `apps/portal/app/verify/page.tsx`, the doctor
+  storefront renders the same body inline on its registration door. The Academy
+  deep link from the verification mail (`/verify#email=…`) keeps working; a host
+  opts into it with `verify.deepLinkEntry`.
+
+  What a visitor can notice: every failure — a wrong code, a refused resend, a
+  rate-limited (429) or failing (5xx) request — now appears as ONE banner above the
+  title, worded by the shared error dictionary on both hosts; an incomplete code
+  says «Введите код.»; the doctor storefront shows «Код принят — входим…» once the
+  code is accepted and refreshes the page after landing, as the Academy did.
+  The code stays six characters with a letter-capable keyboard.
+
+  `<EmailConfirmCard>` follows the owner's canvas: canvas eyebrows and gaps, the
+  hint and the resend notice at the 13px `caption` step, a hairline rule above the
+  already-registered block, the two actions sharing one
+  wrapping row, and the error plate above the title. New, additive: a `testIds`
+  prop (defaults are the ids the block shipped with) and the exported
+  `EMAIL_CONFIRM_TEST_IDS` / `EmailConfirmCardTestIds`.
+
+- [#2474](https://github.com/doctor-school/ds-platform/pull/2474) [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Мои заявки на Конгресс» on the doctor storefront (046 EARS-4…13, 16, 17, [#2433](https://github.com/doctor-school/ds-platform/issues/2433)):
+  the new shared `@ds/congress-submissions` section at `/account/congress` — the
+  list with status labels and filter, the revision deadline with its countdown,
+  the kind choice (every kind with its own intake line; poster and abstracts not
+  yet startable), the oral talk
+  form with the authors editor and autosave, the send panel with the error summary,
+  consent and confirmation, «Забрать на исправление», «Отозвать» and draft deletion.
+  Change, send and withdrawal times and the
+  autosave stamp are in the viewer's time zone; intake and revision dates stay in
+  МСК. A guest is sent to the login and lands back on the section. The account page
+  shows the row «Мои заявки на Конгресс» for an account registered for the
+  congress. `@ds/design-system`: the account card takes an optional `congressHref`
+  row, and `Link` gains the `muted` and `danger` tones, the `caption` size and the
+  `semibold` weight (the canvas quiet action, 13px/600); `cn()` keeps the
+  `text-lead` size beside a text colour instead of dropping it.
+
+- [#2239](https://github.com/doctor-school/ds-platform/pull/2239) [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2027](https://github.com/doctor-school/ds-platform/issues/2027) — every auth form in the package submits by POST. `<LoginCard>`,
+  `<PasswordRecoveryCard>`, `<RegisterCard>`, `<EmailConfirmCard>` and
+  `<OtpFocusScreen>` render their `<form>` with `method="post"`, so a visitor who
+  presses the button before the bundle hydrates submits natively into the request
+  BODY instead of GET-ing their password, identifier or one-time code into the
+  URL, the browser history and every access log on the way. `action` stays off:
+  the HTML default is the current document URL, which is the path the native
+  submit should use, and a path prop would put a host route inside the design
+  system. No visual delta — the rendered surface is unchanged.
+
+  The auth family is also retuned to the owner's canvas, in RENDERING and not only
+  in words. The sign-up and sign-in cards step their inner padding to 36px, raise
+  the badge tile to 52px with the accent glyph, put the title on its own 26px kegel
+  and drop the footer to the 13px caption; every secondary line of the door — the
+  password hint, the access-conditions eyebrow, the consent-note slot, the consent
+  help and the terms sentence — moves to the faint tone and the half-step kegels
+  the canvas actually draws. Two of those are package defaults rather than auth
+  overrides, because a field is one thing: `Checkbox` states its label at 13.5px on
+  the 1.4 line, and `FormMessage` speaks its helper in the 12px/600 faint voice for
+  every field in the system.
+
+  `FormError` gains a public `variant` prop. `banner` draws the canvas plate an
+  operation-level refusal deserves — a 2px danger frame on the danger tint, the
+  sentence itself at 13px/700 in ink so it is read rather than shouted — while the
+  default `inline` keeps the bare line a field-level failure uses. The plate frame
+  takes the danger text tone, so in dark mode it reads `#E15555` with its glyph, as
+  the canvas draws it; light is unchanged. The sign-in door
+  now reports a refused attempt as that plate, and both of its choice groups are
+  named with the same eyebrow the sign-up door's conditions use.
+
+  New type tokens back the above: `font.size.pill` (11.5px, `text-pill`) and
+  `font.size.title-xl` (26px, `text-title-xl`); the named `font.line-height` tokens
+  are additionally mapped onto Tailwind's `--leading-*` namespace, so
+  `leading-title|label|notice|prose` exist as utilities — previously those tokens
+  drove no utility at all.
+
+  Dark-mode field controls now sit on the surface colour (`bg-card`) instead of
+  the page background, matching every design-source canvas: `Input`, `Textarea`,
+  `NativeSelect` and the `Combobox` control and search field. Light is unchanged
+  (both tokens are white there). An invalid field's frame — `Input`, `Textarea`,
+  `NativeSelect` and the `Combobox` control, hover and press included — takes the
+  danger text tone, so it reads `#E15555` in dark as the canvas draws it; light is
+  byte-identical (both tokens are `#C81E1E` there).
+
+  The auth brand panel takes the canvas measures: a `.95fr 1.05fr` split, the fluid
+  `clamp(40px,4vw,64px)` padding, the eyebrow at .14em in the panel's pale blue, a
+  fluid 30–46px headline on the 1.05 line capped at 16ch (the long Academy headline
+  no longer runs into the padding), the 17px sub-copy at 38ch and the 13px footer
+  in white at 85% — new tokens `text-lead`, `text-panel-headline`,
+  `leading-display`, `tracking-eyebrow|display`, `p-panel`,
+  `max-w-panel-headline|panel-lead`, `primary-surface-soft|footer`. The return-context
+  assurance line on that panel adds `leading-assurance` (1.6) and
+  `max-w-panel-assurance` (44ch).
+
+- [#2405](https://github.com/doctor-school/ds-platform/pull/2405) [`026327e`](https://github.com/doctor-school/ds-platform/commit/026327eb09f34c722b68a6a50e0e2b4a3018003c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - New `Sheet` primitive — a side panel for record inspectors ([#2396](https://github.com/doctor-school/ds-platform/issues/2396)), adopted from
+  official shadcn/ui `sheet` (MIT) on the Radix Dialog substrate and re-skinned to
+  the DS tokens. `SheetContent` docks right (or left) at a third (`md`) or half
+  (`lg`) of the viewport; from the `lg` breakpoint it is non-modal so the list
+  behind stays visible, scrollable and clickable, and below `lg` it becomes a modal
+  full cover with a focus trap. Esc and × close it; `onNavigate` pages to the
+  previous/next record on ↑/↓ unless focus is in a form field. `SheetBody` is the
+  only scrolling region and `SheetFooter` holds the actions, so one panel hosts
+  both a read card and an entry form.
+
+- [#2198](https://github.com/doctor-school/ds-platform/pull/2198) [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One shared storefront shell for both storefronts ([#2180](https://github.com/doctor-school/ds-platform/issues/2180)). The topbar, header,
+  footer and theme control now live in `@ds/storefront-shell`, built from the
+  owner-approved `design-source/ds-shell.dc.html` canvas, and each host supplies
+  values only: a `lib/shell-config.ts` config object and an `auth: ShellAuthState`
+  DATA prop it maps its own session onto — the cluster's markup, geometry and press
+  chain are the package's, so neither host can draw its own chip. The Doctor showcase mounts the pair from its `(storefront)` layout; the
+  Academy mounts the header through its three `@chrome` slots and the footer —
+  new to that host, 008 EARS-14 — from the root layout. The six host twins
+  (`app-shell-header`, `header-user-cluster`, `storefront-header`,
+  `storefront-footer`, and both `theme-toggle` copies) are deleted, closing the
+  2026-09-03 duplicated-theme-toggle debt line.
+
+  `minor` on all four: `@ds/storefront-shell` is net-new to `main` (additive),
+  both apps gain shell surface rather than losing a capability, and
+  `@ds/design-system` gains five additive tokens for the canvas-exact chrome —
+  `--font-size-topbar` / `--font-letter-spacing-topbar` (the 9px / .22em BBM
+  micro-band), `--container-search` (the 440px desktop search cap) and
+  `--font-size-chip` / `--spacing-chip-x` (the 13.5px / 22px header-chip geometry).
+  The `on-primary` Button variant IS that chip now: it absorbs the deleted
+  `HEADER_CHIP_BASE` constant, loses its `border-2` (the canvas paints none) and
+  gains the `chip` and `avatar` sizes, so the chip changes in ONE place for both
+  storefronts. Every other `on-primary` call site loses the border with it. Three
+  visible deltas ride along — the storefront footer appears on every non-auth,
+  non-room Academy route; the guest control is the ONE «Войти / Регистрация»
+  chip of the canvas on BOTH hosts (the Academy label was «Войти», the Doctor
+  showcase drew a «Войти» + «Регистрация» pair), one cluster at every width
+  instead of a separate entry inside the mobile `≡` menu (017 EARS-1 forbids a
+  second cluster in the DOM); the Doctor header search stops at the canvas cap
+  instead of spanning the bar; and the BBM topbar's micro type moves onto the band
+  itself, so its text is centred in the band rather than riding the body's
+  line-height strut.
+
+  The BBM topbar keeps the contrast the canvas paints; that is an owner-accepted
+  a11y exception recorded as Issue [#2189](https://github.com/doctor-school/ds-platform/issues/2189) and carried in the e2e axe scans as a
+  single leaf-scoped node exclusion.
+
+  The chrome's look lives in the primitives, not at the shell's call sites:
+  `@ds/design-system` gains `Input variant="header"` (the navy-band search field),
+  `Link` `tone="header-nav" | "neutral"`, `variant="wrapper" | "mobile-nav-row"`,
+  `size="sm"` and `weight="strong"`, `Button tone="header"`, and a new
+  `DisclosureSummary` primitive (the `≡` control as the on-header chip). Every
+  value is the canvas value, moved — the rendered result is unchanged — and the
+  four shell files are consequently NOT on the `local/no-primitive-style-override`
+  legacy baseline, which now stands at 143 hits across 23 files.
+
+### Patch Changes
+
+- [#2408](https://github.com/doctor-school/ds-platform/pull/2408) [`247b352`](https://github.com/doctor-school/ds-platform/commit/247b3524c9addd7e7ebf83a19ac8615a79b3e306) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One password-recovery flow on both storefronts ([#2027](https://github.com/doctor-school/ds-platform/issues/2027), epic [#2020](https://github.com/doctor-school/ds-platform/issues/2020) wave 1).
+  `@ds/auth-flow/reset` owns both stages of «Сброс пароля» — the identifier step
+  behind the invisible challenge, the code and new-password step with its reveal
+  toggle, the resend with its neutral notice, «Начать заново» and the way back to
+  sign-in — and both hosts mount it from their `/reset` route through
+  `@ds/auth-flow/reset/route`. A signed-in doctor can still open `/reset` (the
+  cabinet «Сменить пароль» entry), and a completed reset still lands signed in on
+  this host's account page — or on the account or эфир page the visitor arrived
+  carrying; any other carried page, an эфир room included, lands on the account
+  page.
+
+  What a visitor can notice: the words now follow the owner's canvas on both
+  hosts — «Сброс пароля» / «Новый пароль», «Отправить код сброса», «Задать новый
+  пароль», «← Вернуться ко входу» and the conditional «Если для … есть аккаунт, мы
+  повторно отправили код.» (the doctor storefront used its own wording before);
+  the card shows the canvas key glyph; the doctor storefront's new-password field
+  gains the show-password toggle the Academy already had; and a reset that
+  started from an эфир on the doctor storefront now completes that registration
+  before landing, as sign-in does. The doctor storefront, which serves no SMS,
+  accepts an email address in the identifier box. The code field is unchanged.
+  A refused request, a refused code or password and a refused resend are now
+  said in the one error plate above the key glyph, as on the other sign-in
+  screens; asking for a new code withdraws a standing «Код не подошёл или пароль
+  отклонён.».
+
+- [#2513](https://github.com/doctor-school/ds-platform/pull/2513) [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress posters on the author's submissions API (046 EARS-18…20, [#2434](https://github.com/doctor-school/ds-platform/issues/2434)): a
+  poster draft carries the title, the authors in publication order with no
+  presenting mark, the goal (1–1000) and the content (1–3000), with no file
+  field. Migration 0045 adds the nullable `users.birth_date`, written only by its
+  holder through the new `PUT /v1/me/birth-date` and shown back to them in the
+  section (`birthDate`). A poster draft is created without a birth date; sending
+  it without one is refused (`field-invalid` on `birthDate`). A kind with an age
+  limit refuses an account whose full years on the event's Moscow start day
+  reach it — at creation when a birth date is stored, and at send — with an
+  `age-limit` refusal carrying `{maxAgeYears, eventStartDate, age}` that the
+  cabinet reads as «Постерные доклады принимают от участников младше {N} лет на
+  дату начала Конгресса — {дата}. На эту дату вам будет {возраст} лет.». The
+  section's kinds carry `maxAgeYears`; other kinds are unaffected.
+
+  The cabinet offers the poster: the kind choice creates the draft. The poster
+  form holds the topic, the authors in publication order (no speaker choice, no
+  on-site line), «Цель» and «Содержание», and — until the holder has an earlier
+  sent poster — the birth date («Дата рождения», the DS date control: a calendar
+  day from 1900-01-01 up to today in Moscow, «Спрашиваем один раз — перед первым
+  постером.»), written on blur, with «Укажите дату рождения» when it is empty or
+  out of that range at send. A holder at or above the age limit sees the
+  refusal on the poster card with no start and on a poster draft in place of the
+  send; the birth date stays editable there for correction.
+
+  A failed send keeps «Текст заявки сохранён.» under the refusal also when the
+  refusal is tied to no field (limit, revision deadline, closed intake).
+
+  `@ds/design-system`: the theme root declares `color-scheme` — `light` on
+  `:root`, `dark` under `.dark` — so native control parts (the date picker
+  indicator, scrollbars, autofill, select chrome) follow the resolved theme; in
+  dark the calendar glyph of a date input was a dark icon on the near-black field.
+  Embedded frames keep the UA scheme (`iframe { color-scheme: normal }`): per
+  CSS Color Adjust 1 §2.4 a frame whose scheme differs from its document's gets
+  an opaque Canvas backdrop, so the inherited `dark` turned the light SmartCaptcha
+  challenge into a solid light box over a dark page.
+
+  A cabinet field's error line is referenced by its control's
+  `aria-describedby` (topic, «Цель»/«Содержание» and the other text fields, the
+  birth date with its hint).
+
+- [#2361](https://github.com/doctor-school/ds-platform/pull/2361) [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `Table`: the horizontal scroll wrapper becomes a keyboard-focusable named region (`role="region"`, `tabIndex=0`, `aria-label` from the new `regionLabel` prop, default «Таблица») only while the table overflows, with a token focus ring. `DataTable` lays the grid out with `table-fixed` so its declared column widths and truncation finally apply, and names the region with its caption. A `DataTable` whose every column declares an ABSOLUTE width (`rem`/`px`/`em`/`ch`) gets a table `min-width` equal to their sum and single-line (`whitespace-nowrap`) headers, so a grid wider than its frame scrolls inside that focusable region instead of squeezing its columns; the percent-width contract is unchanged.
+
+- [#2231](https://github.com/doctor-school/ds-platform/pull/2231) [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Pin the shared storefront footer to the viewport bottom on short pages of both storefronts ([#2228](https://github.com/doctor-school/ds-platform/issues/2228)): the Academy root layout becomes a min-full-height flex column with the route content growing, and the cabinet screens / profile block stop claiming a full viewport of their own so the footer follows the content instead of dropping a viewport below the fold.
+- Updated dependencies [[`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449), [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299), [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a), [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e)]:
+  - @ds/schemas@7.0.0
+
 ## 5.4.0
 
 ### Minor Changes

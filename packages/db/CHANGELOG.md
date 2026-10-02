@@ -1,5 +1,214 @@
 # @ds/db
 
+## 3.1.0
+
+### Minor Changes
+
+- [#2451](https://github.com/doctor-school/ds-platform/pull/2451) [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A platform administrator edits an event's congress intake settings in the admin
+  (046 EARS-2/EARS-3, [#2432](https://github.com/doctor-school/ds-platform/issues/2432)): «Приём материалов Конгресса» on the event detail
+  opens `/events/:id/congress-intake` — registration address, first-author rule,
+  last revision day, and per kind (oral, poster, abstracts) the opening day, the
+  last day, the limit and the age limit, as Moscow calendar days. An event
+  without settings opens on the product defaults; a server refusal lands on its
+  field in Russian. The golden seed configures the upcoming эфир as a congress
+  (oral and poster open, abstracts announced).
+
+- [#2390](https://github.com/doctor-school/ds-platform/pull/2390) [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress desk registrar is bound to one event (044 EARS-38, [#2384](https://github.com/doctor-school/ds-platform/issues/2384)). The new
+  `event_role_grants` table (migration 0039, audited by the 010 trigger) binds a
+  user's `event-registrar` role to exactly one event; the roster route
+  `GET /v1/admin/events/:idOrSlug/roster` becomes an `auth_check: policy` row whose
+  handler admits a registrar only for the bound event — another event, an unknown
+  one, or a registrar with no binding row is refused with 403 — while the platform
+  administrator is not limited. `GET /v1/admin/auth/session` now also returns
+  `eventGrants` (role, event id, event slug) for the admin navigation. `@ds/db`
+  exports `findEventGrant` / `listEventGrantsBySub`; until the grants screen
+  ([#2378](https://github.com/doctor-school/ds-platform/issues/2378)) the tech lead inserts a binding by hand (runbook in
+  `apps/api/src/registration/README.md`).
+
+- [#2402](https://github.com/doctor-school/ds-platform/pull/2402) [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress registrar can mark a participant present per congress day (044
+  EARS-34, [#2381](https://github.com/doctor-school/ds-platform/issues/2381), backend layer). New route
+  `PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day`
+  with body `{ present: boolean }` (`check: policy`, bound to the registrar's event
+  per EARS-38, live revalidation): an idempotent mark/clear whose no-op writes no
+  ledger row; a day outside the new REQUIRED `CONGRESS_SIGNUP_EVENT_DAYS` setting is
+  422 `CONGRESS_DAY_UNKNOWN`. Migration 0041 adds the audited
+  `registration_attendance(registration_id, day, present)` table (no author/time
+  columns — the 010 ledger holds who and when). The roster read gains
+  `congressDays`, per-row `attendance`, and the `attendanceDay` + `present`
+  (`marked` | `unmarked`) filter. `@ds/db` exports `registrationAttendance`;
+  `@ds/schemas` exports the `CongressAttendance*` schemas; `@ds/api-client` is the
+  regenerated SDK.
+
+- [#2395](https://github.com/doctor-school/ds-platform/pull/2395) [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A congress registrar can enter a walk-in participant at the desk (044 EARS-35,
+  [#2382](https://github.com/doctor-school/ds-platform/issues/2382)). The new route `POST /v1/admin/events/:idOrSlug/registrations`
+  (`check: policy`, bound to the registrar's event per EARS-38; the platform
+  administrator is not limited) runs the SAME congress intake use-case as the site
+  form — one credential-less account per email, one registration per pair, one
+  consent per version, the same confirmation email — without the captcha, the rate
+  limit and the registration window, and requires `paperConsent: true`. It answers
+  `{ status: "accepted" | "existing", registrationId }` and never whether the
+  account existed before. Migration 0040 adds `registrations.intake_origin`
+  (`site` | `desk` | `platform`, backfilled `site` where answers exist and
+  `platform` otherwise, then `NOT NULL DEFAULT 'platform'`) and the nullable
+  `consent_records.origin` (`paper` for a desk-recorded consent). `@ds/db` exports
+  `IntakeOrigin` / `ConsentOrigin`; `@ds/schemas` exports
+  `CongressDeskRegistrationRequestSchema` / `CongressDeskRegistrationResponseSchema`;
+  `@ds/api-client` is the regenerated SDK.
+
+- [#2334](https://github.com/doctor-school/ds-platform/pull/2334) [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2296](https://github.com/doctor-school/ds-platform/issues/2296) — the 044 congress sign-up intake contract and the registration answers
+  column.
+
+  New `packages/schemas/src/congress/`: `CongressSignUpRequestSchema` (EARS-3) —
+  surname, first name, contact phone, email, specialty, workplace, city, region
+  and the personal-data consent required, patronymic optional. Specialty is a
+  `specialties_minzdrav` uuid and nothing else: the reserved «Другое / не
+  медицинский работник» option is an ordinary row of that table, so free text is
+  structurally unrepresentable rather than merely refused. The consent is
+  `z.literal(true)` — a precondition of the command, not a field that can arrive
+  `false` — and its version is server-stamped, so the client sends no version at
+  all. The captcha token rides the body optionally, mirroring
+  `DoctorRegisterRequestSchema` and how `BotProtectionGuard` actually reads it
+  (header first, body fallback, no-op while the provider is disabled).
+
+  `normaliseContactPhone` (EARS-29) applies the same rule the client-side input
+  mask already applies — digits only, a domestic-length leading `8` rewritten to
+  the `7` country code, capped at the E.164 maximum — so the server and the form
+  agree on what one phone number is. `CongressSignUpAnswersSchema` is the stored
+  shape: the same answers with the phone kept twice, as typed and normalised, and
+  neither the consent flag nor the captcha token. `toCongressSignUpAnswers` is its
+  only assembler, so no call site can hand-build the column value.
+
+  `registrations` gains a nullable `answers` jsonb column (EARS-5, migration
+  `0037_registration_answers`). Nullable is the decision: `null` means a
+  platform-origin registration — a signed-in doctor registering from the feed
+  submits no answers, and the roster renders that row from the account's own
+  profile instead.
+
+- [#2451](https://github.com/doctor-school/ds-platform/pull/2451) [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A platform administrator can read and save the congress intake settings of an
+  event (046 EARS-1…EARS-3, [#2432](https://github.com/doctor-school/ds-platform/issues/2432), backend layer). New routes
+  `GET` / `PUT /v1/admin/events/:id/congress-intake-settings` (`platform_admin`,
+  fast-path; the `PUT` revalidates live): per event the registration address, the
+  first-author rule; per kind (`oral`, `poster`,
+  `abstract`) the opening day, the last day, the submit limit and the age limit.
+  Days are Moscow calendar days, stored as 00:00 Moscow of the opening day and of
+  the day after each last day. An event without settings reads
+  `configured: false` with the product defaults. An opening without a last day, a
+  last day before the opening, a limit below 1 and an age limit outside 18…99 are 400. Migration 0042 adds the audited `congress_submission_settings` and
+  `congress_submission_kind_settings` tables. `@ds/schemas` exports the
+  `CongressIntakeSettings*` contract, the Moscow day↔instant helpers,
+  `isCongressKindIntakeOpen`; `@ds/api-client` is
+  the regenerated SDK.
+
+- [#2474](https://github.com/doctor-school/ds-platform/pull/2474) [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The author's congress submissions API (046 EARS-5…13, 16, 17, [#2433](https://github.com/doctor-school/ds-platform/issues/2433)):
+  `/v1/me/congress-submissions` lists the section for an event, creates an oral
+  talk draft with author 1 from the 044 registration answers, autosaves it, sends
+  it through one cascade (registration, kind window, field set, limit over every
+  sent status, submission consent), takes it back to a draft or withdraws it to
+  «Отозвана», resends a `needs_revision` talk before its revision deadline
+  (`revision-closed` after it; a new receipt, never counted against the limit a
+  second time), and deletes a draft by retiring the row. Migration 0043 adds
+  `congress_submissions` with `revision_due_at`; migration 0044 adds a partial
+  unique index keeping one `congress-submission-personal-data` consent row per
+  account and version. The submission consent is the organising committee's own
+  `@ds/legal-content` document `consent-congress-submissions` (one consent for
+  every kind, abstracts publication included); its version is stamped from that
+  file — edition plus sha256 of its text — independently of the 044
+  `CONGRESS_SIGNUP_CONSENT_VERSION`, so a new edition asks every author again.
+  Each submission carries
+  `statusChangedAt`, the date its committee comment is shown with.
+
+- [#2513](https://github.com/doctor-school/ds-platform/pull/2513) [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Congress posters on the author's submissions API (046 EARS-18…20, [#2434](https://github.com/doctor-school/ds-platform/issues/2434)): a
+  poster draft carries the title, the authors in publication order with no
+  presenting mark, the goal (1–1000) and the content (1–3000), with no file
+  field. Migration 0045 adds the nullable `users.birth_date`, written only by its
+  holder through the new `PUT /v1/me/birth-date` and shown back to them in the
+  section (`birthDate`). A poster draft is created without a birth date; sending
+  it without one is refused (`field-invalid` on `birthDate`). A kind with an age
+  limit refuses an account whose full years on the event's Moscow start day
+  reach it — at creation when a birth date is stored, and at send — with an
+  `age-limit` refusal carrying `{maxAgeYears, eventStartDate, age}` that the
+  cabinet reads as «Постерные доклады принимают от участников младше {N} лет на
+  дату начала Конгресса — {дата}. На эту дату вам будет {возраст} лет.». The
+  section's kinds carry `maxAgeYears`; other kinds are unaffected.
+
+  The cabinet offers the poster: the kind choice creates the draft. The poster
+  form holds the topic, the authors in publication order (no speaker choice, no
+  on-site line), «Цель» and «Содержание», and — until the holder has an earlier
+  sent poster — the birth date («Дата рождения», the DS date control: a calendar
+  day from 1900-01-01 up to today in Moscow, «Спрашиваем один раз — перед первым
+  постером.»), written on blur, with «Укажите дату рождения» when it is empty or
+  out of that range at send. A holder at or above the age limit sees the
+  refusal on the poster card with no start and on a poster draft in place of the
+  send; the birth date stays editable there for correction.
+
+  A failed send keeps «Текст заявки сохранён.» under the refusal also when the
+  refusal is tied to no field (limit, revision deadline, closed intake).
+
+  `@ds/design-system`: the theme root declares `color-scheme` — `light` on
+  `:root`, `dark` under `.dark` — so native control parts (the date picker
+  indicator, scrollbars, autofill, select chrome) follow the resolved theme; in
+  dark the calendar glyph of a date input was a dark icon on the near-black field.
+  Embedded frames keep the UA scheme (`iframe { color-scheme: normal }`): per
+  CSS Color Adjust 1 §2.4 a frame whose scheme differs from its document's gets
+  an opaque Canvas backdrop, so the inherited `dark` turned the light SmartCaptcha
+  challenge into a solid light box over a dark page.
+
+  A cabinet field's error line is referenced by its control's
+  `aria-describedby` (topic, «Цель»/«Содержание» and the other text fields, the
+  birth date with its hint).
+
+- [#2088](https://github.com/doctor-school/ds-platform/pull/2088) [`390c917`](https://github.com/doctor-school/ds-platform/commit/390c9178288cc3737efbad87ba9ee1dbe5289d6b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2063](https://github.com/doctor-school/ds-platform/issues/2063) — `@ds/db` gains the golden dataset and its seed (`src/seed/golden`), the
+  deterministic fixture the staging regression contour restores from.
+
+  Every identity is pinned: fixed UUIDs (`goldenUuid`) and a typed `golden`
+  catalogue of the entities scenarios address by name
+  (`golden.events.upcoming.slug`, `golden.doctors.verifiedCardiologist`, …).
+  Timestamps are derived from one «now» that defaults to the seed run time — so an
+  «upcoming» event stays upcoming on a stand whose apps read the real clock — with
+  `GOLDEN_NOW` as the explicit pin for the unit suite and the drift check; the
+  set-once publication instants (`first_published_at`) are excluded from the
+  upsert's update set and keep the value of the first write. `seedGolden` upserts
+  the whole set in one transaction keyed on those ids, so a second run under the
+  same pin rewrites the same values into the same rows and changes nothing
+  observable; it refuses to run when a golden IdP account's subject is missing
+  rather than inventing one.
+
+  New scripts: `pnpm seed:golden` (fills the database `DATABASE_URL` points at) and
+  `pnpm staging:golden-db` (`tools/staging/golden-db.mjs` — builds `ds_golden_next`,
+  migrates, fills, then rotates it into `ds_golden` and keeps one `ds_golden_prev`;
+  it never migrates the live template in place).
+
+- [#2216](https://github.com/doctor-school/ds-platform/pull/2216) [`640a608`](https://github.com/doctor-school/ds-platform/commit/640a60846ef16544d4bf4e61d4d22db6e6d53ba1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - [#2213](https://github.com/doctor-school/ds-platform/issues/2213) — the golden dataset gains every remaining admin family and the targeting
+  chain that carries an эфир to a doctor.
+
+  `taxonomy.ts` is a new authored catalogue: 41 directions (38 `published`, 2
+  `draft`, 1 `retired`), 14 partners across the same three states, and 77 weighted
+  adjacency edges between the published directions. The 118 `Раздел I` specialties
+  of the Минздрав book are PARTITIONED over those directions, and the
+  `event_directions` walk sweeps the published directions contiguously, so at any
+  pin a doctor who picks any specialty of the book reaches an upcoming published
+  эфир — the invariant a feed that renders empty behind healthy-looking counts
+  violates. `project_experts` and `project_partners` complete the admin nav: one
+  active curator per project, at most one primary partner.
+
+  New exports: the `taxonomy.ts` catalogue, `resolveDirectionSpecialtyRows`
+  (maps authored specialty names onto the seeded book's ids and fails loudly on a
+  name it does not carry), `goldenDirectionId`, `goldenPartnerId`,
+  `partnerLogoKey` / `ordinalFromPartnerLogoKey`, `renderPartnerLogoSvg` and
+  `PARTNER_LOGO_CONTENT_TYPE`. Every partner row now names a logo object, and the
+  media plan generates it: a deterministic inline-SVG wordmark derived from the
+  partner's own title and ordinal, written `if-absent` like a committed portrait
+  because nothing in it moves with the pin.
+
+  `GOLDEN_SEED_ORDER` writes the taxonomy parents before every link that
+  references them, and the referential check covers the nine new FK columns.
+
+### Patch Changes
+
+- [#2354](https://github.com/doctor-school/ds-platform/pull/2354) [`33d4899`](https://github.com/doctor-school/ds-platform/commit/33d4899eb80239139650707795fab82fc8be84e9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add `event-registrar` to the API coarse-role vocabulary (044 EARS-17, [#2310](https://github.com/doctor-school/ds-platform/issues/2310)): the congress registrar is authorized from the Zitadel project-roles claim like every other role and only mirrored into `users.role`, the dev-stand/staging IdP converge seeds the project role key by default, and the golden IdP contract can declare it. No endpoint names the role yet — the authorization matrix is unchanged.
+
+- [#2461](https://github.com/doctor-school/ds-platform/pull/2461) [`2886d85`](https://github.com/doctor-school/ds-platform/commit/2886d856bdb3e594c42940e936fd17aa762fde57) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Staff accounts are users ([#2456](https://github.com/doctor-school/ds-platform/issues/2456)): the account endpoints (`GET /v1/me/profile`, `GET`/`PUT /v1/me/display-name`) serve the visitor and platform-administrator roles (a registrar-only principal stays refused, 044 EARS-19), so a staff session opens its own profile and signs out from it instead of hitting the «Не удалось загрузить профиль» frame. The `users.role` mirror now follows the session's project-roles claim on every signed-in request (any staff role ⇒ that staff role, else `doctor_guest`), and the participant queries — the storefront sign-up count, the roster read model, the registrar's roster page (rows and total), the live room population, its expiry timer and the derived presence minutes — leave staff accounts out. Staff are onboarded with `doctor_guest` + `platform_admin` (runbook step 5; the golden admin and its stage mirror carry both).
+
 ## 3.0.0
 
 ### Major Changes

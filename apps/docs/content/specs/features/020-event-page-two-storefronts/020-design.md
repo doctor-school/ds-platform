@@ -21,14 +21,14 @@ graph TD
   DEvent --> Core["shared event-page core: EventPageView + lifecycle + ParticipationCta + composed page unit"]
   AEvent --> Core
   Feed019["019 feed / WebinarCard — #d-events"] --> DEvent
-  Core --> Open["open part: kicker, МСК time, description, programme, teaser, speakers, school, chips, НМО badge, «Вокруг события»"]
+  Core --> Open["open part: kicker, start time with its zone label (004 EARS-12), description, programme, teaser, speakers, school, chips, НМО badge, «Вокруг события»"]
   Core --> Sticky["F-020-1 А right column: sticky sign-up card ONLY — conditions line + one CTA + sign-up proof"]
   Core --> Vedet["«Ведёт» speaker card — left flow, scrolls away"]
   Core --> Fmt["format block — the only format-varying part (LD-4)"]
   Sticky --> CTA021["cta.action = register → feature 021 registration on the SAME host"]
   CTA021 --> Back["return to this exact URL incl. mode tab, intent resumed (LD-9)"]
   Sticky --> Room["cta.action = enter-room → /events/[slug]/room — thin apps/doctor route over packages/room (#1722)"]
-  Sticky --> Mine["registered state → «Вы записаны» statement only; cancel / calendar / reminder / «Мои события» link deferred to wave 2 (#2040)"]
+  Sticky --> Mine["registered state → «Вы записаны» + add to calendar (005 EARS-14); cancel / reminder / «Мои события» link deferred to wave 2 (#2040)"]
   Fmt --> Online["kind = online: room block + when the room opens"]
   Fmt --> Offline["kind = offline: address, map, «как добраться», seats"]
   Fmt --> Hybrid["kind = hybrid: two tabs «очно / онлайн», mode=... in the URL (F-020-2 Б)"]
@@ -80,7 +80,7 @@ sequenceDiagram
   R->>API: re-read with the session
   API->>P: resolve(lifecycle, registration=held, format, seatsLeft)
   P-->>API: cta { action: 'registered' }
-  R-->>G: «Вы записаны» statement only — no other control; cancel / calendar / «Мои события» wave 2, #2040 (EARS-6)
+  R-->>G: «Вы записаны» + add to calendar (005 EARS-14) — no other control; cancel / «Мои события» wave 2, #2040 (EARS-6)
 
   Note over R006: эфир starts — RoomOpened
   R->>API: re-read
@@ -214,14 +214,14 @@ The two hosts differ only in their paths. A caller who is not signed in is sent 
 
 Seven product surfaces are postponed, and each renders **nothing at all** — no disabled control, no empty labelled box, no «скоро» marker. Their release-3 proof is an absence assertion in `020-scenarios.feature`, and each carries its own tracked Issue on the 020 parent.
 
-| Deferred                                                                           | Clause  | Waits on                                                                                 | Release-3 render                                              |
-| ---------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Points balance, shortfall paths, silent advance, accrual                           | EARS-12 | feature 025 (no spec, no Issues yet)                                                     | the Pul cost parameter only; zero reads «бесплатно для врача» |
-| Live-эфир interaction — questions, polls, vote, reminders                          | EARS-13 | feature 006 channel + 040 / 024 marking                                                  | nothing in any live render                                    |
-| НМО check-in surface and outcome statement                                         | EARS-14 | feature 038                                                                              | НМО as a badge and a conditions-line value only               |
-| Ticket and its QR                                                                  | EARS-15 | features 022 and 038                                                                     | address, map, «как добраться», seats — nothing else           |
-| Post-event rating, review and F-020-4 А mini-survey                                | EARS-16 | wave 2 in the decided F-020-4 А shape                                                    | the 014 recording and materials only                          |
-| Event-level partner link                                                           | EARS-17 | feature 030 + 021's attribution clause                                                   | no attribution element, no marking field                      |
-| Registered-card cancel, add-to-calendar, pre-start reminder and «Мои события» link | EARS-6  | feature 005's wave-2 cancellation and its notifications, a calendar Stage A, feature 022 | the «Вы записаны» statement only — no other control           |
+| Deferred                                                          | Clause  | Waits on                                                             | Release-3 render                                                               |
+| ----------------------------------------------------------------- | ------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Points balance, shortfall paths, silent advance, accrual          | EARS-12 | feature 025 (no spec, no Issues yet)                                 | the Pul cost parameter only; zero reads «бесплатно для врача»                  |
+| Live-эфир interaction — questions, polls, vote, reminders         | EARS-13 | feature 006 channel + 040 / 024 marking                              | nothing in any live render                                                     |
+| НМО check-in surface and outcome statement                        | EARS-14 | feature 038                                                          | НМО as a badge and a conditions-line value only                                |
+| Ticket and its QR                                                 | EARS-15 | features 022 and 038                                                 | address, map, «как добраться», seats — nothing else                            |
+| Post-event rating, review and F-020-4 А mini-survey               | EARS-16 | wave 2 in the decided F-020-4 А shape                                | the 014 recording and materials only                                           |
+| Event-level partner link                                          | EARS-17 | feature 030 + 021's attribution clause                               | no attribution element, no marking field                                       |
+| Registered-card cancel, pre-start reminder and «Мои события» link | EARS-6  | feature 005's wave-2 cancellation and its notifications, feature 022 | the «Вы записаны» statement + add to calendar (005 EARS-14) — no other control |
 
-The EARS-6 row is the deepest cut of the seven: release 3 ships the registered card at parity with what the Academy renders today (D-4) — the «Вы записаны» statement and nothing else. Cancellation waits on feature 005's wave-2 cancellation vertical and its notifications, the calendar affordance owes its own Stage A, no scheduling capability exists in the platform to back a reminder, and «Мои события» waits on feature 022; all four are tracked under [#2040](https://github.com/doctor-school/ds-platform/issues/2040) and promised nowhere on the page.
+The EARS-6 row is the deepest cut of the seven: release 3 ships the registered card at parity with what the Academy renders today (D-4) — the «Вы записаны» statement and the add-to-calendar control of 005 EARS-14 (owner decision 2026-10-02, [#2537](https://github.com/doctor-school/ds-platform/issues/2537)), mounted from `@ds/events-storefront/ui` exactly as on the Academy. Cancellation waits on feature 005's wave-2 cancellation vertical and its notifications, no scheduling capability exists in the platform to back a reminder, and «Мои события» waits on feature 022; all three are tracked under [#2040](https://github.com/doctor-school/ds-platform/issues/2040) and promised nowhere on the page.

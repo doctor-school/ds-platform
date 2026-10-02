@@ -16,6 +16,7 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Given the golden upcoming broadcast is publicly readable
       When the visitor opens "/webinars"
       Then the public listing is server-rendered with heading "Расписание эфиров"
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
       And the golden upcoming card shows its title, school, specialties, speaker and Moscow date and time
       When the visitor activates the golden upcoming card
       Then the visitor lands on the golden event page showing its matching title
@@ -26,6 +27,7 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Given the portal serves the public webinar surfaces on its configured origin
       And the public event read endpoints require no authentication
       And the event read model is seeded with events in each lifecycle state
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
       And all times are presented in Europe/Moscow labeled МСК
 
     # --- Public event page (US-1, US-2, US-5) ---
@@ -41,6 +43,7 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
     Scenario: The event page carries the complete decision set
       Given a published event with speakers, specialties, partners, and a program PDF
       When a visitor opens the event page
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
       Then the page shows the title, school/series, start date and start time labeled МСК, description, speakers with credentials, target specialty chips, and backing partners
       And a downloadable program PDF link is present
 
@@ -115,6 +118,7 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Given several published events with future air dates and some past, draft, and archived events
       When a visitor opens the upcoming-broadcasts listing
       Then only published or live future-dated events are listed, ordered nearest air date first
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
       And each card shows date and time (МСК), title, school/series, specialties, and speakers
       And past, draft, and archived events are absent
 
@@ -201,6 +205,7 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
       Then no draft/archived-as-active body is returned
       And the projection carries no operator, commercial, or registrant-PII field
 
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
     @EARS-12 @happy
     Scenario: Times render in МСК regardless of the viewer's timezone
       Given a viewer whose browser timezone is not Europe/Moscow
@@ -221,3 +226,41 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
         | desktop    | dark  |
         | mobile     | light |
         | mobile     | dark  |
+
+  Rule: Amendment 2026-10-02 (#2537) — online and hybrid events read in the viewer's timezone; offline events keep МСК
+
+    @EARS-12 @happy
+    Scenario: An online event reads in the viewer's zone after hydration
+      Given an online event starting at 19:00 МСК
+      And a viewer whose browser timezone is Asia/Yekaterinburg
+      When the viewer opens the event page
+      Then the server-rendered page shows the start as "19:00 МСК"
+      And after hydration the page shows the start as "21:00 GMT+5" without a layout shift
+
+    @EARS-12 @happy
+    Scenario: A Moscow-time viewer sees МСК on an online event
+      Given an online event starting at 19:00 МСК
+      And a viewer whose browser timezone is Europe/Moscow
+      When the viewer opens the event page
+      Then the start reads "19:00 МСК" before and after hydration
+
+    @EARS-12 @happy
+    Scenario: An offline event keeps МСК for every viewer
+      Given an offline event starting at 19:00 МСК
+      And a viewer whose browser timezone is Asia/Yekaterinburg
+      When the viewer opens the event page and the listing
+      Then the start reads "19:00 МСК" on both surfaces
+
+    @EARS-12 @happy
+    Scenario: A mixed week list groups each event under the day it shows
+      Given an online event and an offline event, both starting at 01:00 МСК on 15 October
+      And a viewer whose browser timezone is Europe/London
+      When the viewer opens the week list
+      Then the online event is grouped under 14 October and reads "23:00 GMT+1"
+      And the offline event is grouped under 15 October and reads "01:00 МСК"
+
+    @EARS-12 @failure
+    Scenario: The month read rejects an unknown timezone
+      Given the public month-range read
+      When a caller requests a month with the zone parameter "Mars/Olympus"
+      Then the read answers 400 and no events are returned

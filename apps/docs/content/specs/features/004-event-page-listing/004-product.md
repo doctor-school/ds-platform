@@ -19,7 +19,7 @@ The public face of a webinar: an event page that any visitor can read **without 
 ## User stories
 
 - **US-1** — As a **doctor**, I open a direct event link a sponsor sent me and immediately see what the webinar is about, when it airs, and who speaks — without logging in or hitting any wall.
-- **US-2** — As a **doctor**, I see on the event page the date and time (MSK), the speakers, a downloadable program (PDF), the target specialties, and the partners backing the event, so I can judge relevance in under a minute.
+- **US-2** — As a **doctor**, I see on the event page the date and time (MSK), the speakers, a downloadable program (PDF), the target specialties, and the partners backing the event, so I can judge relevance in under a minute. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](./004-requirements-en.md).]**
 - **US-3** — As a **doctor**, I see one clear «Участвовать» action on the event page that takes me into registration (through login/signup if I'm a guest).
 - **US-4** — As a **doctor**, I open an upcoming-broadcasts listing and scan the nearest webinars (date/time, title, school/series, specialties, speakers), so I can find a relevant one even without a direct link.
 - **US-5** — As a **pharma sponsor**, the event link I distribute is stable and publicly readable, so every recipient lands on the same complete page regardless of auth state.
@@ -32,7 +32,7 @@ The public face of a webinar: an event page that any visitor can read **without 
 
 **Happy path — direct link (US-1, US-2, US-3):**
 
-1. Doctor taps a sponsor-distributed link → the event page renders publicly: hero (title, school/series, date/time MSK), speakers, program PDF link, specialties, partners.
+1. Doctor taps a sponsor-distributed link → the event page renders publicly: hero (title, school/series, date/time MSK), speakers, program PDF link, specialties, partners. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](./004-requirements-en.md).]**
 2. Doctor taps «Участвовать» → continues into the registration flow (feature 005; auth via 003 if guest).
 
 **Listing entry (US-4):**
@@ -56,9 +56,9 @@ The public face of a webinar: an event page that any visitor can read **without 
 ## Product acceptance criteria
 
 - The event page for a `published` event is fully readable with **zero authentication** — no soft wall, no gated sections in the pre-live state — and that public readability persists through `live` and `ended` (the page itself stays open; only the room behind the join path is server-side gated, feature 006).
-- The page presents: title, school/series, date + time explicitly marked **МСК**, description, speakers, a program **PDF** link, target specialties, and partners.
+- The page presents: title, school/series, date + time explicitly marked **МСК**, description, speakers, a program **PDF** link, target specialties, and partners. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](./004-requirements-en.md).]**
 - «Участвовать» is the single primary CTA and leads into registration (guest passes through auth 003 without losing the event context — handoff owned by feature 005).
-- The listing shows **published upcoming** webinars ordered by nearest air date; each card carries enough to choose (date/time MSK, title, school/series, specialties, speakers).
+- The listing shows **published upcoming** webinars ordered by nearest air date; each card carries enough to choose (date/time MSK, title, school/series, specialties, speakers). **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](./004-requirements-en.md).]**
 - The page truthfully reflects the event's lifecycle state (upcoming / live / ended) from the single state machine — never a stale or contradictory signal.
 - Draft and archived events are not exposed on public surfaces.
 - The listing offers a «Неделя / Месяц» switcher; «Неделя» (the day-grouped list) is the default, and switching back and forth loses nothing.

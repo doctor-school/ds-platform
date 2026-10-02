@@ -28,7 +28,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
   Scenario: A guest reads the whole event, participates, returns to the same page and enters the room on the doctor host
     Given a guest with no account opens «#d-event» on doctor.school at "/events/vedenie-osteoartrit?mode=online"
     Then the page renders server-side with no authentication required
-    And the open part shows the title, the school kicker, the start date and time labelled «МСК», the duration, «О чём событие», the programme, the teaser, the specialty chips, the НМО badge and both speakers
+    And the open part shows the title, the school kicker, the start date and time with its zone label, the duration, «О чём событие», the programme, the teaser, the specialty chips, the НМО badge and both speakers
     And each speaker name links to their expert page and the school kicker links to the school page
     And the right column holds the sticky sign-up card and no other card
     And the sticky card shows the conditions line and exactly one primary CTA «Участвовать»
@@ -137,7 +137,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     When a doctor opens the event page at 1440
     Then the right column contains exactly one card and it is the sticky sign-up card
     And the «Ведёт» speaker card is in the left flow and scrolls away with the content
-    And the conditions line above the CTA reads the format, the start time labelled «МСК», the duration, the НМО value and the cost in Pul
+    And the conditions line above the CTA reads the format, the start time with its zone label, the duration, the НМО value and the cost in Pul
     And exactly one primary CTA exists in the DOM
     And no «купить», «оставить заявку» or «скачать» affordance exists in any state
 
@@ -218,7 +218,7 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And «партнёр» is never used as the money-carrier and «проект» appears in no doctor-facing string
     And НМО appears only as a badge and as a conditions-line value, never as a heading
     And a zero cost reads «бесплатно для врача»
-    And every date and time renders in Europe/Moscow labelled «МСК»
+    And every date and time renders by 004 EARS-12: the viewer's zone with an explicit label for an online or hybrid event, «МСК» for an offline one
     And no user-facing string is hardcoded outside the typed message catalog
 
   @EARS-20 @happy
@@ -282,12 +282,11 @@ Feature: One event page serves the doctor storefront and the Academy, and a doct
     And the free-text partner reference is not rendered anywhere
 
   @EARS-6 @deferred @failure
-  Scenario: The registered card promises no cancel, calendar, reminder or «Мои события» link in release 3
+  Scenario: The registered card offers add to calendar and promises no cancel, reminder or «Мои события» link
     Given a signed-in doctor holds a registration on an upcoming event
     When the doctor opens the event page
-    Then the sticky card reads «Вы записаны» and offers no other control
+    Then the sticky card reads «Вы записаны» with an .ics download and a Google Calendar link (005 EARS-14) and offers no other control
     And no cancel-sign-up affordance is rendered
-    And no add-to-calendar affordance is rendered
     And no reminder promise, reminder setting or reminder placeholder is rendered
     And no «Мои события» link is rendered on the card
     And no «Участвовать» CTA is rendered anywhere on the page

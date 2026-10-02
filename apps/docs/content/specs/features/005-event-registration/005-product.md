@@ -23,6 +23,7 @@ Registration for a webinar, built on the already-shipped auth foundation (featur
 - **US-3** — As a **registered doctor**, the event page shows me that I'm registered and how/when I'll join, instead of offering me the register CTA again.
 - **US-4** — As a **registered doctor**, I find every event I've registered for in «мои события» in my personal account, with date/time and a way to reach the event page — closing the legacy "I registered but can't find it" gap.
 - **US-5** — As an **operator**, every registration is durably recorded against the doctor's account, so the room can admit exactly the registered audience and the sponsor roster is trustworthy.
+- **US-6** — As a **registered doctor**, right after signing up and later on the event page, I add the event to my calendar (Apple / Outlook via an `.ics` file, or Google Calendar), so I do not miss the start. _(Added 2026-10-02, [#2537](https://github.com/doctor-school/ds-platform/issues/2537).)_
 
 ## Flows
 
@@ -42,6 +43,11 @@ Registration for a webinar, built on the already-shipped auth foundation (featur
 1. Doctor opens «мои события» in the portal account → sees registered upcoming events, nearest first.
 2. Doctor taps one → event page (registered state); when the event is live, the path onward to the room (feature 006) is obvious.
 
+**Add to calendar (US-6):**
+
+1. Doctor completes sign-up → «Вы записаны» offers «Добавить в календарь»: an `.ics` download and a Google Calendar link.
+2. Later, the event page in the registered state offers the same two actions until the event starts.
+
 **Key branches:**
 
 - Already registered → the page shows the registered state; no duplicate registration is created.
@@ -53,9 +59,10 @@ Registration for a webinar, built on the already-shipped auth foundation (featur
 - A logged-in doctor completes registration in **one action** on the event page.
 - A guest completes registration through the 003 auth flow **without losing the event context** — no re-search, no second «Участвовать» tap after login.
 - The event page always shows the doctor's true registration state; a registered doctor is never shown the register CTA as if unregistered.
-- «Мои события» lists the doctor's registered events with date/time (MSK) and links back to each event page; a just-registered event appears there immediately.
+- «Мои события» lists the doctor's registered events with date/time (MSK) and links back to each event page; a just-registered event appears there immediately. **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](../004-event-page-listing/004-requirements-en.md).]**
 - One doctor + one event = at most one registration, regardless of how many times or through which path they register.
 - Registrations are recorded server-side against the authenticated account — they are the basis for room admission (feature 006) and the sponsor roster.
+- A registered doctor can add an upcoming event to Apple / Outlook (`.ics`) or Google Calendar from «Вы записаны» and from the registered event page; the affordance never appears before sign-up, for a guest, or in emails. _(Added 2026-10-02, [#2537](https://github.com/doctor-school/ds-platform/issues/2537).)_
 
 ## Out of scope
 

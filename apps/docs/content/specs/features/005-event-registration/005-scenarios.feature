@@ -14,6 +14,7 @@ Feature: Webinar registration — a doctor registers, sees the registered state,
     And the auth foundation (feature 003) is available for login and signup
     And the public event page and «Участвовать» CTA (feature 004) are available
     And the event read model is seeded with events in each lifecycle state
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
     And all times are presented in Europe/Moscow labeled МСК
 
   # --- Logged-in one-tap registration (US-1, US-3) ---
@@ -34,6 +35,7 @@ Feature: Webinar registration — a doctor registers, sees the registered state,
 
     Examples:
       | state     | signpost                         |
+      # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
       | published | start date and time (МСК)        |
       | live      | onward path toward the room      |
 
@@ -89,6 +91,7 @@ Feature: Webinar registration — a doctor registers, sees the registered state,
     Given a doctor registered for several upcoming events and some ended events
     When the doctor opens «мои события» (the Предстоящие tab)
     Then only the registered upcoming events are listed, ordered nearest first
+    # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
     And each item shows date and time (МСК), title, school/series, and a link to its event page
     And ended, archived, and other doctors' registrations are absent
 
@@ -143,6 +146,7 @@ Feature: Webinar registration — a doctor registers, sees the registered state,
     Then no other doctor's registration data is returned
     And the registration command and per-user reads require authentication
 
+  # Amended 2026-10-02 (#2537): online and hybrid events render in the viewer's timezone with an explicit zone label; offline events keep МСК. Read under 004 «Amendment — 2026-10-02».
   @EARS-11 @happy
   Scenario: «Мои события» times render in МСК regardless of the viewer's timezone
     Given a viewer whose browser timezone is not Europe/Moscow
@@ -163,3 +167,37 @@ Feature: Webinar registration — a doctor registers, sees the registered state,
       | desktop    | dark  |
       | mobile     | light |
       | mobile     | dark  |
+
+  # Amendment 2026-10-02 (#2537): add to calendar after sign-up (EARS-14, US-6).
+
+  @EARS-14 @happy
+  Scenario: «Вы записаны» offers add to calendar right after sign-up
+    Given a signed-in doctor on the page of an upcoming event
+    When the doctor activates «Участвовать»
+    Then «Вы записаны» offers an .ics download and a Google Calendar link
+
+  @EARS-14 @happy
+  Scenario: The .ics file carries one event with the start, the duration and the page link
+    Given an upcoming online event starting at 19:00 МСК lasting 90 minutes
+    When the registered doctor downloads the .ics file
+    Then the file holds one VEVENT starting at 16:00 UTC and ending at 17:30 UTC
+    And its summary is the event title and its URL and location are the event page URL
+    And its UID is the same on every download
+
+  @EARS-14 @happy
+  Scenario: The registered event page keeps offering add to calendar until the start
+    Given a doctor registered for an upcoming event
+    When the doctor opens the event page later
+    Then the registered state offers the same two calendar actions
+
+  @EARS-14 @failure
+  Scenario Outline: Add to calendar is not offered outside the registered upcoming state
+    Given <who> on the page of an event in state "<state>"
+    Then no add-to-calendar action is shown
+
+    Examples:
+      | who                        | state     |
+      | a guest                    | published |
+      | an unregistered doctor     | published |
+      | a registered doctor        | live      |
+      | a registered doctor        | ended     |

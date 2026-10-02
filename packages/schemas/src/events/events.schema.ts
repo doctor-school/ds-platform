@@ -732,9 +732,10 @@ export type UpcomingBroadcastSpeaker = z.infer<
  * Like the event-page projection it is an allow-list, not a redactor: a new
  * internal column stays invisible on the card until explicitly added here.
  *
- * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it in
- * `Europe/Moscow` labeled МСК (EARS-12). Cards are returned ordered nearest air
- * date first (`starts_at ASC`); an empty result is a valid `[]` (EARS-11).
+ * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it by
+ * the one time-display rule, 004 EARS-12 as amended 2026-10-02 (the viewer's zone
+ * with an explicit label for an online or hybrid event, МСК for an offline one).
+ * Cards are returned ordered nearest air date first (`starts_at ASC`); an empty result is a valid `[]` (EARS-11).
  */
 export const UpcomingBroadcastCardSchema = z.object({
   id: z.uuid(),
@@ -794,9 +795,10 @@ export type MonthBroadcastState = z.infer<typeof MonthBroadcastStateSchema>;
  * allow-list, not a redactor: a new internal column stays invisible on the entry
  * until explicitly added here.
  *
- * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it in
- * `Europe/Moscow` labeled МСК (EARS-12). Entries are returned ordered nearest
- * air date first (`starts_at ASC`); an empty month is a valid `200 []`.
+ * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it by
+ * the one time-display rule, 004 EARS-12 as amended 2026-10-02 (the viewer's zone
+ * with an explicit label for an online or hybrid event, МСК for an offline one).
+ * Entries are returned ordered nearest air date first (`starts_at ASC`); an empty month is a valid `200 []`.
  */
 export const MonthBroadcastEntrySchema = z.object({
   id: z.uuid(),

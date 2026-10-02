@@ -14,7 +14,7 @@
 
 **Where the truth lives.** Each component's `<Name>.d.ts` is its API; its preview card shows the sanctioned compositions. Compound parts are separate exports used together exactly like shadcn/ui: `Card` + `CardHeader/CardTitle/CardDescription/CardContent/CardFooter`; `Dialog` / `AlertDialog` / `Sheet` + their `*Content/*Header/*Title/*Description/*Footer`; `Tabs` + `TabsList/TabsTrigger/TabsContent`; `Table` + `TableHeader/TableBody/TableRow/TableHead/TableCell`; `InputOTP` + `InputOTPGroup/InputOTPSlot`. Blocks (`WebinarCard`, `EventPageShell`, `EventSignupCard`, `LoginCard`, `RegisterCard`, `DataTable`, `EventsFilter`, `MonthCalendarGrid`, …) are whole product units: pass data and copy as props, never rebuild them from primitives. All user-facing copy is a prop — the components ship no strings of their own.
 
-**Product rules.** Event cost is shown only as «N Pul» — Pul is not money: never «бесплатно», never roubles. Times are Moscow time with an explicit «МСК» label.
+**Product rules.** Event cost is shown only as «N Pul» — Pul is not money: never «бесплатно», never roubles. Event times follow one rule (004 EARS-12): an online or hybrid event shows the viewer's timezone with an explicit label — «МСК» when the viewer is on Moscow time, otherwise «GMT±N» (e.g. «14:00 GMT+5») — an offline event shows Moscow time labelled «МСК»; emails, SMS and admin entry stay «МСК». A time is never shown without its zone label.
 
 ```jsx
 const {

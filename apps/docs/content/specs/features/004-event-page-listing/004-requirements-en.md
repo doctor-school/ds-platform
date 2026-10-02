@@ -28,6 +28,7 @@ issues:
     2542,
     2543,
     2544,
+    2547,
   ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; §3/§4 canvas is source, repo holds the built artifact)
@@ -240,7 +241,7 @@ Feature 004 is the **read side** of the webinar aggregate. Event creation and li
 **The canonical rule — EARS-12 as amended** _(realizes: US-2, US-6, US-8)_:
 
 - **Online and hybrid events** (`participation_format` `online` or `hybrid`) — every date and time on every event surface (the event page, the card, the week list, the month grid and its pills, the mobile dot grid, the day agenda, «мои события», the registered-state signposting, the room's absolute times) shall be presented in the **viewer's timezone**, which is the browser's resolved IANA zone. The zone label is **always explicit**: «МСК» when the viewer's UTC offset at that instant is +3 (Moscow's), otherwise «GMT±N» — whole hours as «GMT+5» / «GMT-4», a non-whole offset as «GMT+5:30», zero as «GMT+0».
-- **Hybrid venue line** — the venue block of a hybrid event shall additionally state the start in the **venue's local time**, labelled with the venue's zone by the same label rule. The venue zone is a field of the event's venue; until the event carries a venue, the venue line is not rendered.
+- **Hybrid venue line** — the venue block of a hybrid event shall additionally state the start in the **venue's local time**, labelled with the venue's zone by the same label rule. The venue zone is a field of the event's venue, delivered with its public exposure by [#2547](https://github.com/doctor-school/ds-platform/issues/2547) (the venue address by [#2517](https://github.com/doctor-school/ds-platform/issues/2517)); until the event carries a venue, the venue line is not rendered.
 - **Offline events** (`participation_format` `offline`) — shall be presented in `Europe/Moscow` labelled «МСК» for every viewer, as before.
 - **Server render** — the server shall render every time in `Europe/Moscow` labelled «МСК» (deterministic and cacheable; the server never guesses a viewer zone). After hydration the client shall re-format the online and hybrid times in the viewer's zone. Every time slot reserves the width of its longest label, so the swap causes no layout shift; a viewer in Moscow sees no change.
 - **Grouping in mixed lists** — in the week list, the month grid, the mobile dot grid, the day agenda, the per-month counts and the month-range read, an event shall be grouped under the **day and month of the time shown on its card**: online and hybrid events by their viewer-zone date, offline events by their Moscow date. The month-range read and the per-month counts (EARS-15, EARS-16) take the viewer's zone as a parameter so the server boundaries match the client grouping; without it (server render) every event is bounded in Moscow.

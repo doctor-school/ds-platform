@@ -734,7 +734,8 @@ export type UpcomingBroadcastSpeaker = z.infer<
  *
  * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it by
  * the one time-display rule, 004 EARS-12 as amended 2026-10-02 (the viewer's zone
- * with an explicit label for an online or hybrid event, МСК for an offline one).
+ * with an explicit label for an online or hybrid event, МСК for an offline one);
+ * until #2539–#2543 land, every surface still renders it in Europe/Moscow labelled МСК.
  * Cards are returned ordered nearest air date first (`starts_at ASC`); an empty result is a valid `[]` (EARS-11).
  */
 export const UpcomingBroadcastCardSchema = z.object({
@@ -797,7 +798,8 @@ export type MonthBroadcastState = z.infer<typeof MonthBroadcastStateSchema>;
  *
  * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it by
  * the one time-display rule, 004 EARS-12 as amended 2026-10-02 (the viewer's zone
- * with an explicit label for an online or hybrid event, МСК for an offline one).
+ * with an explicit label for an online or hybrid event, МСК for an offline one);
+ * until #2539–#2543 land, every surface still renders it in Europe/Moscow labelled МСК.
  * Entries are returned ordered nearest air date first (`starts_at ASC`); an empty month is a valid `200 []`.
  */
 export const MonthBroadcastEntrySchema = z.object({

@@ -105,10 +105,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "fb846ab9a8371a171d273687aa344ac80006b3dcce904a830b584b108e459eb2",
-      "pulledAt": "2026-09-29T08:34:10.170Z",
+      "sha256": "d2e70018645b4fa17ee4a61fff3239670ab4018b0d489de1f564cc786aba6fb4",
+      "pulledAt": "2026-10-02T10:26:20.173Z",
       "remotePath": "auth.dc.html",
-      "note": "re-pulled by the lead via DesignSync 2026-09-29: host switches from #2429 reverted on owner decision (storefronts identical); kept reset code cells 6 upper-alnum and login cell hint 8"
+      "note": "2026-10-02 lead via DesignSync, #2554: one code step 6 cells everywhere, code-sent step tweak, verify «Уже регистрировались?» block removed, unified resend/error copy"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

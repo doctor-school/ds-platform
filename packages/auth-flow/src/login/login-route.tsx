@@ -1,3 +1,4 @@
+import type { LoginCardMethod } from "@ds/design-system/blocks";
 import { headers } from "next/headers";
 
 import type { AuthFlowHostConfig } from "../host-config";
@@ -20,6 +21,22 @@ import { signedInLandingAction } from "../server/signed-in-landing";
 import { AuthShell } from "../shell";
 import { LoginDoor } from "./login-door";
 import { returnContextSlots } from "./return-context-card";
+
+/** 003 EARS-43 — the search param that preselects the sign-in method. */
+export const LOGIN_METHOD_PARAM = "method";
+
+/**
+ * 003 EARS-43 — `?method=` read through a CLOSED allow-list: only `code` opens
+ * the card on the email-code method; any other value, a repeated param's later
+ * values, or no param at all keep the default «Пароль». The raw value is never
+ * rendered, so a hostile one has nothing to echo into.
+ */
+export function resolveLoginMethod(
+  raw: string | string[] | undefined,
+): LoginCardMethod {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "code" ? "otp" : "password";
+}
 
 /**
  * `<LoginRoute>` — the ONE server mount of the sign-in door, hosted by both
@@ -55,6 +72,9 @@ export async function LoginRoute({
   // request being rejected — a malformed return context degrades to no context,
   // it never breaks the door.
   const returnTo = Array.isArray(raw) ? raw[0] : raw;
+  // 003 EARS-43 — independent of the return context: it decides only which tab
+  // the card opens on, never where sign-in leads.
+  const defaultMethod = resolveLoginMethod(params[LOGIN_METHOD_PARAM]);
   // The guard reconstruction of the эфир arrival target — the ONE vocabulary,
   // resolved before any read, and the raw param never stands in for it.
   const safeTarget = resolveReturnTargetPath(returnTo);
@@ -152,6 +172,7 @@ export async function LoginRoute({
         returnTarget={landingTarget && gateResolved ? landingTarget : null}
         returnTargetGone={eventGone}
         returnContextPlate={plate}
+        defaultMethod={defaultMethod}
       />
     </AuthShell>
   );

@@ -251,6 +251,59 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await assertNoTokenInClient(page);
   });
 
+  // 003 EARS-43 — the congress-site entry link `/login?method=code` opens the
+  // card ALREADY on «По коду» (no tab click), and the carried returnTo is where
+  // the code sign-in lands, exactly as without the param.
+  test("003 EARS-43: /login?method=code&returnTo=/account opens on «По коду» and the code sign-in lands on /account", async ({
+    page,
+  }) => {
+    const email = newEmail();
+
+    // Provision a verified account (the email-OTP journey's front half).
+    await page.goto("/register");
+    const regAt = new Date().toISOString();
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page
+      .locator('input[autocomplete="new-password"]')
+      .fill(livePassword());
+    await page.getByTestId("register-submit").click();
+    await page.waitForURL(/\/verify/);
+    const verifyCode = await fetchOtpCode(
+      email,
+      regAt,
+      NOTIFICATION_SUBJECTS.verifyEmail,
+    );
+    expect(verifyCode).toBeTruthy();
+    await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
+    await waitForAuthenticatedLanding(page);
+    await page.goto("/account");
+    await page.getByTestId("logout").click();
+    await page.waitForURL((url) => url.pathname === "/");
+
+    await page.goto("/login?method=code&returnTo=%2Faccount");
+    await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // A preselection, not a lock: the password tab is still offered.
+    await expect(page.getByTestId("login-method-password")).toBeVisible();
+
+    await page.getByTestId("otp-channel-email").click();
+    await page.getByTestId("otp-identifier").fill(email);
+    const otpSentAt = new Date().toISOString();
+    await page.getByTestId("otp-send").click();
+    const otpCode = await fetchOtpCode(
+      email,
+      otpSentAt,
+      NOTIFICATION_SUBJECTS.verifyEmailOtp,
+    );
+    expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
+    await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
+
+    await page.waitForURL((url) => url.pathname === "/account");
+    await expect(page.getByTestId("profile-email")).not.toBeEmpty();
+  });
+
   // EARS-7 SMS-OTP — the live browser round-trip, the SAME bar the email-OTP
   // journey above sets (#170). The dev-stand Zitadel now has a generic HTTP SMS
   // provider pointing at the local `sms-sink` (the SMS analogue of Mailpit;

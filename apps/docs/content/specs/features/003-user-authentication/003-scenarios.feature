@@ -409,7 +409,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given registration targets an existing account
     When the BFF composes the re-registration mail
     Then the mail uses the existing shared mailer layout and carries the code
-    And HTML and plain text say the address is already registered, adding «Ваш пароль не изменился» only when the account has a password
+    And HTML and plain text say the address is already registered, adding «Ваш пароль не изменился» only for a verified account with a password and otherwise that the entered password will be saved after the code
     And neither body contains a link, button or navigation URL
 
   @EARS-31 @EARS-32 @happy

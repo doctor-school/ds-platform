@@ -95,9 +95,9 @@ same published version.
 
 The confirmation email is live too. It is dispatched AFTER the transaction has
 committed and is never awaited by the response: a slow or unreachable relay can
-neither delay an accepted submission nor turn it into a refusal. Its one action
-is «Подать материалы в кабинете», the absolute cabinet link on
-`MAILER_DOCTOR_BASE_URL` (046 EARS-15; see «Letter link origin» below).
+neither delay an accepted submission nor turn it into a refusal. It carries no
+link, no button and no URL (046 EARS-15): the letter only confirms the
+registration.
 
 **Mail outcome, and why there is no retry queue.** The outcome is recorded on the
 registration itself — `registrations.confirmation_mail_status` (`sent` |
@@ -258,10 +258,9 @@ draft of a kind without a form is 422 `kind-not-available`.
   failure never rolls back or delays the `submitted`. No retry queue: the
   section always shows the status.
 
-**Letter link origin (046 «Letters»).** Every congress letter — the 046 letters
-and the 044 confirmation's single action «Подать материалы в кабинете»
-(EARS-15, the site form and the desk alike) — links to
-`{MAILER_DOCTOR_BASE_URL}/account/congress`, resolved once at boot into the
+**Letter link origin (046 «Letters»).** The 046 submission letters link to
+`{MAILER_DOCTOR_BASE_URL}/account/congress` (the 044 confirmation carries no
+link at all — EARS-15, the site form and the desk alike), resolved once at boot into the
 `CONGRESS_CABINET_URL` provider. `MAILER_DOCTOR_BASE_URL` is a REQUIRED api
 key (`z.url()`, no default, like `DATABASE_URL`): an api without it refuses to
 boot rather than mail a link to the wrong site. Values per environment:

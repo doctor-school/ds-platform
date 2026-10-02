@@ -42,7 +42,7 @@ export function adminLockoutMessage(): EmailMessage {
 }
 
 /**
- * 046 «Letters» — the one destination every congress letter links to: the
+ * 046 «Letters» — the one destination the congress submission letters link to: the
  * «Мои заявки на Конгресс» section on the doctor storefront, as an absolute URL
  * on the `MAILER_DOCTOR_BASE_URL` origin.
  */
@@ -53,16 +53,12 @@ export function congressCabinetUrl(doctorBaseUrl: string): string {
 /** 046 «Letters» — the label of the link to {@link congressCabinetUrl}. */
 const CONGRESS_CABINET_ACTION_LABEL = "Мои заявки на Конгресс";
 
-/** 044 production amendment 2026-09-29 (046 EARS-15) — the confirmation's action. */
-const CONGRESS_SUBMIT_MATERIALS_ACTION_LABEL = "Подать материалы в кабинете";
-
 /**
  * 044 EARS-13 — what the congress confirmation email is rendered from: the
  * event, and nothing about the participant's account.
  *
  * One copy for every participant (production amendment 2026-09-24, #2369): the
- * letter carries no account-dependent branch. Its single action is the cabinet
- * link (production amendment 2026-09-29, 046 EARS-15).
+ * letter carries no account-dependent branch and no link at all (046 EARS-15).
  */
 export interface CongressConfirmationContent {
   /** The event's own title, as `events.title` holds it. */
@@ -71,8 +67,6 @@ export interface CongressConfirmationContent {
   eventDate: string;
   /** The congress venue, a per-deployment constant of THIS congress. */
   eventVenue: string;
-  /** {@link congressCabinetUrl} on the doctor storefront origin. */
-  cabinetUrl: string;
 }
 
 /**
@@ -104,10 +98,9 @@ export function formatCongressEventDate(startsAt: Date): string {
  * Carries no code, no token and no personal data beyond the event the reader
  * just signed up for: it belongs to the product-notice class of the
  * {@link import("./mailer.types.js").Mailer} port, not the credential class.
- * The copy says nothing about a Doctor.School account or signing in (#2369);
- * its one action, «Подать материалы в кабинете», leads to the congress
- * submissions section (044 production amendment 2026-09-29, 046 EARS-15) —
- * the same letter for the site form and the desk.
+ * It has no action: the letter confirms the registration, says nothing about a
+ * Doctor.School account or signing in (#2369), and carries no link, button or
+ * URL (046 EARS-15) — the same letter for the site form and the desk.
  */
 export function congressConfirmationMessage(
   content: CongressConfirmationContent,
@@ -118,10 +111,6 @@ export function congressConfirmationMessage(
     preheader: headline,
     intro: `${headline}: ${content.eventDate}, ${content.eventVenue}.`,
     paragraphs: [],
-    action: {
-      label: CONGRESS_SUBMIT_MATERIALS_ACTION_LABEL,
-      url: content.cabinetUrl,
-    },
     footer: [
       "Если это были не вы, просто проигнорируйте это письмо.",
       "Команда Doctor.School",

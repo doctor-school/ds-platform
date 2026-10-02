@@ -58,7 +58,7 @@ import {
     },
     {
       // 046 «Letters» — resolved once at boot from the REQUIRED
-      // `MAILER_DOCTOR_BASE_URL`: every congress letter links here.
+      // `MAILER_DOCTOR_BASE_URL`: the submission letters link here.
       provide: CONGRESS_CABINET_URL,
       useFactory: (): string =>
         congressCabinetUrl(loadEnv().MAILER_DOCTOR_BASE_URL),

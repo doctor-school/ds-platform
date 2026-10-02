@@ -31,12 +31,6 @@ export interface CongressConfirmationRequest {
   eventStartsAt: Date;
   /** The congress venue (a per-deployment constant, 044 EARS-13). */
   eventVenue: string;
-  /**
-   * 046 EARS-15 — the absolute «Мои заявки на Конгресс» URL on the doctor
-   * storefront, `{MAILER_DOCTOR_BASE_URL}/account/congress`
-   * ({@link import("./notice-emails.js").congressCabinetUrl}).
-   */
-  cabinetUrl: string;
 }
 
 /** 046 EARS-14 — what the congress submission receipt is rendered from. */

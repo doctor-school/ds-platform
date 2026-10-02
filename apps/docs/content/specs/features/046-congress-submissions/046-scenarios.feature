@@ -28,12 +28,12 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the save is refused and nothing changes
 
   @EARS-4 @EARS-15
-  Scenario: The confirmation letter leads a guest into the section
+  Scenario: A guest enters the section from the congress site by an emailed code
     Given a participant registered on the congress site and received the 044 confirmation letter
-    Then the letter carries exactly one action, «Подать материалы в кабинете», pointing to "/account/congress" on the doctor storefront origin set in MAILER_DOCTOR_BASE_URL
-    When the participant follows the link as a guest
-    Then the doctor storefront sends them to the login with "/account/congress" as the return target
-    When they sign in with the emailed code
+    Then the letter carries no link, button or URL
+    When the participant opens "/login?method=code&returnTo=/account/congress" on the doctor storefront origin set in MAILER_DOCTOR_BASE_URL
+    Then the email-code method is shown directly
+    When they request a code for their email and enter the six-character code from the mail
     Then the shell lands on "/account/congress" showing "Мои заявки на Конгресс"
 
   @EARS-5

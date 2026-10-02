@@ -28,6 +28,53 @@ The account classification and the mirror role column are running in production.
 - **Participant predicate.** `isParticipant(userId)` in `staff-role.ts` is one `EXISTS` probe on the `users` primary key with `role = doctor_guest`. It applies in `DoctorEventsRepository.countSignUps`, `RegistrationRepository.findEventRoster` and `findEventRosterPage` (rows and total), `PresenceRepository.countLivePresence`, its expiry query and `deriveEventMinutes`. `statistics.countDoctors` already filtered on `users.role`.
 - **Rollout.** Staff are onboarded with `doctor_guest` plus the staff role (`apps/docs/content/operations/admin-onboarding.md`, step 5). Existing production staff grants are widened after the release; each staff row flips on that person's next signed-in request.
 
+## Production amendment — one email code (2026-10-02, #2552 / #2553)
+
+Login by code, registration verification and re-registration run in production with two code kinds and two code screens. This amendment changes §2 (one boundary row), §4 (registration ends in a session from the code), §6 (one submission operation), §8.2 (code mask), §8.3 (the `/verify` step), §10 (security notes), §13.1/§13.2 (journeys) and §15.6 (cold step), and the eight-digit statements of the 2026-09-11 amendment; the rest of those sections describes the deployed baseline. Requirements: the production amendment of the same date (EARS-6/23/24/25/29/34/39 amended, EARS-41…43).
+
+**Code shape (#2555).** Zitadel secret generators `VERIFY_EMAIL_CODE`, `OTP_EMAIL`, `OTP_SMS` → `length: 6`, `includeUpperLetters: true`, `includeDigits: true`, `includeLowerLetters: false`, `includeSymbols: false`, set idempotently by `infra/dev-stand/idp/provision.sh` and the production converge; `PASSWORD_RESET_CODE` is asserted to carry the same shape. Expiries are not changed. The shared code field (`@ds/design-system` OTP input, consumed by `@ds/auth-flow`) has six cells, accepts `[A-Za-z0-9]`, upper-cases and auto-submits on the sixth character.
+
+**One submission operation (EARS-41).** The two submit endpoints (registration verify and login-code verify) converge on one BFF operation `submitEmailCode(identifier, code, registration?)`; both storefronts call it from the one code step (EARS-42). `registration` is present only when the step was reached from the registration form and carries the volatile in-tab password and profile fields.
+
+```mermaid
+sequenceDiagram
+    participant S as code step (@ds/auth-flow)
+    participant B as apps/api BFF
+    participant Z as Zitadel
+    S->>B: submitEmailCode(identifier, code, registration?)
+    B->>Z: resolve identifier → sub, emailVerified (enumeration-safe wrapper)
+    alt email verified
+        B->>Z: PATCH /v2/sessions/{id} checks.otpEmail.code (challenge armed by the request, EARS-6)
+    else email unverified
+        B->>Z: POST /v2/users/{sub}/email/verify {verificationCode}
+        B->>B: mirror email_verified = true + auth.account.verified ledger row (EARS-3)
+        B->>Z: ensure otp_email factor (POST /v2/users/{sub}/otp_email, 409 = present)
+        B->>Z: POST /v2/sessions {checks.user, challenges.otpEmail.returnCode {}}
+        Z-->>B: sessionId, sessionToken, challenges.otpEmail (code, server-side only)
+        B->>Z: PATCH /v2/sessions/{id} checks.otpEmail.code = returned code
+    end
+    opt registration present (EARS-23)
+        B->>Z: GET /v2/users/{sub}/authentication_methods
+        B->>Z: no PASSWORD method → POST /v2/users/{sub}/password {newPassword, changeRequired false}
+        B->>B: fill only empty profile fields on the mirror / IdP profile
+    end
+    B->>Z: OIDC exchange (EARS-8)
+    B-->>S: __Host- session cookie, return target
+```
+
+**Boundary (§2).** Zitadel stays the only generator, checker, attempt counter and session authority. The arm-and-complete step is the same pair of Session API calls the login path already makes (`challenges.otpEmail.returnCode: {}` on `POST /v2/sessions`, then `checks.otpEmail` on `PATCH`, `apps/api/src/auth/idp/zitadel.idp.ts` `requestOtpChallenge` / `loginWithEmailOtp`, proven by `zitadel-login-email.spec.ts`) and the same «return a fresh code and verify it immediately» technique the reset-completion flip already uses (`zitadel.idp.ts`, `markEmailVerified`, EARS-35). The BFF neither generates nor compares a code: it relays a Zitadel-returned value back to Zitadel within one request, held in a local only, never logged, persisted, mailed or returned (EARS-30). The `otp_email` factor registration requires a verified address, which is why the verify call comes first. `authentication_methods` and `SetPassword` are documented User v2 endpoints; #2556 proves both live against the dev-stand IdP (installed v4.15) before relying on them, and a failure of the password or profile tail is fail-soft — logged, never turning an accepted code into a failed sign-in.
+
+**Request side (EARS-34/23/25).** `requestEmailLoginCode`, the re-registration notice and the resend share one fire-and-forget decision: verified → arm `otp_email` with `returnCode` and mail the code; unverified → `POST /v2/users/{sub}/email/send` with `returnCode` and mail the code; unknown → nothing. All three use one code-mail renderer with trigger copy: sign-in (login request and resend, either code kind), registration (fresh registration), re-registration (already registered; «Ваш пароль не изменился» only when `authentication_methods` lists `PASSWORD`). The account-exists notice with its «Войти» link is retired; the EARS-23 HMAC Redis throttle keys the re-registration mail unchanged.
+
+**UI (§8.3, §13, §15.6).** `/verify` and the login code step render one `CodeStep` component of `@ds/auth-flow`: heading, «Мы отправили код на <masked>», six cells, resend with cooldown, back link («← Изменить почту» to the registration form with the entered fields kept in the tab, «← Изменить способ» to the login method choice). The co-equal sign-in/reset block, the #175 password replay and the cold-step `/login` routing are removed; `pending-registration.ts` keeps its envelope (volatile memory, single-shot take, TTL) and now feeds only the `registration` payload of the submit. `/login?method=code` preselects the email-code method; `returnTo` is parsed by the existing `parseAccountReturnTarget`. Exact copy and the code-sent state come from the `auth` canvas redraw (#2554).
+
+**Security notes (§10).**
+
+- _Verification code → session is no weaker than login OTP._ Both prove control of the same mailbox with a Zitadel-generated, single-use, six-character code from the same alphabet (36⁶ ≈ 2.2 × 10⁹ — larger than the retired eight-digit space of 10⁸). Guessing is bounded by the EARS-13 per-user (10 / 15 min), per-IP and per-ASN windows on every branch, in addition to Zitadel's own counting where it applies. The residual difference is lifetime: a verification code may live longer than the 300-second login code; it is single-use and invalidated by a resend (EARS-25), and the rate limits hold for its whole lifetime.
+- _Enumeration._ Request and submission responses are identical across unknown, verified and unverified identifiers (EARS-16); which code kind a mailbox receives is visible only to the mailbox owner. The submit path equalizes the unknown-identifier failure to the wrong-code failure in timing.
+- _Re-registration as a code-spam or takeover vector._ The registration form now mails a code to an existing address, so it is throttled per address by the EARS-23 marker and protected by EARS-17 CAPTCHA, like the login-code request it mirrors. It cannot take over an account: nothing — password, profile, consent — is written before the code proves the mailbox, an existing password is never replaced, and profile values never overwrite.
+- _Password set on a credential-less account._ Only the mailbox owner, after the code is accepted, can give a congress-created account its first password; this is the same proof EARS-35 already treats as sufficient to mark the address verified.
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

@@ -3,7 +3,7 @@ title: "046 — Congress submissions: oral talks, posters and abstracts"
 description: "Requirements for congress submissions in a «Мои заявки на Конгресс» section of the doctor storefront account: three kinds (oral talk, poster, abstracts) as properties of the submission, many per account, autosaved drafts checked at submit, per-event and per-kind intake settings edited in apps/admin, a poster age rule from the birth date, abstract attestations, one submission personal-data consent that also covers abstracts publication, statuses with letters, an event-bound program committee reviewing in the admin registry and card, a read-only congress-partner view, a deadline reminder, and a cabinet link in the 044 confirmation letter."
 slug: 046-congress-submissions
 status: In dev
-issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2438, 2439]
+issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2438, 2439, 2557]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/2379
 prior_decisions:
@@ -24,6 +24,18 @@ lang: en
 > PRD source: [`046-product.md`](./046-product.md) (US-1…US-14). This feature's screens are the «Мои заявки на Конгресс» section on the doctor storefront and the submissions registry, card and intake settings in `apps/admin` — hence `surface: user-facing`.
 
 # 046 — Congress submissions: oral talks, posters and abstracts (Requirements)
+
+## Production amendment — no cabinet link; entry by code from the congress site (2026-10-02, #2552 / #2553)
+
+This amendment overrides EARS-15, verification row V-14, the `@EARS-4 @EARS-15` scenario in `046-scenarios.feature` and the «Entry and return» and «044 letter link» sections of `046-design.md`; the running-production baseline is retained below. EARS-15 itself recorded the owner's 2026-09-29 reversal adding the cabinet link; the owner's 2026-10-02 decision supersedes it (the later decision wins). Production incident 2026-10-02: a congress registrant followed that link, chose «Вход → По коду», typed the six-character verification code into the eight-cell login step and looped on «Код не подошёл». Owner decision on epic #2552, chat 2026-10-02: code-only mails with no links; the congress registration mail link to the cabinet is a mistake — entry goes through a «Войти в кабинет» button on the congress site, with return to the submissions page.
+
+- **EARS-15 amended** (`realizes: US-14`) — THE SYSTEM SHALL send the 044 confirmation letter — the site form and the desk alike — with no link and no action, the 2026-09-24 copy (#2557). The guest's way into the section is the congress site's «Войти в кабинет» button to `{doctor storefront origin}/login?method=code&returnTo=/account/congress`, which opens the email-code method directly (003 EARS-43); entering the code signs in, and for a congress-origin unverified account also verifies the address, in one step (003 EARS-41, 044 EARS-14 amended). The button lives in `doctor-school/orthobio-site`; this spec owns only the address.
+- **Unchanged.** The author letters — the EARS-14 receipt and the status, deadline-reminder and extension letters — keep their link to the section; they are status letters, not code mails, and the 2026-10-02 decision does not name them.
+
+| ID                   | Test type                            | Proves                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V-14 (amended)       | Vitest e2e — `apps/api`              | The 044 confirmation letter from the site form and from the desk carries no link, button or URL (EARS-15, #2557).                                                                                              |
+| V-15 (amended entry) | Playwright / E2E — doctor storefront | A guest opens `/login?method=code&returnTo=/account/congress`, signs in by the emailed six-character code — a congress-origin unverified account included — and lands on the section (EARS-4, EARS-15, #2556). |
 
 ## Outcomes
 

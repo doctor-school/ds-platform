@@ -19,6 +19,8 @@ Requirements: [`046-requirements-en.md`](./046-requirements-en.md) · PRD: [`046
 
 ## Entry and return
 
+> **Production amendment — entry by code from the congress site (2026-10-02, #2552 / #2553).** The diagram and the «044 letter link» section below describe the deployed baseline. Target: the 044 confirmation letter carries no link (EARS-15 amended, #2557); the entry is the congress site's «Войти в кабинет» button to `{MAILER_DOCTOR_BASE_URL}/login?method=code&returnTo=/account/congress` — `method=code` opens the email-code method directly (003 EARS-43), `returnTo` is admitted by the unchanged `parseAccountReturnTarget`, and the code submission verifies an unverified congress account and signs in in one step (003 EARS-41). The cross-repo dependency `doctor-school/orthobio-site#99` changes its «Войти в кабинет» target from `/account/congress` to that `/login` address; the site's «Подать материалы в кабинете» button on «Заявка принята» uses the same address. A direct guest hit on `/account/congress` keeps the guard redirect to `/login?returnTo=/account/congress`.
+
 ```mermaid
 sequenceDiagram
     participant L as 044 letter / orthobio.ru button

@@ -1,5 +1,32 @@
 # @ds/room
 
+## 1.0.0
+
+### Major Changes
+
+- [#2057](https://github.com/doctor-school/ds-platform/pull/2057) [`5dc1a61`](https://github.com/doctor-school/ds-platform/commit/5dc1a617adcb66eb5716d498b4223a133e6947db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Forward the client's `x-forwarded-for` on every SSR authed read ([#2054](https://github.com/doctor-school/ds-platform/issues/2054)).
+
+  Since [#1655](https://github.com/doctor-school/ds-platform/issues/1655) the api runs behind `FastifyAdapter({ trustProxy })`, so `request.ip`
+  is the real browser taken from the forwarded chain and the BFF session
+  fingerprint (ADR-0001 §6) is bound to the BROWSER's IP/24. Every server-side read
+  from the Next containers built its own header set and dropped the chain, so the
+  api saw the container address (172.18.0.x), re-derived a different fingerprint and
+  401'd valid sessions — signed-in doctors were bounced off «Мои события» and the
+  event/room pages.
+
+  `ForwardedSession` gains a required `forwardedFor`, and one canonical
+  `forwardedSessionFrom` / `forwardedHeaders` pair in `@ds/events-storefront/server`
+  now builds every hop's headers (`@ds/room` mirrors it as `roomForwardedHeaders`
+  for its own structural `RoomSession`, which likewise gains the field). Both are
+  required-field additions to an exported interface, i.e. breaking for consumers.
+
+### Patch Changes
+
+- [#2418](https://github.com/doctor-school/ds-platform/pull/2418) [`b2aff14`](https://github.com/doctor-school/ds-platform/commit/b2aff149c351d8fb23b197d4816f1cb33289385d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 020 EARS-7 ([#2242](https://github.com/doctor-school/ds-platform/issues/2242)): a guest who opens a doctor-storefront room URL `/events/<slug>/room` is now redirected to this host's `/login?returnTo=%2Fevents%2F<slug>%2Froom` instead of the event page, and signing in lands them back in the room where the entry gate re-runs — the same door the Academy room uses. The `@ds/room` return codec now validates a room return against the host's own event-page shape (`/webinars/<slug>` or `/events/<slug>`), and the doctor auth-flow config states `room: "/events/:slug/room"`. The shared sign-in and sign-up mounts (`@ds/auth-flow` `LoginRoute` / `RegisterRoute`) now answer a room return from the host's `routes.room` as a landing in its own right, like the account family, so a host without a parking cookie no longer drops it on the default landing.
+- Updated dependencies [[`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14), [`247b352`](https://github.com/doctor-school/ds-platform/commit/247b3524c9addd7e7ebf83a19ac8615a79b3e306), [`c754a6d`](https://github.com/doctor-school/ds-platform/commit/c754a6d5a11e8d72ef26d7cc756cc26cafda3977), [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449), [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299), [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a), [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0), [`026327e`](https://github.com/doctor-school/ds-platform/commit/026327eb09f34c722b68a6a50e0e2b4a3018003c), [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc), [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb), [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e), [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9)]:
+  - @ds/design-system@5.5.0
+  - @ds/schemas@7.0.0
+
 ## 0.1.0
 
 ### Minor Changes

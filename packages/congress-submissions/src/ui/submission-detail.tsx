@@ -617,7 +617,9 @@ export function SubmissionDetail({
 
               {sectionHead(
                 COPY.sectionAuthors,
-                speakerPick ? COPY.pickSpeaker : COPY.authorOrder,
+                // The speaker prompt is an editing hint: a read-only talk
+                // (sent, or past its window) shows the order line instead.
+                speakerPick && canEdit ? COPY.pickSpeaker : COPY.authorOrder,
               )}
               <AuthorsEditor
                 authors={draft.authors}

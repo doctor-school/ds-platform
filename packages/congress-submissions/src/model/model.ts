@@ -881,24 +881,34 @@ export function pickerNote(
 ): string | null {
   const offered = kinds.filter((k) => k.offered);
   if (offered.length === 0) return null;
-  const groups: { window: string; open: boolean; nouns: string[] }[] = [];
+  const groups: {
+    window: string;
+    open: boolean;
+    kinds: CongressSubmissionKindIntake["kind"][];
+  }[] = [];
   for (const k of offered) {
     const window = noteWindow(k);
     const group = groups.find((g) => g.window === window);
-    if (group) group.nouns.push(KIND_COPY[k.kind].nom);
-    else
-      groups.push({
-        window,
-        open: k.state === "open",
-        nouns: [KIND_COPY[k.kind].nom],
-      });
+    if (group) group.kinds.push(k.kind);
+    else groups.push({ window, open: k.state === "open", kinds: [k.kind] });
   }
   const lastOpen = groups.map((g) => g.open).lastIndexOf(true);
   const clauses = groups.map((g, i) => {
+    // Talks and posters in one window share «доклады»: «устные и постерные
+    // доклады», never «устные доклады и постерные доклады».
+    const names =
+      g.kinds.includes("oral") && g.kinds.includes("poster")
+        ? [
+            "устные и постерные доклады",
+            ...g.kinds
+              .filter((k) => k !== "oral" && k !== "poster")
+              .map((k) => KIND_COPY[k].nom),
+          ]
+        : g.kinds.map((k) => KIND_COPY[k].nom);
     const nouns =
-      g.nouns.length === 1
-        ? g.nouns[0]!
-        : `${g.nouns.slice(0, -1).join(", ")} и ${g.nouns.at(-1)!}`;
+      names.length === 1
+        ? names[0]!
+        : `${names.slice(0, -1).join(", ")} и ${names.at(-1)!}`;
     const window = i === lastOpen ? `${g.window} включительно` : g.window;
     if (i > 0) return `${nouns} — ${window}`;
     const head = nouns.charAt(0).toUpperCase() + nouns.slice(1);

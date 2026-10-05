@@ -27,10 +27,6 @@
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Ошибка</span>
       <div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ errTabs }}" as="e" hint-placeholder-count="6"><button onClick="{{ e.onClick }}" style="{{ e.style }}">{{ e.name }}</button></sc-for></div>
-      <sc-if value="{{ showStep }}" hint-placeholder-val="{{ true }}">
-        <span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-left:6px">Шаг</span>
-        <div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ stepTabs }}" as="sp" hint-placeholder-count="2"><button onClick="{{ sp.onClick }}" style="{{ sp.style }}">{{ sp.name }}</button></sc-for></div>
-      </sc-if>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:6px"><sc-for list="{{ docToggles }}" as="g" hint-placeholder-count="2"><button onClick="{{ g.onClick }}" style="{{ g.style }}">{{ g.name }}</button></sc-for></div>
     </div>
   </div>
@@ -292,7 +288,7 @@
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;host&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Академия&quot;,&quot;витрина врача&quot;],&quot;default&quot;:&quot;Академия&quot;,&quot;tsType&quot;:&quot;'Академия'|'витрина врача'&quot;,&quot;section&quot;:&quot;Витрина&quot;},&quot;error&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;нет&quot;,&quot;429&quot;,&quot;5xx&quot;,&quot;ошибка&quot;,&quot;код&quot;,&quot;повтор&quot;],&quot;default&quot;:&quot;нет&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояния&quot;},&quot;step&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;форма&quot;,&quot;код отправлен&quot;],&quot;default&quot;:&quot;форма&quot;,&quot;tsType&quot;:&quot;'форма'|'код отправлен'&quot;,&quot;section&quot;:&quot;Состояния&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;host&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Академия&quot;,&quot;витрина врача&quot;],&quot;default&quot;:&quot;Академия&quot;,&quot;tsType&quot;:&quot;'Академия'|'витрина врача'&quot;,&quot;section&quot;:&quot;Витрина&quot;},&quot;error&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;нет&quot;,&quot;429&quot;,&quot;5xx&quot;,&quot;ошибка&quot;,&quot;код&quot;,&quot;повтор&quot;],&quot;default&quot;:&quot;нет&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояния&quot;}}">
 class Component extends DCLogic {
   state = {
     dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
@@ -315,24 +311,13 @@ class Component extends DCLogic {
     this.upd();
     this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
     this.timer = setInterval(() => this.setState(s => (s.cooldown > 0 ? { cooldown: s.cooldown - 1 } : null)), 1000);
-    if (this.props.step === 'код отправлен') this.applyStep(true);
   }
-  componentDidUpdate(prev) { if (prev.step !== this.props.step) this.applyStep(this.props.step === 'код отправлен'); }
   componentWillUnmount() { clearInterval(this.timer); if (this.sendT) clearTimeout(this.sendT); }
 
   resetSub(extra) {
     return Object.assign({ loginTab: 'password', otpChannel: 'email', otpSent: false, resetStage: 'request', cooldown: 0, notice: false, verified: false, submitted: false, sending: '', values: {}, touched: {}, otp: Array(6).fill('') }, extra || {});
   }
   go(screen) { this.setState(this.resetSub({ screen })); }
-  // Твик «Шаг»: форма ↔ код отправлен. Вход — вкладка «По коду» + отправленный код; Сброс — стадия кода.
-  applyStep(sent) {
-    this.setState(st => {
-      const base = { verified: false, notice: false, submitted: false, sending: '', otp: Array(6).fill(''), cooldown: sent ? 30 : 0 };
-      if (st.screen === 'login') return Object.assign(base, { loginTab: sent ? 'otp' : st.loginTab, otpSent: sent });
-      if (st.screen === 'reset') return Object.assign(base, { resetStage: sent ? 'complete' : 'request' });
-      return null;
-    });
-  }
   startCd() { this.setState({ cooldown: 30 }); }
   flash(key) { if (this.sendT) clearTimeout(this.sendT); this.setState({ sending: key }); this.sendT = setTimeout(() => this.setState({ sending: '' }), 1400); }
 
@@ -517,14 +502,6 @@ class Component extends DCLogic {
       codeBack: s.screen === 'verify'
         ? () => this.setState({ screen: 'register', submitted: false, verified: false, notice: false, cooldown: 0, sending: '', otp: Array(6).fill('') })
         : () => this.setState({ otpSent: false, verified: false, notice: false, cooldown: 0, otp: Array(6).fill(''), values: Object.assign({}, s.values, { code: '' }) }),
-      showStep: s.screen === 'login' || s.screen === 'reset',
-      stepTabs: (() => {
-        const sent = (s.screen === 'login' && s.loginTab === 'otp' && s.otpSent) || (s.screen === 'reset' && s.resetStage === 'complete');
-        return [
-          { name: 'форма', onClick: () => this.applyStep(false), style: pill(!sent, true) },
-          { name: 'код отправлен', onClick: () => this.applyStep(true), style: pill(sent, false) }
-        ];
-      })(),
       isLogin: s.screen === 'login', isRegister: s.screen === 'register', isVerify: s.screen === 'verify', isReset: s.screen === 'reset',
       // вход
       loginPw: s.loginTab === 'password', loginOtp: s.loginTab === 'otp',

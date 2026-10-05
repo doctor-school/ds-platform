@@ -2894,14 +2894,14 @@ function eventListStickyItems(tense: EventListTab) {
   const groups =
     tense === "past"
       ? [
-          { key: "2026-08", label: "August 2026" },
-          { key: "2026-07", label: "July 2026" },
-          { key: "2026-06", label: "June 2026" },
+          { key: "2026-08", label: "August 2026", date: "14 August · Fri" },
+          { key: "2026-07", label: "July 2026", date: "16 July · Thu" },
+          { key: "2026-06", label: "June 2026", date: "18 June · Thu" },
         ]
       : [
-          { key: "2026-08-30", label: "30 August, Sunday" },
-          { key: "2026-08-31", label: "31 August, Monday" },
-          { key: "2026-09-01", label: "1 September, Tuesday" },
+          { key: "2026-08-30", label: "30 August, Sunday", date: "30 August · Sun" },
+          { key: "2026-08-31", label: "31 August, Monday", date: "31 August · Mon" },
+          { key: "2026-09-01", label: "1 September, Tuesday", date: "1 September · Tue" },
         ];
   return groups.flatMap((group) =>
     [0, 1, 2].map((index) => ({
@@ -2909,6 +2909,7 @@ function eventListStickyItems(tense: EventListTab) {
       id: `${tense}-${group.key}-${index}`,
       groupKey: group.key,
       groupLabel: group.label,
+      dateLabel: group.date,
       ...(tense === "past"
         ? {
             variant: "past" as const,

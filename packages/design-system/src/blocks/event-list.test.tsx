@@ -150,7 +150,7 @@ describe("<EventList>", () => {
     await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
     expect(onPageChange).toHaveBeenCalledWith(4, "opaque-current");
   });
-  it("EARS-3: the day plates of «Будущие» stick under the default zero offset on the page-background surface", () => {
+  it("019 EARS-3: the day plates of «Будущие» stick under the default zero offset on the page-background surface", () => {
     const { container } = render(
       <EventList
         items={[item, { ...item, id: "event-2", groupKey: "2026-08-30", groupLabel: "30 августа, воскресенье" }]}
@@ -180,7 +180,7 @@ describe("<EventList>", () => {
     expect(headers[0]!.textContent).toContain("29 августа, суббота");
   });
 
-  it("EARS-3: the month plates of «Прошедшие» stick under the storefront header offset a host passes", () => {
+  it("019 EARS-3: the month plates of «Прошедшие» stick under the storefront header offset a host passes", () => {
     const { container } = render(
       <EventList
         items={[{ ...item, groupKey: "2026-08", groupLabel: "Август 2026", variant: "past" as const }]}

@@ -486,9 +486,17 @@ for (const loop of loopsDoc?.loops ?? []) {
     errors.push(`${where} rounds_draft must be [min, max] with min ≥ 1`);
   else if (
     loop.rounds_from != null &&
-    (!loop.rounds_from.rule || !asList(loop.rounds_from.loops).length)
+    (!Number.isInteger(loop.rounds_from.base) ||
+      loop.rounds_from.base < 1 ||
+      !Array.isArray(loop.rounds_from.plus_extra_rounds_of) ||
+      !loop.rounds_from.plus_extra_rounds_of.length ||
+      Object.keys(loop.rounds_from).some(
+        (key) => !["base", "plus_extra_rounds_of"].includes(key),
+      ))
   )
-    errors.push(`${where} rounds_from needs a rule and loops`);
+    errors.push(
+      `${where} rounds_from must be { base: integer ≥ 1, plus_extra_rounds_of: [loop names] } — rounds = base + Σ (rounds − 1)`,
+    );
   if (!isRange(loop.wait_days_per_round_draft))
     errors.push(
       `${where} wait_days_per_round_draft must be a number or [min, max]`,
@@ -526,9 +534,9 @@ for (const loop of loopsDoc?.loops ?? []) {
         );
   }
 }
-// Derived rounds: every loop named in `rounds_from` exists and has its own rounds_draft (no chains).
+// Derived rounds: every loop named in `rounds_from.plus_extra_rounds_of` exists and has its own rounds_draft (no chains).
 for (const loop of loopByName.values())
-  for (const name of asList(loop.rounds_from?.loops))
+  for (const name of asList(loop.rounds_from?.plus_extra_rounds_of))
     if (loopByName.get(name)?.rounds_draft == null)
       errors.push(
         `loops.yaml: «${loop.name}» rounds_from names «${name}» — no loop with rounds_draft`,

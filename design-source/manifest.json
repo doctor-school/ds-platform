@@ -117,10 +117,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "a438f5d792a2d55c984aeb3aa797a718eacc40f168c994c4815884eb0b2c803a",
-      "pulledAt": "2026-10-05T03:41:25.323Z",
+      "sha256": "cc45614b96e703431449cfc8b9609a21a88fadde73e46d513c9d5b42dcc40606",
+      "pulledAt": "2026-10-05T09:23:41.285Z",
       "remotePath": "auth.dc.html",
-      "note": "2026-10-05 lead via DesignSync, #2554: «Шаг» tweak removed (the code step is reached via «Подтверждение» and by clicking through), reset busy spinner fixed (React #62, styles as objects); one code step 6 cells everywhere, verify «Уже регистрировались?» block removed, unified resend/error copy"
+      "note": "2026-10-05 owner redraw via Claude Design, #2554: ghost text buttons (code-step back link, reset «Начать заново») keep their hover/focus highlight inside the content column (no negative horizontal offset; ghost focus ring inset); earlier 2026-10-05: one code step 6 cells everywhere, verify «Уже регистрировались?» removed, unified resend/error copy, reset spinner fixed"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

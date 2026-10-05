@@ -210,8 +210,21 @@ for (const diagram of diagrams) {
     else if (end.side === "C") controlled.add(end.box);
   };
   for (const arrow of diagram.arrows ?? []) {
-    for (const end of asList(arrow.from)) checkEnd(arrow, end, "from");
+    const from = asList(arrow.from);
+    if (from.length !== 1)
+      errors.push(
+        `${diagram.id}: arrow ${arrow.id} has ${from.length} sources — an arrow has one source and branches only in \`to\``,
+      );
+    for (const end of from) checkEnd(arrow, end, "from");
     for (const end of asList(arrow.to)) checkEnd(arrow, end, "to");
+    // A boundary I/C/M arrow enters a box on the side its code names — never another boundary.
+    const code = from[0]?.boundary;
+    if (code)
+      for (const end of asList(arrow.to))
+        if (end?.boundary || (end?.box && end.side !== code[0]))
+          errors.push(
+            `${diagram.id}: arrow ${arrow.id} from boundary ${code} ends on ${end.boundary ? `boundary ${end.boundary}` : `${end.box} side ${end.side}`} — it enters a box on side ${code[0]}`,
+          );
   }
   for (const id of boxIds) {
     if (!controlled.has(id))

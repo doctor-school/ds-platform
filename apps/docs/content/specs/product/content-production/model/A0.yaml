@@ -371,7 +371,7 @@ arrows:
     to: { box: A6, side: I }
   - id: a12
     label: Запрос на следующий цикл
-    objects: [O-109, O-205, O-179]
+    objects: [O-109, O-205]
     from: { box: A5, side: O }
     to: { box: A1, side: I }
   - id: a13

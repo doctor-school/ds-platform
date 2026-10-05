@@ -1,8 +1,11 @@
 // IDEF0 viewer for the DS content-production model (../model/index.yaml + diagram YAMLs; format: ../model/FORMAT-ru.md).
 /* global document, location, addEventListener, removeEventListener -- a browser module, served as is */
-// React Flow renders, ELK lays out: boxes with ICOM ports on fixed sides
-// (I = west, C = north, O = east, M = south), orthogonal routing, the diagram frame
-// as an ELK parent node whose ports are the boundary arrows (I1, C2, O1, M1 …).
+// React Flow renders; the layout below is the IDEF0 staircase: boxes A1 … An on a diagonal from
+// top-left to bottom-right in number order, ICOM sides fixed (I = west, C = north, O = east,
+// M = south), arrows routed orthogonally by IDEF0 convention, labels placed where they cross
+// nothing. ELK's layered placer was dropped: with partitions and forced model order it still keeps
+// the columns but lifts boxes that feed back (A5, A6 rose above A4 on A0) — it has no notion of a
+// staircase, so boxes are placed here and only the routing follows from that placement.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -16,39 +19,58 @@ import {
   EdgeLabelRenderer,
   MarkerType,
 } from "@xyflow/react";
-import ELK from "elkjs";
 import htm from "htm";
 import { parse as parseYaml } from "yaml";
 
 const html = htm.bind(React.createElement);
 const { useEffect, useMemo, useState, useCallback } = React;
-const elk = new ELK();
-const params = new URLSearchParams(location.search);
 
-const ELK_SIDE = { I: "WEST", C: "NORTH", O: "EAST", M: "SOUTH" };
-const RF_SIDE = {
-  WEST: Position.Left,
-  NORTH: Position.Top,
-  EAST: Position.Right,
-  SOUTH: Position.Bottom,
-};
 const KIND_NAME = { I: "вход", C: "управление", O: "выход", M: "механизм" };
-const BOX_W = 210;
-const BOX_H = 112;
+
+// Diagram units equal CSS px at zoom 1. Fonts are sized so that at LEGIBLE_ZOOM arrow labels
+// render ≥ 11 px and box titles ≥ 13 px; the initial view fits the diagram width and never
+// zooms out below that (a wider diagram scrolls instead of shrinking into illegibility).
+const U = {
+  label: 13,
+  line: 16,
+  title: 15,
+  titleLine: 19,
+  lane: 12,
+  pad: 16,
+};
+const LEGIBLE_ZOOM = 0.87;
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 const asList = (end) => (Array.isArray(end) ? end : end ? [end] : []);
+const codeNumber = (code) => Number(String(code).slice(1)) || 0;
 
-function wrap(text, width = 26) {
+const measureCtx = document.createElement("canvas").getContext("2d");
+function textWidth(text, size, weight = 400) {
+  measureCtx.font = `${weight} ${size}px ${FONT}`;
+  return measureCtx.measureText(text).width;
+}
+function wrapTo(text, maxWidth, size, weight) {
   const lines = [];
   let line = "";
   for (const word of String(text).split(/\s+/)) {
-    if (line && (line + " " + word).length > width) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && textWidth(next, size, weight) > maxWidth) {
       lines.push(line);
       line = word;
-    } else line = line ? `${line} ${word}` : word;
+    } else line = next;
   }
   if (line) lines.push(line);
   return lines;
+}
+/** Label block size; matches `.arrow-label` (13 px / 16 px lines, 2 px + 4 px padding, 3 px rule). */
+function labelBlock(text, maxWidth) {
+  const lines = wrapTo(text, maxWidth - 10, U.label);
+  return {
+    text: lines.join("\n"),
+    lines: lines.length,
+    width: Math.ceil(Math.max(...lines.map((l) => textWidth(l, U.label)))) + 11,
+    height: lines.length * U.line + 4,
+  };
 }
 
 /** Arrow kind for colouring: the ICOM role at its target (boundary outputs are O). */
@@ -58,386 +80,596 @@ function arrowKind(arrow) {
   return target.side ?? "I";
 }
 
-// ---------- ELK graph ----------
+// ---------- Staircase layout ----------
 
-function buildElkGraph(diagram, placement) {
-  const boxPorts = new Map((diagram.boxes ?? []).map((b) => [b.id, []]));
-  const framePorts = new Map();
-  const edges = [];
-  const edgeArrow = new Map();
-
-  const framePort = (code) => {
-    const id = `frame|${code}`;
-    if (!framePorts.has(code))
-      framePorts.set(code, {
-        id,
-        width: 1,
-        height: 1,
-        layoutOptions: { "elk.port.side": ELK_SIDE[code[0]] },
-        code,
-      });
-    return id;
-  };
-  const boxPort = (box, side, arrowId) => {
-    const id = `${box}|${side}|${arrowId}`;
-    const ports = boxPorts.get(box);
-    if (!ports) throw new Error(`arrow ${arrowId}: unknown box ${box}`);
-    if (!ports.some((p) => p.id === id))
-      ports.push({
-        id,
-        width: 1,
-        height: 1,
-        layoutOptions: { "elk.port.side": ELK_SIDE[side] },
-      });
-    return id;
-  };
-
-  // C/M boundary arrows are not routed by ELK: external north/south ports of a layered
-  // graph all land beside the first layer and drag long detours across the sheet. They are
-  // drawn after layout as straight drops from the frame edge to the box port (IDEF0 style).
-  const drops = [];
+/**
+ * Branch kinds. Boundary: `in` (I code → west), `drop` (C code → north), `rise` (M code → south),
+ * `out` (east → O code). Between boxes: `fwd` to a later box, `back` to the same or an earlier box
+ * (IDEF0 feedback: to a control above all boxes, to an input or mechanism below the source box).
+ */
+function classify(diagram) {
+  const boxes = diagram.boxes ?? [];
+  const col = new Map(boxes.map((b, i) => [b.id, i]));
+  const routes = [];
   for (const arrow of diagram.arrows ?? []) {
-    const fromList = asList(arrow.from);
-    if (fromList.length === 1 && /^[CM]/.test(fromList[0].boundary ?? "")) {
-      for (const end of asList(arrow.to))
-        drops.push({
-          arrow,
-          code: fromList[0].boundary,
-          port: boxPort(end.box, end.side, arrow.id),
-        });
-      continue;
-    }
-    const sources = fromList.map((end) =>
-      end.boundary
-        ? framePort(end.boundary)
-        : boxPort(end.box, end.side ?? "O", arrow.id),
-    );
-    const targets = asList(arrow.to).map((end) =>
-      end.boundary
-        ? framePort(end.boundary)
-        : boxPort(end.box, end.side, arrow.id),
-    );
-    const lines = wrap(arrow.label ?? arrow.id);
-    let k = 0;
-    for (const source of sources) {
-      for (const target of targets) {
-        const id = `${arrow.id}#${k}`;
-        const labels =
-          k === 0
-            ? [
-                {
-                  id: `${id}:label`,
-                  text: lines.join("\n"),
-                  width: Math.max(...lines.map((l) => l.length)) * 6.3 + 10,
-                  height: lines.length * 13 + 4,
-                },
-              ]
-            : [];
-        edges.push({ id, sources: [source], targets: [target], labels });
-        edgeArrow.set(id, arrow);
-        k += 1;
+    const from = asList(arrow.from);
+    const to = asList(arrow.to);
+    if (from.length !== 1)
+      throw new Error(
+        `стрелка ${arrow.id}: источников ${from.length}, нужен один (ветвление — только в to)`,
+      );
+    const src = from[0];
+    if (!src.boundary && !col.has(src.box))
+      throw new Error(`стрелка ${arrow.id}: неизвестный блок ${src.box}`);
+    const branches = to.map((end) => {
+      if (end.boundary) {
+        if (src.boundary)
+          throw new Error(
+            `стрелка ${arrow.id}: идёт с границы ${src.boundary} на границу ${end.boundary}, минуя блоки`,
+          );
+        return { end, kind: "out" };
       }
+      if (!col.has(end.box))
+        throw new Error(`стрелка ${arrow.id}: неизвестный блок ${end.box}`);
+      if (src.boundary) {
+        const side = src.boundary[0];
+        if (end.side !== side)
+          throw new Error(
+            `стрелка ${arrow.id}: граничная ${src.boundary} входит в ${end.box} со стороны ${end.side}, а должна — со стороны ${side}`,
+          );
+        return { end, kind: { I: "in", C: "drop", M: "rise" }[side] };
+      }
+      return {
+        end,
+        kind: col.get(end.box) > col.get(src.box) ? "fwd" : "back",
+      };
+    });
+    // Boundary drops and rises are drawn left to right; the leftmost carries the label.
+    if (src.boundary)
+      branches.sort((a, b) => col.get(a.end.box) - col.get(b.end.box));
+    routes.push({ arrow, src, branches });
+  }
+  return { boxes, col, routes };
+}
+
+/** Ports on one side, ordered by (group, key, model order) so that routed lines do not cross. */
+class Side {
+  constructor() {
+    this.items = [];
+  }
+  add(id, group, key) {
+    if (!this.items.some((p) => p.id === id))
+      this.items.push({ id, group, key, n: this.items.length });
+  }
+  sort() {
+    this.items.sort((a, b) => a.group - b.group || a.key - b.key || a.n - b.n);
+    this.items.forEach((p, i) => (p.index = i));
+  }
+  get length() {
+    return this.items.length;
+  }
+  index(id) {
+    return this.items.find((p) => p.id === id).index;
+  }
+}
+
+function layoutDiagram(diagram) {
+  const { boxes, col, routes } = classify(diagram);
+  const single = boxes.length === 1;
+  const last = boxes.length - 1;
+  const sides = new Map(
+    boxes.map((b) => [
+      b.id,
+      { I: new Side(), C: new Side(), O: new Side(), M: new Side() },
+    ]),
+  );
+
+  // 1. Ports. East: feedback up, boundary outputs, forward (farthest first), feedback down.
+  // West: from earlier boxes, boundary inputs, feedback. North: from earlier boxes (later source
+  // leftmost), boundary controls, feedback. South: from earlier boxes, boundary mechanisms, feedback.
+  for (const { arrow, src, branches } of routes) {
+    if (!src.boundary) {
+      const kinds = branches.map((b) =>
+        b.kind === "back" ? (b.end.side === "C" ? "up" : "down") : b.kind,
+      );
+      const far = Math.max(
+        ...branches.map((b) => (b.end.box ? col.get(b.end.box) : 0)),
+      );
+      const group = kinds.includes("up")
+        ? 0
+        : kinds.includes("out")
+          ? 1
+          : kinds.includes("fwd")
+            ? 2
+            : 3;
+      sides.get(src.box).O.add(arrow.id, group, group === 2 ? -far : 0);
+    }
+    for (const { end, kind } of branches) {
+      if (!end.box) continue;
+      const srcCol = src.boundary ? -1 : col.get(src.box);
+      const group = kind === "fwd" ? 0 : kind === "back" ? 2 : 1;
+      const key =
+        kind === "fwd"
+          ? end.side === "C"
+            ? -srcCol
+            : srcCol
+          : kind === "back"
+            ? -srcCol
+            : codeNumber(src.boundary);
+      sides.get(end.box)[end.side].add(arrow.id, group, key);
+    }
+  }
+  for (const s of sides.values())
+    for (const side of Object.values(s)) side.sort();
+
+  // 2. Lanes: vertical tracks right of a source box (feedback leaving it) and left of a target
+  // column (arrows coming down or up to a west input); horizontal tracks above all boxes (feedback
+  // controls) and under a box (feedback inputs/mechanisms leaving it, forward mechanisms entering it).
+  const xrUp = boxes.map(() => []);
+  const xrDown = boxes.map(() => []);
+  const laneDown = boxes.map(() => []);
+  const laneUp = boxes.map(() => []);
+  const laneMech = boxes.map(() => []);
+  const top = [];
+  const under = boxes.map(() => []);
+  for (const { arrow, src, branches } of routes) {
+    const s = src.box ? col.get(src.box) : -1;
+    const westIn = branches.filter(
+      (b) => (b.kind === "fwd" || b.kind === "in") && b.end.side === "I",
+    );
+    if (westIn.length && (src.box || westIn.length > 1)) {
+      const first = westIn.reduce((a, b) =>
+        col.get(b.end.box) < col.get(a.end.box) ? b : a,
+      );
+      laneDown[col.get(first.end.box)].push({
+        id: arrow.id,
+        order: sides.get(first.end.box).I.index(arrow.id),
+      });
+    }
+    for (const { end, kind } of branches) {
+      if (kind === "fwd" && end.side === "M") {
+        laneMech[col.get(end.box)].push({ id: `${arrow.id}>${end.box}` });
+        under[col.get(end.box)].push(`${arrow.id}>${end.box}`);
+      }
+      if (kind === "back" && end.side === "I")
+        laneUp[col.get(end.box)].push({
+          id: `${arrow.id}>${end.box}`,
+          order: -sides.get(end.box).I.index(arrow.id),
+        });
+    }
+    if (branches.some((b) => b.kind === "back" && b.end.side === "C")) {
+      xrUp[s].push({
+        id: arrow.id,
+        order: sides.get(src.box).O.index(arrow.id),
+      });
+      top.push(arrow.id);
+    }
+    if (branches.some((b) => b.kind === "back" && b.end.side !== "C")) {
+      xrDown[s].push({
+        id: arrow.id,
+        order: -sides.get(src.box).O.index(arrow.id),
+      });
+      under[s].push(arrow.id);
+    }
+  }
+  const byOrder = (list) =>
+    list.sort((a, b) => a.order - b.order).map((l) => l.id);
+  const xrLanes = boxes.map((_, i) => ({
+    up: byOrder(xrUp[i]),
+    down: byOrder(xrDown[i]),
+  }));
+  const leftLanes = boxes.map((_, j) => {
+    const down = byOrder(laneDown[j]);
+    const up = byOrder(laneUp[j]);
+    return { down, up, mech: laneMech[j].map((l) => l.id) };
+  });
+  const nXr = xrLanes.map((l) => Math.max(l.up.length, l.down.length));
+  const nLeft = leftLanes.map(
+    (l) => Math.max(l.down.length, l.up.length) + l.mech.length,
+  );
+
+  // 3. Box sizes (title measured in its rendered font) and staircase positions.
+  const margin = single ? 300 : 130;
+  const sized = boxes.map((box) => {
+    const s = sides.get(box.id);
+    // A title wraps only between words: the longest word sets the floor.
+    const longestWord = Math.max(
+      ...String(box.name)
+        .split(/\s+/)
+        .map((w) => textWidth(w, U.title, 600)),
+    );
+    const width = Math.max(
+      single ? 340 : 120,
+      Math.ceil(longestWord) + 26,
+      (Math.max(s.C.length, s.M.length) + 1) * (single ? 34 : 15),
+    );
+    const titleLines = wrapTo(box.name, width - 22, U.title, 600).length;
+    const height = Math.max(
+      single ? 200 : 96,
+      titleLines * U.titleLine + 46,
+      (Math.max(s.I.length, s.O.length) + 1) * (single ? 56 : 30),
+    );
+    return { box, width, height };
+  });
+  const topBand = (single ? 170 : 130) + top.length * U.lane;
+  let x = margin + nLeft[0] * U.lane;
+  let y = topBand;
+  const placed = sized.map((s, i) => {
+    if (i) {
+      x += Math.max(40, 2 * U.pad + (nXr[i - 1] + nLeft[i]) * U.lane);
+      y += Math.max(50, U.pad + under[i - 1].length * U.lane + 34);
+    }
+    const p = { ...s, x, y };
+    x += s.width;
+    y += s.height;
+    return p;
+  });
+  const frameW = x + U.pad + nXr[last] * U.lane + (single ? margin : 110);
+  const frameH = y + U.pad + under[last].length * U.lane + (single ? 170 : 130);
+
+  // 4. Routes.
+  const at = (id) => placed[col.get(id)];
+  const port = (boxId, side, arrowId) => {
+    const b = at(boxId);
+    const list = sides.get(boxId)[side];
+    const t = (list.index(arrowId) + 1) / (list.length + 1);
+    if (side === "I") return { x: b.x, y: Math.round(b.y + b.height * t) };
+    if (side === "O")
+      return { x: b.x + b.width, y: Math.round(b.y + b.height * t) };
+    if (side === "C") return { x: Math.round(b.x + b.width * t), y: b.y };
+    return { x: Math.round(b.x + b.width * t), y: b.y + b.height };
+  };
+  const leftLaneX = (j, id) => {
+    const l = leftLanes[j];
+    let k = l.down.indexOf(id);
+    if (k < 0) k = l.up.indexOf(id);
+    if (k < 0) k = Math.max(l.down.length, l.up.length) + l.mech.indexOf(id);
+    return placed[j].x - U.pad - k * U.lane;
+  };
+  const xrX = (i, id) => {
+    const l = xrLanes[i];
+    const k = Math.max(l.up.indexOf(id), l.down.indexOf(id));
+    return placed[i].x + placed[i].width + U.pad + k * U.lane;
+  };
+  const underY = (i, id) =>
+    placed[i].y + placed[i].height + U.pad + under[i].indexOf(id) * U.lane;
+  const topY = (id) => topBand - U.pad - top.indexOf(id) * U.lane;
+
+  // Neighbouring ports sit closer than a code is wide: every second code moves one row out.
+  const stagger = (boxId, side, arrowId) =>
+    (sides.get(boxId)[side].index(arrowId) % 2) * 14;
+  const edges = [];
+  const codes = [];
+  for (const { arrow, src, branches } of routes) {
+    const s = src.box ? col.get(src.box) : -1;
+    const S = src.box ? port(src.box, "O", arrow.id) : null;
+    const westIn = branches.filter(
+      (b) => (b.kind === "fwd" || b.kind === "in") && b.end.side === "I",
+    );
+    const firstWest = westIn.length
+      ? Math.min(...westIn.map((b) => col.get(b.end.box)))
+      : -1;
+    let inY = null;
+    branches.forEach(({ end, kind }, k) => {
+      const T = end.box ? port(end.box, end.side, arrow.id) : null;
+      const t = end.box ? col.get(end.box) : -1;
+      let points;
+      if (kind === "in") {
+        // A branching boundary input enters at the height of its first (highest) target.
+        inY ??= port(
+          westIn.find((b) => col.get(b.end.box) === firstWest).end.box,
+          "I",
+          arrow.id,
+        ).y;
+        if (k === 0)
+          codes.push({
+            code: src.boundary,
+            side: "I",
+            x: 0,
+            y: inY,
+            key: `${arrow.id}`,
+          });
+        const lane = westIn.length > 1 ? leftLaneX(firstWest, arrow.id) : T.x;
+        points = [
+          { x: 0, y: inY },
+          { x: lane, y: inY },
+          { x: lane, y: T.y },
+          T,
+        ];
+      } else if (kind === "drop") {
+        codes.push({
+          code: src.boundary,
+          side: "C",
+          x: T.x,
+          y: -stagger(end.box, "C", arrow.id),
+          key: `${arrow.id}>${end.box}`,
+        });
+        points = [{ x: T.x, y: 0 }, T];
+      } else if (kind === "rise") {
+        codes.push({
+          code: src.boundary,
+          side: "M",
+          x: T.x,
+          y: frameH + stagger(end.box, "M", arrow.id),
+          key: `${arrow.id}>${end.box}`,
+        });
+        points = [{ x: T.x, y: frameH }, T];
+      } else if (kind === "out") {
+        codes.push({
+          code: end.boundary,
+          side: "O",
+          x: frameW,
+          y: S.y,
+          key: arrow.id,
+        });
+        points = [S, { x: frameW, y: S.y }];
+      } else if (kind === "fwd" && end.side === "C") {
+        points = [S, { x: T.x, y: S.y }, T];
+      } else if (kind === "fwd" && end.side === "I") {
+        const lane = leftLaneX(firstWest, arrow.id);
+        points = [S, { x: lane, y: S.y }, { x: lane, y: T.y }, T];
+      } else if (kind === "fwd") {
+        const lane = leftLaneX(t, `${arrow.id}>${end.box}`);
+        const below = underY(t, `${arrow.id}>${end.box}`);
+        points = [
+          S,
+          { x: lane, y: S.y },
+          { x: lane, y: below },
+          { x: T.x, y: below },
+          T,
+        ];
+      } else if (end.side === "C") {
+        const xr = xrX(s, arrow.id);
+        const above = topY(arrow.id);
+        points = [
+          S,
+          { x: xr, y: S.y },
+          { x: xr, y: above },
+          { x: T.x, y: above },
+          T,
+        ];
+      } else {
+        const xr = xrX(s, arrow.id);
+        const below = underY(s, arrow.id);
+        points =
+          end.side === "I"
+            ? [
+                S,
+                { x: xr, y: S.y },
+                { x: xr, y: below },
+                { x: leftLaneX(t, `${arrow.id}>${end.box}`), y: below },
+                { x: leftLaneX(t, `${arrow.id}>${end.box}`), y: T.y },
+                T,
+              ]
+            : [
+                S,
+                { x: xr, y: S.y },
+                { x: xr, y: below },
+                { x: T.x, y: below },
+                T,
+              ];
+      }
+      edges.push({
+        id: `${arrow.id}#${k}`,
+        arrow,
+        kind:
+          kind === "in" || kind === "drop" || kind === "rise"
+            ? src.boundary[0]
+            : arrowKind(arrow),
+        prefer: kind === "drop" || kind === "rise" ? "end" : "start",
+        points: points.filter(
+          (p, i) => !i || p.x !== points[i - 1].x || p.y !== points[i - 1].y,
+        ),
+        host: k === 0,
+      });
+    });
+  }
+
+  // 5. Labels: one per arrow, on its first branch, at the cheapest free spot along it — never on a
+  // box, a boundary or another label; crossing a line costs, distance from the anchor costs a little.
+  const boxRects = placed.map((p) => ({
+    x: p.x,
+    y: p.y,
+    w: p.width,
+    h: p.height,
+  }));
+  const segments = edges.flatMap((e) =>
+    e.points
+      .slice(1)
+      .map((p, i) => ({ a: e.points[i], b: p, arrow: e.arrow.id })),
+  );
+  const labels = [];
+  const hits = (r, q, m) =>
+    r.x < q.x + q.w + m &&
+    q.x < r.x + r.w + m &&
+    r.y < q.y + q.h + m &&
+    q.y < r.y + r.h + m;
+  const crossings = (r) =>
+    segments.filter(({ a, b }) => {
+      const sx = Math.min(a.x, b.x);
+      const sy = Math.min(a.y, b.y);
+      return hits(
+        r,
+        { x: sx, y: sy, w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) },
+        1,
+      );
+    }).length;
+  const widths = single ? [280, 200, 140] : [240, 170, 120];
+  // Shortest paths first: they have the fewest spots, long ones can still move along.
+  const pathLength = (e) =>
+    e.points
+      .slice(1)
+      .reduce(
+        (sum, p, i) =>
+          sum + Math.abs(p.x - e.points[i].x) + Math.abs(p.y - e.points[i].y),
+        0,
+      );
+  const hosts = edges
+    .filter((e) => e.host)
+    .sort((a, b) => pathLength(a) - pathLength(b));
+  for (const edge of hosts) {
+    const pts =
+      edge.prefer === "end" ? [...edge.points].reverse() : edge.points;
+    let best = null;
+    let walked = 0;
+    for (let i = 1; i < pts.length; i += 1) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const len = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+      for (const maxW of widths) {
+        const block = labelBlock(edge.arrow.label ?? edge.arrow.id, maxW);
+        const spots = [];
+        if (a.y === b.y) {
+          const x0 = Math.min(a.x, b.x);
+          const room = len - block.width - 12;
+          for (const f of room > 0 ? [0, 0.25, 0.5, 0.75, 1] : [0]) {
+            const along = 6 + f * Math.max(room, 0);
+            const lx =
+              a.x <= b.x
+                ? x0 + along
+                : Math.max(a.x, b.x) - along - block.width;
+            spots.push(
+              { x: lx, y: a.y - block.height - 3, d: along },
+              { x: lx, y: a.y + 3, d: along + 4 },
+            );
+          }
+        } else {
+          const y0 = Math.min(a.y, b.y);
+          const room = len - block.height - 12;
+          for (const f of room > 0 ? [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1] : [0]) {
+            const along = 6 + f * Math.max(room, 0);
+            const ly =
+              a.y <= b.y
+                ? y0 + along
+                : Math.max(a.y, b.y) - along - block.height;
+            spots.push(
+              { x: a.x + 5, y: ly, d: along },
+              { x: a.x - 5 - block.width, y: ly, d: along + 4 },
+            );
+          }
+        }
+        for (const spot of spots) {
+          const r = { x: spot.x, y: spot.y, w: block.width, h: block.height };
+          if (
+            r.x < 4 ||
+            r.y < 4 ||
+            r.x + r.w > frameW - 4 ||
+            r.y + r.h > frameH - 4
+          )
+            continue;
+          if (boxRects.some((q) => hits(r, q, 4))) continue;
+          const overlap = labels.filter((q) => hits(r, q, 3)).length;
+          const cost =
+            overlap * 1000 +
+            crossings(r) * 40 +
+            (walked + spot.d) * 0.05 +
+            block.lines * 6;
+          if (!best || cost < best.cost) best = { cost, r, block };
+        }
+      }
+      walked += len;
+    }
+    if (best) {
+      labels.push(best.r);
+      edge.label = { text: best.block.text, x: best.r.x, y: best.r.y };
     }
   }
 
-  const single = (diagram.boxes ?? []).length === 1;
-  const children = (diagram.boxes ?? []).map((box) => ({
-    id: box.id,
-    width: single ? 300 : BOX_W,
-    height: single ? 170 : BOX_H,
-    ports: boxPorts.get(box.id),
-    layoutOptions: {
-      "elk.portConstraints": "FIXED_SIDE",
-      "elk.spacing.portPort": "18",
-    },
-  }));
-
-  const frame = {
-    id: "frame",
-    ports: [...framePorts.values()],
-    children,
-    edges,
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": "RIGHT",
-      "elk.edgeRouting": "ORTHOGONAL",
-      "elk.portConstraints": "FIXED_SIDE",
-      "elk.padding": "[top=150,left=60,bottom=130,right=60]",
-      "elk.spacing.nodeNode": "70",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "90",
-      "elk.spacing.edgeEdge": "14",
-      "elk.spacing.edgeNode": "24",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "14",
-      "elk.layered.spacing.edgeNodeBetweenLayers": "24",
-      "elk.spacing.edgeLabel": "4",
-      "elk.edgeLabels.placement": "CENTER",
-      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-      "elk.layered.crossingMinimization.forceNodeModelOrder": "true",
-      "elk.layered.cycleBreaking.strategy": "MODEL_ORDER",
-      "elk.layered.mergeEdges": "true",
-      "elk.layered.nodePlacement.strategy": placement,
-    },
-  };
-  return {
-    graph: {
-      id: "root",
-      layoutOptions: { "elk.algorithm": "layered" },
-      children: [frame],
-      edges: [],
-    },
-    edgeArrow,
-    drops,
-  };
-}
-
-async function layoutDiagram(diagram, placement) {
-  const { graph, edgeArrow, drops } = buildElkGraph(diagram, placement);
-  const result = await elk.layout(graph);
-  const frame = result.children[0];
-  const fx = frame.x;
-  const fy = frame.y;
-  const boxesById = new Map((diagram.boxes ?? []).map((b) => [b.id, b]));
-  // Port ids: `frame|<ICOM code>` or `<box>|<side letter>|<arrow>` — the side follows from the id.
-  const portData = (p) => {
-    const code = p.id.split("|")[1];
-    return {
-      id: p.id,
-      x: p.x + (p.width ?? 0) / 2,
-      y: p.y + (p.height ?? 0) / 2,
-      side: ELK_SIDE[code[0]],
-      code,
-    };
-  };
-
+  // 6. React Flow nodes and edges. Every edge runs frame → frame through two hidden handles: the
+  // path is drawn from the routed points, so React Flow only supplies events and markers.
   const nodes = [
     {
       id: "frame",
       type: "frame",
-      position: { x: fx, y: fy },
-      data: {
-        ports: (frame.ports ?? []).map(portData),
-        width: frame.width,
-        height: frame.height,
-        title: `${diagram.id} · ${diagram.title ?? ""}`,
-      },
+      position: { x: 0, y: 0 },
+      data: { codes },
       // Explicit width/height: React Flow then never hides a rebuilt node while it re-measures it.
-      width: frame.width,
-      height: frame.height,
-      style: { width: frame.width, height: frame.height },
+      width: frameW,
+      height: frameH,
+      style: { width: frameW, height: frameH },
       draggable: false,
       selectable: false,
       focusable: false,
       zIndex: -1,
     },
-    ...frame.children.map((child) => ({
-      id: child.id,
+    ...placed.map((p) => ({
+      id: p.box.id,
       type: "box",
-      position: { x: fx + child.x, y: fy + child.y },
-      data: {
-        box: boxesById.get(child.id),
-        ports: (child.ports ?? []).map(portData),
-      },
-      width: child.width,
-      height: child.height,
-      style: { width: child.width, height: child.height },
+      position: { x: p.x, y: p.y },
+      data: { box: p.box },
+      width: p.width,
+      height: p.height,
+      style: { width: p.width, height: p.height },
       draggable: false,
     })),
   ];
-
-  const edges = [];
-  for (const edge of frame.edges ?? []) {
-    const arrow = edgeArrow.get(edge.id);
-    const points = [];
-    for (const section of edge.sections ?? []) {
-      points.push(
-        section.startPoint,
-        ...(section.bendPoints ?? []),
-        section.endPoint,
-      );
-    }
-    const label = edge.labels?.[0];
-    // IDEF0 feedback (a box output back to its own input, e.g. A0 a04): ELK hugs the box with
-    // self-loops, so the loop is drawn the IDEF0 way — out east, under the box and its mechanism
-    // stubs, back in west — with its label under the loop.
-    let loopLabel = null;
-    const ownBox = edge.sources[0].split("|")[0];
-    if (
-      !edge.sources[0].startsWith("frame|") &&
-      ownBox === edge.targets[0].split("|")[0] &&
-      points.length
-    ) {
-      const child = frame.children.find((c) => c.id === ownBox);
-      const start = points[0];
-      const end = points[points.length - 1];
-      const below = child.y + child.height + 56;
-      points.splice(
-        0,
-        points.length,
-        start,
-        { x: start.x + 28, y: start.y },
-        { x: start.x + 28, y: below },
-        { x: end.x - 28, y: below },
-        { x: end.x - 28, y: end.y },
-        end,
-      );
-      const label = edge.labels?.[0];
-      if (label)
-        loopLabel = {
-          text: label.text,
-          x: fx + child.x,
-          y: fy + below + 6,
-          width: label.width,
-          height: label.height,
-        };
-    }
-    edges.push({
-      id: edge.id,
-      type: "idef",
-      source: edge.sources[0].startsWith("frame|")
-        ? "frame"
-        : edge.sources[0].split("|")[0],
-      sourceHandle: edge.sources[0],
-      target: edge.targets[0].startsWith("frame|")
-        ? "frame"
-        : edge.targets[0].split("|")[0],
-      targetHandle: edge.targets[0],
-      data: {
-        arrow,
-        kind: arrowKind(arrow),
-        points: points.map((p) => ({ x: fx + p.x, y: fy + p.y })),
-        label:
-          loopLabel ??
-          (label
-            ? {
-                text: label.text,
-                x: fx + label.x,
-                y: fy + label.y,
-                width: label.width,
-                height: label.height,
-              }
-            : null),
-      },
-    });
-  }
-  // Straight C/M drops: frame edge → box port.
-  const portAbs = new Map();
-  for (const child of frame.children)
-    for (const p of child.ports ?? [])
-      portAbs.set(p.id, {
-        x: fx + child.x + p.x + (p.width ?? 0) / 2,
-        y: fy + child.y + p.y + (p.height ?? 0) / 2,
-      });
-  const framePortsExtra = [];
-  const sorted = [...drops].sort(
-    (a, b) => portAbs.get(a.port).x - portAbs.get(b.port).x,
-  );
-  // A branching boundary arrow is labelled once, at its leftmost drop; the other drops carry only
-  // the ICOM code at the frame edge. Labels are packed into rows so neighbours never overlap.
-  const labelled = new Set();
-  const rows = { C: [], M: [] };
-  const ROW_H = 44;
-  for (const drop of sorted) {
-    const end = portAbs.get(drop.port);
-    const isC = drop.code[0] === "C";
-    const edgeY = isC ? fy : fy + frame.height;
-    const handleId = `frame|${drop.code}|${drop.arrow.id}|${drop.port}`;
-    framePortsExtra.push({
-      id: handleId,
-      x: end.x - fx,
-      y: edgeY - fy,
-      side: isC ? "NORTH" : "SOUTH",
-      code: drop.code,
-    });
-    let label = null;
-    if (!labelled.has(drop.arrow.id)) {
-      labelled.add(drop.arrow.id);
-      const lines = wrap(drop.arrow.label ?? drop.arrow.id, 22);
-      const width = Math.max(...lines.map((l) => l.length)) * 6.3 + 12;
-      const height = lines.length * 13 + 4;
-      const side = rows[drop.code[0]];
-      let row = side.findIndex((right) => right < end.x);
-      if (row < 0) row = side.push(0) - 1;
-      side[row] = end.x + width;
-      label = {
-        text: lines.join("\n"),
-        x: end.x + 4,
-        y: isC ? edgeY + 8 + row * ROW_H : edgeY - 8 - height - row * ROW_H,
-        height,
-      };
-    }
-    edges.push({
-      id: `${drop.arrow.id}#${drop.port}`,
+  return {
+    width: frameW,
+    height: frameH,
+    nodes,
+    edges: edges.map((e) => ({
+      id: e.id,
       type: "idef",
       source: "frame",
-      sourceHandle: handleId,
-      target: drop.port.split("|")[0],
-      targetHandle: drop.port,
+      sourceHandle: "s",
+      target: "frame",
+      targetHandle: "t",
       data: {
-        arrow: drop.arrow,
-        kind: drop.code[0],
-        points: [
-          { x: end.x, y: edgeY },
-          { x: end.x, y: end.y },
-        ],
-        label,
+        arrow: e.arrow,
+        kind: e.kind,
+        points: e.points,
+        label: e.label ?? null,
       },
-    });
-  }
-  nodes[0].data.ports = [...nodes[0].data.ports, ...framePortsExtra];
-  return { nodes, edges };
+    })),
+  };
 }
 
 // ---------- React Flow node / edge renderers ----------
 
-function handleStyle(port) {
-  return { left: port.x, top: port.y, transform: "translate(-50%, -50%)" };
-}
+const CODE_OFFSET = {
+  I: { transform: "translate(calc(-100% - 6px), -50%)" },
+  O: { transform: "translate(6px, -50%)" },
+  C: { transform: "translate(4px, calc(-100% - 2px))" },
+  M: { transform: "translate(4px, 2px)" },
+};
 
 function FrameNode({ data }) {
   return html`<div class="frame">
-    ${data.ports.map((port) => {
-      const isOut = port.code.startsWith("O");
-      const offset = {
-        WEST: { left: port.x - 26, top: port.y - 16 },
-        EAST: { left: port.x + 6, top: port.y - 16 },
-        NORTH: { left: port.x + 4, top: port.y - 18 },
-        SOUTH: { left: port.x + 4, top: port.y + 4 },
-      }[port.side];
-      return html`<${React.Fragment} key=${port.id}>
-        <${Handle}
-          id=${port.id}
-          type=${isOut ? "target" : "source"}
-          position=${RF_SIDE[port.side]}
-          style=${handleStyle(port)}
-          isConnectable=${false}
-        />
-        <span class="code" style=${offset}>${port.code}</span>
-      <//>`;
-    })}
+    <${Handle}
+      id="s"
+      type="source"
+      position=${Position.Left}
+      isConnectable=${false}
+    />
+    <${Handle}
+      id="t"
+      type="target"
+      position=${Position.Left}
+      isConnectable=${false}
+    />
+    ${data.codes.map(
+      (c) =>
+        html`<span
+          key=${c.key}
+          class="code"
+          style=${{ left: c.x, top: c.y, ...CODE_OFFSET[c.side] }}
+        >
+          ${c.code}
+        </span>`,
+    )}
   </div>`;
 }
 
 function BoxNode({ data }) {
   // Focus is drawn from data, not React Flow selection: selecting re-sorts nodes by z-index and
   // re-inserts the DOM node mid-click, which swallows the double-click that opens a child diagram.
-  const { box, ports, hasChild, onOpen, focused: selected } = data;
+  const { box, hasChild, onOpen, focused: selected } = data;
   const mechanisms = box.mechanisms ?? [];
   return html`<div
     class=${"box" + (selected ? " selected" : "")}
     title=${box.note ?? ""}
     onDoubleClick=${onOpen ?? undefined}
   >
-    ${ports.map((port) => {
-      const side = port.id.split("|")[1];
-      return html`<${Handle}
-        key=${port.id}
-        id=${port.id}
-        type=${side === "O" ? "source" : "target"}
-        position=${RF_SIDE[port.side]}
-        style=${handleStyle(port)}
-        isConnectable=${false}
-      />`;
-    })}
     ${hasChild ? html`<span class="drill" title="Двойной щелчок — декомпозиция">▼</span>` : null}
     <div class="name">${box.name}</div>
     <div class="mech" title=${mechanisms.join("\n")}>
@@ -555,13 +787,9 @@ function App({ model }) {
   const [current, setCurrent] = useState(() =>
     byId.has(readHash(index.root)) ? readHash(index.root) : index.root,
   );
-  const [layout, setLayout] = useState(null);
-  const [layoutError, setLayoutError] = useState(null);
   const [pinned, setPinned] = useState(null);
   const [hover, setHover] = useState(null);
   const diagram = byId.get(current);
-  // BRANDES_KOEPF gave the fewest bends on A0; ?placement=NETWORK_SIMPLEX | LINEAR_SEGMENTS compares.
-  const placement = params.get("placement") ?? "BRANDES_KOEPF";
 
   useEffect(() => {
     const onHash = () =>
@@ -569,19 +797,35 @@ function App({ model }) {
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
   }, [byId, index.root]);
-  useEffect(() => {
-    let alive = true;
-    setLayout(null);
-    setLayoutError(null);
-    layoutDiagram(diagram, placement)
-      .then((result) => alive && setLayout(result))
-      .catch(
-        (error) => alive && setLayoutError(String(error?.message ?? error)),
+  const [layout, layoutError] = useMemo(() => {
+    try {
+      return [layoutDiagram(diagram), null];
+    } catch (error) {
+      return [null, String(error?.message ?? error)];
+    }
+  }, [diagram]);
+  // Initial view: the whole diagram when that stays legible; otherwise LEGIBLE_ZOOM with the
+  // diagram width on screen and the top edge visible — a tall staircase scrolls down.
+  const fitWidth = useCallback(
+    (instance) => {
+      const canvas = document.querySelector(".canvas");
+      if (!layout || !canvas) return;
+      const outer = { w: layout.width + 80, h: layout.height + 60 };
+      const zoom = Math.min(
+        1.3,
+        Math.max(
+          LEGIBLE_ZOOM,
+          Math.min(canvas.clientWidth / outer.w, canvas.clientHeight / outer.h),
+        ),
       );
-    return () => {
-      alive = false;
-    };
-  }, [diagram, placement]);
+      instance.setViewport({
+        x: Math.max(0, (canvas.clientWidth - outer.w * zoom) / 2) + 40 * zoom,
+        y: Math.max(0, (canvas.clientHeight - outer.h * zoom) / 2) + 30 * zoom,
+        zoom,
+      });
+    },
+    [layout],
+  );
 
   const open = useCallback(
     (id) => {
@@ -677,34 +921,32 @@ function App({ model }) {
             ? html`<p class="err" style=${{ padding: 16 }}>
                 Ошибка раскладки: ${layoutError}
               </p>`
-            : layout
-              ? html`<${ReactFlow}
-                  key=${current}
-                  nodes=${nodes}
-                  edges=${edges}
-                  nodeTypes=${nodeTypes}
-                  edgeTypes=${edgeTypes}
-                  fitView
-                  fitViewOptions=${{ padding: 0.06 }}
-                  minZoom=${0.1}
-                  nodesDraggable=${false}
-                  elevateNodesOnSelect=${false}
-                  elevateEdgesOnSelect=${false}
-                  nodesConnectable=${false}
-                  zoomOnDoubleClick=${false}
-                  proOptions=${{ hideAttribution: true }}
-                  onNodeClick=${(_, node) => node.type === "box" && setPinned({ type: "box", id: node.id })}
-                  onNodeMouseEnter=${(_, node) => node.type === "box" && setHover({ type: "box", id: node.id })}
-                  onNodeMouseLeave=${() => setHover(null)}
-                  onEdgeClick=${(_, edge) => setPinned({ type: "arrow", id: edge.data.arrow.id })}
-                  onEdgeMouseEnter=${(_, edge) => setHover({ type: "arrow", id: edge.data.arrow.id })}
-                  onEdgeMouseLeave=${() => setHover(null)}
-                  onPaneClick=${() => setPinned(null)}
-                >
-                  <${Background} gap=${24} size=${1} />
-                  <${Controls} showInteractive=${false} />
-                <//>`
-              : html`<p style=${{ padding: 16 }}>Раскладка…</p>`
+            : html`<${ReactFlow}
+                key=${current}
+                nodes=${nodes}
+                edges=${edges}
+                nodeTypes=${nodeTypes}
+                edgeTypes=${edgeTypes}
+                onInit=${fitWidth}
+                minZoom=${0.3}
+                panOnScroll
+                nodesDraggable=${false}
+                elevateNodesOnSelect=${false}
+                elevateEdgesOnSelect=${false}
+                nodesConnectable=${false}
+                zoomOnDoubleClick=${false}
+                proOptions=${{ hideAttribution: true }}
+                onNodeClick=${(_, node) => node.type === "box" && setPinned({ type: "box", id: node.id })}
+                onNodeMouseEnter=${(_, node) => node.type === "box" && setHover({ type: "box", id: node.id })}
+                onNodeMouseLeave=${() => setHover(null)}
+                onEdgeClick=${(_, edge) => setPinned({ type: "arrow", id: edge.data.arrow.id })}
+                onEdgeMouseEnter=${(_, edge) => setHover({ type: "arrow", id: edge.data.arrow.id })}
+                onEdgeMouseLeave=${() => setHover(null)}
+                onPaneClick=${() => setPinned(null)}
+              >
+                <${Background} gap=${24} size=${1} />
+                <${Controls} showInteractive=${false} />
+              <//>`
         }
       </div>
       <aside>
@@ -721,15 +963,19 @@ function App({ model }) {
 
 async function loadModel() {
   const base = new URL("../model/", import.meta.url);
-  const index = parseYaml(
-    await (await fetch(new URL("index.yaml", base))).text(),
-  );
+  const read = async (file) => {
+    const response = await fetch(new URL(file, base));
+    if (!response.ok)
+      throw new Error(
+        `файл model/${file} не получен — сервер ответил HTTP ${response.status}`,
+      );
+    return parseYaml(await response.text());
+  };
+  const index = await read("index.yaml");
   const diagrams = [];
   for (const entry of index.diagrams) {
-    const response = await fetch(new URL(entry.file, base));
-    if (!response.ok) throw new Error(`${entry.file}: HTTP ${response.status}`);
     diagrams.push({
-      ...parseYaml(await response.text()),
+      ...(await read(entry.file)),
       id: entry.id,
       parent: entry.parent,
     });

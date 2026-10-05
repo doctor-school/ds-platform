@@ -1,0 +1,198 @@
+# IDEF0 decomposition A32 «Произвести подкаст» (child of A3; format: FORMAT-ru.md). Podcast line of
+# process block 3, steps 19–23 (../process-to-be-ru.md). Leaves carry a DRAFT effort per episode.
+id: A32
+parent: A3
+title: Произвести подкаст
+# Child boundary code → A3 arrow touching box A32 on that side.
+icom:
+  I1: I1
+  I2: I2
+  C1: C1
+  C2: C2
+  C3: C3
+  C4: C5
+  C5: C6
+  C6: C7
+  O1: O2
+  O2: a01
+  O3: a02
+  M1: M1
+  M2: M2
+  M3: M4
+  M4: M8
+  M5: M9
+boxes:
+  - id: A321
+    name: Принять тезисы и авторизовать спикера
+    functions: [F-077, F-079]
+    mechanisms: [Менеджер эксперта]
+    note: >-
+      Шаг 19: компания присылает тезисы и материалы (внешний шаг); спикер вносится в базу
+      авторизованных — эта база управляет и мероприятиями (A33).
+    leaf: true
+    effort:
+      role: Менеджер эксперта
+      unit: эпизод
+      hours_draft: [1, 2]
+      driver: доля новых спикеров; эпизоды с коммерческой частью
+      basis: оценка аналитика
+  - id: A322
+    name: Согласовать коммерческую часть с лидером
+    functions: [F-081, F-082]
+    mechanisms: [Менеджер эксперта]
+    note: >-
+      Шаг 20: слайд-кит лидеру, согласование коммерческой части; при отказе — второй лектор. Тот же шаг
+      для мероприятий (блок 4, шаг 3).
+    leaf: true
+    effort:
+      role: Менеджер эксперта
+      unit: эпизод
+      hours_draft: [1, 3]
+      driver: доля эпизодов с коммерческой частью; доля отказов лидера
+      iterations: замена спикера вторым лектором
+      basis: "оценка аналитика; опора: коммерческая часть 10–15 мин / 10–15 слайдов из 45–60 (L1911, L2003)"
+  - id: A323
+    name: Оформить сценарий подкаста и маркировку
+    functions: [F-083, F-078]
+    mechanisms: [Медредактор-сценарист]
+    note: Шаг 21 — сценарий по СОП подкаста, маркировка (НМО / реклама).
+    leaf: true
+    effort:
+      role: Медредактор-сценарист
+      unit: эпизод
+      hours_draft: [2, 4]
+      driver: длительность эпизода; наличие коммерческой части
+      basis: оценка аналитика
+  - id: A324
+    name: Записать подкаст в студии
+    functions: [F-084, F-085]
+    mechanisms: [Медиа-круг — запись подкаста]
+    note: >-
+      Шаг 22: запись в общей студии (В3); чисто коммерческий подкаст — вариант той же линии. Часы
+      спикера — гонорар (переменная), студия — внешняя затрата.
+    leaf: true
+    effort:
+      role: Медиа-круг — запись подкаста
+      unit: эпизод
+      hours_draft: [2, 3]
+      driver: длительность эпизода; подкастов в неделю
+      basis: "оценка аналитика; опора: 1 → 2 записи подкаста в неделю (M:2026-08-11-0959)"
+  - id: A325
+    name: Нарезать, выложить и архивировать
+    functions: [F-087, F-088]
+    mechanisms: [Медиа-круг — монтажёр]
+    note: Шаг 23 — нарезки и выкладка; архив или встраивание в урок как компонент.
+    leaf: true
+    effort:
+      role: Медиа-круг — монтажёр
+      unit: эпизод
+      hours_draft: [3, 6]
+      driver: число нарезок на эпизод
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Знания лидера, материалы
+    objects: [O-123, O-077]
+    from: { boundary: I1 }
+    to: { box: A323, side: I }
+  - id: I2
+    label: Тезисы и слайд-кит компании
+    objects: [O-076, O-095]
+    from: { boundary: I2 }
+    to: [{ box: A321, side: I }, { box: A322, side: I }]
+  - id: C1
+    label: Маркировка, запрет прямого контакта
+    objects: [O-157, O-161]
+    from: { boundary: C1 }
+    to: [{ box: A322, side: C }, { box: A323, side: C }]
+  - id: C2
+    label: МНН и торговое название
+    objects: [O-151, O-152]
+    from: { boundary: C2 }
+    to: { box: A323, side: C }
+  - id: C3
+    label: НМО
+    objects: [O-158]
+    from: { boundary: C3 }
+    to: { box: A323, side: C }
+  - id: C4
+    label: Предмет договора — слот в подкасте
+    objects: [O-170]
+    from: { boundary: C4 }
+    to: { box: A322, side: C }
+  - id: C5
+    label: План подкастов, заявка компании
+    objects: [O-072, O-071]
+    from: { boundary: C5 }
+    to: [{ box: A321, side: C }, { box: A324, side: C }]
+  - id: C6
+    label: СОП подкаста, 4K
+    objects: [O-144, O-168]
+    from: { boundary: C6 }
+    to:
+      - { box: A323, side: C }
+      - { box: A324, side: C }
+      - { box: A325, side: C }
+  - id: O1
+    label: Подкасты и архив
+    objects: [O-048, O-065]
+    from: { box: A325, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Запись подкаста — компонент урока
+    objects: [O-048]
+    from: { box: A325, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: База авторизованных спикеров
+    objects: [O-117, O-028]
+    from: { box: A321, side: O }
+    to: { boundary: O3 }
+  - id: M1
+    label: Менеджеры экспертов, медредактор
+    objects: [O-001, O-011]
+    from: { boundary: M1 }
+    to:
+      - { box: A321, side: M }
+      - { box: A322, side: M }
+      - { box: A323, side: M }
+  - id: M2
+    label: Спикеры, второй лектор, база спикеров
+    objects: [O-027, O-029, O-116]
+    from: { boundary: M2 }
+    to: [{ box: A322, side: M }, { box: A324, side: M }]
+  - id: M3
+    label: Медиа-круг
+    objects: [O-012, O-013]
+    from: { boundary: M3 }
+    to: [{ box: A324, side: M }, { box: A325, side: M }]
+  - id: M4
+    label: Студия
+    objects: [O-187]
+    from: { boundary: M4 }
+    to: { box: A324, side: M }
+  - id: M5
+    label: База экспертов
+    objects: [O-115]
+    from: { boundary: M5 }
+    to: { box: A321, side: M }
+  - id: a01
+    label: Авторизованный спикер, тезисы
+    objects: [O-117, O-076]
+    from: { box: A321, side: O }
+    to: { box: A322, side: I }
+  - id: a02
+    label: Согласованная коммерческая часть
+    objects: [O-050]
+    from: { box: A322, side: O }
+    to: { box: A323, side: I }
+  - id: a03
+    label: Сценарий подкаста
+    objects: [O-084]
+    from: { box: A323, side: O }
+    to: { box: A324, side: I }
+  - id: a04
+    label: Запись подкаста
+    objects: [O-048]
+    from: { box: A324, side: O }
+    to: { box: A325, side: I }

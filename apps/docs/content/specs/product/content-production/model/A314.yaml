@@ -1,0 +1,173 @@
+# IDEF0 decomposition A314 «Произвести медиа» (child of A31; format: FORMAT-ru.md). Lesson line steps
+# 13–14 (../process-to-be-ru.md, block 3) under the media organisation decision В3: the rotating media
+# lead does the storyboard inside the team, the rest flows in the media circle. DRAFT effort per lesson.
+id: A314
+parent: A31
+title: Произвести медиа
+# Child boundary code → A31 arrow touching box A314 on that side.
+icom:
+  I1: a04
+  I2: I3
+  I3: a07
+  C1: C6
+  O1: a05
+  M1: M4
+  M2: M7
+boxes:
+  - id: A3141
+    name: Сделать и согласовать раскадровку
+    functions: [F-051]
+    mechanisms: [Медиа-круг — медиа-ведущий]
+    note: >-
+      Шаг 13: раскадровка по разметке визуализации, согласование в команде и с экспертом до генерации
+      (снимает переделки после генерации).
+    leaf: true
+    effort:
+      role: Медиа-круг — медиа-ведущий
+      unit: урок
+      hours_draft: [6, 12]
+      driver: длительность ролика и число микролернингов
+      iterations: круги согласования раскадровки с экспертом
+      basis: оценка аналитика
+  - id: A3142
+    name: Сделать схемы
+    functions: [F-041]
+    mechanisms: [Медиа-круг — дизайнер схем]
+    note: Шаг 14 — схемы по стандартным блокам; часть схем уходит в анимацию.
+    leaf: true
+    effort:
+      role: Медиа-круг — дизайнер схем
+      unit: урок
+      hours_draft: [6, 12]
+      driver: число схем на урок
+      basis: "оценка аналитика; опора: 5 из 20 схем под анимацию (L2825)"
+  - id: A3143
+    name: Создать медицинские кадры
+    functions: [F-042]
+    mechanisms: [Медиа-круг — медицинская визуализация]
+    note: Шаг 14 — медкадры с ИИ-генерацией и человеком на каждом этапе (O-140); генерация — внешняя затрата.
+    leaf: true
+    effort:
+      role: Медиа-круг — медицинская визуализация
+      unit: урок
+      hours_draft: [6, 12]
+      driver: число сцен «врач – пациент» и медкадров; доля переделки рекламных кадров
+      basis: оценка аналитика
+  - id: A3144
+    name: Сделать анимацию и генерацию
+    functions: [F-043]
+    mechanisms: [Медиа-круг — аниматор]
+    note: Шаг 14 — анимация по стандарту анимации (снимает TK-10).
+    leaf: true
+    effort:
+      role: Медиа-круг — аниматор
+      unit: урок
+      hours_draft: [10, 20]
+      driver: доля схем под анимацию; длительность ролика
+      basis: "оценка аналитика; опора: 5 из 20 схем под анимацию (L2825)"
+  - id: A3145
+    name: Синтезировать речь
+    functions: [F-044]
+    mechanisms: [Медиа-круг — голос]
+    note: Шаг 14 — синтез по репликам; голоса и лицензии (O-118, O-119) — внешняя затрата.
+    leaf: true
+    effort:
+      role: Медиа-круг — голос
+      unit: урок
+      hours_draft: [2, 4]
+      driver: число реплик; длительность ролика
+      basis: оценка аналитика
+  - id: A3146
+    name: Смонтировать ролик и микролернинги
+    functions: [F-047, F-048]
+    mechanisms: [Медиа-круг — монтажёр]
+    note: >-
+      Шаг 14 — монтаж ролика и микролернингов с единым стартом, 4K; нарезка записей мероприятий на
+      микролернинги (F-048) — тот же монтаж, единица — запись.
+    leaf: true
+    effort:
+      role: Медиа-круг — монтажёр
+      unit: урок
+      hours_draft: [10, 18]
+      driver: длительность ролика; число микролернингов; число записей мероприятий на нарезку
+      iterations: круги правок монтажа и рекламных кадров
+      basis: "оценка аналитика; опора: микролернинг ≈ 5 мин (L675), урок ≈ 45 мин (M:2026-08-28-0958)"
+arrows:
+  - id: I1
+    label: Одобренный сценарий
+    objects: [O-082]
+    from: { boundary: I1 }
+    to: { box: A3141, side: I }
+  - id: I2
+    label: Записи мероприятий
+    objects: [O-064]
+    from: { boundary: I2 }
+    to: { box: A3146, side: I }
+  - id: I3
+    label: Правки монтажа и рекламных кадров
+    objects: [O-091]
+    from: { boundary: I3 }
+    to: { box: A3146, side: I }
+  - id: C1
+    label: Единый старт, 4K, человек на каждом ИИ-этапе
+    objects: [O-145, O-147, O-168, O-140]
+    from: { boundary: C1 }
+    to:
+      - { box: A3141, side: C }
+      - { box: A3142, side: C }
+      - { box: A3143, side: C }
+      - { box: A3144, side: C }
+      - { box: A3145, side: C }
+      - { box: A3146, side: C }
+  - id: O1
+    label: Ролик и микролернинги
+    objects: [O-043, O-044]
+    from: { box: A3146, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Медиа-круг
+    objects: [O-012, O-013]
+    from: { boundary: M1 }
+    to:
+      - { box: A3141, side: M }
+      - { box: A3142, side: M }
+      - { box: A3143, side: M }
+      - { box: A3144, side: M }
+      - { box: A3145, side: M }
+      - { box: A3146, side: M }
+  - id: M2
+    label: ИИ-инструменты
+    objects: [O-183]
+    from: { boundary: M2 }
+    to:
+      - { box: A3143, side: M }
+      - { box: A3144, side: M }
+      - { box: A3145, side: M }
+  - id: a01
+    label: Раскадровка и реплики
+    objects: [O-085, O-089]
+    from: { box: A3141, side: O }
+    to:
+      - { box: A3142, side: I }
+      - { box: A3143, side: I }
+      - { box: A3145, side: I }
+  - id: a02
+    label: Схемы
+    objects: [O-087]
+    from: { box: A3142, side: O }
+    to: [{ box: A3144, side: I }, { box: A3146, side: I }]
+  - id: a03
+    label: Медкадры
+    objects: [O-086]
+    from: { box: A3143, side: O }
+    to: { box: A3146, side: I }
+  - id: a04
+    label: Анимация
+    objects: [O-088]
+    from: { box: A3144, side: O }
+    to: { box: A3146, side: I }
+  - id: a05
+    label: Речь
+    objects: [O-090]
+    from: { box: A3145, side: O }
+    to: { box: A3146, side: I }

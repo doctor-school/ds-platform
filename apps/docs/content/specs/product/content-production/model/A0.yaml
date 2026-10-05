@@ -142,6 +142,7 @@ boxes:
   - id: A4
     name: Выпустить и сопровождать
     process_blocks: [5]
+    decomposition: pending
     functions: [F-064, F-069, F-070, F-071, F-095, F-096, F-097, F-098, F-099]
     mechanisms:
       - Продуктовая команда — продюсер, команда-владелец направления
@@ -152,6 +153,7 @@ boxes:
   - id: A5
     name: Отчитаться и закрыть
     process_blocks: [6]
+    decomposition: pending
     functions:
       [
         F-089,
@@ -174,6 +176,7 @@ boxes:
   - id: A6
     name: Развивать команды и систему производства
     process_blocks: [7]
+    decomposition: pending
     functions: [F-009, F-023, F-106, F-107, F-109, F-111, F-113]
     mechanisms:
       - Ядро — стандарты, рынок, калькулятор, коуч
@@ -192,8 +195,8 @@ arrows:
     from: { boundary: I2 }
     to: [{ box: A2, side: I }, { box: A3, side: I }]
   - id: I3
-    label: Исходники компаний
-    objects: [O-078, O-094, O-095]
+    label: Исходники и тезисы компаний
+    objects: [O-078, O-094, O-095, O-075, O-076]
     from: { boundary: I3 }
     to: { box: A3, side: I }
   - id: I4
@@ -376,7 +379,22 @@ arrows:
     to: { box: A1, side: I }
   - id: a13
     label: Рабочие стандарты DS, СОП, калькулятор
-    objects: [O-141, O-143, O-144, O-145, O-146, O-147, O-148, O-172]
+    objects:
+      [
+        O-141,
+        O-143,
+        O-144,
+        O-145,
+        O-146,
+        O-147,
+        O-148,
+        O-097,
+        O-168,
+        O-169,
+        O-221,
+        O-140,
+        O-172,
+      ]
     from: { box: A6, side: O }
     to:
       - { box: A1, side: C }

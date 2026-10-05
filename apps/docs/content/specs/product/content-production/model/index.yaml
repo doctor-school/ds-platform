@@ -8,3 +8,33 @@ diagrams:
   - id: A0
     file: A0.yaml
     parent: A-0
+  - id: A1
+    file: A1.yaml
+    parent: A0
+  - id: A2
+    file: A2.yaml
+    parent: A0
+  - id: A3
+    file: A3.yaml
+    parent: A0
+  - id: A31
+    file: A31.yaml
+    parent: A3
+  - id: A311
+    file: A311.yaml
+    parent: A31
+  - id: A313
+    file: A313.yaml
+    parent: A31
+  - id: A314
+    file: A314.yaml
+    parent: A31
+  - id: A316
+    file: A316.yaml
+    parent: A31
+  - id: A32
+    file: A32.yaml
+    parent: A3
+  - id: A33
+    file: A33.yaml
+    parent: A3

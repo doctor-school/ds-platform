@@ -40,8 +40,8 @@ arrows:
     from: { boundary: I2 }
     to: { box: A0, side: I }
   - id: I3
-    label: Исходники компаний
-    objects: [O-078, O-094, O-095]
+    label: Исходники и тезисы компаний
+    objects: [O-078, O-094, O-095, O-075, O-076]
     from: { boundary: I3 }
     to: { box: A0, side: I }
   - id: I4

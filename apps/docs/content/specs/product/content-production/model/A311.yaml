@@ -1,0 +1,114 @@
+# IDEF0 decomposition A311 «Подготовить материал эксперта» (child of A31; format: FORMAT-ru.md).
+# Lesson line steps 1–4 (../process-to-be-ru.md, block 3). Leaves carry a DRAFT effort per lesson.
+id: A311
+parent: A31
+title: Подготовить материал эксперта
+# Child boundary code → A31 arrow touching box A311 on that side.
+icom:
+  I1: I1
+  I2: I2
+  I3: I4
+  C1: C5
+  C2: C6
+  O1: a01
+  M1: M1
+  M2: M2
+  M3: M8
+boxes:
+  - id: A3111
+    name: Подготовить бриф и формат DS
+    functions: [F-027, F-068]
+    mechanisms: [Менеджер эксперта]
+    note: Шаги 1–2 — бриф эксперту, формат DS у амбассадора; ведёт закреплённый менеджер эксперта (В2).
+    leaf: true
+    effort:
+      role: Менеджер эксперта
+      unit: урок
+      hours_draft: [1, 3]
+      driver: эксперт новый для DS или уже в стандартах; число экспертов на урок
+      basis: оценка аналитика
+  - id: A3112
+    name: Подготовить материал и клинический случай
+    functions: [F-028, F-029]
+    mechanisms: [Пул экспертов — эксперт]
+    note: >-
+      Шаг 1: эксперт описывает клинический случай и даёт материал; компания присылает исходники, если
+      есть (F-029 — внешний шаг). Часы эксперта — основа гонорара (переменная) и SLA.
+    leaf: true
+    effort:
+      role: Пул экспертов — эксперт
+      unit: урок
+      hours_draft: [4, 8]
+      driver: доля повторно используемых клинических случаев; полнота исходников компании
+      basis: "оценка аналитика; опора: SLA ответа эксперта 24 ч (L1777)"
+  - id: A3113
+    name: Принять и разделить материал
+    functions: [F-030, F-037, F-031]
+    mechanisms: [Медредактор-сценарист]
+    note: >-
+      Шаги 3–4: расшифровка, разметка, фактчек, нормализация; при несоответствии — запрос эксперту
+      через его менеджера (F-037); темы по правилу декомпозиции (снимает TK-2).
+    leaf: true
+    effort:
+      role: Медредактор-сценарист
+      unit: урок
+      hours_draft: [4, 8]
+      driver: объём и качество материала эксперта
+      iterations: запросы эксперту при несоответствии (F-037)
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Знания и материалы экспертов
+    objects: [O-123, O-077, O-079, O-080]
+    from: { boundary: I1 }
+    to: { box: A3112, side: I }
+  - id: I2
+    label: Исходники компании
+    objects: [O-078, O-094, O-095]
+    from: { boundary: I2 }
+    to: { box: A3112, side: I }
+  - id: I3
+    label: Сигнал неактуальности
+    objects: [O-126]
+    from: { boundary: I3 }
+    to: { box: A3111, side: I }
+  - id: C1
+    label: Бриф эксперту, программа
+    objects: [O-073, O-070]
+    from: { boundary: C1 }
+    to: { box: A3111, side: C }
+  - id: C2
+    label: Шаблон клинического случая, правило декомпозиции
+    objects: [O-146, O-148]
+    from: { boundary: C2 }
+    to: [{ box: A3112, side: C }, { box: A3113, side: C }]
+  - id: O1
+    label: Принятый материал по темам
+    objects: [O-077, O-080]
+    from: { box: A3113, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Медредактор-сценарист
+    objects: [O-010, O-011]
+    from: { boundary: M1 }
+    to: { box: A3113, side: M }
+  - id: M2
+    label: Эксперт
+    objects: [O-024]
+    from: { boundary: M2 }
+    to: { box: A3112, side: M }
+  - id: M3
+    label: Менеджер эксперта
+    objects: [O-001]
+    from: { boundary: M3 }
+    to: { box: A3111, side: M }
+  - id: a01
+    label: Бриф эксперту
+    objects: [O-073]
+    from: { box: A3111, side: O }
+    to: { box: A3112, side: I }
+  - id: a02
+    label: Материал эксперта, клинический случай
+    objects: [O-077, O-079, O-080]
+    from: { box: A3112, side: O }
+    to: { box: A3113, side: I }

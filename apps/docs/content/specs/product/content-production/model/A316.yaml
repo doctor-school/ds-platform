@@ -1,0 +1,129 @@
+# IDEF0 decomposition A316 «Собрать, принять и одобрить урок» (child of A31; format: FORMAT-ru.md).
+# Lesson line steps 16–18 (../process-to-be-ru.md, block 3). Leaves carry a DRAFT effort per lesson.
+id: A316
+parent: A31
+title: Собрать, принять и одобрить урок
+# Child boundary code → A31 arrow touching box A316 on that side (a07 — rework back to media —
+# leaves both from the montage check and from pharma stage 2).
+icom:
+  I1: a05
+  I2: a06
+  I3: I5
+  C1: C3
+  C2: C4
+  C3: C6
+  O1: O1
+  O2: a07
+  O3: a07
+  M1: M1
+  M2: M3
+boxes:
+  - id: A3161
+    name: Проверить монтаж и медсоответствие
+    functions: [F-056, F-054]
+    mechanisms: [Пул медрецензентов]
+    note: >-
+      Шаг 16: выборочная проверка расхождений со сценарием при совпадении сценария и раскадровки,
+      полная — для брендированных (реко Р3.3).
+    leaf: true
+    effort:
+      role: Пул медрецензентов
+      unit: урок
+      hours_draft: [1, 3]
+      driver: доля брендированных уроков (полная проверка)
+      basis: оценка аналитика
+  - id: A3162
+    name: Собрать состав и принять урок
+    functions: [F-055, F-067]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаг 17: приёмка по чек-листу без «вкусового» вето, урок не выводится без состава (O-169);
+      очередь по исполнителям и сроки (F-067) — сквозная работа продюсера по линии.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: урок
+      hours_draft: [2, 4]
+      driver: число параллельных уроков в очереди
+      basis: "оценка аналитика; опора: ритм 1 урок в неделю на направление (L1661)"
+  - id: A3163
+    name: Пройти этап 2 одобрения фармы
+    functions: [F-060]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаг 18: финальный ролик, номер одобрения; при поздней рекламе переделываются только рекламные
+      кадры; при гранте шаг пропускается.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: урок
+      hours_draft: [0.5, 2]
+      driver: доля спонсорских уроков; максимум кругов и срок автоодобрения из договора
+      iterations: круги этапа 2 фармы
+      basis: "оценка аналитика; опора: 2 этапа одобрения фармы (L1629-1673)"
+arrows:
+  - id: I1
+    label: Ролик и микролернинги
+    objects: [O-043, O-044]
+    from: { boundary: I1 }
+    to: { box: A3161, side: I }
+  - id: I2
+    label: Тесты, материал для скачивания
+    objects: [O-045, O-046]
+    from: { boundary: I2 }
+    to: { box: A3162, side: I }
+  - id: I3
+    label: Запись подкаста
+    objects: [O-048]
+    from: { boundary: I3 }
+    to: { box: A3162, side: I }
+  - id: C1
+    label: Базовый минимум качества
+    objects: [O-138]
+    from: { boundary: C1 }
+    to: [{ box: A3161, side: C }, { box: A3162, side: C }]
+  - id: C2
+    label: Двухэтапное одобрение фармы, сроки
+    objects: [O-222, O-173]
+    from: { boundary: C2 }
+    to: [{ box: A3162, side: C }, { box: A3163, side: C }]
+  - id: C3
+    label: Чек-лист приёмки, состав урока
+    objects: [O-097, O-169, O-221]
+    from: { boundary: C3 }
+    to: [{ box: A3161, side: C }, { box: A3162, side: C }]
+  - id: O1
+    label: Собранный урок с номером одобрения
+    objects: [O-041, O-197, O-093]
+    from: { box: A3163, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Правки монтажа
+    objects: [O-091]
+    from: { box: A3161, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Правки рекламных кадров
+    objects: [O-091]
+    from: { box: A3163, side: O }
+    to: { boundary: O3 }
+  - id: M1
+    label: Продюсер, аккаунт
+    objects: [O-004, O-015]
+    from: { boundary: M1 }
+    to: [{ box: A3162, side: M }, { box: A3163, side: M }]
+  - id: M2
+    label: Пул медрецензентов
+    objects: [O-009]
+    from: { boundary: M2 }
+    to: { box: A3161, side: M }
+  - id: a01
+    label: Проверенный ролик и микролернинги
+    objects: [O-043, O-044]
+    from: { box: A3161, side: O }
+    to: { box: A3162, side: I }
+  - id: a02
+    label: Собранный урок
+    objects: [O-041]
+    from: { box: A3162, side: O }
+    to: { box: A3163, side: I }

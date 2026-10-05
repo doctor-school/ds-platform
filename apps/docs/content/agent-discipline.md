@@ -59,7 +59,7 @@ Workers isolate themselves and use that worktree for deliverable reads/writes/te
 
 Use a literal UTF-8 `--body-file` for GitHub multiline text. On secret exposure stop repeating the value, record it and assess rotation within authorization.
 
-TDD: meaningful RED before a behaviour change or guard logic, then GREEN; prose and copy need no new tests and no test pins wording; substituting an existing value gets exactly one test. Select local checks for the affected behavior and reuse valid evidence. Repository PRs still run full lint, applicable static guards and `pnpm pr:preflight <N>`; direct tasks need no install or repo checks. Cite unrelated baseline failures without absorbing their repair; required CI stays blocking. Independent review where applicable + fresh CI + owner evidence precede canonical landing.
+TDD: meaningful RED before production/guard logic, then GREEN; prose needs no new tests. Ship only: copy gets no test pinning wording, substituting an existing value exactly one. Select local checks for the affected behavior and reuse valid evidence. Repository PRs still run full lint, applicable static guards and `pnpm pr:preflight <N>`; direct tasks need no install or repo checks. Cite unrelated baseline failures without absorbing their repair; required CI stays blocking. Independent review where applicable + fresh CI + owner evidence precede canonical landing.
 
 Hooks are configured, trusted and observed separately: `tools/hooks/README.md` (`pnpm agent:doctor`, owner review/trust, then `pnpm agent:smoke --project`). Fixtures and synthetic logs prove neither live execution nor persisted trust.
 

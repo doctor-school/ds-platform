@@ -86,6 +86,41 @@ describe("change-tier classifier (#2584)", () => {
     ).toBe("ask");
   });
 
+  it("ship is an allowlist: server, route, auth, proxy and procedure paths never ship", () => {
+    const expected: Record<string, "show" | "ask"> = {
+      "apps/doctor/proxy.ts": "ask",
+      "packages/auth-flow/src/server/session.ts": "show",
+      "packages/auth-flow/src/server/auth-route-guard.ts": "show",
+      "packages/auth-flow/src/return-target.ts": "show",
+      "apps/portal/app/academy-partnership-action.ts": "show",
+      "packages/events-storefront/src/server/register-action.ts": "show",
+      "apps/admin/lib/admin-auth.ts": "show",
+      "apps/docs/content/agent-discipline.md": "ask",
+      "packages/congress-submissions/src/model/model.ts": "show",
+      "apps/portal/app/foo/page.tsx": "show",
+      "apps/portal/app/foo/route.ts": "show",
+      "apps/doctor/instrumentation.ts": "show",
+      "packages/events-storefront/src/server/card.tsx": "show",
+      "apps/portal/lib/shell-auth.ts": "show",
+    };
+    for (const [path, minimum] of Object.entries(expected))
+      expect(classifyChangeTier([mod(path)]).minimum, path).toBe(minimum);
+  });
+
+  it("ship accepts UI source, copy modules, the email allowlist and plain product docs", () => {
+    for (const path of [
+      "packages/congress-submissions/src/copy.ts",
+      "packages/congress-submissions/src/ui/submission-detail.tsx",
+      "packages/auth-flow/src/ui/login-form.tsx",
+      "packages/events-storefront/src/storefront-copy.ts",
+      "packages/events-storefront/src/copy/ru.ts",
+      "apps/api/src/mailer/notice-emails.ts",
+      "apps/doctor/components/hero.tsx",
+      "apps/docs/content/product/glossary/pul.md",
+    ])
+      expect(classifyChangeTier([mod(path)]).minimum, path).toBe("ship");
+  });
+
   it("an empty or incomplete file set is ask", () => {
     expect(classifyChangeTier([]).minimum).toBe("ask");
     expect(classifyChangeTier([copy], 2).minimum).toBe("ask");

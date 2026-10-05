@@ -571,7 +571,15 @@ export function verifyModeAExemption(files, metadata, headSha, runGit = git) {
  * the exemption path. Anything short of `effective === "ship"` keeps the
  * head-pinned verdict requirement.
  */
-export function verifyChangeTierShip(files, metadata) {
+export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
+  // The file listing is unpinned (REST `pulls/<n>/files` has no sha), so the
+  // head is read before AND after it: both reads must equal the head being
+  // merged, or the listing may describe a different commit.
+  if (!headSha || metadata?.headRefOid !== headSha || headAfter !== headSha)
+    return {
+      ok: false,
+      reason: "changed-file set not bound to the merge head",
+    };
   if (!Array.isArray(files) || files.length !== metadata?.changedFiles)
     return { ok: false, reason: "incomplete changed-file set" };
   const tierFiles = normalizeTierFiles(files);
@@ -879,7 +887,7 @@ async function main() {
       "view",
       String(prNumber),
       "--json",
-      "body,changedFiles",
+      "body,changedFiles,headRefOid",
     ]);
     if (bodyRes.status !== 0) return false;
     const metadata = JSON.parse(bodyRes.stdout);
@@ -891,9 +899,21 @@ async function main() {
       "--slurp",
     ]);
     if (filesRes.status !== 0) return false;
+    const afterRes = gh([
+      "pr",
+      "view",
+      String(prNumber),
+      "--json",
+      "headRefOid",
+      "--jq",
+      ".headRefOid",
+    ]);
+    const headAfter = afterRes.status === 0 ? afterRes.stdout.trim() : "";
     const ship = verifyChangeTierShip(
       flattenApiPages(JSON.parse(filesRes.stdout)),
       metadata,
+      sha,
+      headAfter,
     );
     if (!ship.ok) {
       process.stdout.write(

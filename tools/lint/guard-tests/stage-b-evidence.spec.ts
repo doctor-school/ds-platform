@@ -156,14 +156,11 @@ describe("#2584: Change-tier aware Stage-B GO", () => {
     .split("\n")
     .filter((l) => !l.startsWith("Stage-B-live-url:"))
     .join("\n");
-  const shipBody = noUrl
-    .split("\n")
-    .filter((l) => !l.startsWith("Stage-B-head:"))
-    .join("\n");
+  const shipBody = noUrl;
   const evidence =
     "Stage-B-evidence: https://github.com/o/r/blob/abc1234/.github/ui-evidence/card.png";
 
-  it("ship: GO with quote + source + recorded-at, no live URL and no head pin", () => {
+  it("ship: GO with quote + source + recorded-at + current head, no live URL", () => {
     expect(
       validateStageB(
         [{ body: shipBody }],
@@ -175,6 +172,58 @@ describe("#2584: Change-tier aware Stage-B GO", () => {
         "ship",
       ).ok,
     ).toBe(true);
+  });
+
+  it("ship: the GO stays head-pinned — a missing or stale head fails, a pure rebase carries it", () => {
+    const moved = "b".repeat(40);
+    const headless = shipBody
+      .split("\n")
+      .filter((l) => !l.startsWith("Stage-B-head:"))
+      .join("\n");
+    expect(
+      validateStageB(
+        [{ body: headless }],
+        sha,
+        [],
+        {},
+        undefined,
+        false,
+        "ship",
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateStageB(
+        [{ body: shipBody }],
+        moved,
+        [],
+        {},
+        undefined,
+        false,
+        "ship",
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateStageB(
+        [{ body: shipBody }],
+        moved,
+        [],
+        {},
+        () => ({ accepted: true, reason: "pure rebase" }),
+        false,
+        "ship",
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateStageB(
+        [{ body: shipBody }],
+        moved,
+        [],
+        {},
+        () => ({ accepted: false, reason: "rework" }),
+        false,
+        "ship",
+      ).ok,
+    ).toBe(false);
   });
 
   it("ship: owner quote, source and recorded-at stay mandatory", () => {

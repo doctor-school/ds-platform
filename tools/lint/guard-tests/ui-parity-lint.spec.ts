@@ -918,7 +918,7 @@ describe("ui-parity Change-tier ship (#2584)", () => {
     mkdirSync(gh);
     const files = [
       {
-        path: "apps/doctor/app/page.tsx",
+        path: "apps/doctor/components/hero.tsx",
         additions: 1,
         deletions: 1,
         changeType: "MODIFIED",

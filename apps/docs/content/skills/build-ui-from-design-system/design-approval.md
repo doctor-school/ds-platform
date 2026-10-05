@@ -24,7 +24,7 @@ The _look_ is a product (taste) decision — the product owner's, not the lead's
 
 **Stage B — before live-verify / merge (around step 9).** **This is the canonical Stage-B procedure** (AGENTS.md §6 is the hard rule; dev-stand docs supply mechanics). The route follows the PR's change tier (`.claude/rules/change-tiers.md`):
 
-- **Ship** — the owner decides in chat; no stand, no captures, no live URL, no head pin. Record `Stage-B: GO — <what was decided>` with `Stage-B-recorded-at`, `Stage-B-owner-quote` and `Stage-B-source` (format under _Recorded Stage-B evidence_ below).
+- **Ship** — the owner decides in chat; no stand, no captures, no live URL. Record `Stage-B: GO — <what was decided>` with `Stage-B-head` (the current head), `Stage-B-recorded-at`, `Stage-B-owner-quote` and `Stage-B-source` (format under _Recorded Stage-B evidence_ below).
 - **Show** — the owner decides on the PR's ui-parity captures from the agent's local run; no staging slot. Record the common fields plus `Stage-B-evidence: <https PR capture URL>` in place of `Stage-B-live-url`.
 - **Ask** — the full stand procedure below.
 
@@ -82,7 +82,7 @@ The owner relay is auditable attribution, not cryptographic identity proof. A pu
 
 For the exact `Stage-B: N/A (no visual surface) — lead-certified; harness: <command>; run UTC: <ISO>; report: <https Issue/PR artifact URL>` marker, also require the common head/date/quote/source fields above and `Stage-B-authorization: autonomous-merge`, `Stage-B-visual-change: none`, `Stage-B-live-verified: yes`, `Stage-B-report-stdout: <complete stdout>` and `Stage-B-report-sha: <head>`. Keep complete owner-readable stdout at the report artifact; a summary of unit tests is not live verification. This remains solely the narrow behavioral-only carve-out.
 
-For a verified **Ship** PR (`change-tier` resolves to ship) the pre-merge guard accepts a GO without `Stage-B-head` and without `Stage-B-live-url` — it approves wording, not a build; recorded-at, owner-quote and source stay required. For a verified **Show** PR a GO may carry `Stage-B-evidence: <https URL>` (a PR capture) in place of `Stage-B-live-url`; the head pin stays. A declaration below its minimum tier gets the Ask rules here and is refused by the `change-tier` guard.
+For a verified **Ship** PR (`change-tier` resolves to ship) the pre-merge guard accepts a GO without `Stage-B-live-url` — it approves wording, not a stand; `Stage-B-head` stays pinned to the current head (a pure rebase carries it) and recorded-at, owner-quote and source stay required. For a verified **Show** PR a GO may carry `Stage-B-evidence: <https URL>` (a PR capture) in place of `Stage-B-live-url`; the head pin stays. A declaration below its minimum tier gets the Ask rules here and is refused by the `change-tier` guard.
 
 For a **copy-only** PR — only user-visible strings or their formatting inputs change, certified by the latest head-pinned Mode (a) review as `render-delta: copy-only` for the body's `ui-parity: N/A (copy-only) — <reason>` ([parity-evidence.md](parity-evidence.md)) — no stand is raised: the owner decides the wording in chat, and `Stage-B: GO` carries the common head/date/quote/source fields with that decision as quote and source, `Stage-B-live-url` omitted. Without that certification a GO still requires the live URL.
 

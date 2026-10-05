@@ -1,9 +1,10 @@
 /**
  * Change tiers (#2584): risk-proportional procedure per PR.
  *
- *   ship — small reversible change: no Mode (a) reviewer, no ui-parity
- *          evidence, Stage-B = the owner's chat decision (no live URL, no
- *          head pin).
+ *   ship — small reversible presentational change (allowlisted UI / copy /
+ *          email / product-doc paths only): no Mode (a) reviewer, no
+ *          ui-parity evidence, Stage-B = the owner's head-pinned chat
+ *          decision (no live URL).
  *   show — Mode (a) review and ui-parity as for every PR; a Stage-B GO may
  *          cite a PR evidence capture instead of a live staging URL.
  *   ask  — the full procedure, unchanged.
@@ -13,10 +14,13 @@
  * minimum is refused. Absent or malformed declarations are `ask`, so every PR
  * that does not opt in keeps today's behaviour byte-for-byte.
  *
- * Pure and import-free on purpose: `tools/gh/merge-gate.mjs` loads this file
- * through Node's native type stripping, the lint guards through tsx — one rule
- * for every gate.
+ * Pure on purpose: `tools/gh/merge-gate.mjs` loads this file through Node's
+ * native type stripping, the lint guards through tsx — one rule for every
+ * gate. Its only import (`ui-surface.ts`, itself import-free) carries the
+ * explicit `.ts` extension native type stripping needs.
  */
+
+import { isUiSourcePath } from "./ui-surface.ts";
 
 export type ChangeTier = "ship" | "show" | "ask";
 
@@ -74,9 +78,52 @@ const ASK_PATH_RES: readonly RegExp[] = [
   /(?:^|\/)Dockerfile[^/]*$/,
   /(?:^|\/)docker-compose[^/]*$/,
   /(?:^|\/)\.env[^/]*$/,
-  /(?:^|\/)middleware\.[^/]+$/,
+  /(?:^|\/)(?:middleware|proxy)\.[^/]+$/,
   /(?:^|\/)migrations\//,
+  /^apps\/docs\/content\/agent-discipline\.md$/,
 ];
+
+/**
+ * Ship is an ALLOWLIST: every changed non-test file must be presentational —
+ * UI source, a copy module, an allowlisted email file or a plain product doc.
+ * Anything else floors at show.
+ */
+const COPY_MODULE_RE =
+  /^packages\/[^/]+\/src\/(?:.*\/)?(?:copy\.ts|[^/]+-copy\.ts|copy\/.+)$/;
+const PRODUCT_DOC_RE = /^apps\/docs\/content\/.+\.mdx?$/;
+const PROCEDURE_DOC_RE =
+  /^apps\/docs\/content\/(?:(?:specs|adr|skills)\/|agent-discipline\.md$)/;
+
+/**
+ * UI-shaped files that still carry server, routing or auth behaviour: never
+ * ship, whatever their extension says.
+ */
+const SERVER_ROUTE_RES: readonly RegExp[] = [
+  /(?:^|\/)server\//,
+  /(?:^|\/)actions\//,
+  /(?:^|\/)[^/]*action[^/]*\.[cm]?[jt]sx?$/i,
+  /(?:^|\/)app\/(?:.*\/)?(?:page|layout|route|template|default|loading|error|not-found|global-error)\.(?:ts|tsx|js|jsx)$/,
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
+  /(?:^|\/)(?:proxy|middleware|instrumentation)\.[^/]+$/,
+];
+
+function isCopyModule(path: string): boolean {
+  return COPY_MODULE_RE.test(path);
+}
+
+function isServerOrRoutePath(path: string): boolean {
+  if (SERVER_ROUTE_RES.some((re) => re.test(path))) return true;
+  const authSegment = path.split("/").some((segment) => /auth/i.test(segment));
+  return authSegment && !/\/src\/ui\//.test(path) && !isCopyModule(path);
+}
+
+/** A non-test, non-changeset path that may change under ship. */
+export function isShipPath(path: string): boolean {
+  if (API_COPY_ALLOWLIST.includes(path)) return true;
+  if (PRODUCT_DOC_RE.test(path)) return !PROCEDURE_DOC_RE.test(path);
+  if (isServerOrRoutePath(path)) return false;
+  return isCopyModule(path) || isUiSourcePath(path);
+}
 
 /** Test sources: excluded from the ship size cap and may be added. */
 export function isTestPath(path: string): boolean {
@@ -123,6 +170,8 @@ export function classifyChangeTier(
     }
     if (file.status !== "modified")
       show.push(`${file.status || "unknown-status"} file: ${file.path}`);
+    if (!isShipPath(file.path))
+      show.push(`not a ship path (UI/copy/email/product doc): ${file.path}`);
     lines += (file.additions || 0) + (file.deletions || 0);
   }
   if (lines > SHIP_LINE_CAP)

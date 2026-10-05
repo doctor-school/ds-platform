@@ -103,9 +103,10 @@ export function validateStageB(
     };
   const recordedHead = field("head");
   let carried = "";
-  // #2584: a ship-tier GO approves the wording, not a build — no head pin.
+  // #2584: a ship-tier GO approves the wording with no live stand, but it
+  // stays head-pinned so a later push cannot inherit a GO given on other text.
   const shipGo = go && tier === "ship";
-  if (!shipGo && (!/^[a-f0-9]{40}$/.test(head) || recordedHead !== head)) {
+  if (!/^[a-f0-9]{40}$/.test(head) || recordedHead !== head) {
     const stale =
       "Stage-B head is missing or stale; record current applicability or obtain a fresh verdict";
     // #2373: a pure rebase keeps a valid record, exactly as the Mode (a)

@@ -160,8 +160,13 @@ export const COPY = {
   sendAgain: "Отправить снова",
   confirmTitle: "Отправить заявку в программный комитет?",
   confirmTitleAgain: "Отправить исправленную заявку?",
-  confirmSub:
-    "После отправки редактирование закроется. Забрать заявку на исправление можно, пока открыт приём.",
+  confirmSub: "После отправки редактирование закроется.",
+  /** 046 EARS-12 — while the kind is open; the date is its close day. */
+  confirmTakeBackUntil: (day: string) =>
+    `До ${day} заявку можно забрать на исправление. После — комитет рассмотрит отправленную версию.`,
+  /** 046 EARS-12 — a sent row's meta and the sent notice while the kind is open. */
+  takeBackMeta: (day: string) => `исправить можно до ${day}`,
+  takeBackNotice: (day: string) => `Исправить можно до ${day}.`,
   confirmSubAgain:
     "После отправки изменить её будет нельзя — комитет рассмотрит эту версию.",
   confirmYes: "Да, отправить",

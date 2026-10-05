@@ -52,6 +52,7 @@ import {
   revisionView,
   summaryTitle,
   localTime,
+  mskDay,
   withdrawnNotice,
 } from "../model/model";
 import {
@@ -483,7 +484,11 @@ export function SubmissionDetail({
             ) : null}
 
             {justSent ? (
-              <Alert variant="success">{COPY.sentNotice}</Alert>
+              <Alert variant="success">
+                {intake.state === "open"
+                  ? `${COPY.sentNotice} ${COPY.takeBackNotice(mskDay(intake.lastDay!))}`
+                  : COPY.sentNotice}
+              </Alert>
             ) : readDraft ? (
               <Alert variant="warn">{blockedText}</Alert>
             ) : s.status === "needs_revision" && !rev.open ? (
@@ -762,9 +767,9 @@ export function SubmissionDetail({
                             : COPY.confirmTitle}
                         </span>
                         <span className="text-caption leading-normal text-foreground">
-                          {s.status === "needs_revision"
+                          {intake.state !== "open"
                             ? COPY.confirmSubAgain
-                            : COPY.confirmSub}
+                            : `${s.status === "needs_revision" ? "" : `${COPY.confirmSub} `}${COPY.confirmTakeBackUntil(mskDay(intake.lastDay!))}`}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3">

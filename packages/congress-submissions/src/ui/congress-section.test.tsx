@@ -1236,7 +1236,7 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       screen.getByRole("button", { name: "Да, отправить" }),
     );
     await screen.findByText(
-      "Заявка отправлена. Рассмотрит программный комитет, ответ придёт на почту.",
+      "Заявка отправлена. Рассмотрит программный комитет, ответ придёт на почту. Исправить можно до 15 января 2027.",
     );
     const send = callsTo("POST").find(([u]) => String(u).endsWith("/send"))!;
     expect(JSON.parse(String((send[1] as RequestInit).body))).toEqual({

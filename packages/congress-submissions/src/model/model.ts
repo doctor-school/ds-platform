@@ -457,7 +457,12 @@ export function rowMeta(
         ? `отозвано ${localDate(s.statusChangedAt)}`
         : `отправлено ${localDate(s.submittedAt ?? s.updatedAt)}`,
   ];
-  if (s.status === "submitted") out.push(COPY.sentMeta);
+  if (s.status === "submitted")
+    out.push(
+      intake.state === "open"
+        ? COPY.takeBackMeta(mskDay(intake.lastDay!))
+        : COPY.sentMeta,
+    );
   if (s.status === "draft" && (ageRefusal !== null || !kindSendable(intake))) {
     const why = ageRefusal ?? closedText(intake);
     out.push(why.split(" — ")[0]!.toLowerCase());

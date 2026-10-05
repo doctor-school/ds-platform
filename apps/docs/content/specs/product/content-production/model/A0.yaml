@@ -1,0 +1,401 @@
+# IDEF0 decomposition A0 of DS content production (child of A-0; format: FORMAT-ru.md).
+# Every in-TO-BE F-ID of ../registry-ru.md sits in exactly one box; `process_blocks` = numbered
+# blocks of ../process-to-be-ru.md the box realises. Check: node trace-check.mjs.
+id: A0
+parent: A-0
+title: Создавать и продавать образовательные продукты DS для врачей
+boxes:
+  - id: A1
+    name: Сформировать предложение и заключить договор
+    process_blocks: [1]
+    functions:
+      [
+        F-001,
+        F-002,
+        F-003,
+        F-004,
+        F-005,
+        F-006,
+        F-007,
+        F-008,
+        F-010,
+        F-011,
+        F-012,
+        F-013,
+        F-014,
+        F-049,
+        F-061,
+        F-075,
+        F-076,
+        F-080,
+        F-105,
+        F-108,
+        F-112,
+        F-114,
+        F-116,
+      ]
+    mechanisms:
+      - Продуктовая команда — аккаунт, продюсер, методолог
+      - Сервисный круг — юрист
+      - Ядро — консультант рынка (советующая роль)
+  - id: A2
+    name: Спроектировать продукт
+    process_blocks: [2]
+    functions:
+      [
+        F-015,
+        F-016,
+        F-017,
+        F-018,
+        F-019,
+        F-020,
+        F-021,
+        F-022,
+        F-024,
+        F-025,
+        F-026,
+        F-062,
+        F-063,
+        F-065,
+        F-066,
+        F-073,
+        F-074,
+        F-115,
+      ]
+    mechanisms:
+      - Продуктовая команда — методолог, продюсер, аккаунт, менеджеры экспертов
+      - Пул экспертов — амбассадор, эксперты
+      - Пул медрецензентов — координатор
+  - id: A3
+    name: "Произвести продукты: уроки, подкасты, мероприятия"
+    process_blocks: [3, 4]
+    note: >-
+      Две линии: единицы контента (блок 3 процесса) и мероприятия (блок 4); записи мероприятий
+      возвращаются на вход линии единиц как сырьё микролернингов.
+    functions:
+      [
+        F-027,
+        F-028,
+        F-029,
+        F-030,
+        F-031,
+        F-032,
+        F-033,
+        F-034,
+        F-035,
+        F-036,
+        F-037,
+        F-038,
+        F-039,
+        F-040,
+        F-041,
+        F-042,
+        F-043,
+        F-044,
+        F-045,
+        F-046,
+        F-047,
+        F-048,
+        F-050,
+        F-051,
+        F-052,
+        F-053,
+        F-054,
+        F-055,
+        F-056,
+        F-057,
+        F-058,
+        F-059,
+        F-060,
+        F-067,
+        F-068,
+        F-077,
+        F-078,
+        F-079,
+        F-081,
+        F-082,
+        F-083,
+        F-084,
+        F-085,
+        F-086,
+        F-087,
+        F-088,
+        F-117,
+        F-118,
+        F-119,
+        F-123,
+        F-124,
+        F-125,
+        F-126,
+        F-127,
+        F-128,
+      ]
+    mechanisms:
+      - Продуктовая команда — медредактор-сценарист, менеджер эксперта, продюсер, менеджер мероприятий
+      - Пул экспертов — эксперты, спикеры
+      - Пул медрецензентов
+      - Медиа-круг
+      - Сервисный круг — юрист, оператор платформы, режиссёр трансляции, поддержка
+      - Платформа DS
+      - ИИ-инструменты
+      - Студия
+  - id: A4
+    name: Выпустить и сопровождать
+    process_blocks: [5]
+    functions: [F-064, F-069, F-070, F-071, F-095, F-096, F-097, F-098, F-099]
+    mechanisms:
+      - Продуктовая команда — продюсер, команда-владелец направления
+      - Медиа-круг
+      - Сервисный круг — оператор платформы
+      - Пул медрецензентов — по сигналу
+      - Платформа DS
+  - id: A5
+    name: Отчитаться и закрыть
+    process_blocks: [6]
+    functions:
+      [
+        F-089,
+        F-090,
+        F-091,
+        F-092,
+        F-093,
+        F-094,
+        F-100,
+        F-101,
+        F-103,
+        F-104,
+        F-110,
+        F-129,
+      ]
+    mechanisms:
+      - Продуктовая команда — аккаунт, продюсер
+      - Сервисный круг — юрист, бухгалтер
+      - Платформа DS
+  - id: A6
+    name: Развивать команды и систему производства
+    process_blocks: [7]
+    functions: [F-009, F-023, F-106, F-107, F-109, F-111, F-113]
+    mechanisms:
+      - Ядро — стандарты, рынок, калькулятор, коуч
+      - Продуктовые команды — найм, деление, СОП
+      - Пул медрецензентов — политика независимости
+arrows:
+  # ---- Boundary inputs (branches of A-0 I-arrows) ----
+  - id: I1
+    label: Запросы фармы, техорга, лидеров мнений и их инициативы
+    objects: [O-019, O-067, O-021, O-022, O-121]
+    from: { boundary: I1 }
+    to: { box: A1, side: I }
+  - id: I2
+    label: Знания и материалы экспертов
+    objects: [O-123, O-077, O-079, O-080]
+    from: { boundary: I2 }
+    to: [{ box: A2, side: I }, { box: A3, side: I }]
+  - id: I3
+    label: Исходники компаний
+    objects: [O-078, O-094, O-095]
+    from: { boundary: I3 }
+    to: { box: A3, side: I }
+  - id: I4
+    label: Сигнал неактуальности (внешний — отзыв препарата, новые рекомендации)
+    objects: [O-126]
+    from: { boundary: I4 }
+    to: { box: A4, side: I }
+  # ---- Boundary controls ----
+  - id: C1
+    label: Закон о рекламе и маркировка
+    objects: [O-153, O-157, O-161]
+    from: { boundary: C1 }
+    to: [{ box: A1, side: C }, { box: A3, side: C }, { box: A4, side: C }]
+  - id: C2
+    label: Клинические рекомендации и консенсусы
+    objects: [O-149, O-150, O-139, O-151, O-152]
+    from: { boundary: C2 }
+    to: [{ box: A2, side: C }, { box: A3, side: C }, { box: A4, side: C }]
+  - id: C3
+    label: Норматив ДПО / НМО
+    objects: [O-159, O-158, O-211]
+    from: { boundary: C3 }
+    to: [{ box: A2, side: C }, { box: A3, side: C }]
+  - id: C4
+    label: Стандарты DS
+    objects: [O-141, O-138]
+    from: { boundary: C4 }
+    to: { box: A6, side: C }
+  - id: C5
+    label: Договор и маршрут одобрения фармы
+    objects: [O-107, O-108, O-222, O-166]
+    from: { boundary: C5 }
+    to: { box: A1, side: C }
+  - id: C6
+    label: Бюджетный цикл фармы
+    objects: [O-133, O-205]
+    from: { boundary: C6 }
+    to: { box: A1, side: C }
+  # ---- Boundary mechanisms (branches per «Роли и круги» of each block) ----
+  - id: M1
+    label: Продуктовые команды
+    objects: [O-001, O-004, O-005, O-010, O-011, O-015, O-193]
+    from: { boundary: M1 }
+    to:
+      - { box: A1, side: M }
+      - { box: A2, side: M }
+      - { box: A3, side: M }
+      - { box: A4, side: M }
+      - { box: A5, side: M }
+      - { box: A6, side: M }
+  - id: M2
+    label: Пул экспертов
+    objects: [O-023, O-024, O-025, O-026, O-027, O-029, O-115, O-116]
+    from: { boundary: M2 }
+    to: [{ box: A2, side: M }, { box: A3, side: M }]
+  - id: M3
+    label: Пул медрецензентов
+    objects: [O-009]
+    from: { boundary: M3 }
+    to:
+      [
+        { box: A2, side: M },
+        { box: A3, side: M },
+        { box: A4, side: M },
+        { box: A6, side: M },
+      ]
+  - id: M4
+    label: Медиа-круг
+    objects: [O-012, O-013]
+    from: { boundary: M4 }
+    to: [{ box: A3, side: M }, { box: A4, side: M }]
+  - id: M5
+    label: Сервисный круг
+    objects: [O-014, O-224, O-194, O-195, O-196]
+    from: { boundary: M5 }
+    to:
+      [
+        { box: A1, side: M },
+        { box: A3, side: M },
+        { box: A4, side: M },
+        { box: A5, side: M },
+      ]
+  - id: M6
+    label: Ядро
+    objects: [O-017, O-223, O-008]
+    from: { boundary: M6 }
+    to: [{ box: A1, side: M }, { box: A6, side: M }]
+  - id: M7
+    label: Платформа DS
+    objects: [O-185, O-184, O-207, O-218]
+    from: { boundary: M7 }
+    to: [{ box: A3, side: M }, { box: A4, side: M }, { box: A5, side: M }]
+  - id: M8
+    label: ИИ-инструменты
+    objects: [O-183]
+    from: { boundary: M8 }
+    to: { box: A3, side: M }
+  - id: M9
+    label: Студия
+    objects: [O-187]
+    from: { boundary: M9 }
+    to: { box: A3, side: M }
+  # ---- Internal arrows ----
+  - id: a01
+    label: Договор и маршрут одобрения
+    objects: [O-107, O-108, O-142, O-222, O-170, O-173]
+    from: { box: A1, side: O }
+    to:
+      - { box: A2, side: C }
+      - { box: A3, side: C }
+      - { box: A4, side: C }
+      - { box: A5, side: C }
+  - id: a02
+    label: Программа, план конвейера, график мероприятий
+    objects: [O-070, O-071, O-072, O-073, O-213, O-214]
+    from: { box: A2, side: O }
+    to: { box: A3, side: C }
+  - id: a03
+    label: Собранные уроки, подкасты, записи
+    objects: [O-041, O-197, O-048, O-064, O-065, O-093]
+    from: { box: A3, side: O }
+    to: { box: A4, side: I }
+  - id: a04
+    label: Записи мероприятий — сырьё микролернингов (обратная связь)
+    objects: [O-064]
+    from: { box: A3, side: O }
+    to: { box: A3, side: I }
+  - id: a05
+    label: Опубликованный продукт
+    objects:
+      [
+        O-041,
+        O-197,
+        O-040,
+        O-198,
+        O-044,
+        O-048,
+        O-049,
+        O-052,
+        O-055,
+        O-056,
+        O-199,
+      ]
+    from: { box: A4, side: O }
+    to: { boundary: O1 }
+  - id: a06
+    label: Метрики
+    objects: [O-100, O-176, O-178, O-180, O-206]
+    from: { box: A4, side: O }
+    to: { box: A5, side: I }
+  - id: a07
+    label: Сигнал неактуальности — актуализация
+    objects: [O-126]
+    from: { box: A4, side: O }
+    to: { box: A3, side: I }
+  - id: a08
+    label: Отчёт партнёру
+    objects: [O-099, O-209, O-208]
+    from: { box: A5, side: O }
+    to: { boundary: O2 }
+  - id: a09
+    label: Акты и оплата
+    objects: [O-105, O-098, O-128]
+    from: { box: A5, side: O }
+    to: { boundary: O3 }
+  - id: a10
+    label: Выплаты участникам
+    objects: [O-219]
+    from: { box: A5, side: O }
+    to: { boundary: O4 }
+  - id: a11
+    label: Факт часов и итераций
+    objects: [O-177, O-174, O-179]
+    from: { box: A5, side: O }
+    to: { box: A6, side: I }
+  - id: a12
+    label: Запрос на следующий цикл
+    objects: [O-109, O-205]
+    from: { box: A5, side: O }
+    to: { box: A1, side: I }
+  - id: a13
+    label: Стандарты, СОП, калькулятор
+    objects: [O-141, O-143, O-144, O-145, O-146, O-147, O-148, O-172]
+    from: { box: A6, side: O }
+    to:
+      - { box: A1, side: C }
+      - { box: A2, side: C }
+      - { box: A3, side: C }
+      - { box: A4, side: C }
+      - { box: A5, side: C }
+  - id: a14
+    label: Команды, роли, пулы
+    objects: [O-001, O-115]
+    from: { box: A6, side: O }
+    to:
+      - { box: A1, side: M }
+      - { box: A2, side: M }
+      - { box: A3, side: M }
+      - { box: A4, side: M }
+      - { box: A5, side: M }
+  - id: a15
+    label: Калиброванная себестоимость
+    objects: [O-172, O-177]
+    from: { box: A6, side: O }
+    to: { boundary: O5 }

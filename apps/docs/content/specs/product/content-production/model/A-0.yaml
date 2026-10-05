@@ -1,0 +1,167 @@
+# IDEF0 context diagram A-0 of DS content production (format: FORMAT-ru.md).
+# Trace IDs: ../registry-ru.md (O-… objects on arrows). Check: node trace-check.mjs.
+id: A-0
+parent: null
+title: Создавать и продавать образовательные продукты DS для врачей
+viewpoint: >-
+  Продуктовая команда направления — самоуправляющийся круг, который ведёт полный цикл
+  от продажи до отчёта.
+purpose: >-
+  Показать, из какой работы и чьих ролевых часов складывается себестоимость каждой единицы
+  (урок → модуль → курс → специальность; мероприятие и подкаст отдельно) и где ограничена мощность —
+  основа калькулятора (#2527) и клиентской презентации (#2528).
+boxes:
+  - id: A0
+    name: Создавать и продавать образовательные продукты DS для врачей
+    functions: []
+    mechanisms:
+      - Продуктовые команды
+      - Пул экспертов
+      - Пул медрецензентов
+      - Медиа-круг
+      - Сервисный круг
+      - Ядро
+      - Платформа DS
+      - ИИ-инструменты
+      - Студия
+    note: >-
+      Граница: продажа → договор → проектирование → производство и мероприятия → выпуск →
+      отчёт и закрывающие документы → развитие команд. Функции размещаются на A0.
+arrows:
+  # ---- Inputs ----
+  - id: I1
+    label: Запросы фармы, техорга, лидеров мнений и их инициативы
+    objects: [O-019, O-067, O-021, O-022, O-121]
+    from: { boundary: I1 }
+    to: { box: A0, side: I }
+  - id: I2
+    label: Знания и материалы экспертов
+    objects: [O-123, O-077, O-079, O-080]
+    from: { boundary: I2 }
+    to: { box: A0, side: I }
+  - id: I3
+    label: Исходники компаний
+    objects: [O-078, O-094, O-095]
+    from: { boundary: I3 }
+    to: { box: A0, side: I }
+  - id: I4
+    label: Сигнал неактуальности
+    objects: [O-126]
+    from: { boundary: I4 }
+    to: { box: A0, side: I }
+  # ---- Controls ----
+  - id: C1
+    label: Закон о рекламе и маркировка
+    objects: [O-153, O-157, O-161]
+    from: { boundary: C1 }
+    to: { box: A0, side: C }
+  - id: C2
+    label: Клинические рекомендации и консенсусы
+    objects: [O-149, O-150, O-139, O-151, O-152]
+    from: { boundary: C2 }
+    to: { box: A0, side: C }
+  - id: C3
+    label: Норматив ДПО / НМО
+    objects: [O-159, O-158, O-211]
+    from: { boundary: C3 }
+    to: { box: A0, side: C }
+  - id: C4
+    label: Стандарты DS
+    objects: [O-141, O-138]
+    from: { boundary: C4 }
+    to: { box: A0, side: C }
+  - id: C5
+    label: Договор и маршрут одобрения фармы
+    objects: [O-107, O-108, O-222, O-166]
+    from: { boundary: C5 }
+    to: { box: A0, side: C }
+  - id: C6
+    label: Бюджетный цикл фармы
+    objects: [O-133, O-205]
+    from: { boundary: C6 }
+    to: { box: A0, side: C }
+  # ---- Outputs ----
+  - id: O1
+    label: Опубликованные продукты — уроки, модули, курсы, подкасты, мероприятия
+    objects:
+      [
+        O-041,
+        O-197,
+        O-040,
+        O-198,
+        O-044,
+        O-048,
+        O-049,
+        O-052,
+        O-055,
+        O-056,
+        O-199,
+      ]
+    from: { box: A0, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Отчёты партнёру
+    objects: [O-099, O-209, O-208]
+    from: { box: A0, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Закрывающие документы и оплата
+    objects: [O-105, O-098, O-128]
+    from: { box: A0, side: O }
+    to: { boundary: O3 }
+  - id: O4
+    label: Выплаты участникам
+    objects: [O-219]
+    from: { box: A0, side: O }
+    to: { boundary: O4 }
+  - id: O5
+    label: Факт часов для калибровки себестоимости
+    objects: [O-172, O-177]
+    from: { box: A0, side: O }
+    to: { boundary: O5 }
+  # ---- Mechanisms ----
+  - id: M1
+    label: Продуктовые команды
+    objects: [O-001, O-004, O-005, O-010, O-011, O-015, O-193]
+    from: { boundary: M1 }
+    to: { box: A0, side: M }
+  - id: M2
+    label: Пул экспертов
+    objects: [O-023, O-024, O-025, O-026, O-027, O-029, O-115, O-116]
+    from: { boundary: M2 }
+    to: { box: A0, side: M }
+  - id: M3
+    label: Пул медрецензентов
+    objects: [O-009]
+    from: { boundary: M3 }
+    to: { box: A0, side: M }
+  - id: M4
+    label: Медиа-круг
+    objects: [O-012, O-013]
+    from: { boundary: M4 }
+    to: { box: A0, side: M }
+  - id: M5
+    label: Сервисный круг
+    objects: [O-014, O-224, O-194, O-195, O-196]
+    from: { boundary: M5 }
+    to: { box: A0, side: M }
+  - id: M6
+    label: Ядро
+    objects: [O-017, O-223, O-008]
+    from: { boundary: M6 }
+    to: { box: A0, side: M }
+  - id: M7
+    label: Платформа DS
+    objects: [O-185, O-184, O-207, O-218]
+    from: { boundary: M7 }
+    to: { box: A0, side: M }
+  - id: M8
+    label: ИИ-инструменты
+    objects: [O-183]
+    from: { boundary: M8 }
+    to: { box: A0, side: M }
+  - id: M9
+    label: Студия
+    objects: [O-187]
+    from: { boundary: M9 }
+    to: { box: A0, side: M }

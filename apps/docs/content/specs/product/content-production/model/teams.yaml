@@ -3,6 +3,7 @@
 # DRAFTS for owner calibration in the calculator (#2527); roles only, never people; no money here.
 capacity_variables:
   paid_hours_per_month:
+    label: Оплачиваемые часы на 1 FTE в месяц
     draft: 145.7
     unit: оплачиваемые часы на 1 FTE в месяц
     basis: >-
@@ -17,14 +18,17 @@ capacity_variables:
       деление, СОП, governance — листья модели с часами (A641, A62, A63, A652, A56, A643), они
       вычитаются из мощности роли и оцениваются часами × ставка, а не второй раз долей.
   working_days_per_month:
+    label: Рабочих дней в месяце
     draft: 21
     unit: рабочие дни в месяце
     basis: оценка аналитика; перевод lead time из рабочих дней в месяцы
   team_size_max:
+    label: Наибольший размер команды
     draft: 12
     unit: участников команды
     basis: решение владельца В7 — деление команды при > 12
   target_lessons_per_week:
+    label: Целевой ритм — уроков в неделю
     draft: 1
     unit: урок в неделю на направление
     basis: "цель ритма выпуска (L1661; M:2026-09-08-0952) — точка сверки мощности, не ограничение модели"

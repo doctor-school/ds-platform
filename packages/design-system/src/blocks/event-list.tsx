@@ -155,10 +155,13 @@ export function EventList({
                   never pokes up beside it. Owner Stage-B 2026-10-05: the
                   label gets token padding top AND bottom and the plate a
                   `border` edge, so the stuck plate reads as a plate on the
-                  white page instead of melting into the cards. */}
+                  white page instead of melting into the cards. The 24px
+                  gap under the plate clears the desktop live sticker, which
+                  rises ~16px above its card (`-top-4` + `rotate-3`), so the
+                  plate never paints over it at rest. */}
               <div
                 data-event-list-group-header=""
-                className="sticky z-10 -mx-4 border-b-2 border-border bg-background layout:mx-0 layout:-mr-1.5 layout:mb-3 layout:py-3 layout:pr-1.5"
+                className="sticky z-10 -mx-4 border-b-2 border-border bg-background layout:mx-0 layout:-mr-1.5 layout:mb-6 layout:py-3 layout:pr-1.5"
                 style={{ top: stickyHeaderOffset }}
               >
                 <DayBand className="layout:hidden">{group.label}</DayBand>

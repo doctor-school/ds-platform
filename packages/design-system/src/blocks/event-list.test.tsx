@@ -187,6 +187,11 @@ describe("<EventList>", () => {
       // `z-10` (the CTA, the stretched link) can paint over the plate.
       const cards = header.nextElementSibling as HTMLElement;
       expect(cards.className).toContain("isolate");
+      // The desktop live sticker rises ~16px (-top-4 + rotate-3) above its
+      // card; the plate-to-card gap must clear it so the plate never paints
+      // over the sticker at rest.
+      expect(header.className).toContain("layout:mb-6");
+      expect(header.className).not.toContain("layout:mb-3");
     }
     expect(headers[0]!.textContent).toContain("29 августа, суббота");
   });

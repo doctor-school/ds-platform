@@ -53,6 +53,13 @@ export interface EventListBaseProps {
   tenseControl?: "tabs" | "none";
   /** Host-owned control below the feed — e.g. 019's «показать ещё», which is a URL edit, not a page state. */
   footer?: React.ReactNode;
+  /**
+   * Where the group plates (days in «Будущие», months in «Прошедшие») stick,
+   * measured from the top of the scrolling viewport — the height of a sticky
+   * storefront header above the feed. A number is pixels; a string is any CSS
+   * length (e.g. a host header-height custom property). Default `0`.
+   */
+  stickyHeaderOffset?: number | string;
 }
 
 /**
@@ -97,6 +104,7 @@ export function EventList({
   toolbar,
   tenseControl = "tabs",
   footer,
+  stickyHeaderOffset = 0,
   paginationMode = "pages",
   hasPrevious = false,
   hasNext = false,
@@ -138,12 +146,22 @@ export function EventList({
         >
           {groups.map((group) => (
             <section key={group.key} id={`day-${group.key}`}>
-              <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
-              <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
-                <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
-                  {group.label}
-                </span>
-                <span className="flex-1 border-t-2 border-foreground" />
+              {/* The group plate sticks while its own group scrolls and is
+                  pushed out by the next one (019 EARS-3, canvas 2026-10-05):
+                  block behaviour on the page-background surface, so a host
+                  needs no page CSS — only the offset of its own header. */}
+              <div
+                data-event-list-group-header=""
+                className="sticky z-10 -mx-4 bg-background layout:mx-0 layout:mb-6 layout:pt-3"
+                style={{ top: stickyHeaderOffset }}
+              >
+                <DayBand className="layout:hidden">{group.label}</DayBand>
+                <div className="hidden layout:flex layout:items-baseline layout:gap-4">
+                  <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
+                    {group.label}
+                  </span>
+                  <span className="flex-1 border-t-2 border-foreground" />
+                </div>
               </div>
               <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
                 {group.items.map(

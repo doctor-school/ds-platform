@@ -150,4 +150,51 @@ describe("<EventList>", () => {
     await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
     expect(onPageChange).toHaveBeenCalledWith(4, "opaque-current");
   });
+  it("EARS-3: the day plates of «Будущие» stick under the default zero offset on the page-background surface", () => {
+    const { container } = render(
+      <EventList
+        items={[item, { ...item, id: "event-2", groupKey: "2026-08-30", groupLabel: "30 августа, воскресенье" }]}
+        selectedTab="upcoming"
+        tenseControl="none"
+        paginationMode="none"
+        labels={{ emptyTitle: "Событий нет" }}
+      />,
+    );
+
+    const headers = container.querySelectorAll<HTMLElement>(
+      "section > [data-event-list-group-header]",
+    );
+    expect(headers).toHaveLength(2);
+    for (const header of headers) {
+      expect(header.className).toContain("sticky");
+      expect(header.className).toContain("z-10");
+      expect(header.className).toContain("bg-background");
+      expect(header.style.top).toBe("0px");
+      // The header is the section's first child: it sticks only while its own group scrolls.
+      expect(header.parentElement!.firstElementChild).toBe(header);
+    }
+    expect(headers[0]!.textContent).toContain("29 августа, суббота");
+  });
+
+  it("EARS-3: the month plates of «Прошедшие» stick under the storefront header offset a host passes", () => {
+    const { container } = render(
+      <EventList
+        items={[{ ...item, groupKey: "2026-08", groupLabel: "Август 2026", variant: "past" as const }]}
+        selectedTab="past"
+        onTabChange={vi.fn()}
+        counts={{ upcoming: 0, past: 1 }}
+        labels={{ upcoming: "Будущие", past: "Прошедшие", emptyTitle: "Событий нет" }}
+        paginationMode="none"
+        stickyHeaderOffset={64}
+      />,
+    );
+
+    const header = container.querySelector<HTMLElement>(
+      "[data-event-list-body] section > [data-event-list-group-header]",
+    );
+    expect(header).not.toBeNull();
+    expect(header!.className).toContain("sticky");
+    expect(header!.style.top).toBe("64px");
+    expect(header!.textContent).toContain("Август 2026");
+  });
 });

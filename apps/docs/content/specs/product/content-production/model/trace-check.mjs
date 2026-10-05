@@ -110,7 +110,9 @@ for (const entry of index.diagrams) {
 /** Closed sub-role list: «Подроли» table of FORMAT-ru.md, circle → set of sub-role names. */
 function parseSubRoles(text) {
   const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^Подроли — закрытый список/.test(line));
+  const start = lines.findIndex((line) =>
+    /^Подроли — закрытый список/.test(line),
+  );
   const map = new Map();
   if (start < 0) return map;
   for (const line of lines.slice(start + 1)) {

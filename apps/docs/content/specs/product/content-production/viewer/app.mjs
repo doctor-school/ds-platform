@@ -289,7 +289,9 @@ function layoutDiagram(diagram) {
   const xrTrack = xrLanes.map(({ up, down }) => {
     const both = up.filter((id) => down.includes(id));
     const track = new Map(both.map((id, k) => [id, k]));
-    up.filter((id) => !track.has(id)).forEach((id, k) => track.set(id, both.length + k));
+    up.filter((id) => !track.has(id)).forEach((id, k) =>
+      track.set(id, both.length + k),
+    );
     let k = both.length;
     for (const id of down) if (!track.has(id)) track.set(id, k++);
     return track;

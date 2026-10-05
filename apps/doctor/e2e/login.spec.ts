@@ -95,6 +95,41 @@ test("017 #1933: the sign-up door carries the arrival context onward", async ({
   );
 });
 
+// 003 EARS-43 — the congress-site entry `/login?method=code` opens the card on
+// «По коду» with no tab click; the carried returnTo still rides onward exactly
+// as without the param. An unknown value, or none, keeps «Пароль». Backend-free:
+// the preselection is decided by the mount from the URL alone.
+test("003 EARS-43: /login?method=code&returnTo=/account/congress opens on «По коду»", async ({
+  page,
+}) => {
+  await page.goto("/login?method=code&returnTo=%2Faccount%2Fcongress");
+
+  await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByTestId("otp-identifier")).toBeVisible();
+  // A preselection, not a lock: «Пароль» stays offered.
+  await expect(page.getByTestId("login-method-password")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Создать аккаунт" }),
+  ).toHaveAttribute("href", "/register?returnTo=%2Faccount%2Fcongress");
+});
+
+for (const query of ["", "?method=bogus"]) {
+  test(`003 EARS-43: /login${query} keeps «Пароль» preselected`, async ({
+    page,
+  }) => {
+    await page.goto(`/login${query}`);
+
+    await expect(page.getByTestId("login-method-password")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(passwordForm(page)).toBeVisible();
+  });
+}
+
 test("017 #1933: a rejected credential renders the block's own error", async ({
   page,
 }) => {

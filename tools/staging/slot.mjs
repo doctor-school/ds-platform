@@ -2290,6 +2290,7 @@ export function assertCaptchaCoherent(boxEnv) {
   }
   const serverKey = (boxEnv?.SMARTCAPTCHA_SERVER_KEY ?? "").trim();
   const siteKey = (boxEnv?.SMARTCAPTCHA_SITE_KEY ?? "").trim();
+  assertTestTokenCoherent(boxEnv, enabled);
   if (!enabled) {
     if (siteKey !== "") {
       throw new SlotError(
@@ -2318,6 +2319,44 @@ export function assertCaptchaCoherent(boxEnv) {
     }
   }
   return { enabled: true };
+}
+
+/**
+ * The optional bot-protection test token (#2605) must be coherent too. It lets the
+ * agent drive captcha-gated journeys on a slot (`packages/e2e/lib/captcha-stub.ts`
+ * resolves the widget with it), so it is meaningful only while bot protection is ON;
+ * and the api env schema refuses to boot on a token shorter than 32 characters or
+ * one set without a non-production `SENTRY_ENVIRONMENT` — refused here by name before
+ * any build minute is spent. Empty means "no token".
+ */
+const TEST_TOKEN_MIN_LENGTH = 32;
+const NON_PRODUCTION_SENTRY_ENVIRONMENTS = ["stage", "development", "test"];
+
+function assertTestTokenCoherent(boxEnv, enabled) {
+  const token = (boxEnv?.BOT_PROTECTION_TEST_TOKEN ?? "").trim();
+  if (token === "") return;
+  const where = `in ${STAGE_ENV_FILE} on ${STAGE_1}`;
+  if (!enabled) {
+    throw new SlotError(
+      `BOT_PROTECTION_TEST_TOKEN is set ${where} while BOT_PROTECTION_ENABLED is off — nothing ` +
+        "validates captcha tokens then, so the test token is a meaningless half. Empty it, or turn " +
+        "bot protection ON with the staging-captcha pair (infra/deploy/stage.env.example → Bot protection).",
+    );
+  }
+  if (token.length < TEST_TOKEN_MIN_LENGTH) {
+    throw new SlotError(
+      `BOT_PROTECTION_TEST_TOKEN ${where} is shorter than ${TEST_TOKEN_MIN_LENGTH} characters — the api ` +
+        "refuses to boot on it. Regenerate it on the box with `openssl rand -hex 32`.",
+    );
+  }
+  const sentryEnvironment = (boxEnv?.SENTRY_ENVIRONMENT ?? "").trim();
+  if (!NON_PRODUCTION_SENTRY_ENVIRONMENTS.includes(sentryEnvironment)) {
+    throw new SlotError(
+      `BOT_PROTECTION_TEST_TOKEN is set ${where} but SENTRY_ENVIRONMENT=${JSON.stringify(sentryEnvironment)} ` +
+        `is not a non-production marker (${NON_PRODUCTION_SENTRY_ENVIRONMENTS.join(", ")}; unset defaults to ` +
+        "production) — the api refuses to boot with the test token in production. Set SENTRY_ENVIRONMENT=stage.",
+    );
+  }
 }
 
 /**
@@ -2617,7 +2656,10 @@ async function main() {
   // coherent — refuse before any build minute is spent (#2207).
   if (COMMANDS_WITH_SLOT_AND_REF.has(options.command)) {
     const captcha = assertCaptchaCoherent(boxEnv);
-    console.log(`# bot protection on ${STAGE_1}: ${captcha.enabled ? "ON (vendor pair)" : "OFF"} — coherent`);
+    const testToken = (boxEnv.BOT_PROTECTION_TEST_TOKEN ?? "").trim() !== "";
+    console.log(
+      `# bot protection on ${STAGE_1}: ${captcha.enabled ? `ON (vendor pair${testToken ? " + test token" : ""})` : "OFF"} — coherent`,
+    );
   }
 
   if (options.command === "status") {

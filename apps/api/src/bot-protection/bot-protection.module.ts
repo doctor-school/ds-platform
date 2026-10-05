@@ -42,6 +42,7 @@ import { SmartCaptchaProvider } from "./smart-captcha.provider.js";
           isEnabled: () =>
             flags.isEnabled(FLAG_BOT_PROTECTION, env.BOT_PROTECTION_ENABLED),
           serverKey: env.SMARTCAPTCHA_SERVER_KEY,
+          testToken: env.BOT_PROTECTION_TEST_TOKEN,
           validateUrl: env.SMARTCAPTCHA_VALIDATE_URL,
         });
       },

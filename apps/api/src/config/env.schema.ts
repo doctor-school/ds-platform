@@ -21,6 +21,16 @@ export const ApiEnvSchema = z.looseObject({
     .default(false),
   SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
   SMARTCAPTCHA_VALIDATE_URL: z.url().default(SMARTCAPTCHA_VALIDATE_URL),
+  // Non-production test token (#2605): a request token equal to it passes the
+  // provider without a Yandex call, so the agent drives captcha-gated journeys
+  // on a staging slot. Generated ON the box (`openssl rand -hex 32`), never
+  // committed; an empty or whitespace-only line is unset and surrounding
+  // whitespace is trimmed (as `assertCaptchaCoherent` reads it). Accepted only when SENTRY_ENVIRONMENT
+  // positively names a non-production environment (`ApiEnvBootSchema` below).
+  BOT_PROTECTION_TEST_TOKEN: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim() || undefined : v),
+    z.string().min(32).optional(),
+  ),
 
   // Identity provider (Zitadel — design §1/§2). The BFF binds the real Zitadel
   // adapter only when a service token is present; with no token (the dev-stand
@@ -365,6 +375,32 @@ export const ApiEnvSchema = z.looseObject({
 
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;
 
+/**
+ * Environments that positively declare themselves non-production (#2605). The
+ * bot-protection test token is accepted only here; `SENTRY_ENVIRONMENT` is the
+ * marker that already differs between api-prod (`production`, also the schema
+ * default) and stage-1 (`stage`), so an unset marker refuses (fail-safe).
+ */
+const NON_PRODUCTION_ENVIRONMENTS: ReadonlySet<string> = new Set([
+  "stage",
+  "development",
+  "test",
+]);
+
+/** The boot contract: the field schema plus the cross-field production refusals. */
+const ApiEnvBootSchema = ApiEnvSchema.superRefine((env, ctx) => {
+  if (
+    env.BOT_PROTECTION_TEST_TOKEN !== undefined &&
+    !NON_PRODUCTION_ENVIRONMENTS.has(env.SENTRY_ENVIRONMENT)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["BOT_PROTECTION_TEST_TOKEN"],
+      message: `BOT_PROTECTION_TEST_TOKEN is non-production only; refusing to boot with SENTRY_ENVIRONMENT="${env.SENTRY_ENVIRONMENT}" (allowed: ${[...NON_PRODUCTION_ENVIRONMENTS].join(", ")})`,
+    });
+  }
+});
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): ApiEnv {
-  return ApiEnvSchema.parse(source);
+  return ApiEnvBootSchema.parse(source);
 }

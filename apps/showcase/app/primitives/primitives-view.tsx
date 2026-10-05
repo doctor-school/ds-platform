@@ -2229,9 +2229,150 @@ function WebinarCardSection() {
           />
         </SubRow>
       ))}
+
+      <p className="text-sm text-muted-foreground">
+        019 EARS-2 / 004 EARS-12 (amendments 2026-10-01/02) split the label row
+        into two separate props:{" "}
+        <code className="font-mono text-xs">kindLabel</code> (the event kind)
+        and <code className="font-mono text-xs">formatLabel</code> (онлайн /
+        офлайн / гибрид), joined by the card as «Мастер-класс · гибрид». A
+        hybrid event adds its venue-local start{" "}
+        <code className="font-mono text-xs">venueTimeLabel</code> on its own
+        line under the date; the{" "}
+        <code className="font-mono text-xs">recordingLabel</code> line renders
+        only on a past card. A caller passing{" "}
+        <code className="font-mono text-xs">formatLabel</code> alone keeps the
+        single-part kicker unchanged.
+      </p>
+      {KIND_FORMAT_CARDS.map((variant) => (
+        <SubRow key={variant.label} label={variant.label}>
+          <ThemePair
+            render={() => (
+              <div className="w-full">
+                <WebinarCard
+                  href="#"
+                  time={variant.time}
+                  tzLabel={variant.tzLabel}
+                  dateLabel={variant.dateLabel}
+                  school="Школа травматологии и ортопедии"
+                  title={variant.title}
+                  speakers={[{ name: "Анна Соколова", org: "К.м.н." }]}
+                  nmoLabel="НМО · 2 ЗЕТ"
+                  signUpLabel="коллег записались"
+                  seatsLeftLabel="мест осталось"
+                  soldOutLabel="мест не осталось"
+                  registeredLabel="Вы записаны"
+                  {...variant.props}
+                />
+              </div>
+            )}
+          />
+        </SubRow>
+      ))}
     </PrimitiveSection>
   );
 }
+
+/**
+ * 019 EARS-2 / 004 EARS-12 — the kind · format label row and the hybrid
+ * venue-local time slot. Kind and format are separate props; the venue line
+ * is host-formatted copy; the recording line belongs to past cards only.
+ */
+const KIND_FORMAT_CARDS = [
+  {
+    label: "kindLabel + formatLabel — «Вебинар · онлайн»",
+    title: "Пластика ахиллова сухожилия: разбор клинических случаев",
+    time: "19:00",
+    tzLabel: "МСК",
+    dateLabel: "16 июля · ср",
+    props: {
+      kindLabel: "Вебинар",
+      formatLabel: "онлайн",
+      venueLabel: "Онлайн",
+      pulCost: 120,
+      pulCostLabel: "120 Pul",
+      signUpCount: 128,
+    },
+  },
+  {
+    label:
+      "hybrid upcoming — «Мастер-класс · гибрид» + venueTimeLabel «На площадке 16:00 GMT+7»",
+    title: "Мастер-класс: артроскопия плечевого сустава",
+    time: "12:00",
+    tzLabel: "GMT+3",
+    dateLabel: "14 ноября · пт",
+    props: {
+      kindLabel: "Мастер-класс",
+      formatLabel: "гибрид",
+      venueTimeLabel: "На площадке 16:00 GMT+7",
+      venueLabel: "Гибрид",
+      city: "Новосибирск",
+      signUpCount: 56,
+      seatsLeft: 14,
+    },
+  },
+  {
+    label:
+      'hybrid past — variant="past": venue line + recordingLabel «Есть запись»',
+    title: "Мастер-класс: артроскопия плечевого сустава",
+    time: "12:00",
+    tzLabel: "GMT+3",
+    dateLabel: "14 мая · ср",
+    props: {
+      variant: "past",
+      kindLabel: "Мастер-класс",
+      formatLabel: "гибрид",
+      venueTimeLabel: "На площадке 16:00 GMT+7",
+      recordingLabel: "Есть запись",
+      venueLabel: "Гибрид",
+      city: "Новосибирск",
+    },
+  },
+  {
+    label: "offline — «Конгресс · офлайн» · МСК · city + seats",
+    title: "Конгресс «Ортобиология-2026»",
+    time: "10:00",
+    tzLabel: "МСК",
+    dateLabel: "14–15 ноября",
+    props: {
+      kindLabel: "Конгресс",
+      formatLabel: "офлайн",
+      venueLabel: "Офлайн",
+      city: "Москва",
+      pulCost: 450,
+      pulCostLabel: "450 Pul",
+      signUpCount: 314,
+      seatsLeft: 40,
+    },
+  },
+  {
+    label: "long kind title wraps inside the plate (019 EARS-17)",
+    title: "Встреча клуба: травматология и спортивная медицина",
+    time: "18:30",
+    tzLabel: "МСК",
+    dateLabel: "3 декабря · ср",
+    props: {
+      kindLabel: "Межрегиональная научно-практическая встреча клуба",
+      formatLabel: "офлайн",
+      venueLabel: "Офлайн",
+      city: "Казань",
+      signUpCount: 18,
+      seatsLeft: 12,
+    },
+  },
+  {
+    label: "legacy — formatLabel only «Вебинар» (unchanged single-part kicker)",
+    title: "Разбор клинического случая с экспертом",
+    time: "19:00",
+    tzLabel: "МСК",
+    dateLabel: "16 июля · ср",
+    props: {
+      formatLabel: "Вебинар",
+      venueLabel: "Онлайн",
+      signUpCount: 42,
+    },
+  },
+] as const;
 
 /**
  * 019 EARS-2 — the widened doctor-feed states of the SAME shared unit, staged

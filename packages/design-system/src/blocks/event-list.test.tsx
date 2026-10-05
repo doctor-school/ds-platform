@@ -18,7 +18,6 @@ const item = {
   title: "Клинический разбор",
   specialties: ["Кардиология"],
   speakers: [{ name: "Доктор" }],
-  recordingLabel: "Запись эфира",
 };
 
 describe("<EventList>", () => {
@@ -55,7 +54,6 @@ describe("<EventList>", () => {
     expect(
       screen.getByRole("link", { name: "Клинический разбор" }),
     ).toHaveAttribute("href", "/webinars/event-1");
-    expect(screen.getByText("Запись эфира")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Прошедшие · 2" }));
     await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
     expect(onTabChange).toHaveBeenCalledWith("past");
@@ -109,6 +107,7 @@ describe("<EventList>", () => {
     expect(
       screen.getByRole("link", { name: "Смотреть запись ↗" }),
     ).toHaveAttribute("href", item.href);
+    expect(screen.getByText("Запись готовится")).toBeInTheDocument();
   });
 
   it("#1641: a cursor-paged host gets prev/next only — never a fabricated page count", async () => {
@@ -144,7 +143,9 @@ describe("<EventList>", () => {
         .map((button) => button.textContent)
         .filter((text) => text === "Назад" || text === "Вперёд"),
     ).toEqual(["Назад", "Вперёд"]);
-    expect(screen.queryByRole("button", { name: "Страница 1" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Страница 1" }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
     expect(onPageChange).toHaveBeenCalledWith(4, "opaque-current");

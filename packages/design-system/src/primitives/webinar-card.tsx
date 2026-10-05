@@ -90,8 +90,20 @@ export interface WebinarCardProps extends Omit<
   live?: boolean;
   /** Live-signal copy — «В эфире» (from the catalog); required visually when `live`. */
   liveLabel?: string;
-  /** Source-free recording-state badge supplied by the host for an ended event. */
+  /**
+   * Source-free recording-state line supplied by the host for an ended event
+   * («Есть запись», «Запись · 90 мин»). Rendered for `variant="past"` only — an
+   * upcoming card has no recording to state.
+   */
   recordingLabel?: string;
+  /**
+   * 004 EARS-12 (Amendment 2026-10-02) — the hybrid event's start in the
+   * VENUE's local time, already formatted and zone-labelled by the host, e.g.
+   * «На площадке 16:00 GMT+7». The main {@link time} stays in the viewer's
+   * zone; this is its own line under the date, rendered only when given (a
+   * hybrid event whose venue carries a zone), in both variants.
+   */
+  venueTimeLabel?: string;
   /**
    * Whether the VIEWER is registered for this event — surfaces the canvas
    * `registered` variant's «вы записаны» marker (the green `✓` line, semantic
@@ -103,11 +115,20 @@ export interface WebinarCardProps extends Omit<
   /** Registered-marker copy — «Вы записаны» (from the catalog); required visually when `registered`. */
   registeredLabel?: string;
   /**
-   * 019 EARS-2 — the format/kind KICKER on the time plate (the canvas card's
-   * `num` slot): «Вебинар», «Разбор», «Doctor Club», «Подкаст», «Конгресс».
-   * Pure catalog copy — the card holds NO format vocabulary of its own, so it
+   * 019 EARS-2 / EARS-17 (LD-12) — the event KIND, the title of an entry of
+   * the editor-managed kind dictionary («Мастер-класс», «Конгресс», «Встреча
+   * клуба»). The first part of the time-plate label row (the canvas card's
+   * `num` slot), followed by {@link formatLabel}; the two are separate axes and
+   * the card joins them, the host never pre-concatenates them.
+   */
+  kindLabel?: string;
+  /**
+   * 019 EARS-2 — the participation FORMAT part of the time-plate label row
+   * («онлайн», «офлайн», «гибрид»), rendered after {@link kindLabel}. A caller
+   * passing only this prop gets the single-part kicker as before. Pure catalog
+   * copy — the card holds NO format or kind vocabulary of its own, so it
    * carries no dependency on the read contract in `@ds/schemas` and cannot
-   * drift from it. With no label the kicker line simply does not render.
+   * drift from it. With neither label the row simply does not render.
    */
   formatLabel?: string;
   /**
@@ -149,7 +170,8 @@ export interface WebinarCardProps extends Omit<
 }
 
 /** The canvas chip: pale tint plate, 12.5px/700 ink, `6px 13px` padding. */
-const CHIP_CLASS = "bg-tint px-3.25 py-1.5 text-caption font-bold text-foreground";
+const CHIP_CLASS =
+  "bg-tint px-3.25 py-1.5 text-caption font-bold text-foreground";
 
 /** The pulsing round dot shared by the desktop sticker and the mobile live tag. */
 function LiveDot() {
@@ -178,8 +200,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
       live = false,
       liveLabel,
       recordingLabel,
+      venueTimeLabel,
       registered = false,
       registeredLabel,
+      kindLabel,
       formatLabel,
       nmoLabel,
       venueLabel,
@@ -199,6 +223,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
     ref,
   ) => {
     const past = variant === "past";
+    // Past = the muted archive anatomy, drawn with full-strength muted tokens on
+    // the time plate (WCAG AA) — never a whole-card opacity, which pushes the
+    // plate ink below 4.5:1 (#2565; the canvas .82 opacity is a canvas defect).
+    const plateInk = past ? "text-muted-foreground" : "text-tint-foreground";
     // EARS-2: the cost reads in Pul, and a zero cost reads «бесплатно для
     // врача». There is no rouble branch because there is no rouble input.
     const costLabel = pulCost === 0 ? freeLabel : pulCostLabel;
@@ -227,7 +255,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
           "border-b-2 border-border last:border-b-0",
           // Desktop (>900px): the 196px time-plate grid on a bordered, raised card.
           "layout:grid layout:grid-cols-[196px_1fr] layout:border-2 layout:border-border layout:shadow-lg layout:last:border-2",
-          past && "opacity-80 layout:border-muted-foreground/30",
+          past && "layout:border-muted-foreground/30",
           className,
         )}
         {...props}
@@ -244,7 +272,13 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
         ) : null}
 
         {/* Time plate. */}
-        <div className="flex flex-col items-start gap-2.5 bg-tint px-4 py-[14px] layout:items-start layout:gap-3 layout:border-r-2 layout:border-border layout:px-6 layout:py-[30px]">
+        <div
+          data-time-plate=""
+          className={cn(
+            "flex flex-col items-start gap-2.5 px-4 py-[14px] layout:items-start layout:gap-3 layout:border-r-2 layout:border-border layout:px-6 layout:py-[30px]",
+            past ? "bg-muted" : "bg-tint",
+          )}
+        >
           {/* Live tag — mobile only (the desktop signal is the sticker above). */}
           {live && liveLabel ? (
             <span
@@ -258,30 +292,78 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
           {/* `display:contents` on desktop lets the time + meta lay out directly in
             the time-column flex; on mobile they stack inside their own column. */}
           <div className="flex w-full flex-col items-start gap-1 layout:contents">
-            <span className="text-3xl font-extrabold leading-none tracking-tighter tabular-nums text-tint-foreground layout:text-4xl">
+            <span
+              className={cn(
+                "text-3xl font-extrabold leading-none tracking-tighter tabular-nums layout:text-4xl",
+                plateInk,
+              )}
+            >
               {time}
             </span>
             <div className="text-left">
-              {/* 019 EARS-2 — the format/kind kicker, the canvas card's `num`
-                slot on the time plate (NOT a badge of its own): «Вебинар»,
-                «Разбор», «Doctor Club», «Подкаст», «Конгресс». Pure catalog
-                copy, so no format vocabulary lives in the primitive. */}
-              {formatLabel ? (
+              {/* 019 EARS-2 — the kind · format label row, the canvas card's
+                `num` slot on the time plate (NOT a badge of its own):
+                «Мастер-класс · гибрид». Kind and format are two parts so each
+                axis stays its own value; a long kind title wraps inside the
+                plate (EARS-17). Pure catalog copy, so no vocabulary lives in
+                the primitive. */}
+              {kindLabel || formatLabel ? (
                 <div
                   data-event-format-kicker=""
-                  className="mb-1 text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground"
+                  className={cn(
+                    "mb-1 break-words text-eyebrow font-extrabold uppercase tracking-micro",
+                    plateInk,
+                  )}
                 >
-                  {formatLabel}
+                  {kindLabel ? (
+                    <span data-event-kind-label="">{kindLabel}</span>
+                  ) : null}
+                  {kindLabel && formatLabel ? " · " : null}
+                  {formatLabel ? (
+                    kindLabel ? (
+                      <span data-event-format-label="">{formatLabel}</span>
+                    ) : (
+                      formatLabel
+                    )
+                  ) : null}
                 </div>
               ) : null}
-              <div className="text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground">
+              <div
+                className={cn(
+                  "text-eyebrow font-extrabold uppercase tracking-micro",
+                  plateInk,
+                )}
+              >
                 {tzLabel}
               </div>
-              <div className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground">
+              <div
+                className={cn(
+                  "mt-1 text-xs font-bold uppercase leading-snug tracking-wide",
+                  plateInk,
+                )}
+              >
                 {dateLabel}
               </div>
-              {recordingLabel ? (
-                <div className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground">
+              {/* 004 EARS-12 — the hybrid venue-local start, its own line. */}
+              {venueTimeLabel ? (
+                <div
+                  data-event-venue-time=""
+                  className={cn(
+                    "mt-1 text-xs font-bold uppercase leading-snug tracking-wide",
+                    plateInk,
+                  )}
+                >
+                  {venueTimeLabel}
+                </div>
+              ) : null}
+              {past && recordingLabel ? (
+                <div
+                  data-event-recording=""
+                  className={cn(
+                    "mt-1 text-xs font-bold uppercase leading-snug tracking-wide",
+                    plateInk,
+                  )}
+                >
                   {recordingLabel}
                 </div>
               ) : null}
@@ -337,7 +419,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
               className="mb-5 flex flex-wrap items-center gap-2"
             >
               {venueChipLabel ? (
-                <span data-event-city={city ?? undefined} className={CHIP_CLASS}>
+                <span
+                  data-event-city={city ?? undefined}
+                  className={CHIP_CLASS}
+                >
                   {venueChipLabel}
                 </span>
               ) : null}

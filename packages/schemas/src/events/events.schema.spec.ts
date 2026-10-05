@@ -261,12 +261,37 @@ describe("007 events schema", () => {
       startsAtMsk: "2026-07-17T19:00",
       durationMin: 90,
       specialties: ["cardiology"],
+      kindId: "6f0f6a1c-0e5a-4d6a-9f2b-6a1c0e5a4d6a",
+      audience: "doctors",
     };
 
     it("accepts a valid full-field payload and defaults optionals", () => {
       const parsed = CreateEventRequestSchema.parse(base);
       expect(parsed.description).toBe("");
       expect(parsed.title).toBe("Актуальная терапия");
+      expect(parsed.participationFormat).toBe("online");
+    });
+
+    it("012 EARS-26: create requires exactly one kind id — missing or non-uuid is refused", () => {
+      const { kindId: _omit, ...withoutKind } = base;
+      expect(CreateEventRequestSchema.safeParse(withoutKind).success).toBe(false);
+      expect(
+        CreateEventRequestSchema.safeParse({ ...base, kindId: "Вебинар" }).success,
+      ).toBe(false);
+    });
+
+    it("012 EARS-29: create requires one audience doctors | experts — missing or unknown is refused", () => {
+      const { audience: _omit, ...withoutAudience } = base;
+      expect(CreateEventRequestSchema.safeParse(withoutAudience).success).toBe(
+        false,
+      );
+      expect(
+        CreateEventRequestSchema.safeParse({ ...base, audience: "pharma" })
+          .success,
+      ).toBe(false);
+      expect(
+        CreateEventRequestSchema.parse({ ...base, audience: "experts" }).audience,
+      ).toBe("experts");
     });
 
     it("rejects a malformed МСК datetime", () => {

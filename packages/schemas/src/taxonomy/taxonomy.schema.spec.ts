@@ -27,6 +27,9 @@ import {
   UpdateExpertRequestSchema,
   UpdateDirectionRequestSchema,
   UpdateProjectRequestSchema,
+  CreateEventKindRequestSchema,
+  UpdateEventKindRequestSchema,
+  PublicEventKindSchema,
   CreateEventProjectRequestSchema,
   EventProjectAdminDetailSchema,
   LifecycleImpactRowSchema,
@@ -87,8 +90,26 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
       CreateProjectRequestSchema.safeParse({
         kind: "school",
         title: "Школа кардиологии",
+        defaultAudience: "doctors",
       }).success,
     ).toBe(true);
+  });
+
+  it("012 EARS-30: a project create requires a default audience doctors | experts", () => {
+    const body = { kind: "media", title: "Академия смыслов" };
+    expect(CreateProjectRequestSchema.safeParse(body).success).toBe(false);
+    expect(
+      CreateProjectRequestSchema.safeParse({ ...body, defaultAudience: "all" })
+        .success,
+    ).toBe(false);
+    expect(
+      CreateProjectRequestSchema.parse({ ...body, defaultAudience: "experts" })
+        .defaultAudience,
+    ).toBe("experts");
+    // An edit may change it but never clear it.
+    expect(
+      UpdateProjectRequestSchema.safeParse({ defaultAudience: null }).success,
+    ).toBe(false);
   });
 
   it("012 EARS-1: when a project create carries an unknown kind or an over-long description, the schema shall refuse it", () => {
@@ -141,6 +162,7 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
       title: "System-owned address",
       description: null,
       coverUrl: null,
+      defaultAudience: "doctors",
       status: "draft",
       firstPublishedAt: null,
       slugEditable: true,
@@ -747,6 +769,7 @@ const PUBLIC_EVENT_SUMMARY_KEYS = [
   "school",
   "startsAt",
   "state",
+  "kind",
 ] as const;
 
 const publicProjectSummary = {
@@ -766,6 +789,11 @@ const publicEventSummary = {
   school: "Кардиошкола",
   startsAt: new Date().toISOString(),
   state: "published",
+  kind: {
+    id: "44444444-4444-4444-8444-444444444444",
+    slug: "vebinar",
+    title: "Вебинар",
+  },
 };
 
 describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
@@ -926,6 +954,41 @@ describe("012 EARS-6 — event↔project relationship contract (SSOT)", () => {
     expect(
       EventProjectAdminDetailSchema.safeParse({ ...detail, status: "draft" })
         .success,
+    ).toBe(false);
+  });
+});
+
+describe("012 EARS-25 / EARS-28 — event-kind dictionary contract (SSOT)", () => {
+  it("012 EARS-25: a kind create requires a title and a non-empty, duplicate-free set of allowed formats, and accepts no slug or storefront attribute", () => {
+    const body = { title: "Клинический разбор", allowedFormats: ["online"] };
+    expect(CreateEventKindRequestSchema.safeParse(body).success).toBe(true);
+    for (const bad of [
+      { ...body, allowedFormats: [] },
+      { ...body, allowedFormats: ["online", "online"] },
+      { ...body, allowedFormats: ["webinar"] },
+      { ...body, title: "" },
+      { ...body, slug: "klinicheskiy-razbor" },
+      { ...body, audience: "doctors" },
+    ]) {
+      expect(
+        CreateEventKindRequestSchema.safeParse(bad).success,
+        JSON.stringify(bad),
+      ).toBe(false);
+    }
+    expect(
+      UpdateEventKindRequestSchema.safeParse({ allowedFormats: ["offline", "hybrid"] })
+        .success,
+    ).toBe(true);
+  });
+
+  it("012 EARS-28: PublicEventKind is exactly { id, slug, title }", () => {
+    const kind = { id: "55555555-5555-4555-8555-555555555555", slug: "efir", title: "Эфир" };
+    expect(PublicEventKindSchema.parse(kind)).toEqual(kind);
+    expect(
+      PublicEventKindSchema.safeParse({ ...kind, allowedFormats: ["online"] }).success,
+    ).toBe(false);
+    expect(
+      PublicEventKindSchema.safeParse({ ...kind, status: "published" }).success,
     ).toBe(false);
   });
 });

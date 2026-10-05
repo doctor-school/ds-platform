@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  EventAudienceSchema,
+  EventKindRefSchema,
+} from "../events/events.schema.js";
+import { EventParticipationFormatSchema } from "../events/participation.schema.js";
+
 // 012 — Content taxonomy contracts (API SSOT, ADR-0002 §3, ADR-0006 §6.2;
 // 012-design §2.2, §5.1, §5.3, §6). Framework-agnostic: `apps/api` validates at
 // the I/O boundary with these schemas, and the Refine admin (`apps/admin`)
@@ -118,6 +124,11 @@ export const CreateProjectRequestSchema = z
     kind: ProjectKindSchema,
     title: ProjectTitleSchema,
     description: ProjectDescriptionSchema.nullish(),
+    /**
+     * 012 EARS-30 (#2509) — required: the audience that prefills a new event
+     * linked to this project (the event may override it).
+     */
+    defaultAudience: EventAudienceSchema,
   })
   .strict();
 export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
@@ -134,6 +145,11 @@ export const UpdateProjectRequestSchema = z
     kind: ProjectKindSchema.optional(),
     title: ProjectTitleSchema.optional(),
     description: ProjectDescriptionSchema.nullish(),
+    /**
+     * 012 EARS-30 — never clearable. Changing it rewrites no existing event's
+     * audience; it only prefills the project's next new events.
+     */
+    defaultAudience: EventAudienceSchema.optional(),
     mediaAction: MediaActionSchema.optional(),
   })
   .strict();
@@ -151,6 +167,8 @@ export const ProjectAdminDetailSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
   coverUrl: z.string().nullable(),
+  /** 012 EARS-30 — prefills the audience of the project's new events. */
+  defaultAudience: EventAudienceSchema,
   status: TaxonomyStatusSchema,
   /** Null until the first publish; once set, the slug is permanently locked. */
   firstPublishedAt: z.string().nullable(),
@@ -166,6 +184,7 @@ export const ProjectAdminListItemSchema = ProjectAdminDetailSchema.pick({
   slug: true,
   kind: true,
   title: true,
+  defaultAudience: true,
   status: true,
   version: true,
   updatedAt: true,
@@ -517,6 +536,115 @@ export const DirectionAdminListSchema = z.object({
 });
 export type DirectionAdminList = z.infer<typeof DirectionAdminListSchema>;
 
+// ── Event-kind authoring DTOs (012 LD-11, EARS-25…EARS-28; #2509) ────────────
+
+export const EVENT_KIND_TITLE_MIN = 1;
+export const EVENT_KIND_TITLE_MAX = 120;
+
+const EventKindTitleSchema = z
+  .string()
+  .trim()
+  .min(EVENT_KIND_TITLE_MIN)
+  .max(EVENT_KIND_TITLE_MAX);
+
+/**
+ * The non-empty, duplicate-free set of participation formats a kind allows
+ * (LD-11). Order carries no meaning; the server stores it in the canonical
+ * `online, offline, hybrid` order so two equal sets compare equal.
+ */
+export const EventKindAllowedFormatsSchema = z
+  .array(EventParticipationFormatSchema)
+  .min(1)
+  .refine((formats) => new Set(formats).size === formats.length, {
+    message: "each format may appear once",
+  });
+
+/**
+ * `POST /v1/admin/event-kinds` — create one draft kind. Slug is server-derived
+ * (never accepted) and a kind carries NO storefront attribute: the storefront
+ * is the event audience alone (LD-12). `.strict()` turns a hopeful `slug` or
+ * `audience` into 400 rather than a silently ignored field.
+ */
+export const CreateEventKindRequestSchema = z
+  .object({
+    title: EventKindTitleSchema,
+    allowedFormats: EventKindAllowedFormatsSchema,
+  })
+  .strict();
+export type CreateEventKindRequest = z.infer<
+  typeof CreateEventKindRequestSchema
+>;
+
+/**
+ * `PATCH /v1/admin/event-kinds/:id` — rename or re-scope the SAME row. Narrowing
+ * `allowedFormats` changes no existing event (EARS-25): an event whose format
+ * the kind no longer allows is flagged in the admin, not rewritten.
+ */
+export const UpdateEventKindRequestSchema = z
+  .object({
+    title: EventKindTitleSchema.optional(),
+    allowedFormats: EventKindAllowedFormatsSchema.optional(),
+  })
+  .strict();
+export type UpdateEventKindRequest = z.infer<
+  typeof UpdateEventKindRequestSchema
+>;
+
+/** The admin detail projection; `version` backs the ETag the next write echoes. */
+export const EventKindAdminDetailSchema = z.object({
+  id: z.string(),
+  slug: SlugSchema,
+  title: z.string(),
+  allowedFormats: z.array(EventParticipationFormatSchema),
+  status: TaxonomyStatusSchema,
+  /** Null until the first publish; once set, the derived slug is permanently frozen. */
+  firstPublishedAt: z.string().nullable(),
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type EventKindAdminDetail = z.infer<typeof EventKindAdminDetailSchema>;
+
+/** One row of the admin list. */
+export const EventKindAdminListItemSchema = EventKindAdminDetailSchema.pick({
+  id: true,
+  slug: true,
+  title: true,
+  allowedFormats: true,
+  status: true,
+  version: true,
+  updatedAt: true,
+});
+export type EventKindAdminListItem = z.infer<
+  typeof EventKindAdminListItemSchema
+>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const EventKindAdminListSchema = z.object({
+  data: z.array(EventKindAdminListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type EventKindAdminList = z.infer<typeof EventKindAdminListSchema>;
+
+/**
+ * EARS-28 — `PublicEventKind { id, slug, title }`, the item of the public kind
+ * list every reader and facet reads. The same shape as the `EventKindRef` an
+ * event read carries.
+ */
+export const PublicEventKindSchema = EventKindRefSchema;
+export type PublicEventKind = z.infer<typeof PublicEventKindSchema>;
+
+/**
+ * `GET /v1/public/event-kinds` — every published, non-retired kind, ordered by
+ * title. A small editorial dictionary, so one unpaged list.
+ */
+export const PublicEventKindListSchema = z
+  .object({ data: z.array(PublicEventKindSchema) })
+  .strict();
+export type PublicEventKindList = z.infer<typeof PublicEventKindListSchema>;
+
 // ── Partner authoring DTOs (012-design §2.2 matrix; EARS-4, #1286) ──────────
 
 export const PARTNER_TITLE_MIN = 1;
@@ -857,6 +985,8 @@ export const PublicEventSummarySchema = z
     school: z.string(),
     startsAt: z.string(),
     state: z.string(),
+    /** 012 EARS-28 — the event's kind, so a newly published kind reaches this read with no code change. */
+    kind: EventKindRefSchema,
   })
   .strict();
 export type PublicEventSummary = z.infer<typeof PublicEventSummarySchema>;
@@ -1051,6 +1181,10 @@ export const LIFECYCLE_IMPACT_ROW_KINDS = [
   // transition 012 EARS-13 exists to make visible.
   "direction↔specialty",
   "direction↔direction",
+  // 012 EARS-28 (#2509) — the event-kind dictionary entry; retiring one keeps
+  // the reference of every event that carries it (those events are the
+  // `event` rows of its preview).
+  "event-kind",
 ] as const;
 export const LifecycleImpactRowKindSchema = z.enum(LIFECYCLE_IMPACT_ROW_KINDS);
 export type LifecycleImpactRowKind = z.infer<

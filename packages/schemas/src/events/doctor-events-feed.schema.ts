@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventCardSchema, DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
 import {
   createEventListingQueryCodec,
@@ -61,14 +63,12 @@ export const DoctorEventsFeedQuerySchema = z
     to: DoctorEventsFeedDaySchema.optional(),
     format: z.array(DoctorEventFormatSchema).default([]),
     /**
-     * The `kind` FACET is a list of managed direction IDs — the same vocabulary
-     * the card's own `kind` field carries, so a card value round-trips. The
-     * uuid constraint is load-bearing, not cosmetic: `direction_id` is a uuid
-     * column, so an unconstrained value would reach Postgres and raise `22P02`
-     * as a 500 on a public unauthenticated URL. A malformed `kind` is a 400 at
-     * the boundary instead.
+     * The `kind` FACET is a list of 012 event-kind dictionary SLUGS — the
+     * same value the card's `kind.slug` carries, so a card value round-trips
+     * (019 «Amendment — 2026-10-01»). The slug grammar is enforced here, so a
+     * malformed value is a 400 at the boundary, never a database error.
      */
-    kind: z.array(z.uuid()).default([]),
+    kind: z.array(SlugSchema).default([]),
     specialty: z
       .union([
         DoctorEventsFeedSpecialtyModeSchema,

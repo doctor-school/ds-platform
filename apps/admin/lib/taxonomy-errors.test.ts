@@ -254,24 +254,24 @@ describe("narrowRefusal — 012 EARS-25 bounded narrowing refusal (#2509)", () =
     expect(narrowRefusal(undefined)).toBeNull();
   });
 
-  it("012 EARS-25: the sentence states the count with the Russian plural of «событие», and the tail says how many more", () => {
+  it("012 EARS-25: the sentence states the count with the Russian plural of «мероприятие», and the tail says how many more", () => {
     const t = createTranslator({ locale: "ru", messages });
     const say = (count: number) =>
       t("eventKinds.errors.narrowRefused" as never, { count } as never);
     expect(say(1)).toBe(
-      "Нельзя убрать формат: его использует 1 событие этого вида.",
+      "Нельзя убрать формат: его использует 1 мероприятие этого типа.",
     );
     expect(say(3)).toBe(
-      "Нельзя убрать формат: его используют 3 события этого вида.",
+      "Нельзя убрать формат: его используют 3 мероприятия этого типа.",
     );
     expect(say(222)).toBe(
-      "Нельзя убрать формат: его используют 222 события этого вида.",
+      "Нельзя убрать формат: его используют 222 мероприятия этого типа.",
     );
     expect(say(11)).toBe(
-      "Нельзя убрать формат: его используют 11 событий этого вида.",
+      "Нельзя убрать формат: его используют 11 мероприятий этого типа.",
     );
     expect(say(25)).toBe(
-      "Нельзя убрать формат: его используют 25 событий этого вида.",
+      "Нельзя убрать формат: его используют 25 мероприятий этого типа.",
     );
     expect(
       t("eventKinds.errors.narrowRefusedMore" as never, { count: 217 } as never),

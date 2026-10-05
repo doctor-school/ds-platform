@@ -211,7 +211,7 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
     await toggleFormat(page, "offline");
     await page.getByTestId("submit-event-kind").click();
     await expect(page.getByTestId("update-error")).toContainText(
-      "Нельзя убрать формат: его использует 1 событие этого вида.",
+      "Нельзя убрать формат: его использует 1 мероприятие этого типа.",
     );
     const named = page.getByTestId("narrow-refused-events");
     await expect(named).toContainText(eventTitle);

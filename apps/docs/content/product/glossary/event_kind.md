@@ -19,9 +19,9 @@ no code change (012 LD-11, EARS-25…EARS-28).
 The seed holds exactly five kinds: Вебинар {online} · Эфир {online} ·
 Конгресс {offline, hybrid} · Встреча клуба {online, offline, hybrid} ·
 Мастер-класс {offline, hybrid}. The format is checked against the kind when an
-event is created or saved; narrowing a kind never rewrites existing events, and
-an existing event whose format its kind no longer allows is flagged in the admin
-until its next valid save (012 EARS-26). A kind carries **no storefront rule** —
+event is created or saved, and the admin format select offers only the formats
+the chosen kind allows; narrowing a kind's formats is refused while any event of
+that kind uses a removed format (012 EARS-26). A kind carries **no storefront rule** —
 the storefront is chosen by the event_audience alone. Grouping is the project,
 not the kind, and a lesson is not an event kind: lessons are content of the
 specialty feed (feature 018).

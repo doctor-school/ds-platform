@@ -535,6 +535,38 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
+    it("012 EARS-26: an event create or update naming a retired kind is refused with a field error, and nothing is written", async () => {
+      const retired = await publishKind(
+        await newKind(["online", "offline", "hybrid"]),
+      );
+      await retireKind(retired);
+
+      const title = `Отказ ${marker()}`;
+      const created = await createEvent(
+        eventPayload({ kindId: retired.id, title }),
+      );
+      expect(created.statusCode).toBe(400);
+      expect(fieldOf(created)).toContainEqual(["kindId"]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM events WHERE title = $1",
+        [title],
+      );
+      expect(rows).toHaveLength(0);
+
+      const ok = await createEvent(
+        eventPayload({
+          kindId: SEED_EVENT_KINDS.kongress.id,
+          participationFormat: "offline",
+        }),
+      );
+      expect(ok.statusCode).toBe(201);
+      const id = (ok.json() as { id: string }).id;
+      const save = await patchEvent(id, { kindId: retired.id });
+      expect(save.statusCode).toBe(400);
+      expect(fieldOf(save)).toContainEqual(["kindId"]);
+      expect((await adminEvent(id)).kind.id).toBe(SEED_EVENT_KINDS.kongress.id);
+    });
+
     it("012 EARS-26: a participation format the kind does not allow is refused with a field error on create and on save", async () => {
       const refused = await createEvent(
         eventPayload({
@@ -553,7 +585,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(ok.statusCode).toBe(201);
       const id = (ok.json() as { id: string }).id;
-      const save = await patchEvent(id, { kindId: SEED_EVENT_KINDS.vebinar.id });
+      const save = await patchEvent(id, {
+        kindId: SEED_EVENT_KINDS.vebinar.id,
+      });
       expect(save.statusCode).toBe(400);
       expect(fieldOf(save)).toContainEqual(["participationFormat"]);
       expect((await adminEvent(id)).kind.id).toBe(SEED_EVENT_KINDS.kongress.id);
@@ -596,7 +630,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect((await adminEvent(event.id)).participationFormat).toBe("offline");
 
-      const moved = await patchEvent(event.id, { participationFormat: "online" });
+      const moved = await patchEvent(event.id, {
+        participationFormat: "online",
+      });
       expect(moved.statusCode).toBe(200);
 
       const accepted = await patchKind(kind, { allowedFormats: ["online"] });
@@ -620,7 +656,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await adminEvent(id)).audience).toBe("doctors");
     });
 
-    it("012 EARS-29: every public read selects by audience — a doctors event shows only on the doctor storefront and an experts event only on the Academy", async () => {
+    it("012 EARS-29: every public listing read selects by audience — a doctors event shows only on the doctor storefront and an experts event only on the Academy", async () => {
       const doctors = await seedEvent({ audience: "doctors" });
       const experts = await seedEvent({ audience: "experts" });
 
@@ -695,9 +731,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: { defaultAudience: "experts" },
       });
       expect(changed.statusCode).toBe(200);
-      expect((changed.json() as { defaultAudience: string }).defaultAudience).toBe(
-        "experts",
-      );
+      expect(
+        (changed.json() as { defaultAudience: string }).defaultAudience,
+      ).toBe("experts");
       const { rows } = await pool.query<{ audience: string }>(
         "SELECT audience FROM events WHERE id = $1",
         [event.id],

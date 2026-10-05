@@ -2,7 +2,7 @@
 "@ds/schemas": major
 "@ds/api-client": major
 "@ds/api": major
-"@ds/db": minor
+"@ds/db": major
 "@ds/admin": minor
 "@ds/doctor": minor
 ---

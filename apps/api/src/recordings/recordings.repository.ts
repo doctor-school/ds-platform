@@ -4,7 +4,6 @@ import type { DrizzleHandle, Event, EventRecording } from "@ds/db";
 import { eventRecordings, events } from "@ds/db";
 import {
   CANONICAL_UUID_REGEX,
-  type EventAudience,
   type RecordingAdminListQuery,
   type RecordingKind,
   type RecordingStatus,
@@ -246,24 +245,12 @@ export class RecordingsRepository {
    * and still answer this route 200 with `provider` + `embed_ref` to any
    * signed-in account — authenticating would turn the route into an oracle on
    * a record the platform says does not exist.
-   *
-   * 012 EARS-29 (#2509) — a public caller names the storefront it serves:
-   * `audience` selects only events of that audience, so a doctor-storefront
-   * event never resolves on an Academy read. The operator backfill passes none:
-   * it is an admin seam addressing any event.
    */
-  async findEventByIdOrSlug(
-    idOrSlug: string,
-    audience?: EventAudience,
-  ): Promise<Event | null> {
+  async findEventByIdOrSlug(idOrSlug: string): Promise<Event | null> {
     const key = CANONICAL_UUID_REGEX.test(idOrSlug)
       ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
       : eq(events.slug, idOrSlug);
-    const where = and(
-      key,
-      eq(events.recordStatus, "active"),
-      audience ? eq(events.audience, audience) : undefined,
-    );
+    const where = and(key, eq(events.recordStatus, "active"));
     const [row] = await this.db.select().from(events).where(where).limit(1);
     return row ?? null;
   }

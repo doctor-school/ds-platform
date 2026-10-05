@@ -571,23 +571,20 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(byId.payload).not.toContain(EDITED_REF);
     });
 
-    it("012 EARS-29: the Academy playback read selects only an `experts` event, so a doctor-storefront event hands out no playable source on the Academy", async () => {
+    it("012 EARS-29: the playback read of one event by its key is not audience-scoped, so a doctors-audience event's recording still plays from its event page", async () => {
       const doctors = await insertEvent("ended", { audience: "doctors" });
       await publishRecording(doctors.id, "edited");
       const experts = await insertEvent("ended", { audience: "experts" });
       await publishRecording(experts.id, "edited");
       const headers = cookieHeader(await doctorSession("doc-2509-audience"));
 
-      for (const key of [doctors.slug, doctors.id]) {
+      for (const key of [doctors.slug, doctors.id, experts.slug]) {
         const res = await readPlayback(key, headers);
-        expect(res.statusCode).toBe(404);
-        expect(res.payload).not.toContain(EDITED_REF);
+        expect(res.statusCode).toBe(200);
+        expect(JSON.parse(res.payload)).toMatchObject({
+          primary: { kind: "edited", embedRef: EDITED_REF },
+        });
       }
-      const academy = await readPlayback(experts.slug, headers);
-      expect(academy.statusCode).toBe(200);
-      expect(JSON.parse(academy.payload)).toMatchObject({
-        primary: { kind: "edited", embedRef: EDITED_REF },
-      });
     });
   },
 );

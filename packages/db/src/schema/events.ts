@@ -117,8 +117,9 @@ export const events = pgTable(
      * into the open `event_kinds` dictionary (never a free-text tag). The kind's
      * `allowed_formats` must contain `participation_format` when the event is
      * created or saved; that check is the write command's, not a DB constraint,
-     * because narrowing a kind deliberately leaves existing events as they are
-     * (flagged in the admin, rejected on their next save).
+     * because it spans two tables. Its counterpart is the kind's narrowing
+     * command, which is refused while any event of that kind carries a removed
+     * format, so no event ever holds a format its kind does not allow.
      */
     kindId: uuid("kind_id")
       .notNull()

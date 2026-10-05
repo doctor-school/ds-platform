@@ -30,6 +30,7 @@ export const eventParticipationFormat = pgEnum("event_participation_format", [
  * storefront that shows the event: `doctors` → the doctor storefront (web and
  * mobile), `experts` → the Academy. Independent of the kind and the format. A
  * project's `default_audience` prefills it for the project's new events; the
- * event's own value is what every public read filters on (012 EARS-29).
+ * event's own value is what every public listing read filters on (012 EARS-29);
+ * a read of one event by its slug is not audience-scoped.
  */
 export const eventAudience = pgEnum("event_audience", ["doctors", "experts"]);

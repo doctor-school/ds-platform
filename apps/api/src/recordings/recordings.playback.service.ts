@@ -70,12 +70,11 @@ export class RecordingsPlaybackService {
    *    is published.
    */
   async playback(idOrSlug: string): Promise<EventPlayback> {
-    // 012 EARS-29 — the playback read serves the Academy, whose events are
-    // the `experts` audience; a doctor-storefront event is the same 404.
-    const event = await this.repository.findEventByIdOrSlug(
-      idOrSlug,
-      "experts",
-    );
+    // 012 EARS-29 — deliberately NOT audience-scoped: playback serves the event
+    // page, a read of one event by its slug, which 004 leaves unscoped so a
+    // deep link to any event still opens. Audience selects what a storefront
+    // LISTS, not whether a known event's page or recording opens.
+    const event = await this.repository.findEventByIdOrSlug(idOrSlug);
     if (!event || !isPubliclyReachable(event.state)) {
       throw new PlaybackEventNotFoundError();
     }

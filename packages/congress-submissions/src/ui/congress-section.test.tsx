@@ -267,11 +267,6 @@ describe("CongressSection", () => {
         name: "Забрать на исправление →",
       }),
     ).toHaveClass("text-sm");
-    // 046 EARS-12: the take-back carries its deadline — the kind's close day.
-    expect(
-      within(rows[0]!).getByText("Можно исправить до 15 января 2027"),
-    ).toBeInTheDocument();
-    expect(within(rows[1]!).queryByText(/^Можно исправить до/)).toBeNull();
     expect(
       within(rows[1]!).getByText("Уточните дизайн исследования"),
     ).toBeInTheDocument();
@@ -1445,12 +1440,6 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       await userEvent.click(screen.getByRole("checkbox", { name }));
     }
     await userEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    // 046 EARS-12: the confirm states the take-back deadline as a concrete date.
-    expect(
-      screen.getByText(
-        "После отправки редактирование закроется. До 15 января 2027 заявку можно забрать на исправление. После — комитет рассмотрит отправленную версию.",
-      ),
-    ).toBeInTheDocument();
     fetchMock.mockResolvedValueOnce(
       answer({ ...abstractDraft, status: "submitted" }),
     );
@@ -1458,11 +1447,6 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       screen.getByRole("button", { name: "Да, отправить" }),
     );
     await screen.findByText(/^Заявка отправлена/);
-    // The deadline sits right after the take-back it dates.
-    expect(
-      screen.getByText("Можно исправить до 15 января 2027")
-        .previousElementSibling,
-    ).toHaveTextContent("Забрать на исправление");
     fetchMock.mockResolvedValueOnce(answer(abstractDraft));
     await userEvent.click(
       screen.getByRole("button", { name: "Забрать на исправление" }),

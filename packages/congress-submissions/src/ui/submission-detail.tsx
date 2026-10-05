@@ -40,7 +40,6 @@ import {
   abstractCounter,
   actionsFor,
   closedText,
-  confirmText,
   dateLine,
   draftErrors,
   editable as isEditable,
@@ -53,7 +52,7 @@ import {
   revisionView,
   summaryTitle,
   localTime,
-  takeBackHint,
+  mskDay,
   withdrawnNotice,
 } from "../model/model";
 import {
@@ -376,7 +375,6 @@ export function SubmissionDetail({
     ...(acts.primary?.action === "take-back" ? [acts.primary] : []),
     ...acts.secondary,
   ];
-  const takeBack = takeBackHint(s, intake);
   const runAction = (a: (typeof detailActions)[number]) => {
     if (a.action === "take-back") void onTakeBack();
     else if (a.action === "withdraw") setAsk("withdraw");
@@ -525,9 +523,9 @@ export function SubmissionDetail({
                         {a.label}
                       </button>
                     </Link>
-                    {a.action === "take-back" && takeBack ? (
+                    {a.hint ? (
                       <span className="self-center text-caption text-muted-foreground">
-                        {takeBack}
+                        {a.hint}
                       </span>
                     ) : null}
                   </React.Fragment>
@@ -771,7 +769,9 @@ export function SubmissionDetail({
                             : COPY.confirmTitle}
                         </span>
                         <span className="text-caption leading-normal text-foreground">
-                          {confirmText(s, intake)}
+                          {intake.state !== "open"
+                            ? COPY.confirmSubAgain
+                            : `${s.status === "needs_revision" ? "" : `${COPY.confirmSub} `}${COPY.confirmTakeBackUntil(mskDay(intake.lastDay!))}`}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3">

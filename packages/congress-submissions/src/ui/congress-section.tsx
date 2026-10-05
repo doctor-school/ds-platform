@@ -39,7 +39,6 @@ import {
   pickerNote,
   revisionView,
   rowMeta,
-  takeBackHint,
   withSubmissions,
 } from "../model/model";
 import { PosterBand } from "./poster-band";
@@ -539,7 +538,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                   );
                   const rev =
                     s.status === "needs_revision" ? revisionView(s, now) : null;
-                  const hint = takeBackHint(s, it);
                   return (
                     <li
                       key={s.id}
@@ -660,9 +658,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                                 </button>
                               </Link>
                             ) : null}
-                            {hint ? (
+                            {acts.primary?.hint ? (
                               <span className="text-caption text-muted-foreground">
-                                {hint}
+                                {acts.primary.hint}
                               </span>
                             ) : null}
                             {acts.secondary.map((a) => (

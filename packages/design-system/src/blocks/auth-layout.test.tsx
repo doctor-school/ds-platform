@@ -159,7 +159,8 @@ describe("<AuthLayout>", () => {
     const formColumn =
       screen.getByTestId("form-slot").parentElement?.parentElement;
     const classes = formColumn?.className.split(" ") ?? [];
-    expect(classes).toContain("px-4");
+    // `gutter-sm` = 16px — the token a full-bleed plate inside cancels.
+    expect(classes).toContain("px-gutter-sm");
     expect(classes).toContain("layout:px-6");
     expect(classes).not.toContain("px-6");
   });

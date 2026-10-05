@@ -165,6 +165,7 @@
   --space-1-5: 0.375rem;
   --space-2-5: 0.625rem;
   --space-gutter: clamp(1rem, 4vw, 3rem);
+  --space-gutter-sm: 1rem;
   --space-inset: 1.5rem;
   --space-stack: 1.75rem;
   --space-stack-sm: 1.25rem;
@@ -472,6 +473,7 @@
   --leading-assurance: var(--font-line-height-assurance);
   --leading-relaxed: var(--font-line-height-relaxed);
   --spacing-gutter: var(--space-gutter);
+  --spacing-gutter-sm: var(--space-gutter-sm);
   --spacing-inset: var(--space-inset);
   --spacing-stack: var(--space-stack);
   --spacing-stack-sm: var(--space-stack-sm);

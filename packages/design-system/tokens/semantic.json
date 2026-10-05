@@ -247,6 +247,10 @@
       "$value": "clamp(1rem, 4vw, 3rem)",
       "$description": "Container horizontal gutter on desktop (≥ layout breakpoint): clamp(16px, 4vw, 48px). On mobile the Container uses a fixed 16px gutter instead (edge-to-edge, so day-band/cards bleed cleanly by -16px). Also the negative-margin bleed unit (`-mx-gutter`)."
     },
+    "gutter-sm": {
+      "$value": "{space.4}",
+      "$description": "The fixed MOBILE page gutter (below the `layout` breakpoint) — 16px, the canvas §09 mobile edge (auth.dc.html 37). Surfaced as `px-gutter-sm`, and as the matching full-bleed unit `-mx-gutter-sm`: a plate that bleeds to the viewport edge cancels exactly the gutter its column stands on, so the two can never drift apart (#2556 — the auth form column and its return-context plate)."
+    },
     "inset": {
       "$value": "{space.6}",
       "$description": "Padding INSIDE cards, panels and buttons (canonical 24px; the source spans 16 · 20 · 24 · 30 — reach for `p-4`/`p-5` for tighter insets)."

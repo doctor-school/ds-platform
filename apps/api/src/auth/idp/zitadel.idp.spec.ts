@@ -1251,7 +1251,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
             Promise.resolve({
               sessionId: "otp-sess-1",
               sessionToken: "unchecked-token",
-              challenges: { otpEmail: "12345678" },
+              challenges: { otpEmail: "K7Q2M9" },
             }),
         });
       }
@@ -1938,7 +1938,7 @@ describe("ZitadelIdpClient.requestEmailLoginCode wire shape (003 EARS-34, #1131)
             Promise.resolve({
               sessionId: "sess-1",
               sessionToken: "tok-1",
-              challenges: { otpEmail: "12345678" },
+              challenges: { otpEmail: "K7Q2M9" },
             }),
         });
       throw new Error(`unexpected hop: ${init.method} ${url}`);
@@ -1956,7 +1956,7 @@ describe("ZitadelIdpClient.requestEmailLoginCode wire shape (003 EARS-34, #1131)
     );
     expect(mailer.verificationCodeEmails).toEqual([]);
     expect(mailer.loginCodeEmails).toEqual([
-      { to: "user@ds.test", code: "12345678" },
+      { to: "user@ds.test", code: "K7Q2M9" },
     ]);
     expect(calls.some((c) => c.url.endsWith("/email/resend"))).toBe(false);
   });

@@ -4,7 +4,7 @@ import { SmtpMailer, type SmtpTransport } from "../../mailer/smtp-mailer.js";
 import { FakeMailer } from "../../mailer/mailer.fake.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
 
-const CODE = "12345678";
+const CODE = "K7Q2M9";
 function setup(
   options: {
     code?: string;

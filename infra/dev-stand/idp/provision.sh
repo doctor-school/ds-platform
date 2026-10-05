@@ -946,6 +946,54 @@ api GET /admin/v1/policies/password/complexity | jq -r '.policy |
   "password-policy sweep: minLength=\(.minLength // "0") hasUppercase=\(.hasUppercase // false) hasLowercase=\(.hasLowercase // false) hasNumber=\(.hasNumber // false) hasSymbol=\(.hasSymbol // false) — length-only creation policy (003 EARS-36)"
 ' >&2
 
+# ── 8.septies. login OTP code format = the verify-email format (#2555) ───────
+# Owner decision (epic #2552, «one email code»): every code a user receives has
+# ONE format — 6 characters, upper-case letters + digits — the format the
+# instance's VERIFY_EMAIL_CODE generator already uses. The login OTP generators
+# (OTP_EMAIL for the email-code sign-in, OTP_SMS for the SMS-code sign-in) were
+# an INHERITED PROVIDER DEFAULT (8 digits) that provisioning never touched; this
+# step makes provisioning their managed owner.
+#
+# Only the character shape converges. The lifetime is read and written back
+# unchanged: the login mail copy (step 8.quinquies) promises «Код действует
+# 5 минут» against the live 300s expiry, so a provisioning run must never move it.
+# Admin API (v4 admin.proto): GET/PUT /admin/v1/secretgenerators/{generator_type};
+# the PUT body carries length + expiry + the four include* flags.
+#
+# READ-BEFORE-WRITE for idempotency (the 8.sexies precedent): a generator already
+# at the target shape skips the PUT; api_idempotent absorbs a raced code-9.
+LOGIN_OTP_CODE_LENGTH=6
+for OTP_GENERATOR in SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS; do
+  OTP_GENERATOR_CURRENT="$(api GET "/admin/v1/secretgenerators/${OTP_GENERATOR}" | jq '.secretGenerator')"
+  OTP_GENERATOR_EXPIRY="$(jq -r '.expiry // empty' <<< "$OTP_GENERATOR_CURRENT")"
+  [[ -n "$OTP_GENERATOR_EXPIRY" ]] || {
+    echo "FATAL: ${OTP_GENERATOR} read back without an expiry — refusing to write a generator whose lifetime is unknown" >&2
+    exit 1
+  }
+  if [[ "$(jq -r --argjson len "$LOGIN_OTP_CODE_LENGTH" '
+        ((.length // 0) == $len)
+        and ((.includeUpperLetters // false) == true)
+        and ((.includeDigits // false) == true)
+        and ((.includeLowerLetters // false) == false)
+        and ((.includeSymbols // false) == false)
+      ' <<< "$OTP_GENERATOR_CURRENT")" == "true" ]]; then
+    echo "${OTP_GENERATOR}: already ${LOGIN_OTP_CODE_LENGTH} upper-alnum (expiry ${OTP_GENERATOR_EXPIRY})" >&2
+  else
+    api_idempotent PUT "/admin/v1/secretgenerators/${OTP_GENERATOR}" \
+      "$(jq -nc --argjson len "$LOGIN_OTP_CODE_LENGTH" --arg exp "$OTP_GENERATOR_EXPIRY" '
+        {
+          length: $len,
+          expiry: $exp,
+          includeLowerLetters: false,
+          includeUpperLetters: true,
+          includeDigits: true,
+          includeSymbols: false
+        }
+      ')" >/dev/null \
+      && echo "${OTP_GENERATOR}: ensured ${LOGIN_OTP_CODE_LENGTH} upper-alnum (expiry ${OTP_GENERATOR_EXPIRY} kept)" >&2
+  fi
+done
+
 # ── 9. MFA capability on the default login policy (011 EARS-8) ───────────────
 # Spec: apps/docs/content/specs/features/011-admin-session-2fa/011-requirements-en.md
 # (EARS-8). TOTP for `platform_admin` is mandatory (ADR-0001 §4). Zitadel supplies

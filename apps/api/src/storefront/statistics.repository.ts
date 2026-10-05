@@ -76,6 +76,10 @@ export class StatisticsRepository {
    *
    * A draft is not an event that happened; a future date has not happened yet.
    * Both would inflate a figure a doctor reads as track record.
+   *
+   * 012 EARS-29 (#2509): a doctor-storefront figure counts only events whose
+   * audience is `doctors` — an Academy (`experts`) event is not on this
+   * storefront, so it is not part of the track record shown here.
    */
   async countEventsPerYear(): Promise<number> {
     const [row] = await this.db
@@ -85,6 +89,7 @@ export class StatisticsRepository {
         and(
           eq(events.recordStatus, "active"),
           ne(events.state, "draft"),
+          eq(events.audience, "doctors"),
           gte(events.startsAt, EVENTS_WINDOW),
           lte(events.startsAt, sql`now()`),
         ),

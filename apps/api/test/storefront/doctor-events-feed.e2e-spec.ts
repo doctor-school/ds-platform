@@ -51,6 +51,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let lonelyEventId = "";
     /** Far past the default horizon, on the adjacency-less direction (EARS-3.7/3.8/9.1). */
     let lonelyFarEventId = "";
+    let expertsEventId = "";
 
     const at = (dayOffset: number, hour: number) =>
       new Date(
@@ -89,10 +90,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       title: string;
       startsAt: Date;
       directionId: string;
+      /** 012 EARS-29 — the storefront selector; the doctor feed selects `doctors`. */
+      audience?: "doctors" | "experts";
     }) => {
       const id = randomUUID();
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql("doctors")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql(input.audience ?? "doctors")})`,
         [
           id,
           `feed-${randomUUID()}`,
@@ -202,6 +205,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: at(40, 12),
         directionId: lonelyDirection,
       });
+      // Same direction and day as the own events, but for the Academy audience.
+      expertsEventId = await makeEvent({
+        title: "Эфир для экспертов",
+        startsAt: at(1, 16),
+        directionId: own,
+        audience: "experts",
+      });
     }, 60_000);
 
     afterAll(async () => {
@@ -258,6 +268,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const day of days) {
         expect(day >= feed.from && day < feed.to).toBe(true);
       }
+    });
+
+    it("019 EARS-2: the feed selects only events whose audience is doctors — an experts event on a targeted direction never appears (012 EARS-29)", async () => {
+      const feed = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: "?specialty=all",
+      });
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(ownEventId);
+      expect(ids).not.toContain(expertsEventId);
     });
 
     it("EARS-3.2: a specialty with no adjacency rows yields no adjacent items", async () => {

@@ -46,6 +46,6 @@ Target: «Doctor.School Design System», `https://claude.ai/design/p/1366789c-9a
 ## Re-sync risks
 
 - `prepare.mjs` mirrors the package's public entries by hand (root + `blocks`). A new `exports` subpath that is not re-exported from either entry (e.g. `./events-filter` style) is invisible to the sync — check `package.json` `exports` vs the two index files.
-- Previews copy showcase compositions; prop renames in the DS break them at compile (`preview build failed` in the build log → floor card).
+- Previews copy showcase compositions; prop renames in the DS break them (`preview build failed` in the build log, or a runtime crash on a missing field → floor card). esbuild does not typecheck, so check previews with `tsc` first and without the converter: a throwaway tsconfig extending `packages/design-system/tsconfig.json` with `include` = `.design-sync/previews/*.tsx` and `paths` for `@ds/design-system` (a file re-exporting `src/index.ts` + `src/blocks/index.ts`), `@ds/schemas` (`packages/schemas/src/index.ts`) and `react`/`react/jsx-runtime` (the package's `@types/react`). It runs under the package's `exactOptionalPropertyTypes`: omit a prop rather than pass `undefined`.
 - The bundle CSS only contains utilities used by DS sources + previews; designs that use other Tailwind classes silently get nothing (documented in `conventions.md`).
 - Inter loads from fonts.googleapis.com at runtime (network-fetched asset).

@@ -1,120 +1,186 @@
-import { EventsFilter } from '@ds/design-system';
+import { EventsFilter, defaultAppliedFacets } from '@ds/design-system';
+import type { AppliedFacets, EventsFilterHost, EventsFilterLabels, EventsFilterOptions } from '@ds/design-system';
 
-const options = {
-  view: [
-    { id: 'week', label: 'Неделя' },
-    { id: 'month', label: 'Месяц' },
-  ],
-  tense: [
-    { id: 'upcoming', label: 'Будущие' },
-    { id: 'past', label: 'Прошедшие' },
-  ],
-  format: [
-    { id: 'webinar', label: 'Вебинар' },
-    { id: 'online-meeting', label: 'Онлайн-встреча' },
-    { id: 'offline-meetup', label: 'Офлайн-встреча коллег' },
-    { id: 'congress', label: 'Конгресс' },
-    { id: 'podcast', label: 'Подкаст-эфир' },
-  ],
-  kind: [
-    { id: 'case-review', label: 'Разбор случая' },
-    { id: 'club', label: 'Doctor Club' },
-    { id: 'lecture', label: 'Лекция' },
-  ],
-  specialty: [
-    { id: 'traumatology', label: 'Травматология' },
-    { id: 'rheumatology', label: 'Ревматология' },
-  ],
-  city: [
-    { id: 'kazan', label: 'Казань' },
-    { id: 'moscow', label: 'Москва' },
-    { id: 'spb', label: 'Санкт-Петербург' },
-  ],
+// Mirrors apps/showcase/app/primitives/primitives-view.tsx «Events-filter»:
+// the host picks the facet set (doctor · Академия); the panel itself is the same.
+const opts = (pairs: ReadonlyArray<readonly [string, string]>) => pairs.map(([id, label]) => ({ id, label }));
+
+const doctorOptions: EventsFilterOptions = {
+  format: opts([
+    ['online', 'Онлайн'],
+    ['offline', 'Офлайн'],
+    ['hybrid', 'Гибрид'],
+  ]),
+  kind: opts([
+    ['webinar', 'Вебинар'],
+    ['efir', 'Эфир'],
+    ['congress', 'Конгресс'],
+    ['club', 'Встреча клуба'],
+    ['master', 'Мастер-класс'],
+    ['case', 'Клинический разбор с пациентом'],
+  ]),
+  specialty: opts([
+    ['endo', 'Эндокринология'],
+    ['rad', 'Лучевая диагностика'],
+    ['rehab', 'Реабилитация'],
+    ['rheum', 'Ревматология'],
+    ['sport', 'Спортивная медицина'],
+    ['ortho', 'Травматология и ортопедия'],
+  ]),
+  city: opts([
+    ['c0', 'Москва'],
+    ['c1', 'Казань'],
+    ['c2', 'Новосибирск'],
+    ['c3', 'Екатеринбург'],
+    ['c4', 'Санкт-Петербург'],
+  ]),
+  direction: opts([
+    ['orthobio', 'Ортобиология'],
+    ['arthro', 'Артроскопия'],
+    ['sportmed', 'Спортивная медицина'],
+    ['rehab', 'Реабилитация'],
+  ]),
 };
 
-// The «цена в Pul» facet labels are deliberately omitted (the facet then does not render).
-const labels = {
-  panel: 'Фильтры событий',
-  view: 'Вид',
-  tense: 'Время',
-  format: 'Формат',
-  kind: 'Тип события',
-  specialty: 'Специальность',
-  specialtyMine: 'Моя и смежные',
-  specialtyAll: 'Все специальности',
-  city: 'Город',
-  cityHint: 'Город действует на офлайн- и гибридные события.',
-  anyValue: 'Все',
-  cityAny: 'Все города',
-  nmoOnly: 'Только с НМО',
-  nmoFacet: 'НМО',
-  nmoOff: 'Не важно',
-  closeOptions: 'Закрыть список значений',
-  query: 'Поиск по названию',
-  queryPlaceholder: 'Поиск по названию',
-  applied: 'Фильтры:',
-  appliedCount: (n: number) => `Применено фильтров: ${n}`,
-  removeFacet: 'Убрать фильтр',
-  reset: 'Сбросить фильтры',
+const academyOptions: EventsFilterOptions = {
+  project: opts([
+    ['as', 'Академия смыслов'],
+    ['sp', 'Школа продюсеров'],
+    ['p1', 'Школа ортобиологии'],
+    ['p2', 'Школа артроскопии'],
+  ]),
+  expert: opts([
+    ['belov', 'Артём Белов'],
+    ['vorontsova', 'Елена Воронцова'],
+    ['gromova', 'Ирина Громова'],
+  ]),
+  topic: opts([
+    ['partner', 'Партнёрства'],
+    ['program', 'Программа школ'],
+    ['production', 'Продакшн эфиров'],
+    ['metrics', 'Метрики и отчётность'],
+    ['regul', 'Регуляторика'],
+  ]),
 };
 
-const empty = {
-  format: [],
-  kind: [],
-  specialtyScope: 'mine-and-adjacent' as const,
-  city: [],
-  nmoOnly: false,
-  freeByPul: false,
-  query: '',
+const shared = {
+  panel: 'Фильтры',
+  title: 'Фильтры',
+  appliedCount: (n: number) => `Применено: ${n}`,
+  reset: 'Сбросить',
+  removeFacet: 'Убрать',
+  combobox: {
+    emptyLabel: 'Ничего не найдено',
+    searchLabel: 'Найти',
+    countLabel: (shown: number, total: number) => `Найдено ${shown} из ${total}`,
+    loadMoreLabel: 'Показать ещё',
+    loadingMoreLabel: 'Загружаем…',
+    loadMoreErrorLabel: 'Повторить',
+  },
+};
+
+const labels: Record<EventsFilterHost, EventsFilterLabels> = {
+  doctor: {
+    ...shared,
+    query: { label: 'Поиск по названию', placeholder: 'Например, PRP' },
+    specialty: {
+      label: 'Специальность',
+      mine: 'Моя и смежные',
+      all: 'Все специальности',
+      placeholder: 'Выбрать специальность',
+      addPlaceholder: 'Добавить специальность',
+      searchPlaceholder: 'Например, кардиология',
+    },
+    format: 'Формат',
+    kind: 'Вид события',
+    city: {
+      label: 'Город',
+      hint: 'Только для офлайн-событий',
+      placeholder: 'Любой город',
+      addPlaceholder: 'Добавить город',
+      searchPlaceholder: 'Начните вводить город',
+    },
+    direction: {
+      label: 'Направление',
+      placeholder: 'Любое направление',
+      addPlaceholder: 'Добавить направление',
+      searchPlaceholder: 'Например, артроскопия',
+    },
+    nmoOnly: 'Только с НМО',
+  },
+  academy: {
+    ...shared,
+    project: {
+      label: 'Проект',
+      placeholder: 'Все проекты',
+      addPlaceholder: 'Добавить проект',
+      searchPlaceholder: 'Например, школа продюсеров',
+    },
+    expert: {
+      label: 'Эксперт',
+      placeholder: 'Все эксперты',
+      addPlaceholder: 'Добавить эксперта',
+      searchPlaceholder: 'Фамилия или имя',
+    },
+    topic: {
+      label: 'Тема',
+      placeholder: 'Все темы',
+      addPlaceholder: 'Добавить тему',
+      searchPlaceholder: 'Например, метрики',
+    },
+  },
 };
 
 const noop = () => {};
-const common = {
-  options,
-  labels,
-  onChange: noop,
-  onReset: noop,
-  view: { value: 'week', onChange: noop },
-  tense: { value: 'upcoming', onChange: noop },
-};
 
-export const Wave1 = () => (
-  <div style={{ width: 384 }}>
-    <EventsFilter {...common} fill="wave-1" applied={empty} appliedCount={0} />
-  </div>
-);
-
-export const Intermediate = () => (
-  <div style={{ width: 384 }}>
-    <EventsFilter {...common} fill="intermediate" applied={empty} appliedCount={0} />
-  </div>
-);
-
-export const Full = () => (
-  <div style={{ width: 384 }}>
-    <EventsFilter {...common} fill="full" applied={empty} appliedCount={0} />
-  </div>
-);
-
-export const IntermediateWithApplied = () => (
+const Panel = ({
+  host,
+  applied = {},
+  showHeader = true,
+}: {
+  host: EventsFilterHost;
+  applied?: Partial<AppliedFacets>;
+  showHeader?: boolean;
+}) => (
   <div style={{ width: 384 }}>
     <EventsFilter
-      {...common}
-      fill="intermediate"
-      applied={{ ...empty, format: ['webinar', 'offline-meetup'], kind: ['club'] }}
-      appliedCount={3}
+      host={host}
+      applied={{ ...defaultAppliedFacets(), ...applied }}
+      options={host === 'doctor' ? doctorOptions : academyOptions}
+      labels={labels[host]}
+      onChange={noop}
+      onReset={noop}
+      showHeader={showHeader}
     />
   </div>
 );
 
-export const FullWithApplied = () => (
-  <div style={{ width: 384 }}>
-    <EventsFilter
-      {...common}
-      options={{ ...options, view: undefined, tense: undefined }}
-      fill="full"
-      applied={{ ...empty, specialtyScope: 'all', city: ['kazan'], nmoOnly: true, query: 'PRP' }}
-      appliedCount={4}
-    />
-  </div>
+export const Doctor = () => <Panel host="doctor" />;
+
+export const DoctorWithApplied = () => (
+  <Panel
+    host="doctor"
+    applied={{
+      query: 'PRP',
+      specialtyScope: [
+        { id: 'sport', label: 'Спортивная медицина' },
+        { id: 'rheum', label: 'Ревматология' },
+      ],
+      format: ['offline', 'hybrid'],
+      kind: ['club'],
+      city: ['c1'],
+      direction: ['arthro'],
+      nmoOnly: true,
+    }}
+  />
+);
+
+export const Academy = () => <Panel host="academy" />;
+
+export const AcademyWithApplied = () => (
+  <Panel host="academy" applied={{ project: ['as'], expert: ['belov'], topic: ['metrics', 'regul'] }} />
+);
+
+export const SheetBodyWithoutHeader = () => (
+  <Panel host="doctor" showHeader={false} applied={{ specialtyScope: 'all', kind: ['webinar'], nmoOnly: true }} />
 );

@@ -236,7 +236,7 @@ describe("actions per status", () => {
 
   it("EARS-12: a submitted submission is taken back while the kind is open, withdrawn after", () => {
     const open = actionsFor(sub({ status: "submitted" }), intake(), NOW);
-    expect(open.primary).toMatchObject({
+    expect(open.primary).toEqual({
       action: "take-back",
       label: "Забрать на исправление",
     });
@@ -252,21 +252,19 @@ describe("actions per status", () => {
     ]);
   });
 
-  it("046 EARS-12: a sent submission's take-back is dated by its own kind's close day", () => {
-    const oral = actionsFor(
+  it("046 EARS-12: a sent row is dated by its own kind's close day", () => {
+    const oral = rowMeta(
       sub({ status: "submitted" }),
       intake({ lastDay: "2027-01-15" }),
       NOW,
     );
-    const abstract = actionsFor(
+    const abstract = rowMeta(
       sub({ kind: "abstract", status: "submitted" }),
       intake({ kind: "abstract", lastDay: "2027-01-29" }),
       NOW,
     );
-    expect(oral.primary?.hint).toBe(COPY.takeBackUntil(mskDay("2027-01-15")));
-    expect(abstract.primary?.hint).toBe(
-      COPY.takeBackUntil(mskDay("2027-01-29")),
-    );
+    expect(oral).toContain(COPY.takeBackMeta(mskDay("2027-01-15")));
+    expect(abstract).toContain(COPY.takeBackMeta(mskDay("2027-01-29")));
   });
 
   it("EARS-12: in review and needs revision may be withdrawn; decided and withdrawn may not", () => {
@@ -337,7 +335,7 @@ describe("row meta and date line", () => {
       updatedAt: "2026-12-18T09:00:00.000Z",
     });
     expect(rowMeta(sent, intake(), NOW)).toBe(
-      "Устный доклад · отправлено 16 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+      "Устный доклад · отправлено 16 декабря 2026 · исправить можно до 15 января 2027",
     );
     expect(rowMeta({ ...sent, status: "in_review" }, intake(), NOW)).toBe(
       "Устный доклад · отправлено 16 декабря 2026",
@@ -398,7 +396,7 @@ describe("row meta and date line", () => {
         refusal,
       ),
     ).toBe(
-      "Постерный доклад · отправлено 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+      "Постерный доклад · отправлено 18 декабря 2026 · исправить можно до 15 января 2027",
     );
   });
 

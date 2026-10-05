@@ -340,8 +340,6 @@ export interface ActionView {
   action: RowAction;
   label: string;
   danger?: boolean;
-  /** The take-back's deadline — the kind's close day (046 EARS-12). */
-  hint?: string;
 }
 
 export interface Actions {
@@ -412,11 +410,7 @@ function baseActions(
     case "submitted":
       return intake.state === "open"
         ? {
-            primary: {
-              action: "take-back",
-              label: COPY.takeBack,
-              hint: COPY.takeBackUntil(mskDay(intake.lastDay!)),
-            },
+            primary: { action: "take-back", label: COPY.takeBack },
             secondary: [],
           }
         : {
@@ -463,7 +457,12 @@ export function rowMeta(
         ? `отозвано ${localDate(s.statusChangedAt)}`
         : `отправлено ${localDate(s.submittedAt ?? s.updatedAt)}`,
   ];
-  if (s.status === "submitted") out.push(COPY.sentMeta);
+  if (s.status === "submitted")
+    out.push(
+      intake.state === "open"
+        ? COPY.takeBackMeta(mskDay(intake.lastDay!))
+        : COPY.sentMeta,
+    );
   if (s.status === "draft" && (ageRefusal !== null || !kindSendable(intake))) {
     const why = ageRefusal ?? closedText(intake);
     out.push(why.split(" — ")[0]!.toLowerCase());

@@ -164,7 +164,9 @@ export const COPY = {
   /** 046 EARS-12 — while the kind is open; the date is its close day. */
   confirmTakeBackUntil: (day: string) =>
     `До ${day} заявку можно забрать на исправление. После — комитет рассмотрит отправленную версию.`,
-  takeBackUntil: (day: string) => `Можно исправить до ${day}`,
+  /** 046 EARS-12 — a sent row's meta and the sent notice while the kind is open. */
+  takeBackMeta: (day: string) => `исправить можно до ${day}`,
+  takeBackNotice: (day: string) => `Исправить можно до ${day}.`,
   confirmSubAgain:
     "После отправки изменить её будет нельзя — комитет рассмотрит эту версию.",
   confirmYes: "Да, отправить",

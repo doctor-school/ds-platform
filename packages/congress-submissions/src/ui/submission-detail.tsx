@@ -484,7 +484,11 @@ export function SubmissionDetail({
             ) : null}
 
             {justSent ? (
-              <Alert variant="success">{COPY.sentNotice}</Alert>
+              <Alert variant="success">
+                {intake.state === "open"
+                  ? `${COPY.sentNotice} ${COPY.takeBackNotice(mskDay(intake.lastDay!))}`
+                  : COPY.sentNotice}
+              </Alert>
             ) : readDraft ? (
               <Alert variant="warn">{blockedText}</Alert>
             ) : s.status === "needs_revision" && !rev.open ? (
@@ -509,26 +513,20 @@ export function SubmissionDetail({
             {detailActions.length ? (
               <div className="flex flex-wrap gap-x-6 gap-y-2.5">
                 {detailActions.map((a) => (
-                  <React.Fragment key={a.action}>
-                    <Link
-                      asChild
-                      tone={a.danger ? "danger" : "default"}
-                      size="sm"
+                  <Link
+                    key={a.action}
+                    asChild
+                    tone={a.danger ? "danger" : "default"}
+                    size="sm"
+                  >
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => runAction(a)}
                     >
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => runAction(a)}
-                      >
-                        {a.label}
-                      </button>
-                    </Link>
-                    {a.hint ? (
-                      <span className="self-center text-caption text-muted-foreground">
-                        {a.hint}
-                      </span>
-                    ) : null}
-                  </React.Fragment>
+                      {a.label}
+                    </button>
+                  </Link>
                 ))}
               </div>
             ) : null}

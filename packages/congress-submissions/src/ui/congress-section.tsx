@@ -658,11 +658,6 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
                                 </button>
                               </Link>
                             ) : null}
-                            {acts.primary?.hint ? (
-                              <span className="text-caption text-muted-foreground">
-                                {acts.primary.hint}
-                              </span>
-                            ) : null}
                             {acts.secondary.map((a) => (
                               <Link
                                 key={a.action}

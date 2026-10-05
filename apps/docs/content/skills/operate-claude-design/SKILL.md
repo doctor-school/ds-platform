@@ -22,7 +22,7 @@ Two layers, each carrying only what the layer above does not:
 | Layer                                                                                | Holds                                                                                                                                                                                                                                                                                               | Maintained by                                                                                                                                                                                                           |
 | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Project** «Doctor.School визуальный язык» (`8cc2f39a-d58e-4491-b539-4337881ced4f`) | The visual language and every canvas: `ds-foundation` carries the tokens (colour, type, spacing, radii), the `unit-*` canvases carry the reuse units, and screen canvases dc-import those units (`ds-shell`, the screens). A canvas the prompt names is already there — the drawing agent opens it. | The owner draws; the lead vendors the canvases into the repository (see **After the drawing**). The repository stays the source of truth for code (ADR-0013); nothing is synced from the repository into Claude Design. |
-| **Prompt**                                                                           | Only the delta for this one drawing: goal, audience, which canvas to edit, reuse units with what differs, content, states, open forks.                                                                                                                                                              | The lead, from the template below.                                                                                                                                                                                      |
+| **Prompt**                                                                           | Only the delta for this one drawing: goal, audience, which canvas to edit, reuse units with what differs, content, switches.                                                                                                                                                                        | The lead, from the template below.                                                                                                                                                                                      |
 
 A prompt that restates tokens or constraints the project canvases already carry bloats the drawing agent's context and drifts from the source of truth (owner correction 2026-07-13, #770): tokens come from `ds-foundation`, components and blocks from the `unit-*` canvases. A good prompt states goal, layout, content and audience and names the canvases to reuse ([get started](https://support.claude.com/en/articles/14604416-get-started-with-claude-design)).
 
@@ -51,7 +51,7 @@ Canvas naming (title = vendored file name, group prefixes `ds-*` / no prefix + `
 
 ## Reuse units
 
-Change in one place, apply everywhere. If a drawing shows one of these things, it shows **that** unit from the named canvas, inserted as is. The prompt never re-describes its anatomy and never asks for "something similar": it names the canvas file and states **only what differs** (facet set, content, state). "Rebuild", "inspired by", "similar to" for an existing unit are banned words. **A canvas never creates a new primitive.** `@ds/design-system` is the source of truth for components: a primitive a screen needs is built in the design system first, as its own task, and only then appears on a canvas (ADR-0013, ADR-0014 §4). Build screens from existing elements; a new value or element is a deliberate exception named in words on the artboard.
+Change in one place, apply everywhere. If a drawing shows one of these things, it shows **that** unit from the named canvas, inserted as is. The prompt never re-describes its anatomy and never asks for "something similar": it names the canvas file and states **only what differs** (facet set, content, state). "Rebuild", "inspired by", "similar to" for an existing unit are banned words. **A canvas never creates a new primitive.** `@ds/design-system` is the source of truth for components: a primitive a screen needs is built in the design system first, as its own task, and only then appears on a canvas (ADR-0013, ADR-0014 §4). Build screens from existing elements; a new value or element is a deliberate exception named in words in the prompt and in the drawing agent's reply.
 
 | Unit                            | Canvas file                                                                         | How it is used                                                                                                                          |
 | ------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -61,7 +61,7 @@ Change in one place, apply everywhere. If a drawing shows one of these things, i
 | Events feed by day              | `events-feed.dc.html`                                                               | As is; the screen sets only content and filters, never the rhythm or geometry of the feed.                                              |
 | Month / week calendar           | `events-feed-month.dc.html`                                                         | As is, with its view switcher; a compact version is the same calendar in a narrow column, not a second calendar.                        |
 | Facet panel                     | `unit-events-filter.dc.html`                                                        | Panel geometry as is; only the **set** of facets differs per host.                                                                      |
-| Event page                      | `event-page.dc.html`                                                                | One for both storefronts; differs by storefront header and by format artboard (online / offline / hybrid).                              |
+| Event page                      | `event-page.dc.html`                                                                | One for both storefronts; differs by storefront header and by the `format` switch (online / offline / hybrid).                          |
 | Past event and recording        | `event-page-recording.dc.html`                                                      | As is: recording, editing states, guest sign-in gate.                                                                                   |
 | Live room and chat              | `unit-room-frame.dc.html` + `unit-chat-column.dc.html` (composed by `room.dc.html`) | One for both storefronts, never redrawn.                                                                                                |
 | Sign-in / registration          | `auth.dc.html`                                                                      | As is, prop `host`; differs only by return point and the content of the split's right half.                                             |
@@ -91,10 +91,12 @@ A new unit has one owner canvas — the one where it is the main subject and its
 
 Write the prompt in **English**, in exactly these sections and this order. Fill every section; delete nothing.
 
+One canvas renders **one page** (owner 2026-10-05, #2562). The page is responsive to the preview width — the desktop layout from 1024 px up, the mobile layout below — and every variation is a toolbar switch in the Claude Design UI, never a separate drawing: the canon canvases already work this way (`host`, `dark`, `state`, `signedIn`, `screen`, `width` props). Artboard grids and frame matrices (breakpoint × theme × state) are not drawn.
+
 ```text
 Goal
-<Edit | Create> <canon>.dc.html — <one sentence: what the drawing must add or change>.
-Host props: <host values this canvas switches between, or "single host: <host>">.
+<Edit | Create> <canon>.dc.html — <one sentence: what the page must add or change>.
+One responsive page: desktop layout from 1024 px up, mobile layout below; every variation is a toolbar switch.
 
 Audience
 <who uses this screen, in one or two sentences; what they came to do>.
@@ -107,19 +109,24 @@ Content and host differences
 <blocks top to bottom with the Russian UI strings quoted verbatim, e.g. heading «Мои заявки на Конгресс»;
 then what changes per host value>.
 
-States
-- <state 1>
-- …
-Output: 1440 and 390, light and dark (unless stated otherwise here).
+Switches
+- host: <values, default first, or "single host: <host>">
+- signedIn: <guest | signed-in, default first>
+- dark: <off | on>
+- state: <обычное | загрузка | пусто | ошибка | …>
+- <screen-specific switch, e.g. tense / view / timezone / field state>: <values, default first>
+- <open fork, if any>: <option A | option B>
 
-Open forks for the owner
-<fork → 2–3 options, only where the decision is genuinely open>  |  none — decided on <YYYY-MM-DD>.
-
-Artboard naming
-<screen id> · <breakpoint> · <theme> · <state>   (composition options add " · option A|B|C")
+Interactions
+<affordances that work on the page itself: sheets, tabs, links between views, hover / focus>.
 ```
 
-Output rules the template encodes: both breakpoints (1440, 390) and both themes are required unless the Goal says otherwise; states include at least empty, loading, error and guest vs signed-in where the screen has them, plus hover / focus and form fields «пусто / заполнено / ошибка / отправлено»; options are drawn only where a fork is open — a decided fork gets one drawing.
+Rules the template encodes:
+
+- **One page, responsive.** The drawing agent builds one page that reflows with the preview width; no fixed 1440 / 390 frames, no side-by-side copies.
+- **Every variation is a switch.** Host, signed-in, theme (`dark`), data `state` and screen-specific variations (tense, view, timezone, form-field state…) are toolbar switches, default value first. The state checklist lives as switch values: at least empty, loading, error and guest vs signed-in where the screen has them, and form fields «пусто / заполнено / ошибка / отправлено».
+- **Interactions work on the page.** Hover and focus, sheets, tabs and links between views are live on the page, not drawn as frozen copies.
+- **Open forks are switches.** A fork the owner has not decided is a switch whose values are the options («option A | B»); a decided fork has no switch — name the decision and its date. Open questions the drawing agent has go into its chat reply, never onto the canvas.
 
 **Do not put into a prompt:**
 
@@ -127,7 +134,8 @@ Output rules the template encodes: both breakpoints (1440, 390) and both themes 
 - tokens, colours, spacing values or component anatomy — they come from the project canvases (`ds-foundation`, `unit-*`; see «Where context lives»); a prompt never restates them;
 - Russian prose outside quoted UI copy;
 - options for a decision the owner has already made — name the decision and its date instead;
-- the anatomy of a reuse unit — name its canvas file and the delta.
+- the anatomy of a reuse unit — name its canvas file and the delta;
+- breakpoint or theme matrices, artboard naming or frame grids — one responsive page with switches replaces them.
 
 ## Provenance
 

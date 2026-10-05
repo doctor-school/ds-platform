@@ -62,6 +62,7 @@
     "lint:route-mount": "tsx tools/lint/route-mount-lint.ts",
     "lint:import-boundary": "tsx tools/lint/import-boundary-lint.ts",
     "lint:ui-parity": "tsx tools/lint/ui-parity-lint.ts",
+    "lint:change-tier": "tsx tools/lint/change-tier-lint.ts",
     "lint:canvas-provenance": "tsx tools/lint/canvas-provenance-lint.ts",
     "lint:host-config-parity": "tsx tools/lint/host-config-parity-lint.ts",
     "lint:retained-data": "tsx tools/lint/retained-data-lint.ts",

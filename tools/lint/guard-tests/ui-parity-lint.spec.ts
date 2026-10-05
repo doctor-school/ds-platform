@@ -905,3 +905,57 @@ describe("ui-parity guard integration", () => {
     expect(stdout).toContain("touches no render-capable UI source");
   });
 });
+
+describe("ui-parity Change-tier ship (#2584)", () => {
+  const roots: string[] = [];
+  afterAll(() =>
+    roots.forEach((d) => rmSync(d, { recursive: true, force: true })),
+  );
+  function run(body: string) {
+    const root = mkdtempSync(join(tmpdir(), "ui-parity-tier-"));
+    roots.push(root);
+    const gh = join(root, "gh");
+    mkdirSync(gh);
+    const files = [
+      {
+        path: "apps/doctor/app/page.tsx",
+        additions: 1,
+        deletions: 1,
+        changeType: "MODIFIED",
+      },
+    ];
+    writeFileSync(
+      join(gh, "pr-view-2584.json"),
+      JSON.stringify({
+        number: 2584,
+        body,
+        headRefOid: "d".repeat(40),
+        changedFiles: files.length,
+        files,
+        reviews: [],
+      }),
+    );
+    return runGuard("ui-parity-lint.ts", root, {
+      env: {
+        GITHUB_EVENT_NAME: "pull_request",
+        PR_NUMBER: "2584",
+        PR_BODY: body,
+        LINT_GH_FIXTURE_DIR: gh,
+      },
+    });
+  }
+
+  it("ship: a verified ship PR needs no parity evidence", () => {
+    const { code, stdout } = run(
+      "Change-tier: ship — date substitution on the promo page",
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain("rule does not apply (Change-tier ship)");
+  });
+
+  it("ask: the same UI change without a declaration still needs evidence", () => {
+    const { code, stdout } = run("");
+    expect(code).toBe(1);
+    expect(stdout).not.toContain("Change-tier ship");
+  });
+});

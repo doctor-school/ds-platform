@@ -150,3 +150,78 @@ describe("#2581: copy-only GO on the owner's chat wording decision", () => {
       );
   });
 });
+
+describe("#2584: Change-tier aware Stage-B GO", () => {
+  const noUrl = base
+    .split("\n")
+    .filter((l) => !l.startsWith("Stage-B-live-url:"))
+    .join("\n");
+  const shipBody = noUrl
+    .split("\n")
+    .filter((l) => !l.startsWith("Stage-B-head:"))
+    .join("\n");
+  const evidence =
+    "Stage-B-evidence: https://github.com/o/r/blob/abc1234/.github/ui-evidence/card.png";
+
+  it("ship: GO with quote + source + recorded-at, no live URL and no head pin", () => {
+    expect(
+      validateStageB(
+        [{ body: shipBody }],
+        sha,
+        [],
+        {},
+        undefined,
+        false,
+        "ship",
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("ship: owner quote, source and recorded-at stay mandatory", () => {
+    for (const field of [
+      "Stage-B-owner-quote:",
+      "Stage-B-source:",
+      "Stage-B-recorded-at:",
+    ]) {
+      const body = shipBody
+        .split("\n")
+        .filter((l) => !l.startsWith(field))
+        .join("\n");
+      expect(
+        validateStageB([{ body }], sha, [], {}, undefined, false, "ship").ok,
+      ).toBe(false);
+    }
+  });
+
+  it("show: a PR evidence capture replaces the live URL; head pin still required", () => {
+    const body = `${noUrl}\n${evidence}`;
+    expect(
+      validateStageB([{ body }], sha, [], {}, undefined, false, "show").ok,
+    ).toBe(true);
+    expect(
+      validateStageB([{ body: noUrl }], sha, [], {}, undefined, false, "show")
+        .ok,
+    ).toBe(false);
+    expect(
+      validateStageB(
+        [{ body: body.replace(sha, "b".repeat(40)) }],
+        sha,
+        [],
+        {},
+        undefined,
+        false,
+        "show",
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("ask (the default): unchanged — the evidence capture and a missing head both still fail", () => {
+    expect(
+      validateStageB([{ body: `${noUrl}\n${evidence}` }], sha, [], {}).ok,
+    ).toBe(false);
+    expect(validateStageB([{ body: shipBody }], sha, [], {}).ok).toBe(false);
+    expect(
+      validateStageB([{ body: base }], sha, [], {}, undefined, false, "ask").ok,
+    ).toBe(true);
+  });
+});

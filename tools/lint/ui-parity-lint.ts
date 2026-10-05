@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { ghViewJson } from "./lib/gh";
+import { normalizeTierFiles, resolveTier } from "./lib/change-tier";
 import {
   classifyCanvasCoEdit,
   evidenceProfilesForPaths,
@@ -46,7 +47,8 @@ interface GhPR {
   number: number;
   body?: string;
   headRefOid?: string;
-  files?: { path: string }[];
+  files?: ({ path: string } & Record<string, unknown>)[];
+  changedFiles?: number;
   reviews?: GhReview[];
 }
 type Verdict = { ok: boolean; missing: string[] };
@@ -418,7 +420,7 @@ export async function runUiParityGuard(): Promise<void> {
   const response = await ghViewJson<GhPR>(
     "pr",
     prNumber,
-    "number,body,headRefOid,files,reviews",
+    "number,body,headRefOid,files,changedFiles,reviews",
     REPO_ROOT,
   );
   if (!response.ok) fail(`could not fetch PR #${prNumber}: ${response.error}`);
@@ -436,6 +438,15 @@ export async function runUiParityGuard(): Promise<void> {
         )
         .join("\n"),
     );
+  // #2584: a verified ship-tier change carries no parity evidence; the
+  // change-tier guard refuses a ship declaration its file set does not allow.
+  const tier = resolveTier(
+    pr.body ?? "",
+    normalizeTierFiles(pr.files ?? []),
+    typeof pr.changedFiles === "number" ? pr.changedFiles : undefined,
+  );
+  if (tier.effective === "ship")
+    return info(`PR #${pr.number} rule does not apply (Change-tier ship)`);
   if (!paths.some(isUiSourcePath))
     return info(
       `PR #${pr.number} touches no render-capable UI source; rule does not apply`,

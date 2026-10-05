@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { ghViewJson } from "./lib/gh";
 import { isUiSourcePath } from "./lib/ui-surface";
+import { normalizeTierFiles, resolveTier } from "./lib/change-tier";
 import { stageBArtifact } from "./lib/stage-b-artifact";
 import { stageBComments } from "./lib/stage-b-comments";
 import {
@@ -36,7 +37,8 @@ interface GhPR {
   headRefOid?: string;
   comments?: StageBRecord[];
   updatedAt?: string;
-  files?: { path: string }[];
+  files?: ({ path: string } & Record<string, unknown>)[];
+  changedFiles?: number;
   reviews?: Parameters<typeof certifiedNaVerdict>[1];
 }
 type GhComment = StageBRecord;
@@ -67,7 +69,7 @@ async function ghPR(prNumber: string): Promise<GhPR | null> {
   const res = await ghViewJson<GhPR>(
     "pr",
     prNumber,
-    "number,body,labels,files,headRefOid,updatedAt,reviews",
+    "number,body,labels,files,changedFiles,headRefOid,updatedAt,reviews",
     REPO_ROOT,
     true,
   );
@@ -172,6 +174,18 @@ async function main(): Promise<void> {
     info(
       `PR #${pr.number} is reviewer-certified copy-only: a GO needs no live URL`,
     );
+  // #2584: a declaration below its minimum gets the strictest (ask) rules here;
+  // the change-tier guard refuses it on its own.
+  const tier = resolveTier(
+    pr.body ?? "",
+    normalizeTierFiles(pr.files ?? []),
+    typeof pr.changedFiles === "number" ? pr.changedFiles : undefined,
+  );
+  const effectiveTier = tier.effective ?? "ask";
+  if (effectiveTier !== "ask")
+    info(
+      `PR #${pr.number} is Change-tier ${effectiveTier} (minimum ${tier.minimum})`,
+    );
   const verdict = validateStageB(
     records,
     pr.headRefOid ?? "",
@@ -179,6 +193,7 @@ async function main(): Promise<void> {
     gates,
     checkRebaseEquivalence,
     copyOnly,
+    effectiveTier,
   );
   if (!verdict.ok) fail(`PR #${pr.number}: ${verdict.reason}`);
   // URL-backed sources are fetched; relays remain explicit session/message

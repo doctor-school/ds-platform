@@ -14,6 +14,7 @@ import {
   isWorktreeCwd,
   latestRunsByName,
   parseModeAExempt,
+  verifyChangeTierShip,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
 
@@ -736,5 +737,39 @@ describe("merge-gate hasMergeCommits() (#1865)", () => {
     // Unusable input (a git failure the caller could not read) is NOT clean.
     expect(hasMergeCommits(null)).toBe(true);
     expect(hasMergeCommits(undefined)).toBe(true);
+  });
+});
+
+describe("merge-gate verifyChangeTierShip() (#2584)", () => {
+  const copyFile = {
+    filename: "apps/doctor/messages/ru.json",
+    status: "modified",
+    additions: 3,
+    deletions: 3,
+  };
+  const shipBody = "Change-tier: ship — date substitution in the promo copy";
+
+  it("ship: a verified ship PR needs no Mode (a) verdict", () => {
+    expect(
+      verifyChangeTierShip([copyFile], { body: shipBody, changedFiles: 1 }),
+    ).toEqual({ ok: true, files: 1, lines: 6 });
+  });
+
+  it("ask: no declaration keeps the Mode (a) verdict requirement", () => {
+    expect(
+      verifyChangeTierShip([copyFile], { body: "", changedFiles: 1 }).ok,
+    ).toBe(false);
+  });
+
+  it("refuses an incomplete file set or a ship declaration its files do not allow", () => {
+    expect(
+      verifyChangeTierShip([copyFile], { body: shipBody, changedFiles: 2 }).ok,
+    ).toBe(false);
+    expect(
+      verifyChangeTierShip(
+        [{ ...copyFile, filename: "packages/db/src/schema/users.ts" }],
+        { body: shipBody, changedFiles: 1 },
+      ).ok,
+    ).toBe(false);
   });
 });

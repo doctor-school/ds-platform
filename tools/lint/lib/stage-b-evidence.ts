@@ -1,4 +1,6 @@
 /** Stage-B records are auditable owner relays, not identity authentication. */
+import type { ChangeTier } from "./change-tier";
+
 export interface StageBRecord {
   body: string;
   createdAt?: string;
@@ -73,6 +75,7 @@ export function validateStageB(
   gates: Record<number, string>,
   headEquivalent?: HeadEquivalence,
   copyOnlyCertified = false,
+  tier: ChangeTier = "ask",
 ): Verdict {
   const candidates = stageBDecisions(records);
   if (!candidates.length) return { ok: false, reason: "No Stage-B record" };
@@ -100,7 +103,9 @@ export function validateStageB(
     };
   const recordedHead = field("head");
   let carried = "";
-  if (!/^[a-f0-9]{40}$/.test(head) || recordedHead !== head) {
+  // #2584: a ship-tier GO approves the wording, not a build — no head pin.
+  const shipGo = go && tier === "ship";
+  if (!shipGo && (!/^[a-f0-9]{40}$/.test(head) || recordedHead !== head)) {
     const stale =
       "Stage-B head is missing or stale; record current applicability or obtain a fresh verdict";
     // #2373: a pure rebase keeps a valid record, exactly as the Mode (a)
@@ -137,7 +142,17 @@ export function validateStageB(
   // #2581: a copy-only PR (reviewer-certified `render-delta: copy-only`, the
   // caller's `ui-parity` verdict) is approved on the owner's chat wording
   // decision — no stand, so no live URL. Quote, source and head stay required.
-  if (go && !copyOnlyCertified && !/^https?:\/\/\S+$/.test(field("live-url")))
+  // #2584: ship needs no stand either; a show GO may cite a PR evidence
+  // capture (`Stage-B-evidence: https://…`) in place of a live staging URL.
+  const showEvidence =
+    tier === "show" && /^https:\/\/\S+$/.test(field("evidence"));
+  if (
+    go &&
+    !copyOnlyCertified &&
+    !shipGo &&
+    !showEvidence &&
+    !/^https?:\/\/\S+$/.test(field("live-url"))
+  )
     return {
       ok: false,
       reason:

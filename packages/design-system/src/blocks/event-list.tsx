@@ -152,10 +152,13 @@ export function EventList({
                   needs no page CSS — only the offset of its own header. On
                   desktop the plate reaches 1.5 (= the cards' 6px `shadow-lg`
                   cast) past the column so a scrolled card's offset shadow
-                  never pokes up beside it. */}
+                  never pokes up beside it. Owner Stage-B 2026-10-05: the
+                  label gets token padding top AND bottom and the plate a
+                  `border` edge, so the stuck plate reads as a plate on the
+                  white page instead of melting into the cards. */}
               <div
                 data-event-list-group-header=""
-                className="sticky z-10 -mx-4 bg-background layout:mx-0 layout:-mr-1.5 layout:mb-6 layout:pr-1.5 layout:pt-3"
+                className="sticky z-10 -mx-4 border-b-2 border-border bg-background layout:mx-0 layout:-mr-1.5 layout:mb-3 layout:py-3 layout:pr-1.5"
                 style={{ top: stickyHeaderOffset }}
               >
                 <DayBand className="layout:hidden">{group.label}</DayBand>
@@ -166,7 +169,10 @@ export function EventList({
                   <span className="flex-1 border-t-2 border-foreground" />
                 </div>
               </div>
-              <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
+              {/* `isolate`: the cards paint in their own stacking context,
+                  below the z-10 plate — a card-internal `relative z-10` (CTA,
+                  stretched link) can never paint over the stuck plate. */}
+              <div className="isolate -mx-4 flex flex-col layout:mx-0 layout:gap-7">
                 {group.items.map(
                   ({
                     id,

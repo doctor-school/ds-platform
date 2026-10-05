@@ -174,8 +174,17 @@ describe("<EventList>", () => {
       // cast, so a scrolled card's right edge never pokes up beside it.
       expect(header.className).toContain("layout:-mr-1.5");
       expect(header.className).toContain("layout:pr-1.5");
+      // Stage-B 2026-10-05: the stuck plate has breathing room under its
+      // label and a visible edge against the page.
+      expect(header.className).toContain("layout:py-3");
+      expect(header.className).toContain("border-b-2");
+      expect(header.className).toContain("border-border");
       // The header is the section's first child: it sticks only while its own group scrolls.
       expect(header.parentElement!.firstElementChild).toBe(header);
+      // The cards sit in an isolated stacking context, so no card-internal
+      // `z-10` (the CTA, the stretched link) can paint over the plate.
+      const cards = header.nextElementSibling as HTMLElement;
+      expect(cards.className).toContain("isolate");
     }
     expect(headers[0]!.textContent).toContain("29 августа, суббота");
   });

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { Logger } from "@nestjs/common";
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
@@ -195,6 +196,7 @@ function parseIdpClaims(idToken: string): IdpClaims {
  * fail closed while the rest of the surface still works.
  */
 export class ZitadelIdpClient implements IdpClient {
+  private readonly logger = new Logger(ZitadelIdpClient.name);
   private readonly fetchImpl: FetchLike;
 
   /**
@@ -1134,19 +1136,23 @@ export class ZitadelIdpClient implements IdpClient {
     identifier: string,
     signal: AbortSignal,
   ): Promise<boolean> {
-    // EARS-25: re-issue the registration email code, enumeration-safely. Mirror
-    // `requestPasswordReset`'s discipline — resolve the identifier internally and
-    // NEVER throw or branch on existence so the caller's ack/timing is not an
-    // oracle (EARS-16). A code is re-sent ONLY for an existing, UNVERIFIED
-    // registrant; an unknown identifier, an already-verified one, or any provider
-    // hiccup is a silent no-op. The boolean is a server-side ledger decision
-    // (whether an `otp.sent` row is owed), never reflected into the response.
+    // 003 EARS-25 (amended): re-issue, enumeration-safely, the code that fits
+    // the account state — the verification code for an unverified account, the
+    // login code for a verified one (a re-registrant onto a verified address
+    // reaches the same code step and its resend). Mirror `requestPasswordReset`'s
+    // discipline — resolve the identifier internally and NEVER throw or branch on
+    // existence so the caller's ack/timing is not an oracle (EARS-16). An unknown
+    // identifier or any provider hiccup is a silent no-op. The boolean is a
+    // server-side ledger decision (whether an `otp.sent` row is owed), never
+    // reflected into the response.
     try {
       const user = await this.resolveUserVerification(identifier, signal);
-      // Unknown identifier, or already verified → no send, no ledger row. An
-      // already-verified registrant has no pending verification to re-issue, and
-      // re-sending would be an existence/state oracle, so it is a no-op.
-      if (!user || user.emailVerified) return false;
+      if (!user) return false;
+      // Verified: arm a fresh `otp_email` login challenge (EARS-6) and mail its
+      // code in the sign-in mail; `true` only when the challenge was armed.
+      if (user.emailVerified) {
+        return await this.requestOtpChallenge(identifier, "otpEmail");
+      }
       // The same `returnCode` hop the EARS-1/3 cascade uses (#910, EARS-29):
       // Zitadel re-issues + returns the fresh code (invalidating the previous
       // one) and sends nothing; the BFF mailer delivers the same §13.3
@@ -1327,12 +1333,13 @@ export class ZitadelIdpClient implements IdpClient {
     identifier: string,
     challenge: "otpEmail" | "otpSms",
     deliver?: (to: string, code: string) => Promise<void>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Enumeration-safe like `requestPasswordReset`: an unknown identifier (no
-    // user) is a silent no-op, and ANY provider error still resolves void — the
+    // user) is a silent no-op, and ANY provider error still resolves — the
     // caller's acknowledgement must never become an existence/health oracle
     // (EARS-6/7/16). A code is sent only if the user exists, but the caller can't
-    // tell which.
+    // tell which. Resolves `true` only when a challenge was armed (a code was
+    // issued) — a server-side ledger decision, never reflected to a client.
     try {
       const user =
         challenge === "otpEmail"
@@ -1342,7 +1349,7 @@ export class ZitadelIdpClient implements IdpClient {
         challenge === "otpEmail"
           ? user?.userId
           : await this.resolveUserId(identifier);
-      if (!userId) return;
+      if (!userId) return false;
       await this.ensureOtpFactor(userId, challenge);
       // Return the native login code to the existing mailer; Zitadel sends no
       // duplicate. SMS retains its native notifier and unchanged challenge.
@@ -1355,18 +1362,18 @@ export class ZitadelIdpClient implements IdpClient {
           challenges: { [challenge]: challengeBody },
         }),
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const data = (await res.json()) as {
         sessionId?: string;
         sessionToken?: string;
         challenges?: { otpEmail?: string };
       };
-      if (!data.sessionId || !data.sessionToken) return;
+      if (!data.sessionId || !data.sessionToken) return false;
       const code = data.challenges?.otpEmail;
       if (challenge === "otpEmail" && (typeof code !== "string" || !code))
-        return;
+        return false;
       // A store write failure (e.g. Redis blip) falls into the enclosing catch
-      // below — still void, enumeration-safe (a store outage must not become a
+      // below — still `false`, enumeration-safe (a store outage must not become a
       // health oracle either).
       await this.otpChallengeStore.set(identifier.toLowerCase(), {
         sessionId: data.sessionId,
@@ -1383,10 +1390,11 @@ export class ZitadelIdpClient implements IdpClient {
             this.requireMailer().sendLoginCodeEmail(addr, c));
         void send(to, code!).catch(() => {});
       }
+      return true;
     } catch {
       // A thrown fetch (network hiccup) is indistinguishable from success to the
       // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`.
-      return;
+      return false;
     }
   }
 
@@ -1590,14 +1598,12 @@ export class ZitadelIdpClient implements IdpClient {
       // survives the first accepted code. Zitadel v4.15 serves no password
       // removal (DELETE on the password resource is 405, proven live #2556), so
       // invalidation is SetPassword with a random, never-recorded value.
-      const nextPassword = registration
-        ? registration.password
-        : invalidate
-          ? ZitadelIdpClient.unrecordedPassword()
-          : undefined;
       if (
-        nextPassword !== undefined &&
-        !(await this.setPassword(user.userId, nextPassword))
+        (registration || invalidate) &&
+        !(await this.replacePreVerificationPassword(
+          user.userId,
+          registration?.password,
+        ))
       ) {
         return { sub: user.userId, verifiedNow: true, session: null };
       }
@@ -1626,6 +1632,39 @@ export class ZitadelIdpClient implements IdpClient {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 003 EARS-41, after the code has already flipped the address to verified:
+   * replace the pre-verification password, failing closed. The flip cannot be
+   * undone (SetEmail on the current address is rejected, proven live #1131), so
+   * the replacement is retried: the submitted password twice, then a random,
+   * never-recorded value twice — the registrant can always set a password later
+   * through reset (EARS-11/12), but a squatter's password must not outlive the
+   * owner's first code. `false` only when every attempt failed: the caller then
+   * issues no session, and the error log names the account so an operator can
+   * force a reset.
+   */
+  private async replacePreVerificationPassword(
+    userId: string,
+    submitted: string | undefined,
+  ): Promise<boolean> {
+    const attempts = [
+      ...(submitted === undefined ? [] : [submitted, submitted]),
+      ZitadelIdpClient.unrecordedPassword(),
+      ZitadelIdpClient.unrecordedPassword(),
+    ];
+    for (const password of attempts) {
+      try {
+        if (await this.setPassword(userId, password)) return true;
+      } catch {
+        // A network fault is one more failed attempt.
+      }
+    }
+    this.logger.error(
+      `003 EARS-41: the pre-verification password of Zitadel user ${userId} could not be replaced after its first email verification; no session was issued — force a password reset for this account`,
+    );
+    return false;
   }
 
   /** Management SetPassword (no current password, no code) — `true` on 2xx. */

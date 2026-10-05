@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { Logger } from "@nestjs/common";
+import { describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "./zitadel.idp.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
 import { FakeMailer } from "../../mailer/mailer.fake.js";
@@ -572,7 +573,105 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     ]);
   });
 
-  it("003 EARS-25/16: an unknown or already-verified identifier obtains NO code and sends nothing (no-op, false)", async () => {
+  it("003 EARS-25 (amended): a VERIFIED account arms a fresh otp_email login challenge and mails the login code, resolving true", async () => {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (url.endsWith("/v2/users")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              result: [
+                {
+                  userId: "user-9",
+                  human: { email: { email: "user@ds.test", isVerified: true } },
+                },
+              ],
+            }),
+        });
+      }
+      if (url.endsWith("/otp_email"))
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        });
+      if (url.endsWith("/v2/sessions"))
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              sessionId: "sess-1",
+              sessionToken: "tok-1",
+              challenges: { otpEmail: "LC7Q2M" },
+            }),
+        });
+      throw new Error(`unexpected hop: ${init.method} ${url}`);
+    };
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await expect(client.resendEmailVerification("user@ds.test")).resolves.toBe(
+      true,
+    );
+    await new Promise((r) => setImmediate(r));
+    const session = calls.find((c) => c.url.endsWith("/v2/sessions"));
+    expect(session, "the otp_email challenge was armed").toBeTruthy();
+    expect(JSON.parse(session!.body ?? "{}").challenges).toEqual({
+      otpEmail: { returnCode: {} },
+    });
+    expect(calls.some((c) => c.url.endsWith("/email/resend"))).toBe(false);
+    expect(mailer.loginCodeEmails).toEqual([
+      { to: "user@ds.test", code: "LC7Q2M", lifetime: "5m" },
+    ]);
+    expect(mailer.verificationCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-25: a verified account whose challenge hop fails issues no code, resolving false", async () => {
+    const fetchImpl: FetchLike = (url) => {
+      if (url.endsWith("/v2/users")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              result: [
+                {
+                  userId: "user-9",
+                  human: { email: { email: "user@ds.test", isVerified: true } },
+                },
+              ],
+            }),
+        });
+      }
+      if (url.endsWith("/otp_email"))
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        });
+      return Promise.resolve({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({}),
+      });
+    };
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await expect(client.resendEmailVerification("user@ds.test")).resolves.toBe(
+      false,
+    );
+    expect(mailer.loginCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-25/16: an unknown identifier obtains NO code and sends nothing (no-op, false)", async () => {
     const mailer = new FakeMailer();
     const buildFetch = (result: unknown[]): FetchLike => {
       return (url, init) => {
@@ -595,21 +694,8 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     await expect(
       unknown.resendEmailVerification("ghost@ds.test"),
     ).resolves.toBe(false);
-    // Already-verified registrant: resolves, but no resend hop is reached.
-    const verified = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      mailer,
-      fetchImpl: buildFetch([
-        {
-          userId: "user-9",
-          human: { email: { email: "user@ds.test", isVerified: true } },
-        },
-      ]),
-    });
-    await expect(
-      verified.resendEmailVerification("user@ds.test"),
-    ).resolves.toBe(false);
     expect(mailer.verificationCodeEmails).toEqual([]);
+    expect(mailer.loginCodeEmails).toEqual([]);
   });
 
   it("003 EARS-30/16: a mailer failure on the resend path is swallowed — false, never a throw, and the code never leaks", async () => {
@@ -1050,7 +1136,10 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
       alreadyExisted: true,
     });
     const searches = calls.filter((c) => c.url.endsWith("/v2/users"));
-    expect(searches, "exactly one User v2 search, keyed on the email").toHaveLength(1);
+    expect(
+      searches,
+      "exactly one User v2 search, keyed on the email",
+    ).toHaveLength(1);
     expect(JSON.parse(searches[0]!.body ?? "{}")).toEqual({
       queries: [{ emailQuery: { emailAddress: INPUT.email } }],
     });
@@ -2783,8 +2872,11 @@ describe("ZitadelIdpClient.submitEmailCode wire shape (003 EARS-41/23)", () => {
     verified: boolean;
     methods?: string[];
     verifyOk?: boolean;
+    /** The first N SetPassword hops answer 503 (a provider fault). */
+    passwordFailures?: number;
   }) {
     const calls: ScriptedCall[] = [];
+    let passwordFailuresLeft = opts.passwordFailures ?? 0;
     const ok = (body: unknown) =>
       Promise.resolve({
         ok: true,
@@ -2821,6 +2913,14 @@ describe("ZitadelIdpClient.submitEmailCode wire shape (003 EARS-41/23)", () => {
           : ok({});
       if (url.endsWith("/email/resend"))
         return ok({ verificationCode: "LC7Q2M" });
+      if (url.endsWith("/password") && passwordFailuresLeft > 0) {
+        passwordFailuresLeft -= 1;
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({}),
+        });
+      }
       if (url.endsWith("/password") || url.endsWith("/otp_email"))
         return ok({});
       if (url.endsWith("/v2/sessions") && init.method === "POST")
@@ -2894,6 +2994,71 @@ describe("ZitadelIdpClient.submitEmailCode wire shape (003 EARS-41/23)", () => {
     const sent = JSON.parse(password!.body ?? "{}").newPassword;
     expect(sent.changeRequired).toBe(false);
     expect(sent.password.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it("003 EARS-41: a transient SetPassword fault after the code flipped the address is retried, and the submitted password still replaces the pre-verification one", async () => {
+    const { calls, fetchImpl } = scripted({
+      verified: false,
+      passwordFailures: 1,
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    const result = await client.submitEmailCode("user@ds.test", "LC7Q2M", {
+      password: "Fresh-Passw0rd!",
+    });
+    expect(result?.session).not.toBeNull();
+    const sets = calls.filter((c) => c.url.endsWith("/password"));
+    expect(sets).toHaveLength(2);
+    for (const set of sets)
+      expect(JSON.parse(set.body ?? "{}").newPassword.password).toBe(
+        "Fresh-Passw0rd!",
+      );
+  });
+
+  it("003 EARS-41: when the submitted password cannot be set after the flip, the pre-verification password is still invalidated with an unrecorded value", async () => {
+    const { calls, fetchImpl } = scripted({
+      verified: false,
+      passwordFailures: 2,
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    const result = await client.submitEmailCode("user@ds.test", "LC7Q2M", {
+      password: "Fresh-Passw0rd!",
+    });
+    expect(result).toMatchObject({ sub: "user-9", verifiedNow: true });
+    expect(result?.session).not.toBeNull();
+    const sets = calls.filter((c) => c.url.endsWith("/password"));
+    expect(sets).toHaveLength(3);
+    const last = JSON.parse(sets[2]!.body ?? "{}").newPassword.password;
+    expect(last).not.toBe("Fresh-Passw0rd!");
+    expect(last.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it("003 EARS-41: when no invalidation lands after the flip, no session is issued and an operator-facing error names the account for a forced reset", async () => {
+    const error = vi
+      .spyOn(Logger.prototype, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const { calls, fetchImpl } = scripted({
+        verified: false,
+        methods: ["AUTHENTICATION_METHOD_TYPE_PASSWORD"],
+        passwordFailures: 99,
+      });
+      const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+      const result = await client.submitEmailCode("user@ds.test", "LC7Q2M");
+      expect(result).toEqual({
+        sub: "user-9",
+        verifiedNow: true,
+        session: null,
+      });
+      expect(calls.filter((c) => c.url.endsWith("/password"))).toHaveLength(2);
+      expect(calls.some((c) => c.url.includes("/v2/sessions"))).toBe(false);
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(String(error.mock.calls[0]?.[0])).toContain("user-9");
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it("044 EARS-14: an unverified credential-less (congress) account signed in by code stays credential-less", async () => {

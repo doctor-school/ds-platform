@@ -17,10 +17,7 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
-import {
-  FakeIdpClient,
-  FAKE_VALID_CODE,
-} from "../../src/auth/idp/idp.fake.js";
+import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -332,8 +329,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         },
       ]);
       // EARS-7's "each granted consent … with its date", per purpose.
-      for (const row of consentRows.rows)
-        expect(row.captured_at).toBeTruthy();
+      for (const row of consentRows.rows) expect(row.captured_at).toBeTruthy();
     });
 
     /**
@@ -654,6 +650,63 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBeGreaterThanOrEqual(400);
       expect(res.statusCode).toBeLessThan(500);
       expect(res.headers["set-cookie"]).toBeUndefined();
+    });
+
+    // 003 EARS-41 + Invariants (code submission ≤ 50 ms) on the doctor door: a
+    // wrong code is the same generic failure — status, body AND timing — for an
+    // unknown, a verified and an unverified account. Same pattern and budget as
+    // the login-code triad (login-otp.e2e-spec, EARS-34/16).
+    it("003 EARS-41: a wrong code on the doctor verify door is byte-identical in status, body, AND timing across {unknown, verified, unverified}", async () => {
+      const unverified = uniqueEmail("verify-timing-unver");
+      const verified = uniqueEmail("verify-timing-ver");
+      const unknown = `ears41-nobody-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      for (const email of [unverified, verified]) {
+        const registered = await app.inject({
+          method: "POST",
+          url: URL,
+          payload: {
+            email,
+            password: PASSWORD,
+            medicalWorkerDeclaration: true,
+            consent: [{ purpose: PARTNER_DATA_SHARING_PURPOSE, version: "x" }],
+          },
+        });
+        expect(registered.statusCode).toBe(200);
+      }
+      const flip = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        payload: { email: verified, code: FAKE_VALID_CODE },
+      });
+      expect(flip.statusCode).toBe(200);
+
+      async function wrongCode(email: string) {
+        const t0 = performance.now();
+        const res = await app.inject({
+          method: "POST",
+          url: "/v1/storefront/doctor/verify",
+          payload: { email, code: "ZZZZZZ" },
+        });
+        const ms = performance.now() - t0;
+        return { status: res.statusCode, body: res.json(), ms };
+      }
+      const none = await wrongCode(unknown);
+      const ver = await wrongCode(verified);
+      const unver = await wrongCode(unverified);
+
+      for (const r of [ver, unver]) {
+        expect(r.status).toBe(none.status);
+        expect(r.body).toEqual(none.body);
+      }
+      expect(none.status).toBe(400);
+      // The @TimingEqualized floor engages on every branch (≥ 30 ms allows
+      // scheduling jitter below the 40 ms floor) and the spread stays in budget.
+      const spread =
+        Math.max(none.ms, ver.ms, unver.ms) -
+        Math.min(none.ms, ver.ms, unver.ms);
+      expect(spread).toBeLessThanOrEqual(50);
+      for (const r of [none, ver, unver])
+        expect(r.ms).toBeGreaterThanOrEqual(30);
     });
   },
 );

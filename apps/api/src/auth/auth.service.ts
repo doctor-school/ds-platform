@@ -380,11 +380,11 @@ export class AuthService {
         sub: result.sub,
         channel: "email",
       });
-    }
-    if (!result.session) return null;
-    if (result.verifiedNow) {
+      // Every session from before the first verification ends here, also when
+      // the adapter issues no new one (fail-closed, EARS-41).
       await this.sessions.revokeAllBeforeVerification(result.sub);
     }
+    if (!result.session) return null;
     const established = await this.sessions.establish(
       result.session,
       fingerprint,
@@ -1041,14 +1041,14 @@ export class AuthService {
   }
 
   /**
-   * EARS-25: resend the registration email verification code, enumeration-safely.
-   * The existence-agnostic `/verify` screen (EARS-24) needs a way to re-send the
-   * code without the held password (re-`register` is the EARS-23 path and needs
-   * it). Delegates to the IdP port's enumeration-safe
+   * 003 EARS-25 (amended): resend from the registration code step,
+   * enumeration-safely. Delegates to the IdP port's enumeration-safe
    * {@link IdpClient.resendEmailVerification} — keyed by the identifier, resolving
-   * → `sub` internally and re-issuing the `otp_email` code ONLY for an existing,
-   * UNVERIFIED registrant (an unknown identifier or an already-verified one is a
-   * silent no-op). The port never throws or branches on existence, so the response
+   * → `sub` internally and re-issuing the code that fits the account state: the
+   * verification code for an unverified account, the login code for a verified
+   * one (a re-registrant onto a verified address), so the step's resend is never
+   * a dead end; an unknown identifier is a silent no-op. The port never throws or
+   * branches on existence, so the response
    * (`resend_requested`), status, and timing are identical on every path
    * (EARS-16; the ≤50 ms budget is the F6 `@TimingEqualized` concern). It creates
    * no `users`/consent row and appends the `otp.sent` ledger row (EARS-18) ONLY
@@ -1061,7 +1061,7 @@ export class AuthService {
     this.dispatchEmail("verification-resend", async () => {
       const issued = await this.idp.resendEmailVerification(identifier);
       // Keep the acceptance-dependent ledger write in the same observed tail:
-      // failures and unknown/already-verified identifiers still write no row.
+      // failures and unknown identifiers still write no row.
       if (issued) {
         await this.audit.record({
           type: "OtpSent",

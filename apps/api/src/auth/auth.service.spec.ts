@@ -199,8 +199,10 @@ function makeStubDb() {
     returning: () => Promise.resolve([{ id: "stub-user-id" }]),
     then: (resolve: (v: unknown) => void) => resolve(undefined),
   };
-  return { transaction: (fn: (tx: unknown) => Promise<unknown>) =>
-    fn({ insert: () => insertChain }) };
+  return {
+    transaction: (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ insert: () => insertChain }),
+  };
 }
 
 /** Let the fire-and-forget notice chain settle (it runs off the response path). */
@@ -333,12 +335,9 @@ describe("AuthService.register — re-registration code mail (003 EARS-23)", () 
 
   it("003 EARS-23: when the code mail send rejects, the duplicate-register response shall stay identical and not throw", async () => {
     const exploding: Mailer = {
-      sendReRegistrationCodeEmail: () =>
-        Promise.reject(new Error("smtp down")),
-      sendVerificationCodeEmail: () =>
-        Promise.reject(new Error("smtp down")),
-      sendPasswordResetCodeEmail: () =>
-        Promise.reject(new Error("smtp down")),
+      sendReRegistrationCodeEmail: () => Promise.reject(new Error("smtp down")),
+      sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
+      sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
       sendLoginCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendCongressRegistrationConfirmation: () =>
@@ -405,7 +404,8 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     sessions: SessionService,
   ): Promise<string> {
     const login = await idp.passwordLogin(email, oldPassword);
-    if (login.outcome !== "authenticated") throw new Error("login setup failed");
+    if (login.outcome !== "authenticated")
+      throw new Error("login setup failed");
     const { cookie } = await sessions.establish(login.session, fingerprint);
     return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
   }
@@ -444,7 +444,10 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     );
 
     // Force-logout audit is preserved…
-    expect(audit.events).toContainEqual({ type: "PasswordResetCompleted", sub });
+    expect(audit.events).toContainEqual({
+      type: "PasswordResetCompleted",
+      sub,
+    });
     // …and the new session records the same session-created row as login.
     expect(audit.events).toContainEqual({
       type: "LoginSucceeded",
@@ -562,20 +565,32 @@ describe("AuthService.resendEmailVerification — enumeration-safe (#319, EARS-2
     expect(audit.events).toEqual([]);
   });
 
-  it("EARS-25/16: an ALREADY-VERIFIED registrant yields the identical ack with NO code and NO ledger row", async () => {
-    const idp = new FakeIdpClient();
+  it("EARS-25: when a VERIFIED account requests a resend, the system shall issue a fresh login code under the identical ack and append exactly one otp.sent row", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
     const audit = new InMemoryAuthAuditLog();
     const email = "verified@ds.test";
     const created = await idp.createUser({ email, password });
-    // Flip the registrant to verified (mirrors a completed EARS-3 verify).
+    // Flip the account to verified (a re-registrant onto a verified address).
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     const service = buildResendService(idp, audit);
 
     const res = await service.resendEmailVerification(email);
+    await new Promise((r) => setImmediate(r)); // the send runs off the response path
 
+    // Identical body to the unverified and unknown paths (EARS-16)…
     expect(res).toEqual({ status: "resend_requested" });
-    // A verified registrant has no pending verification — no send, no row.
-    expect(audit.events).toEqual([]);
+    // …and the code that fits the state is the LOGIN code (003 EARS-25 amended),
+    // so the code step's «Отправить код ещё раз» is never a dead end.
+    expect(mailer.loginCodeEmails.map((m) => m.to)).toEqual([email]);
+    expect(mailer.verificationCodeEmails).toEqual([]);
+    expect(audit.events).toEqual([
+      { type: "OtpSent", identifier: email, channel: "email" },
+    ]);
+    // The armed challenge accepts the fresh code: the submission signs in.
+    await expect(
+      idp.submitEmailCode(email, FAKE_VALID_CODE),
+    ).resolves.toMatchObject({ verifiedNow: false });
   });
 });
 
@@ -601,11 +616,14 @@ describe("FakeIdpClient.resendEmailVerification — parity with real adapter (#3
     );
   });
 
-  it("resolves false (no send) for an already-verified registrant", async () => {
+  it("resolves true and arms the login challenge for a verified account (003 EARS-25 amended)", async () => {
     const idp = new FakeIdpClient();
     const created = await idp.createUser({ email: "v@ds.test", password });
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
-    await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(false);
+    await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(true);
+    await expect(
+      idp.loginWithEmailOtp("v@ds.test", FAKE_VALID_CODE),
+    ).resolves.not.toBeNull();
   });
 });
 
@@ -620,7 +638,10 @@ describe("AuthService.requestLoginOtp — SMS synthetic-send suppression (003 EA
   const allowingBudget = { tryConsume: () => true } as never;
   const okAudit = { record: () => Promise.resolve() } as never;
 
-  function buildOtpService(synthetic: SyntheticSuppression, idp: FakeIdpClient) {
+  function buildOtpService(
+    synthetic: SyntheticSuppression,
+    idp: FakeIdpClient,
+  ) {
     return new AuthService(
       idp as unknown as IdpClient,
       explodingDb as never, // the otp-request path touches no DB
@@ -726,7 +747,10 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
 
   it("#1112: a verify with a WRONG code records one VerifyFailed(invalid) — and NEVER the plaintext code (EARS-30)", async () => {
     const idp = new FakeIdpClient();
-    await idp.createUser({ email: "u@ds.test", password: "Aa1!long-enough-pw" });
+    await idp.createUser({
+      email: "u@ds.test",
+      password: "Aa1!long-enough-pw",
+    });
     const audit = new InMemoryAuthAuditLog();
     const service = buildFailObsService(idp as unknown as IdpClient, {}, audit);
     const code = "ZZZZZZ";
@@ -774,7 +798,11 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     // Only the failure row — the throw precedes any revoke/mint, so no
     // PasswordResetCompleted / LoginSucceeded row leaks (EARS-16 unchanged).
     expect(audit.events).toEqual([
-      { type: "PasswordResetFailed", identifier: "reset@ds.test", reason: "invalid" },
+      {
+        type: "PasswordResetFailed",
+        identifier: "reset@ds.test",
+        reason: "invalid",
+      },
     ]);
     expect(JSON.stringify(audit.events)).not.toContain(code);
   });
@@ -931,8 +959,7 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
     // The out-of-band send is off the response path: a total mailer outage
     // (EARS-31) must never differentiate the response or turn into a 500.
     const exploding: Mailer = {
-      sendReRegistrationCodeEmail: () =>
-        Promise.reject(new Error("smtp down")),
+      sendReRegistrationCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
@@ -1233,15 +1260,18 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
 
   it("003 EARS-41: an unverified account signs in with the code from the sign-in mail — verified, one auth.account.verified row, a session", async () => {
     const { idp, audit, flips, service } = build();
-    const created = await idp.createUser({ email: "late@ds.test", password: first });
+    const created = await idp.createUser({
+      email: "late@ds.test",
+      password: first,
+    });
 
     const result = await signInByCode(service, "late@ds.test");
 
     expect(result?.cookie).toContain(SESSION_COOKIE_NAME);
     expect(flips).toEqual([created.sub]);
-    expect(
-      audit.events.filter((e) => e.type === "IdentifierVerified"),
-    ).toEqual([{ type: "IdentifierVerified", sub: created.sub, channel: "email" }]);
+    expect(audit.events.filter((e) => e.type === "IdentifierVerified")).toEqual(
+      [{ type: "IdentifierVerified", sub: created.sub, channel: "email" }],
+    );
     expect((await idp.getUser(created.sub))?.emailVerified).toBe(true);
   });
 
@@ -1308,7 +1338,10 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
 
   it("003 EARS-23: a verified password holder who re-registers keeps the password; the submitted one is ignored", async () => {
     const { idp, flips, service } = build();
-    const created = await idp.createUser({ email: "owner@ds.test", password: first });
+    const created = await idp.createUser({
+      email: "owner@ds.test",
+      password: first,
+    });
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     await idp.requestEmailLoginCode("owner@ds.test", "re-registration");
 
@@ -1378,7 +1411,11 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
     );
 
     expect(inserted).toEqual([
-      { userId: "user-1", purpose: "medical-worker-declaration", version: "2026-09" },
+      {
+        userId: "user-1",
+        purpose: "medical-worker-declaration",
+        version: "2026-09",
+      },
     ]);
   });
 

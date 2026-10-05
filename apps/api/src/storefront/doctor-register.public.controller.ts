@@ -82,11 +82,13 @@ export class DoctorRegisterPublicController {
    * (003 EARS-23/41). The 003 `/verify` contract — same guards, same generic
    * 400 on every failure (EARS-16), the `__Host-` session cookie on success —
    * with this door's registration values, whose consent versions are stamped
-   * exactly as {@link register} stamps them.
+   * exactly as {@link register} stamps them. `@TimingEqualized` as on the 003
+   * route: a wrong code discloses neither existence nor state (EARS-41).
    */
   @Post("verify")
   @Public()
   @RateLimited()
+  @TimingEqualized()
   @HttpCode(200)
   @Authz({
     access: "public",

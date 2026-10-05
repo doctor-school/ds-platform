@@ -413,19 +413,21 @@ export interface IdpClient {
     code?: string,
   ): Promise<void>;
   /**
-   * EARS-25: re-issue the registration `otp_email` verification code for an
-   * `identifier` (the email), **enumeration-safely**. Unlike
+   * 003 EARS-25 (amended): re-issue, for an `identifier` (the email) and
+   * **enumeration-safely**, the code that fits the account state — the email
+   * verification code for an unverified account, a fresh `otp_email` login
+   * challenge (sign-in mail) for a verified one. Unlike
    * {@link requestEmailVerification} (which takes a resolved `sub` from the
    * EARS-1 cascade, where the BFF just created the user), this is keyed by the
    * raw identifier the resend endpoint receives — the port has no other targeted
    * identifier→sub lookup (`listUsers` is the reconcile-sweep enumerator, not a
    * per-request lookup), so resolution lives here, in the **same** enumeration-
    * safe wrapper as {@link requestPasswordReset} / {@link requestEmailOtp}: it
-   * resolves the identifier → `sub` without disclosing existence and re-issues the
-   * code **only** for an existing, **unverified** registrant. Resolves to `true`
-   * when a code was actually issued (so the caller appends the `otp.sent` ledger
-   * row, EARS-18) and `false` on every no-op path — an unknown identifier, an
-   * already-verified one, or any provider hiccup. It **never throws or branches**
+   * resolves the identifier → `sub` without disclosing existence and re-issues a
+   * code for any existing account. Resolves to `true` when a code was actually
+   * issued (so the caller appends the `otp.sent` ledger row, EARS-18) and `false`
+   * on every no-op path — an unknown identifier or any provider hiccup. It
+   * **never throws or branches**
    * on existence, so the caller's acknowledgement and timing cannot become an
    * existence oracle (EARS-16); the returned boolean is a server-side ledger
    * decision the caller never reflects into the response.

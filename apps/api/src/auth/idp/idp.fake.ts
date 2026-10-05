@@ -269,17 +269,27 @@ export class FakeIdpClient implements IdpClient {
   }
 
   async resendEmailVerification(identifier: string): Promise<boolean> {
-    // EARS-25 fake/real parity (no more permissive than the real adapter): a
-    // code is re-issued ONLY for an existing, UNVERIFIED registrant. The real
-    // Zitadel adapter resolves the identifier and skips an already-verified one
-    // (its User v2 search carries `human.email.isVerified`); the fake mirrors that
-    // exact unverified-vs-verified distinction off its own `emailVerified` flag,
-    // so a regression that re-sends to a verified (or unknown) identifier fails in
-    // unit tests, not only live. Every path resolves (never throws) so the caller
-    // stays enumeration-safe (EARS-16); the boolean drives only the server-side
-    // `otp.sent` ledger decision, never the response.
+    // 003 EARS-25 (amended) fake/real parity: the code that fits the account
+    // state is re-issued — the verification code for an existing, UNVERIFIED
+    // account; a fresh `otp_email` login challenge (sign-in mail) for a VERIFIED
+    // one, exactly the split the real adapter draws off `human.email.isVerified`;
+    // an unknown identifier is a no-op. Every path resolves (never throws) so the
+    // caller stays enumeration-safe (EARS-16); the boolean drives only the
+    // server-side `otp.sent` ledger decision, never the response.
     const record = this.findByIdentifier(identifier);
-    if (!record || record.emailVerified) return false;
+    if (!record) return false;
+    if (record.emailVerified) {
+      this.emailOtpChallenges.add(record.sub);
+      if (this.mailer) {
+        const to = record.email ?? identifier;
+        try {
+          await this.mailer.sendLoginCodeEmail(to, FAKE_VALID_CODE);
+        } catch {
+          // Fire-and-forget parity with the real adapter: the challenge is armed.
+        }
+      }
+      return true;
+    }
     // EARS-29: the re-issued code rides the BFF mailer (same §13.3 artifact as
     // the initial send). A mailer failure = no code delivered = `false`, the
     // real adapter's exact swallow (EARS-30: nothing thrown, nothing leaked).

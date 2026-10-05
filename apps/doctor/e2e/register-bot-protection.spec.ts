@@ -26,9 +26,9 @@ import { test, expect, type Page, type Request } from "@playwright/test";
  */
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
 const RESEND_ROUTE = "**/v1/auth/verify/resend";
-const CONFIRM_ROUTE = "**/v1/auth/verify";
-// 021 EARS-15 (#1996) — the sign-in the confirmation replays.
-const LOGIN_ROUTE = "**/v1/auth/login";
+// 003 EARS-41/23 (#2556) — the doctor storefront's own code submit; its answer
+// sets the session itself, so no sign-in replay follows it.
+const CONFIRM_ROUTE = "**/v1/storefront/doctor/verify";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
@@ -221,18 +221,18 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
       resend.click(),
     ]);
     expect(body(request).identifier).toBe(EMAIL);
-    // The acknowledgement is conditionally phrased — identical for a
-    // registrant, a stranger and an already-verified owner (003 EARS-16).
+    // The acknowledgement states no account fact — the same sentence for a
+    // registrant, a stranger and an already-verified owner (003 EARS-16/25).
     await expect(page.getByTestId("verify-resend-notice")).toContainText(
-      "Если регистрация ещё не подтверждена",
+      "Мы отправили новый код на",
     );
   });
 
-  // #1546 moved this hop from 003's `/v1/auth/verify` to the STOREFRONT confirm
-  // command: it runs the same 003 engine and answers with the 021 success state,
-  // so the code is still checked exactly once and the browser still makes exactly
-  // one round trip — what changed is the answer, not the engine.
-  test("021 EARS-19.5: the confirmation state confirms the code through the one 003 confirm command (#2455)", async ({
+  // 003 EARS-41/23 (#2556): the code step posts the doctor storefront's own
+  // code command, which runs the one 003 engine and sets the session in its
+  // answer — the code is checked exactly once, in exactly one round trip, and
+  // the in-tab registration values ride with it.
+  test("003 EARS-41 / 021 EARS-19.5: the code step submits the code once, with the held registration values, through the storefront code command", async ({
     page,
   }) => {
     await acceptRegistration(page);
@@ -241,19 +241,6 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ status: "verified" }),
-      }),
-    );
-    // 021 EARS-15 (#1996) — the success state exists ONLY for a doctor who is
-    // signed in: the screen replays the real 003 EARS-5 login with the password
-    // it held, and a replay that fails routes to `/login?returnTo=…` instead of
-    // rendering the card. This tier is backend-free, so the replay is fulfilled
-    // at the same network boundary as the commands above rather than left to a
-    // refused connection.
-    await page.route(LOGIN_ROUTE, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ status: "authenticated" }),
       }),
     );
     await page.goto("/register");
@@ -267,7 +254,14 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
       // it IS the submit — the same way the portal drives its code fields.
       page.locator('input[autocomplete="one-time-code"]').fill("ABC123"),
     ]);
-    expect(body(request)).toEqual({ email: EMAIL, code: "ABC123" });
+    expect(body(request)).toEqual({
+      email: EMAIL,
+      code: "ABC123",
+      registration: expect.objectContaining({
+        password: PASSWORD,
+        medicalWorkerDeclaration: true,
+      }),
+    });
 
     // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates away from
     // this surface instead of replacing it with an outcome card, so the

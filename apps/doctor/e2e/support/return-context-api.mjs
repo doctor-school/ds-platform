@@ -24,13 +24,12 @@ import { createServer } from "node:http";
  * does not — so the tier drives the real server read rather than a switch in
  * product code.
  *
- * `POST /v1/auth/login` (021 EARS-15, #1996) is here because the confirmed
- * doctor is SIGNED IN by replaying the real 003 EARS-5 login: the confirm route
- * mints no session, the client replays the login through this same proxy, and
- * the api answers by setting `__Host-ds_session`. The double answers it the same
- * way — the one live session value below — so the header of the page the doctor
- * lands on is decided by the real server read of a real cookie, not by a switch
- * in the tier.
+ * `POST /v1/storefront/doctor/verify` (003 EARS-41, 021 EARS-15, #2556) is here
+ * because the accepted code SIGNS the doctor in: the api answers the code step
+ * by setting `__Host-ds_session`. The double answers it the same way — the one
+ * live session value below — so the header of the page the doctor lands on is
+ * decided by the real server read of a real cookie, not by a switch in the
+ * tier.
  *
  * The specialty read is here because the LD-4 landing is also resolved on the
  * SERVER, from the forwarded `__Host-ds_specialty` cookie, and is therefore
@@ -112,12 +111,13 @@ const SPECIALTY = {
  * branch on lifecycle or registration, which is the whole point of the contract.
  */
 /**
- * The one password this double REFUSES at `POST /v1/auth/login` (021 EARS-15).
- * Kept in step by name with the same constant in `e2e/register-return.spec.ts`,
- * which is the only caller that sends it — a spec importing from this module
- * would pull the whole server into the Playwright type graph.
+ * The one code this double REFUSES at `POST /v1/storefront/doctor/verify`
+ * (003 EARS-41). Kept in step by name with the same constant in
+ * `e2e/register-return.spec.ts`, which is the only caller that sends it — a
+ * spec importing from this module would pull the whole server into the
+ * Playwright type graph.
  */
-const REFUSED_PASSWORD = "the second password the idp never took";
+const REFUSED_CODE = "NOPE42";
 
 /**
  * The register policy the api's `participation-cta.resolver` builds for a
@@ -264,9 +264,10 @@ const server = createServer((request, response) => {
     return json(response, 200, { ok: true, double: "return-context-api" });
 
   // The write commands the registration journey makes. The register, resend
-  // and confirm answers are the constants the contracts declare: the confirm
-  // command is the one 003 `/v1/auth/verify` on both storefronts (#2455) and
-  // names no destination — the landing is decided by the client resolution.
+  // and code answers are the constants the contracts declare: the code command
+  // is the doctor storefront's `/v1/storefront/doctor/verify` (003 EARS-41/23,
+  // #2556) and names no destination — the landing is decided by the client
+  // resolution.
   if (request.method === "POST") {
     if (url.pathname === "/v1/storefront/doctor/register") {
       return readJson(request, () =>
@@ -278,37 +279,32 @@ const server = createServer((request, response) => {
         json(response, 200, { status: "resend_requested" }),
       );
     }
-    // 003 EARS-5 / 021 EARS-15 (#1996) — the replayed sign-in. The double owns
-    // exactly ONE credential verdict, and it is the one the journey turns on:
-    // `REFUSED_PASSWORD` gets the generic 401 the 003 engine answers when the
-    // held credential is not the one the IdP holds (the doctor re-registered
-    // with a second password — 003 EARS-16 answers a repeat registration
-    // identically, so the client cannot know). Every other password is accepted,
-    // because this tier asserts the session that follows a successful sign-in,
-    // not the engine's verdict. The success answer is the api's own — a
-    // token-free body plus the `__Host-ds_session` cookie the BFF sets, which
-    // `/v1/auth/session` above then recognises as this tier's live doctor.
-    if (url.pathname === "/v1/auth/login") {
+    // 003 EARS-41 / 021 EARS-15 (#2556) — the code step's submit, whose answer
+    // is the session itself. The double owns exactly ONE code verdict, and it
+    // is the one the journey turns on: `REFUSED_CODE` gets the generic 400 the
+    // 003 engine answers for a wrong, expired or used code (EARS-16 — one
+    // answer, no oracle). Every other code is accepted, because this tier
+    // asserts the landing and the session that follow an accepted code, not the
+    // engine's verdict. The success answer is the api's own — a token-free body
+    // plus the `__Host-ds_session` cookie the BFF sets, which `/v1/auth/session`
+    // above then recognises as this tier's live doctor.
+    if (url.pathname === "/v1/storefront/doctor/verify") {
       return readJson(request, (body) =>
-        body?.password === REFUSED_PASSWORD
-          ? // 003 EARS-16 — one generic answer, no enumeration oracle.
-            json(response, 401, {
-              statusCode: 401,
-              error: "Unauthorized",
-              message: "invalid_credentials",
+        body?.code === REFUSED_CODE
+          ? json(response, 400, {
+              statusCode: 400,
+              error: "Bad Request",
+              message: "the request could not be completed",
             })
           : json(
               response,
               200,
-              { status: "authenticated" },
+              { status: "verified" },
               {
                 "set-cookie": `__Host-ds_session=${SESSION_VALUE}; Path=/; HttpOnly; Secure; SameSite=Lax`,
               },
             ),
       );
-    }
-    if (url.pathname === "/v1/auth/verify") {
-      return readJson(request, () => json(response, 200, { status: "verified" }));
     }
   }
 

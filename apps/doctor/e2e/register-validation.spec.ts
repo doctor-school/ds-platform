@@ -18,10 +18,9 @@ import { test, expect, devices, type Page, type Request } from "@playwright/test
  * assertable — the code that leaves the browser, not the glyphs on screen.
  */
 const REGISTER_ROUTE = "**/v1/storefront/doctor/register";
-// #2455 — the code rides the one 003 confirm command both storefronts post.
-const CONFIRM_ROUTE = "**/v1/auth/verify";
-// 021 EARS-15 (#1996) — the sign-in the confirmation replays.
-const LOGIN_ROUTE = "**/v1/auth/login";
+// 003 EARS-41/23 (#2556) — the doctor storefront's own code submit; its answer
+// sets the session itself, so no sign-in replay follows it.
+const CONFIRM_ROUTE = "**/v1/storefront/doctor/verify";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
@@ -185,20 +184,6 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
       }),
     );
 
-    // 021 EARS-15 (#1996) — the success state exists ONLY for a doctor who is
-    // signed in: the screen replays the real 003 EARS-5 login with the password
-    // it held, and a replay that fails routes to `/login?returnTo=…` instead of
-    // rendering the card. This tier is backend-free, so the replay is fulfilled
-    // at the same network boundary as the commands above rather than left to a
-    // refused connection.
-    await page.route(LOGIN_ROUTE, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ status: "authenticated" }),
-      }),
-    );
-
     await page.goto("/register");
     await page.getByTestId("register-email").fill(EMAIL);
     await page.getByTestId("register-password").fill(PASSWORD);
@@ -229,7 +214,11 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
       page.waitForRequest(CONFIRM_ROUTE),
       code.fill("abc123"),
     ]);
-    expect(body(request)).toEqual({ email: EMAIL, code: "ABC123" });
+    expect(body(request)).toEqual({
+      email: EMAIL,
+      code: "ABC123",
+      registration: expect.objectContaining({ password: PASSWORD }),
+    });
 
     // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates; the
     // confirmation surface leaving the DOM is what says the command succeeded.

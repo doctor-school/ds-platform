@@ -109,9 +109,9 @@ export interface MailpitMessage {
 /**
  * Poll Mailpit for a message to `email` delivered AFTER `afterIso` (optionally
  * filtered by `subjectIncludes`), returning the full message rather than a code.
- * Used by the EARS-23 account-exists-notice assertion (#207): the notice must
- * arrive AND must carry no verification/login code (it is a product notice, not
- * an identity-credential email). Returns `null` if no matching mail lands.
+ * Used by the 003 EARS-23 re-registration assertion (#2556): the code mail must
+ * arrive, say «already registered» and the kept password, and carry no link.
+ * Returns `null` if no matching mail lands.
  */
 export async function fetchMessage(
   email: string,

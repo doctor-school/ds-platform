@@ -56,15 +56,14 @@ import { requireLiveStandEnv } from "./support/live-stand-env";
  *
  * WHY THE GUEST SIGN-UP LEG IS NOT DRIVEN HERE. 005 EARS-2 has two doors, and
  * this file drives the SIGN-IN one against a real command. The SIGN-UP one
- * (register, email code, held-password replay, registration) needs a FRESH
+ * (register, email code that signs in, registration) needs a FRESH
  * account per run: self-signup throttles after ~4-5 attempts per window
  * (`support/doctor-session.ts`), so driving it live would make this tier flaky by
  * construction. It is covered instead where it can be observed deterministically:
  * the confirmation journey and its landing in `register-return.spec.ts` (against
  * the `support/return-context-api.mjs` double, which by design cannot observe a
- * real registration), and the ORDER of the held-password replay and the
- * `RegisterForEvent` command it now fires in
- * `packages/auth-flow/src/register/register-door.test.tsx` (005 EARS-2, jsdom).
+ * real registration), and the code step's own sign-in and what follows it in
+ * `packages/auth-flow/src/verify/verify-door.test.tsx` (003 EARS-41, jsdom).
  */
 
 const ENV = [

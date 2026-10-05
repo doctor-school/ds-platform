@@ -1,3 +1,4 @@
+import { chooseProjectDefaultAudience } from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import {
   searchRelationshipCombobox,
@@ -33,6 +34,7 @@ async function createProject(
   await page.getByTestId("project-form").waitFor({ state: "visible" });
   await page.locator("#title").fill(title);
   await page.locator("#description").fill("Описание для проверки связей.");
+  await chooseProjectDefaultAudience(page);
   await page.getByTestId("submit-project").click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return { title, url: page.url() };

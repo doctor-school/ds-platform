@@ -1,3 +1,7 @@
+import {
+  chooseEventClassification,
+  chooseProjectDefaultAudience,
+} from "../support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PROJECT_DESCRIPTION_MAX } from "@ds/schemas";
@@ -74,6 +78,7 @@ async function createEventForScan(page: Page): Promise<string> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/);
   return page.url().split("/").pop()!;
@@ -226,6 +231,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.locator("#title").fill(`Axe-скан проект ${Date.now()}`);
     await page.locator("#description").fill("");
     await page.locator("#description").fill("Описание для скана доступности.");
+    await chooseProjectDefaultAudience(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
     await page.getByTestId("project-form").waitFor({ state: "visible" });
@@ -428,6 +434,7 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       await page.getByTestId("project-form").waitFor({ state: "visible" });
       await page.locator("#title").fill(`Axe-скан связи ${suffix} ${stamp}`);
       await page.locator("#description").fill("Описание для скана связей.");
+      await chooseProjectDefaultAudience(page);
       await page.getByTestId("submit-project").click();
       await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
       projects.push({
@@ -706,13 +713,17 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
-  test("the event directions tab passes WCAG 2 A/AA (light)", async ({ page }) => {
+  test("the event directions tab passes WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     const id = await createEventForScan(page);
 
     await page.goto(`/events/${id}`);
     await page.getByTestId("tab-directions").click();
-    await page.getByTestId("event-directions-panel").waitFor({ state: "visible" });
+    await page
+      .getByTestId("event-directions-panel")
+      .waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 
@@ -725,7 +736,10 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   }) => {
     test.setTimeout(120_000);
     await loginAsAdmin(page);
-    const id = await createPublishedEvent(page, `Axe-скан реестр ${Date.now()}`);
+    const id = await createPublishedEvent(
+      page,
+      `Axe-скан реестр ${Date.now()}`,
+    );
     const slug = await eventSlugFromRoster(page, id);
     await registerDoctorThroughPlatform(
       browser,

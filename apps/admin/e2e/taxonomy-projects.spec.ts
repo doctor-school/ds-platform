@@ -1,3 +1,4 @@
+import { chooseProjectDefaultAudience } from "./support/event-classification";
 import { expect, test } from "@playwright/test";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
 import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
@@ -70,6 +71,7 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
       .fill("Программа для практикующих кардиологов.");
     // The counter reports the remaining budget, not a truncation.
     await expect(page.getByText("осталось", { exact: false })).toBeVisible();
+    await chooseProjectDefaultAudience(page);
     await page.getByTestId("submit-project").click();
 
     // ── The created row renders on its own detail page ─────────────────────
@@ -202,6 +204,7 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     await page
       .getByTestId("project-description")
       .fill("Годовая программа для практикующих ревматологов.");
+    await chooseProjectDefaultAudience(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     const projectUrl = page.url();

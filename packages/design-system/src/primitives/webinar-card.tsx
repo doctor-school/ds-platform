@@ -223,6 +223,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
     ref,
   ) => {
     const past = variant === "past";
+    // Past = the muted archive anatomy, drawn with full-strength muted tokens on
+    // the time plate (WCAG AA) — never a whole-card opacity, which pushes the
+    // plate ink below 4.5:1 (#2565; the canvas .82 opacity is a canvas defect).
+    const plateInk = past ? "text-muted-foreground" : "text-tint-foreground";
     // EARS-2: the cost reads in Pul, and a zero cost reads «бесплатно для
     // врача». There is no rouble branch because there is no rouble input.
     const costLabel = pulCost === 0 ? freeLabel : pulCostLabel;
@@ -251,7 +255,7 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
           "border-b-2 border-border last:border-b-0",
           // Desktop (>900px): the 196px time-plate grid on a bordered, raised card.
           "layout:grid layout:grid-cols-[196px_1fr] layout:border-2 layout:border-border layout:shadow-lg layout:last:border-2",
-          past && "opacity-80 layout:border-muted-foreground/30",
+          past && "layout:border-muted-foreground/30",
           className,
         )}
         {...props}
@@ -268,7 +272,13 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
         ) : null}
 
         {/* Time plate. */}
-        <div className="flex flex-col items-start gap-2.5 bg-tint px-4 py-[14px] layout:items-start layout:gap-3 layout:border-r-2 layout:border-border layout:px-6 layout:py-[30px]">
+        <div
+          data-time-plate=""
+          className={cn(
+            "flex flex-col items-start gap-2.5 px-4 py-[14px] layout:items-start layout:gap-3 layout:border-r-2 layout:border-border layout:px-6 layout:py-[30px]",
+            past ? "bg-muted" : "bg-tint",
+          )}
+        >
           {/* Live tag — mobile only (the desktop signal is the sticker above). */}
           {live && liveLabel ? (
             <span
@@ -282,7 +292,12 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
           {/* `display:contents` on desktop lets the time + meta lay out directly in
             the time-column flex; on mobile they stack inside their own column. */}
           <div className="flex w-full flex-col items-start gap-1 layout:contents">
-            <span className="text-3xl font-extrabold leading-none tracking-tighter tabular-nums text-tint-foreground layout:text-4xl">
+            <span
+              className={cn(
+                "text-3xl font-extrabold leading-none tracking-tighter tabular-nums layout:text-4xl",
+                plateInk,
+              )}
+            >
               {time}
             </span>
             <div className="text-left">
@@ -295,7 +310,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
               {kindLabel || formatLabel ? (
                 <div
                   data-event-format-kicker=""
-                  className="mb-1 break-words text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground"
+                  className={cn(
+                    "mb-1 break-words text-eyebrow font-extrabold uppercase tracking-micro",
+                    plateInk,
+                  )}
                 >
                   {kindLabel ? (
                     <span data-event-kind-label="">{kindLabel}</span>
@@ -310,17 +328,30 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
                   ) : null}
                 </div>
               ) : null}
-              <div className="text-eyebrow font-extrabold uppercase tracking-micro text-tint-foreground">
+              <div
+                className={cn(
+                  "text-eyebrow font-extrabold uppercase tracking-micro",
+                  plateInk,
+                )}
+              >
                 {tzLabel}
               </div>
-              <div className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground">
+              <div
+                className={cn(
+                  "mt-1 text-xs font-bold uppercase leading-snug tracking-wide",
+                  plateInk,
+                )}
+              >
                 {dateLabel}
               </div>
               {/* 004 EARS-12 — the hybrid venue-local start, its own line. */}
               {venueTimeLabel ? (
                 <div
                   data-event-venue-time=""
-                  className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground"
+                  className={cn(
+                    "mt-1 text-xs font-bold uppercase leading-snug tracking-wide",
+                    plateInk,
+                  )}
                 >
                   {venueTimeLabel}
                 </div>
@@ -328,7 +359,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
               {past && recordingLabel ? (
                 <div
                   data-event-recording=""
-                  className="mt-1 text-xs font-bold uppercase leading-snug tracking-wide text-tint-foreground"
+                  className={cn(
+                    "mt-1 text-xs font-bold uppercase leading-snug tracking-wide",
+                    plateInk,
+                  )}
                 >
                   {recordingLabel}
                 </div>

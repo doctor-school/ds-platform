@@ -136,7 +136,19 @@ describe("014 EARS-11 WebinarCard — archive variant", () => {
       />,
     );
 
-    expect(container.firstElementChild?.className).toContain("opacity-80");
+    // Muted through full-strength muted tokens on the time plate — never a
+    // whole-card opacity, which drops the plate ink below WCAG AA (#2565).
+    const card = container.firstElementChild as HTMLElement;
+    expect(card.className).not.toMatch(/\bopacity-/);
+    const plate = card.querySelector("[data-time-plate]") as HTMLElement;
+    expect(plate.className).toContain("bg-muted");
+    expect(plate.className).not.toContain("bg-tint");
+    for (const ink of plate.querySelectorAll("[class*='text-tint-foreground']")) {
+      throw new Error(`past plate still carries tint ink: ${ink.className}`);
+    }
+    expect(screen.getByText("Запись готовится").className).toContain(
+      "text-muted-foreground",
+    );
     expect(screen.getByText("Запись готовится")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Смотреть запись ↗" }),
@@ -407,7 +419,7 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
 describe("004 EARS-12 WebinarCard — hybrid venue-local time slot", () => {
   const VENUE = "На площадке 16:00 GMT+7";
 
-  it("EARS-12.1: a hybrid card renders the venue-local time in its own slot under the date", () => {
+  it("004 EARS-12.1: a hybrid card renders the venue-local time in its own slot under the date", () => {
     const { container } = render(
       <WebinarCard {...BASE} tzLabel="GMT+3" venueTimeLabel={VENUE} />,
     );
@@ -422,12 +434,12 @@ describe("004 EARS-12 WebinarCard — hybrid venue-local time slot", () => {
     ).toBeTruthy();
   });
 
-  it("EARS-12.2: with no venue-local time the slot does not render (online / offline events)", () => {
+  it("004 EARS-12.2: with no venue-local time the slot does not render (online / offline events)", () => {
     const { container } = render(<WebinarCard {...BASE} />);
     expect(container.querySelector("[data-event-venue-time]")).toBeNull();
   });
 
-  it("EARS-12.3: a past hybrid card keeps the venue line alongside its recording line", () => {
+  it("004 EARS-12.3: a past hybrid card keeps the venue line alongside its recording line", () => {
     const { container } = render(
       <WebinarCard
         {...BASE}
@@ -444,7 +456,7 @@ describe("004 EARS-12 WebinarCard — hybrid venue-local time slot", () => {
     );
   });
 
-  it("EARS-12.4: the recording line renders for past events only", () => {
+  it("004 EARS-12.4: the recording line renders for past events only", () => {
     const { container } = render(
       <WebinarCard {...BASE} recordingLabel="Есть запись" />,
     );

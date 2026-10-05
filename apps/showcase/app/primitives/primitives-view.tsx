@@ -2258,8 +2258,6 @@ function WebinarCardSection() {
                   title={variant.title}
                   speakers={[{ name: "Анна Соколова", org: "К.м.н." }]}
                   nmoLabel="НМО · 2 ЗЕТ"
-                  freeLabel="бесплатно для врача"
-                  pulCostLabel="120 Pul"
                   signUpLabel="коллег записались"
                   seatsLeftLabel="мест осталось"
                   soldOutLabel="мест не осталось"
@@ -2292,6 +2290,7 @@ const KIND_FORMAT_CARDS = [
       formatLabel: "онлайн",
       venueLabel: "Онлайн",
       pulCost: 120,
+      pulCostLabel: "120 Pul",
       signUpCount: 128,
     },
   },
@@ -2308,7 +2307,6 @@ const KIND_FORMAT_CARDS = [
       venueTimeLabel: "На площадке 16:00 GMT+7",
       venueLabel: "Гибрид",
       city: "Новосибирск",
-      pulCost: 0,
       signUpCount: 56,
       seatsLeft: 14,
     },
@@ -2358,7 +2356,6 @@ const KIND_FORMAT_CARDS = [
       formatLabel: "офлайн",
       venueLabel: "Офлайн",
       city: "Казань",
-      pulCost: 0,
       signUpCount: 18,
       seatsLeft: 12,
     },
@@ -2372,7 +2369,6 @@ const KIND_FORMAT_CARDS = [
     props: {
       formatLabel: "Вебинар",
       venueLabel: "Онлайн",
-      pulCost: 0,
       signUpCount: 42,
     },
   },

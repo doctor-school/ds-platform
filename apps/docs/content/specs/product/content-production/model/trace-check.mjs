@@ -11,7 +11,10 @@
 // sub-role only from the closed «Подроли» list of FORMAT-ru.md); a repeat box (`repeats`) that
 // names a box absent from the model or carries F-IDs of its own; a leaf without a draft lead time;
 // a leaf `iterations` that is no loops.yaml entry, or a loop whose leaves do not carry it; a loop
-// fragment with a dangling step; a teams.yaml role outside «Роли и круги».
+// fragment with a dangling step; a teams.yaml role outside «Роли и круги»; teams.yaml without
+// paid_hours_per_month or with a second hours-per-month variable, an hours-per-month variable in
+// ../rates/rates.yaml; a model role string without a rates.yaml record (NO_OWN_RATE aside), a rates
+// record that is no model role or has no dated source.
 // Everything else (O-ID coverage, out-of-TO-BE placement, block mismatch) is reported, never fails.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -563,10 +566,96 @@ for (const team of teamsDoc?.teams ?? []) {
   for (const pool of asList(team.draws_on))
     resolveRole(pool.role, `teams.yaml: ${team.id} draws_on`);
 }
-if (!isRange(teamsDoc?.capacity_variables?.productive_hours_per_month?.draft))
+// One FTE-hours variable: teams.yaml owns paid_hours_per_month (capacity and the in-house hourly
+// cost divide by the same hours); no other file or key redefines hours per month.
+const HOURS_PER_MONTH = /hours?_(per_)?month/;
+if (!isRange(teamsDoc?.capacity_variables?.paid_hours_per_month?.draft))
   errors.push(
-    "teams.yaml: capacity_variables.productive_hours_per_month.draft is missing",
+    "teams.yaml: capacity_variables.paid_hours_per_month.draft is missing",
   );
+for (const key of Object.keys(teamsDoc?.capacity_variables ?? {}))
+  if (HOURS_PER_MONTH.test(key) && key !== "paid_hours_per_month")
+    errors.push(
+      `teams.yaml: capacity_variables.${key} — paid_hours_per_month is the only hours-per-month variable`,
+    );
+const ratesDoc = parse(
+  await readFile(join(pkg, "rates", "rates.yaml"), "utf8"),
+);
+for (const key of Object.keys(ratesDoc?.variables ?? {}))
+  if (HOURS_PER_MONTH.test(key))
+    errors.push(
+      `rates.yaml: variables.${key} — hours per month live in teams.yaml paid_hours_per_month`,
+    );
+
+// Rate coverage (../rates/rates.yaml): every role string of the model — leaf effort.role, box
+// mechanisms, teams.yaml roles, «Роли и круги» and the closed sub-role list — has a rates.yaml
+// record, unless it is a tool or an aggregate label listed in NO_OWN_RATE; every rates.yaml record
+// names a model role and carries a dated source or `composite_of`.
+const NO_OWN_RATE = new Set([
+  // tools and external costs, not roles
+  "Платформа DS",
+  "ИИ-инструменты",
+  "Студия",
+  // aggregate mechanism labels of upper diagrams: each named role is rated by its own record
+  "Продуктовая команда — аккаунт, продюсер",
+  "Продуктовая команда — аккаунт, продюсер, методолог",
+  "Продуктовая команда — медредактор-сценарист, менеджер эксперта, продюсер, менеджер мероприятий",
+  "Продуктовая команда — методолог, продюсер, аккаунт, менеджеры экспертов",
+  "Продуктовая команда — продюсер, команда-владелец направления",
+  "Продуктовые команды",
+  "Продуктовые команды — найм, деление, СОП",
+  "Пул медрецензентов — по сигналу",
+  "Пул медрецензентов — политика независимости",
+  "Пул экспертов — амбассадор, эксперты",
+  "Пул экспертов — эксперты, спикеры",
+  "Сервисный круг — оператор платформы, режиссёр трансляции, поддержка",
+  "Сервисный круг — юрист, бухгалтер",
+  "Сервисный круг — юрист, оператор платформы, режиссёр трансляции, поддержка",
+  "Ядро — стандарты, рынок, калькулятор, коуч",
+]);
+const rateRoles = new Set(asList(ratesDoc?.roles).map((record) => record.role));
+const modelRoles = new Set([
+  ...process_.roles,
+  ...[...subRoles].flatMap(([circle, names]) =>
+    [...names].map((name) => `${circle} — ${name}`),
+  ),
+]);
+const needsRate = new Map(); // role string -> where first seen
+const need = (role, where) => {
+  const name = String(role ?? "").replace(/\s*\(.*\)\s*$/, "");
+  if (name && !needsRate.has(name)) needsRate.set(name, where);
+};
+for (const role of modelRoles) need(role, "«Роли и круги» / «Подроли»");
+for (const diagram of diagrams)
+  for (const box of diagram.boxes ?? []) {
+    if (box.effort?.role)
+      need(box.effort.role, `${diagram.id}: leaf ${box.id}`);
+    for (const m of asList(box.mechanisms))
+      need(m, `${diagram.id}: box ${box.id} mechanism`);
+  }
+for (const team of teamsDoc?.teams ?? [])
+  for (const entry of [...asList(team.members), ...asList(team.draws_on)])
+    need(entry.role, `teams.yaml: ${team.id}`);
+for (const [role, where] of needsRate)
+  if (!rateRoles.has(role) && !NO_OWN_RATE.has(role))
+    errors.push(
+      `${where}: role «${role}» has no rates.yaml record (add one, or list it in NO_OWN_RATE if it is a tool or an aggregate label)`,
+    );
+for (const label of NO_OWN_RATE)
+  if (!needsRate.has(label))
+    warnings.push(`NO_OWN_RATE «${label}» is no longer used in the model`);
+for (const record of asList(ratesDoc?.roles)) {
+  if (!needsRate.has(record.role) || NO_OWN_RATE.has(record.role))
+    errors.push(`rates.yaml: record «${record.role}» is no model role`);
+  const dated = asList(record.sources).filter((s) => s?.url && s?.accessed);
+  if (!record.composite_of && !dated.length)
+    errors.push(
+      `rates.yaml: record «${record.role}» has no source with url and accessed, nor composite_of`,
+    );
+}
+console.log(
+  `Rates: ${[...needsRate.keys()].filter((r) => rateRoles.has(r)).length} role strings with a record, ${[...needsRate.keys()].filter((r) => NO_OWN_RATE.has(r)).length} without own rate (NO_OWN_RATE)`,
+);
 console.log(
   `Loops: ${loopByName.size}; leaves with lead time: ${[...leafById.values()].filter(({ box }) => box.effort?.lead_days_draft != null).length}/${leafById.size}; teams: ${asList(teamsDoc?.teams).length}`,
 );

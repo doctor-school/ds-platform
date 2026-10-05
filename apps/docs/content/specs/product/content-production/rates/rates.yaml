@@ -1,0 +1,1186 @@
+# Рыночные ставки ролей TO-BE — значения переменных калькулятора себестоимости (#2527).
+# Метод, соответствие ролей рынку, достоверность и обновление — rates-ru.md (рядом).
+# Деньги — только здесь; в model/*.yaml денежных сумм нет. Все суммы в рублях.
+# monthly_gross_rub — месячная зарплата до вычета НДФЛ: [min, median, max]; median — суждение
+#   по точкам данных, а не статистическая медиана, если в источнике не сказано иное.
+# hourly_rub — [min, max] часовая ставка подрядчика (самозанятый / ИП / ГПХ / фирма); null — рынок
+#   не продаёт роль по часам или данных нет (причина — в notes).
+# per_piece — цена за единицу там, где рынок считает поштучно.
+# sources[].accessed — дата обращения; period — период данных источника.
+meta:
+  issue: https://github.com/doctor-school/ds-platform/issues/2526
+  as_of: 2026-10-05
+  currency: RUB
+  net_to_gross: "вакансии «на руки» пересчитаны в gross как net ÷ 0,87 (НДФЛ 13 %; для верхних точек выше 2,4 млн ₽ в год ставка 15 % — пересчёт слегка занижает gross)"
+  regions:
+    moscow: Москва
+    russia_remote: регионы РФ и удалённая работа
+
+variables:
+  # Часы на штатную единицу здесь не определяются: делитель стоимости часа штата —
+  # paid_hours_per_month из ../model/teams.yaml (capacity_variables) — один источник для
+  # себестоимости и мощности. Его разбивка (календарь, отпуск, болезнь) — в basis той переменной.
+  # Коэффициента загрузки нет: непроизводственное время команд — накладные листья модели,
+  # которые сами оцениваются часами × ставка роли (см. rates-ru.md, «Пересчёт в стоимость часа»).
+  employer_contributions_rate:
+    default: 0.302
+    unit: доля к gross
+    basis: >-
+      Единый тариф страховых взносов 2026: 30 % в пределах единой предельной базы 2 979 000 ₽ за год
+      (≈ 248 250 ₽ в месяц), 15,1 % сверх неё; плюс взносы на травматизм (НС и ПЗ) от 0,2 % (I класс
+      профриска). Для штатной зарплаты в пределах базы — 30,2 %. Пониженный тариф МСП (30 % до 1,5 МРОТ
+      = 40 639,50 ₽ в месяц, 15 % сверх) с 2026 действует только при основном ОКВЭД из перечня
+      Правительства и доле дохода от него ≥ 70 % (425-ФЗ); применимость к DS проверяет бухгалтерия —
+      до проверки калькулятор считает по общему тарифу.
+    base_2026_rub: 2979000
+    above_base_rate: 0.151
+    nsipz_min: 0.002
+    msp_priority_alternative:
+      up_to_1_5_mrot_rate: 0.30
+      above_1_5_mrot_rate: 0.15
+      mrot_2026_rub: 27093
+      threshold_month_rub: 40639.5
+      condition: "реестр МСП + основной ОКВЭД в перечне (распоряжение Правительства № 4125-р от 27.12.2025) + доля дохода ≥ 70 %; ОКВЭД 85 «Образование» в перечне — по пересказу 1С:ИТС, не по тексту распоряжения"
+    sources:
+      - url: https://kontur.ru/articles/4261
+        publisher: "Контур — тарифы взносов 2026, предельная база по ПП РФ № 1705 от 31.10.2025, условия МСП по 425-ФЗ"
+        period: 2026
+        accessed: 2026-10-05
+      - url: https://kontur.ru/articles/4103
+        publisher: "Контур — тарифы НС и ПЗ 0,2–8,5 %"
+        period: 2026
+        accessed: 2026-10-05
+      - url: https://its.1c.ru/db/content/newscomm/src/497968.htm
+        publisher: "1С:ИТС — перечень ОКВЭД для пониженного тарифа МСП (виден в выдаче поиска)"
+        period: 2026
+        accessed: 2026-10-05
+  contractor_on_top_rate:
+    unit: доля к цене подрядчика, которую компания платит сверх неё
+    npd_self_employed: 0
+    ip: 0
+    gph_individual: 0.30
+    gph_individual_with_nsipz: 0.302
+    default_by_engagement:
+      "подряд/самозанятый": 0
+      "гонорар за единицу": 0
+    basis: >-
+      Самозанятый (НПД): компания не платит взносов, налог 6 % (4 % с физлиц) платит исполнитель из
+      согласованной суммы; лимит дохода 2,4 млн ₽ в год; нельзя платить как самозанятому своему
+      работнику или бывшему в течение 2 лет после увольнения. ИП: сверху 0. Договор ГПХ с физлицом:
+      взносы 30 % / 15,1 % как по зарплате, НС и ПЗ — только если указаны в договоре; НДФЛ удерживается
+      из суммы, а не начисляется сверху. Форма по умолчанию для пулов и пикового медиа — самозанятый
+      (0); если исполнитель — физлицо по ГПХ, калькулятор берёт gph_individual.
+    caveat: "С 01.10.2026 постановление Правительства РФ № 760 ограничивает самозанятого 60 ч в месяц на одного заказчика (шесть месяцев подряд) — только при работе через онлайн-платформы в перечне отраслей, включая образование; к прямым договорам DS не относится, при найме исполнителей через платформу — проверить текст постановления в КонсультантПлюс"
+    sources:
+      - url: https://www.consultant.ru/law/podborki/predelnyj_dohod_samozanyatogo/
+        publisher: "КонсультантПлюс — лимит НПД 2,4 млн ₽ (422-ФЗ, ч. 2 ст. 4)"
+        period: 2026
+        accessed: 2026-10-05
+      - url: https://npd.nalog.ru/
+        publisher: "ФНС, «Налог на профессиональный доход» — ставки 4 % с доходов от физлиц, 6 % от юрлиц и ИП (422-ФЗ, ст. 10)"
+        period: 2026
+        accessed: 2026-10-05
+      - url: https://pnz.ru/tax/novye-ogranicheniya-po-rabote-i-uvelichennyj-limit-chto-menyayut-dlya-samozanyatyh-v-2026-godu/
+        publisher: "pnz.ru — запрет на бывшего работодателя 2 года, правило 60 ч (постановление Правительства РФ № 760, с 01.10.2026, платформенная занятость)"
+        period: 2026-08
+        accessed: 2026-10-05
+      - url: https://kontur.ru/articles/4261
+        publisher: "Контур — взносы начисляются на выплаты по договорам ГПХ"
+        period: 2026
+        accessed: 2026-10-05
+  formulas:
+    in_house_hourly_cost: "monthly_gross_rub.median × (1 + employer_contributions_rate) ÷ ../model/teams.yaml#capacity_variables.paid_hours_per_month"
+    contractor_hourly_cost: "hourly_rub × (1 + contractor_on_top_rate[форма договора])"
+    per_piece_cost: "per_piece.rub × (1 + contractor_on_top_rate[форма договора])"
+    composite_rate: "средневзвешенная часовая стоимость ролей composite_of по долям их часов (из листьев модели или из состава команды в калькуляторе)"
+
+roles:
+  # ── Продуктовая команда: роли в команде, штат ──────────────────────────────────────────
+  - role: Продуктовая команда
+    composite_of:
+      [
+        Аккаунт,
+        Продюсер,
+        Методолог,
+        Медредактор-сценарист,
+        Менеджер мероприятий,
+        Менеджер эксперта,
+      ]
+    engagement: штат
+    notes: "Круг, не рыночная должность. Листья с ролью «Продуктовая команда» (ретро, деление, найм, governance ролей, СОП) — время нескольких участников; ставка — composite_rate по составу команды."
+    confidence:
+      { level: medium, why: "наследует достоверность ставок участников" }
+
+  - role: Аккаунт
+    market_titles:
+      [
+        key account manager (KAM) фармкомпаний в агентстве медкоммуникаций,
+        KAM фарма,
+        client manager фарма,
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [130000, 210000, 345000]
+      russia_remote: [100000, 140000, 195000]
+    hourly_rub: null
+    per_piece: []
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=key+account+manager+фарма&area=113&only_with_salary=true"
+        publisher: "hh.ru, вакансии KAM фарма — Медиабюро Статус презенс 130 000 gross (агентство медкоммуникаций), Progress Group 200 000, ФармХаб 172–258 тыс., Б-ФАРМ 300 000, HR.PIVOT 300 000 на руки"
+        n: 20
+        period: вакансии, открытые на 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=key+account+manager+фарма&area=113&only_with_salary=true"
+        publisher: "hh.ru, региональные KAM — Alta Personnel 140 000 (4 города), Пенткрофт Фарма 100–150 тыс., Евросервис 195 000"
+        n: 9
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "KAM фармы — 20+ согласованных вакансий (high), но единственная точка агентства, продающего фарме, — 130 000 у нижней границы; для роли DS ближе нижняя половина Москвы (130–200 тыс.); бонусы фармы в вилки не входят",
+      }
+
+  - role: Продюсер
+    market_titles:
+      [
+        продюсер образовательных онлайн-продуктов,
+        project manager / executive producer в EdTech,
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [100000, 160000, 260000]
+      russia_remote: [80000, 120000, 200000]
+    hourly_rub: null
+    per_piece: []
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=продюсер+образовательных&search_field=name&area=113&only_with_salary=true"
+        publisher: "hh.ru — МФТИ «Продюсер образовательного контента» 130 000 на руки (≈149 000), AXNV от 220 000 на руки, Тай Традишнз от 120 000 на руки"
+        n: 3
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=продюсер+онлайн-курсов&area=1&only_with_salary=true"
+        publisher: "hh.ru — БС медиа «Project Manager | Executive Producer» 80–120 тыс. gross, Скулсмарт от 90 000 на руки"
+        n: 2
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://h.careers/hub/karernye-traektorii/course-producer
+        publisher: "H Careers (hh.ru) — middle 80–150 тыс., senior 150–250 тыс. (оклад без процента запусков)"
+        period: 2026-07
+        accessed: 2026-10-05
+      - url: https://skillbox.ru/media/education/stalo-izvestno-skolko-zarabatyvayut-metodisty-prodyusery-i-prodakty-v-edtech/
+        publisher: "Skillbox Media, опрос сообщества School of Education — 49 % продюсеров 120–170 тыс., 14 % > 200 тыс."
+        n: "~850 респондентов"
+        period: 2023-09
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "≈10 вакансий и 2 обзора сходятся на 100–250 тыс. в Москве; рынок смешивает продюсеров запусков с процентом и PM EdTech — роль DS (без доли выручки) ближе к PM, 130–160 тыс.",
+      }
+
+  - role: Методолог
+    market_titles:
+      [
+        методолог образовательных продуктов,
+        методист онлайн-курсов,
+        дизайнер образовательного опыта (instructional designer),
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [80000, 140000, 175000]
+      russia_remote: [65000, 100000, 130000]
+    hourly_rub: null
+    per_piece:
+      - {
+          unit: "методология онлайн-курса за услугу (вакансия-проект)",
+          rub: [50000, 60000],
+        }
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=методолог&search_field=name&area=113&only_with_salary=true"
+        publisher: "hh.ru — Онлайн-школа Ольги Красновой от 160 000 gross, Fedotov Group 120–150 тыс. на руки, Академия Виктора Лапина от 130 000 на руки, региональные от 60 000 на руки, ИП Турлаева 50–60 тыс. за услугу"
+        n: 8
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=методолог+обучения&area=1&only_with_salary=true"
+        publisher: "hh.ru — «Дизайнер образовательного опыта» 100–150 тыс. на руки"
+        n: 1
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://skillbox.ru/media/education/stalo-izvestno-skolko-zarabatyvayut-metodisty-prodyusery-i-prodakty-v-edtech/
+        publisher: "Skillbox Media, опрос School of Education — 44 % методистов 70–120 тыс., 13 % 120–150 тыс., 6 % > 150 тыс."
+        n: 307
+        period: 2023-09
+        accessed: 2026-10-05
+      - url: https://www.fl.ru/uslugi-freelancera/metodisty/
+        publisher: "FL.ru — фиксированные услуги 2 990 (консультация), 6 500 (концепция и программа курса); нижняя граница, не цена для медицинского НМО"
+        n: 7
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "12+ согласованных вакансий из образования; почасовой ставки на рынке нет",
+      }
+
+  - role: Медредактор-сценарист
+    market_titles:
+      [
+        медицинский редактор / medical writer,
+        научный редактор (медицина),
+        сценарист электронных курсов,
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [70000, 125000, 172000]
+      russia_remote: [40000, 80000, 120000]
+    hourly_rub: null
+    per_piece: []
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=медицинский+редактор&search_field=name&area=113&only_with_salary=true"
+        publisher: "hh.ru — Медиабюро Статус презенс «Медицинский редактор / медицинский писатель» до 150 000 на руки (≈172 000), iSEO от 70 000 gross"
+        n: 2
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=%22медицинский+редактор%22+OR+%22медицинский+копирайтер%22+OR+%22медицинский+автор%22+OR+%22редактор+медицинских%22+OR+%22medical+writer%22+OR+%22медицинский+писатель%22&area=113&only_with_salary=true"
+        publisher: "hh.ru — «Научный редактор (медицина)» 85–120 тыс. на руки, Адвирос «Менеджер по медицинской информации» до 131 000 gross"
+        n: 2
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=сценарист+образовательного&area=113&only_with_salary=true"
+        publisher: "hh.ru — сценарист вебинаров от 150 000 на руки (Москва), Лабмедиа «Сценарист электронных курсов» 30–40 тыс. (Ярославль)"
+        n: 3
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "≈7 вакансий; совмещённой роли «медредактор + сценарист + автор тестов» на рынке нет; вилка регионов — суждение от одной ярославской точки и коэффициента ≈ 0,65 к Москве; сдельные ставки за 1000 знаков видны только в выдаче поиска и не использованы",
+      }
+
+  - role: Менеджер мероприятий
+    market_titles:
+      [
+        event-менеджер медицинских и научных мероприятий,
+        организатор образовательных проектов в медицине,
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [100000, 135000, 185000]
+      russia_remote: [50000, 90000, 140000]
+    hourly_rub: null
+    per_piece:
+      - {
+          unit: "организация мероприятия за услугу (одна региональная вакансия)",
+          rub: [45000, 45000],
+        }
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=%22event-менеджер%22+конференции&area=113&only_with_salary=true"
+        publisher: "hh.ru — РМАНПО event-менеджер 120 000 на руки, Асклепиус Академия 120–150 тыс. gross, Конференции Олега Бунина 140–160 тыс. на руки, регионы 40–120 тыс. на руки, ИП Соболева 45 000 за услугу"
+        n: 14
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=%22медицинских+мероприятий%22+OR+%22медицинских+конференций%22+OR+%22научных+мероприятий%22&area=113&only_with_salary=true"
+        publisher: "hh.ru — НМИЦ эндокринологии «Специалист по организации мероприятий» от 100 000 на руки"
+        n: 1
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "≈15 вакансий, три работодателя из медицинского образования сходятся на 115–150 тыс. gross в Москве; нагрузка НМО отдельно нигде не оценена",
+      }
+
+  - role: Менеджер эксперта
+    market_titles:
+      [
+        менеджер по работе с авторами / преподавателями (прокси),
+        KOL-менеджер (потолок),
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [80000, 120000, 185000]
+      russia_remote: [70000, 100000, 140000]
+    hourly_rub: null
+    per_piece: []
+    proxy_role: "менеджер по работе с авторами в онлайн-школе; если роли нужен медицинский диплом — медицинский советник (MSL) ≈ 172 000 gross"
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=%22со+спикерами%22+OR+%22с+лекторами%22+OR+%22с+преподавателями%22+OR+%22с+экспертами%22+OR+%22с+авторами%22&search_field=name&area=113&only_with_salary=true"
+        publisher: "hh.ru — «Специалист по работе с преподавателями» 161–184 тыс. gross, Windsor 70–80 тыс. на руки, Полка Чудес «Руководитель направления работы с авторами» 80–120 тыс. на руки (Казань)"
+        n: 3
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=%22KOL%22&area=113&only_with_salary=true"
+        publisher: "hh.ru — Б-ФАРМ «KAM (Doctors, KOL)» 300 000 gross, Биомедикалфарм MSL 150 000 на руки — потолок, не типичная ставка"
+        n: 2
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "вакансий «менеджер по работе с экспертами» в образовании с зарплатой нет; вилка из трёх прокси «работа с авторами», сверху ограничена ролями фармы с KOL",
+      }
+
+  # ── Пул экспертов: внешняя сеть, гонорар за единицу ──────────────────────────────────
+  - role: Пул экспертов
+    composite_of:
+      [
+        Пул экспертов — эксперт,
+        Пул экспертов — амбассадор,
+        Пул экспертов — спикер,
+      ]
+    engagement: гонорар за единицу
+    notes: "Сеть внешних ролей; ставка — по подроли листа."
+    confidence: { level: low, why: "наследует низкую достоверность подролей" }
+
+  - role: Пул экспертов — эксперт
+    market_titles:
+      [
+        врач-автор образовательного контента,
+        лектор НМО,
+        врач-эксперт по проекту,
+      ]
+    engagement: гонорар за единицу
+    monthly_gross_rub: null
+    hourly_rub: [900, null]
+    per_piece:
+      - {
+          unit: "экспертиза одного проекта врачом-экспертом (вакансия)",
+          rub: [10000, 10000],
+        }
+    notes: >-
+      Публичного прейскуранта гонораров врача-автора, лектора и KOL в России нет: ставки fair market value
+      фармкомпаний внутренние, раскрытия AIPM — годовые суммы на врача за 2016–2019. Нижняя граница
+      часа ≈ 900 ₽ = средняя зарплата врача ОМС 2025 (147 000 ₽ по ФФОМС) ÷ 164,3 ч; верхней рыночной
+      границы нет. Санитарный коридор сверху — потребительские цены онлайн-консультации врача ≈ 3–12 тыс.
+      ₽/ч (доля врача ниже). Гонорар — входная переменная владельца, калибруется по договорам с экспертами.
+    sources:
+      - url: https://www.vbr.ru/novosti/zdorovie/2026/01/28/v-ffoms-nazvali-zarplaty/
+        publisher: "vbr.ru со ссылкой на ФФОМС — средняя зарплата врачей в медорганизациях ОМС 2025 = 147 тыс. ₽ (видно в выдаче поиска)"
+        period: 2025
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=врач+эксперт+рецензирование&area=113&only_with_salary=true"
+        publisher: "hh.ru — АНО Центр судебных экспертиз, врач-эксперт 10 000 ₽ за проект"
+        n: 2
+        period: 2026-10
+        accessed: 2026-10-05
+      - url: https://gxpnews.net/2019/07/v-2018-godu-farmkompanii-perechislili-rossijskim-vracham-bolee-35-mlrd-rublej/
+        publisher: "GxP News / РБК по раскрытиям AIPM (44 компании) — 10–310 тыс. ₽ в год на врача, максимум ≈ 2,7 млн"
+        period: 2018
+        accessed: 2026-10-05
+      - url: https://t-j.ru/short/second-opinion/
+        publisher: "Т—Ж — онлайн-консультация врача от 1 549 ₽ за 30 мин, клиника от 6 000 ₽ (видно в выдаче поиска)"
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "только нижняя граница (зарплата врача), одна сдельная точка и устаревшие годовые суммы фармы",
+      }
+
+  - role: Пул экспертов — амбассадор
+    market_titles: [ведущий эксперт / KOL направления]
+    engagement: гонорар за единицу
+    monthly_gross_rub: null
+    hourly_rub: null
+    per_piece: []
+    proxy_role: "Пул экспертов — эксперт: часы амбассадора × часовой гонорар эксперта с надбавкой за статус KOL, которую задаёт владелец"
+    notes: "Данных нет: гонорары KOL в России публикуются только как годовые суммы фармы; верхний хвост 2018 — до 310 тыс. ₽ в год на врача у одной компании, единичный максимум ≈ 2,7 млн. Ставку задают владелец и спонсор."
+    sources:
+      - url: https://gxpnews.net/2019/07/v-2018-godu-farmkompanii-perechislili-rossijskim-vracham-bolee-35-mlrd-rublej/
+        publisher: "GxP News / РБК по раскрытиям AIPM — верхний хвост выплат врачам"
+        period: 2018
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "null — публичных данных о гонорарах KOL в России нет",
+      }
+
+  - role: Пул экспертов — спикер
+    market_titles: [спикер медицинской конференции, лектор вебинара]
+    engagement: гонорар за единицу
+    monthly_gross_rub: null
+    hourly_rub: null
+    per_piece: []
+    proxy_role: "Пул экспертов — эксперт: часовой гонорар × (часы выступления + подготовки)"
+    notes: "Гонорар за лекцию в России задают сетки FMV спонсоров и не публикуют; найденная цифра «около 1 000 долларов за выступление» — анекдотическая и, вероятно, не российская — не использована."
+    sources:
+      - url: https://snob.ru/selected/entry/8499/
+        publisher: "Сноб — анекдотическая оценка гонорара спикера, не используется как ставка (видно в выдаче поиска)"
+        accessed: 2026-10-05
+    confidence:
+      { level: low, why: "null — российских данных о гонораре за лекцию нет" }
+
+  # ── Пул медрецензентов: внешний, гонорар за единицу ──────────────────────────────────
+  - role: Пул медрецензентов
+    market_titles:
+      [медицинский рецензент, врач-эксперт проверки медицинских текстов]
+    engagement: гонорар за единицу
+    monthly_gross_rub: null
+    hourly_rub: [900, null]
+    per_piece:
+      - {
+          unit: "проверка и редактура медицинского текста врачом (фриланс, за заказ)",
+          rub: [2990, 5850],
+        }
+      - {
+          unit: "экспертиза одного проекта врачом-экспертом",
+          rub: [10000, 10000],
+        }
+    notes: "Рецензирование статей в научных журналах в России бесплатное — рыночной цены рецензии ВАК нет; цены рецензирования программ НМО / ДПО не найдены. Час — та же нижняя граница врача, что у эксперта. Цена рецензии модуля DS = часы листа × час рецензента, сверка с 3–10 тыс. ₽ за материал."
+    sources:
+      - url: https://www.fl.ru/uslugi-freelancera/specialist-napisanie-tekstov-rechej-raportov/
+        publisher: "FL.ru — услуги по медицинским текстам 2 990–5 850 ₽ за заказ (видно в выдаче поиска)"
+        period: 2026
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=врач+эксперт+рецензирование&area=113&only_with_salary=true"
+        publisher: "hh.ru — врач-эксперт 10 000 ₽ за проект"
+        n: 2
+        period: 2026-10
+        accessed: 2026-10-05
+      - url: https://old.volgmed.ru/uploads/files/2021-1/140220-pravila_recenzirovaniya_nauchnyh_statej_russkij.pdf
+        publisher: "ВолгГМУ, правила рецензирования — рецензирование статей без оплаты (видно в выдаче поиска)"
+        period: 2021
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "две сдельные точки (одна только из выдачи поиска) и нижняя граница часа",
+      }
+
+  - role: Пул медрецензентов — координатор
+    market_titles:
+      [выпускающий редактор / менеджер редакции научного медицинского журнала]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [103400, 116700, 129900]
+      russia_remote: null
+    hourly_rub: null
+    per_piece: []
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=редакция+научного+журнала&area=113&only_with_salary=true&search_field=name"
+        publisher: "hh.ru — Consortium Psychiatricum «Выпускающий редактор / менеджер редакции» 90 000 на руки (≈103 400)"
+        n: 1
+        period: 2026-10
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=медицинский+редактор+рецензент&area=113&only_with_salary=true"
+        publisher: "hh.ru — ФГБУ НЦЭСМП Минздрава «Научный редактор» 113 000 на руки (≈129 900)"
+        n: 1
+        period: 2026-10
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "две подходящие вакансии; медиана — середина двух точек",
+      }
+
+  # ── Медиа-круг: ядро в штате, пик — внешний пул подрядчиков ───────────────────────────
+  - role: Медиа-круг
+    composite_of:
+      [
+        Медиа-круг — медиа-ведущий,
+        Медиа-круг — дизайнер схем,
+        Медиа-круг — медицинская визуализация,
+        Медиа-круг — аниматор,
+        Медиа-круг — голос,
+        Медиа-круг — монтажёр,
+        Медиа-круг — запись подкаста,
+        Медиа-круг — анонсы,
+      ]
+    engagement: "штат; пик — подряд/самозанятый"
+    notes: "Общий круг; ставка — по подроли листа. Доля пиковых часов, ушедших во внешний пул, — переменная калькулятора: для них берётся hourly_rub или per_piece вместо штатной стоимости часа."
+    confidence: { level: medium, why: "наследует достоверность подролей" }
+
+  - role: Медиа-круг — медиа-ведущий
+    market_titles:
+      [
+        раскадровщик (storyboard artist),
+        режиссёр-раскадровщик,
+        арт-директор видео,
+      ]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [90000, 130000, 230000]
+      russia_remote: null
+    hourly_rub: [2500, 3600]
+    per_piece:
+      - {
+          unit: "раскадровка одного ролика (вакансия-услуга)",
+          rub: [9000, 10000],
+        }
+    proxy_role: "моушн-дизайнер middle–senior и ведущий иллюстратор (Москва) — раскадровщиков на рынке вакансий почти нет"
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=раскадровщик&area=113"
+        publisher: "hh.ru — 2 вакансии по России, «Раскадровщик в Adobe Animate» 9–10 тыс. ₽ за услугу"
+        n: 2
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://workspace.ru/illustration/
+        publisher: "Workspace.ru — средний час агентств иллюстрации 2 500 ₽ (верхняя граница для частного исполнителя)"
+        n: "528 агентств"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://workspace.ru/animation-and-motiondesign/
+        publisher: "Workspace.ru — средний час агентств анимации и моушн-дизайна 3 600 ₽"
+        n: "113 агентств"
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "раскадровщик как вакансия почти не существует; зарплата — прокси моушн-дизайнера и иллюстратора; час — агентский, для частного исполнителя это потолок",
+      }
+
+  - role: Медиа-круг — дизайнер схем
+    market_titles:
+      [дизайнер инфографики, иллюстратор схем, технический иллюстратор]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [75000, 120000, 200000]
+      russia_remote: [30000, 70000, 100000]
+    hourly_rub: [1500, 2500]
+    per_piece:
+      - {
+          unit: "схема / технический рисунок (фикс-предложения FL.ru)",
+          rub: [2990, 5850],
+        }
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=иллюстратор&area=1"
+        publisher: "hh.ru — иллюстраторы и графдизайнеры Москвы, 65–200 тыс. (в основном на руки)"
+        n: 20
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=дизайнер+инфографики&area=113"
+        publisher: "hh.ru — дизайнеры инфографики по России, 25–90 тыс. на руки"
+        n: 20
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://www.fl.ru/uslugi-freelancera/tehnicheskaya-illustraciya/
+        publisher: "FL.ru — техническая иллюстрация 2 990–5 850 ₽ за работу"
+        n: 18
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://workspace.ru/illustration/
+        publisher: "Workspace.ru — средний час агентств иллюстрации 2 500 ₽"
+        n: "528 агентств"
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "много вакансий, но медицинская схема — более узкий навык, чем общий графдизайн; нижняя граница часа 1 500 — суждение ниже агентской средней",
+      }
+
+  - role: Медиа-круг — медицинская визуализация
+    market_titles:
+      [медицинский иллюстратор, 3D-визуализатор, 3D medical animator]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [75000, 135000, 290000]
+      russia_remote: null
+    hourly_rub: [2500, 5000]
+    per_piece:
+      - {
+          unit: "3D-визуализация медтехники (одно предложение FL.ru)",
+          rub: [4550, 4550],
+        }
+    proxy_role: "3D-визуализатор общего профиля (Москва); с надбавкой за дефицит анатомической точности"
+    notes: "ДЕФИЦИТНАЯ роль: вакансий и прайсов медицинского иллюстратора в России не найдено. Трудоёмкость одной иллюстрации — 5–26+ ч (Ohio State University, США); × час 2 500–5 000 ₽ ≈ 12,5–130 тыс. ₽ за иллюстрацию — производная оценка, не рыночная цена."
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=3D+визуализатор&area=1"
+        publisher: "hh.ru — 3D-визуализаторы Москвы 50–250 тыс. на руки, проектные 50–400 тыс. за услугу"
+        n: 20
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/19
+        publisher: "hh Карьера — медиана 3D-визуализатора 100 823 ₽ (по 4 вакансиям)"
+        n: 4
+        period: 2026
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=медицинский+иллюстратор&area=113"
+        publisher: "hh.ru — 77 результатов, ни одной вакансии медицинского иллюстратора"
+        n: 0
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://hsl.osu.edu/resources/medical-visuals/medical-illustration/illustration-pricing
+        publisher: "Ohio State University Health Sciences Library — часы на иллюстрацию по сложности (только часы, не цены)"
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "дефицитная роль; зарплата — прокси 3D-визуализатора, занижающий цену анатомической точности",
+      }
+
+  - role: Медиа-круг — аниматор
+    market_titles: [моушн-дизайнер, 2D-аниматор]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [70000, 130000, 220000]
+      russia_remote: null
+    hourly_rub: [2000, 4000]
+    per_piece:
+      - {
+          unit: "2D-анимационный ролик до 30 с (фикс-предложение FL.ru)",
+          rub: [49999, 49999],
+        }
+      - { unit: "doodle-видео (фикс-предложение FL.ru)", rub: [19500, 19500] }
+    notes: "Минута 2D-анимации ≈ 100 тыс. ₽ — производная от одной фикс-цены за 30 с. Цены ИИ-анимации за минуту в российских источниках не найдено."
+    sources:
+      - url: https://hh.ru/vacancies/motion-dizajner
+        publisher: "hh.ru — моушн-дизайнеры Москвы 40–190 тыс. (смешанно gross / на руки)"
+        n: 15
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/20
+        publisher: "hh Карьера — моушн-дизайнер Москва 60 000–104 400, медиана 80 733"
+        n: 6
+        period: 2026
+        accessed: 2026-10-05
+      - url: https://workspace.ru/animation-and-motiondesign/
+        publisher: "Workspace.ru — агентства анимации, средний час 3 600 ₽, топ-10 2 000–5 000 ₽"
+        n: "113 агентств"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://www.fl.ru/freelancers/videomontazher/
+        publisher: "FL.ru — 2D-ролик до 30 с 49 999 ₽, doodle-видео 19 500 ₽"
+        n: 4
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "согласованные вакансии Москвы; поминутная цена — из единичных фикс-предложений",
+      }
+
+  - role: Медиа-круг — голос
+    market_titles: [оператор синтеза речи; диктор (верхний прокси)]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub: null
+    hourly_rub: [800, 1000]
+    per_piece:
+      - {
+          unit: "минута речи студийного диктора (верхний прокси)",
+          rub: [1500, null],
+        }
+      - { unit: "минута синтеза речи сервисом", rub: [null, 10] }
+    proxy_role: "для работы оператора синтеза (подготовка текста, ударения, перегенерация) — часовая стоимость монтажёра; диктор — только потолок"
+    notes: "DS использует синтез, поэтому цена диктора — верхний прокси. Штатных вакансий диктора или оператора синтеза нет — monthly null. У Profi.ru только цены «от»."
+    sources:
+      - url: https://profi.ru/artist/diktor/
+        publisher: "Profi.ru — дикторы Москвы от 800–1 000 ₽/ч, минимальный заказ 1 500 ₽"
+        n: "1 362 специалиста"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://dtf.ru/howto/5280336-neyroseti-dlya-ozvuchki-teksta
+        publisher: "DTF — минута нейросетевой речи дешевле 10 ₽, студийный диктор от 1 500 ₽ за минуту"
+        period: 2026-09-04
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "рынка штатного оператора синтеза нет; данные диктора — только нижние цены «от»",
+      }
+
+  - role: Медиа-круг — монтажёр
+    market_titles: [видеомонтажёр, режиссёр монтажа]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [70000, 105000, 150000]
+      russia_remote: [35000, 52000, 70000]
+    hourly_rub: [1500, 3500]
+    per_piece:
+      - { unit: "минута готового видео (эконом)", rub: [400, 1000] }
+    sources:
+      - url: https://hh.ru/vacancies/videomontazher
+        publisher: "hh.ru — видеомонтажёры Москвы 30–130 тыс. на руки, до 100 тыс. gross"
+        n: 15
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/337
+        publisher: "hh Карьера — видеомонтажёр Москва 65–100 тыс., медиана 68 203"
+        n: 7
+        period: 2026
+        accessed: 2026-10-05
+      - url: https://workspace.ru/video-editing/
+        publisher: "Workspace.ru — агентства видеомонтажа, средний час 3 500 ₽, топ-10 1 500–4 000 ₽"
+        n: "99 агентств"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://skillbox.ru/media/education/syemka-videourokov-skolko-stoit-i-kak-snizit-zatraty/
+        publisher: "Skillbox Media — монтаж видеоуроков 400–1 000 ₽ за минуту готового видео"
+        period: 2023-02
+        accessed: 2026-10-05
+      - url: https://practicum.yandex.ru/blog/professiya-videomontazher/
+        publisher: "Яндекс Практикум — средняя по России ≈ 45 000, 30–60 тыс. (видно в выдаче поиска; основа вилки регионов)"
+        period: 2026-04
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "Москва — много вакансий (сама по себе средняя достоверность), но вилка регионов взята из выдачи поиска, а не с открытой страницы; поминутная цена — 2023 год",
+      }
+
+  - role: Медиа-круг — запись подкаста
+    market_titles: [звукорежиссёр, звукоинженер подкастов]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [75000, 115000, 200000]
+      russia_remote: [40000, 49000, 110000]
+    hourly_rub: [1500, 5000]
+    per_piece:
+      - { unit: "смена звукорежиссёра", rub: [10000, 10000] }
+      - {
+          unit: "час студии со звукорежиссёром (включая помещение)",
+          rub: [1500, 5000],
+        }
+    notes: "Цена часа студии включает помещение; для своей студии DS считается только работа инженера. Аренда студии — внешняя затрата вне ставки роли."
+    sources:
+      - url: https://hh.ru/vacancies/zvukorezhisser
+        publisher: "hh.ru — звукорежиссёры Москвы от 65 000 до 110 000 на руки, продюсер подкастов 130–350 тыс. gross"
+        n: 15
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://checkroi.ru/blog/zarplata-zvukorezhissyora/
+        publisher: "Checkroi со ссылкой на ГородРабот (июль 2026) — медиана по России 43 000, по Москве 100 000; час студии 1 500–5 000 ₽"
+        period: 2026-09
+        accessed: 2026-10-05
+      - url: https://skillbox.ru/media/education/syemka-videourokov-skolko-stoit-i-kak-snizit-zatraty/
+        publisher: "Skillbox Media — звукорежиссёр 10 000 ₽ за смену"
+        period: 2023-02
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "вакансии Москвы и один агрегированный источник; цены именно подкастовых студий напрямую не получены",
+      }
+
+  - role: Медиа-круг — анонсы
+    market_titles: [SMM-менеджер, контент-менеджер соцсетей, рилсмейкер]
+    engagement: "штат; пик — подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [55000, 100000, 200000]
+      russia_remote: null
+    hourly_rub: [850, 1800]
+    per_piece:
+      - {
+          unit: "ведение сообщества за месяц (средний бюджет агентства)",
+          rub: [60000, 60000],
+        }
+      - {
+          unit: "SMM под ключ за месяц (средний бюджет агентства)",
+          rub: [100000, 100000],
+        }
+    notes: "Цена за рилс или тизер не найдена; нарезка тизеров пересекается со ставкой монтажёра. Медиана hh Карьера 29 834 ₽ противоречит вакансиям и отброшена."
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=SMM-менеджер&area=1"
+        publisher: "hh.ru — SMM-менеджеры Москвы 40–200 тыс. на руки"
+        n: 20
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://workspace.ru/blog/prices-and-budgets-in-smm/
+        publisher: "Workspace.ru — средний час SMM 1 700–1 800 ₽, средний бюджет 60 / 100 тыс. ₽ в месяц"
+        n: "≥ 482 агентства"
+        accessed: 2026-10-05
+      - url: https://workspace.ru/specialists/smm/
+        publisher: "Workspace.ru — частные SMM-специалисты 850–5 000 ₽/ч"
+        n: 6
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "большой пул вакансий; сдельной цены за единицу анонса нет",
+      }
+
+  # ── Сервисный круг: общий, по запросу; накладные (В8) ─────────────────────────────────
+  - role: Сервисный круг
+    composite_of:
+      [
+        Сервисный круг — юрист,
+        Сервисный круг — бухгалтер,
+        Сервисный круг — оператор платформы,
+        Сервисный круг — режиссёр трансляции,
+        Сервисный круг — поддержка,
+      ]
+    engagement: "штат (общий круг) или аутсорсинг"
+    notes: "Общий круг; часы идут в пул накладных (В8), ставка — по подроли листа."
+    confidence: { level: medium, why: "наследует достоверность подролей" }
+
+  - role: Сервисный круг — юрист
+    market_titles:
+      [юрист по договорной работе, корпоративный юрист, юридический аутсорсинг]
+    engagement: "аутсорсинг (абонентское обслуживание) или штат"
+    monthly_gross_rub:
+      moscow: [115000, 185000, 290000]
+      russia_remote: [60000, 75000, 120000]
+    hourly_rub: [3000, 25000]
+    per_piece:
+      - {
+          unit: "абонентское юробслуживание фирмы, месяц (3–12 ч консультаций и 3–12 договоров)",
+          rub: [35000, 120000],
+        }
+      - { unit: "составление договора юрфирмой", rub: [10000, 80000] }
+      - {
+          unit: "проверка договора частным юристом (цены «от»)",
+          rub: [1000, 3000],
+        }
+    notes: "Данных по юристам фармы и рекламного права нет — взяты договорные и корпоративные юристы. Часовая вилка — из одной статьи юрфирмы; реалистичная форма для DS — абонентский пакет."
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=юрист+по+договорной+работе&area=1&only_with_salary=true"
+        publisher: "hh.ru — юристы по договорной работе Москвы 100–250 тыс. (смешанно gross / на руки)"
+        n: "20 из 528"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/303
+        publisher: "hh Карьера — медиана юриста 71 973 ₽ (основа вилки регионов)"
+        n: 116
+        period: 2025–2026
+        accessed: 2026-10-05
+      - url: https://vitvet.com/service/stoimost-uslug-yurista/
+        publisher: "Ветров и партнёры — час 3 000–25 000 ₽, абонент 15–150 тыс., договор 10–80 тыс."
+        accessed: 2026-10-05
+      - url: https://www.dvitex.ru/service_yr/yuridicheskie-obsluzhivanie-biznesa/stoimost-yuridicheskogo-soprovozhdeniya-biznesa
+        publisher: "Двитекс — абонент 35 / 60 / 120 тыс. ₽ в месяц"
+        accessed: 2026-10-05
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=юрист+по+договорам"
+        publisher: "Яндекс Услуги — частные юристы Москвы, договор от 1 000–5 755 ₽, проверка от 1 000–3 000 ₽"
+        n: 107
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "штатная вилка Москвы — 20 вакансий; часовая — заявление одной юрфирмы, очень широкая",
+      }
+
+  - role: Сервисный круг — бухгалтер
+    market_titles: [бухгалтер, ведущий бухгалтер, бухгалтерский аутсорсинг]
+    engagement: "аутсорсинг или штат"
+    monthly_gross_rub:
+      moscow: [94000, 125000, 200000]
+      russia_remote: [60000, 70000, 100000]
+    hourly_rub: [500, 1000]
+    per_piece:
+      - {
+          unit: "аутсорсинг ООО на УСН с персоналом, месяц",
+          rub: [20000, 35000],
+        }
+      - { unit: "аутсорсинг ООО на ОСНО, месяц", rub: [40000, 80000] }
+    sources:
+      - url: https://incrussia.ru/news/bum-na-buhgalterov-spros-i-zarplaty-rastut-po-vsej-strane/
+        publisher: "Inc. Russia со ссылкой на Авито Работу — бухгалтер 1–3 года, предложение по России 60 238, Москва 94 278 (gross)"
+        period: 2025-01…10
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/309
+        publisher: "hh Карьера — медиана бухгалтера 76 431 ₽"
+        n: 56
+        period: 2025–2026
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=бухгалтер&area=1&only_with_salary=true"
+        publisher: "hh.ru — бухгалтеры Москвы 100–170 тыс. (без главбухов)"
+        n: "20 из 1 943"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://m.business-gazeta.ru/article/690744
+        publisher: "Бизнес Online — аутсорсинг Москвы: ООО УСН 12–22 тыс., с персоналом 20–35 тыс., ОСНО 40–80 тыс. в месяц"
+        period: 2025-12
+        accessed: 2026-10-05
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=бухгалтер+час"
+        publisher: "Яндекс Услуги — услуги от 500 ₽, консультация от 1 000 ₽"
+        n: 167
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "штатная вилка — три независимых источника согласны (high); часовая — только цены «от»",
+      }
+
+  - role: Сервисный круг — оператор платформы
+    market_titles:
+      [
+        контент-менеджер образовательной платформы,
+        администратор LMS / СДО,
+        администратор учебного процесса,
+      ]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [60000, 90000, 140000]
+      russia_remote: [55000, 70000, 100000]
+    hourly_rub: [650, 650]
+    per_piece: []
+    proxy_role: "контент-менеджер и специалист учебного отдела EdTech — вакансий администратора LMS с зарплатой почти нет"
+    sources:
+      - url: https://career.hh.ru/profession/33
+        publisher: "hh Карьера — медиана контент-менеджера 64 095 ₽"
+        n: 48
+        period: 2025–2026
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=контент-менеджер+образовательной+платформы&area=113&only_with_salary=true"
+        publisher: "hh.ru — контент-менеджеры EdTech 55 000–150 000 (смешанно)"
+        n: 5
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=администратор+образовательной+платформы&area=113&only_with_salary=true"
+        publisher: "hh.ru — администратор учебного процесса 60 000 на руки, куратор 90–100 тыс. на руки (Москва)"
+        n: 20
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://tenchat.ru/media/4297174-2025-god-v-tsifrakh-dokhod-kontentmenedzhera-na-frilanse
+        publisher: "TenChat — частный отчёт фриланс-контент-менеджера ≈ 650 ₽/ч"
+        n: 1
+        period: 2025
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "роль почти не публикуется с зарплатой; прокси — контент-менеджер; час — один самоотчёт",
+      }
+
+  - role: Сервисный круг — режиссёр трансляции
+    market_titles:
+      [
+        режиссёр онлайн-трансляций,
+        видеоинженер стриминга,
+        техподдержка вебинара,
+      ]
+    engagement: "подряд за мероприятие"
+    monthly_gross_rub:
+      moscow: [90000, 115000, 180000]
+      russia_remote: [65000, 90000, 180000]
+    hourly_rub: [990, 4500]
+    per_piece:
+      - {
+          unit: "техподдержка вебинара на платформе (1 ч подготовки + 2 ч эфира), без съёмочной группы",
+          rub: [10000, 10000],
+        }
+      - {
+          unit: "трансляция под ключ, 1 камера + оператор + режиссёр",
+          rub: [17000, 70000],
+        }
+      - { unit: "трансляция 2–3 камеры или гибрид", rub: [35000, 120000] }
+    notes: "Рынок продаёт трансляцию за мероприятие вместе с группой и техникой; штатная роль редка."
+    sources:
+      - url: https://getcourse.ru/offer/webinar_help
+        publisher: "GetCourse — техподдержка вебинара 4 500 ₽/ч, минимум 10 000 ₽"
+        accessed: 2026-10-05
+      - url: https://musprokat.ru/onlayn-translyatsii/
+        publisher: "МузПрокат — трансляция 17 / 35 / 53 тыс. ₽ (с режиссёром и техникой)"
+        accessed: 2026-10-05
+      - url: https://pro-stream.ru/broadcasts/
+        publisher: "Pro-Stream — до 8 ч, 36 896–66 334 ₽ (со скидкой первого заказа 20 %)"
+        accessed: 2026-10-05
+      - url: https://brocast.team/organizatsiya-onlayn-translyatsii-moskva
+        publisher: "brocast — вебинар одной камерой от 70 тыс., гибрид от 120 тыс."
+        accessed: 2026-10-05
+      - url: "https://uslugi.yandex.ru/213-moscow/category?text=онлайн+трансляция+под+ключ"
+        publisher: "Яндекс Услуги — 990–3 000 ₽/ч, 9 500–60 000 ₽ за мероприятие"
+        n: "120+"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=режиссер+трансляций&area=113&only_with_salary=true"
+        publisher: "hh.ru — видеоинженер 90–180 тыс. gross (Ижевск), видеооператор 80–100 тыс. на руки (Москва)"
+        n: 7
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "цены за мероприятие — пять независимых поставщиков Москвы; штатная вилка — low (7 смежных вакансий)",
+      }
+
+  - role: Сервисный круг — поддержка
+    market_titles:
+      [специалист службы поддержки, специалист технической поддержки]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [60000, 85300, 125000]
+      russia_remote: [45000, 60100, 76000]
+    hourly_rub: null
+    per_piece: []
+    notes: "Медианы 85 300 (Москва) и 60 100 (Россия) — опубликованные медианы hh.ru. Поддержку покупают штатом или через контакт-центр; почасового рынка нет."
+    sources:
+      - url: https://www.dp.ru/a/2025/08/27/lenoblast-oboshla-peterburg
+        publisher: "Деловой Петербург со ссылкой на hh.ru — медиана предложения техподдержки Россия 60,1 тыс., Москва 85,3 тыс."
+        n: "38 000+ вакансий"
+        period: 2025-01…08
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/69
+        publisher: "hh Карьера — медиана специалиста техподдержки 67 274 ₽"
+        n: "~200"
+        period: 2025–2026
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=специалист+поддержки+пользователей&area=1&only_with_salary=true"
+        publisher: "hh.ru — поддержка Москвы 50–125 тыс."
+        n: "20 из 2 065"
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: high,
+        why: "опубликованные медианы hh.ru на большой базе, согласны с живыми вакансиями",
+      }
+
+  # ── Ядро: общий круг, штат; накладные (В8) ────────────────────────────────────────────
+  - role: Ядро
+    market_titles: [руководитель направления в EdTech / медицинском образовании]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [150000, 200000, 300000]
+      russia_remote: [100000, 140000, 200000]
+    hourly_rub: null
+    per_piece: []
+    composite_of:
+      [Ядро — стандарты, Ядро — консультант рынка, Ядро — калькулятор, Коуч]
+    notes: "Листья с ролью «Ядро» без подроли (A61 открытие направления, A653 метрики) — работа уровня руководителя направления; ставка — его прокси, а не средняя подролей. Если роль закрывает человек из фармы, верх сдвигается к 500–700 тыс. (данные 2015)."
+    proxy_role: руководитель направления в образовании / EdTech, Москва
+    sources:
+      - url: https://eduregion.ru/k-zhurnal/menedzhment-sfere-obrazovaniya-skolko-zarabatyvaet-moskva-regiony/
+        publisher: "Эдурегион — руководитель направления в образовании, Москва 150–250+ тыс., регионы на 30–45 % ниже (ориентировочные вилки самого источника)"
+        period: 2026-03
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=руководитель+направления+образовательных&area=113&only_with_salary=true&search_field=name"
+        publisher: "hh.ru — «Руководитель образовательного направления» от 140 000 gross (удалённо)"
+        n: 1
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://skillbox.ru/media/education/stalo-izvestno-skolko-zarabatyvayut-metodisty-prodyusery-i-prodakty-v-edtech/
+        publisher: "Skillbox Media — продюсеры EdTech 120–170 тыс., продакт-менеджеры 110–150 тыс. (уровень ниже руководителя направления)"
+        n: "~850"
+        period: 2023-09
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "свежего обзора по руководителям направлений EdTech / медкоммуникаций нет; вилка из ориентировочных диапазонов и смежных ролей",
+      }
+
+  - role: Ядро — стандарты
+    market_titles:
+      [руководитель методического отдела, ведущий методолог онлайн-обучения]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [120000, 170000, 250000]
+      russia_remote: [70000, 100000, 150000]
+    hourly_rub: null
+    per_piece: []
+    proxy_role: руководитель учебно-методического отдела / ведущий методолог
+    sources:
+      - url: "https://hh.ru/search/vacancy?text=руководитель+методического&area=113&only_with_salary=true&search_field=name"
+        publisher: "hh.ru — руководители учебно-методических отделов, Москва (ФНКЦ ФМБА) от 150 000 на руки, регионы 50–120 тыс."
+        n: "20 из 43"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=методист+онлайн&area=113&only_with_salary=true&search_field=name"
+        publisher: "hh.ru — онлайн-методисты 82 400 gross – 150 000 на руки"
+        n: 9
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://eduregion.ru/k-zhurnal/menedzhment-sfere-obrazovaniya-skolko-zarabatyvaet-moskva-regiony/
+        publisher: "Эдурегион — senior-менеджеры образования Москвы 180–250+ тыс."
+        period: 2026-03
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "прямых данных «руководитель стандартов / качества контента» нет; прокси — руководители методических отделов",
+      }
+
+  - role: Ядро — консультант рынка
+    market_titles:
+      [market access manager (фарма), эксперт по экономике здравоохранения]
+    engagement: "подряд по запросу (советующая роль)"
+    monthly_gross_rub:
+      moscow: [300000, 380000, 450000]
+      russia_remote: null
+    hourly_rub: null
+    per_piece: []
+    proxy_role: "штатный market access manager фармы; часовой стоимости рынка независимых консультантов не найдено — калькулятор берёт стоимость часа штатного прокси, ближайший наблюдаемый советующий час — юрфирмы 3–25 тыс. ₽"
+    sources:
+      - url: https://grapecareers.com/role/speczialist-po-dostupu-na-rynok-2/
+        publisher: "Grape Careers — market access manager, средняя 380 тыс. gross, 300–450 тыс."
+        period: "~2023"
+        accessed: 2026-10-05
+      - url: https://pharmvestnik.ru/content/news/Farmkompanii-budut-usilivat-napravlenie-market-access-i-rasshiryat-shtat.html
+        publisher: "Фармвестник со ссылкой на Hays — market access managers средняя 380 тыс., максимум 450 тыс."
+        period: 2020
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=market+access&area=1&only_with_salary=true"
+        publisher: "hh.ru — главный эксперт по экономике здравоохранения 100–200 тыс. на руки (ступенью ниже)"
+        n: 1
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "рекрутеры согласны, но данные 2020–2023; цены независимого консультирования в России не найдены",
+      }
+
+  - role: Ядро — калькулятор
+    market_titles: [финансовый аналитик, экономист по себестоимости, FP&A]
+    engagement: штат
+    monthly_gross_rub:
+      moscow: [115000, 185000, 300000]
+      russia_remote: [52000, 95000, 200000]
+    hourly_rub: null
+    per_piece: []
+    sources:
+      - url: https://career.hh.ru/article/finansovyj-analitik-professiya-budushego-ili-net
+        publisher: "hh Карьера — финансовый аналитик по России junior 52–60 тыс., middle 90–100 тыс., senior 180–200 тыс."
+        period: 2025-08
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=финансовый+аналитик&area=1&only_with_salary=true&search_field=name"
+        publisher: "hh.ru — финансовые аналитики Москвы 70–350 тыс."
+        n: "20 из 68"
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=экономист+по+себестоимости&area=1&only_with_salary=true"
+        publisher: "hh.ru — экономисты по себестоимости Москвы 110–200 тыс."
+        n: "20 из 124"
+        period: 2026-10-05
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: medium,
+        why: "hh Карьера и ≈ 40 живых вакансий Москвы согласованы",
+      }
+
+  - role: Коуч
+    market_titles: [agile-коуч, scrum-мастер, фасилитатор команд]
+    engagement: "штат или подряд/самозанятый"
+    monthly_gross_rub:
+      moscow: [140000, 200000, 260000]
+      russia_remote: [93000, 120000, 150000]
+    hourly_rub: [3000, 8000]
+    per_piece: []
+    notes: "Часовая вилка — цены сессии лайф- и бизнес-коучей (3–5 тыс. регионы, 6–8 тыс. Москва), не agile-коучей: российских ставок agile-коучинга и фасилитации не найдено. Рынок agile-коучей сжался с 2023 года."
+    sources:
+      - url: "https://career.habr.com/vacancies?q=agile+coach&type=all"
+        publisher: "Хабр Карьера — Scrum Master, AstraZeneca, Москва 138–262 тыс."
+        n: 1
+        period: 2026-09-29
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=scrum+master&area=1&only_with_salary=true"
+        publisher: "hh.ru — scrum-мастер от 150 000 на руки (Москва)"
+        n: 3
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: "https://hh.ru/search/vacancy?text=agile+coach&area=113&only_with_salary=true"
+        publisher: "hh.ru — Agile Coach + Scrum Master 120 000 gross (Набережные Челны), единственная по России"
+        n: 1
+        period: 2026-10-05
+        accessed: 2026-10-05
+      - url: https://career.hh.ru/profession/60
+        publisher: "hh Карьера — медиана scrum-мастера 93 200 ₽"
+        n: 3
+        period: 2025–2026
+        accessed: 2026-10-05
+      - url: https://habr.com/ru/articles/1047694/
+        publisher: "Хабр — цена сессии коуча 3–5 тыс. (регионы), 6–8 тыс. (Москва)"
+        period: 2026
+        accessed: 2026-10-05
+    confidence:
+      {
+        level: low,
+        why: "штатные вакансии agile-коуча редки; час — прокси лайф- и бизнес-коучинга",
+      }

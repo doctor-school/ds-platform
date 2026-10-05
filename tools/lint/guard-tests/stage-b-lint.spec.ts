@@ -186,4 +186,24 @@ describe("stage-b-lint", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("skipping");
   });
+
+  it("green (#2581): reviewer-certified copy-only PR + GO without a live URL → exit 0", () => {
+    const { code, stdout } = runGuard(
+      GUARD,
+      caseDir("stage-b", "green-copy-only-no-live-url"),
+      { env: prEnv("2581", "green-copy-only-no-live-url") },
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain("copy-only");
+  });
+
+  it("red (#2581): copy-only claim the reviewer did not certify still needs the live URL → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("stage-b", "red-copy-only-uncertified"),
+      { env: prEnv("2582", "red-copy-only-uncertified") },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("live URL");
+  });
 });

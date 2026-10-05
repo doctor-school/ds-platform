@@ -1,0 +1,20 @@
+{
+  "number": 2582,
+  "headRefOid": "cccccccccccccccccccccccccccccccccccccccc",
+  "body": "## Verification\n\nui-parity: N/A (copy-only) — take-back confirmation strings reworded; no layout, styling or behaviour touched\n",
+  "labels": [],
+  "files": [
+    {
+      "path": "apps/portal/src/app/account/take-back.tsx"
+    }
+  ],
+  "reviews": [
+    {
+      "body": "## Mode (a) Review — PR #2582\n\nrender-delta: none\n\nVERDICT: APPROVE",
+      "submittedAt": "2026-10-05T10:00:00Z",
+      "commit": {
+        "oid": "cccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  ]
+}

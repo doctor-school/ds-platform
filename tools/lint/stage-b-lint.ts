@@ -16,6 +16,9 @@ import {
 // #2373: the Mode (a) rebase carry-over probe (#1865), reused — never
 // re-implemented. `merge-gate.mjs` guards its own entry point.
 import { checkRebaseEquivalence } from "../gh/merge-gate.mjs";
+// #2581: the copy-only certification is the `ui-parity` guard's own verdict,
+// reused so both guards read one reviewer line.
+import { certifiedNaVerdict } from "./ui-parity-lint";
 
 const TAG = "[stage-b]";
 
@@ -34,6 +37,7 @@ interface GhPR {
   comments?: StageBRecord[];
   updatedAt?: string;
   files?: { path: string }[];
+  reviews?: Parameters<typeof certifiedNaVerdict>[1];
 }
 type GhComment = StageBRecord;
 interface GhIssue {
@@ -63,7 +67,7 @@ async function ghPR(prNumber: string): Promise<GhPR | null> {
   const res = await ghViewJson<GhPR>(
     "pr",
     prNumber,
-    "number,body,labels,files,headRefOid,updatedAt",
+    "number,body,labels,files,headRefOid,updatedAt,reviews",
     REPO_ROOT,
     true,
   );
@@ -162,12 +166,19 @@ async function main(): Promise<void> {
         fail("Batched gate source does not contain its owner quote");
     }
   }
+  const na = certifiedNaVerdict(pr.body ?? "", pr.reviews, pr.headRefOid);
+  const copyOnly = na.ok && na.route === "copy-only";
+  if (copyOnly)
+    info(
+      `PR #${pr.number} is reviewer-certified copy-only: a GO needs no live URL`,
+    );
   const verdict = validateStageB(
     records,
     pr.headRefOid ?? "",
     renderable,
     gates,
     checkRebaseEquivalence,
+    copyOnly,
   );
   if (!verdict.ok) fail(`PR #${pr.number}: ${verdict.reason}`);
   // URL-backed sources are fetched; relays remain explicit session/message

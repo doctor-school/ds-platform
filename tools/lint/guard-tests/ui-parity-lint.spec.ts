@@ -769,6 +769,90 @@ describe("ui-parity reviewer-certified N/A (#1708)", () => {
   });
 });
 
+describe("ui-parity reviewer-certified copy-only (#2581)", () => {
+  const HEAD = "c".repeat(40);
+  const copyBody =
+    "ui-parity: N/A (copy-only) — take-back confirmation strings reworded; no layout or behaviour touched";
+  const review = (delta: string, oid = HEAD) => [
+    {
+      body: `## Mode (a) Review — PR #2581\n\n${delta}\n\nVERDICT: APPROVE`,
+      submittedAt: "2026-10-05T10:00:00Z",
+      commit: { oid },
+    },
+  ];
+
+  it("green: a head-pinned `render-delta: copy-only` certifies the copy-only route", () => {
+    expect(
+      certifiedNaVerdict(copyBody, review("render-delta: copy-only"), HEAD),
+    ).toMatchObject({ claimed: true, ok: true, route: "copy-only" });
+  });
+
+  it("red: an uncertified copy-only claim fails", () => {
+    expect(certifiedNaVerdict(copyBody, [], HEAD).ok).toBe(false);
+    expect(
+      certifiedNaVerdict(copyBody, review("VERDICT-note: fine"), HEAD).ok,
+    ).toBe(false);
+    expect(
+      certifiedNaVerdict(
+        copyBody,
+        review("render-delta: copy-only", "0".repeat(40)),
+        HEAD,
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("red: the reviewer must certify the claimed route, not another render-delta", () => {
+    for (const delta of [
+      "render-delta: none",
+      "render-delta: layout",
+      "render-delta: copy-only and spacing",
+    ])
+      expect(certifiedNaVerdict(copyBody, review(delta), HEAD).ok).toBe(false);
+    expect(
+      certifiedNaVerdict(
+        "ui-parity: N/A (no render delta) — adds meta: { version } to a mutation call",
+        review("render-delta: copy-only"),
+        HEAD,
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("green fixture: the guard exits 0 on a certified copy-only PR", () => {
+    const { code, stdout } = runGuard(
+      "ui-parity-lint.ts",
+      caseDir("ui-parity", "green-2581-copy-only"),
+      {
+        env: {
+          GITHUB_EVENT_NAME: "pull_request",
+          PR_NUMBER: "2581",
+          LINT_GH_FIXTURE_DIR: ghDir("ui-parity", "green-2581-copy-only"),
+        },
+      },
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain("(copy-only)");
+  });
+
+  it("red fixture: a copy-only claim certified only as `render-delta: none` fails", () => {
+    const { code, stderr } = runGuard(
+      "ui-parity-lint.ts",
+      caseDir("ui-parity", "red-2581-copy-only-certified-none"),
+      {
+        env: {
+          GITHUB_EVENT_NAME: "pull_request",
+          PR_NUMBER: "2582",
+          LINT_GH_FIXTURE_DIR: ghDir(
+            "ui-parity",
+            "red-2581-copy-only-certified-none",
+          ),
+        },
+      },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("render-delta: copy-only");
+  });
+});
+
 describe("ui-parity guard integration", () => {
   it("red fixture: #1625-style inspected wording fails the BLOCK guard", () => {
     const { code, stderr } = runGuard(

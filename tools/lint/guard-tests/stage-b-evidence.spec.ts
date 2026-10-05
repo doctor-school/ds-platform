@@ -131,3 +131,22 @@ describe("#2373: Stage-B head carry-over across a patch-id-identical head", () =
     expect(probed).toBe(false);
   });
 });
+describe("#2581: copy-only GO on the owner's chat wording decision", () => {
+  const noUrl = base.replace(/\nStage-B-live-url:[^\n]*/, "");
+  it("accepts a GO without a live URL only when the caller certifies copy-only", () => {
+    expect(
+      validateStageB([{ body: noUrl }], sha, [], {}, undefined, true).ok,
+    ).toBe(true);
+    expect(validateStageB([{ body: noUrl }], sha, [], {}).ok).toBe(false);
+  });
+  it("keeps head, owner quote and source mandatory on the copy-only route", () => {
+    for (const body of [
+      noUrl.replace(sha, "b".repeat(40)),
+      noUrl.replace("Approved this live room", "TBD"),
+      noUrl.replace(/\nStage-B-source:[^\n]*/, ""),
+    ])
+      expect(validateStageB([{ body }], sha, [], {}, undefined, true).ok).toBe(
+        false,
+      );
+  });
+});

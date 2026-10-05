@@ -37,7 +37,7 @@
  *      `!`/`<`/`>` row, no comparable rows, a merge commit above `origin/main`
  *      («Update branch», which range-diff ignores), a missing object, a git
  *      failure — stays RED. The escape covers THIS gate only: a PR on the
- *      `ui-parity: N/A (no render delta)` route keeps a head-pinned
+ *      `ui-parity: N/A (no render delta|copy-only)` route keeps a head-pinned
  *      certification in the `ui-parity` CI guard and still needs a fresh
  *      delta-only verdict after a rebase. Sanctioned no-Mode-a classes
  *      (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version
@@ -652,7 +652,7 @@ function git(args) {
  *
  * NOTE (scope): this escape covers the merge gate's own Mode-a verdict and,
  * since #2373, the pre-merge Stage-B record head (`tools/lint/stage-b-lint.ts`
- * reuses this probe). A PR on the `ui-parity: N/A (no render delta)` route keeps a head-pinned
+ * reuses this probe). A PR on the `ui-parity: N/A (no render delta|copy-only)` route keeps a head-pinned
  * certification in the `ui-parity` CI guard (BLOCK), which cannot see the
  * pre-rebase head — such a PR still needs a fresh delta-only verdict.
  *

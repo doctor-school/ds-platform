@@ -160,9 +160,10 @@ export const COPY = {
   sendAgain: "Отправить снова",
   confirmTitle: "Отправить заявку в программный комитет?",
   confirmTitleAgain: "Отправить исправленную заявку?",
-  confirmSub:
-    "После отправки редактирование закроется. Забрать заявку на исправление можно, пока открыт приём.",
-  confirmSubAgain:
+  /** 046 EARS-12 — the first send's lead line; `confirmText` dates the take-back after it. */
+  confirmSub: "После отправки редактирование закроется.",
+  /** 046 EARS-12 — a re-send once the kind has closed: no take-back is left. */
+  confirmFinal:
     "После отправки изменить её будет нельзя — комитет рассмотрит эту версию.",
   confirmYes: "Да, отправить",
   confirmYesAgain: "Да, отправить снова",

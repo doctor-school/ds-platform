@@ -265,6 +265,35 @@ export function intakeLine(intake: CongressSubmissionKindIntake): string {
   }
 }
 
+/**
+ * The send confirm's line (046 EARS-12, owner decision 2026-10-05 on #2573):
+ * while the kind is open the sent submission can be taken back until its
+ * close day — the concrete date, never an abstract open-window phrase; a re-send after
+ * the kind has closed is final.
+ */
+export function confirmText(
+  s: Pick<CongressSubmission, "status">,
+  intake: CongressSubmissionKindIntake,
+): string {
+  if (intake.state !== "open" || !intake.lastDay) return COPY.confirmFinal;
+  const until = `До ${mskDay(intake.lastDay)} заявку можно забрать на исправление. После — комитет рассмотрит отправленную версию.`;
+  return s.status === "needs_revision" ? until : `${COPY.confirmSub} ${until}`;
+}
+
+/**
+ * The deadline next to «Забрать на исправление» (046 EARS-12): a submitted
+ * submission of an open kind can be taken back until the kind's close day;
+ * otherwise there is no take-back and no hint.
+ */
+export function takeBackHint(
+  s: Pick<CongressSubmission, "status">,
+  intake: CongressSubmissionKindIntake,
+): string | null {
+  return s.status === "submitted" && intake.state === "open" && intake.lastDay
+    ? `Можно исправить до ${mskDay(intake.lastDay)}`
+    : null;
+}
+
 /** The picker's count line of a limited kind (046 EARS-17; canvas `pk.count` / `reason`). */
 export function limitLine(intake: CongressSubmissionKindIntake): string | null {
   if (!intake.offered || intake.submitLimit === null) return null;

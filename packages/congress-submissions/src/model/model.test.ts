@@ -12,6 +12,7 @@ import {
   agoText,
   birthHint,
   closedText,
+  confirmText,
   countdownText,
   dateLine,
   draftErrors,
@@ -33,6 +34,7 @@ import {
   revisionView,
   pickerNote,
   rowMeta,
+  takeBackHint,
   withdrawnNotice,
 } from "./model";
 
@@ -248,6 +250,43 @@ describe("actions per status", () => {
     expect(closed.secondary).toEqual([
       { action: "withdraw", label: "Отозвать", danger: true },
     ]);
+  });
+
+  it("046 EARS-12: the send confirm dates the take-back by the kind's close day", () => {
+    expect(confirmText(sub(), intake())).toBe(
+      "После отправки редактирование закроется. До 15 января 2027 заявку можно забрать на исправление. После — комитет рассмотрит отправленную версию.",
+    );
+    const again = sub({
+      status: "needs_revision",
+      revisionDueAt: "2026-12-22T21:00:00.000Z",
+    });
+    expect(
+      confirmText(again, intake({ kind: "poster", lastDay: "2027-01-29" })),
+    ).toBe(
+      "До 29 января 2027 заявку можно забрать на исправление. После — комитет рассмотрит отправленную версию.",
+    );
+    expect(confirmText(again, intake({ state: "closed" }))).toBe(
+      "После отправки изменить её будет нельзя — комитет рассмотрит эту версию.",
+    );
+  });
+
+  it("046 EARS-12: a sent submission says until when it can be taken back, only while the kind is open", () => {
+    expect(takeBackHint(sub({ status: "submitted" }), intake())).toBe(
+      "Можно исправить до 15 января 2027",
+    );
+    expect(
+      takeBackHint(sub({ status: "submitted" }), intake({ state: "closed" })),
+    ).toBeNull();
+    for (const status of [
+      "draft",
+      "in_review",
+      "needs_revision",
+      "accepted",
+      "rejected",
+      "withdrawn",
+    ] as const) {
+      expect(takeBackHint(sub({ status }), intake())).toBeNull();
+    }
   });
 
   it("EARS-12: in review and needs revision may be withdrawn; decided and withdrawn may not", () => {

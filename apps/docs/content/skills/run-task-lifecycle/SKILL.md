@@ -19,7 +19,7 @@ This is the **connective** lifecycle skill. It does not re-implement any step �
 
 Answers, analysis, artifact exports and authorized standard operations run directly: provide the requested result and proportionate evidence, then stop. They do not require an Issue, worktree, PR, dispatch, package install or repository-wide checks merely because the session is in this repository. Preserve maintained sources and apply the operation’s actual safety/authorization gates. For an export use the requested destination (otherwise outside the repository), verify content/destination and return its link.
 
-Changing a maintained spec, ADR, instruction or runtime source, or explicitly requesting repository integration/publication, enters the normal lifecycle below. A request to save text does not by itself request such a change. Preserve the text's language and distinguish review recommendations from accepted decisions.
+Changing a maintained spec, ADR, instruction or runtime source, or explicitly requesting repository integration/publication, enters the normal lifecycle below — first pick its change tier (`.claude/rules/change-tiers.md`). A Ship change takes the short path: the lead authors it inline in a worktree, opens the PR with `Change-tier: ship — <reason>`, records the owner's chat decision as Stage-B, and lands on green CI with no dispatch or Mode (a). Show and Ask run the full lifecycle; Show raises no staging slot. A request to save text does not by itself request such a change. Preserve the text's language and distinguish review recommendations from accepted decisions.
 
 ## Autonomous vs human-gated (read first)
 

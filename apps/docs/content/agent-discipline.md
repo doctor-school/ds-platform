@@ -41,7 +41,7 @@ Claude Design remains the design product; missing required live inventory/sync/c
 
 ## Dispatch, models and context
 
-Roles: `ds-explorer` scouts; `ds-implementer` authors in isolation; `ds-reviewer` independently reviews without fixing; `ds-lander` runs the main-tree tail. Codex inherits model/effort; Claude uses its overlay. Use a general agent with the same contract if a role is unavailable; without dispatch, required independent review is blocked rather than self-reviewed.
+Roles: `ds-explorer` scouts; `ds-implementer` authors in isolation; `ds-reviewer` independently reviews without fixing; `ds-lander` runs the main-tree tail. Codex inherits model/effort; Claude uses its overlay. Use a general agent with the same contract if a role is unavailable; without dispatch, required independent review is blocked rather than self-reviewed. Procedure scales with the change tier (`.claude/rules/change-tiers.md`): a Ship change (copy, existing data into an existing component, a small presentational tweak) is authored by the lead directly and needs no independent review; Show and Ask changes are dispatched and reviewed.
 
 Proportionate execution: the requested result sets scope and completion evidence — plans, specs, reviews and handoffs do not expand it. Keep valid facts, checks and approvals; repeat only what a relevant change, contradiction or missing proof invalidates. Security, privacy and data safeguards, required review, CI and owner gates stay in place at every scale. A merge, report or subagent return is intermediate while release or other requested work remains. A session ending before the outcome (owner defers, context tier fires, worktree-pinned tail) ends with skill `handoff-prompt` as the final message.
 
@@ -59,7 +59,7 @@ Workers isolate themselves and use that worktree for deliverable reads/writes/te
 
 Use a literal UTF-8 `--body-file` for GitHub multiline text. On secret exposure stop repeating the value, record it and assess rotation within authorization.
 
-TDD: meaningful RED before production/guard logic, then GREEN; prose needs no new tests. Select local checks for the affected behavior and reuse valid evidence. Repository PRs still run full lint, applicable static guards and `pnpm pr:preflight <N>`; direct tasks need no install or repo checks. Cite unrelated baseline failures without absorbing their repair; required CI stays blocking. Independent review where applicable + fresh CI + owner evidence precede canonical landing.
+TDD: meaningful RED before a behaviour change or guard logic, then GREEN; prose and copy need no new tests and no test pins wording; substituting an existing value gets exactly one test. Select local checks for the affected behavior and reuse valid evidence. Repository PRs still run full lint, applicable static guards and `pnpm pr:preflight <N>`; direct tasks need no install or repo checks. Cite unrelated baseline failures without absorbing their repair; required CI stays blocking. Independent review where applicable + fresh CI + owner evidence precede canonical landing.
 
 Hooks are configured, trusted and observed separately: `tools/hooks/README.md` (`pnpm agent:doctor`, owner review/trust, then `pnpm agent:smoke --project`). Fixtures and synthetic logs prove neither live execution nor persisted trust.
 

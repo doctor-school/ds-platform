@@ -23,7 +23,7 @@ none
 
 ## Linked
 
-- Closes #<issue-number> (or "Relates #N" if partial)
+- Closes #<issue-number> (or "Relates #N" if partial; a Ship PR without an owner Issue: "Refs #<epic>")
 - Spec: <link to apps/docs/content/specs/features/NNN-<slug>/ if feature-PR>
 - ADR: <link to apps/docs/content/adr/NNNN-\*.md if architectural decision>
 
@@ -63,6 +63,7 @@ Any deviation from an ADR/spec clause must name its tracked `#<issue>` or an
 exact `DEBT.md#<anchor>`.
 -->
 
+Change-tier: <ship|show|ask> — <reason; absent = ask — `.claude/rules/repo-conventions.md` → Change tiers>
 Stage-B: <GO with owner/date/link | batched at #N | reasoned N/A in the exact lead-certified form above>
 Changeset: <`.changeset/<file>.md` | reasoned N/A>
 Behavior change: <concise user/runtime behavior change | reasoned N/A>

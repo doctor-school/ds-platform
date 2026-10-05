@@ -404,6 +404,29 @@ test("roleHourlyCost: a pool at its lower-bound floor says max (and likely mid) 
   );
 });
 
+test("periodPlan at media_external_share 0,5: non-production hours are штат time — the pool prices them at the штат rate", () => {
+  const m = buildModel(inputs, { "var:media_external_share": 0.5 });
+  for (const s of ["min", "mid", "max"]) {
+    const plan = periodPlan(m, s);
+    const own = Object.fromEntries(
+      plan.idle.byRole.map((r) => [r.role, r.ownHourlyCost]),
+    );
+    const weights = m.teamRoles.map((t) => ({
+      own: own[t.role],
+      w: Array.isArray(t.fte) ? (s === "min" ? t.fte[0] : s === "max" ? t.fte[1] : (t.fte[0] + t.fte[1]) / 2) : t.fte,
+    }));
+    const staffCircle =
+      weights.reduce((a, x) => a + x.w * x.own, 0) /
+      weights.reduce((a, x) => a + x.w, 0);
+    const circle = plan.poolLines.find(
+      (l) => l.source === "период" && l.role === "Продуктовая команда",
+    );
+    near(circle.hourlyCost, staffCircle, 1e-6);
+    near(circle.cost, circle.hours * staffCircle, 1e-6);
+    assert.ok(circle.hourlyCost < roleHourlyCost(m, "Продуктовая команда", s).value);
+  }
+});
+
 test("reconciliation at media_external_share 0,5: idle and payroll at the штат rate, contractor share per loaded hour", () => {
   const m = buildModel(inputs, { "var:media_external_share": 0.5 });
   for (const s of ["min", "mid", "max"]) {
@@ -413,7 +436,8 @@ test("reconciliation at media_external_share 0,5: idle and payroll at the шта
     assert.ok(own < roleHourlyCost(m, "Медиа-круг — медиа-ведущий", s).value);
     near(host.payroll, host.paidHours * own, 1e-6);
     near(host.idleCost, host.idleHours * own, 1e-6);
-    near(host.idleHours, host.paidHours - 0.5 * (host.nonProduction + host.loaded), 1e-9);
+    near(host.contractorHours, 0.5 * host.loaded, 1e-9);
+    near(host.idleHours, host.paidHours - host.nonProduction - 0.5 * host.loaded, 1e-9);
     const team = new Set(plan.idle.byRole.map((r) => r.role));
     team.add("Продуктовая команда");
     const payroll = plan.idle.byRole.reduce((a, r) => a + r.payroll, 0);

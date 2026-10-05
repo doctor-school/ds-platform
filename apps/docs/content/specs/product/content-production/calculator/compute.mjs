@@ -235,20 +235,23 @@ function contractorOnTop(model, record) {
   return on.default_by_engagement?.[record.engagement] ?? 0;
 }
 
-/** Hourly cost of a role at a scenario: { value | null, flags, basis }. */
-export function roleHourlyCost(model, role, scenario) {
-  return memo(model, `rate|${role}|${scenario}`, () =>
-    resolveRate(model, role, scenario),
+/**
+ * Hourly cost of a role at a scenario: { value | null, flags, basis }. `staff` prices штат time
+ * only — non-production hours (meetings, hiring, management) are never the external pool's share.
+ */
+export function roleHourlyCost(model, role, scenario, staff = false) {
+  return memo(model, `rate|${role}|${scenario}|${staff}`, () =>
+    resolveRate(model, role, scenario, staff),
   );
 }
 
-function resolveRate(model, role, scenario) {
+function resolveRate(model, role, scenario, staff) {
   const override = model.hourlyCostOverride[role];
   if (override != null)
     return { value: pick(override, scenario), flags: [], basis: "калибровка" };
   const proxy = model.config.rate_proxy?.[role];
   if (proxy) {
-    const r = roleHourlyCost(model, proxy, scenario);
+    const r = roleHourlyCost(model, proxy, scenario, staff);
     return { ...r, flags: [...r.flags, `прокси: ${proxy}`] };
   }
   const record = model.rates.get(role);
@@ -260,7 +263,7 @@ function resolveRate(model, role, scenario) {
     const parts = record.composite_of
       .map((member) => ({
         w: weights[member] ?? 1,
-        r: roleHourlyCost(model, member, scenario),
+        r: roleHourlyCost(model, member, scenario, staff),
       }))
       .filter((p) => p.r.value != null);
     if (!parts.length)
@@ -318,6 +321,8 @@ function resolveRate(model, role, scenario) {
   if (role.startsWith("Медиа-круг — ") && share > 0 && first && second) {
     const ext = first.basis === "подряд" ? first : second;
     const own = first.basis === "штат" ? first : second;
+    if (staff)
+      return { ...own, inHouse: own.value, contractor: null, share: 0 };
     return {
       value: (1 - share) * own.value + share * ext.value,
       flags: [...own.flags, ...ext.flags],
@@ -379,7 +384,7 @@ function leafLine(model, id, qty, path, scenario) {
   };
 }
 
-function costLine(model, line, scenario) {
+function costLine(model, line, scenario, staff = false) {
   const piece = model.piece[line.leaf];
   if (piece != null) {
     const record = model.rates.get(line.role);
@@ -392,7 +397,7 @@ function costLine(model, line, scenario) {
       flags: ["сдельно"],
     };
   }
-  const rate = roleHourlyCost(model, line.role, scenario);
+  const rate = roleHourlyCost(model, line.role, scenario, staff);
   return {
     ...line,
     hourlyCost: rate.value,
@@ -587,7 +592,11 @@ export function periodPlan(model, scenario) {
       const count = periodLeafCount(model, entry, scenario);
       if (!count) continue;
       const line = leafLine(model, entry.leaf, count, [entry.leaf], scenario);
-      poolLines.push({ ...costLine(model, line, scenario), source: "период" });
+      // Period leaves are non-production time of the team: штат hours at the штат rate.
+      poolLines.push({
+        ...costLine(model, line, scenario, true),
+        source: "период",
+      });
     }
     const poolCost = sum(poolLines.map((l) => l.cost ?? 0));
     const unpriced = poolLines.filter((l) => l.cost == null).map((l) => l.leaf);
@@ -629,12 +638,13 @@ function idleCapacity(model, sold, scenario) {
       const paidHours = teams * fte * P;
       const nonProd = teams * nonProduction(model, m.role, scenario);
       const load = loaded[m.role] ?? 0;
-      // Hours charged to the role at a blended rate are the external pool's share at the
-      // contractor rate and штат time for the rest; idle and payroll are штат time only.
+      // Loaded hours are charged at the blended rate: the external pool's share goes to the
+      // contractor, the rest is штат time. Non-production hours are штат time at the штат rate
+      // (the pool prices them so), and idle and payroll are штат time only.
       const rate = roleHourlyCost(model, m.role, scenario);
       const share = rate.share ?? 0;
       const own = rate.inHouse ?? rate.value ?? 0;
-      const contractorHours = share * (nonProd + load);
+      const contractorHours = share * load;
       const free = paidHours - (nonProd + load - contractorHours);
       if (free < -1e-9) flags.push(`перегрузка штата: ${m.role}`);
       const idleHours = Math.max(0, free);

@@ -27,6 +27,8 @@ boxes:
       role: Ядро — стандарты
       unit: ревизия стандартов
       hours_draft: [8, 20]
+      lead_days_draft: [10, 20]
+      lead_days_basis: "оценка аналитика"
       driver: число стандартов в ревизии; число затронутых команд в advice process
       basis: оценка аналитика
   - id: A652
@@ -39,6 +41,8 @@ boxes:
       role: Продуктовая команда
       unit: СОП
       hours_draft: [4, 12]
+      lead_days_draft: [5, 15]
+      lead_days_basis: "оценка аналитика"
       driver: число специализаций; частота пересмотра
       basis: оценка аналитика
   - id: A653
@@ -51,6 +55,8 @@ boxes:
       role: Ядро
       unit: команда·месяц
       hours_draft: [1, 2]
+      lead_days_draft: [1, 3]
+      lead_days_basis: "оценка аналитика"
       driver: число команд; доля метрик, которые платформа собирает автоматически
       basis: оценка аналитика
   - id: A654
@@ -65,6 +71,8 @@ boxes:
       role: Ядро — калькулятор
       unit: отчётный период
       hours_draft: [4, 8]
+      lead_days_draft: [5, 10]
+      lead_days_basis: "оценка аналитика"
       driver: число ретро за период; расхождение факта с черновыми часами
       basis: оценка аналитика
 arrows:

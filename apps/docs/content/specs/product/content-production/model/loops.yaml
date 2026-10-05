@@ -1,0 +1,424 @@
+# Approval and rework loops of the IDEF0 model (format: FORMAT-ru.md, section «Петли одобрения»).
+# One entry per iteration variable: `name` is the exact `effort.iterations` string of its leaves.
+# Rounds and waits are DRAFTS for owner calibration in the calculator (#2527); no money here.
+# A leaf's lead_days_draft covers one pass including the wait on the external party inside that pass;
+# wait_days_per_round_draft is only the gap between two rounds (remarks handed back, re-entry into
+# the approver's queue) and is counted (rounds − 1) times — never twice.
+loops:
+  - name: итерации КП
+    leaves: [A13]
+    approver: фарма (партнёр)
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [2, 5]
+    exit_rule: Партнёр выбрал один из 2–3 вариантов финансирования или отказался; отказ закрывает запрос.
+    basis: "оценка аналитика; опора: 2–3 варианта финансирования устраивают 99 % клиентов (L3315)"
+    fragment:
+      - id: s1
+        step: Отправить КП с вариантами финансирования
+        actor: Аккаунт
+        kind: task
+        box: A13
+        next: s2
+      - id: s2
+        step: Ждать решения партнёра
+        actor: фарма
+        kind: wait
+        next: s3
+      - id: s3
+        step: Вариант выбран?
+        actor: фарма
+        kind: decision
+        next: end
+        loop_to: s1
+
+  - name: итерации нестандартного договора
+    leaves: [A16]
+    approver: юрслужба фармы
+    rounds_draft: [1, 4]
+    wait_days_per_round_draft: [3, 10]
+    exit_rule: Договор подписан; стандартный договор по шаблону DS — один круг, круги идут только у нестандартного.
+    basis: "оценка аналитика; опора: 80–90 % стандартных процедур (L3075)"
+    fragment:
+      - id: s1
+        step: Подготовить договор по шаблону DS
+        actor: Сервисный круг — юрист
+        kind: task
+        box: A16
+        next: s2
+      - id: s2
+        step: Договор стандартный?
+        actor: Сервисный круг — юрист
+        kind: decision
+        next: s5
+        loop_to: s3
+      - id: s3
+        step: Ждать правок юрслужбы фармы
+        actor: юрслужба фармы
+        kind: wait
+        next: s4
+      - id: s4
+        step: Правки согласованы?
+        actor: Сервисный круг — юрист
+        kind: decision
+        next: s5
+        loop_to: s1
+      - id: s5
+        step: Подписать договор
+        actor: Аккаунт
+        kind: task
+        next: end
+
+  - name: итерации программы с фармой (F-062)
+    leaves: [A21]
+    approver: фарма (медотдел); при гранте — нет
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [3, 10]
+    exit_rule: Партнёр согласовал программу курса; независимый контент и грант — один проход без согласования.
+    basis: оценка аналитика
+    fragment:
+      - id: s1
+        step: Сформировать видение и программу курса
+        actor: Методолог
+        kind: task
+        box: A21
+        next: s2
+      - id: s2
+        step: Курс спонсорский?
+        actor: Аккаунт
+        kind: decision
+        next: s3
+        loop_to: end
+      - id: s3
+        step: Ждать замечаний партнёра к программе
+        actor: фарма
+        kind: wait
+        next: s4
+      - id: s4
+        step: Программа согласована?
+        actor: фарма
+        kind: decision
+        next: end
+        loop_to: s1
+
+  - name: запросы эксперту при несоответствии (F-037)
+    leaves: [A3113]
+    approver: Медредактор-сценарист (приёмка материала по формату DS)
+    rounds_draft: [1, 2]
+    wait_days_per_round_draft: [1, 5]
+    exit_rule: Материал соответствует формату DS и брифу; ответ эксперта — по SLA 24 ч, через ассистента — до недели.
+    basis: "оценка аналитика; опора: SLA ответа эксперта 24 ч (L1777), ответ ассистентов раз в неделю (L1829)"
+    fragment:
+      - id: s1
+        step: Принять и разделить материал
+        actor: Медредактор-сценарист
+        kind: task
+        box: A3113
+        next: s2
+      - id: s2
+        step: Материал соответствует формату DS?
+        actor: Медредактор-сценарист
+        kind: decision
+        next: end
+        loop_to: s3
+      - id: s3
+        step: Запросить у эксперта недостающее
+        actor: Менеджер эксперта
+        kind: task
+        next: s4
+      - id: s4
+        step: Ждать ответа эксперта
+        actor: Пул экспертов — эксперт
+        kind: wait
+        next: s1
+
+  - name: итерации сценария до «зелёного»
+    leaves: [A312]
+    approver: Пул медрецензентов и фарма (замечания этапа 1)
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [0, 1]
+    exit_rule: >-
+      Сценарий получил «зелёное» заключение рецензента и прошёл этап 1 фармы. Круг доработки запускает каждое замечание — поэтому круги сценария ≈ 1 + (круги медрецензии − 1) + (круги этапа 1 фармы − 1); калькулятор держит их отдельной переменной для калибровки.
+    basis: "оценка аналитика; опора: сценарий — «довольно много дней» (L2613)"
+    fragment:
+      - id: s1
+        step: Написать или доработать сценарий
+        actor: Медредактор-сценарист
+        kind: task
+        box: A312
+        next: s2
+      - id: s2
+        step: Пройти медрецензию и этап 1 фармы (петли ниже)
+        actor: Пул медрецензентов
+        kind: task
+        next: s3
+      - id: s3
+        step: Есть замечания к сценарию?
+        actor: Медредактор-сценарист
+        kind: decision
+        next: end
+        loop_to: s1
+
+  - name: круги медрецензии до «зелёного»
+    leaves: [A3131]
+    approver: Пул медрецензентов (вето только на фактическую достоверность, В4)
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [1, 2]
+    exit_rule: >-
+      «Зелёное» заключение рецензента. Вето — только на фактическую достоверность (O-139, клинические рекомендации); остальное — совет (advice process), круг не запускает. Спор о достоверности — второй рецензент или ведущий эксперт пула, их заключение закрывает петлю (В4).
+    basis: оценка аналитика
+    fragment:
+      - id: s1
+        step: Провести медрецензию сценария
+        actor: Пул медрецензентов
+        kind: task
+        box: A3131
+        next: s2
+      - id: s2
+        step: Замечания по фактической достоверности?
+        actor: Пул медрецензентов
+        kind: decision
+        next: end
+        loop_to: s3
+      - id: s3
+        step: Автор оспаривает замечание?
+        actor: Медредактор-сценарист
+        kind: decision
+        next: s4
+        loop_to: s5
+      - id: s4
+        step: Заключение второго рецензента или ведущего эксперта
+        actor: Пул медрецензентов — координатор
+        kind: task
+        next: s6
+      - id: s5
+        step: Доработать сценарий (петля сценария)
+        actor: Медредактор-сценарист
+        kind: task
+        box: A312
+        next: s1
+      - id: s6
+        step: Замечание подтверждено?
+        actor: Пул медрецензентов — координатор
+        kind: decision
+        next: s5
+        loop_to: end
+
+  - name: круги этапа 1 фармы
+    leaves: [A3134]
+    approver: фарма (служба одобрения); при гранте — нет
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [2, 5]
+    exit_rule: >-
+      Фарма одобрила сценарий и рекламный текст либо истёк срок автоодобрения; максимум кругов и срок автоодобрения фиксирует договор (A14), сверх максимума — доплата или отказ по договору.
+    basis: "оценка аналитика; опора: согласование у фармы «днями и неделями» (L1661), 2 этапа одобрения (L1629-1673)"
+    fragment:
+      - id: s1
+        step: Отправить сценарий и рекламный текст на этап 1
+        actor: Аккаунт
+        kind: task
+        box: A3134
+        next: s2
+      - id: s2
+        step: Ждать решения фармы до срока автоодобрения
+        actor: фарма
+        kind: wait
+        next: s3
+      - id: s3
+        step: Одобрено или срок истёк?
+        actor: Аккаунт
+        kind: decision
+        next: end
+        loop_to: s4
+      - id: s4
+        step: Круг в пределах максимума договора?
+        actor: Аккаунт
+        kind: decision
+        next: s5
+        loop_to: end
+      - id: s5
+        step: Доработать сценарий по замечаниям фармы (петля сценария)
+        actor: Медредактор-сценарист
+        kind: task
+        box: A312
+        next: s1
+
+  - name: круги согласования раскадровки с экспертом
+    leaves: [A3141]
+    approver: эксперт (через менеджера эксперта)
+    rounds_draft: [1, 2]
+    wait_days_per_round_draft: [1, 3]
+    exit_rule: Эксперт согласовал раскадровку или истёк срок автоодобрения из договора с лидером.
+    basis: "оценка аналитика; опора: SLA ответа эксперта 24 ч (L1777)"
+    fragment:
+      - id: s1
+        step: Сделать или поправить раскадровку
+        actor: Медиа-круг — медиа-ведущий
+        kind: task
+        box: A3141
+        next: s2
+      - id: s2
+        step: Ждать ответа эксперта
+        actor: Пул экспертов — эксперт
+        kind: wait
+        next: s3
+      - id: s3
+        step: Раскадровка согласована или срок истёк?
+        actor: Менеджер эксперта
+        kind: decision
+        next: end
+        loop_to: s1
+
+  - name: круги правок монтажа и рекламных кадров
+    leaves: [A3146]
+    approver: Пул медрецензентов (проверка монтажа) и фарма (рекламные кадры, этап 2)
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [1, 2]
+    exit_rule: >-
+      Монтаж прошёл проверку медсоответствия и этап 2 фармы. Поздние замечания к рекламе переделывают только рекламные кадры, не ролик целиком (противоречие 4 реестра).
+    basis: "оценка аналитика; опора: переделка только рекламных кадров (registry-ru.md, «Противоречия», п. 4)"
+    fragment:
+      - id: s1
+        step: Смонтировать или поправить ролик и микролернинги
+        actor: Медиа-круг — монтажёр
+        kind: task
+        box: A3146
+        next: s2
+      - id: s2
+        step: Проверить монтаж и медсоответствие
+        actor: Пул медрецензентов
+        kind: task
+        box: A3161
+        next: s3
+      - id: s3
+        step: Правки монтажа?
+        actor: Пул медрецензентов
+        kind: decision
+        next: s4
+        loop_to: s1
+      - id: s4
+        step: Пройти этап 2 фармы (петля ниже)
+        actor: Аккаунт
+        kind: task
+        box: A3163
+        next: s5
+      - id: s5
+        step: Правки рекламных кадров?
+        actor: фарма
+        kind: decision
+        next: end
+        loop_to: s1
+
+  - name: круги этапа 2 фармы
+    leaves: [A3163]
+    approver: фарма (служба одобрения, номер одобрения); при гранте — нет
+    rounds_draft: [1, 2]
+    wait_days_per_round_draft: [2, 5]
+    exit_rule: Фарма выдала номер одобрения либо истёк срок автоодобрения; максимум кругов — из договора (A14).
+    basis: "оценка аналитика; опора: согласование у фармы «днями и неделями» (L1661), 2 этапа одобрения (L1629-1673)"
+    fragment:
+      - id: s1
+        step: Отправить финальный ролик на этап 2
+        actor: Аккаунт
+        kind: task
+        box: A3163
+        next: s2
+      - id: s2
+        step: Ждать номера одобрения до срока автоодобрения
+        actor: фарма
+        kind: wait
+        next: s3
+      - id: s3
+        step: Номер получен или срок истёк?
+        actor: Аккаунт
+        kind: decision
+        next: end
+        loop_to: s4
+      - id: s4
+        step: Поправить рекламные кадры (петля монтажа)
+        actor: Медиа-круг — монтажёр
+        kind: task
+        box: A3146
+        next: s1
+
+  - name: замена спикера вторым лектором
+    leaves: [A322]
+    approver: лидер (Пул экспертов — амбассадор) и фарма
+    rounds_draft: [1, 2]
+    wait_days_per_round_draft: [2, 5]
+    exit_rule: Лидер согласовал коммерческую часть (≤ 15 мин); при отказе — второй лектор, с которым шаг повторяется один раз.
+    basis: "оценка аналитика; опора: коммерческая часть 10–15 мин / 10–15 слайдов (L1911, L2003)"
+    fragment:
+      - id: s1
+        step: Передать слайд-кит и согласовать коммерческую часть
+        actor: Менеджер эксперта
+        kind: task
+        box: A322
+        next: s2
+      - id: s2
+        step: Ждать решения лидера
+        actor: Пул экспертов — амбассадор
+        kind: wait
+        next: s3
+      - id: s3
+        step: Лидер согласен?
+        actor: Пул экспертов — амбассадор
+        kind: decision
+        next: end
+        loop_to: s4
+      - id: s4
+        step: Пригласить второго лектора
+        actor: Менеджер эксперта
+        kind: task
+        next: s1
+
+  - name: итерации согласования коммерческой части
+    leaves: [A332]
+    approver: лидер (Пул экспертов — амбассадор) и фарма
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [2, 5]
+    exit_rule: Коммерческая часть каждого спикера мероприятия согласована с лидером; при отказе — второй лектор (тот же шаг, что A322).
+    basis: "оценка аналитика; опора: коммерческая часть 10–15 мин / 10–15 слайдов (L1911, L2003)"
+    fragment:
+      - id: s1
+        step: Авторизовать спикеров и передать коммерческую часть
+        actor: Менеджер эксперта
+        kind: task
+        box: A332
+        next: s2
+      - id: s2
+        step: Ждать решения лидера и фармы
+        actor: Пул экспертов — амбассадор
+        kind: wait
+        next: s3
+      - id: s3
+        step: Все части согласованы?
+        actor: Менеджер эксперта
+        kind: decision
+        next: end
+        loop_to: s1
+
+  - name: итерации подписания
+    leaves: [A53]
+    approver: фарма (бухгалтерия, ЭДО)
+    rounds_draft: [1, 3]
+    wait_days_per_round_draft: [3, 10]
+    exit_rule: Акт подписан в ЭДО и оплата поступила.
+    basis: оценка аналитика
+    fragment:
+      - id: s1
+        step: Выставить акт и закрывающие документы в ЭДО
+        actor: Сервисный круг — бухгалтер
+        kind: task
+        box: A53
+        next: s2
+      - id: s2
+        step: Ждать подписи партнёра
+        actor: фарма
+        kind: wait
+        next: s3
+      - id: s3
+        step: Акт подписан без замечаний?
+        actor: Сервисный круг — бухгалтер
+        kind: decision
+        next: end
+        loop_to: s1

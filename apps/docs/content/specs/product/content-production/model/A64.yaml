@@ -23,6 +23,8 @@ boxes:
       role: Продуктовая команда
       unit: команда·месяц
       hours_draft: [2, 4]
+      lead_days_draft: [1, 3]
+      lead_days_basis: "оценка аналитика"
       driver: частота governance-встреч; число изменений ролей
       basis: оценка аналитика
   - id: A642
@@ -35,6 +37,8 @@ boxes:
       role: Коуч
       unit: команда·месяц
       hours_draft: [2, 4]
+      lead_days_draft: [1, 2]
+      lead_days_basis: "оценка аналитика"
       driver: число команд на одного коуча; доля новых и делящихся команд
       basis: оценка аналитика
   - id: A643
@@ -49,6 +53,8 @@ boxes:
       role: Менеджер эксперта
       unit: команда·месяц
       hours_draft: [2, 6]
+      lead_days_draft: [2, 5]
+      lead_days_basis: "оценка аналитика"
       driver: число экспертов и спикеров за командой; приток новых экспертов
       basis: оценка аналитика
 arrows:

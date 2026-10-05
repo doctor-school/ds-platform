@@ -12,6 +12,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { eventAudience, eventParticipationFormat } from "./event-vocabulary.js";
+// Lazy `references(() => events.id)` only — events.ts imports this file back
+// for `events.kind_id → event_kinds.id`.
 import { events } from "./events.js";
 import { specialtiesMinzdrav } from "./specialties.js";
 import { users } from "./users.js";
@@ -105,6 +108,12 @@ export const projects = pgTable(
     description: text("description"),
     /** Server-generated object-storage key of the normalized WebP cover; never a client value. */
     coverRef: text("cover_ref"),
+    /**
+     * 012 LD-12 / EARS-30 (#2509) — the audience that prefills a new event
+     * linked to this project. A prefill only: changing it never rewrites the
+     * audience of an existing event.
+     */
+    defaultAudience: eventAudience("default_audience").notNull(),
     /** Set once by the first publish transaction; trigger-pinned thereafter. */
     firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
     status: taxonomyStatus("status").notNull().default("draft"),
@@ -390,6 +399,82 @@ export const directions = pgTable(
 
 export type Direction = typeof directions.$inferSelect;
 export type NewDirection = typeof directions.$inferInsert;
+
+export const EVENT_KIND_TITLE_MAX = 120;
+
+/**
+ * 012 LD-11 / EARS-25…EARS-28 (#2509) — the open, editor-managed dictionary of
+ * event kinds. The same retained-entity shape as {@link directions} (system
+ * slug pinned by `first_published_at`, `draft | published | retired`,
+ * `retired ⇔ deleted_at`), plus the non-empty set of participation formats the
+ * kind allows. A kind carries no storefront attribute: the storefront is the
+ * event's `audience` alone (LD-12). Every event references exactly one kind
+ * (`events.kind_id`), so this is a many-to-one reference, not a join.
+ *
+ * The five seed kinds are ordinary published rows inserted by migration 0046,
+ * not constants in code (EARS-27).
+ */
+export const eventKinds = pgTable(
+  "event_kinds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    /** Non-empty, duplicate-free set of formats an event of this kind may take. */
+    allowedFormats: eventParticipationFormat("allowed_formats")
+      .array()
+      .notNull(),
+    /** Set once by the first publish transaction; trigger-pinned thereafter. */
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
+    status: taxonomyStatus("status").notNull().default("draft"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("event_kinds_slug_key").on(t.slug),
+    check(
+      "event_kinds_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check(
+      "event_kinds_slug_pattern",
+      sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`,
+    ),
+    check(
+      "event_kinds_slug_not_uuid",
+      sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "event_kinds_slug_bounds",
+      sql`char_length(${t.slug}) BETWEEN 1 AND ${sql.raw(String(TAXONOMY_SLUG_MAX))}`,
+    ),
+    check(
+      "event_kinds_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(EVENT_KIND_TITLE_MAX))}`,
+    ),
+    // A kind with no allowed format would make every event of it unsavable.
+    check(
+      "event_kinds_allowed_formats_non_empty",
+      sql`cardinality(${t.allowedFormats}) BETWEEN 1 AND 3`,
+    ),
+    check("event_kinds_version_positive", sql`${t.version} >= 1`),
+    check(
+      "event_kinds_published_has_first_published_at",
+      sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
+    ),
+  ],
+);
+
+export type EventKind = typeof eventKinds.$inferSelect;
+export type NewEventKind = typeof eventKinds.$inferInsert;
 
 export const PARTNER_TITLE_MAX = 160;
 export const PARTNER_WEBSITE_URL_MAX = 2048;

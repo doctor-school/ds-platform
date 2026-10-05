@@ -323,6 +323,13 @@
       "when": 1790829125787,
       "tag": "0045_users_birth_date",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791204605452,
+      "tag": "0046_event_kinds_and_audience",
+      "breakpoints": true
     }
   ]
 }

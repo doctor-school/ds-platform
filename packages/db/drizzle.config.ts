@@ -16,6 +16,7 @@ export default defineConfig({
     // Listed explicitly so the enum is emitted even if every consuming table
     // file is later removed from this list.
     "../../packages/db/src/schema/lifecycle.ts",
+    "../../packages/db/src/schema/event-vocabulary.ts",
     "../../packages/db/src/schema/idempotency-keys.ts",
     "../../packages/db/src/schema/users.ts",
     "../../packages/db/src/schema/consent-records.ts",

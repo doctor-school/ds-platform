@@ -283,7 +283,10 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
         name: "registered",
         props: { registered: true, registeredLabel: "Вы записаны" },
       },
-      { name: "sold out", props: { seatsLeft: 0, soldOutLabel: "мест не осталось" } },
+      {
+        name: "sold out",
+        props: { seatsLeft: 0, soldOutLabel: "мест не осталось" },
+      },
       {
         name: "past with a recording",
         props: {
@@ -298,8 +301,10 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     for (const state of states) {
       const { container } = render(<WebinarCard {...FEED} {...state.props} />);
       const count = container.querySelector("[data-signup-count]");
-      expect(count, `sign-up count missing in the «${state.name}» state`)
-        .not.toBeNull();
+      expect(
+        count,
+        `sign-up count missing in the «${state.name}» state`,
+      ).not.toBeNull();
       expect(count!.textContent).toContain("128");
       cleanup();
     }
@@ -320,9 +325,9 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     const venue = container.querySelector("[data-event-city]");
     expect(venue?.getAttribute("data-event-city")).toBe("Казань");
     expect(venue?.textContent).toBe("Офлайн · Казань");
-    expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
-      "12",
-    );
+    expect(
+      container.querySelector("[data-event-seats]")?.textContent,
+    ).toContain("12");
   });
 
   it("019 EARS-2.8: a hybrid congress spanning dates still carries its city and seats", () => {
@@ -345,9 +350,9 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     expect(container.querySelector("[data-event-city]")?.textContent).toBe(
       "Гибрид · Москва",
     );
-    expect(container.querySelector("[data-event-seats]")?.textContent).toContain(
-      "40",
-    );
+    expect(
+      container.querySelector("[data-event-seats]")?.textContent,
+    ).toContain("40");
   });
 
   it("019 EARS-2.9: zero remaining seats reads «мест не осталось» in the chip row, with no seat count", () => {
@@ -388,5 +393,115 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
     expect(container.textContent).not.toMatch(
       /спонсор|при поддержке|финанс|партнёр|партнер|инвестор/i,
     );
+  });
+});
+
+/**
+ * 004 EARS-12 (Amendment 2026-10-02) — a hybrid event shows its time in the
+ * viewer's zone like an online one, and additionally states the start in the
+ * VENUE's local time, labelled with the venue zone. The approved events-feed
+ * canvas (#2076) draws that line under the date on the time plate; the card
+ * gives it its own slot instead of borrowing the recording line, which belongs
+ * to past events only.
+ */
+describe("004 EARS-12 WebinarCard — hybrid venue-local time slot", () => {
+  const VENUE = "На площадке 16:00 GMT+7";
+
+  it("EARS-12.1: a hybrid card renders the venue-local time in its own slot under the date", () => {
+    const { container } = render(
+      <WebinarCard {...BASE} tzLabel="GMT+3" venueTimeLabel={VENUE} />,
+    );
+    const slot = container.querySelector("[data-event-venue-time]");
+    expect(slot).not.toBeNull();
+    expect(slot!.textContent).toBe(VENUE);
+    // Its own slot: not the recording line, and it sits after the date line.
+    expect(container.querySelector("[data-event-recording]")).toBeNull();
+    const date = screen.getByText(BASE.dateLabel);
+    expect(
+      date.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("EARS-12.2: with no venue-local time the slot does not render (online / offline events)", () => {
+    const { container } = render(<WebinarCard {...BASE} />);
+    expect(container.querySelector("[data-event-venue-time]")).toBeNull();
+  });
+
+  it("EARS-12.3: a past hybrid card keeps the venue line alongside its recording line", () => {
+    const { container } = render(
+      <WebinarCard
+        {...BASE}
+        variant="past"
+        venueTimeLabel={VENUE}
+        recordingLabel="Запись · 90 мин"
+      />,
+    );
+    expect(
+      container.querySelector("[data-event-venue-time]")!.textContent,
+    ).toBe(VENUE);
+    expect(container.querySelector("[data-event-recording]")!.textContent).toBe(
+      "Запись · 90 мин",
+    );
+  });
+
+  it("EARS-12.4: the recording line renders for past events only", () => {
+    const { container } = render(
+      <WebinarCard {...BASE} recordingLabel="Есть запись" />,
+    );
+    expect(container.querySelector("[data-event-recording]")).toBeNull();
+    expect(screen.queryByText("Есть запись")).toBeNull();
+  });
+});
+
+/**
+ * 019 EARS-2 / EARS-17 (LD-12) — the event KIND (an editor-managed dictionary
+ * title) and the participation FORMAT (online / offline / hybrid) are two
+ * separate axes, so the card takes them as two props and renders them as two
+ * parts of the time-plate label row («Мастер-класс · гибрид» on the canvas).
+ */
+describe("019 EARS-2 WebinarCard — separate kind and format labels", () => {
+  it("019 EARS-2.11: kind and format render as two separate parts of the label row, kind first", () => {
+    const { container } = render(
+      <WebinarCard {...BASE} kindLabel="Мастер-класс" formatLabel="гибрид" />,
+    );
+    const row = container.querySelector("[data-event-format-kicker]");
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toBe("Мастер-класс · гибрид");
+    const kind = row!.querySelector("[data-event-kind-label]");
+    const format = row!.querySelector("[data-event-format-label]");
+    expect(kind!.textContent).toBe("Мастер-класс");
+    expect(format!.textContent).toBe("гибрид");
+    expect(
+      kind!.compareDocumentPosition(format!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("019 EARS-2.12: a kind without a format renders the kind alone, with no dangling separator", () => {
+    const { container } = render(
+      <WebinarCard {...BASE} kindLabel="Конгресс" />,
+    );
+    const row = container.querySelector("[data-event-format-kicker]");
+    expect(row!.textContent).toBe("Конгресс");
+    expect(row!.querySelector("[data-event-format-label]")).toBeNull();
+  });
+
+  it("019 EARS-2.13: a format-only caller renders exactly as before (back-compat)", () => {
+    const { container } = render(
+      <WebinarCard {...BASE} formatLabel="Вебинар" />,
+    );
+    const row = container.querySelector("[data-event-format-kicker]");
+    expect(row!.textContent).toBe("Вебинар");
+    expect(row!.querySelector("[data-event-kind-label]")).toBeNull();
+  });
+
+  it("019 EARS-2.14: a long kind title wraps inside the time plate instead of overflowing it", () => {
+    const longKind =
+      "Межрегиональная научно-практическая конференция с международным участием";
+    const { container } = render(
+      <WebinarCard {...BASE} kindLabel={longKind} formatLabel="офлайн" />,
+    );
+    const row = container.querySelector("[data-event-format-kicker]");
+    expect(row!.textContent).toBe(`${longKind} · офлайн`);
+    expect(row!.className).toContain("break-words");
   });
 });

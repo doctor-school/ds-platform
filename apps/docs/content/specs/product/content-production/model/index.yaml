@@ -1,0 +1,10 @@
+# Diagram index of the IDEF0 model (format: FORMAT-ru.md). Order = drill-down order.
+# `file` is relative to this folder; `parent` is the diagram whose box this one decomposes.
+root: A-0
+diagrams:
+  - id: A-0
+    file: A-0.yaml
+    parent: null
+  - id: A0
+    file: A0.yaml
+    parent: A-0

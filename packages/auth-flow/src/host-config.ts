@@ -372,7 +372,7 @@ export type AuthFlowResetCopy = {
   readonly submit: string;
   /** Complete stage (canvas `titles.reset`, complete branch). */
   readonly completeTitle: string;
-  /** Template with `{destination}` — the masked address the code went to. */
+  /** Template with `{destination}` — the address the code went to, as typed. */
   readonly completeDescription: string;
   readonly codeLabel: string;
   readonly newPasswordLabel: string;

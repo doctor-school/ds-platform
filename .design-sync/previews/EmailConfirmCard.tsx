@@ -1,4 +1,4 @@
-import { EmailConfirmCard, maskDestination } from '@ds/design-system';
+import { EmailConfirmCard } from '@ds/design-system';
 
 const MailCheckGlyph = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden focusable="false">
@@ -43,7 +43,7 @@ const Confirm = ({
     <EmailConfirmCard
       copy={copy}
       email={EMAIL}
-      destination={maskDestination(EMAIL)}
+      destination={EMAIL}
       resolver={passThrough}
       onSubmit={() => {}}
       succeeded={succeeded}

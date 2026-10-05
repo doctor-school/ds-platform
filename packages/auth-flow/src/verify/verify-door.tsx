@@ -11,7 +11,6 @@ import {
   EmailConfirmCard,
   isBotProtectionRejected,
   isBotProtectionRequired,
-  maskDestination,
   peekPendingRegistration,
   useBotProtectedAction,
   useResendCooldown,
@@ -136,7 +135,8 @@ export function VerifyDoor({
   const authClient = useMemo(() => createAuthClient(config.api), [config.api]);
   const cardCopy = useMemo(() => cardCopyOf(copy), [copy]);
   const resolver = useMemo(() => codeResolver(config), [config]);
-  const destination = maskDestination(email);
+  // #2607 — the address exactly as typed, never masked.
+  const destination = email;
 
   const [error, setError] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
@@ -274,7 +274,7 @@ export function VerifyDoor({
 function cardCopyOf(copy: AuthFlowVerifyCopy): EmailConfirmCardCopy {
   return {
     title: copy.title,
-    // Canvas 394 — the masked address stands bold inside the sentence.
+    // Canvas 394 — the typed address stands bold inside the sentence.
     description: (destination) =>
       withBoldDestination(copy.description, destination),
     codeLabel: copy.codeLabel,

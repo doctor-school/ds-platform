@@ -20,7 +20,6 @@ export { useResendCountdown } from "./use-resend-countdown";
 // successful resend, route a failure to the host's error channel. The transport
 // is always the caller's — each surface resends against a different endpoint.
 export { useResendCooldown } from "./use-resend-cooldown";
-export { maskDestination } from "./mask-destination";
 // #1666 slice A — the ONE canonical sign-in composition both storefronts mount
 // (AGENTS.md §6 cross-front reuse). Lifted verbatim from the portal `/login` page;
 // copy, resolvers, transport, routing and the captcha element stay app glue.

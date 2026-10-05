@@ -261,7 +261,7 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     }
   });
 
-  it("003 EARS-16: the resend acknowledgement is the SAME whatever the address (no existence branch)", async () => {
+  it("003 EARS-16: the resend acknowledgement is one sentence whatever the address, naming only the typed address (no existence branch)", async () => {
     async function noticeTextFor(email: string): Promise<string> {
       vi.useFakeTimers();
       try {
@@ -283,9 +283,10 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
 
     const first = await noticeTextFor("doc-registered@example.com");
     const second = await noticeTextFor("dan-never-seen@example.com");
-    expect(first).toBe(second);
-    // Canvas 81-83 — the sentence names the masked address, nothing else.
-    expect(first).toBe("Мы отправили новый код на d•••@e•••.com.");
+    // Canvas 81-83 — one sentence for either address, naming the address
+    // exactly as typed (#2607) and nothing about whether it has an account.
+    expect(first).toBe("Мы отправили новый код на doc-registered@example.com.");
+    expect(second).toBe("Мы отправили новый код на dan-never-seen@example.com.");
   });
 
   it("003 EARS-3: auto-submits the fixed-length code (no manual click) and confirms it", async () => {
@@ -544,14 +545,24 @@ describe("003 EARS-40: a /verify with no address goes to /register (#2394)", () 
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/register"));
   });
 
-  it("003 EARS-40: the ?email= seed renders the step with the masked address and its resend, no redirect", async () => {
+  it("003 EARS-40: the ?email= seed renders the step with the address as typed and its resend, no redirect", async () => {
     await mountSettled({ email: EMAIL });
 
     expect(screen.getByTestId("verify-card")).toHaveTextContent(
-      "d•••@e•••.com",
+      `Мы отправили код на ${EMAIL}.`,
     );
     expect(screen.getByTestId("verify-resend")).toBeInTheDocument();
     expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-42 (#2607): the address stands bold exactly as typed, and a long one wraps inside the column", async () => {
+    const LONG =
+      "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
+    await mountSettled({ email: LONG });
+
+    const address = screen.getByText(LONG);
+    expect(address.tagName).toBe("STRONG");
+    expect(address).toHaveClass("wrap-anywhere");
   });
 
   it("003 EARS-29 (#2455): the verification mail carries no link, so a URL fragment is never an address — a bare query goes to /register", async () => {

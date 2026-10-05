@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * 003 EARS-42 — sign-in by code lands on THE one code step: the canvas «ШАГ
  * КОДА» (`design-source/auth.dc.html` 64-85, 394-397, 501-503), the same
  * `<OtpFocusScreen>` the registration confirmation draws. Once a code was sent
- * the card heading and description name the channel and the masked address,
+ * the card heading and description name the channel and the address exactly
+ * as typed (#2607 — the visitor's own input, never masked),
  * the method tabs are gone, the field takes six letters-or-digits, and
  * «← Изменить способ» returns to the request form. Run over BOTH hosts: the
  * step is package behaviour, never a host branch.
@@ -49,7 +50,6 @@ const HOSTS = [
 
 const COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).login;
 const EMAIL = "doc@clinic.ru";
-const MASKED_EMAIL = "d•••@c•••.ru";
 
 beforeEach(() => {
   push.mockReset();
@@ -74,16 +74,16 @@ async function sendEmailCode(config: AuthFlowHostConfig) {
 
 describe("003 EARS-42: sign-in by code shows the one code step", () => {
   it.each(HOSTS)(
-    "003 EARS-42: on %s the e-mail code step reads «Проверьте почту», names the masked address and the «Код из письма» field",
+    "003 EARS-42: on %s the e-mail code step reads «Проверьте почту», names the address as typed and the «Код из письма» field",
     async (_host, config) => {
       await sendEmailCode(config);
 
       expect(screen.getByText(COPY.otp.verifyTitle.email)).toBeInTheDocument();
       // The address stands bold inside the sentence (canvas 394).
-      const address = screen.getByText(MASKED_EMAIL);
+      const address = screen.getByText(EMAIL);
       expect(address.tagName).toBe("STRONG");
       expect(address.parentElement).toHaveTextContent(
-        `Мы отправили код на ${MASKED_EMAIL}.`,
+        `Мы отправили код на ${EMAIL}.`,
       );
       expect(
         screen.getByLabelText(COPY.otp.codeLabel.email),
@@ -163,7 +163,33 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
     expect(screen.getByText(COPY.otp.verifyTitle.sms)).toBeInTheDocument();
     expect(screen.getByLabelText(COPY.otp.codeLabel.sms)).toBeInTheDocument();
     expect(screen.queryByText(COPY.otp.verifyTitle.email)).toBeNull();
+    // #2607: the number the code went to stands in full, bold — never masked.
+    const sent = requestOtp.mock.calls[0]?.[0] as { identifier: string };
+    const number = screen.getByText(sent.identifier);
+    expect(number.tagName).toBe("STRONG");
+    expect(number.textContent).not.toContain("•");
   });
+
+  it.each(HOSTS)(
+    "003 EARS-42 (#2607): on %s two addresses typed in turn read apart on the step, and a long one wraps inside the column",
+    async (_host, config) => {
+      const LONG = "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
+      const user = await sendEmailCode(config);
+      expect(screen.getByText(EMAIL).tagName).toBe("STRONG");
+
+      await user.click(screen.getByTestId("otp-change-method"));
+      await user.clear(screen.getByLabelText(COPY.otp.emailLabel));
+      await user.type(screen.getByLabelText(COPY.otp.emailLabel), LONG);
+      await user.click(screen.getByTestId("otp-send"));
+      await screen.findByTestId("otp-verify");
+
+      const address = screen.getByText(LONG);
+      expect(address.tagName).toBe("STRONG");
+      expect(screen.queryByText(EMAIL)).toBeNull();
+      // Canvas `overflow-wrap:anywhere` on the address — a token-free utility.
+      expect(address).toHaveClass("wrap-anywhere");
+    },
+  );
 
   it("003 EARS-42: a resend says «Мы отправили новый код на …» under the field", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -181,7 +207,7 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
 
       await waitFor(() => expect(requestOtp).toHaveBeenCalledTimes(2));
       expect(await screen.findByTestId("otp-resend-notice")).toHaveTextContent(
-        `Мы отправили новый код на ${MASKED_EMAIL}.`,
+        `Мы отправили новый код на ${EMAIL}.`,
       );
     } finally {
       vi.useRealTimers();

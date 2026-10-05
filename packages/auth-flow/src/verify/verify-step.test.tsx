@@ -462,12 +462,12 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
 });
 
 describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify", () => {
-  it("003 EARS-42: the doctor /verify draws the canvas code step — heading, masked address, 6 cells, «← Изменить почту», no «Войти» / «Сбросить пароль»", () => {
+  it("003 EARS-42: the doctor /verify draws the canvas code step — heading, the address as typed, 6 cells, «← Изменить почту», no «Войти» / «Сбросить пароль»", () => {
     renderPanel();
 
     expect(screen.getByText(CONFIRM_COPY.title)).toBeTruthy();
     expect(screen.getByTestId("verify-card")).toHaveTextContent(
-      "d•••@e•••.com",
+      `Мы отправили код на ${EMAIL}.`,
     );
     const field = screen.getByLabelText(CONFIRM_COPY.codeLabel);
     expect(field).toHaveAttribute("maxlength", "6");

@@ -148,14 +148,14 @@ describe("<PasswordRecoveryCard>", () => {
 
   // The stage is host-controlled — it flips only once the host's protected request
   // actually succeeded, exactly as `<LoginCard>`'s `sentIdentifier` does.
-  it("shows the complete step with the masked destination once the host flips the stage", () => {
+  it("shows the complete step with the destination as typed once the host flips the stage", () => {
     setup({ stage: "complete", identifier: "doc@example.com" });
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "copy.titleComplete",
     );
     expect(
-      screen.getByText("copy.descriptionComplete:d•••@e•••.com"),
+      screen.getByText("copy.descriptionComplete:doc@example.com"),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("reset-request-submit"),

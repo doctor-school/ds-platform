@@ -22,7 +22,6 @@ import {
 import { cn } from "../lib/utils";
 import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 import { OtpFocusScreen } from "./otp-focus-screen";
-import { maskDestination } from "./mask-destination";
 
 /**
  * `<LoginCard>` (#1666 slice A) — the ONE canonical sign-in composition both
@@ -39,8 +38,8 @@ import { maskDestination } from "./mask-destination";
  *     own RHF handle, `onTouched` validation (#200) and `Button.loading` pending
  *     affordance (#337),
  *   • the one code step (003 EARS-42) on `<OtpFocusScreen>` once a code was
- *     sent: the card's heading becomes «check your mail / phone» with the masked
- *     destination, the method tabs are hidden, the footer stays, and the #266
+ *     sent: the card's heading becomes «check your mail / phone» with the
+ *     destination exactly as typed (#2607), the method tabs are hidden, the footer stays, and the #266
  *     no-remount resend mechanic (a `resendNonce` bump restarts the cooldown,
  *     clears the superseded code and shows the after-resend notice).
  *
@@ -123,14 +122,14 @@ export interface LoginCardCopy {
     sendCode: React.ReactNode;
     /** The code step's card heading per channel (canvas «Проверьте почту / телефон»). */
     verifyTitle: Record<LoginCardOtpChannel, React.ReactNode>;
-    /** The code step's description «Мы отправили код на {masked}» — the block masks. */
+    /** The code step's description «Мы отправили код на {destination}» — the destination as typed. */
     sentTo: (destination: string) => React.ReactNode;
     /** The code label per channel (canvas «Код из письма / из сообщения»). */
     codeLabel: Record<LoginCardOtpChannel, string>;
     verifySubmit: React.ReactNode;
     resend: React.ReactNode;
     resendCountdown: (seconds: number) => React.ReactNode;
-    /** The after-resend notice «Мы отправили новый код на {masked}». */
+    /** The after-resend notice «Мы отправили новый код на {destination}». */
     resentTo: (destination: string) => React.ReactNode;
     changeMethod: React.ReactNode;
   };
@@ -258,7 +257,7 @@ export function LoginCard({
     channels[0] ?? "email",
   );
   // 003 EARS-42 — once the host confirms a sent code, the card IS the code
-  // step: its heading names the channel and the masked destination, and the
+  // step: its heading names the channel and the typed destination, and the
   // method tabs are hidden (canvas `showLoginTabs: !loginCodeStep`).
   const sentIdentifier = otp.sentIdentifier;
   // Canvas `auth.dc.html:56-61` — the operation-level failure of EITHER method
@@ -289,7 +288,7 @@ export function LoginCard({
       }
       description={
         sentIdentifier !== null
-          ? copy.otp.sentTo(maskDestination(sentIdentifier))
+          ? copy.otp.sentTo(sentIdentifier)
           : copy.description
       }
       footer={
@@ -696,7 +695,7 @@ function OtpVerifyForm({
             cooldownSeconds={cooldownSeconds}
             resendNonce={resendNonce}
             isSubmitting={verifyForm.formState.isSubmitting}
-            notice={resent ? copy.resentTo(maskDestination(identifier)) : null}
+            notice={resent ? copy.resentTo(identifier) : null}
             onComplete={onCodeComplete}
             onSubmit={submit}
             onResend={onResend}

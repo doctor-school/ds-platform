@@ -39,7 +39,6 @@ import {
   Pagination,
   PasswordRecoveryCard,
   RegistrationSuccessCard,
-  maskDestination,
   type AccountProfileCardCopy,
   type ComboboxOption,
   type DataTableColumn,
@@ -1677,7 +1676,7 @@ function NeutralEmailConfirmCard({
       <EmailConfirmCard
         copy={EMAIL_CONFIRM_COPY}
         email="you@example.com"
-        destination={maskDestination("you@example.com")}
+        destination="you@example.com"
         resolver={showcaseEmailConfirmResolver}
         onSubmit={() => {}}
         succeeded={succeeded}
@@ -1966,7 +1965,7 @@ function OtpFocusScreenSection() {
                 notice={
                   <>
                     We sent a new code to{" "}
-                    <strong>{maskDestination("doctor@example.com")}</strong>.
+                    <strong className="wrap-anywhere">doctor@example.com</strong>.
                   </>
                 }
               />

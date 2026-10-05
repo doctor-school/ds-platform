@@ -13,7 +13,6 @@ import {
   type PasswordRevealLabels,
 } from "../primitives/fields";
 import { AuthCard } from "./auth-card";
-import { maskDestination } from "./mask-destination";
 import { useResendCountdown } from "./use-resend-countdown";
 
 /**
@@ -26,7 +25,7 @@ import { useResendCountdown } from "./use-resend-countdown";
  *
  * What lives HERE (presentation + form mechanics):
  *   • the `<AuthCard>` frame whose title/description track the stage (the #1033
- *     `<h1>` a11y landmark; the #227 privacy-masked destination),
+ *     `<h1>` a11y landmark; the destination exactly as typed, #2607),
  *   • the EARS-11 request form (union identifier box, #196) and the EARS-12
  *     complete form (slotted 6-char alphanumeric code + new password, submitted
  *     together — which is why this surface never adopted `<OtpFocusScreen>`),
@@ -87,7 +86,7 @@ export interface PasswordRecoveryCardCopy {
   /** Card title on the complete step. */
   titleComplete: React.ReactNode;
   descriptionRequest: React.ReactNode;
-  /** "We sent a code to {masked}" — the block masks the destination. */
+  /** "We sent a code to {destination}" — the destination as typed (#2607). */
   descriptionComplete: (destination: string) => React.ReactNode;
   backToSignIn: React.ReactNode;
   request: {
@@ -155,8 +154,8 @@ export interface PasswordRecoveryCardProps {
   /** Host-owned stage: `"complete"` only once the request actually succeeded. */
   stage: PasswordRecoveryStage;
   /**
-   * The identifier the code was sent to. Seeds the complete form and is MASKED for
-   * display; empty on the request step.
+   * The identifier the code was sent to. Seeds the complete form and is shown
+   * exactly as typed (#2607); empty on the request step.
    */
   identifier: string;
   /** Target for the footer link back to sign-in. */
@@ -230,10 +229,9 @@ export function PasswordRecoveryCard({
       description={
         stage === "request"
           ? copy.descriptionRequest
-          : // #227: confirm WHERE the reset code went with a privacy-masked
-            // destination (the same `maskDestination` the login-OTP focus-screen
-            // shows), never the full identifier.
-            copy.descriptionComplete(maskDestination(identifier))
+          : // Confirm WHERE the reset code went — the identifier exactly as
+            // typed, as every code step shows it (#2607).
+            copy.descriptionComplete(identifier)
       }
       footer={
         <DsLink asChild>

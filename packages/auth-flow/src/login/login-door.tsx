@@ -185,7 +185,7 @@ function otpVerifyResolverOf(
 /**
  * The host's login sentences, projected onto the block's copy slots. The two
  * `{…}`-templated lines are interpolated here rather than in the config, because
- * the block hands over a value (the masked destination, the remaining seconds)
+ * the block hands over a value (the typed destination, the remaining seconds)
  * that only exists at render time.
  */
 function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
@@ -223,7 +223,7 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       phonePlaceholder: copy.otp.phonePlaceholder,
       sendCode: copy.otp.sendCode,
       verifyTitle: copy.otp.verifyTitle,
-      // Canvas 394 — the masked destination stands bold inside the sentence.
+      // Canvas 394 — the typed destination stands bold inside the sentence.
       sentTo: (destination) => withBoldDestination(copy.otp.sentTo, destination),
       codeLabel: copy.otp.codeLabel,
       verifySubmit: copy.otp.verifySubmit,

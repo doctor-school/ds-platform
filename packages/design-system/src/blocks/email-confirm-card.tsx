@@ -11,7 +11,7 @@ import { OtpFocusScreen } from "./otp-focus-screen";
  * `<EmailConfirmCard>` — the post-registration code step both storefronts mount
  * on `/verify` (003 EARS-24 amended, EARS-42; ADR-0013 A1). It is the canvas
  * «ШАГ КОДА» (`design-source/auth.dc.html` 64-85) in its own card: heading
- * «Проверьте почту», «Мы отправили код на <masked>.», the SAME
+ * «Проверьте почту», «Мы отправили код на <address as typed>.», the SAME
  * `<OtpFocusScreen>` the sign-in card draws once a code was sent, and the
  * «← Изменить почту» back control. A new and an already-registered address get
  * the identical step — it never branches on existence (003 EARS-16), and there
@@ -22,7 +22,7 @@ import { OtpFocusScreen } from "./otp-focus-screen";
  * with the #175 guarded auto-submit, and the resend wiring the step draws.
  *
  * What stays in the HOST: copy, the resolver, BFF transport (the code submit
- * and the EARS-25 resend), the masked destination, routing (including where
+ * and the EARS-25 resend), the destination, routing (including where
  * «back» goes) and the bot-protection element (a slot).
  */
 
@@ -70,7 +70,7 @@ export interface EmailConfirmCardProps {
   copy: EmailConfirmCardCopy;
   /** The address the code was sent to — seeds the non-rendered `email` field. */
   email?: string | undefined;
-  /** The already-masked destination label the description interpolates. */
+  /** The destination exactly as typed (#2607) the description interpolates. */
   destination: string;
   /** App-owned RHF resolver (localized messages + the `@ds/schemas` SSOT). */
   resolver: Resolver<EmailConfirmValues>;

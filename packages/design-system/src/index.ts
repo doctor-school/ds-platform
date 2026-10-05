@@ -164,7 +164,6 @@ export {
   AuthLayout,
   AuthCard,
   OtpFocusScreen,
-  maskDestination,
 } from "./blocks";
 
 // 028 EARS-7 (#1966) — the legal-document reading surface and the Markdown→ToC

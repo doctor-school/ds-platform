@@ -105,7 +105,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: The post-registration screen is the one code step for new and existing visitors
     Given a visitor has submitted the registration form
     When the storefront shows the post-registration screen
-    Then it is the one code step: "check your email", the masked address, six code cells and a resend with cooldown
+    Then it is the one code step: "check your email", the address exactly as typed, six code cells and a resend with cooldown
     And it offers «← Изменить почту» back to the registration form with the entered fields kept
     And it offers no separate Sign in or Reset password block
     And the screen never branches on whether the email was already registered
@@ -664,7 +664,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-42 @happy
   Scenario: No eight-cell code step exists on either storefront
     When a user reaches the code step from login by code, registration or re-registration
-    Then the step shows six code cells, the masked address and a resend with cooldown
+    Then the step shows six code cells, the address exactly as typed and a resend with cooldown
     And the back link reads «← Изменить способ» in login and «← Изменить почту» in registration
 
   @EARS-43 @happy

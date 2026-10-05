@@ -271,13 +271,13 @@ describe("<LoginCard>", () => {
 
   });
 
-  it("003 EARS-42: the sent code turns the card into the code step — channel heading, masked destination, no tabs, footer kept", () => {
+  it("003 EARS-42: the sent code turns the card into the code step — channel heading, the destination as typed, no tabs, footer kept", () => {
     setup({ sentIdentifier: "doc@example.com" });
 
     expect(
       screen.getByRole("heading", { level: 1, name: "copy.otp.verifyTitle.email" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("copy.otp.sentTo:d•••@e•••.com")).toBeInTheDocument();
+    expect(screen.getByText("copy.otp.sentTo:doc@example.com")).toBeInTheDocument();
     expect(screen.queryByText("copy.title")).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByText("copy.methodSwitcherLabel")).toBeNull();
@@ -307,9 +307,10 @@ describe("<LoginCard>", () => {
       screen.getByRole("heading", { level: 1, name: "copy.otp.verifyTitle.sms" }),
     ).toBeInTheDocument();
     expect(screen.getByText("copy.otp.codeLabel.sms")).toBeInTheDocument();
-    // Masked by the block — the raw number never renders.
-    expect(screen.getByText(/^copy\.otp\.sentTo:\+7.*•/)).toBeInTheDocument();
-    expect(screen.queryByText(/79991234567/)).toBeNull();
+    // #2607: the visitor's own number, exactly as sent — never masked.
+    expect(
+      screen.getByText("copy.otp.sentTo:+79991234567"),
+    ).toBeInTheDocument();
   });
 
   it("003 EARS-42: a successful resend shows the «new code» notice, absent before it", () => {
@@ -319,7 +320,7 @@ describe("<LoginCard>", () => {
       expect(screen.queryByTestId("otp-resend-notice")).toBeNull();
       rerender(<Card sentIdentifier="doc@example.com" resendNonce={1} />);
       expect(screen.getByTestId("otp-resend-notice")).toHaveTextContent(
-        "copy.otp.resentTo:d•••@e•••.com",
+        "copy.otp.resentTo:doc@example.com",
       );
     } finally {
       vi.useRealTimers();

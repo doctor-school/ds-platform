@@ -134,6 +134,7 @@ export default function ProjectDetailPage() {
                       kind: values.kind,
                       title: values.title,
                       description: values.description,
+                      defaultAudience: values.defaultAudience,
                       ...(values.removeCover && !values.cover
                         ? { mediaAction: "clear" as const }
                         : {}),

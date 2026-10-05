@@ -108,10 +108,16 @@ export function taxonomyErrorKey(
   // specialty link and adjacency edge hanging off it, so the operator confirms
   // a set they were shown. `RELATIONSHIP_CONFLICT` stays event-project-only —
   // there is no logical pair to collide on the entity surface.
-  if (ns === "eventProjects" || ns === "directions") {
+  //
+  // `eventKinds` (012 EARS-25/28, #2509) is impact-gated the same way, and its
+  // `RELATIONSHIP_CONFLICT` has exactly one meaning: a narrowing of the allowed
+  // formats was refused because events of the kind still carry a removed one.
+  // The sentence says so; the page lists the named events under it.
+  if (ns === "eventProjects" || ns === "directions" || ns === "eventKinds") {
     switch (code) {
       case "RELATIONSHIP_CONFLICT":
         if (ns === "eventProjects") return "eventProjects.errors.duplicatePair";
+        if (ns === "eventKinds") return "eventKinds.errors.narrowRefused";
         break;
       case "INVALID_TRANSITION":
         return `${ns}.errors.invalidTransition`;

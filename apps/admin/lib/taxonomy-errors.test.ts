@@ -187,3 +187,32 @@ describe("taxonomyErrorKey — 012 EARS-6 relationship codes (#1288)", () => {
     }
   });
 });
+
+describe("taxonomyErrorKey — 012 EARS-25/28 event kinds (#2509)", () => {
+  it("012 EARS-25: a refused narrowing maps to its own sentence, which exists in ru.json", () => {
+    const key = taxonomyErrorKey(
+      { errorCode: "RELATIONSHIP_CONFLICT" },
+      "eventKinds.errors.updateFailed",
+    );
+    expect(key).toBe("eventKinds.errors.narrowRefused");
+    expect(typeof lookup(key)).toBe("string");
+  });
+
+  it("012 EARS-28: the lifecycle-impact codes map onto the eventKinds namespace", () => {
+    for (const [code, suffix] of [
+      ["INVALID_TRANSITION", "invalidTransition"],
+      ["LIFECYCLE_IMPACT_STALE", "impactStale"],
+      ["LIFECYCLE_IMPACT_REQUIRED", "impactRequired"],
+      ["RESOURCE_NOT_FOUND", "notFound"],
+      ["PRECONDITION_FAILED", "stale"],
+      ["SLUG_CONFLICT", "slugConflict"],
+    ] as const) {
+      const key = taxonomyErrorKey(
+        { errorCode: code },
+        "eventKinds.errors.transitionFailed",
+      );
+      expect(key).toBe(`eventKinds.errors.${suffix}`);
+      expect(typeof lookup(key)).toBe("string");
+    }
+  });
+});

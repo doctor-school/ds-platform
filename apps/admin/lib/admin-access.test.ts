@@ -79,6 +79,7 @@ describe("044 EARS-20 admin access projection", () => {
       "/projects",
       "/experts",
       "/partners",
+      "/event-kinds",
       "/directions",
       "/direction-specialties",
       "/direction-adjacency",

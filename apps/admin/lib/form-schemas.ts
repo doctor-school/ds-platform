@@ -31,6 +31,10 @@ import {
   type StreamProvider,
   StreamProviderSchema,
   CongressDeskRegistrationRequestSchema,
+  CreateEventKindRequestSchema,
+  type EventAudience,
+  type EventParticipationFormat,
+  EventParticipationFormatSchema,
 } from "@ds/schemas";
 import {
   CurrentPasswordFieldSchema,
@@ -106,6 +110,16 @@ export function eventFormSchema({
       // before the box was checked must not fail a submit on a field the operator
       // can no longer see or clear.
       partnerRef: z.string(),
+      // 012 EARS-26/29/30 (#2509) — three required choices the form offers from
+      // closed lists: the kind (published kinds), the participation format (only
+      // those the chosen kind allows) and the audience. An empty select is the
+      // «Обязательное поле.» refusal; the value set itself is the server's rule.
+      kindId: z.string().min(1),
+      participationFormat: z.string().min(1),
+      audience: z.string().min(1),
+      // Optional and CREATE-only: the project the new event is linked to, whose
+      // default audience prefills `audience` (EARS-30). "" = no project.
+      projectId: z.string(),
       specialtiesText: z.string().superRefine((text, ctx) => {
         const result = create.specialties.safeParse(parseSpecialties(text));
         if (result.success) return;
@@ -203,6 +217,14 @@ export interface EventFormFields {
   /** 014 EARS-24 — «Это архивный эфир» (server-assigned `legacy` origin). */
   legacy: boolean;
   recording: EventRecordingFields;
+  /** 012 EARS-26 — the event kind id ("" until chosen). */
+  kindId: string;
+  /** 020 EARS-1 / 012 EARS-26 — one of the kind's allowed formats ("" until chosen). */
+  participationFormat: EventParticipationFormat | "";
+  /** 012 EARS-29 — the storefront selector ("" until chosen or prefilled). */
+  audience: EventAudience | "";
+  /** 012 EARS-30 — create only: the linked project ("" = none). */
+  projectId: string;
 }
 
 /** The stream-config form validator — the SSOT request schema verbatim (EARS-3). */
@@ -254,12 +276,32 @@ export const ProjectFormSchema = z.object({
   kind: projectCreate.kind,
   title: projectCreate.title,
   description: z.string().trim().min(1).max(2000),
+  // 012 EARS-30 (#2509) — required; "" (nothing chosen yet) is the
+  // «Обязательное поле.» refusal rather than an unknown-value one.
+  defaultAudience: z.string().min(1),
 });
 
 export interface ProjectFormFields {
   kind: ProjectKind;
   title: string;
   description: string;
+  defaultAudience: EventAudience | "";
+}
+
+/**
+ * The 012 event-kind create/edit form (EARS-25, #2509) — the Directions twin
+ * plus the allowed participation formats: a non-empty set chosen from the closed
+ * format list. Slug is absent (server-derived), and so is any storefront field —
+ * the storefront is the event's audience alone (LD-12).
+ */
+export const EventKindFormSchema = z.object({
+  title: CreateEventKindRequestSchema.shape.title,
+  allowedFormats: z.array(EventParticipationFormatSchema).min(1),
+});
+
+export interface EventKindFormFields {
+  title: string;
+  allowedFormats: EventParticipationFormat[];
 }
 
 /**

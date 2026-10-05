@@ -31,6 +31,9 @@ const detail = {
   partnerRef: "partner-1",
   specialties: ["cardiology", "therapy"],
   streamConfig: { provider: "rutube", embedRef: "abc123" },
+  kind: { id: "44444444-4444-4444-8444-444444444444", slug: "efir", title: "Эфир" },
+  participationFormat: "online",
+  audience: "experts",
 } as unknown as EventAdminDetail;
 
 describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
@@ -63,7 +66,26 @@ describe("007 EARS-2/EARS-3 form fields projection (#1593)", () => {
       specialtiesText: "",
       legacy: false,
       recording: { kind: "edited", provider: "rutube", embedRef: "" },
+      // 012 EARS-26/29/30 — no kind, no format and no audience are preselected:
+      // the editor chooses them, and only a linked project prefills the audience.
+      kindId: "",
+      participationFormat: "",
+      audience: "",
+      projectId: "",
     });
+  });
+
+  it("012 EARS-26/29: the edit fields project the event's kind id, participation format and audience", () => {
+    const fields = eventFormFields({
+      ...detail,
+      kind: { id: "22222222-2222-4222-8222-222222222222", slug: "vebinar", title: "Вебинар" },
+      participationFormat: "offline",
+      audience: "doctors",
+    });
+    expect(fields.kindId).toBe("22222222-2222-4222-8222-222222222222");
+    expect(fields.participationFormat).toBe("offline");
+    expect(fields.audience).toBe("doctors");
+    expect(fields.projectId).toBe("");
   });
 
   it("014 EARS-24: a legacy detail projects `legacy: true`, a platform detail `false`", () => {

@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useList, useOne } from "@refinedev/core";
+import { useForm, type UseFormReturn } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import type { z } from "zod";
-import { Button, Checkbox, Input, Label, Link } from "@ds/design-system";
+import {
+  Button,
+  Checkbox,
+  Input,
+  Label,
+  Link,
+  NativeSelect,
+} from "@ds/design-system";
 import {
   Form,
   FormControl,
@@ -15,12 +23,19 @@ import {
   FormMessage,
 } from "@ds/design-system/form";
 import {
+  ADMIN_LIST_PAGE_SIZE_MAX,
   type AttachRecordingRequest,
+  EVENT_AUDIENCES,
   type EventAdminDetail,
+  type EventAudience,
+  type EventKindAdminListItem,
+  type EventParticipationFormat,
+  type ProjectAdminDetail,
   RECORDING_KINDS,
 } from "@ds/schemas";
 import { TokenSelect, TokenTextarea } from "@/components/fields";
 import { RecordingSourceFieldSet } from "@/components/recording-source-fields";
+import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
 import {
   FORM_SAVED_RESET_OPTIONS,
   FORM_SYNC_RESET_OPTIONS,
@@ -60,6 +75,18 @@ export interface EventFormValues {
    * the API shape (empty optional boxes dropped, seconds parsed).
    */
   recording: AttachRecordingRequest | null;
+  /** 012 EARS-26 — the event kind (a published kind, or the event's current one). */
+  kindId: string;
+  /** 012 EARS-26 / 020 EARS-1 — one of the formats the kind allows. */
+  participationFormat: EventParticipationFormat;
+  /** 012 EARS-29 — the storefront selector. */
+  audience: EventAudience;
+  /**
+   * 012 EARS-30 — CREATE only: the project the new event is linked to after it
+   * is created (`null` = no project). The edit form never sends one: the
+   * «Проекты» tab owns the links of an existing event.
+   */
+  projectId: string | null;
 }
 
 const PDF_MIME = "application/pdf";
@@ -204,6 +231,11 @@ export function EventForm({
       programPdf,
       legacy: false,
       recording: null,
+      kindId: fieldsValue.kindId,
+      participationFormat:
+        fieldsValue.participationFormat as EventParticipationFormat,
+      audience: fieldsValue.audience as EventAudience,
+      projectId: detail ? null : fieldsValue.projectId || null,
       // Only on CREATE: the route choice and the recording are authoring
       // facts, and the detail page's update never carries either.
       ...(detail ? null : legacySubmission(fieldsValue)),
@@ -289,6 +321,8 @@ export function EventForm({
             </FormItem>
           )}
         />
+
+        <EventClassificationFields form={form} detail={detail} />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <FormField
@@ -502,5 +536,201 @@ export function EventForm({
         </div>
       </form>
     </Form>
+  );
+}
+
+/**
+ * 012 EARS-26/29/30 (#2509) — the event's classification: its kind, the
+ * participation format, the audience and (on create) the linked project.
+ * Standard design-system selects inside the existing form, per the owner's look
+ * decision («Как «Направления»»: no bespoke element).
+ *
+ * - **Kind** offers the published kinds; the event's own kind stays offered on
+ *   edit even once retired (the reference is retained, EARS-28), labelled so.
+ * - **Format** offers ONLY the formats the chosen kind allows — the owner rule
+ *   «если таксономия не матчится, то и не должно быть возможности выбора
+ *   несовместимых типов». Changing the kind to one that disallows the current
+ *   format clears it (a kind allowing exactly one format selects it). The
+ *   server refuses a disallowed pair anyway; this keeps it unchoosable.
+ * - **Audience** has no default. A project chosen on create prefills it from
+ *   the project's default audience (EARS-30); the editor may still change it,
+ *   and a later project-default change never rewrites the event.
+ */
+function EventClassificationFields({
+  form,
+  detail,
+}: {
+  form: UseFormReturn<EventFormFields>;
+  detail?: EventAdminDetail;
+}) {
+  const t = useTranslations();
+  const { result: kindPage, query: kindQuery } =
+    useList<EventKindAdminListItem>({
+      resource: "event-kinds",
+      pagination: { currentPage: 1, pageSize: ADMIN_LIST_PAGE_SIZE_MAX },
+      // Retired rows are read too, so the event's own retired kind still
+      // resolves its allowed formats; only published kinds are OFFERED.
+      filters: [{ field: "includeRetired", operator: "eq", value: true }],
+    });
+  const kinds = (kindPage.data ?? []) as EventKindAdminListItem[];
+  const kindsLoaded = kindQuery.isSuccess;
+  const currentKindId = detail?.kind.id;
+  const offeredKinds = kinds.filter(
+    (kind) => kind.status === "published" || kind.id === currentKindId,
+  );
+
+  const kindId = form.watch("kindId");
+  const allowedFormats =
+    kinds.find((kind) => kind.id === kindId)?.allowedFormats ?? [];
+  const allowedKey = allowedFormats.join(",");
+
+  useEffect(() => {
+    if (!kindsLoaded || !kindId) return;
+    const current = form.getValues("participationFormat");
+    if (current && allowedFormats.includes(current)) return;
+    const next = allowedFormats.length === 1 ? allowedFormats[0]! : "";
+    if (next === current) return;
+    form.setValue("participationFormat", next, {
+      shouldDirty: true,
+      shouldValidate: current !== "",
+    });
+    // Keyed on the kind and its format set, not on `allowedFormats` (a new
+    // array each render): re-running on every render would fight the select.
+  }, [kindId, allowedKey, kindsLoaded, form]);
+
+  const projectId = form.watch("projectId");
+  const { result: project } = useOne<ProjectAdminDetail>({
+    resource: "projects",
+    id: projectId,
+    queryOptions: { enabled: Boolean(projectId) },
+  });
+  // The project whose default was last applied: the prefill happens once per
+  // chosen project, so the editor's override is never clobbered by a refetch.
+  const prefilledFor = useRef("");
+  useEffect(() => {
+    if (!projectId) {
+      prefilledFor.current = "";
+      return;
+    }
+    if (!project || project.id !== projectId) return;
+    if (prefilledFor.current === projectId) return;
+    prefilledFor.current = projectId;
+    form.setValue("audience", project.defaultAudience, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [projectId, project, form]);
+
+  return (
+    <div className="flex flex-col gap-5" data-testid="event-classification">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <FormField
+          control={form.control}
+          name="kindId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel htmlFor="kindId">{t("events.fields.kind")}</FormLabel>
+              <FormControl>
+                <NativeSelect id="kindId" data-testid="event-kind" {...field}>
+                  <option value="">
+                    {kindsLoaded
+                      ? t("events.fields.kindPlaceholder")
+                      : t("common.loading")}
+                  </option>
+                  {offeredKinds.map((kind) => (
+                    <option key={kind.id} value={kind.id}>
+                      {kind.status === "retired"
+                        ? `${kind.title} (${t("events.fields.kindRetiredSuffix")})`
+                        : kind.title}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="participationFormat"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel htmlFor="participationFormat">
+                {t("events.fields.participationFormat")}
+              </FormLabel>
+              <FormControl>
+                <NativeSelect
+                  id="participationFormat"
+                  data-testid="event-participation-format"
+                  disabled={!kindId}
+                  {...field}
+                >
+                  <option value="">
+                    {t("events.fields.participationFormatPlaceholder")}
+                  </option>
+                  {allowedFormats.map((format) => (
+                    <option key={format} value={format}>
+                      {t(`events.participationFormats.${format}`)}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </FormControl>
+              <FormMessage>
+                {kindId
+                  ? t("events.fields.participationFormatHint")
+                  : t("events.fields.participationFormatNeedsKind")}
+              </FormMessage>
+            </FormItem>
+          )}
+        />
+      </div>
+
+      {detail ? null : (
+        <div className="flex flex-col gap-2" data-testid="event-project">
+          <RelationshipEndpointPicker
+            endpoint="project"
+            excludedIds={[]}
+            value={projectId}
+            onChange={(next) =>
+              form.setValue("projectId", next, { shouldDirty: true })
+            }
+            testIdPrefix="event-project"
+            copy={{
+              search: t("events.fields.projectSearch"),
+              searchPlaceholder: t("events.fields.projectSearchPlaceholder"),
+              select: t("events.fields.project"),
+              selectPlaceholder: t("events.fields.projectPlaceholder"),
+              noOptions: t("events.fields.projectNoOptions"),
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("events.fields.projectHint")}
+          </p>
+        </div>
+      )}
+
+      <FormField
+        control={form.control}
+        name="audience"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel htmlFor="audience">
+              {t("events.fields.audience")}
+            </FormLabel>
+            <FormControl>
+              <NativeSelect id="audience" data-testid="event-audience" {...field}>
+                <option value="">{t("events.fields.audiencePlaceholder")}</option>
+                {EVENT_AUDIENCES.map((audience) => (
+                  <option key={audience} value={audience}>
+                    {t(`events.audiences.${audience}`)}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormControl>
+            <FormMessage>{t("events.fields.audienceHint")}</FormMessage>
+          </FormItem>
+        )}
+      />
+    </div>
   );
 }

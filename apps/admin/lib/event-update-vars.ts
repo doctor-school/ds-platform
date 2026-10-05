@@ -48,5 +48,10 @@ export function eventUpdateVars(
     specialties: values.specialties,
     partnerRef: values.partnerRef,
     programPdf: values.programPdf,
+    // 012 EARS-26/29 — always sent: the kind, the format the kind allows and
+    // the audience. The project link is never part of the event body.
+    kindId: values.kindId,
+    participationFormat: values.participationFormat,
+    audience: values.audience,
   };
 }

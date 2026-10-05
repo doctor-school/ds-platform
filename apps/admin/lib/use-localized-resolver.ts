@@ -34,6 +34,7 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "experts.validation"
     | "partners.validation"
     | "directions.validation"
+    | "eventKinds.validation"
     | "directionSpecialties.validation"
     | "directionAdjacency.validation"
     | "recordings.validation"
@@ -176,6 +177,8 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return issue.code === "custom" ? t("selfEdge") : t("adjacentDirection");
   }
   if (has("directionId")) return t("direction");
+  // 012 EARS-25 — an event kind allows a non-empty set of formats.
+  if (has("allowedFormats")) return t("allowedFormats");
   if (has("expectedBy")) return t("expectedBy");
   // 014 EARS-24 (#1741): the recording block the «Это архивный эфир» checkbox
   // opens INSIDE the event form arrives nested (`recording.*`) and needs no

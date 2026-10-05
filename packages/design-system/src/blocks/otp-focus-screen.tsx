@@ -162,7 +162,9 @@ export function OtpFocusScreen<T extends FieldValues>({
           data-testid={testIds.back}
           // `shrink-0` — the back control keeps its size; the resend label is
           // the flex item that yields when the row is cramped (#542).
-          className="shrink-0"
+          // `-mx-4 -my-2` cancel the ghost padding so the label sits on the
+          // content edge, as the canvas back control does (auth.dc.html 78).
+          className="-mx-4 -my-2 shrink-0"
         >
           {backLabel}
         </Button>

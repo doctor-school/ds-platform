@@ -336,7 +336,13 @@ export function LoginCard({
         <TabsContent value="password">
           <PasswordLogin copy={copy.password} {...password} />
         </TabsContent>
-        <TabsContent value="otp">
+        {/* The code step has no tab row above it, so it drops the panel's
+            tab-row offset: the field sits under the description as on /verify
+            (canvas «ШАГ КОДА», auth.dc.html 64-66). */}
+        <TabsContent
+          value="otp"
+          className={sentIdentifier !== null ? "mt-0" : undefined}
+        >
           <OtpLogin
             copy={copy.otp}
             resendCooldownSeconds={resendCooldownSeconds}

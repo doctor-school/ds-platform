@@ -127,7 +127,9 @@ describe("#2027 PR 1.7 host config — the confirmation step", () => {
       expect(copy.submit).toBe("Подтвердить и войти");
       expect(copy.back).toBe("← Изменить почту");
       expect(copy.codeAccepted).toBe("Код принят — входим…");
-      expect(copy.failed).toBe("Код не подошёл. Попробуйте ещё раз.");
+      expect(copy.failed).toBe(
+        "Код не подошёл. Проверьте его или запросите новый.",
+      );
       expect(copy.resendAcknowledged).toBe(
         "Мы отправили новый код на {destination}.",
       );
@@ -151,6 +153,10 @@ describe("#2027 PR 1.7 host config — the confirmation step", () => {
       expect(otp.verifySubmit).toBe("Подтвердить и войти");
       expect(otp.changeMethod).toBe("← Изменить способ");
       expect(otp.resentTo).toBe("Мы отправили новый код на {destination}.");
+      // Canvas `errText()` «код» — the one refusal of the one code step.
+      expect(resolveAuthFlowCopy(config).login.failed.otpVerify).toBe(
+        "Код не подошёл. Проверьте его или запросите новый.",
+      );
     }
   });
 

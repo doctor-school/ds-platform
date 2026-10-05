@@ -105,7 +105,7 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     failed: {
       password: "Не удалось войти. Проверьте данные и попробуйте снова.",
       otpRequest: "Не удалось отправить код. Попробуйте ещё раз.",
-      otpVerify: "Код не подошёл. Запросите новый.",
+      otpVerify: "Код не подошёл. Проверьте его или запросите новый.",
     },
   },
   register: {
@@ -142,7 +142,7 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
     resend: "Отправить снова",
     resendCountdown: "Отправить снова · {seconds} с",
     back: "← Изменить почту",
-    failed: "Код не подошёл. Попробуйте ещё раз.",
+    failed: "Код не подошёл. Проверьте его или запросите новый.",
     resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
     resendAcknowledged: "Мы отправили новый код на {destination}.",
   },

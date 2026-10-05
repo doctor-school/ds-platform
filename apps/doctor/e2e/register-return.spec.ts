@@ -208,7 +208,7 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     // generic sentence, the one post-throw exit both hosts share.
     await registerAndConfirm(page, arrival(LIVE), REFUSED_CODE);
 
-    await expect(page.getByText("Код не подошёл. Попробуйте ещё раз.")).toBeVisible();
+    await expect(page.getByText("Код не подошёл. Проверьте его или запросите новый.")).toBeVisible();
     // Still the code step, on the `/verify` route, with «← Изменить почту»
     // back to the form (003 EARS-24).
     await expect(page).toHaveURL(/\/verify\?/);

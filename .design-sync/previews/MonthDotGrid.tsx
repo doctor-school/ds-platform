@@ -1,8 +1,9 @@
 import { MonthDotGrid } from '@ds/design-system';
+import type { DotGridCell } from '@ds/design-system';
 
 const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 
-const WEEKS = [
+const WEEKS: DotGridCell[][] = [
   [
     { day: 30, inMonth: false, dots: [], ariaLabel: '30' },
     { day: 1, inMonth: true, dots: ['past', 'past'], ariaLabel: '1 — 2 эфира прошли' },

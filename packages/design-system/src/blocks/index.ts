@@ -165,16 +165,23 @@ export type {
   FilterBarApplyMode,
   AppliedFilter,
 } from "./filter-bar";
-// 019 EARS-7 — the ONE shared events facet panel (doctor-events.dc.html,
-// F-019-1 Б sidebar); 019/030/031 mount it at different D-1 fill states and
-// none of them owns a private copy.
-export { EventsFilter } from "./events-filter";
+// 019 EARS-7 — the ONE shared events facet panel (events-facets.dc.html);
+// both storefronts mount it with their own `host` facet set and none of them
+// owns a private copy.
+export {
+  EventsFilter,
+  countAppliedFacets,
+  defaultAppliedFacets,
+} from "./events-filter";
 export type {
   EventsFilterProps,
-  EventsFilterFill,
+  EventsFilterHost,
   EventsFilterOption,
   EventsFilterOptions,
   EventsFilterLabels,
+  EventsFilterComboFacet,
+  EventsFilterComboLabels,
+  EventsFilterComboPaging,
   AppliedFacets,
   FacetPanelState,
   SpecialtyRef,

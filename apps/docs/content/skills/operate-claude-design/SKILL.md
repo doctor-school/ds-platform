@@ -91,7 +91,7 @@ A new unit has one owner canvas — the one where it is the main subject and its
 
 Write the prompt in **English**, in exactly these sections and this order. Fill every section; delete nothing.
 
-One canvas renders **one page** (owner 2026-10-05, #2562). The page is responsive to the preview width — the desktop layout from 1024 px up, the mobile layout below — and every variation is a toolbar switch in the Claude Design UI, never a separate drawing: the canon canvases already work this way (`host`, `dark`, `state`, `signedIn`, `screen`, `width` props). Artboard grids and frame matrices (breakpoint × theme × state) are not drawn.
+One canvas renders **one page** (owner 2026-10-05, #2562). The page is responsive to the preview width — the desktop layout from 1024 px up, the mobile layout below — and every variation is a toolbar switch in the Claude Design UI, never a separate drawing: the canon canvases already work this way (`host`, `dark`, `state`, `signedIn`, `screen` props). A `width` switch, where a canvas has one, only forces the preview width («авто | десктоп | мобильный»); it never adds fixed frames. Artboard grids and frame matrices (breakpoint × theme × state) are not drawn.
 
 ```text
 Goal

@@ -112,6 +112,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         programPdfRef?: string | null;
         partnerRef?: string | null;
         recordingExpectedBy?: string | null;
+        audience?: "doctors" | "experts";
       } = {},
     ): Promise<{ id: string; slug: string }> {
       const slug = `pub-1341-${randomUUID()}`;
@@ -120,7 +121,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
            (slug, title, school, description, starts_at, duration_min, state,
             specialties, partner_ref, program_pdf_ref, recording_expected_by, kind_id, audience)
          VALUES ($1, $2, $3, $4, now() - interval '3 days', 90, $5,
-                 $6, $7, $8, $9, ${eventClassificationSql()})
+                 $6, $7, $8, $9, ${eventClassificationSql(overrides.audience)})
          RETURNING id`,
         [
           slug,
@@ -568,6 +569,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const byId = await readPlayback(id, headers);
       expect(byId.statusCode).toBe(404);
       expect(byId.payload).not.toContain(EDITED_REF);
+    });
+
+    it("012 EARS-29: the Academy playback read selects only an `experts` event, so a doctor-storefront event hands out no playable source on the Academy", async () => {
+      const doctors = await insertEvent("ended", { audience: "doctors" });
+      await publishRecording(doctors.id, "edited");
+      const experts = await insertEvent("ended", { audience: "experts" });
+      await publishRecording(experts.id, "edited");
+      const headers = cookieHeader(await doctorSession("doc-2509-audience"));
+
+      for (const key of [doctors.slug, doctors.id]) {
+        const res = await readPlayback(key, headers);
+        expect(res.statusCode).toBe(404);
+        expect(res.payload).not.toContain(EDITED_REF);
+      }
+      const academy = await readPlayback(experts.slug, headers);
+      expect(academy.statusCode).toBe(200);
+      expect(JSON.parse(academy.payload)).toMatchObject({
+        primary: { kind: "edited", embedRef: EDITED_REF },
+      });
     });
   },
 );

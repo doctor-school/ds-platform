@@ -347,8 +347,15 @@ function narrowingConflict(
 ): TaxonomyError {
   const named = conflicts.map((e) => `«${e.title}» (${e.id})`).join(", ");
   const message = `events of this kind still use ${removed.join(", ")}: ${named}; change their format or kind first`;
+  // The summary entry, then one entry per event addressed under
+  // `allowedFormats.events.<id>` with the title alone, so a client names and
+  // links each event without parsing the English summary.
   return new TaxonomyError("RELATIONSHIP_CONFLICT", message, [
     { path: "allowedFormats", message },
+    ...conflicts.map((e) => ({
+      path: `allowedFormats.events.${e.id}`,
+      message: e.title,
+    })),
   ]);
 }
 

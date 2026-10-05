@@ -578,6 +578,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const field = problem.errors?.find((e) => e.path === "allowedFormats");
       expect(field?.message).toContain(event.id);
       expect(field?.message).toContain(title);
+      // One addressed entry per conflicting event, so the admin kind form can
+      // name (and link) each event without parsing the summary sentence.
+      expect(problem.errors).toContainEqual({
+        path: `allowedFormats.events.${event.id}`,
+        message: title,
+      });
 
       const unchanged = await app.inject({
         method: "GET",

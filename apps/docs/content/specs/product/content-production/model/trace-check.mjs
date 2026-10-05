@@ -2,7 +2,9 @@
 // Trace check: registry-ru.md / process-to-be-ru.md IDs <-> IDEF0 model YAML (index.yaml).
 // Usage (from the repo root): node apps/docs/content/specs/product/content-production/model/trace-check.mjs
 // Exit 1 on: a dangling ID (in YAML, not in the registry or merged/excluded there);
-// an in-TO-BE F-ID missing from the first decomposition level (A0); an F-ID placed in several A0 boxes.
+// an in-TO-BE F-ID missing from the first decomposition level (A0); an F-ID placed in several A0 boxes;
+// an IDEF0 structure fault (arrow end on a wrong side / boundary kind / unknown box; a box without
+// a control or an output).
 // Everything else (O-ID coverage, out-of-TO-BE placement, block mismatch, ICOM subset) is reported, never fails.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -176,6 +178,47 @@ for (const diagram of diagrams) {
     console.log(
       `  O-IDs not on ${diagram.id} arrows (${missing.length}): ${missing.join(", ")}`,
     );
+
+  // IDEF0 structure: an arrow leaves a box output or enters through a boundary I/C/M code, and
+  // ends on a box input/control/mechanism or a boundary O code; every box is controlled and produces.
+  const boxIds = new Set((diagram.boxes ?? []).map((box) => box.id));
+  const controlled = new Set();
+  const producing = new Set();
+  const checkEnd = (arrow, end, role) => {
+    if (end?.boundary) {
+      const allowed = role === "from" ? /^[ICM]\d+$/ : /^O\d+$/;
+      if (!allowed.test(end.boundary))
+        errors.push(
+          `${diagram.id}: arrow ${arrow.id} ${role} boundary ${end.boundary} — ${role === "from" ? "a source boundary is I/C/M" : "a target boundary is O"}`,
+        );
+      return;
+    }
+    if (!boxIds.has(end?.box)) {
+      errors.push(
+        `${diagram.id}: arrow ${arrow.id} ${role} unknown box ${end?.box}`,
+      );
+      return;
+    }
+    const sides = role === "from" ? ["O"] : ["I", "C", "M"];
+    if (!sides.includes(end.side)) {
+      errors.push(
+        `${diagram.id}: arrow ${arrow.id} ${role} ${end.box} side ${end.side} — allowed ${sides.join("/")}`,
+      );
+      return;
+    }
+    if (role === "from") producing.add(end.box);
+    else if (end.side === "C") controlled.add(end.box);
+  };
+  for (const arrow of diagram.arrows ?? []) {
+    for (const end of asList(arrow.from)) checkEnd(arrow, end, "from");
+    for (const end of asList(arrow.to)) checkEnd(arrow, end, "to");
+  }
+  for (const id of boxIds) {
+    if (!controlled.has(id))
+      errors.push(`${diagram.id}: box ${id} has no control arrow`);
+    if (!producing.has(id))
+      errors.push(`${diagram.id}: box ${id} has no output arrow`);
+  }
 
   // ICOM consistency: a child boundary arrow carries a subset of the parent arrow with the same code.
   const parent = diagram.parent ? byId.get(diagram.parent) : null;

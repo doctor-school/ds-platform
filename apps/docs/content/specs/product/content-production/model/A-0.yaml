@@ -66,8 +66,8 @@ arrows:
     from: { boundary: C3 }
     to: { box: A0, side: C }
   - id: C4
-    label: Стандарты DS
-    objects: [O-141, O-138]
+    label: Базовый минимум качества
+    objects: [O-138]
     from: { boundary: C4 }
     to: { box: A0, side: C }
   - id: C5

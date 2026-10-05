@@ -484,6 +484,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/event-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventKindsAdminController_list"];
+        put?: never;
+        post: operations["EventKindsAdminController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/event-kinds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventKindsAdminController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["EventKindsAdminController_update"];
+        trace?: never;
+    };
+    "/v1/admin/event-kinds/{id}/lifecycle-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventKindsAdminController_lifecycleImpact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/event-kinds/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EventKindsAdminController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/event-kinds/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EventKindsAdminController_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/event-kinds/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EventKindsAdminController_retire"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/event-projects": {
         parameters: {
             query?: never;
@@ -1652,6 +1748,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/event-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventKindsPublicController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/events": {
         parameters: {
             query?: never;
@@ -2404,11 +2516,14 @@ export interface components {
                     city?: string;
                     endsAt: string | null;
                     /** @enum {string} */
-                    format: "webinar" | "online-meeting" | "offline-meetup" | "congress" | "podcast";
+                    format: "online" | "offline" | "hybrid";
                     href: string;
                     id: string;
-                    kind: string;
-                    kindTitle: string;
+                    kind: {
+                        id: string;
+                        slug: string;
+                        title: string;
+                    };
                     nmo: boolean;
                     pulCost: number;
                     seatsLeft?: number;
@@ -2490,11 +2605,21 @@ export interface components {
         };
         EventAdminListDto: {
             data: {
+                /** @enum {string} */
+                audience: "doctors" | "experts";
                 durationMin: number;
                 /** Format: uuid */
                 id: string;
+                kind: {
+                    id: string;
+                    slug: string;
+                    title: string;
+                };
+                kindFormatMismatch: boolean;
                 /** @enum {string} */
                 origin: "platform" | "legacy";
+                /** @enum {string} */
+                participationFormat: "online" | "offline" | "hybrid";
                 school: string;
                 slug: string;
                 /** Format: date-time */
@@ -2599,10 +2724,19 @@ export interface components {
             total: number;
         };
         LegacyBroadcastCreateDto: {
+            /** @enum {string} */
+            audience: "doctors" | "experts";
             /** @default  */
             description: string;
             durationMin: number;
             heldAtMsk: string;
+            /** Format: uuid */
+            kindId: string;
+            /**
+             * @default online
+             * @enum {string}
+             */
+            participationFormat: "online" | "offline" | "hybrid";
             recording: {
                 durationSec?: number | null;
                 embedRef: string;
@@ -3465,6 +3599,154 @@ export interface operations {
         };
     };
     EventExpertsAdminController_retire: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_lifecycleImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsAdminController_retire: {
         parameters: {
             query?: never;
             header?: never;
@@ -5379,6 +5661,23 @@ export interface operations {
             path: {
                 idOrSlug: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    EventKindsPublicController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

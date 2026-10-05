@@ -1977,13 +1977,7 @@
                         ]
                       },
                       "format": {
-                        "enum": [
-                          "webinar",
-                          "online-meeting",
-                          "offline-meetup",
-                          "congress",
-                          "podcast"
-                        ],
+                        "enum": ["online", "offline", "hybrid"],
                         "type": "string"
                       },
                       "href": {
@@ -1993,10 +1987,20 @@
                         "type": "string"
                       },
                       "kind": {
-                        "type": "string"
-                      },
-                      "kindTitle": {
-                        "type": "string"
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "slug", "title"],
+                        "type": "object"
                       },
                       "nmo": {
                         "type": "boolean"
@@ -2050,7 +2054,6 @@
                       "endsAt",
                       "format",
                       "kind",
-                      "kindTitle",
                       "title",
                       "speaker",
                       "source",
@@ -2374,6 +2377,10 @@
           "data": {
             "items": {
               "properties": {
+                "audience": {
+                  "enum": ["doctors", "experts"],
+                  "type": "string"
+                },
                 "durationMin": {
                   "maximum": 9007199254740991,
                   "minimum": -9007199254740991,
@@ -2384,8 +2391,31 @@
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
                 },
+                "kind": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "slug", "title"],
+                  "type": "object"
+                },
+                "kindFormatMismatch": {
+                  "type": "boolean"
+                },
                 "origin": {
                   "enum": ["platform", "legacy"],
+                  "type": "string"
+                },
+                "participationFormat": {
+                  "enum": ["online", "offline", "hybrid"],
                   "type": "string"
                 },
                 "school": {
@@ -2437,7 +2467,11 @@
                 "durationMin",
                 "state",
                 "origin",
-                "validTransitions"
+                "validTransitions",
+                "kind",
+                "participationFormat",
+                "kindFormatMismatch",
+                "audience"
               ],
               "type": "object"
             },
@@ -2973,6 +3007,10 @@
       "LegacyBroadcastCreateDto": {
         "additionalProperties": false,
         "properties": {
+          "audience": {
+            "enum": ["doctors", "experts"],
+            "type": "string"
+          },
           "description": {
             "default": "",
             "maxLength": 20000,
@@ -2985,6 +3023,16 @@
           },
           "heldAtMsk": {
             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$",
+            "type": "string"
+          },
+          "kindId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "participationFormat": {
+            "default": "online",
+            "enum": ["online", "offline", "hybrid"],
             "type": "string"
           },
           "recording": {
@@ -3052,7 +3100,14 @@
             "type": "string"
           }
         },
-        "required": ["title", "heldAtMsk", "durationMin", "recording"],
+        "required": [
+          "title",
+          "heldAtMsk",
+          "durationMin",
+          "recording",
+          "kindId",
+          "audience"
+        ],
         "type": "object"
       },
       "LoginRequestDto": {
@@ -4402,6 +4457,152 @@
           }
         },
         "tags": ["EventExpertsAdmin"]
+      }
+    },
+    "/v1/admin/event-kinds": {
+      "get": {
+        "operationId": "EventKindsAdminController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      },
+      "post": {
+        "operationId": "EventKindsAdminController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      }
+    },
+    "/v1/admin/event-kinds/{id}": {
+      "get": {
+        "operationId": "EventKindsAdminController_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      },
+      "patch": {
+        "operationId": "EventKindsAdminController_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      }
+    },
+    "/v1/admin/event-kinds/{id}/lifecycle-impact": {
+      "get": {
+        "operationId": "EventKindsAdminController_lifecycleImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      }
+    },
+    "/v1/admin/event-kinds/{id}/publish": {
+      "post": {
+        "operationId": "EventKindsAdminController_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      }
+    },
+    "/v1/admin/event-kinds/{id}/restore": {
+      "post": {
+        "operationId": "EventKindsAdminController_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
+      }
+    },
+    "/v1/admin/event-kinds/{id}/retire": {
+      "post": {
+        "operationId": "EventKindsAdminController_retire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsAdmin"]
       }
     },
     "/v1/admin/event-projects": {
@@ -6592,6 +6793,18 @@
           }
         },
         "tags": ["DirectionEventsPublic"]
+      }
+    },
+    "/v1/public/event-kinds": {
+      "get": {
+        "operationId": "EventKindsPublicController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EventKindsPublic"]
       }
     },
     "/v1/public/events": {

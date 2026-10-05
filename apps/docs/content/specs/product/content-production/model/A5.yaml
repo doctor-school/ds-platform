@@ -1,0 +1,205 @@
+# IDEF0 decomposition A5 «Отчитаться и закрыть» (child of A0; format: FORMAT-ru.md).
+# Steps 1–9 of process block 6 (../process-to-be-ru.md). Leaves carry a DRAFT effort for the owner's
+# calibration (effort-draft-ru.md); rates are calculator variables, never numbers here.
+id: A5
+parent: A0
+title: Отчитаться и закрыть
+# Child boundary code → A0 arrow touching box A5 on that side.
+icom:
+  I1: a06
+  C1: a01
+  C2: a13
+  O1: a08
+  O2: a09
+  O3: a10
+  O4: a11
+  O5: a12
+  M1: M1
+  M2: M5
+  M3: M7
+  M4: a14
+boxes:
+  - id: A51
+    name: Измерить осведомлённость и собрать данные
+    functions: [F-110]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаг 1: входной и выходной тест урока (реко Р6.1 — во всех продуктах), посещаемость и досмотры
+      — из данных платформы, не вручную.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: отчётный этап
+      hours_draft: [1, 3]
+      driver: число отчётных этапов на договор; доля ручной сборки данных
+      basis: оценка аналитика
+  - id: A52
+    name: Сформировать и отправить отчёт партнёру
+    functions: [F-089, F-090, F-104]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 2–3: отчёт по предмету соглашения; при сервисном пакете «под ключ» — отчёт и презентация;
+      при агенте-прослойке — напрямую фарме. Юрист — по advice process при рекламных метриках.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: отчётный этап
+      hours_draft: [2, 6]
+      driver: число отчётов на договор (этапы); сервисный пакет; доля ручной сборки данных
+      basis: оценка аналитика
+  - id: A53
+    name: Закрыть документы и принять оплату
+    functions: [F-091, F-092, F-093, F-094]
+    mechanisms: [Сервисный круг — бухгалтер]
+    note: >-
+      Шаги 4–5: закрывающий акт по реестру документов через ЭДО; подпись уполномоченного лица и
+      проводка как маркетингового расхода (F-092, F-093) — внешние шаги заказчика, часы DS — только
+      сопровождение.
+    leaf: true
+    effort:
+      role: Сервисный круг — бухгалтер
+      unit: отчётный этап
+      hours_draft: [1, 3]
+      driver: часы бухгалтера на договор; требования бухгалтерии заказчика
+      iterations: итерации подписания
+      basis: оценка аналитика
+  - id: A54
+    name: Выплатить гонорары и распределить авторскую долю
+    functions: [F-129]
+    mechanisms: [Сервисный круг — бухгалтер]
+    note: >-
+      Шаг 6: гонорары по открытой сетке (ставка × часы) — себестоимость; авторская доля —
+      распределение прибыли, вне себестоимости. Часы бухгалтера на расчёт — накладные (решение В8).
+    leaf: true
+    effort:
+      role: Сервисный круг — бухгалтер
+      unit: отчётный период
+      hours_draft: [2, 6]
+      driver: число получателей гонораров и авторской доли за период
+      basis: оценка аналитика
+  - id: A55
+    name: Собрать обратную связь и договориться о следующем цикле
+    functions: [F-100, F-101, F-103]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 7–8: обратная связь заказчика; при инциденте — признать и предложить бонус (влияет на цену,
+      не на себестоимость); договор о намерениях или предзаказ на следующий год → вход A1.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: договор
+      hours_draft: [2, 5]
+      driver: доля договоров с инцидентом; длина цикла предзаказа против окна бюджета фармы
+      basis: оценка аналитика
+  - id: A56
+    name: Провести ретро команды по проекту
+    functions: []
+    mechanisms: [Продуктовая команда]
+    note: >-
+      Шаг 9 (новое, в реестре нет): факт часов и итераций против калькулятора, открыто для всех
+      команд; без ретро калькулятор не калибруется. Часы — суммарно по участникам команды;
+      фасилитация коуча — в A6.
+    leaf: true
+    effort:
+      role: Продуктовая команда
+      unit: договор
+      hours_draft: [4, 12]
+      driver: число участников команды в проекте; число единиц в предмете договора
+      basis: оценка аналитика
+arrows:
+  # ---- Boundary ----
+  - id: I1
+    label: Посещаемость, досмотры, выпущенные уроки, контакты с врачом
+    objects: [O-100, O-178, O-180, O-176, O-206]
+    from: { boundary: I1 }
+    to: { box: A51, side: I }
+  - id: C1
+    label: Договор — предмет соглашения
+    objects: [O-107, O-170]
+    from: { boundary: C1 }
+    to:
+      - { box: A52, side: C }
+      - { box: A53, side: C }
+      - { box: A55, side: C }
+  - id: C2
+    label: Стандарты DS, калькулятор себестоимости
+    objects: [O-141, O-172]
+    from: { boundary: C2 }
+    to:
+      - { box: A51, side: C }
+      - { box: A54, side: C }
+      - { box: A56, side: C }
+  - id: O1
+    label: Отчёт партнёру
+    objects: [O-099, O-209, O-208]
+    from: { box: A52, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Акты и оплата
+    objects: [O-105, O-098, O-128]
+    from: { box: A53, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Выплаты участникам
+    objects: [O-219]
+    from: { box: A54, side: O }
+    to: { boundary: O3 }
+  - id: O4
+    label: Факт часов и итераций
+    objects: [O-177, O-174]
+    from: { box: A56, side: O }
+    to: { boundary: O4 }
+  - id: O5
+    label: Договор о намерениях, предзаказ, удовлетворённость
+    objects: [O-109, O-205, O-179]
+    from: { box: A55, side: O }
+    to: { boundary: O5 }
+  - id: M1
+    label: Аккаунт, продюсер, команда
+    objects: [O-015, O-004, O-001]
+    from: { boundary: M1 }
+    to:
+      - { box: A51, side: M }
+      - { box: A52, side: M }
+      - { box: A55, side: M }
+  - id: M2
+    label: Бухгалтер
+    objects: [O-224]
+    from: { boundary: M2 }
+    to: [{ box: A53, side: M }, { box: A54, side: M }]
+  - id: M3
+    label: Платформа DS, кабинет партнёра
+    objects: [O-185, O-207]
+    from: { boundary: M3 }
+    to: [{ box: A51, side: M }, { box: A52, side: M }]
+  - id: M4
+    label: Команда проекта
+    objects: [O-001]
+    from: { boundary: M4 }
+    to: { box: A56, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Осведомлённость и данные платформы
+    objects: [O-176, O-100]
+    from: { box: A51, side: O }
+    to: { box: A52, side: I }
+  - id: a02
+    label: Отправленный отчёт
+    objects: [O-099]
+    from: { box: A52, side: O }
+    to: [{ box: A53, side: I }, { box: A55, side: I }]
+  - id: a03
+    label: Поступившая оплата
+    objects: [O-128]
+    from: { box: A53, side: O }
+    to: { box: A54, side: I }
+  - id: a04
+    label: Выплаты по факту часов
+    objects: [O-219]
+    from: { box: A54, side: O }
+    to: { box: A56, side: I }
+  - id: a05
+    label: Обратная связь заказчика
+    objects: [O-179]
+    from: { box: A55, side: O }
+    to: { box: A56, side: I }

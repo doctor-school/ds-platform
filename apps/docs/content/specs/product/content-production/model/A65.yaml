@@ -1,0 +1,128 @@
+# IDEF0 decomposition A65 «Вести стандарты, СОП и метрики, калибровать себестоимость» (child of A6;
+# format: FORMAT-ru.md). Steps 8–11 of process block 7 (../process-to-be-ru.md). Per-period overheads.
+id: A65
+parent: A6
+title: Вести стандарты, СОП и метрики, калибровать себестоимость
+# Child boundary code → A6 arrow touching box A65 on that side.
+icom:
+  I1: I1
+  C1: C1
+  O1: O1
+  O2: O1
+  O3: O5
+  O4: a03
+  M1: M1
+  M2: M2
+  M3: M3
+boxes:
+  - id: A651
+    name: Сформировать и пересмотреть стандарты DS и шаблоны договоров
+    functions: [F-106, F-009]
+    mechanisms: [Ядро — стандарты]
+    note: >-
+      Шаг 8: advice process с публикацией; шаблоны договоров — с юристом по advice process; пул
+      рецензентов держит собственную политику независимости.
+    leaf: true
+    effort:
+      role: Ядро — стандарты
+      unit: ревизия стандартов
+      hours_draft: [8, 20]
+      driver: число стандартов в ревизии; число затронутых команд в advice process
+      basis: оценка аналитика
+  - id: A652
+    name: Разработать СОП по специализации
+    functions: [F-107]
+    mechanisms: [Продуктовая команда]
+    note: Шаг 9 — СОП пишет тот, кто делает работу.
+    leaf: true
+    effort:
+      role: Продуктовая команда
+      unit: СОП
+      hours_draft: [4, 12]
+      driver: число специализаций; частота пересмотра
+      basis: оценка аналитика
+  - id: A653
+    name: Определить и измерять метрики
+    functions: [F-111, F-109]
+    mechanisms: [Ядро]
+    note: Шаг 10 — метрики по ЦА и метрики процесса; результаты команд открыты, без усреднения.
+    leaf: true
+    effort:
+      role: Ядро
+      unit: команда·месяц
+      hours_draft: [1, 2]
+      driver: число команд; доля метрик, которые платформа собирает автоматически
+      basis: оценка аналитика
+  - id: A654
+    name: Калибровать себестоимость
+    functions: []
+    mechanisms: [Ядро — калькулятор]
+    note: >-
+      Шаг 11: факт часов и итераций из ретро → переменные калькулятора. Расчёт по калькулятору
+      (F-108) стоит в A13; здесь — его калибровка, отдельного F-ID в реестре нет.
+    leaf: true
+    effort:
+      role: Ядро — калькулятор
+      unit: отчётный период
+      hours_draft: [4, 8]
+      driver: число ретро за период; расхождение факта с черновыми часами
+      basis: оценка аналитика
+arrows:
+  - id: I1
+    label: Факт часов и итераций
+    objects: [O-177, O-174]
+    from: { boundary: I1 }
+    to: [{ box: A653, side: I }, { box: A654, side: I }]
+  - id: C1
+    label: Базовый минимум качества
+    objects: [O-138]
+    from: { boundary: C1 }
+    to: [{ box: A651, side: C }, { box: A653, side: C }]
+  - id: O1
+    label: Стандарты DS, шаблоны, чек-лист приёмки
+    objects: [O-141, O-097, O-145, O-146, O-147, O-148, O-168, O-169, O-221]
+    from: { box: A651, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: СОП
+    objects: [O-143, O-144]
+    from: { box: A652, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Откалиброванный калькулятор, факт часов
+    objects: [O-172, O-177]
+    from: { box: A654, side: O }
+    to: { boundary: O3 }
+  - id: O4
+    label: Стандарты DS — вводный модуль
+    objects: [O-141]
+    from: { box: A651, side: O }
+    to: { boundary: O4 }
+  - id: M1
+    label: Продуктовые команды
+    objects: [O-001]
+    from: { boundary: M1 }
+    to: { box: A652, side: M }
+  - id: M2
+    label: Пул медрецензентов — политика независимости
+    objects: [O-009]
+    from: { boundary: M2 }
+    to: { box: A651, side: M }
+  - id: M3
+    label: Ядро
+    objects: [O-017, O-223]
+    from: { boundary: M3 }
+    to:
+      - { box: A651, side: M }
+      - { box: A653, side: M }
+      - { box: A654, side: M }
+  - id: a01
+    label: Стандарты DS
+    objects: [O-141]
+    from: { box: A651, side: O }
+    to: { box: A652, side: C }
+  - id: a02
+    label: Метрики процесса
+    objects: [O-177]
+    from: { box: A653, side: O }
+    to: { box: A654, side: C }

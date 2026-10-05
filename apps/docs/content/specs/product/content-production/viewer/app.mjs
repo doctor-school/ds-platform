@@ -27,9 +27,9 @@ const { useEffect, useMemo, useState, useCallback } = React;
 
 const KIND_NAME = { I: "вход", C: "управление", O: "выход", M: "механизм" };
 
-// Diagram units equal CSS px at zoom 1. Fonts are sized so that at LEGIBLE_ZOOM arrow labels
-// render ≥ 11 px and box titles ≥ 13 px; the initial view fits the diagram width and never
-// zooms out below that (a wider diagram scrolls instead of shrinking into illegibility).
+// Diagram units equal CSS px at zoom 1. Fonts are sized so that at zoom 0.87 arrow labels render
+// ≥ 11 px and box titles ≥ 13 px. The initial view fits the whole diagram (it may start smaller
+// than that on a small window); zoom in to read.
 const U = {
   label: 13,
   line: 16,
@@ -38,7 +38,6 @@ const U = {
   lane: 12,
   pad: 16,
 };
-const LEGIBLE_ZOOM = 0.87;
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 const asList = (end) => (Array.isArray(end) ? end : end ? [end] : []);
@@ -65,6 +64,8 @@ function wrapTo(text, maxWidth, size, weight) {
 /** Label block size; matches `.arrow-label` (13 px / 16 px lines, 2 px + 4 px padding, 3 px rule). */
 function labelBlock(text, maxWidth) {
   const lines = wrapTo(text, maxWidth - 10, U.label);
+  // An unlabelled arrow has no block: Math.max() of no widths would be -Infinity → NaN geometry.
+  if (!lines.length) return { text: "", lines: 0, width: 0, height: 0 };
   return {
     text: lines.join("\n"),
     lines: lines.length,
@@ -282,9 +283,24 @@ function layoutDiagram(diagram) {
     const up = byOrder(laneUp[j]);
     return { down, up, mech: laneMech[j].map((l) => l.id) };
   });
-  const nXr = xrLanes.map((l) => Math.max(l.up.length, l.down.length));
+  // Right-side track per arrow. An arrow feeding back both up and down runs the full height, so it
+  // owns a track no other arrow uses; an up-only and a down-only arrow may share a track, because
+  // up ports sit above down ports on the east side and their spans never meet.
+  const xrTrack = xrLanes.map(({ up, down }) => {
+    const both = up.filter((id) => down.includes(id));
+    const track = new Map(both.map((id, k) => [id, k]));
+    up.filter((id) => !track.has(id)).forEach((id, k) =>
+      track.set(id, both.length + k),
+    );
+    let k = both.length;
+    for (const id of down) if (!track.has(id)) track.set(id, k++);
+    return track;
+  });
+  const nXr = xrTrack.map((t) => (t.size ? Math.max(...t.values()) + 1 : 0));
+  // Left side: a descending lane can run below its first target (a branching input to later
+  // boxes), so feedback lanes rising from under the box take their own tracks after it.
   const nLeft = leftLanes.map(
-    (l) => Math.max(l.down.length, l.up.length) + l.mech.length,
+    (l) => l.down.length + l.up.length + l.mech.length,
   );
 
   // 3. Box sizes (title measured in its rendered font) and staircase positions.
@@ -341,13 +357,12 @@ function layoutDiagram(diagram) {
   const leftLaneX = (j, id) => {
     const l = leftLanes[j];
     let k = l.down.indexOf(id);
-    if (k < 0) k = l.up.indexOf(id);
-    if (k < 0) k = Math.max(l.down.length, l.up.length) + l.mech.indexOf(id);
+    if (k < 0 && l.up.includes(id)) k = l.down.length + l.up.indexOf(id);
+    if (k < 0) k = l.down.length + l.up.length + l.mech.indexOf(id);
     return placed[j].x - U.pad - k * U.lane;
   };
   const xrX = (i, id) => {
-    const l = xrLanes[i];
-    const k = Math.max(l.up.indexOf(id), l.down.indexOf(id));
+    const k = xrTrack[i].get(id) ?? 0;
     return placed[i].x + placed[i].width + U.pad + k * U.lane;
   };
   const underY = (i, id) =>
@@ -659,9 +674,19 @@ function layoutDiagram(diagram) {
       draggable: false,
     })),
   ];
+  // Drawn extent: boundary codes sit outside the frame (CODE_OFFSET: ≈ 32 px past a staggered C/M
+  // code, ≈ 36 px beside an I/O code) and a label may be placed past the frame edge.
+  const bounds = { x0: -36, y0: -34, x1: frameW + 36, y1: frameH + 34 };
+  for (const r of labels) {
+    bounds.x0 = Math.min(bounds.x0, r.x);
+    bounds.y0 = Math.min(bounds.y0, r.y);
+    bounds.x1 = Math.max(bounds.x1, r.x + r.w);
+    bounds.y1 = Math.max(bounds.y1, r.y + r.h);
+  }
   return {
     width: frameW,
     height: frameH,
+    bounds,
     nodes,
     edges: edges.map((e) => ({
       id: e.id,
@@ -878,23 +903,25 @@ function App({ model }) {
       return [null, String(error?.message ?? error)];
     }
   }, [diagram]);
-  // Initial view: the whole diagram when that stays legible; otherwise LEGIBLE_ZOOM with the
-  // diagram width on screen and the top edge visible — a tall staircase scrolls down.
+  // Initial view: the whole drawn extent (frame, boundary codes, labels) fits the canvas — width
+  // and height — and is centred; zoom in to the diagram never past 1.3. Reading detail is a zoom
+  // or a double-click away; a first view that hides an edge of the diagram hides arrows.
   const fitWidth = useCallback(
     (instance) => {
       const canvas = document.querySelector(".canvas");
       if (!layout || !canvas) return;
-      const outer = { w: layout.width + 80, h: layout.height + 60 };
+      const { x0, y0, x1, y1 } = layout.bounds;
+      const pad = 16;
+      const w = x1 - x0 + 2 * pad;
+      const h = y1 - y0 + 2 * pad;
       const zoom = Math.min(
         1.3,
-        Math.max(
-          LEGIBLE_ZOOM,
-          Math.min(canvas.clientWidth / outer.w, canvas.clientHeight / outer.h),
-        ),
+        canvas.clientWidth / w,
+        canvas.clientHeight / h,
       );
       instance.setViewport({
-        x: Math.max(0, (canvas.clientWidth - outer.w * zoom) / 2) + 40 * zoom,
-        y: Math.max(0, (canvas.clientHeight - outer.h * zoom) / 2) + 30 * zoom,
+        x: (canvas.clientWidth - w * zoom) / 2 + (pad - x0) * zoom,
+        y: (canvas.clientHeight - h * zoom) / 2 + (pad - y0) * zoom,
         zoom,
       });
     },

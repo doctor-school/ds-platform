@@ -1,0 +1,166 @@
+# IDEF0 decomposition A6 «Развивать команды и систему производства» (child of A0; format: FORMAT-ru.md).
+# Steps 1–11 of process block 7 (../process-to-be-ru.md). A6 works per period and per team, not per
+# lesson: its hours are overheads allocated to units by hours (owner decision В8, effort-draft-ru.md).
+id: A6
+parent: A0
+title: Развивать команды и систему производства
+# Child boundary code → A0 arrow touching box A6 on that side.
+icom:
+  I1: a11
+  C1: C4
+  O1: a13
+  O2: a14
+  O3: a14
+  O4: a14
+  O5: a15
+  M1: M1
+  M2: M3
+  M3: M6
+boxes:
+  - id: A61
+    name: Открыть направление и запустить команду
+    functions: [F-113]
+    mechanisms: [Ядро]
+    note: >-
+      Шаги 1–2: ниша по кастомным запросам и сигналам команд; финансирование — якорный партнёр или
+      2–3 спонсора по предзаказу; запуск — advice process ядра с затронутыми командами и пулами
+      (мощность медиа, рецензентов, экспертов). Число стартов ограничено ожидаемым притоком денег (В7).
+    leaf: true
+    effort:
+      role: Ядро
+      unit: новая команда
+      hours_draft: [40, 80]
+      driver: число стартов за период; время выхода новой команды на полную мощность
+      basis: оценка аналитика
+  - id: A62
+    name: Разделить команду
+    functions: []
+    mechanisms: [Продуктовая команда]
+    note: >-
+      Шаг 3 (новое, в реестре нет): при превышении 12 участников или второй оси нагрузки; решает сама
+      команда. Часы — суммарно по участникам.
+    leaf: true
+    effort:
+      role: Продуктовая команда
+      unit: деление
+      hours_draft: [8, 24]
+      driver: число делений за период (рост числа направлений и договоров)
+      basis: оценка аналитика
+  - id: A63
+    name: Нанять и ввести участника
+    functions: []
+    mechanisms: [Продуктовая команда]
+    note: >-
+      Шаг 4 (новое, в реестре нет): собеседование будущими коллегами, пробный срок, вводный модуль
+      (самоуправление, стандарты DS, медицинская этика). Часы — время коллег, не нанимаемого.
+    leaf: true
+    effort:
+      role: Продуктовая команда
+      unit: найм
+      hours_draft: [12, 30]
+      driver: число наймов за период; время коллег на найм и адаптацию
+      basis: оценка аналитика
+  - id: A64
+    name: Вести роли, коучинг и базу экспертов
+    functions: [F-023]
+    mechanisms: [Продуктовая команда, Коуч, Менеджер эксперта]
+    note: Шаги 5–7 — три роли, раскрыто диаграммой A64.
+  - id: A65
+    name: Вести стандарты, СОП и метрики, калибровать себестоимость
+    functions: [F-106, F-009, F-107, F-111, F-109]
+    mechanisms: [Ядро, Продуктовая команда]
+    note: Шаги 8–11 — раскрыто диаграммой A65.
+arrows:
+  # ---- Boundary ----
+  - id: I1
+    label: Факт часов и итераций из ретро команд
+    objects: [O-177, O-174]
+    from: { boundary: I1 }
+    to: [{ box: A62, side: I }, { box: A65, side: I }]
+  - id: C1
+    label: Базовый минимум качества
+    objects: [O-138]
+    from: { boundary: C1 }
+    to:
+      - { box: A61, side: C }
+      - { box: A62, side: C }
+      - { box: A63, side: C }
+      - { box: A64, side: C }
+      - { box: A65, side: C }
+  - id: O1
+    label: Рабочие стандарты DS, СОП, калькулятор
+    objects:
+      [
+        O-141,
+        O-143,
+        O-144,
+        O-145,
+        O-146,
+        O-147,
+        O-148,
+        O-097,
+        O-168,
+        O-169,
+        O-221,
+        O-172,
+      ]
+    from: { box: A65, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Новая команда
+    objects: [O-001]
+    from: { box: A61, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Нанятые участники
+    objects: [O-001]
+    from: { box: A63, side: O }
+    to: { boundary: O3 }
+  - id: O4
+    label: Реестр ролей, база экспертов и спикеров
+    objects: [O-001, O-115]
+    from: { box: A64, side: O }
+    to: { boundary: O4 }
+  - id: O5
+    label: Факт часов для калибровки себестоимости
+    objects: [O-172, O-177]
+    from: { box: A65, side: O }
+    to: { boundary: O5 }
+  - id: M1
+    label: Продуктовые команды, менеджеры экспертов
+    objects: [O-001]
+    from: { boundary: M1 }
+    to:
+      - { box: A62, side: M }
+      - { box: A63, side: M }
+      - { box: A64, side: M }
+      - { box: A65, side: M }
+  - id: M2
+    label: Пул медрецензентов — политика независимости
+    objects: [O-009]
+    from: { boundary: M2 }
+    to: { box: A65, side: M }
+  - id: M3
+    label: Ядро — стандарты, рынок, калькулятор, коуч
+    objects: [O-017, O-223]
+    from: { boundary: M3 }
+    to:
+      - { box: A61, side: M }
+      - { box: A64, side: M }
+      - { box: A65, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Запущенное направление — состав к найму
+    objects: [O-190]
+    from: { box: A61, side: O }
+    to: { box: A63, side: I }
+  - id: a02
+    label: Разделённая команда, открытые роли
+    objects: [O-001]
+    from: { box: A62, side: O }
+    to: { box: A63, side: I }
+  - id: a03
+    label: Стандарты DS — вводный модуль
+    objects: [O-141]
+    from: { box: A65, side: O }
+    to: { box: A63, side: C }

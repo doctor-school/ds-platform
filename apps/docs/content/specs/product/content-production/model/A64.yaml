@@ -1,0 +1,87 @@
+# IDEF0 decomposition A64 «Вести роли, коучинг и базу экспертов» (child of A6; format: FORMAT-ru.md).
+# Steps 5–7 of process block 7 (../process-to-be-ru.md). Per-team-month overheads (effort-draft-ru.md).
+id: A64
+parent: A6
+title: Вести роли, коучинг и базу экспертов
+# Child boundary code → A6 arrow touching box A64 on that side.
+icom:
+  C1: C1
+  O1: O4
+  O2: O4
+  M1: M1
+  M2: M3
+boxes:
+  - id: A641
+    name: Создать, изменить или снять роль
+    functions: []
+    mechanisms: [Продуктовая команда]
+    note: >-
+      Шаг 5 (новое, в реестре нет): governance-встреча круга по возражениям «вред / откат»; реестр
+      ролей публичный. Часы — суммарно по участникам.
+    leaf: true
+    effort:
+      role: Продуктовая команда
+      unit: команда·месяц
+      hours_draft: [2, 4]
+      driver: частота governance-встреч; число изменений ролей
+      basis: оценка аналитика
+  - id: A642
+    name: Коучить команду
+    functions: []
+    mechanisms: [Коуч]
+    note: Шаг 6 (новое, в реестре нет) — фасилитация, посредничество в конфликте, без решений и KPI.
+    leaf: true
+    effort:
+      role: Коуч
+      unit: команда·месяц
+      hours_draft: [2, 4]
+      driver: число команд на одного коуча; доля новых и делящихся команд
+      basis: оценка аналитика
+  - id: A643
+    name: Вести общую базу экспертов и спикеров
+    functions: [F-023]
+    mechanisms: [Менеджер эксперта]
+    note: >-
+      Шаг 7: карточки ведут менеджеры экспертов из своих команд; за каждым экспертом закреплён
+      менеджер, календарь загрузки открыт.
+    leaf: true
+    effort:
+      role: Менеджер эксперта
+      unit: команда·месяц
+      hours_draft: [2, 6]
+      driver: число экспертов и спикеров за командой; приток новых экспертов
+      basis: оценка аналитика
+arrows:
+  - id: C1
+    label: Базовый минимум качества
+    objects: [O-138]
+    from: { boundary: C1 }
+    to:
+      - { box: A641, side: C }
+      - { box: A642, side: C }
+      - { box: A643, side: C }
+  - id: O1
+    label: Реестр ролей
+    objects: [O-001]
+    from: { box: A641, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: База экспертов и спикеров, закреплённые менеджеры
+    objects: [O-115]
+    from: { box: A643, side: O }
+    to: { boundary: O2 }
+  - id: M1
+    label: Команды, менеджеры экспертов
+    objects: [O-001]
+    from: { boundary: M1 }
+    to: [{ box: A641, side: M }, { box: A643, side: M }]
+  - id: M2
+    label: Коуч ядра
+    objects: [O-017]
+    from: { boundary: M2 }
+    to: { box: A642, side: M }
+  - id: a01
+    label: Фасилитация, разрешённые конфликты
+    objects: []
+    from: { box: A642, side: O }
+    to: { box: A641, side: I }

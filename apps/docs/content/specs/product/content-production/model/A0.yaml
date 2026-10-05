@@ -142,7 +142,6 @@ boxes:
   - id: A4
     name: Выпустить и сопровождать
     process_blocks: [5]
-    decomposition: pending
     functions: [F-064, F-069, F-070, F-071, F-095, F-096, F-097, F-098, F-099]
     mechanisms:
       - Продуктовая команда — продюсер, команда-владелец направления
@@ -153,7 +152,6 @@ boxes:
   - id: A5
     name: Отчитаться и закрыть
     process_blocks: [6]
-    decomposition: pending
     functions:
       [
         F-089,
@@ -176,7 +174,6 @@ boxes:
   - id: A6
     name: Развивать команды и систему производства
     process_blocks: [7]
-    decomposition: pending
     functions: [F-009, F-023, F-106, F-107, F-109, F-111, F-113]
     mechanisms:
       - Ядро — стандарты, рынок, калькулятор, коуч
@@ -325,7 +322,7 @@ arrows:
     from: { box: A3, side: O }
     to: { box: A3, side: I }
   - id: a05
-    label: Опубликованный продукт
+    label: Опубликованный продукт и анонсы
     objects:
       [
         O-041,
@@ -339,6 +336,8 @@ arrows:
         O-055,
         O-056,
         O-199,
+        O-062,
+        O-058,
       ]
     from: { box: A4, side: O }
     to: { boundary: O1 }

@@ -37,6 +37,12 @@ This amendment overrides EARS-15, verification row V-14, the `@EARS-4 @EARS-15` 
 | V-14 (amended)       | Vitest e2e — `apps/api`              | The 044 confirmation letter from the site form and from the desk carries no link, button or URL (EARS-15, #2557).                                                                                              |
 | V-15 (amended entry) | Playwright / E2E — doctor storefront | A guest opens `/login?method=code&returnTo=/account/congress`, signs in by the emailed six-character code — a congress-origin unverified account included — and lands on the section (EARS-4, EARS-15, #2556). |
 
+## Production amendment — the list row's date (2026-10-02, #2551)
+
+This amendment overrides «the last change» in the list row of EARS-11, and with it the row wording in `046-design.md` («Two clocks in the section»); the running-production text is retained in EARS-11 below. The product owner approved on 2026-10-02 (Issue #2551) that a sent submission's row names when it was sent instead of its last edit, and on 2026-10-05 (Stage-B, «Устный доклад · отправлено») that the row's word takes one neuter form for every kind.
+
+The list row of EARS-11 shows, after the kind, in one neuter form for every kind, «изменено {дата}» from the last change for a `draft`, «отозвано {дата}» from the status change for `withdrawn`, and «отправлено {дата}» from the send moment (`submittedAt`) for every other status — `submitted`, `in_review`, `accepted`, `rejected`, `needs_revision`; the date is the viewer's local day, as in «Two clocks in the section».
+
 ## Outcomes
 
 - A registered congress participant signs in to the doctor storefront with the emailed code and, in «Мои заявки на Конгресс», prepares and sends any number of submissions of three kinds — oral talk, poster, abstracts — at different times, while each kind's intake is open.

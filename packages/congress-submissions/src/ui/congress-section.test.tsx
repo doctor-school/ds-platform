@@ -512,6 +512,21 @@ describe("CongressSection", () => {
     ).toBeNull();
   });
 
+  it("046 EARS-8: a sent oral talk is read-only — its authors block carries no «Отметьте одного докладчика» prompt", async () => {
+    const sent = sub({ ...complete });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${sent.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(answer(section({ submissions: [sent] })));
+    render(<CongressSection host={HOST} />);
+    expect(
+      await screen.findByText("Порядок — как в публикации"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Отметьте одного докладчика")).toBeNull();
+  });
+
   it("EARS-11: the committee comment carries the day of the committee action in the viewer zone, not Moscow", async () => {
     // 15:40Z is 18:40 in Moscow on the 16th and 01:40 on the 17th in the
     // test zone (Vladivostok) — the action date follows the viewer.
@@ -933,7 +948,7 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     const row = (await screen.findAllByTestId("congress-row"))[0]!;
     expect(
       within(row).getByText(
-        /^Постерный доклад · изменён .+ · постерные доклады принимают от участников младше 40 лет на дату начала конгресса$/,
+        /^Постерный доклад · изменено .+ · постерные доклады принимают от участников младше 40 лет на дату начала конгресса$/,
       ),
     ).toBeInTheDocument();
     expect(

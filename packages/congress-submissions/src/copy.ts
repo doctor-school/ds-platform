@@ -36,6 +36,8 @@ export interface KindCopy {
   label: string;
   /** Genitive plural — «Приём {устных докладов} закрыт …». */
   gen: string;
+  /** Nominative plural — the chooser note «{Устные доклады} принимаются до …». */
+  nom: string;
   /** Plural forms for a count — one, few, many. */
   forms: readonly [string, string, string];
   /** Count forms after a number — «отправлено {3 тезиса}» — one, few, many. */
@@ -46,18 +48,21 @@ export const KIND_COPY: Record<CongressSubmissionKind, KindCopy> = {
   oral: {
     label: "Устный доклад",
     gen: "устных докладов",
+    nom: "устные доклады",
     forms: ["устного доклада", "устных докладов", "устных докладов"],
     countForms: ["устный доклад", "устных доклада", "устных докладов"],
   },
   poster: {
     label: "Постерный доклад",
     gen: "постерных докладов",
+    nom: "постерные доклады",
     forms: ["постерного доклада", "постерных докладов", "постерных докладов"],
     countForms: ["постерный доклад", "постерных доклада", "постерных докладов"],
   },
   abstract: {
     label: "Тезисы",
     gen: "тезисов",
+    nom: "тезисы",
     forms: ["тезиса", "тезисов", "тезисов"],
     countForms: ["тезис", "тезиса", "тезисов"],
   },

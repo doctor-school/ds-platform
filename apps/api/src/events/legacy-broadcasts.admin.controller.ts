@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -19,6 +20,10 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { IdempotencyService } from "../taxonomy/idempotency.service.js";
 import { LegacyBroadcastCreateDto } from "./events.dto.js";
 import { EventsService } from "./events.service.js";
+import {
+  classificationProblem,
+  EventClassificationError,
+} from "./event-classification.js";
 import { withProtocolRefusalShape } from "./protocol-refusal-shape.js";
 
 /**
@@ -123,7 +128,22 @@ export class LegacyBroadcastsAdminController {
       return outcome.replay.body as EventAdminDetail;
     }
 
-    const detail = await this.events.createLegacyBroadcast(body);
+    let detail: EventAdminDetail;
+    try {
+      detail = await this.events.createLegacyBroadcast(body);
+    } catch (err) {
+      // 012 EARS-26 — a kind/format refusal is deterministic, so it is stored
+      // as the record's terminal outcome and an exact retry replays the 400.
+      if (err instanceof EventClassificationError) {
+        const problem = classificationProblem(err);
+        await this.idempotency.storeTerminalOutcome(outcome.lease, {
+          status: 400,
+          body: problem,
+        });
+        throw new BadRequestException(problem);
+      }
+      throw err;
+    }
     const etag = taxonomyETag(detail.version);
     // The stored bytes ARE the bytes sent, so an exact retry replays this 201
     // verbatim instead of authoring a second эфир. Completed on the pool right

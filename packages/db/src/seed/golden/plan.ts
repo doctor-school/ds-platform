@@ -35,7 +35,7 @@ import {
   projects,
 } from "../../schema/taxonomy.js";
 import { users } from "../../schema/users.js";
-import { GOLDEN_GROUP } from "./ids.js";
+import { GOLDEN_GROUP, SEED_EVENT_KINDS } from "./ids.js";
 import type {
   GoldenDataset,
   GoldenDirectionSpecialtyLink,
@@ -401,6 +401,13 @@ export function goldenReferentialIssues(dataset: GoldenDataset): string[] {
   );
   check("event_experts", dataset.eventExperts, "eventId", eventIds);
   check("event_experts", dataset.eventExperts, "expertId", expertIds);
+  // 012 EARS-26 — the kinds are migration 0046's seed rows, not golden rows.
+  check(
+    "events",
+    dataset.events,
+    "kindId",
+    new Set(Object.values(SEED_EVENT_KINDS).map((kind) => kind.id)),
+  );
   check("event_projects", dataset.eventProjects, "eventId", eventIds);
   check("event_projects", dataset.eventProjects, "projectId", projectIds);
   check("doctor_specialties", dataset.doctorSpecialties, "doctorId", userIds);

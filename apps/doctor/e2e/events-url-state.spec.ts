@@ -18,7 +18,7 @@ import { expect, test } from "@playwright/test";
  * distinguishable from one applied in the browser.
  */
 const FULL_STATE =
-  "/events?day=2026-09-04&tense=upcoming&from=2026-09-01&to=2026-09-29&format=webinar&specialty=all&nmo=false&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5";
+  "/events?day=2026-09-04&tense=upcoming&from=2026-09-01&to=2026-09-29&format=online&specialty=all&nmo=false&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5";
 
 /** The «показать ещё» href, or `null` when the horizon is already maximal. */
 const showMoreHrefOf = async (page: import("@playwright/test").Page) => {
@@ -72,17 +72,17 @@ test("019 EARS-8.18: a pasted URL reproduces the same feed in a fresh browser co
 test("019 EARS-8.19: the facet in the URL reaches the read rather than the browser", async ({
   page,
 }) => {
-  // Every fixture card is a `webinar`; asking for a format none of them has
+  // Every fixture card is `online`; asking for a format none of them has
   // must empty the feed. If the facet were applied client-side over a full
   // response, the day sections would still be in the DOM.
   await page.goto(
-    "/events?from=2026-09-01&to=2026-09-29&format=podcast&specialty=all",
+    "/events?from=2026-09-01&to=2026-09-29&format=offline&specialty=all",
   );
   await expect(page.locator("[data-events-feed]")).toHaveCount(1);
   await expect(page.locator('section[id^="day-"]')).toHaveCount(0);
 
   await page.goto(
-    "/events?from=2026-09-01&to=2026-09-29&format=webinar&specialty=all",
+    "/events?from=2026-09-01&to=2026-09-29&format=online&specialty=all",
   );
   await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
 });
@@ -92,7 +92,7 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
 }) => {
   // No `to` — the horizon is the default one, so «показать ещё» is present.
   await page.goto(
-    "/events?day=2026-09-02&format=webinar&specialty=all&city=msk&nmo=true&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5&sort=relevance&utm_source=mail",
+    "/events?day=2026-09-02&format=online&specialty=all&city=msk&nmo=true&q=%D1%81%D0%B5%D1%80%D0%B4%D1%86%D0%B5&sort=relevance&utm_source=mail",
   );
 
   const href = await page
@@ -105,7 +105,7 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
   // one would hand the reader a link to a DIFFERENT screen.
   expect(params.get("day")).toBe("2026-09-02");
   expect(params.get("tense")).toBe("upcoming");
-  expect(params.getAll("format")).toEqual(["webinar"]);
+  expect(params.getAll("format")).toEqual(["online"]);
   expect(params.get("specialty")).toBe("all");
   expect(params.getAll("city")).toEqual(["msk"]);
   expect(params.get("nmo")).toBe("true");

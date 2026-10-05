@@ -19,7 +19,12 @@ import {
   GOLDEN_CONSENT_VERSION,
   goldenSpecialtyIssues,
 } from "./dataset.js";
-import { golden, GOLDEN_ACCOUNT_KEYS, goldenUuid } from "./ids.js";
+import {
+  golden,
+  GOLDEN_ACCOUNT_KEYS,
+  goldenUuid,
+  SEED_EVENT_KINDS,
+} from "./ids.js";
 import {
   GOLDEN_IDP_ACCOUNTS,
   GoldenIdpError,
@@ -339,6 +344,47 @@ describe("#2063 golden dataset", () => {
       ],
     };
     expect(goldenReferentialIssues(broken)).toHaveLength(1);
+  });
+
+  it("012 EARS-26: an event naming a kind migration 0046 did not seed is a dangling reference", () => {
+    const broken = {
+      ...dataset,
+      events: [{ ...dataset.events[0]!, kindId: goldenUuid(0x0fff, 2) }],
+      registrations: [],
+      consentRecords: [],
+      eventRecordings: [],
+      streamConfig: [],
+      congressSubmissionSettings: [],
+      congressSubmissionKindSettings: [],
+      eventExperts: [],
+      eventProjects: [],
+      eventDirections: [],
+    };
+    expect(
+      goldenReferentialIssues(broken).filter((issue) =>
+        issue.startsWith("events.kindId"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("012 EARS-29: the golden events populate BOTH storefronts, each event with a kind allowing its format", () => {
+    const audiences = new Set(dataset.events.map((event) => event.audience));
+    expect([...audiences].sort()).toEqual(["doctors", "experts"]);
+    const allowed: Record<string, readonly string[]> = {
+      [SEED_EVENT_KINDS.vebinar.id]: ["online"],
+      [SEED_EVENT_KINDS.efir.id]: ["online"],
+      [SEED_EVENT_KINDS.kongress.id]: ["offline", "hybrid"],
+      [SEED_EVENT_KINDS.vstrechaKluba.id]: ["online", "offline", "hybrid"],
+      [SEED_EVENT_KINDS.masterKlass.id]: ["offline", "hybrid"],
+    };
+    for (const event of dataset.events) {
+      expect(allowed[event.kindId], event.slug).toContain(
+        event.participationFormat ?? "online",
+      );
+    }
+    for (const project of dataset.projects) {
+      expect(["doctors", "experts"]).toContain(project.defaultAudience);
+    }
   });
 
   it("only references specialties the closed Минздрав book carries", () => {

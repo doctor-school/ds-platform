@@ -150,6 +150,7 @@ export class ProjectsService {
         slug,
         kind: input.payload.kind,
         title: input.payload.title,
+        defaultAudience: input.payload.defaultAudience,
         description: input.payload.description ?? null,
         coverRef: uploaded?.key ?? null,
       });
@@ -228,6 +229,9 @@ export class ProjectsService {
         {
           ...(input.payload.kind !== undefined
             ? { kind: input.payload.kind }
+            : {}),
+          ...(input.payload.defaultAudience !== undefined
+            ? { defaultAudience: input.payload.defaultAudience }
             : {}),
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }
@@ -405,6 +409,7 @@ export class ProjectsService {
         slug: row.slug,
         kind: row.kind,
         title: row.title,
+        defaultAudience: row.defaultAudience,
         status: row.status,
         version: row.version,
         updatedAt: row.updatedAt.toISOString(),
@@ -475,6 +480,7 @@ export class ProjectsService {
       slug: row.slug,
       kind: row.kind,
       title: row.title,
+      defaultAudience: row.defaultAudience,
       description: row.description,
       coverUrl: row.coverRef ? await this.storage.urlFor(row.coverRef) : null,
       status: row.status,

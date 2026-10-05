@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Event, EventProject, Project } from "@ds/db";
-import { eventProjects, events, projects } from "@ds/db";
+import { eventKinds, eventProjects, events, projects } from "@ds/db";
 import type { EventProjectAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -442,15 +442,25 @@ export class EventProjectsRepository {
       filters.push(afterEventCursor(after));
     }
     const rows = await this.db
-      .select({ event: events, startsAtCursor: eventCursorInstant })
+      .select({
+        event: events,
+        startsAtCursor: eventCursorInstant,
+        kindRef: {
+          id: eventKinds.id,
+          slug: eventKinds.slug,
+          title: eventKinds.title,
+        },
+      })
       .from(eventProjects)
       .innerJoin(events, eq(events.id, eventProjects.eventId))
+      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
       .where(and(...filters))
       .orderBy(asc(events.startsAt), asc(events.id))
       .limit(limit);
     return rows.map((row) => ({
       ...row.event,
       startsAtCursor: row.startsAtCursor,
+      kindRef: row.kindRef,
     }));
   }
 }

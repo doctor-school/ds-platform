@@ -57,20 +57,17 @@ import { TargetingService } from "./targeting.service.js";
  * instant, and the response schema is `.strict()` — there is no field a score
  * could be written into and no code path that would compute one (EARS-3).
  *
- * ## Wave-1 card fields
+ * ## Card fields
  *
- * `format`, `kind`, `nmo`, `pulCost`, `city`/`seatsLeft` are read from what the
- * 007 aggregate actually authors today: 007 authors WEBINAR broadcasts, files
- * them under managed directions, and has no НМО, Pul-cost, city or seat column
- * at all. So the mapping states the truth of the current authoring model rather
- * than inventing values — `format: "webinar"`, `kind` = the event's managed
- * direction, and no `city`/`seatsLeft` key. НМО and the Pul cost are NOT read
- * here: they come from `eventEconomyFacts` (`../events/event-economy-facts.ts`),
- * the one module the 020 event page reads them from too (#1766), so a card and
- * the page it opens can never disagree. Widening 007's authoring to the remaining four
- * formats and the НМО/Pul/offline fields is tracked as decision-debt in
- * `DEBT.md`; the contract already carries them, so that widening is a mapper
- * change and not a reshape.
+ * `format` is the event's own attendance mode (`online | offline | hybrid`) and
+ * `kind` its 012 event-kind dictionary entry `{ id, slug, title }` (019
+ * amendment, 012 EARS-28) — both authored on the event, never derived from its
+ * directions. `source` is the published project the event is linked to, falling
+ * back to the authored `school`. НМО and the Pul cost come from
+ * `eventEconomyFacts` (`../events/event-economy-facts.ts`), the one module the
+ * 020 event page reads them from too (#1766), so a card and the page it opens
+ * can never disagree. The feed reads only `audience = doctors` events (012
+ * LD-12): an Academy (`experts`) event never reaches it.
  */
 @Injectable()
 export class DoctorEventsService {
@@ -116,7 +113,7 @@ export class DoctorEventsService {
       directionIds,
       fromInstant: new Date(`${horizon.from}T00:00:00+03:00`),
       toInstant: new Date(`${horizon.to}T00:00:00+03:00`),
-      kindIds: query.kind,
+      kindSlugs: query.kind,
       q: query.q,
     });
 
@@ -174,7 +171,7 @@ export class DoctorEventsService {
       directionIds: input.directionIds,
       fromInstant: new Date(`${horizon.to}T00:00:00+03:00`),
       toInstant: new Date(`${maxTo}T00:00:00+03:00`),
-      kindIds: query.kind,
+      kindSlugs: query.kind,
       q: query.q,
     });
     if (firstStart === null) return null;
@@ -257,7 +254,7 @@ export class DoctorEventsService {
                   ],
             fromInstant: new Date(`${fromDay}T00:00:00+03:00`),
             toInstant: new Date(`${endDay}T00:00:00+03:00`),
-            kindIds: facets.kind,
+            kindSlugs: facets.kind,
             q: facets.q,
           });
 
@@ -479,9 +476,9 @@ export class DoctorEventsService {
 
   private async toCards(rows: DoctorFeedRow[]): Promise<DoctorEventCard[]> {
     const ids = rows.map((row) => row.id);
-    const [speakers, kinds, signUps] = await Promise.all([
+    const [speakers, projectTitles, signUps] = await Promise.all([
       this.repository.findLeadSpeakers(ids),
-      this.repository.findPrimaryDirections(ids),
+      this.repository.findProjectTitles(ids),
       this.repository.countSignUps(ids),
     ]);
 
@@ -496,14 +493,14 @@ export class DoctorEventsService {
       endsAt: new Date(
         row.startsAt.getTime() + row.durationMin * 60_000,
       ).toISOString(),
-      format: "webinar" as const,
-      // `kind` is the direction ID — the vocabulary the `?kind=` facet takes, so
-      // a card value round-trips; `kindTitle` is its display projection.
-      kind: kinds.get(row.id)?.id ?? "",
-      kindTitle: kinds.get(row.id)?.title ?? "",
+      // 019 amendment — the event's own attendance mode and its 012 kind
+      // (`{ id, slug, title }`; the slug is the `?kind=` facet vocabulary).
+      format: row.participationFormat,
+      kind: row.kind,
       title: row.title,
       speaker: speakers.get(row.id) ?? "",
-      source: row.school,
+      // The published project the event belongs to; `school` until linked.
+      source: projectTitles.get(row.id) ?? row.school,
       ...eventEconomyFacts(),
       signUpCount: signUps.get(row.id) ?? 0,
       // 014 EARS-26 (#1741): `in_archive` is the legacy machine's «this эфир

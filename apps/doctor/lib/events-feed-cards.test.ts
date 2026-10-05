@@ -22,9 +22,12 @@ const CARD: DoctorEventCard = {
   href: "/events/kardio-forum",
   startsAt: "2026-09-14T16:00:00.000Z",
   endsAt: null,
-  format: "webinar",
-  kind: "3f1c7d2e-8a5b-4a1e-9c33-1d0f6b2a7e41",
-  kindTitle: "Разбор клинического случая",
+  format: "online",
+  kind: {
+    id: "3f1c7d2e-8a5b-4a1e-9c33-1d0f6b2a7e41",
+    slug: "vstrecha-kluba",
+    title: "Встреча клуба",
+  },
   title: "Кардиофорум",
   speaker: "Анна Соколова",
   source: "Школа кардиологии",
@@ -121,7 +124,8 @@ describe("019 EARS-12: the feed card CTA", () => {
   it("019 EARS-12: a feed query the ONE codec rejects yields no guest CTA rather than an unguarded link", () => {
     const [item] = toEventListItems(feedOf(CARD), {
       viewer: "guest",
-      feedQuery: { kind: "not-a-uuid" },
+      // The kind facet takes 012 dictionary slugs — this one breaks the grammar.
+      feedQuery: { kind: "Not A Slug!" },
     });
 
     expect(item!.ctaHref).toBeUndefined();
@@ -141,6 +145,24 @@ describe("019 EARS-12: the feed card CTA", () => {
     });
 
     expect(guest.map(strip)).toEqual(doctor.map(strip));
+  });
+});
+
+describe("019 EARS-17: the card kind label reads the 012 dictionary", () => {
+  it("019 EARS-17: the time-plate kicker is the event's kind title, with no fixed vocabulary in the host", () => {
+    const viewer = { viewer: "doctor" as const, feedQuery: FEED_QUERY };
+    const [item] = toEventListItems(feedOf(CARD), viewer);
+    expect(item?.formatLabel).toBe("Встреча клуба");
+
+    // An editor-added kind reaches the card with no code change (012 EARS-28).
+    const [added] = toEventListItems(
+      feedOf({
+        ...CARD,
+        kind: { id: "k-new", slug: "masterskaya", title: "Мастерская" },
+      }),
+      viewer,
+    );
+    expect(added?.formatLabel).toBe("Мастерская");
   });
 });
 

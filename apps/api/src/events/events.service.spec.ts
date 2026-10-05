@@ -26,6 +26,14 @@ import { EventsService, type UploadedPdf } from "./events.service.js";
 
 const OLD_KEY = "events/programs/test-event-1a2b/1000-program.pdf";
 
+/** The seed «Вебинар» kind the fixture event carries (012 EARS-27). */
+const KIND = {
+  id: "22222222-2222-4222-8222-222222222222",
+  slug: "vebinar",
+  title: "Вебинар",
+  allowedFormats: ["online" as const],
+};
+
 function baseEvent(programPdfRef: string | null): Event {
   return {
     id: "11111111-1111-4111-8111-111111111111",
@@ -45,6 +53,9 @@ function baseEvent(programPdfRef: string | null): Event {
     // 020 (#1764) — attendance mode + remaining offline seats. The fixture is a
     // plain online webinar with no seat limit, the shipped corpus's shape.
     participationFormat: "online",
+    // 012 EARS-26 / EARS-29 (#2509) — the event's kind and storefront audience.
+    kindId: KIND.id,
+    audience: "doctors",
     seatsLeft: null,
     liveAt: null,
     // 014 (#1339) — the operator's recording-readiness date; unset here.
@@ -100,6 +111,7 @@ class RecordingStorage implements ObjectStorage {
 function repoStub(current: EventAggregate, ops: string[]) {
   return {
     findById: vi.fn(() => Promise.resolve(current)),
+    findKinds: vi.fn(() => Promise.resolve(new Map([[KIND.id, KIND]]))),
     updateEvent: vi.fn(
       (
         _id: string,

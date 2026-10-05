@@ -30,11 +30,14 @@ const card = (id, startsAt, overrides = {}) => ({
   href: `/events/${id}`,
   startsAt,
   endsAt: null,
-  format: "webinar",
-  // `kind` is the managed direction ID — the same vocabulary `?kind=` takes —
-  // and `kindTitle` is its display projection.
-  kind: "6f0f6a1c-0e5a-4d6a-9f2b-6a1c0e5a4d6a",
-  kindTitle: "Кардиология",
+  format: "online",
+  // `kind` is the event's 012 dictionary entry; its slug is the `?kind=`
+  // vocabulary and its title the card's kicker (019 EARS-17).
+  kind: {
+    id: "6f0f6a1c-0e5a-4d6a-9f2b-6a1c0e5a4d6a",
+    slug: "vebinar",
+    title: "Вебинар",
+  },
   title: `Событие ${id}`,
   speaker: "Иванов И. И.",
   source: "Doctor.School",
@@ -219,7 +222,7 @@ const server = createServer((request, response) => {
     const served = ALL_DAYS.filter(
       (group) => group.day >= from && group.day < to,
     );
-    // The `format` facet is honoured (every fixture card is a `webinar`) so a
+    // The `format` facet is honoured (every fixture card is `online`) so a
     // route-level test can prove the facet reached the SERVER through the URL
     // rather than being applied in the browser (019 EARS-8, #1523).
     const formats = url.searchParams.getAll("format").flatMap((v) => v.split(","));

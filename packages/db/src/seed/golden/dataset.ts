@@ -34,7 +34,7 @@ import type {
 import type { NewUser } from "../../schema/users.js";
 import { RAZDEL_I_NAMES } from "../specialties-minzdrav.data.js";
 import { GOLDEN_CONSENT_PURPOSES, GOLDEN_CONSENT_VERSION } from "./consent.js";
-import { golden, GOLDEN_GROUP, goldenUuid } from "./ids.js";
+import { golden, GOLDEN_GROUP, goldenUuid, SEED_EVENT_KINDS } from "./ids.js";
 import type { GoldenSubjectMap } from "./idp.js";
 import { GOLDEN_IDP_ACCOUNTS } from "./idp.js";
 import { goldenDateOnly, goldenMskMidnight, shiftFromNow } from "./now.js";
@@ -240,6 +240,7 @@ export function buildGoldenDataset(
       slug: golden.projects.publishedSchool.slug,
       kind: "school",
       title: "Школа кардиолога (эталон)",
+      defaultAudience: "doctors",
       description:
         "Опубликованный проект-школа золотого набора: несёт куратора-эксперта и опубликованные события.",
       status: "published",
@@ -253,6 +254,7 @@ export function buildGoldenDataset(
       slug: golden.projects.draft.slug,
       kind: "media",
       title: "Медиапроект в черновике (эталон)",
+      defaultAudience: "experts",
       status: "draft",
       version: 1,
       createdAt: created,
@@ -781,6 +783,9 @@ function baseEvent(options: BaseEventOptions): NewEvent {
     state: options.state,
     origin: "platform",
     participationFormat: "online",
+    // 012 EARS-26 / EARS-29 — an online event of the doctors school project.
+    kindId: SEED_EVENT_KINDS.vebinar.id,
+    audience: "doctors",
     seatsLeft: options.seatsLeft ?? null,
     version: 1,
     recordStatus: "active",

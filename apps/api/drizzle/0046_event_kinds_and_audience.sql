@@ -42,14 +42,17 @@ CREATE TRIGGER event_kinds_audit AFTER INSERT OR UPDATE OR DELETE
 --    entity carries (the function is table-agnostic).
 CREATE TRIGGER event_kinds_first_published_at_set_once BEFORE UPDATE ON "event_kinds"
   FOR EACH ROW EXECUTE FUNCTION taxonomy_first_published_at_set_once();--> statement-breakpoint
--- ── EARS-27: exactly the five seed kinds of LD-11, published.
-INSERT INTO "event_kinds" ("slug", "title", "allowed_formats", "status", "first_published_at")
+-- ── EARS-27: exactly the five seed kinds of LD-11, published. Ordinary rows
+--    (renamable, re-scopable, retirable); the ids are fixed so every database
+--    — production, CI, the golden template and its slots — names the same seed
+--    row by the same id.
+INSERT INTO "event_kinds" ("id", "slug", "title", "allowed_formats", "status", "first_published_at")
 VALUES
-  ('vebinar', 'Вебинар', ARRAY['online']::"event_participation_format"[], 'published', now()),
-  ('efir', 'Эфир', ARRAY['online']::"event_participation_format"[], 'published', now()),
-  ('kongress', 'Конгресс', ARRAY['offline', 'hybrid']::"event_participation_format"[], 'published', now()),
-  ('vstrecha-kluba', 'Встреча клуба', ARRAY['online', 'offline', 'hybrid']::"event_participation_format"[], 'published', now()),
-  ('master-klass', 'Мастер-класс', ARRAY['offline', 'hybrid']::"event_participation_format"[], 'published', now());--> statement-breakpoint
+  ('00460046-0000-4000-8000-000000000001', 'vebinar', 'Вебинар', ARRAY['online']::"event_participation_format"[], 'published', now()),
+  ('00460046-0000-4000-8000-000000000002', 'efir', 'Эфир', ARRAY['online']::"event_participation_format"[], 'published', now()),
+  ('00460046-0000-4000-8000-000000000003', 'kongress', 'Конгресс', ARRAY['offline', 'hybrid']::"event_participation_format"[], 'published', now()),
+  ('00460046-0000-4000-8000-000000000004', 'vstrecha-kluba', 'Встреча клуба', ARRAY['online', 'offline', 'hybrid']::"event_participation_format"[], 'published', now()),
+  ('00460046-0000-4000-8000-000000000005', 'master-klass', 'Мастер-класс', ARRAY['offline', 'hybrid']::"event_participation_format"[], 'published', now());--> statement-breakpoint
 ALTER TABLE "events" ADD COLUMN "kind_id" uuid;--> statement-breakpoint
 ALTER TABLE "events" ADD COLUMN "audience" "event_audience";--> statement-breakpoint
 ALTER TABLE "projects" ADD COLUMN "default_audience" "event_audience";--> statement-breakpoint

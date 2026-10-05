@@ -2,7 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, count, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, Project } from "@ds/db";
 import { projects } from "@ds/db";
-import type { AdminTaxonomyListQuery, ProjectKind } from "@ds/schemas";
+import type {
+  AdminTaxonomyListQuery,
+  EventAudience,
+  ProjectKind,
+} from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
@@ -20,12 +24,16 @@ export interface ProjectInsert {
   title: string;
   description: string | null;
   coverRef: string | null;
+  /** 012 EARS-30 — prefills the audience of a new event linked to the project. */
+  defaultAudience: EventAudience;
 }
 
 /** The field patch a PATCH applies. `undefined` means unchanged. */
 export interface ProjectPatch {
   kind?: ProjectKind;
   title?: string;
+  /** 012 EARS-30 — changing it rewrites no existing event. */
+  defaultAudience?: EventAudience;
   description?: string | null;
   /** `undefined` keeps the current reference; `null` clears it; a string replaces it. */
   coverRef?: string | null;

@@ -36,7 +36,11 @@ import { type Event, events } from "@ds/db";
 export const eventCursorInstant = sql<string>`to_char(${events.startsAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 /** An event row plus the exact cursor token of its position in the order tuple. */
-export type PublicEventRow = Event & { startsAtCursor: string };
+export type PublicEventRow = Event & {
+  startsAtCursor: string;
+  /** 012 EARS-28 — the event's kind, carried by every public summary. */
+  kindRef: { id: string; slug: string; title: string };
+};
 
 /**
  * `(starts_at, id) > (cursor.startsAt, cursor.id)` as a keyset comparison.

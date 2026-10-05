@@ -29,7 +29,10 @@ import {
   LifecycleImpactService,
   type LifecycleImpactTuple,
 } from "./lifecycle-impact.service.js";
-import { EVENT_CURSOR_SHAPE } from "./public-event-cursor.js";
+import {
+  EVENT_CURSOR_SHAPE,
+  type PublicEventRow,
+} from "./public-event-cursor.js";
 import { PublicProjectSummaryService } from "./public-project-summary.service.js";
 import {
   markReplayable,
@@ -408,7 +411,7 @@ function isPublicEvent(event: Pick<Event, "state" | "recordStatus">): boolean {
   );
 }
 
-function toEventSummary(row: Event): PublicEventSummary {
+function toEventSummary(row: PublicEventRow): PublicEventSummary {
   return {
     id: row.id,
     slug: row.slug,
@@ -416,6 +419,8 @@ function toEventSummary(row: Event): PublicEventSummary {
     school: row.school,
     startsAt: row.startsAt.toISOString(),
     state: row.state,
+    // 012 EARS-28 — the event's kind, read from the dictionary.
+    kind: row.kindRef,
   };
 }
 

@@ -5,7 +5,7 @@ import { and, asc, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 // public route all speak `direction` and no bridge alias survives at the
 // import.
 import type { Direction, DrizzleHandle, Event, EventDirection } from "@ds/db";
-import { directions, eventDirections, events } from "@ds/db";
+import { directions, eventDirections, eventKinds, events } from "@ds/db";
 import type { EventDirectionAdminListQuery } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -445,15 +445,25 @@ export class EventDirectionsRepository {
       filters.push(afterEventCursor(after));
     }
     const rows = await this.db
-      .select({ event: events, startsAtCursor: eventCursorInstant })
+      .select({
+        event: events,
+        startsAtCursor: eventCursorInstant,
+        kindRef: {
+          id: eventKinds.id,
+          slug: eventKinds.slug,
+          title: eventKinds.title,
+        },
+      })
       .from(eventDirections)
       .innerJoin(events, eq(events.id, eventDirections.eventId))
+      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
       .where(and(...filters))
       .orderBy(asc(events.startsAt), asc(events.id))
       .limit(limit);
     return rows.map((row) => ({
       ...row.event,
       startsAtCursor: row.startsAtCursor,
+      kindRef: row.kindRef,
     }));
   }
 }

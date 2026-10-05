@@ -34,6 +34,7 @@ import { RecordingsProjectionService } from "../recordings/recordings.projection
 import { SpeakerProjectionService } from "../taxonomy/speaker-projection.service.js";
 import {
   type EventAggregate,
+  type EventKindProjection,
   type EventListingCursor,
   EventsRepository,
   type Tx,
@@ -443,6 +444,30 @@ function isEditable(event: Event): boolean {
     : EVENT_EDITABLE_STATES.includes(state);
 }
 
+/**
+ * 012 EARS-26 / EARS-29 — the classification an admin read projects: the kind
+ * reference (a retired kind included — the reference is retained), the format,
+ * the audience, and whether a later narrowing of the kind left the format
+ * outside the kind's allowed set (the admin flags such a row).
+ */
+function kindFields(
+  e: Event,
+  kind: EventKindProjection | undefined,
+): Pick<
+  EventAdminDetail,
+  "kind" | "participationFormat" | "kindFormatMismatch" | "audience"
+> {
+  // `events.kind_id` is a NOT NULL FK with ON DELETE RESTRICT, so a missing
+  // row is a broken invariant, not a state to render.
+  if (!kind) throw new Error(`event ${e.id} references a missing kind`);
+  return {
+    kind: { id: kind.id, slug: kind.slug, title: kind.title },
+    participationFormat: e.participationFormat,
+    kindFormatMismatch: !kind.allowedFormats.includes(e.participationFormat),
+    audience: e.audience,
+  };
+}
+
 /** Slugify a (possibly non-ASCII) title into a URL-safe, collision-resistant handle. */
 function slugify(title: string): string {
   const ascii = title
@@ -521,6 +546,11 @@ export class EventsService {
       partnerRef: input.partnerRef ?? null,
       programPdfRef,
       state: "draft",
+      // 012 EARS-26 / EARS-29 — the kind (checked against the format inside the
+      // write transaction) and the storefront audience.
+      kindId: input.kindId,
+      participationFormat: input.participationFormat,
+      audience: input.audience,
     });
 
     return this.toDetail(aggregate);
@@ -599,8 +629,16 @@ export class EventsService {
         | "partnerRef"
         | "programPdfRef"
         | "recordingExpectedBy"
+        | "kindId"
+        | "participationFormat"
+        | "audience"
       >
     > = {};
+    // 012 EARS-26 / EARS-29 — the repository re-checks the EFFECTIVE pair.
+    if (input.kindId !== undefined) patch.kindId = input.kindId;
+    if (input.participationFormat !== undefined)
+      patch.participationFormat = input.participationFormat;
+    if (input.audience !== undefined) patch.audience = input.audience;
     if (input.title !== undefined) patch.title = input.title;
     if (input.school !== undefined) patch.school = input.school;
     if (input.startsAtMsk !== undefined)
@@ -669,12 +707,15 @@ export class EventsService {
             archivable.map((row) => row.id),
           )
         : undefined;
+    // 012 EARS-26 — the page's kinds in ONE read (the mismatch flag needs them).
+    const kinds = await this.repo.findKinds(rows.map((row) => row.kindId));
     return {
       data: rows.map((row) =>
         this.toListItem(
           row,
           projections?.get(row.id)?.state !== undefined &&
             projections.get(row.id)!.state !== "preparing",
+          kinds.get(row.kindId),
         ),
       ),
       total,
@@ -1053,6 +1094,9 @@ export class EventsService {
         programPdfRef: null,
         origin: "legacy",
         state: "hidden",
+        kindId: input.kindId,
+        participationFormat: input.participationFormat,
+        audience: input.audience,
       },
       {
         kind: input.recording.kind,
@@ -1382,6 +1426,7 @@ export class EventsService {
         await this.hasPublishedRecording(e),
       ),
       recordingExpectedBy: e.recordingExpectedBy,
+      ...kindFields(e, (await this.repo.findKinds([e.kindId])).get(e.kindId)),
       // #1593 — the validator the `ETag` carries, on the body too so a client
       // holding a parsed detail can re-derive it without retaining a header.
       version: e.version,
@@ -1393,8 +1438,10 @@ export class EventsService {
   private toListItem(
     e: Event,
     hasPublishedRecording: boolean,
+    kind: EventKindProjection | undefined,
   ): EventAdminListItem {
     return {
+      ...kindFields(e, kind),
       id: e.id,
       slug: e.slug,
       title: e.title,

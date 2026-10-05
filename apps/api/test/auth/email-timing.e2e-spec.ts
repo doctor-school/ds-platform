@@ -28,6 +28,12 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  DEFAULT_TIMING_ROUNDS,
+  describeTiming,
+  medianSpread,
+  sampleInterleaved,
+} from "../support/timing-oracle.js";
 
 // Actual controller -> AuthService -> Zitadel adapter -> SmtpMailer. Only the
 // native IdP API is simulated; no provider credentials or external emails.
@@ -106,9 +112,19 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
       const email = `timing-${randomUUID()}@ds.test`;
       const ghost = `timing-${randomUUID()}@ds.test`;
       const sub = randomUUID();
-      let exists = false;
+      // The register "new account" class needs a fresh address per measured
+      // round; `email` is registered in the warm-up round and is the
+      // duplicate class from then on (#2591).
+      const fresh = Array.from(
+        { length: DEFAULT_TIMING_ROUNDS },
+        () => `timing-${randomUUID()}@ds.test`,
+      );
+      const rounds = DEFAULT_TIMING_ROUNDS + 1; // warm-up + measured
+      const subs = new Map<string, string>();
+      const addressIn = (body?: string) =>
+        [email, ...fresh].find((address) => body?.includes(address));
       const nativeCalls: string[] = [];
-      const fetchImpl: FetchLike = async (url) => {
+      const fetchImpl: FetchLike = async (url, init) => {
         const path = new URL(url).pathname;
         nativeCalls.push(path);
         const ok = (body: unknown, status = 200) => ({
@@ -117,9 +133,12 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
           json: async () => body,
         });
         if (path === "/v2/users/new") {
-          if (exists) return ok({}, 409);
-          exists = true;
-          return ok({ id: sub, emailCode: "NATIVE1" });
+          const address = addressIn(init.body);
+          if (!address) throw new Error("Unexpected registration address");
+          if (subs.has(address)) return ok({}, 409);
+          const id = address === email ? sub : randomUUID();
+          subs.set(address, id);
+          return ok({ id, emailCode: "NATIVE1" });
         }
         if (path.endsWith("/CreateAuthorization")) return ok({});
         if (path.endsWith("/email/resend") || path.endsWith("/password_reset"))
@@ -134,7 +153,9 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
         mailer,
         fetchImpl: async (url, init) => {
           if (new URL(url).pathname === "/v2/users") {
-            const known = init.body?.includes(email);
+            const address = addressIn(init.body);
+            const known =
+              address === email || (address !== undefined && subs.has(address));
             return {
               ok: true,
               status: 200,
@@ -142,8 +163,8 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
                 result: known
                   ? [
                       {
-                        userId: sub,
-                        human: { email: { email, isVerified: false } },
+                        userId: subs.get(address!) ?? sub,
+                        human: { email: { email: address, isVerified: false } },
                       },
                     ]
                   : [],
@@ -173,9 +194,8 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
         pool = app.get<pg.Pool>(DRIZZLE_POOL);
         const audit = vi.spyOn(app.get<AuthAuditLog>(AUTH_AUDIT), "record");
         await app.inject({ method: "GET", url: "/v1/health" });
-        const request = async (url: string, identifier: string) => {
-          const started = performance.now();
-          const response = await app!.inject({
+        const request = (url: string, identifier: string) =>
+          app!.inject({
             method: "POST",
             url,
             payload: url.endsWith("/register")
@@ -186,56 +206,69 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
                 }
               : { identifier },
           });
-          return { ms: performance.now() - started, response };
-        };
         for (const route of [
           "/v1/auth/register",
           "/v1/auth/verify/resend",
           "/v1/auth/password/reset",
         ]) {
-          const first = await request(route, email);
-          const second = await request(
-            route,
-            route.endsWith("/register") ? email : ghost,
-          );
-          expect(first.response.statusCode).toBe(200);
-          expect(second.response.statusCode).toBe(first.response.statusCode);
-          expect(second.response.json()).toEqual(first.response.json());
-          expect.soft(Math.abs(first.ms - second.ms)).toBeLessThanOrEqual(50);
-          expect.soft(Math.max(first.ms, second.ms)).toBeLessThan(200);
-          expect(first.response.body).not.toContain("NATIVE1");
+          const register = route.endsWith("/register");
+          // Known vs unknown, interleaved; register compares a NEW account
+          // (warm-up `email`, then a fresh address per round) with the
+          // duplicate `email`. The band bounds the medians (#2591).
+          const timing = await sampleInterleaved([
+            (round) =>
+              request(route, register && round > 0 ? fresh[round - 1]! : email),
+            () => request(route, register ? email : ghost),
+          ]);
+          const first = timing[0]!;
+          const second = timing[1]!;
+          const reference = first.results[0]!;
+          expect(reference.statusCode).toBe(200);
+          for (const response of [...first.results, ...second.results]) {
+            expect(response.statusCode).toBe(reference.statusCode);
+            expect(response.json()).toEqual(reference.json());
+            expect(response.body).not.toContain("NATIVE1");
+          }
+          expect.soft(medianSpread(timing)).toBeLessThanOrEqual(50);
+          expect
+            .soft(Math.max(...first.samples, ...second.samples))
+            .toBeLessThan(200);
           console.info(
-            `EARS-16 ${scenario} ${route}: ${first.ms.toFixed(1)}/${second.ms.toFixed(1)} ms`,
+            `EARS-16 ${scenario} ${route}: ${describeTiming(timing)} ms`,
           );
         }
-        // Wait for all four real delivery attempts (new, duplicate, resend, reset)
-        // before fixture teardown. Failed resend must not create a success row.
+        // Wait for every real delivery attempt before fixture teardown — per
+        // round: new account, resend, reset; plus ONE account-exists notice,
+        // since the per-address notice throttle sends the duplicate `email`
+        // a single notice however often it re-registers. Failed resend must
+        // not create a success row.
+        const deliveries = 3 * rounds + 1;
         await vi.waitFor(
           () =>
             expect(
               scenario === "fallback-accept" ? accepted : relayFailure,
-            ).toHaveBeenCalledTimes(4),
-          { timeout: 2000 },
+            ).toHaveBeenCalledTimes(deliveries),
+          { timeout: 5000 },
         );
         await vi.waitFor(() =>
           expect(
             audit.mock.calls.filter(([event]) => event.type === "OtpSent"),
-          ).toHaveLength(scenario === "fallback-accept" ? 1 : 0),
+          ).toHaveLength(scenario === "fallback-accept" ? rounds : 0),
         );
         expect(
           audit.mock.calls.filter(
             ([event]) => event.type === "PasswordResetRequested",
           ),
-        ).toHaveLength(2);
+        ).toHaveLength(2 * rounds);
         expect(
           nativeCalls.filter((p) => p.endsWith("/email/resend")),
-        ).toHaveLength(1);
+        ).toHaveLength(rounds);
         expect(
           nativeCalls.filter((p) => p.endsWith("/password_reset")),
-        ).toHaveLength(1);
+        ).toHaveLength(rounds);
         if (fallback) {
-          expect(failover).toHaveBeenCalledTimes(4);
-          expect(fallbackFinished).toBe(4);
+          expect(failover).toHaveBeenCalledTimes(deliveries);
+          expect(fallbackFinished).toBe(deliveries);
         }
         const { rows } = await pool.query(
           "SELECT event_type, metadata::text FROM audit_ledger WHERE subject_id = $1",
@@ -249,7 +282,9 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
         // All listeners belong to this test, never to the shared stand.
         for (const socket of sockets) socket.destroy();
         await new Promise<void>((resolve) => server.close(() => resolve()));
-        if (pool) await deleteUserFixture(pool, "email", email);
+        if (pool)
+          for (const address of [email, ...fresh])
+            await deleteUserFixture(pool, "email", address);
         await app?.close();
       }
     },

@@ -12,6 +12,11 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { TOTP_STEP_SECONDS, totpCode } from "../../src/auth/idp/totp.js";
 import {
+  describeTiming,
+  medianSpread,
+  sampleInterleaved,
+} from "../support/timing-oracle.js";
+import {
   MFA_LOCKOUT_THRESHOLD,
   MfaLockoutService,
 } from "../../src/auth/admin-session/mfa-lockout.service.js";
@@ -392,7 +397,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
         payload: { code: string },
         headers = pendingHeaders(ref),
       ) {
-        const started = performance.now();
         const res = await app.inject({
           method: "POST",
           url: CHALLENGE_URL,
@@ -400,18 +404,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
           payload,
         });
         expect(res.statusCode).toBe(401);
-        return performance.now() - started;
       }
-      // Warm the path first — a cold first request measures module lazy-init,
-      // not the branch under test.
-      await timeOf({ code: "000000" });
-
-      const wrong = await timeOf({ code: "000000" });
-      const stale = await timeOf(
-        { code: "000000" },
-        pendingHeaders("00000000-0000-4000-8000-000000000000"),
-      );
-      expect(Math.abs(wrong - stale)).toBeLessThanOrEqual(50);
+      // Interleaved samples per class (the warm-up round absorbs module
+      // lazy-init); the band bounds the MEDIANS, so one scheduler spike on a
+      // shared runner cannot decide the verdict (#2591). Six wrong codes on
+      // `ref` stay below the 10-attempt lockout threshold (EARS-7.4).
+      const timing = await sampleInterleaved([
+        () => timeOf({ code: "000000" }),
+        () =>
+          timeOf(
+            { code: "000000" },
+            pendingHeaders("00000000-0000-4000-8000-000000000000"),
+          ),
+      ]);
+      console.info(`EARS-7.2 wrong/stale: ${describeTiming(timing)} ms`);
+      expect(medianSpread(timing)).toBeLessThanOrEqual(50);
     });
 
     it("EARS-7.3: the enrollment verify and the challenge verify BOTH append an auth.mfa.failure row", async () => {

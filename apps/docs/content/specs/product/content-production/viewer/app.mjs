@@ -153,6 +153,25 @@ class Side {
   }
 }
 
+/** Drops repeated points and interior points on a straight run: a bend is drawn only where the
+ * route turns. Ports share their coordinate with the line feeding them, so no jog is left. */
+function straighten(points) {
+  const out = [];
+  for (const p of points) {
+    const prev = out[out.length - 1];
+    if (prev && prev.x === p.x && prev.y === p.y) continue;
+    const before = out[out.length - 2];
+    if (
+      before &&
+      ((before.x === prev.x && prev.x === p.x) ||
+        (before.y === prev.y && prev.y === p.y))
+    )
+      out.pop();
+    out.push(p);
+  }
+  return out;
+}
+
 function layoutDiagram(diagram) {
   const { boxes, col, routes } = classify(diagram);
   const single = boxes.length === 1;
@@ -457,9 +476,7 @@ function layoutDiagram(diagram) {
             ? src.boundary[0]
             : arrowKind(arrow),
         prefer: kind === "drop" || kind === "rise" ? "end" : "start",
-        points: points.filter(
-          (p, i) => !i || p.x !== points[i - 1].x || p.y !== points[i - 1].y,
-        ),
+        points: straighten(points),
         host: k === 0,
       });
     });
@@ -689,7 +706,7 @@ function IdefEdge({ id, data, markerEnd }) {
       id=${id}
       path=${path}
       markerEnd=${markerEnd}
-      style=${{ stroke: color, strokeWidth: 1.6 }}
+      style=${{ stroke: color, strokeWidth: 1 }}
       interactionWidth=${12}
     />
     ${
@@ -874,6 +891,8 @@ function App({ model }) {
         return {
           ...edge,
           className: active ? "active" : "",
+          // The focused arrow is drawn above the others so its whole route stays visible.
+          zIndex: active ? 10 : 0,
           markerEnd: {
             type: MarkerType.ArrowClosed,
             width: 14,

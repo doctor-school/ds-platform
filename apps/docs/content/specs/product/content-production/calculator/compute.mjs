@@ -252,7 +252,7 @@ function resolveRate(model, role, scenario, staff) {
   const proxy = model.config.rate_proxy?.[role];
   if (proxy) {
     const r = roleHourlyCost(model, proxy, scenario, staff);
-    return { ...r, flags: [...r.flags, `прокси: ${proxy}`] };
+    return { ...r, flags: [...r.flags, `ставка взята по роли «${proxy}»`] };
   }
   const record = model.rates.get(role);
   if (!record) return { value: null, flags: ["нет записи ставки"], basis: "—" };
@@ -282,7 +282,7 @@ function resolveRate(model, role, scenario, staff) {
     let monthly = byRegion[model.vars.region];
     if (monthly == null && model.vars.region !== "moscow") {
       monthly = byRegion.moscow;
-      flags.push("регион: Москва");
+      flags.push("ставка по Москве — для региона нет данных");
     }
     const m = pick(monthly, scenario);
     if (m == null) return null;
@@ -301,8 +301,8 @@ function resolveRate(model, role, scenario, staff) {
       value = h[0] ?? h[1];
       flags.push(
         h[0] != null
-          ? "нижняя граница ставки: max (и, вероятно, mid) занижен"
-          : "верхняя граница ставки: min (и, вероятно, mid) завышен",
+          ? "ставка взята по нижней границе рынка — верхняя и, вероятно, средняя оценка занижены"
+          : "ставка взята по верхней границе рынка — нижняя и, вероятно, средняя оценка завышены",
       );
     }
     if (value == null) return null;
@@ -730,8 +730,10 @@ export function unitCost(model, productName, scenario) {
     const overheadCost = directHours * plan.overheadPerDirectHour;
     const reserve = { hours: 0, cost: 0 };
     const ext = {};
+    const units = [];
     expand(model, productName, scenario, (node) => {
       if (!node.product) return;
+      units.push({ path: node.path, product: node.product, qty: node.qty });
       const p = model.products[node.product];
       if (p.reserve_line) {
         const r = reserveOfUnit(model, node.product, scenario);
@@ -753,8 +755,11 @@ export function unitCost(model, productName, scenario) {
         status: rub == null ? "не задано" : "задано",
       };
     });
-    if (externals.some((e) => e.rub == null))
-      flags.add("внешние затраты не заданы");
+    const unset = externals.filter((e) => e.rub == null);
+    if (unset.length)
+      flags.add(
+        `внешние затраты не заданы: ${unset.map((e) => e.name).join(", ")}`,
+      );
     const externalCost = sum(externals.map((e) => e.cost ?? 0));
     const idleCost = directHours * plan.idle.perDirectHour;
     const byLoad = directCost + overheadCost + reserve.cost + externalCost;
@@ -785,6 +790,7 @@ export function unitCost(model, productName, scenario) {
       },
       reserve,
       externals,
+      units,
       idle: { cost: idleCost, perDirectHour: plan.idle.perDirectHour },
       total: { byLoad, fullPayroll: byLoad + idleCost },
       flags: [...flags],

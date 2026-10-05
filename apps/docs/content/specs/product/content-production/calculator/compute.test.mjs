@@ -123,7 +123,9 @@ test("roleHourlyCost: in-house = monthly × (1 + contributions) ÷ paid hours; c
   // a pool rate with only a lower bound is that bound, flagged
   const reviewer = roleHourlyCost(model, "Пул медрецензентов", "max");
   assert.equal(reviewer.value, 900);
-  assert.ok(reviewer.flags.some((f) => f.startsWith("нижняя граница")));
+  assert.ok(
+    reviewer.flags.some((f) => f.startsWith("ставка взята по нижней границе")),
+  );
   // composite circle = FTE-weighted member rates
   const team = roleHourlyCost(model, "Продуктовая команда", "mid").value;
   const lo = roleHourlyCost(model, "Медредактор-сценарист", "mid").value;
@@ -156,7 +158,12 @@ test("unitCost: a null external cost never contributes to totals and is flagged 
     assert.equal(ext.rub, null);
     assert.equal(ext.status, "не задано");
   }
-  assert.ok(lesson.flags.includes("внешние затраты не заданы"));
+  const unset = (u) =>
+    u.flags.find((f) => f.startsWith("внешние затраты не заданы"));
+  assert.equal(
+    unset(lesson),
+    `внешние затраты не заданы: ${lesson.externals.map((e) => e.name).join(", ")}`,
+  );
   near(
     lesson.total.byLoad,
     lesson.direct.cost + lesson.overhead.cost + lesson.reserve.cost,
@@ -168,6 +175,8 @@ test("unitCost: a null external cost never contributes to totals and is flagged 
     "mid",
   );
   near(withAi.total.byLoad - lesson.total.byLoad, 5000, 1e-6);
+  const aiName = inputs.products.externals.ai_generation.name;
+  assert.ok(!unset(withAi).includes(aiName), unset(withAi));
   near(withAi.total.fullPayroll - lesson.total.fullPayroll, 5000, 1e-6);
 });
 
@@ -223,6 +232,12 @@ test("unitCost: module = 6 × lesson + club + its deal share", () => {
       1e-6,
     );
     near(module.reserve.cost, 6 * lesson.reserve.cost, 1e-6);
+    const qty = Object.fromEntries(
+      module.units.map((u) => [u.path.join(" → "), u.qty]),
+    );
+    assert.equal(qty["модуль"], 1);
+    assert.equal(qty["модуль → урок"], 6);
+    assert.equal(qty["модуль → клуб"], 1);
     for (const t of ["byLoad", "fullPayroll"])
       near(
         module.total[t],
@@ -397,11 +412,14 @@ test("overrides: piece:<leaf> applies the contractor on-top (rates.yaml per_piec
 test("roleHourlyCost: a pool at its lower-bound floor says max (and likely mid) is understated", () => {
   const flags = roleHourlyCost(model, "Пул медрецензентов", "max").flags;
   assert.ok(
-    flags.some(
-      (f) => /нижняя граница/.test(f) && /max/.test(f) && /занижен/.test(f),
+    flags.includes(
+      "ставка взята по нижней границе рынка — верхняя и, вероятно, средняя оценка занижены",
     ),
     flags.join("; "),
   );
+  assert.deepEqual(roleHourlyCost(model, "Медиа-круг — голос", "mid").flags, [
+    "ставка взята по роли «Медиа-круг — монтажёр»",
+  ]);
 });
 
 test("periodPlan at media_external_share 0,5: non-production hours are штат time — the pool prices them at the штат rate", () => {
@@ -413,7 +431,13 @@ test("periodPlan at media_external_share 0,5: non-production hours are штат 
     );
     const weights = m.teamRoles.map((t) => ({
       own: own[t.role],
-      w: Array.isArray(t.fte) ? (s === "min" ? t.fte[0] : s === "max" ? t.fte[1] : (t.fte[0] + t.fte[1]) / 2) : t.fte,
+      w: Array.isArray(t.fte)
+        ? s === "min"
+          ? t.fte[0]
+          : s === "max"
+            ? t.fte[1]
+            : (t.fte[0] + t.fte[1]) / 2
+        : t.fte,
     }));
     const staffCircle =
       weights.reduce((a, x) => a + x.w * x.own, 0) /
@@ -423,7 +447,9 @@ test("periodPlan at media_external_share 0,5: non-production hours are штат 
     );
     near(circle.hourlyCost, staffCircle, 1e-6);
     near(circle.cost, circle.hours * staffCircle, 1e-6);
-    assert.ok(circle.hourlyCost < roleHourlyCost(m, "Продуктовая команда", s).value);
+    assert.ok(
+      circle.hourlyCost < roleHourlyCost(m, "Продуктовая команда", s).value,
+    );
   }
 });
 
@@ -431,25 +457,39 @@ test("reconciliation at media_external_share 0,5: idle and payroll at the шта
   const m = buildModel(inputs, { "var:media_external_share": 0.5 });
   for (const s of ["min", "mid", "max"]) {
     const plan = periodPlan(m, s);
-    const host = plan.idle.byRole.find((r) => r.role === "Медиа-круг — медиа-ведущий");
+    const host = plan.idle.byRole.find(
+      (r) => r.role === "Медиа-круг — медиа-ведущий",
+    );
     const own = host.ownHourlyCost;
     assert.ok(own < roleHourlyCost(m, "Медиа-круг — медиа-ведущий", s).value);
     near(host.payroll, host.paidHours * own, 1e-6);
     near(host.idleCost, host.idleHours * own, 1e-6);
     near(host.contractorHours, 0.5 * host.loaded, 1e-9);
-    near(host.idleHours, host.paidHours - host.nonProduction - 0.5 * host.loaded, 1e-9);
+    near(
+      host.idleHours,
+      host.paidHours - host.nonProduction - 0.5 * host.loaded,
+      1e-9,
+    );
     const team = new Set(plan.idle.byRole.map((r) => r.role));
     team.add("Продуктовая команда");
     const payroll = plan.idle.byRole.reduce((a, r) => a + r.payroll, 0);
-    const contracted = plan.idle.byRole.reduce((a, r) => a + r.contractorCost, 0);
+    const contracted = plan.idle.byRole.reduce(
+      (a, r) => a + r.contractorCost,
+      0,
+    );
     let otherDirect = 0;
     for (const [name, n] of Object.entries(plan.sold))
       for (const l of unitCost(m, name, s).trail)
-        if (l.class === "direct" && !team.has(l.role)) otherDirect += n * (l.cost ?? 0);
+        if (l.class === "direct" && !team.has(l.role))
+          otherDirect += n * (l.cost ?? 0);
     const otherPool = plan.poolLines
       .filter((l) => !team.has(l.role))
       .reduce((a, l) => a + (l.cost ?? 0), 0);
-    const full = planSum(m, s, (u) => u.direct.cost + u.overhead.cost + u.idle.cost);
+    const full = planSum(
+      m,
+      s,
+      (u) => u.direct.cost + u.overhead.cost + u.idle.cost,
+    );
     near(full, payroll + contracted + otherDirect + otherPool, 1e-3);
   }
 });

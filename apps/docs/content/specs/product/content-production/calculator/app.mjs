@@ -14,6 +14,7 @@ import {
   roleHourlyCost,
   loopRounds,
   pick,
+  SCENARIOS,
 } from "./compute.mjs";
 
 const html = htm.bind(React.createElement);
@@ -61,7 +62,7 @@ const hrs = (v) => (v == null ? "—" : `${f1.format(v)} ч`);
 const n2 = (v) => (v == null ? "—" : f2.format(v));
 const shape = (v) =>
   Array.isArray(v)
-    ? v.map((x) => (x == null ? "?" : f2.format(x))).join(" – ")
+    ? v.map((x) => (x == null ? "?" : f2.format(x))).join("–")
     : v == null
       ? "не задано"
       : typeof v === "number"
@@ -91,8 +92,23 @@ function withCustom(inputs, custom) {
   };
 }
 
+const UNKNOWN = {
+  leaf: "такого листа",
+  loop: "такой петли",
+  role: "такой роли",
+  variable: "такой переменной",
+  product: "такого продукта",
+  parameter: "такого параметра",
+  external: "такой внешней затраты",
+  kind: "такого вида правки",
+};
+const plainError = (message) => {
+  const m = /unknown (\w+)/.exec(message);
+  return m && UNKNOWN[m[1]] ? `${UNKNOWN[m[1]]} в модели нет` : message;
+};
+
 /** Model with the edits that apply; an edit compute rejects is reported and left out. */
-function evaluate(inputs, overrides, productName) {
+function evaluate(inputs, overrides, productName, describeKey) {
   const errors = [];
   let model;
   try {
@@ -104,13 +120,15 @@ function evaluate(inputs, overrides, productName) {
         buildModel(inputs, { [key]: value });
         applied[key] = value;
       } catch (error) {
-        errors.push(`правка ${key} не применена: ${error.message}`);
+        errors.push(
+          `правка «${describeKey(key)}» не применена: ${plainError(error.message)}`,
+        );
       }
     }
     try {
       model = buildModel(inputs, applied);
     } catch (error) {
-      errors.push(`правки не применены: ${error.message}`);
+      errors.push(`правки не применены: ${plainError(error.message)}`);
       model = buildModel(inputs, {});
     }
   }
@@ -123,24 +141,168 @@ function evaluate(inputs, overrides, productName) {
   return { model, result, errors };
 }
 
-/** Quantity of every nested unit (by path) — the «unit (qty)» level of the drill-down. */
-function unitQuantities(model, productName, scenario) {
-  const out = new Map();
-  const param = (owner, q) =>
-    typeof q === "number" ? q : (pick(model.params[owner]?.[q], scenario) ?? 0);
-  const walk = (name, qty, path) => {
-    const here = [...path, name];
-    out.set(here.join(" → "), qty);
-    for (const item of model.products[name]?.items ?? []) {
-      if (!item.product) continue;
-      const n =
-        param(name, item.qty ?? 1) *
-        (item.per ?? []).reduce((a, k) => a * param(name, k), 1);
-      walk(item.product, qty * n, here);
+/** Model value an override key replaces (undefined: the key names nothing the page edits). */
+function baseValue(model, key) {
+  const [kind, name, field] = key.split(":");
+  switch (kind) {
+    case "leaf":
+      return model.leaves.get(name)?.hours;
+    case "lead":
+      return model.leaves.get(name)?.leadDays;
+    case "loop": {
+      const loop = model.loops.get(name);
+      if (!loop) return undefined;
+      return loop.rounds_from
+        ? SCENARIOS.map((s) => loopRounds(model, name, s))
+        : loop.rounds_draft;
+    }
+    case "wait":
+      return model.loops.get(name)?.wait_days_per_round_draft;
+    case "rate": {
+      const rec = model.rates.get(name);
+      if (!rec) return undefined;
+      if (field === "monthly")
+        return (
+          rec.monthly_gross_rub?.[model.vars.region] ??
+          rec.monthly_gross_rub?.moscow ??
+          null
+        );
+      if (field === "hourly") return rec.hourly_rub ?? null;
+      return null;
+    }
+    case "fte":
+      return model.teamRoles.find((m) => m.role === name)?.fte ?? null;
+    case "var":
+      return model.vars[name];
+    case "param":
+      return model.params[name]?.[field];
+    case "external":
+      return model.externals[name]?.rub;
+    default:
+      return undefined;
+  }
+}
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+
+/** Why a range cannot be applied: an empty bound, or bounds out of order (мин ≤ сред ≤ макс). */
+function rangeProblem(values) {
+  if (values.some((v) => v == null)) return "заполните все границы диапазона";
+  if (values.some((v, i) => i && values[i - 1] > v))
+    return values.length === 3
+      ? "границы не по порядку: нужно мин ≤ сред ≤ макс"
+      : "мин больше макс";
+  return null;
+}
+
+/**
+ * Edit value in the model's shape: a number for a range field becomes [n, n]; anything compute would
+ * misread (wrong shape, empty or disordered bounds) is refused with a reason instead.
+ */
+function normaliseEdit(model, key, value) {
+  const base = baseValue(model, key);
+  if (base === undefined) return { value };
+  if (typeof base === "string" || (base === null && typeof value === "string"))
+    return typeof value === "string" || value === null
+      ? { value }
+      : { error: "ожидается значение из списка" };
+  if (value === null)
+    return base === null
+      ? { value }
+      : { error: "пустое значение — в модели здесь число" };
+  if (Array.isArray(base)) {
+    if (isNum(value)) return { value: base.map(() => value) };
+    if (!Array.isArray(value) || value.length !== base.length)
+      return { error: `ожидается диапазон из ${base.length} чисел` };
+  }
+  if (isNum(base) && !isNum(value)) return { error: "ожидается одно число" };
+  if (Array.isArray(value)) {
+    if (!value.every((v) => v == null || isNum(v)))
+      return { error: "в диапазоне не число" };
+    const problem = rangeProblem(value);
+    return problem ? { error: problem } : { value };
+  }
+  return isNum(value) ? { value } : { error: "ожидается число" };
+}
+
+/** Edits split into those in the model's shape and those refused, with a plain reason each. */
+function normaliseEdits(model, overrides, describeKey) {
+  const clean = {};
+  const errors = [];
+  for (const [key, value] of Object.entries(overrides)) {
+    const r = normaliseEdit(model, key, value);
+    if ("error" in r)
+      errors.push(`правка «${describeKey(key)}» не загружена: ${r.error}`);
+    else clean[key] = r.value;
+  }
+  return { clean, errors };
+}
+
+const VAR_FALLBACK_LABEL = {
+  employer_contributions_rate: "Ставка взносов работодателя в пределах базы",
+};
+
+/** Plain names of override keys and their values — the «Правки» list; the JSON file keeps keys. */
+function describer(model, inputs) {
+  const described = {
+    ...inputs.teams.capacity_variables,
+    ...inputs.products.variables,
+  };
+  const varLabel = (name) =>
+    described[name]?.label ?? VAR_FALLBACK_LABEL[name] ?? name;
+  const leafName = (id) => `${id} ${model.leaves.get(id)?.name ?? ""}`.trim();
+  const productLabel = (name) => model.products[name]?.name ?? name;
+  const name = (key) => {
+    const [kind, id, field] = key.split(":");
+    switch (kind) {
+      case "leaf":
+        return `Часы: ${leafName(id)}`;
+      case "lead":
+        return `Срок: ${leafName(id)}`;
+      case "piece":
+        return `Сдельная цена: ${leafName(id)}`;
+      case "loop":
+        return `Круги петли «${id}»`;
+      case "wait":
+        return `Ожидание между кругами петли «${id}»`;
+      case "rate":
+        return (
+          {
+            monthly: `Зарплата в месяц: ${id}`,
+            hourly: `Подряд, ₽/ч: ${id}`,
+            hourly_cost: `Калибровка ₽/ч: ${id}`,
+          }[field] ?? `Ставка: ${id}`
+        );
+      case "fte":
+        return `FTE на команду: ${id}`;
+      case "var":
+        return varLabel(id);
+      case "param":
+        return `${productLabel(id)}: ${String(field).replaceAll("_", " ")}`;
+      case "external":
+        return `Внешняя затрата: ${model.externals[id]?.name ?? id}`;
+      case "plan":
+        return `План: ${productLabel(id)} в месяц`;
+      default:
+        return key;
     }
   };
-  walk(productName, 1, []);
-  return out;
+  const UNIT = {
+    leaf: " ч",
+    lead: " раб. дн.",
+    wait: " раб. дн.",
+    loop: " кр.",
+    piece: " ₽ за проход",
+    rate: " ₽",
+    external: " ₽",
+  };
+  const value = (key, v) => {
+    const [kind, id] = key.split(":");
+    if (kind === "var" && VAR_OPTIONS[id])
+      return VAR_OPTIONS[id].find(([k]) => k === (v ?? ""))?.[1] ?? shape(v);
+    return v == null ? "не задано" : `${shape(v)}${UNIT[kind] ?? ""}`;
+  };
+  return { name, value, varLabel };
 }
 
 const Ctx = createContext(null);
@@ -154,42 +316,70 @@ const parseNum = (text) => {
 const showNum = (v) => (v == null ? "" : String(v).replace(".", ","));
 const SLOT = { 1: [""], 2: ["мин", "макс"], 3: ["мин", "сред", "макс"] };
 
-/** Number / range editor: one input per slot of the model value ([min, max] or [min, mid, max]). */
-function NumberEdit({ value, base, label, onChange }) {
+/** Slots shown for a value: a mismatched shape (a number on a range field) renders, never throws. */
+const slotsOf = (value, n) =>
+  Array.from({ length: n }, (_, i) =>
+    Array.isArray(value) ? (value[i] ?? null) : (value ?? null),
+  );
+
+/**
+ * Number / range editor: one input per slot of the model value ([min, max] or [min, mid, max]).
+ * A value that is not a number, an emptied bound or disordered bounds is marked and not applied —
+ * the last applied value stays; an empty field means «не задано» only where the model allows it.
+ */
+function NumberEdit({ value, base, label, nullable, onChange }) {
   const n = Array.isArray(base)
     ? base.length
     : Array.isArray(value)
       ? value.length
       : 1;
-  const slots = n === 1 ? [Array.isArray(value) ? value[0] : value] : value;
-  const [text, setText] = useState(() => slots.map(showNum));
+  const [text, setText] = useState(() => slotsOf(value, n).map(showNum));
   const sig = JSON.stringify(value);
+  const problemOf = (texts) => {
+    const vals = texts.map(parseNum);
+    if (vals.some((v) => v === undefined)) return "не число";
+    if (n === 1)
+      return vals[0] === null && !nullable
+        ? "пустое значение не применяется — введите число"
+        : null;
+    if (nullable && vals.every((v) => v === null)) return null;
+    return rangeProblem(vals);
+  };
   useEffect(() => {
     const parsed = text.map(parseNum);
     if (JSON.stringify(n === 1 ? parsed[0] : parsed) !== sig)
-      setText(slots.map(showNum));
+      setText(slotsOf(value, n).map(showNum));
     // Only an outside change (reset, import) rewrites what is being typed.
   }, [sig]);
+  const problem = problemOf(text);
   const type = (i, t) => {
     const next = [...text];
     next[i] = t;
     setText(next);
+    if (problemOf(next)) return;
     const vals = next.map(parseNum);
-    if (vals.some((v) => v === undefined)) return;
-    const out = n === 1 ? vals[0] : vals;
+    const out = n === 1 ? vals[0] : vals.every((v) => v === null) ? null : vals;
     if (JSON.stringify(out) !== sig) onChange(out);
   };
-  return text.map(
+  return html`${text.map(
     (t, i) =>
       html`${i ? html`<span class="muted">–</span>` : null}<input
           key=${i}
           inputmode="decimal"
-          class=${parseNum(t) === undefined ? "bad" : ""}
+          class=${problem ? "bad" : ""}
+          aria-invalid=${problem ? "true" : "false"}
           aria-label=${`${label}${SLOT[n]?.[i] ? `, ${SLOT[n][i]}` : ""}`}
+          title=${problem ? `не применено: ${problem}` : undefined}
           value=${t}
           onChange=${(e) => type(i, e.target.value)}
         />`,
-  );
+  )}${
+    problem
+      ? html`<span class="err small" data-testid="field-problem"
+          >не применено: ${problem}</span
+        >`
+      : null
+  }`;
 }
 
 /** One editable model value, addressed by its override key; edited values are marked. */
@@ -199,7 +389,7 @@ function Field({ k, base, label, options }) {
   const value = edited ? c.ov[k] : base;
   return html`<span
     class=${`edit${edited ? " edited" : ""}`}
-    title=${edited ? `изменено; в модели: ${shape(base)}` : `правка ${k}`}
+    title=${edited ? `изменено; в модели: ${shape(base)}` : "значение модели — можно править"}
   >
     ${
       options
@@ -216,7 +406,11 @@ function Field({ k, base, label, options }) {
             value=${value}
             base=${base}
             label=${label}
-            onChange=${(v) => c.set(k, v)}
+            nullable=${base == null}
+            onChange=${(v) =>
+              JSON.stringify(v) === JSON.stringify(base)
+                ? c.reset(k)
+                : c.set(k, v)}
           />`
     }
     ${
@@ -323,10 +517,9 @@ function Drill({ name, amount, children, open = false, testid }) {
   </details>`;
 }
 
-function DirectDrill({ r, productName, scenario }) {
-  const c = useContext(Ctx);
+function DirectDrill({ r }) {
   const direct = r.trail.filter((l) => l.class === "direct");
-  const qty = unitQuantities(c.model, productName, scenario);
+  const qty = new Map(r.units.map((u) => [u.path.join(" → "), u.qty]));
   const groups = new Map();
   for (const l of direct) {
     const key = l.path.slice(0, -1).join(" → ");
@@ -479,10 +672,15 @@ function IdleDrill({ r, plan }) {
 
 function ExternalsDrill({ r }) {
   const set = r.externals.reduce((a, e) => a + (e.cost ?? 0), 0);
+  const amount = !r.externals.length
+    ? "нет"
+    : r.externals.every((e) => e.cost == null)
+      ? "не задано"
+      : rub(set);
   return html`<${Drill}
     testid="drill-externals"
     name=${html`<b>Внешние затраты</b>`}
-    amount=${rub(set)}
+    amount=${amount}
   >
     ${
       r.externals.length
@@ -507,12 +705,12 @@ function ExternalsDrill({ r }) {
                       <td><${ExternalField} id=${e.id} /></td>
                       <td class="num">
                         ${
-                        e.cost == null
-                          ? html`<span class="err"
-                              >не задано — не входит в итог</span
-                            >`
-                          : rub(e.cost)
-                      }
+                          e.cost == null
+                            ? html`<span class="err"
+                                >не задано — не входит в итог</span
+                              >`
+                            : rub(e.cost)
+                        }
                       </td>
                     </tr>`,
                 )}
@@ -587,10 +785,10 @@ function Headline({ r, model, productName }) {
   </section>`;
 }
 
-function Breakdown({ r, plan, model, productName, scenario }) {
+function Breakdown({ r, plan, model, scenario }) {
   return html`<section class="card">
     <h2>Из чего складывается</h2>
-    <${DirectDrill} r=${r} productName=${productName} scenario=${scenario} />
+    <${DirectDrill} r=${r} />
     <${OverheadDrill} r=${r} plan=${plan} />
     <${ReserveDrill} r=${r} model=${model} scenario=${scenario} />
     <${ExternalsDrill} r=${r} />
@@ -783,7 +981,8 @@ function RatesPanel({ scenario, roles }) {
     <p class="small muted">
       Стоимость часа штата = зарплата × (1 + взносы) ÷ оплачиваемые часы;
       подряда — ставка × (1 + надбавка формы договора). «Калибровка ₽/ч»
-      заменяет расчёт целиком. Регион ставок: ${region}.
+      заменяет расчёт целиком. Регион ставок:
+      ${VAR_OPTIONS.region.find(([k]) => k === region)?.[1] ?? region}.
     </p>
     <table>
       <thead>
@@ -879,16 +1078,16 @@ function VariablesPanel({ inputs }) {
           (name) =>
             html`<tr key=${name}>
               <td>
-                <span class="id">${name}</span>
+                ${c.describe.varLabel(name)}
                 <div class="small muted">
-                  ${described[name]?.unit ?? "ставка взносов работодателя в пределах базы"}
+                  ${described[name]?.unit ?? "доля к зарплате"}
                 </div>
               </td>
               <td>
                 <${Field}
                   k=${`var:${name}`}
                   base=${c.base.vars[name]}
-                  label=${`переменная ${name}`}
+                  label=${c.describe.varLabel(name)}
                   options=${
                     name === "plan_mix"
                       ? Object.keys(c.base.products)
@@ -937,9 +1136,9 @@ function ParamsPanel({ productName }) {
         ${rows.map(
           ({ p, name, def }) =>
             html`<tr key=${`${p}|${name}`}>
-              <td>${p}</td>
+              <td>${c.base.products[p].name ?? p}</td>
               <td>
-                ${name}
+                ${name.replaceAll("_", " ")}
                 <div class="small muted">${def.unit}</div>
               </td>
               <td>
@@ -1017,8 +1216,8 @@ function EditsPanel() {
       ${keys.map(
         (k) =>
           html`<tr key=${k}>
-            <td><span class="id">${k}</span></td>
-            <td>${shape(c.ov[k])}</td>
+            <td>${c.describe.name(k)}</td>
+            <td>${c.describe.value(k, c.ov[k])}</td>
             <td>
               <button class="link" onClick=${() => c.reset(k)}>
                 ↺ сбросить
@@ -1241,9 +1440,21 @@ function App({ inputs }) {
 
   const full = useMemo(() => withCustom(inputs, custom), [inputs, custom]);
   const base = useMemo(() => buildModel(full, {}), [full]);
+  const describe = useMemo(() => describer(base, inputs), [base, inputs]);
+  // Stored edits from an older page or a hand-edited file: normalise, report and drop the rest.
+  const checked = useMemo(
+    () => normaliseEdits(base, overrides, describe.name),
+    [base, overrides, describe],
+  );
+  useEffect(() => {
+    if (checked.errors.length) {
+      setOverrides(checked.clean);
+      setImportError(checked.errors.join("; "));
+    }
+  }, [checked]);
   const { model, result, errors } = useMemo(
-    () => evaluate(full, overrides, productName),
-    [full, overrides, productName],
+    () => evaluate(full, checked.clean, productName, describe.name),
+    [full, checked, productName, describe],
   );
   let plan = null;
   let planError = null;
@@ -1263,6 +1474,7 @@ function App({ inputs }) {
       }),
     base,
     model,
+    describe,
   };
   const r = result?.[scenario];
   const count = Object.keys(overrides).length;
@@ -1274,11 +1486,18 @@ function App({ inputs }) {
       try {
         const data = JSON.parse(String(reader.result));
         if (!isPlainObject(data?.overrides))
-          throw new Error("в файле нет объекта overrides");
-        setOverrides(data.overrides);
-        setImportError(null);
+          throw new Error("в файле нет раздела правок (overrides)");
+        const { clean, errors: refused } = normaliseEdits(
+          base,
+          data.overrides,
+          describe.name,
+        );
+        setOverrides(clean);
+        setImportError(refused.length ? refused.join("; ") : null);
       } catch (error) {
-        setImportError(`файл правок не прочитан: ${error.message}`);
+        setImportError(
+          `файл правок не прочитан: ${error instanceof SyntaxError ? "это не JSON" : error.message}`,
+        );
       }
     };
     reader.readAsText(file);
@@ -1391,7 +1610,6 @@ function App({ inputs }) {
                   r=${r}
                   plan=${plan}
                   model=${model}
-                  productName=${productName}
                   scenario=${scenario}
                 />
                 <${Calibration}

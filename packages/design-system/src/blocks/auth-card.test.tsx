@@ -220,4 +220,34 @@ describe("<AuthCard>", () => {
     expect(content).toHaveClass("layout:px-9");
     expect(content?.className ?? "").not.toMatch(/layout:pb-9/);
   });
+
+  it("#2556: the footer links share ONE row, ends apart, wrapping on a narrow card (canvas 140)", () => {
+    // Canvas 140: «Создать аккаунт» / «Забыли пароль?» on one line —
+    // `display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap`.
+    // A single-link footer (register, reset) stands at the start of that row.
+    render(
+      <AuthCard
+        title="Sign in"
+        footer={
+          <>
+            <a href="#">Create account</a>
+            <a href="#">Forgot password?</a>
+          </>
+        }
+      >
+        <div>form</div>
+      </AuthCard>,
+    );
+    const footer = screen.getByText("Create account").parentElement;
+    const classes = footer?.className.split(" ") ?? [];
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        "flex-wrap",
+        "items-center",
+        "justify-between",
+        "gap-4",
+      ]),
+    );
+    expect(classes).not.toContain("flex-col");
+  });
 });

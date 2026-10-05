@@ -91,8 +91,10 @@ export function AuthLayout({
           past the viewport instead of constraining it — with `min-w-0` the column
           holds the viewport width and shrinkable content (the OTP slots) compresses
           to fit. At `layout:` the tracks are already `minmax(0,1fr)`, so the split
-          is unaffected. */}
-      <div className="flex min-w-0 flex-col items-center justify-center gap-8 px-6 py-12 layout:order-2">
+          is unaffected. `px-4`: below `layout:` the column stands on the canvas
+          16px gutter (auth.dc.html 37, the §09 mobile edge); the split desktop
+          column keeps its 24px. */}
+      <div className="flex min-w-0 flex-col items-center justify-center gap-8 px-4 py-12 layout:order-2 layout:px-6">
         {logo ? (
           <div
             className={cn(

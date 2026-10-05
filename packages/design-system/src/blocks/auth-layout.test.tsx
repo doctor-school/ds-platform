@@ -147,4 +147,20 @@ describe("<AuthLayout>", () => {
       screen.getByTestId("form-slot").parentElement?.className ?? "",
     ).not.toMatch(/max-w-md/);
   });
+
+  it("#2556: the form column stands on the canvas 16px mobile gutter (canvas 37 clamp(16px,4vw,40px))", () => {
+    // Below `layout:` the form column is the §09 edge-to-edge surface on the fixed
+    // 16px gutter the canvas draws; the desktop column keeps its 24px.
+    render(
+      <AuthLayout logo={<span>logo</span>} aside={<p>brand-aside</p>}>
+        <div data-testid="form-slot">form</div>
+      </AuthLayout>,
+    );
+    const formColumn =
+      screen.getByTestId("form-slot").parentElement?.parentElement;
+    const classes = formColumn?.className.split(" ") ?? [];
+    expect(classes).toContain("px-4");
+    expect(classes).toContain("layout:px-6");
+    expect(classes).not.toContain("px-6");
+  });
 });

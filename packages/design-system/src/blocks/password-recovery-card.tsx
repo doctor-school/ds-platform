@@ -456,7 +456,9 @@ function RecoveryCompleteForm({
             data-testid="reset-restart"
             // `shrink-0` — «Начать заново» keeps its size; the resend label is the
             // flex item that yields when the row is cramped (#542).
-            className="shrink-0"
+            // `-mx-4 -my-2` cancel the ghost padding so the label sits on the
+            // content edge, as the canvas draws it (auth.dc.html 248).
+            className="-mx-4 -my-2 shrink-0"
           >
             {copy.startOver}
           </Button>

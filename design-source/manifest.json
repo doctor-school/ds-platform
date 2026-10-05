@@ -105,10 +105,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "d2e70018645b4fa17ee4a61fff3239670ab4018b0d489de1f564cc786aba6fb4",
-      "pulledAt": "2026-10-02T10:26:20.173Z",
+      "sha256": "a438f5d792a2d55c984aeb3aa797a718eacc40f168c994c4815884eb0b2c803a",
+      "pulledAt": "2026-10-05T03:41:25.323Z",
       "remotePath": "auth.dc.html",
-      "note": "2026-10-02 lead via DesignSync, #2554: one code step 6 cells everywhere, code-sent step tweak, verify «Уже регистрировались?» block removed, unified resend/error copy"
+      "note": "2026-10-05 lead via DesignSync, #2554: «Шаг» tweak removed (the code step is reached via «Подтверждение» and by clicking through), reset busy spinner fixed (React #62, styles as objects); one code step 6 cells everywhere, verify «Уже регистрировались?» block removed, unified resend/error copy"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

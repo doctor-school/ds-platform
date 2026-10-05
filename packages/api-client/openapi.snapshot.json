@@ -2407,9 +2407,6 @@
                   "required": ["id", "slug", "title"],
                   "type": "object"
                 },
-                "kindFormatMismatch": {
-                  "type": "boolean"
-                },
                 "origin": {
                   "enum": ["platform", "legacy"],
                   "type": "string"
@@ -2470,7 +2467,6 @@
                 "validTransitions",
                 "kind",
                 "participationFormat",
-                "kindFormatMismatch",
                 "audience"
               ],
               "type": "object"

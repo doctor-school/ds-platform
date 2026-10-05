@@ -446,16 +446,16 @@ function isEditable(event: Event): boolean {
 
 /**
  * 012 EARS-26 / EARS-29 — the classification an admin read projects: the kind
- * reference (a retired kind included — the reference is retained), the format,
- * the audience, and whether a later narrowing of the kind left the format
- * outside the kind's allowed set (the admin flags such a row).
+ * reference (a retired kind included — the reference is retained), the format
+ * and the audience. The format is always one the kind allows: writes enforce it
+ * and a narrowing that would strand an event is refused (EARS-25).
  */
 function kindFields(
   e: Event,
   kind: EventKindProjection | undefined,
 ): Pick<
   EventAdminDetail,
-  "kind" | "participationFormat" | "kindFormatMismatch" | "audience"
+  "kind" | "participationFormat" | "audience"
 > {
   // `events.kind_id` is a NOT NULL FK with ON DELETE RESTRICT, so a missing
   // row is a broken invariant, not a state to render.
@@ -463,7 +463,6 @@ function kindFields(
   return {
     kind: { id: kind.id, slug: kind.slug, title: kind.title },
     participationFormat: e.participationFormat,
-    kindFormatMismatch: !kind.allowedFormats.includes(e.participationFormat),
     audience: e.audience,
   };
 }
@@ -707,7 +706,7 @@ export class EventsService {
             archivable.map((row) => row.id),
           )
         : undefined;
-    // 012 EARS-26 — the page's kinds in ONE read (the mismatch flag needs them).
+    // 012 EARS-26 — the page's kinds in ONE read.
     const kinds = await this.repo.findKinds(rows.map((row) => row.kindId));
     return {
       data: rows.map((row) =>

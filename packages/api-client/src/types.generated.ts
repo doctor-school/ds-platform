@@ -2615,7 +2615,6 @@ export interface components {
                     slug: string;
                     title: string;
                 };
-                kindFormatMismatch: boolean;
                 /** @enum {string} */
                 origin: "platform" | "legacy";
                 /** @enum {string} */

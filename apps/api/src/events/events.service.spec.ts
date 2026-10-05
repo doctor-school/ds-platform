@@ -31,7 +31,6 @@ const KIND = {
   id: "22222222-2222-4222-8222-222222222222",
   slug: "vebinar",
   title: "Вебинар",
-  allowedFormats: ["online" as const],
 };
 
 function baseEvent(programPdfRef: string | null): Event {

@@ -139,7 +139,7 @@ export class EventKindsAdminController {
     return detail;
   }
 
-  /** EARS-25 / EARS-26 — rename or re-scope the SAME row; narrowing rewrites no event. */
+  /** EARS-25 — rename or re-scope the SAME row; a narrowing that would strand an event is refused. */
   @Patch(":id")
   @HttpCode(200)
   @Authz({

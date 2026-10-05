@@ -42,9 +42,10 @@ import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 //   auth (guard) → key shape → fingerprint binding → domain transaction
 //   (precondition recheck → write → audit → fenced record completion).
 //
-// Narrowing `allowedFormats` rewrites no event (EARS-26): an event whose format
-// the kind no longer allows is FLAGGED on the admin event read
-// (`kindFormatMismatch`) and refused on its next save until fixed.
+// Narrowing `allowedFormats` is REFUSED while any retained event of the kind
+// carries a removed format (EARS-25): no event can ever hold a format its kind
+// disallows, so there is no mismatch state to flag. The refusal names the
+// conflicting events so the editor can re-classify them first.
 
 export interface CreateEventKindInput {
   payload: CreateEventKindRequest;
@@ -211,6 +212,16 @@ export class EventKindsService {
       if (locked.version !== input.expectedVersion) {
         throw new TaxonomyError("PRECONDITION_FAILED", STALE);
       }
+      if (input.payload.allowedFormats !== undefined) {
+        const kept = input.payload.allowedFormats;
+        const removed = locked.allowedFormats.filter((f) => !kept.includes(f));
+        const conflicts = await this.repo.findEventsWithFormats(
+          tx,
+          input.id,
+          removed,
+        );
+        if (conflicts.length > 0) throw narrowingConflict(removed, conflicts);
+      }
       const updated = await this.repo.updateVersioned(
         tx,
         input.id,
@@ -323,6 +334,22 @@ export class EventKindsService {
     );
     return { detail: toDetail(row), etag: taxonomyETag(row.version) };
   }
+}
+
+/**
+ * 012 EARS-25 — the refusal of a narrowing that would strand events: a 409
+ * `RELATIONSHIP_CONFLICT` (deterministic for the bound input, so it is replayed)
+ * with a field error on `allowedFormats` naming every conflicting event.
+ */
+function narrowingConflict(
+  removed: readonly string[],
+  conflicts: ReadonlyArray<{ id: string; title: string }>,
+): TaxonomyError {
+  const named = conflicts.map((e) => `«${e.title}» (${e.id})`).join(", ");
+  const message = `events of this kind still use ${removed.join(", ")}: ${named}; change their format or kind first`;
+  return new TaxonomyError("RELATIONSHIP_CONFLICT", message, [
+    { path: "allowedFormats", message },
+  ]);
 }
 
 function assertTransitionApplies(

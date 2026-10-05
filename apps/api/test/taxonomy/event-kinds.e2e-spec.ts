@@ -248,7 +248,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return res.json() as {
         kind: { id: string; slug: string; title: string };
         participationFormat: string;
-        kindFormatMismatch: boolean;
         audience: string;
         title: string;
       };
@@ -560,46 +559,43 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await adminEvent(id)).kind.id).toBe(SEED_EVENT_KINDS.kongress.id);
     });
 
-    it("012 EARS-26: narrowing a kind changes no event, flags the event in the admin list and editor, refuses its next save until fixed, and the storefront keeps showing it", async () => {
+    it("012 EARS-25: narrowing a kind's allowed formats is refused, naming the events, while a retained event of that kind carries a removed format, and accepted once none does", async () => {
       const kind = await publishKind(await newKind(["online", "offline"]));
       const event = await seedEvent({
         audience: "experts",
         kindId: kind.id,
         format: "offline",
       });
+      const { title } = await adminEvent(event.id);
 
-      const narrowed = await patchKind(kind, { allowedFormats: ["online"] });
-      expect(narrowed.statusCode).toBe(200);
+      const refused = await patchKind(kind, { allowedFormats: ["online"] });
+      expect(refused.statusCode).toBe(409);
+      const problem = refused.json() as {
+        errorCode: string;
+        errors?: { path: string; message: string }[];
+      };
+      expect(problem.errorCode).toBe("RELATIONSHIP_CONFLICT");
+      const field = problem.errors?.find((e) => e.path === "allowedFormats");
+      expect(field?.message).toContain(event.id);
+      expect(field?.message).toContain(title);
 
-      const detail = await adminEvent(event.id);
-      expect(detail.participationFormat).toBe("offline");
-      expect(detail.kindFormatMismatch).toBe(true);
-      const list = await app.inject({
+      const unchanged = await app.inject({
         method: "GET",
-        url: `/v1/admin/events?q=${encodeURIComponent(detail.title)}`,
+        url: `/v1/admin/event-kinds/${kind.id}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
-      expect(list.statusCode).toBe(200);
-      const row = (
-        list.json() as { data: { id: string; kindFormatMismatch: boolean }[] }
-      ).data.find((r) => r.id === event.id);
-      expect(row?.kindFormatMismatch).toBe(true);
-
-      const page = await app.inject({
-        method: "GET",
-        url: `/v1/public/events/${event.slug}`,
+      expect(unchanged.json()).toMatchObject({
+        allowedFormats: ["online", "offline"],
+        version: kind.version,
       });
-      expect(page.statusCode).toBe(200);
+      expect((await adminEvent(event.id)).participationFormat).toBe("offline");
 
-      const blocked = await patchEvent(event.id, { title: `${detail.title}!` });
-      expect(blocked.statusCode).toBe(400);
-      expect(fieldOf(blocked)).toContainEqual(["participationFormat"]);
+      const moved = await patchEvent(event.id, { participationFormat: "online" });
+      expect(moved.statusCode).toBe(200);
 
-      const fixed = await patchEvent(event.id, {
-        participationFormat: "online",
-      });
-      expect(fixed.statusCode).toBe(200);
-      expect((await adminEvent(event.id)).kindFormatMismatch).toBe(false);
+      const accepted = await patchKind(kind, { allowedFormats: ["online"] });
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toMatchObject({ allowedFormats: ["online"] });
     });
 
     // ── EARS-29: the event's audience ────────────────────────────────────

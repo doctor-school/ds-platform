@@ -555,13 +555,6 @@ export const EventAdminDetailSchema = z.object({
   kind: EventKindRefSchema,
   /** 020 EARS-1 — the attendance mode. */
   participationFormat: EventParticipationFormatSchema,
-  /**
-   * 012 EARS-26 — `true` when the kind was narrowed after this event was saved
-   * and no longer allows its format. The admin list and editor flag the row;
-   * its next save is refused until the format or the kind is changed. The
-   * storefronts keep showing the event unchanged.
-   */
-  kindFormatMismatch: z.boolean(),
   /** 012 EARS-29 — the storefront selector. */
   audience: EventAudienceSchema,
   /**
@@ -594,7 +587,6 @@ export const EventAdminListItemSchema = EventAdminDetailSchema.pick({
   validTransitions: true,
   kind: true,
   participationFormat: true,
-  kindFormatMismatch: true,
   audience: true,
 });
 export type EventAdminListItem = z.infer<typeof EventAdminListItemSchema>;

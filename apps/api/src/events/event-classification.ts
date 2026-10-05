@@ -28,7 +28,8 @@ export class EventClassificationError extends Error {
  * The effective `(kind, format)` an event write would leave behind must be one
  * the kind allows, and the kind must be a published, non-retired dictionary row.
  * `kind` is `null` when the id resolves to no row. Applied on create AND on every
- * save, so an event left mismatched by a narrowed kind is refused until fixed.
+ * save; together with the refused narrowing (EARS-25) no event ever holds a
+ * format its kind disallows.
  */
 export function assertEventClassification(
   kind: Pick<EventKind, "status" | "deletedAt" | "allowedFormats" | "title"> | null,

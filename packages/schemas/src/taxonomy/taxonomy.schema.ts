@@ -577,8 +577,8 @@ export type CreateEventKindRequest = z.infer<
 
 /**
  * `PATCH /v1/admin/event-kinds/:id` — rename or re-scope the SAME row. Narrowing
- * `allowedFormats` changes no existing event (EARS-25): an event whose format
- * the kind no longer allows is flagged in the admin, not rewritten.
+ * `allowedFormats` is refused (409, field error on `allowedFormats`) while any
+ * retained event of the kind carries a removed format (EARS-25).
  */
 export const UpdateEventKindRequestSchema = z
   .object({

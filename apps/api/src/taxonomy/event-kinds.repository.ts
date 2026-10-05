@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DrizzleHandle, EventKind } from "@ds/db";
 import { eventKinds, events } from "@ds/db";
 import type { AdminTaxonomyListQuery, EventParticipationFormat } from "@ds/schemas";
@@ -160,6 +160,31 @@ export class EventKindsRepository {
       )
       .returning();
     return row ?? null;
+  }
+
+  /**
+   * 012 EARS-25 — the retained events of this kind whose format is one of
+   * `formats`. A narrowing that would leave any of them outside the kind's
+   * allowed set is refused, so this read runs under the kind's `FOR UPDATE`
+   * lock: an event write holds the kind `FOR SHARE`, so no event can take a
+   * removed format between this read and the narrowing's commit.
+   */
+  async findEventsWithFormats(
+    tx: Tx,
+    kindId: string,
+    formats: readonly EventParticipationFormat[],
+  ): Promise<Array<{ id: string; title: string }>> {
+    if (formats.length === 0) return [];
+    return tx
+      .select({ id: events.id, title: events.title })
+      .from(events)
+      .where(
+        and(
+          eq(events.kindId, kindId),
+          inArray(events.participationFormat, [...formats]),
+        ),
+      )
+      .orderBy(asc(events.title), asc(events.id));
   }
 
   discoverIncidentAnywhere(kindId: string): Promise<EventKindIncidentEvent[]> {

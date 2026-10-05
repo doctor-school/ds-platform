@@ -109,11 +109,8 @@ async function lockKind(tx: Tx, kindId: string): Promise<EventKind | null> {
   return kind ?? null;
 }
 
-/** The kind fields an admin event read projects (`kind` + `kindFormatMismatch`). */
-export type EventKindProjection = Pick<
-  EventKind,
-  "id" | "slug" | "title" | "allowedFormats"
->;
+/** The kind fields an admin event read projects (`kind`). */
+export type EventKindProjection = Pick<EventKind, "id" | "slug" | "title">;
 
 /**
  * One event aggregate with its (optional) stream config.
@@ -159,7 +156,6 @@ export class EventsRepository {
         id: eventKinds.id,
         slug: eventKinds.slug,
         title: eventKinds.title,
-        allowedFormats: eventKinds.allowedFormats,
       })
       .from(eventKinds)
       .where(inArray(eventKinds.id, [...new Set(ids)]));
@@ -259,8 +255,8 @@ export class EventsRepository {
   ): Promise<EventAggregate | null> {
     return withRequestAuditContext(this.db, async (tx) => {
       // 012 EARS-26 — EVERY save re-checks the EFFECTIVE (kind, format) pair
-      // under the row lock, so an event a narrowed kind left mismatched is
-      // refused until the editor changes the format or the kind.
+      // under the row lock: a patch that changes only the kind or only the
+      // format is checked against the stored other half.
       const [current] = await tx
         .select({ kindId: events.kindId, format: events.participationFormat })
         .from(events)

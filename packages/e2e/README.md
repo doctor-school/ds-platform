@@ -205,6 +205,27 @@ chunks execute, the browser submits it natively and `/v1/auth/login` is never
 called. That case now throws a named error naming the walk as the defect rather
 than timing out on a URL that will never change.
 
+## Captcha-gated journeys: `installCaptchaStub` (#2605)
+
+Registration, login-OTP request, verification resend and password reset carry the
+invisible Yandex SmartCaptcha, which never yields a token in headless Playwright.
+`lib/captcha-stub.ts` (export `@ds/e2e/captcha-stub`) routes ONLY the Yandex
+`captcha.js` request to an inline stand-in implementing the `window.smartCaptcha`
+surface `@yandex/smart-captcha` calls, resolving every `execute` with the stand's
+non-production test token — the widget wrapper, header plumbing, api guard and
+provider all run for real.
+
+```ts
+import { installCaptchaStub } from "@ds/e2e/captcha-stub";
+
+await installCaptchaStub(page); // or a BrowserContext; before the first navigation
+```
+
+The token comes from `E2E_CAPTCHA_TEST_TOKEN` (set by `pnpm e2e:stage` from the box,
+or exported by hand — `tools/staging/README.md` → «Driving captcha-gated auth on a
+slot»). Absent ⇒ `CaptchaTestTokenMissingError`, never a silent skip. No walk in this
+suite drives a captcha-gated step yet; the first one calls the helper.
+
 ## Running this suite against a staging slot
 
 `pnpm --filter @ds/e2e test:e2e` runs whatever `E2E_PORTAL_URL` / `E2E_DOCTOR_URL` point

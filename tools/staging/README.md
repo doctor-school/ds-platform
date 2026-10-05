@@ -62,6 +62,30 @@ slots: use the slot-tagged sender and test recipient to find the right message.
 Shared Zitadel OTP mail has no sender slot tag; find the newest mail for the
 registration recipient used on your slot.
 
+## Driving captcha-gated auth on a slot (#2605)
+
+Registration, the login-OTP request, verification resend and password reset are
+bot-protected, and Yandex SmartCaptcha has no vendor test keypair, so the agent
+drives them with the box's non-production test token instead of handing them to
+the owner. stage-1 carries `BOT_PROTECTION_TEST_TOKEN` in `stage.env` (generated
+on the box with `openssl rand -hex 32`, never committed; `up`/`sync` refuse it
+while bot protection is off, shorter than 32 characters, or without
+`SENTRY_ENVIRONMENT=stage`). The api accepts it only there (audited as
+`test-token`); production refuses it at boot and in `pnpm deploy:prod`.
+
+`pnpm e2e:stage <slot>` hands it to the suite as `E2E_CAPTCHA_TEST_TOKEN`. An
+ad-hoc drive reads it from the box the way `STAGE_BASIC_AUTH_PASS` is read —
+never invent one:
+
+```sh
+export E2E_CAPTCHA_TEST_TOKEN="$(ssh -o BatchMode=yes ds-stage-1 'sudo sed -n "s/^BOT_PROTECTION_TEST_TOKEN=//p" /etc/ds-platform/stage.env' | tr -d '[:space:]')"
+```
+
+and calls `installCaptchaStub(page)` from `@ds/e2e/captcha-stub` before the first
+navigation: it routes only Yandex's `captcha.js` to a stub that resolves the real
+widget with the token, so the `x-smartcaptcha-token` header, the api guard and the
+provider all run for real. The owner's Stage-B judges only how the widget looks.
+
 ## API mail transport and safe configuration recovery (#2274)
 
 `renderSlotEnv` always emits `MAILER_SMTP_HOST=mailpit`,

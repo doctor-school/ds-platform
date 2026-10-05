@@ -1478,6 +1478,40 @@ test("up|sync fail closed on an incoherent box captcha trio (#2207)", () => {
   );
 });
 
+test("up|sync refuse an incoherent bot-protection test token on the box (#2605)", () => {
+  const on = {
+    BOT_PROTECTION_ENABLED: "true",
+    SMARTCAPTCHA_SERVER_KEY: "ysc2_abcdefghijklmnopqrst0123456789",
+    SMARTCAPTCHA_SITE_KEY: "ysc1_abcdefghijklmnopqrst0123456789",
+    SENTRY_ENVIRONMENT: "stage",
+  };
+  const token = "a".repeat(64);
+  // Coherent: ON with the full pair, a ≥32-char token and a non-production marker.
+  assert.deepEqual(assertCaptchaCoherent({ ...on, BOT_PROTECTION_TEST_TOKEN: token }), { enabled: true });
+  // An empty template line is "no token" — coherent in both modes.
+  assert.deepEqual(assertCaptchaCoherent({ ...on, BOT_PROTECTION_TEST_TOKEN: "" }), { enabled: true });
+  assert.deepEqual(assertCaptchaCoherent({ BOT_PROTECTION_TEST_TOKEN: "  " }), { enabled: false });
+  // A token while bot protection is OFF is a meaningless half (nothing validates).
+  assert.throws(
+    () => assertCaptchaCoherent({ BOT_PROTECTION_ENABLED: "false", BOT_PROTECTION_TEST_TOKEN: token }),
+    (err) => err instanceof SlotError && /BOT_PROTECTION_TEST_TOKEN/.test(err.message) && /off/.test(err.message),
+  );
+  // A short token is refused here by name — the api schema refuses to boot on it.
+  assert.throws(
+    () => assertCaptchaCoherent({ ...on, BOT_PROTECTION_TEST_TOKEN: "short" }),
+    (err) => err instanceof SlotError && /BOT_PROTECTION_TEST_TOKEN/.test(err.message) && /32/.test(err.message),
+  );
+  // A token without a non-production SENTRY_ENVIRONMENT makes the api refuse to boot.
+  assert.throws(
+    () => assertCaptchaCoherent({ ...on, SENTRY_ENVIRONMENT: undefined, BOT_PROTECTION_TEST_TOKEN: token }),
+    (err) => err instanceof SlotError && /SENTRY_ENVIRONMENT/.test(err.message),
+  );
+  assert.throws(
+    () => assertCaptchaCoherent({ ...on, SENTRY_ENVIRONMENT: "production", BOT_PROTECTION_TEST_TOKEN: token }),
+    (err) => err instanceof SlotError && /SENTRY_ENVIRONMENT/.test(err.message),
+  );
+});
+
 test("EARS-1: a second slot reuses existing images without rebuilding their shared tags", async () => {
   const commands = [];
   await runSlotPlan(

@@ -252,6 +252,58 @@ export async function applyRuntimeConfigs({
   return { restarted: servicesToRestart };
 }
 
+// --- #2605: the bot-protection test token never reaches production ---------
+// The api already refuses to boot with `BOT_PROTECTION_TEST_TOKEN` set outside a
+// non-production SENTRY_ENVIRONMENT; this is the second, independent control.
+// The probe counts non-empty assignments in api-prod's env file (root 0600, so
+// read via sudo) and never prints a value; the verdict fails closed on anything
+// it does not recognise.
+const API_PROD_ENV_FILE = "/etc/ds-platform/api.env";
+
+export function apiEnvTestTokenProbeScript(envFile = API_PROD_ENV_FILE) {
+  return `if sudo test -r '${envFile}'; then
+  echo api-env=readable
+  echo "test-token-lines=$(sudo grep -cE '^[[:space:]]*(export[[:space:]]+)?BOT_PROTECTION_TEST_TOKEN=[^[:space:]]' '${envFile}' || true)"
+else
+  echo api-env=unreadable
+fi
+`;
+}
+
+export function apiEnvTestTokenVerdict(output) {
+  const lines = output.split(/\r?\n/);
+  if (!lines.includes("api-env=readable")) {
+    return {
+      ok: false,
+      reason: `could not read ${API_PROD_ENV_FILE} on api-prod to prove it carries no BOT_PROTECTION_TEST_TOKEN`,
+    };
+  }
+  const count = lines
+    .map((line) => line.match(/^test-token-lines=(\d+)$/))
+    .find(Boolean);
+  if (!count) {
+    return {
+      ok: false,
+      reason: `unrecognised BOT_PROTECTION_TEST_TOKEN probe output for ${API_PROD_ENV_FILE}`,
+    };
+  }
+  return Number(count[1]) === 0
+    ? { ok: true }
+    : {
+        ok: false,
+        reason: `${API_PROD_ENV_FILE} on api-prod defines BOT_PROTECTION_TEST_TOKEN — the bot-protection test token is non-production only (#2605); remove the line on the box before deploying`,
+      };
+}
+
+async function assertProdApiEnvHasNoTestToken() {
+  step("#2605: api-prod env carries no bot-protection test token");
+  const verdict = apiEnvTestTokenVerdict(
+    await sshCapture(API_PROD, apiEnvTestTokenProbeScript()),
+  );
+  if (!verdict.ok) die(verdict.reason);
+  ok(`${API_PROD_ENV_FILE}: no BOT_PROTECTION_TEST_TOKEN`);
+}
+
 // --- tiny console ---------------------------------------------------------
 
 const t0All = Date.now();
@@ -976,6 +1028,7 @@ export async function preparePostgresDeployment(
 
 async function deploy(hotfixRef = null) {
   const sha = await preflight(hotfixRef);
+  await assertProdApiEnvHasNoTestToken();
   // #1896: everything per-service below (build banner, pre-swap boot probe,
   // truthful-success verify, smoke scope) is derived from THIS set.
   const services = resolveTargetServiceSet(

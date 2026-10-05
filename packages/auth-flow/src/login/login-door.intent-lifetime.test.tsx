@@ -158,7 +158,7 @@ describe.each(HOSTS)(
       await user.click(screen.getByTestId("otp-send"));
       await screen.findByTestId("otp-verify");
       await user.click(screen.getByRole("textbox"));
-      await user.keyboard("12345678");
+      await user.keyboard("PVDC3R");
 
       await waitFor(() => expect(push).toHaveBeenCalledWith(eventPath));
       expect(loginWithOtp).toHaveBeenCalledTimes(1);

@@ -72,7 +72,7 @@ import {
 import {
   clearPendingRegistration,
   setPendingRegistration,
-  takePendingRegistration,
+  peekPendingRegistration,
 } from "@ds/design-system/blocks";
 
 import { AuthError } from "../client/auth-client";
@@ -367,25 +367,29 @@ describe("021 EARS-10 (#2331): the already-registered visitor's way out", () => 
   );
 });
 
-describe("021 EARS-15.4: what the door holds for the step after the submit", () => {
+describe("003 EARS-41 / 021 EARS-15.4: what the door holds for the code step", () => {
   it.each(HOSTS)(
-    "021 EARS-15.4: an accepted registration on the %s door holds the typed credential for the confirmation replay",
+    "003 EARS-41: an accepted registration on the %s door holds the values the code step submits WITH the code, and the typed form",
     async (_name, config) => {
       await submitForm(config);
 
       await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
-      // The hold is what lets the confirmation step sign the visitor in without
-      // asking for the password they typed one screen ago.
+      // The hold is what the code step sends as `registration`: exactly the
+      // body the registration command carried, minus the address.
+      const { email: _email, ...sent } = lastBody();
       await waitFor(() =>
-        expect(takePendingRegistration(EMAIL)).toEqual({
+        expect(peekPendingRegistration(EMAIL)).toMatchObject({
           identifier: EMAIL,
-          password: PASSWORD,
+          registration: sent,
+          form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
         }),
       );
+      // A hold for another address is never handed out.
+      expect(peekPendingRegistration("other@clinic.ru")).toBeNull();
     },
   );
 
-  it("021 EARS-15.4: a refused registration holds nothing — there is no step to replay into", async () => {
+  it("021 EARS-15.4: a refused registration holds nothing — there is no code step to submit it from", async () => {
     register.mockReset().mockRejectedValue(authError(400));
 
     await submitForm(DOCTOR_FIXTURE);
@@ -395,17 +399,48 @@ describe("021 EARS-15.4: what the door holds for the step after the submit", () 
         resolveAuthFlowCopy(DOCTOR_FIXTURE).register.failed,
       ),
     );
-    expect(takePendingRegistration(EMAIL)).toBeNull();
+    expect(peekPendingRegistration()).toBeNull();
   });
 
   it("021 EARS-15.4.1: a hold left by an abandoned attempt is dropped as the submit starts, never carried past a refusal", async () => {
-    setPendingRegistration({ identifier: EMAIL, password: "stale-password" });
     register.mockReset().mockRejectedValue(authError(400));
-
-    await submitForm(DOCTOR_FIXTURE);
+    const user = setupUser();
+    await renderDoor(DOCTOR_FIXTURE);
+    // Written after the form opened (another tab's step in this module
+    // singleton), so it did not refill this form — yet it is still held.
+    setPendingRegistration({
+      identifier: EMAIL,
+      registration: { password: "stale-password", consent: [] },
+      form: { email: EMAIL, password: "stale-password", promoCode: "", consents: {} },
+    });
+    await fillForm(user);
+    await user.click(screen.getByTestId("register-submit"));
 
     await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
-    expect(takePendingRegistration(EMAIL)).toBeNull();
+    expect(peekPendingRegistration()).toBeNull();
+  });
+
+  it.each(HOSTS)(
+    "003 EARS-42: «← Изменить почту» lands the %s visitor on the form with the values this tab still holds",
+    async (_name, config) => {
+      setPendingRegistration({
+        identifier: EMAIL,
+        registration: { password: PASSWORD, consent: [] },
+        form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+      });
+
+      await renderDoor(config);
+
+      expect(screen.getByTestId("register-email")).toHaveValue(EMAIL);
+      expect(screen.getByTestId("register-password")).toHaveValue(PASSWORD);
+    },
+  );
+
+  it("003 EARS-42: with nothing held the form opens empty", async () => {
+    await renderDoor(ACADEMY_FIXTURE);
+
+    expect(screen.getByTestId("register-email")).toHaveValue("");
+    expect(screen.getByTestId("register-password")).toHaveValue("");
   });
 });
 
@@ -659,6 +694,8 @@ describe("003 EARS-24 (#2455): one confirmation mechanism — the door never bec
   it("003 EARS-24: on either host an accepted registration leaves the form for /verify and never renders a code field in place", async () => {
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
       push.mockReset();
+      // Each pass is a fresh visitor: the previous pass's hold would refill it.
+      clearPendingRegistration();
       await submitForm(config);
 
       await waitFor(() =>

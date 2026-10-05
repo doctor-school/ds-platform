@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
+  DOCTOR_REGISTER_CONSENT_REFUSAL_CODES,
   MARKETING_COMMUNICATIONS_PURPOSE,
   PARTNER_DATA_SHARING_PURPOSE,
   type ConsentAcceptance,
@@ -17,6 +18,7 @@ import {
   clearPendingRegistration,
   isBotProtectionRejected,
   isBotProtectionRequired,
+  peekPendingRegistration,
   RegisterCard,
   setPendingRegistration,
   useBotProtectedAction,
@@ -39,6 +41,7 @@ import type {
   AuthFlowHostConfig,
 } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
+import { consentUnmetMessage } from "./consent-refusal";
 import { RegisterGlyph } from "./register-glyph";
 
 /**
@@ -51,8 +54,9 @@ import { RegisterGlyph } from "./register-glyph";
  * (ADR-0013 A1); what the door adds is the
  * composition the two hosts used to own twice: the live BFF command, the
  * bot-protection retry-once orchestration, the EARS-16 outcome mapping, the
- * consent READ MODEL → recorded acceptances projection, the held credential for
- * the step after the submit, and the hop out of an accepted command.
+ * consent READ MODEL → recorded acceptances projection, the held registration
+ * values the code step submits with the code (003 EARS-41), and the hop out of
+ * an accepted command.
  *
  * Row 51: an accepted registration hands the address to the host's `/verify`
  * route (003 EARS-24) — the one confirmation mechanism on every host, so the
@@ -229,6 +233,9 @@ export function RegisterDoor({
 
   const [commandError, setCommandError] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
+  // 003 EARS-24 amended — read once, on mount: the values this tab still holds
+  // from a registration whose code step the visitor stepped back from.
+  const [initialValues] = useState(() => peekPendingRegistration()?.form);
 
   const captcha = useBotProtectedAction({
     onVerified: () => setChallengeError(null),
@@ -262,8 +269,7 @@ export function RegisterDoor({
     captchaToken?: string,
   ) {
     const email = values.email.trim();
-    const body = {
-      email,
+    const registration = {
       password: values.password,
       consent: acceptancesOf(config, values.consents ?? {}),
       // 021 EARS-4 — a DECLARATION, stated by the host and required of the
@@ -271,17 +277,18 @@ export function RegisterDoor({
       // submit, so reaching this line means it was made. A host that states no
       // declaration sends no such key rather than a `false` it never asked about.
       ...(consents?.medicalWorkerDeclaration
-        ? { medicalWorkerDeclaration: true }
+        ? { medicalWorkerDeclaration: true as const }
         : {}),
       // The promo code is render-only (row 9): the command contract carries no
       // such field, so sending one would invent a contract.
     };
     // Row 18: the captcha token travels as the header the client sets.
-    await authClient.register(body, captchaToken);
-    // 021 EARS-15.4 — hold the typed credential for the step that follows, so
-    // the confirmation can sign this visitor in without asking again. The slot
-    // is a module singleton: it survives the client-side hop below.
-    setPendingRegistration({ identifier: email, password: values.password });
+    await authClient.register({ email, ...registration }, captchaToken);
+    // 003 EARS-41 / EARS-23 amended — hold the typed values for the code step:
+    // it submits them WITH the code (nothing is written to an existing account
+    // before that), and «← Изменить почту» refills the form from them. The
+    // slot is a module singleton: it survives the client-side hop below.
+    setPendingRegistration({ identifier: email, registration, form: values });
 
     // Row 51 / 003 EARS-24 — the address is confirmed on the host's `/verify`
     // route, and the arrival context rides along so the trip through the mail
@@ -309,8 +316,8 @@ export function RegisterDoor({
       setCommandError(missingPrecondition);
       return;
     }
-    // A hold left by an abandoned attempt must never survive into this one: it
-    // would replay a credential this submit is about to replace.
+    // A hold left by an abandoned attempt must never survive into this one: the
+    // code step would submit values this submit is about to replace.
     clearPendingRegistration();
     // 003 EARS-17 — the challenge runs BEFORE the command, the way both
     // storefronts ran it before this door and the way the sign-in door requests
@@ -376,7 +383,10 @@ export function RegisterDoor({
   const missingPrecondition =
     consents?.partnerDataItem &&
     !tierItem(consents, PARTNER_DATA_SHARING_PURPOSE)
-      ? (consentCopy.partnerDataItem.unmet ?? null)
+      ? consentUnmetMessage(
+          consentCopy,
+          DOCTOR_REGISTER_CONSENT_REFUSAL_CODES[PARTNER_DATA_SHARING_PURPOSE],
+        )
       : null;
 
   const attribution = config.register.attribution;
@@ -386,6 +396,9 @@ export function RegisterDoor({
     <RegisterCard
       icon={<RegisterGlyph icon={config.brand.registerIcon ?? "user-plus"} />}
       copy={cardCopy}
+      // 003 EARS-24 amended — «← Изменить почту» on the code step lands here
+      // with the visitor's typed values still held in this tab.
+      initialValues={initialValues}
       // #2331 — the already-registered visitor's way out, on BOTH doors, with
       // the arrival context carried onward (rule S3).
       footer={

@@ -138,7 +138,7 @@ test.describe("021 EARS-13: a duplicate registration on the doctor host", () => 
 
     // ── Register #1 (new account) → the confirmation step ─────────────────
     await register(page, email, password);
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
     // The PENDING registrant's resend acknowledgement — the reference answer.
     const resentAt = new Date().toISOString();
     const pendingAck = await resendAcknowledgement(page);
@@ -156,10 +156,9 @@ test.describe("021 EARS-13: a duplicate registration on the doctor host", () => 
     // ── Register #2 (same, already-verified address) ──────────────────────
     const dupAt = new Date().toISOString();
     await register(page, email, livePassword());
-    // Identical to the new-registrant case: the same step, the same co-equal
-    // actions, no field error, no «этот email уже занят».
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-reset")).toBeVisible();
+    // Identical to the new-registrant case: the same code step (003 EARS-42),
+    // no field error, no «этот email уже занят».
+    await expect(page.getByTestId("verify-back")).toBeVisible();
     await expect(page.getByText(/уже занят|уже зарегистрирован/i)).toHaveCount(0);
 
     // 003 EARS-23: the notice carries a sign-in action and NO code.

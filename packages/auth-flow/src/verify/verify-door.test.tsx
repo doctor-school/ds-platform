@@ -22,8 +22,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *
  * Mocked seams: the BFF factory (`createAuthClient`), the router (the observable
  * outcome), the 005 EARS-2 completion command at its transport entry, and the
- * challenge widget (it needs a site key and a network). The held-credential
- * slot is the real one.
+ * challenge widget (it needs a site key and a network). The held-registration
+ * slot is the real one. `login` stays on the mocked client only so every
+ * success path can prove it is never called (003 EARS-41: no replay).
  */
 type CaptchaProps = {
   requestKey: number | null;
@@ -81,6 +82,7 @@ vi.mock("@ds/design-system/blocks", async () => {
 
 import {
   clearPendingRegistration,
+  peekPendingRegistration,
   setPendingRegistration,
 } from "@ds/design-system/blocks";
 
@@ -169,8 +171,18 @@ async function enterCode(arrival?: Arrival) {
   await user.keyboard(CODE);
 }
 
+/** What the Academy register door holds for this step (003 EARS-41). */
+const REGISTRATION = {
+  password: PASSWORD,
+  consent: [{ purpose: "tos", version: "2026-01" }],
+};
+
 function hold() {
-  setPendingRegistration({ identifier: EMAIL, password: PASSWORD });
+  setPendingRegistration({
+    identifier: EMAIL,
+    registration: REGISTRATION,
+    form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+  });
 }
 
 describe("003 /verify dual-affordance + resend (#227/#267)", () => {
@@ -211,12 +223,13 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     }
   });
 
-  it("003 EARS-24: keeps BOTH co-equal paths — the code form AND the sign-in / reset actions", async () => {
+  it("003 EARS-42: the code step offers the code form and «← Изменить почту» — no co-equal «Войти» / «Сбросить пароль» way out", async () => {
     await mountSettled();
 
-    expect(screen.getByTestId("verify-submit")).toBeInTheDocument();
-    expect(screen.getByTestId("verify-go-to-login")).toBeInTheDocument();
-    expect(screen.getByTestId("verify-go-to-reset")).toBeInTheDocument();
+    expect(screen.getByTestId("verify-submit")).toHaveTextContent(COPY.submit);
+    expect(screen.getByTestId("verify-back")).toHaveTextContent(COPY.back);
+    expect(screen.queryByTestId("verify-go-to-login")).toBeNull();
+    expect(screen.queryByTestId("verify-go-to-reset")).toBeNull();
   });
 
   it("003 EARS-25: resend is disabled during cooldown, re-enables after, hits the dedicated endpoint, and re-arms", async () => {
@@ -271,9 +284,8 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     const first = await noticeTextFor("doc-registered@example.com");
     const second = await noticeTextFor("dan-never-seen@example.com");
     expect(first).toBe(second);
-    expect(first).toBe(
-      "Если регистрация ещё не подтверждена, мы повторно отправили код на d•••@e•••.com.",
-    );
+    // Canvas 81-83 — the sentence names the masked address, nothing else.
+    expect(first).toBe("Мы отправили новый код на d•••@e•••.com.");
   });
 
   it("003 EARS-3: auto-submits the fixed-length code (no manual click) and confirms it", async () => {
@@ -301,49 +313,68 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
   });
 
-  it("003 EARS-3: the canvas success banner stands while the replay runs, only after the server accepted", async () => {
+  it("003 EARS-3: the canvas success banner stands while the landing completes, only after the server accepted", async () => {
     hold();
-    h.login.mockImplementationOnce(() => new Promise(() => {}));
-    await enterCode();
+    h.registerForEvent.mockImplementationOnce(() => new Promise(() => {}));
+    await enterCode({ email: EMAIL, returnTo: "/webinars/ahilles-042" });
 
     expect(await screen.findByTestId("verify-succeeded")).toHaveTextContent(
       COPY.codeAccepted,
     );
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("003 EARS-3: a refused code never shows the success banner", async () => {
+    h.verify.mockRejectedValue(new AuthError(400, "Bad Request"));
+    await enterCode();
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      COPY.failed,
+    );
+    expect(screen.queryByTestId("verify-succeeded")).toBeNull();
   });
 });
 
 describe("005 EARS-2 guest-through-auth completion on /verify", () => {
-  it("005 EARS-2: on success with a held credential and a carried event context, the system shall register for that event and land on its page", async () => {
+  it("005 EARS-2: on an accepted code with held values and a carried event context, the system shall register for that event and land on its page", async () => {
     hold();
     await enterCode({ email: EMAIL, returnTo: "/webinars/ahilles-042" });
 
     await waitFor(() => {
-      expect(h.login).toHaveBeenCalledTimes(1);
       expect(h.registerForEvent).toHaveBeenCalledWith("ahilles-042");
       expect(h.replace).toHaveBeenCalledWith("/webinars/ahilles-042");
     });
+    // 003 EARS-41 — the held values went WITH the code; the answer is the
+    // session, so nothing is replayed.
+    expect(h.verify).toHaveBeenCalledWith({
+      email: EMAIL,
+      code: CODE,
+      registration: REGISTRATION,
+    });
+    expect(h.login).not.toHaveBeenCalled();
   });
 
-  it("008 EARS-5 (#2281): the auto-login refreshes the router after the landing replace, so Back re-reads the header", async () => {
+  it("008 EARS-5 (#2281): the confirmed sign-in refreshes the router after the landing replace, so Back re-reads the header", async () => {
     hold();
     await enterCode();
 
     await waitFor(() => expect(h.refresh).toHaveBeenCalledTimes(1));
-    expect(h.login).toHaveBeenCalledTimes(1);
+    expect(h.login).not.toHaveBeenCalled();
     expect(h.replace.mock.invocationCallOrder[0]!).toBeLessThan(
       h.refresh.mock.invocationCallOrder[0]!,
     );
   });
 
-  it("005 EARS-2: with no held credential, the /login fallback carries the event context onward", async () => {
+  it("005 EARS-2: a cold step (no held values) is signed in by the code alone and still completes the carried event context", async () => {
     await enterCode({ email: EMAIL, returnTo: "/webinars/ahilles-042" });
 
     await waitFor(() =>
-      expect(h.push).toHaveBeenCalledWith(
-        "/login?returnTo=%2Fwebinars%2Fahilles-042",
-      ),
+      expect(h.replace).toHaveBeenCalledWith("/webinars/ahilles-042"),
     );
-    expect(h.registerForEvent).not.toHaveBeenCalled();
+    expect(h.registerForEvent).toHaveBeenCalledWith("ahilles-042");
+    expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
+    expect(h.push).not.toHaveBeenCalled();
+    expect(h.login).not.toHaveBeenCalled();
   });
 
   it("005 EARS-2: a cross-origin returnTo is rejected — the auto-login lands on the discovery listing (`/webinars`, 013 EARS-15), nothing registers", async () => {
@@ -354,23 +385,35 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     expect(h.registerForEvent).not.toHaveBeenCalled();
   });
 
-  it("005 EARS-2: the co-equal «Войти» action carries the event context onward into /login", async () => {
+  it("003 EARS-42 / #2027 S3: «← Изменить почту» returns to the registration form, carrying the event context onward", async () => {
+    const user = userEvent.setup();
     await mountSettled({ email: EMAIL, returnTo: "/webinars/ahilles-042" });
 
-    expect(screen.getByTestId("verify-go-to-login")).toHaveAttribute(
-      "href",
-      "/login?returnTo=%2Fwebinars%2Fahilles-042",
+    await user.click(screen.getByTestId("verify-back"));
+
+    expect(h.push).toHaveBeenCalledWith(
+      "/register?returnTo=%2Fwebinars%2Fahilles-042",
     );
+    expect(h.verify).not.toHaveBeenCalled();
   });
 
-  // #2027 rule S3: both co-equal actions carry the target ALIKE.
-  it("#2027 S3: the co-equal «Сбросить пароль» action carries the arrival target onward into /reset", async () => {
-    await mountSettled({ email: EMAIL, returnTo: "/webinars/ahilles-042" });
+  it("003 EARS-42 / #2027 S3: a cross-origin carried target is dropped at «← Изменить почту»", async () => {
+    const user = userEvent.setup();
+    await mountSettled({ email: EMAIL, returnTo: "//evil.example" });
 
-    expect(screen.getByTestId("verify-go-to-reset")).toHaveAttribute(
-      "href",
-      "/reset?returnTo=%2Fwebinars%2Fahilles-042",
-    );
+    await user.click(screen.getByTestId("verify-back"));
+
+    expect(h.push).toHaveBeenCalledWith("/register");
+  });
+
+  it("003 EARS-42: stepping back keeps the held values, so the form refills from them", async () => {
+    hold();
+    const user = userEvent.setup();
+    await mountSettled();
+
+    await user.click(screen.getByTestId("verify-back"));
+
+    expect(peekPendingRegistration(EMAIL)?.registration).toEqual(REGISTRATION);
   });
 });
 
@@ -412,26 +455,50 @@ describe("021 EARS-10 (#2455, owner decision Б): an эфир that no longer exi
   );
 });
 
-describe("003 EARS-39: a confirmation with no held credential (reload, restored tab, expired hold)", () => {
-  it("003 EARS-39: a cold verify (no held password: reload, restored tab, expired hold) routes to /login", async () => {
+describe("003 EARS-41: one submission — the code, with the held values while this tab has them", () => {
+  it("003 EARS-41: a cold step (reload, restored tab, expired hold) submits the code alone and lands signed in — never routed to /login", async () => {
     await enterCode({ email: EMAIL });
 
-    await waitFor(() => expect(h.push).toHaveBeenCalledWith("/login"));
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/webinars"));
     expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
+    expect(h.push).not.toHaveBeenCalled();
     expect(h.login).not.toHaveBeenCalled();
   });
 
-  it("003 EARS-39: a login replay the IdP refuses keeps the registrant on the verification step with the generic error, no routing", async () => {
+  it("003 EARS-41: a hold for ANOTHER address is never submitted with this one's code", async () => {
+    setPendingRegistration({
+      identifier: "someone-else@example.com",
+      registration: REGISTRATION,
+      form: { email: "someone-else@example.com", password: PASSWORD, promoCode: "", consents: {} },
+    });
+    await enterCode({ email: EMAIL });
+
+    await waitFor(() => expect(h.verify).toHaveBeenCalledTimes(1));
+    expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
+  });
+
+  it("003 EARS-41: an accepted code wipes the held values", async () => {
     hold();
-    h.login.mockRejectedValueOnce(new AuthError(401, "Unauthorized"));
     await enterCode();
 
-    await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(COPY.failed)).toBeInTheDocument();
+    await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
+    expect(peekPendingRegistration()).toBeNull();
+  });
+
+  it("003 EARS-16 / EARS-41: a refused code keeps the visitor on the step with the generic error and the held values kept for the retry", async () => {
+    hold();
+    h.verify.mockRejectedValueOnce(new AuthError(400, "Bad Request"));
+    await enterCode();
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      COPY.failed,
+    );
     expect(h.push).not.toHaveBeenCalled();
     expect(h.replace).not.toHaveBeenCalled();
+    expect(h.login).not.toHaveBeenCalled();
     expect(screen.queryByTestId("verify-succeeded")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
+    expect(peekPendingRegistration(EMAIL)?.registration).toEqual(REGISTRATION);
   });
 
   it("003 EARS-3 (#2455): the one 003 command carries the address and the code only, even with a carried target", async () => {

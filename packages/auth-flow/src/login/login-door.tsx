@@ -24,6 +24,8 @@ import {
 import { OtpCodeFieldSchema } from "@ds/design-system/fields";
 
 import { resolveAuthFlowCopy } from "../copy";
+import { withBoldDestination } from "../copy/destination";
+import { VerifyGlyph } from "../verify/verify-glyph";
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import {
@@ -221,13 +223,15 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       phonePlaceholder: copy.otp.phonePlaceholder,
       sendCode: copy.otp.sendCode,
       verifyTitle: copy.otp.verifyTitle,
-      sentTo: (destination) =>
-        copy.otp.sentTo.replace("{destination}", destination),
+      // Canvas 394 — the masked destination stands bold inside the sentence.
+      sentTo: (destination) => withBoldDestination(copy.otp.sentTo, destination),
       codeLabel: copy.otp.codeLabel,
       verifySubmit: copy.otp.verifySubmit,
       resend: copy.otp.resend,
       resendCountdown: (seconds) =>
         copy.otp.resendCountdown.replace("{seconds}", String(seconds)),
+      resentTo: (destination) =>
+        withBoldDestination(copy.otp.resentTo, destination),
       changeMethod: copy.otp.changeMethod,
     },
   };
@@ -477,6 +481,8 @@ export function LoginDoor({
 
       <LoginCard
         icon={<LoginGlyph icon={config.brand.loginIcon} />}
+        // Canvas 497 — the code step wears the confirmation's envelope glyph.
+        codeStepIcon={<VerifyGlyph />}
         copy={copy}
         // 005 EARS-2: signup is a co-equal auth path — the arrival context rides
         // onward into /register so it survives this hop too.

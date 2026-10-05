@@ -245,6 +245,12 @@ export interface RegisterCardProps {
    * the server and carried as a fact rather than a hidden input.
    */
   formDataAttributes?: Record<string, string>;
+  /**
+   * 003 EARS-24 amended — the values the visitor typed before the code step,
+   * refilled when «← Изменить почту» returns them here. Read on mount only;
+   * a consent absent from it stays unticked (never pre-ticked by the block).
+   */
+  initialValues?: RegisterCardValues | undefined;
   testIds?: RegisterCardTestIds;
 }
 
@@ -282,6 +288,7 @@ export function RegisterCard({
   errors,
   pending = false,
   formDataAttributes,
+  initialValues,
   testIds,
 }: RegisterCardProps) {
   const items = consentItems ?? EMPTY_ITEMS;
@@ -301,10 +308,11 @@ export function RegisterCard({
     mode: "onTouched",
     ...(resolver ? { resolver } : {}),
     defaultValues: {
-      email: "",
-      password: "",
-      promoCode: "",
-      consents: defaultConsents,
+      email: initialValues?.email ?? "",
+      password: initialValues?.password ?? "",
+      promoCode: initialValues?.promoCode ?? "",
+      // The visitor's own ticks come back; nothing else is ever ticked.
+      consents: { ...defaultConsents, ...initialValues?.consents },
     },
   });
 

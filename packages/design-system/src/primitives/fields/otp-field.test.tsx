@@ -10,7 +10,7 @@ import { OtpField } from "./otp-field";
 afterEach(cleanup);
 
 /**
- * Regression harness for #212 / #211. Drives `<OtpField variant="slotted">` exactly
+ * Regression harness for #212 / #211. Drives `<OtpField>` exactly
  * as `/login`, `/verify`, and `/reset` do — a real RHF `<FormField>` Controller
  * feeding the `field` — and asserts the controlled-value contract the #212 fix
  * restored: typed input must land in the RHF value, the field must wire RHF's `ref`
@@ -46,7 +46,6 @@ function SlottedHarness({
             <OtpField
               field={field as ControllerRenderProps<{ code: string }>}
               length={length}
-              variant="slotted"
               charset={charset}
               label="Code"
               onComplete={onComplete}
@@ -124,7 +123,6 @@ describe("OtpField variant=slotted", () => {
                 <OtpField
                   field={field as ControllerRenderProps<{ code: string }>}
                   length={6}
-                  variant="slotted"
                   charset="numeric"
                   label="Code"
                 />

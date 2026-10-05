@@ -21,6 +21,7 @@ export const ACADEMY_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
     registerPath: "/v1/auth/register",
+    verifyPath: "/v1/auth/verify",
   },
   routes: {
     login: "/login",
@@ -70,6 +71,7 @@ export const DOCTOR_FIXTURE: AuthFlowHostConfig = {
   api: {
     basePath: "/v1/auth",
     registerPath: "/v1/storefront/doctor/register",
+    verifyPath: "/v1/storefront/doctor/verify",
   },
   routes: {
     login: "/login",

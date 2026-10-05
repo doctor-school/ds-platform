@@ -68,23 +68,27 @@ afterEach(() => {
  * `verify`/`reset` suites for the same split).
  */
 function Harness({
-  length = 6,
   cooldownSeconds = 0,
   resendNonce = 0,
   isSubmitting = false,
+  resendPending = false,
+  succeeded = false,
+  notice,
   onSubmit = (e: React.FormEvent) => e.preventDefault(),
   onResend = () => {},
-  onChangeMethod = () => {},
+  onBack = () => {},
   onComplete,
   captchaSlot,
 }: {
-  length?: number;
   cooldownSeconds?: number;
   resendNonce?: number;
   isSubmitting?: boolean;
+  resendPending?: boolean;
+  succeeded?: boolean;
+  notice?: React.ReactNode;
   onSubmit?: React.FormEventHandler<HTMLFormElement>;
   onResend?: () => void;
-  onChangeMethod?: () => void;
+  onBack?: () => void;
   onComplete?: () => void;
   captchaSlot?: React.ReactNode;
 }) {
@@ -97,27 +101,30 @@ function Harness({
         render={({ field }) => (
           <OtpFocusScreen
             field={field as ControllerRenderProps<{ code: string }>}
-            length={length}
-            variant="slotted"
-            charset="numeric"
-            title="Enter code"
-            sentToLabel="Code sent to a•••@p•••.com"
             codeLabel="Code"
             submitLabel="Verify"
+            backLabel="Change method"
             resendLabel="Resend"
             resendCountdownLabel={(s) => `Resend in ${s}s`}
-            changeMethodLabel="Change method"
             cooldownSeconds={cooldownSeconds}
             resendNonce={resendNonce}
             isSubmitting={isSubmitting}
+            resendPending={resendPending}
+            succeeded={succeeded}
+            succeededLabel="Accepted"
+            notice={notice}
             onComplete={onComplete}
             onSubmit={onSubmit}
             onResend={onResend}
-            onChangeMethod={onChangeMethod}
+            onBack={onBack}
             captchaSlot={captchaSlot}
-            submitTestId="otp-submit"
-            resendTestId="otp-resend"
-            changeMethodTestId="otp-change-method"
+            testIds={{
+              submit: "otp-submit",
+              resend: "otp-resend",
+              back: "otp-change-method",
+              notice: "otp-notice",
+              succeeded: "otp-succeeded",
+            }}
           />
         )}
       />
@@ -148,11 +155,51 @@ describe("OtpFocusScreen", () => {
     expect(screen.queryByTestId("challenge")).toBeNull();
   });
 
-  it("renders the masked destination passed by the app (past-tense, no raw value)", () => {
+  it("003 EARS-42: six alphanumeric cells — a text keyboard, upper-cased, one-time-code autofill", async () => {
+    const user = userEvent.setup();
     render(<Harness />);
-    expect(screen.getByTestId("otp-sent-to")).toHaveTextContent(
-      "Code sent to a•••@p•••.com",
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("maxlength", "6");
+    expect(input).toHaveAttribute("autocomplete", "one-time-code");
+    expect(input).not.toHaveAttribute("inputmode", "numeric");
+    await user.click(input);
+    await user.keyboard("ab12cd");
+    expect(input).toHaveValue("AB12CD");
+  });
+
+  it("003 EARS-42: the heading is the card's — the step itself draws no title or sent-to line", () => {
+    render(<Harness />);
+    expect(screen.queryByTestId("otp-sent-to")).toBeNull();
+    expect(screen.queryByRole("heading")).toBeNull();
+  });
+
+  it("003 EARS-42: the accepted row and the after-resend notice render only when given", () => {
+    const { rerender } = render(<Harness />);
+    expect(screen.queryByTestId("otp-succeeded")).toBeNull();
+    expect(screen.queryByTestId("otp-notice")).toBeNull();
+    rerender(<Harness succeeded notice="New code sent to a•••@p•••.com." />);
+    expect(screen.getByTestId("otp-succeeded")).toHaveTextContent("Accepted");
+    expect(screen.getByTestId("otp-notice")).toHaveTextContent(
+      "New code sent to a•••@p•••.com.",
     );
+    expect(screen.getByTestId("otp-notice")).toHaveAttribute("role", "status");
+  });
+
+  it("003 EARS-42: a resend in flight keeps the resend control busy", () => {
+    render(<Harness resendPending />);
+    expect(screen.getByTestId("otp-resend")).toBeDisabled();
+  });
+
+  it("003 EARS-42: back and resend share one wrapping row under the primary (canvas 77-80)", () => {
+    render(<Harness />);
+    const back = screen.getByTestId("otp-change-method");
+    const resend = screen.getByTestId("otp-resend");
+    expect(back.parentElement).toBe(resend.parentElement);
+    expect(back.parentElement).toHaveClass("flex-wrap", "justify-between");
+    expect(
+      screen.getByTestId("otp-submit").compareDocumentPosition(back) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders ONLY the focus-screen affordances — no channel switcher / secondary links", () => {
@@ -240,23 +287,23 @@ describe("OtpFocusScreen", () => {
     expect(onResend).toHaveBeenCalledTimes(1);
   });
 
-  it("fires onChangeMethod / back when the change-method control is clicked", async () => {
-    const onChangeMethod = vi.fn();
+  it("fires onBack when the back control is clicked", async () => {
+    const onBack = vi.fn();
     const user = userEvent.setup();
-    render(<Harness onChangeMethod={onChangeMethod} />); // cooldown defaults to 0 (no interval)
+    render(<Harness onBack={onBack} />); // cooldown defaults to 0 (no interval)
     await user.click(screen.getByTestId("otp-change-method"));
-    expect(onChangeMethod).toHaveBeenCalledTimes(1);
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("auto-submits (fires onComplete) once the fixed-length code lands", async () => {
+  it("003 EARS-42: auto-submits (fires onComplete) once the sixth character lands", async () => {
     const onComplete = vi.fn();
     const user = userEvent.setup();
-    render(<Harness length={6} onComplete={onComplete} />); // cooldown defaults to 0 (no interval)
+    render(<Harness onComplete={onComplete} />); // cooldown defaults to 0 (no interval)
     const input = screen.getByRole("textbox");
     await user.click(input);
-    await user.keyboard("12345");
+    await user.keyboard("A1B2C");
     expect(onComplete).not.toHaveBeenCalled();
-    await user.keyboard("6");
+    await user.keyboard("3");
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 

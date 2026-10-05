@@ -22,6 +22,7 @@ import ru from "../messages/ru.json";
 export const ACADEMY_AUTH_FLOW_API: AuthFlowApiConfig = {
   basePath: "/v1/auth",
   registerPath: "/v1/auth/register",
+  verifyPath: "/v1/auth/verify",
 };
 
 /** The Academy's catalogue, read as DATA — this host is single-locale RU (`i18n/request.ts`). */

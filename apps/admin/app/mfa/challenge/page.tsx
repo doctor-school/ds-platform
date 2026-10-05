@@ -151,7 +151,6 @@ export default function MfaChallengePage() {
                         field={field}
                         length={CODE_LENGTH}
                         label={t("codeLabel")}
-                        variant="slotted"
                         charset="numeric"
                         onComplete={() => void form.handleSubmit(submit)()}
                       />

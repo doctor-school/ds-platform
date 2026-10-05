@@ -3,181 +3,142 @@
 import * as React from "react";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
+import { Alert } from "../primitives/alert";
 import { Button } from "../primitives/button";
-import { FormError } from "../primitives/form";
 import { OtpField } from "../primitives/fields/otp-field";
 import { useResendCountdown } from "./use-resend-countdown";
 
 /**
- * `<OtpFocusScreen>` (#227, absorbed into #235) — a reusable, focused OTP-entry
- * block. When a code has been requested, the surface (login-OTP / register-verify /
- * reset) renders THIS instead of the full request-form chrome, so the user sees
- * only what the focus-screen decision (227) prescribes and CANNOT wander off the
- * issued challenge:
+ * The one code every flow mails or texts (003 EARS-29 amended, #2555): six
+ * characters, upper-case letters and digits. The step has no other length —
+ * no eight-cell, digits-only step exists on any host (003 EARS-42).
+ */
+export const CODE_STEP_LENGTH = 6;
+
+/** The step's addressable parts — every id is the caller's. */
+export interface OtpFocusScreenTestIds {
+  submit?: string;
+  resend?: string;
+  back?: string;
+  notice?: string;
+  succeeded?: string;
+}
+
+/**
+ * `<OtpFocusScreen>` — the ONE code step (003 EARS-42, canvas
+ * `design-source/auth.dc.html` 64-85 «ШАГ КОДА»). Login by code (after the code
+ * was sent), the post-registration confirmation and a re-registration all draw
+ * THIS step inside their card; the card itself carries the step's heading
+ * («Проверьте почту» / «Проверьте телефон») and the «Мы отправили код на …»
+ * line, so the step renders only:
  *
- *   renders ONLY → masked destination + code input + submit + resend(cooldown) +
- *   change-method/back (+ an optional error slot).
+ *   code label + six cells → «Код принят» row → primary → back + resend row →
+ *   the after-resend notice.
  *
- * By construction it omits any channel switcher and any secondary links (create /
- * forgot) — those props simply do not exist, so a surface physically cannot
- * re-introduce the #227 papercut through this block.
+ * By construction it has no channel switcher and no secondary links — those
+ * props do not exist, so no surface can re-introduce the #227 papercut here.
  *
- * Copy-as-props / i18n contract (#235): EVERY visible string is a prop — `title`,
- * the past-tense "code sent to {masked}" `sentToLabel` (the app composes it with the
- * already-masked destination), the `submitLabel`, the `resendLabel` +
- * `resendCountdownLabel(seconds)`, and the `changeMethodLabel`. No copy lives in the
- * package.
+ * Copy-as-props (#235): every visible string is a prop; no copy lives in the
+ * package. The code is entered into `<OtpField>`'s slotted alphanumeric
+ * variant (text keyboard, upper-cased), and the app's guarded `onComplete`
+ * auto-submits on the sixth character (003 EARS-22 amended).
  *
- * Behavior (preserved from `verify/page.tsx`): the code field auto-submits the
- * moment the fixed-length code lands, via `<OtpField onComplete>`. The app owns the
- * RHF form and the `isSubmitting` guard, so it passes a guarded `onComplete` and the
- * current `isSubmitting`, which drives the submit's shared `Button.loading` pending
- * affordance (spinner + `aria-busy` + disabled-while-loading, ADR-0013 §7 / #337) and
- * skips a racing auto-submit.
- * The masked destination is computed by the app (reuse `maskDestination` from this
- * package) and passed pre-masked — the block never sees the raw destination.
- *
- * Resend cooldown: the block owns a live countdown. It (re)starts whenever EITHER
- * the `cooldownSeconds` prop *value* changes OR the `resendNonce` counter is bumped.
- * A real resend re-issues the SAME duration (e.g. 30s) so the value does not change
- * — the app bumps `resendNonce` on each successful resend and the countdown restarts
- * regardless. This lets a consumer restart the cooldown WITHOUT remounting the block
- * by `key` (the #237 → #266 anti-pattern). While counting down the resend control is
- * disabled and shows `resendCountdownLabel(remaining)`, then re-enables and shows
- * `resendLabel`. Pass `cooldownSeconds={0}` to start enabled.
+ * Resend cooldown: the step owns a live countdown that (re)starts whenever the
+ * `cooldownSeconds` VALUE changes or the `resendNonce` counter is bumped, so a
+ * consumer restarts it without a `key` remount (#266). `cooldownSeconds={0}`
+ * starts enabled.
  */
 export function OtpFocusScreen<T extends FieldValues>({
   field,
-  length,
-  variant = "slotted",
-  charset,
-  placeholder,
-  title,
-  sentToLabel,
   codeLabel,
   submitLabel,
+  backLabel,
   resendLabel,
   resendCountdownLabel,
-  changeMethodLabel,
   cooldownSeconds = 0,
   resendNonce = 0,
   isSubmitting = false,
+  resendPending = false,
+  succeeded = false,
+  succeededLabel,
+  notice,
   onComplete,
   onSubmit,
   onResend,
-  onChangeMethod,
-  error,
+  onBack,
   captchaSlot,
-  submitTestId,
-  resendTestId,
-  changeMethodTestId,
+  testIds = {},
 }: {
   /** RHF controller for the code field — the app owns the form/resolver. */
   field: ControllerRenderProps<T>;
-  /** Fixed code length (8 for login OTP, 6 for register/reset). */
-  length: number;
-  /** OTP presentation — defaults to the unified slotted look (#211). */
-  variant?: "slotted" | "plain";
-  /**
-   * Character set of the code — drives the mobile keyboard the code box requests,
-   * forwarded to `<OtpField charset>` (#1110). REQUIRED: `"numeric"` for the digit
-   * login OTP, `"alphanumeric"` for a letter-bearing code. Never defaulted, so no
-   * surface silently inherits the wrong keypad.
-   */
-  charset: "alphanumeric" | "numeric";
-  /** Placeholder for the plain variant. */
-  placeholder?: string;
-
-  /** Screen title (app-supplied, localized). */
-  title: React.ReactNode;
-  /**
-   * Past-tense confirmation naming the masked destination, e.g. composed by the app
-   * as «Код отправлен на +7•••••31223». The app masks the destination itself
-   * (reuse `maskDestination`) — the block never sees the raw value.
-   */
-  sentToLabel: React.ReactNode;
-  /** Label for the code input. */
+  /** Label above the six cells («Код из письма» / «Код из сообщения»). */
   codeLabel: string;
-  /** Submit button copy. */
+  /** Primary button copy. */
   submitLabel: React.ReactNode;
+  /** The back control («← Изменить способ» / «← Изменить почту»). */
+  backLabel: React.ReactNode;
   /** Resend control copy while enabled. */
   resendLabel: React.ReactNode;
   /** Resend control copy while counting down; receives the remaining seconds. */
   resendCountdownLabel: (secondsRemaining: number) => React.ReactNode;
-  /** Change-method / back control copy. */
-  changeMethodLabel: React.ReactNode;
-
-  /**
-   * Resend cooldown in seconds. The countdown (re)starts whenever this VALUE
-   * changes (or `resendNonce` is bumped). `0` = resend enabled now.
-   */
+  /** Resend cooldown in seconds; `0` = resend enabled now. */
   cooldownSeconds?: number;
-  /**
-   * Monotonic resend counter. Bump it on each successful resend to restart the
-   * countdown even when `cooldownSeconds` is unchanged (a resend re-issues the
-   * same duration) — so a consumer never has to remount the block by `key` to
-   * reset the cooldown (#266). Defaults to `0`.
-   */
+  /** Monotonic resend counter — bump on each successful resend (#266). */
   resendNonce?: number;
-  /**
-   * App-owned in-flight flag — drives the submit's `Button.loading` pending affordance
-   * (spinner + `aria-busy` + disabled-while-loading) and guards the auto-submit race.
-   */
+  /** App-owned in-flight flag — the primary's `Button.loading` affordance. */
   isSubmitting?: boolean;
-
-  /** Fired when the fixed-length code completes (app wires the guarded auto-submit). */
+  /** An in-flight resend (e.g. its challenge) — the resend control's busy state. */
+  resendPending?: boolean;
+  /** Server-confirmed acceptance (canvas 73-75) — never set optimistically. */
+  succeeded?: boolean;
+  /** The «Код принят — входим…» row copy, drawn while `succeeded`. */
+  succeededLabel?: React.ReactNode;
+  /** The after-resend notice (canvas 81-83); absent → nothing renders. */
+  notice?: React.ReactNode;
+  /** Fired when the sixth character lands (app wires the guarded auto-submit). */
   onComplete?: (() => void) | undefined;
   /** Manual submit handler (the `<form onSubmit>` the app owns). */
   onSubmit: React.FormEventHandler<HTMLFormElement>;
-  /** Resend handler — the app re-requests the code and bumps `cooldownSeconds`. */
+  /** Resend handler — the app re-requests the code and bumps `resendNonce`. */
   onResend: () => void;
-  /** Change-method / back handler — returns the surface to channel selection. */
-  onChangeMethod: () => void;
-
-  /** Optional error slot (already-mapped, localized message). */
-  error?: React.ReactNode;
+  /** Back handler — the surface returns to where the code was asked for. */
+  onBack: () => void;
   /**
    * The bot-protection challenge, rendered INSIDE the form directly above the
-   * submit (canvas `auth.dc.html:139-143`) — the challenge belongs to the act
-   * of submitting the code, so it stands with the button, not above the screen.
+   * primary (canvas 139-143) — invisible unless the provider asks.
    */
   captchaSlot?: React.ReactNode;
-
-  submitTestId?: string;
-  resendTestId?: string;
-  changeMethodTestId?: string;
+  testIds?: OtpFocusScreenTestIds;
 }) {
-  // Live resend countdown, owned by the shared `useResendCountdown` hook so the
-  // `/reset` inline resend (which can't adopt this whole block) runs the identical
-  // timer. (Re)starts whenever the app changes `cooldownSeconds` OR bumps
-  // `resendNonce` — restart without a remount; `0` leaves resend enabled now.
   const remaining = useResendCountdown(cooldownSeconds, resendNonce);
   const resendDisabled = remaining > 0;
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground" data-testid="otp-sent-to">
-          {sentToLabel}
-        </p>
-      </div>
-
-      {/* Same pre-hydration rule as `<LoginCard>`: a native submit before the
+    // Canvas 66 — one 16px column.
+    <div className="flex flex-col gap-4">
+      {/* Same pre-hydration rule as every auth form: a native submit before the
           bundle loads must POST, never GET the one-time code into the URL and
           the access logs. */}
-      <form method="post" onSubmit={onSubmit} className="space-y-4" noValidate>
+      <form
+        method="post"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+        noValidate
+      >
         <OtpField
           field={field}
-          length={length}
-          variant={variant}
-          charset={charset}
+          length={CODE_STEP_LENGTH}
+          charset="alphanumeric"
           label={codeLabel}
-          placeholder={placeholder}
           onComplete={onComplete}
         />
 
-        <FormError>{error}</FormError>
+        {/* Canvas 73-75 — confirms acceptance while the app navigates on. */}
+        {succeeded ? (
+          <Alert variant="success" data-testid={testIds.succeeded}>
+            {succeededLabel}
+          </Alert>
+        ) : null}
 
         {captchaSlot}
 
@@ -185,44 +146,55 @@ export function OtpFocusScreen<T extends FieldValues>({
           type="submit"
           className="w-full"
           loading={isSubmitting}
-          data-testid={submitTestId}
+          data-testid={testIds.submit}
         >
           {submitLabel}
         </Button>
       </form>
 
-      <div className="flex items-center justify-between gap-2">
+      {/* Canvas 77-80 — back on the left, resend on the right; wraps when cramped. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          onClick={onChangeMethod}
-          data-testid={changeMethodTestId}
-          // `shrink-0` so the change-method control keeps its size and the resend
-          // label is the flex item that yields when the row is cramped (#542).
+          onClick={onBack}
+          data-testid={testIds.back}
+          // `shrink-0` — the back control keeps its size; the resend label is
+          // the flex item that yields when the row is cramped (#542).
           className="shrink-0"
         >
-          {changeMethodLabel}
+          {backLabel}
         </Button>
         <Button
           type="button"
           variant="link"
           size="sm"
-          disabled={resendDisabled}
+          disabled={resendDisabled || resendPending}
+          loading={resendPending}
           onClick={onResend}
-          data-testid={resendTestId}
-          // `tabular-nums` so the countdown digits are fixed-width — the label no
-          // longer jitters as the remaining-seconds digit changes (#227/#267 owner
-          // finding). `text-right` keeps it anchored at the row edge while the text
-          // length varies between the countdown and the resend label. `min-w-0` +
-          // `whitespace-normal` override the Button base `whitespace-nowrap` so the
-          // label WRAPS instead of overflowing the card at any width (#542 — the
-          // overflow the owner saw on /reset with the longer copy).
-          className="min-w-0 whitespace-normal text-right tabular-nums"
+          data-testid={testIds.resend}
+          // `tabular-nums` — fixed-width countdown digits, no jitter (#267);
+          // `min-w-0` + `whitespace-normal` let the label wrap (#542);
+          // `font-extrabold` — canvas 378 draws it at 13px / 800.
+          className="min-w-0 whitespace-normal text-right font-extrabold tabular-nums"
         >
           {resendDisabled ? resendCountdownLabel(remaining) : resendLabel}
         </Button>
       </div>
+
+      {/* Canvas 81-83 — neutral after-resend notice; a success ack, not an
+          error. Canvas 12.5px has no type-scale step; `caption` is nearest. */}
+      {notice ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-caption leading-normal text-muted-foreground"
+          data-testid={testIds.notice}
+        >
+          {notice}
+        </p>
+      ) : null}
     </div>
   );
 }

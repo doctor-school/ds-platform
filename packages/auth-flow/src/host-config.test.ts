@@ -118,18 +118,45 @@ describe("#2027 PR 1.7 host config — the confirmation step", () => {
     }
   });
 
-  it("rows 65-77: the confirmation words are the canvas «Подтверждение» screen on every host", () => {
+  it("003 EARS-42: the confirmation words are the canvas «ШАГ КОДА» on every host", () => {
     for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
       const copy = resolveAuthFlowCopy(config).verify;
       expect(copy.title).toBe("Проверьте почту");
-      expect(copy.description).toBe(
-        "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
-      );
-      expect(copy.newAccountHeading).toBe("Новый аккаунт — введите код");
+      expect(copy.description).toBe("Мы отправили код на {destination}.");
+      expect(copy.codeLabel).toBe("Код из письма");
+      expect(copy.submit).toBe("Подтвердить и войти");
+      expect(copy.back).toBe("← Изменить почту");
       expect(copy.codeAccepted).toBe("Код принят — входим…");
       expect(copy.failed).toBe("Код не подошёл. Попробуйте ещё раз.");
-      expect(copy.resendAcknowledged).toContain("{destination}");
+      expect(copy.resendAcknowledged).toBe(
+        "Мы отправили новый код на {destination}.",
+      );
+      expect(copy).not.toHaveProperty("existingAccountHeading");
+      expect(copy).not.toHaveProperty("goToSignIn");
     }
+  });
+
+  it("003 EARS-42: sign-in by code says the same step's words, per channel, on every host", () => {
+    for (const config of [ACADEMY_FIXTURE, DOCTOR_FIXTURE]) {
+      const otp = resolveAuthFlowCopy(config).login.otp;
+      expect(otp.verifyTitle).toEqual({
+        email: "Проверьте почту",
+        sms: "Проверьте телефон",
+      });
+      expect(otp.sentTo).toBe("Мы отправили код на {destination}.");
+      expect(otp.codeLabel).toEqual({
+        email: "Код из письма",
+        sms: "Код из сообщения",
+      });
+      expect(otp.verifySubmit).toBe("Подтвердить и войти");
+      expect(otp.changeMethod).toBe("← Изменить способ");
+      expect(otp.resentTo).toBe("Мы отправили новый код на {destination}.");
+    }
+  });
+
+  it("003 EARS-41: each host names its own code-step verify command", () => {
+    expect(ACADEMY_FIXTURE.api.verifyPath).toBe("/v1/auth/verify");
+    expect(DOCTOR_FIXTURE.api.verifyPath).toBe("/v1/storefront/doctor/verify");
   });
 });
 

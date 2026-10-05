@@ -61,12 +61,19 @@ const copy: LoginCardCopy = {
     phoneLabel: "copy.otp.phoneLabel",
     phonePlaceholder: "copy.otp.phonePlaceholder",
     sendCode: "copy.otp.sendCode",
-    verifyTitle: "copy.otp.verifyTitle",
+    verifyTitle: {
+      email: "copy.otp.verifyTitle.email",
+      sms: "copy.otp.verifyTitle.sms",
+    },
     sentTo: (destination) => `copy.otp.sentTo:${destination}`,
-    codeLabel: "copy.otp.codeLabel",
+    codeLabel: {
+      email: "copy.otp.codeLabel.email",
+      sms: "copy.otp.codeLabel.sms",
+    },
     verifySubmit: "copy.otp.verifySubmit",
     resend: "copy.otp.resend",
     resendCountdown: (seconds) => `copy.otp.resendIn:${seconds}`,
+    resentTo: (destination) => `copy.otp.resentTo:${destination}`,
     changeMethod: "copy.otp.changeMethod",
   },
 };
@@ -86,11 +93,25 @@ function setup(
     passwordError?: React.ReactNode;
     sentIdentifier?: string | null;
     resendNonce?: number;
+    defaultMethod?: LoginCardMethod;
   } = {},
 ) {
-  return render(
+  return render(<Card {...overrides} />);
+}
+
+/** The card under test — a component so a test can rerender it with a new nonce. */
+function Card(
+  overrides: Parameters<typeof setup>[0] & object,
+): React.ReactElement {
+  return (
     <LoginCard
       copy={copy}
+      // A sent code exists only on the code tab — the host clears it on switch.
+      defaultMethod={
+        overrides.defaultMethod ??
+        (overrides.sentIdentifier ? "otp" : "password")
+      }
+      codeStepIcon={<span data-testid="code-step-icon" />}
       links={{ register: "/register", reset: "/reset" }}
       onMethodChange={overrides.onMethodChange ?? vi.fn()}
       password={{
@@ -113,7 +134,7 @@ function setup(
         onVerify: overrides.onVerify ?? vi.fn(),
         onChangeMethod: overrides.onChangeMethod ?? vi.fn(),
       }}
-    />,
+    />
   );
 }
 
@@ -250,15 +271,66 @@ describe("<LoginCard>", () => {
 
   });
 
-  it("verifies through the host once the stage is open, masking the destination in the copy", async () => {
+  it("003 EARS-42: the sent code turns the card into the code step — channel heading, masked destination, no tabs, footer kept", () => {
+    setup({ sentIdentifier: "doc@example.com" });
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "copy.otp.verifyTitle.email" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("copy.otp.sentTo:d•••@e•••.com")).toBeInTheDocument();
+    expect(screen.queryByText("copy.title")).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByText("copy.methodSwitcherLabel")).toBeNull();
+    expect(screen.getByTestId("code-step-icon")).toBeInTheDocument();
+    expect(screen.getByText("copy.otp.codeLabel.email")).toBeInTheDocument();
+    expect(screen.getByTestId("otp-change-method")).toHaveTextContent(
+      "copy.otp.changeMethod",
+    );
+    // The canvas keeps «Создать аккаунт / Забыли пароль?» under the code step.
+    expect(screen.getByRole("link", { name: "copy.createAccount" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "copy.forgotPassword" })).toBeInTheDocument();
+  });
+
+  it("003 EARS-42: one six-cell alphanumeric code — no eight-cell digits-only step", () => {
+    setup({ sentIdentifier: "doc@example.com" });
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("maxlength", "6");
+    expect(input).not.toHaveAttribute("inputmode", "numeric");
+  });
+
+  it("003 EARS-42: the SMS code step says «phone» and its code label", async () => {
+    const { rerender } = setup();
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+    fireEvent.click(screen.getByTestId("otp-channel-sms"));
+    rerender(<Card sentIdentifier="+79991234567" />);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "copy.otp.verifyTitle.sms" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("copy.otp.codeLabel.sms")).toBeInTheDocument();
+    // Masked by the block — the raw number never renders.
+    expect(screen.getByText(/^copy\.otp\.sentTo:\+7.*•/)).toBeInTheDocument();
+    expect(screen.queryByText(/79991234567/)).toBeNull();
+  });
+
+  it("003 EARS-42: a successful resend shows the «new code» notice, absent before it", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = setup({ sentIdentifier: "doc@example.com" });
+      expect(screen.queryByTestId("otp-resend-notice")).toBeNull();
+      rerender(<Card sentIdentifier="doc@example.com" resendNonce={1} />);
+      expect(screen.getByTestId("otp-resend-notice")).toHaveTextContent(
+        "copy.otp.resentTo:d•••@e•••.com",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("verifies through the host once the stage is open", async () => {
     const onVerify = vi.fn();
     setup({ sentIdentifier: "doc@example.com", onVerify });
 
-    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
     expect(screen.getByTestId("otp-verify")).toBeInTheDocument();
-    expect(
-      screen.getByText("copy.otp.sentTo:d•••@e•••.com"),
-    ).toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("otp-verify"));
@@ -276,9 +348,6 @@ describe("<LoginCard>", () => {
     try {
       const onResend = vi.fn();
       setup({ sentIdentifier: "doc@example.com", onResend });
-      fireEvent.mouseDown(screen.getByTestId("login-method-otp"), {
-        button: 0,
-      });
 
       const resend = screen.getByTestId("otp-resend");
       expect(resend).toBeDisabled();
@@ -326,7 +395,6 @@ describe("#2027 <LoginCard> pre-hydration submit", () => {
 
   it("EARS-16.4: the OTP request AND verify forms post too — a code is a credential", () => {
     const { container } = setup({ sentIdentifier: "doc@example.com" });
-    fireEvent.click(screen.getByTestId("login-method-otp"));
     const forms = container.querySelectorAll("form");
     expect(forms.length).toBeGreaterThan(0);
     for (const form of forms) {

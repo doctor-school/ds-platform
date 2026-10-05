@@ -18,9 +18,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *     at the transport ENTRY the shared rule imports it from; the RULE above the
  *     mock is the real shared one.
  *   - `BotProtectionField` — the real widget needs a site key and a network.
- * The held-credential slot (`pending-registration`) is NOT mocked: what these
- * tests assert is the wiring across confirm → login → completion, and mocking
- * the unit under the wiring would assert the mock.
+ * The held-registration slot (`pending-registration`) is NOT mocked: what these
+ * tests assert is the wiring across confirm → completion, and mocking the unit
+ * under the wiring would assert the mock. `login` stays on the mocked client so
+ * every journey can prove it is never called (003 EARS-41: no replay).
  */
 
 const h = vi.hoisted(() => ({
@@ -73,10 +74,15 @@ vi.mock("@ds/design-system/blocks", async () => {
 });
 
 import {
+  MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
+  PARTNER_DATA_SHARING_PURPOSE,
+  PARTNER_DATA_SHARING_REQUIRED_CODE,
+} from "@ds/schemas";
+import {
   PENDING_TTL_MS,
   clearPendingRegistration,
+  peekPendingRegistration,
   setPendingRegistration,
-  takePendingRegistration,
 } from "@ds/design-system/blocks";
 
 import { AuthError } from "../client/auth-client";
@@ -94,6 +100,17 @@ const CARRIED_TARGET = "/webinars/kardio";
 
 /** The ONE confirmation dictionary (#2027 PR 1.7) — the same words on every host. */
 const CONFIRM_COPY = resolveAuthFlowCopy(DOCTOR_FIXTURE).verify;
+/** What the doctor register door holds for this step (003 EARS-41, 021 EARS-4). */
+const REGISTRATION = {
+  password: PASSWORD,
+  medicalWorkerDeclaration: true as const,
+  consent: [
+    {
+      purpose: PARTNER_DATA_SHARING_PURPOSE,
+      version: DOCTOR_FIXTURE.consents!.wordingVersion,
+    },
+  ],
+};
 
 beforeEach(() => {
   h.calls.length = 0;
@@ -138,11 +155,15 @@ type PanelProps = {
 
 /**
  * The step as the `/verify` route mounts it after the registration door's hop,
- * with the credential that door held (021 EARS-15.4) by default.
+ * with the registration values that door held (003 EARS-41) by default.
  */
 function renderPanel(props: PanelProps = {}, options?: { held?: boolean }) {
   if (options?.held !== false) {
-    setPendingRegistration({ identifier: EMAIL, password: PASSWORD });
+    setPendingRegistration({
+      identifier: EMAIL,
+      registration: REGISTRATION,
+      form: { email: EMAIL, password: PASSWORD, promoCode: "", consents: {} },
+    });
   }
   return render(
     <VerifyEntry
@@ -176,7 +197,7 @@ async function submitCode(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир they came from", () => {
-  it("005 EARS-2: after the held-password replay, system shall fire RegisterForEvent for the carried эфир before the success state", async () => {
+  it("005 EARS-2: once the code is accepted, system shall fire RegisterForEvent for the carried эфир before the doctor is navigated", async () => {
     let completeRegistration!: () => void;
     h.registerForEvent.mockReturnValue(
       new Promise<void>((resolve) => {
@@ -193,10 +214,10 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
     );
     // Order is the contract, and it is the SAME order the Academy ships: the
     // session must exist before the command (the api answers a guest with a
-    // 401), and the doctor must not be navigated before they are actually on
-    // the roster — the эфир page would otherwise open still asking them to
-    // register.
-    expect(h.calls).toEqual(["verify", "login", "register-for-event"]);
+    // 401) — the accepted verify sets it (003 EARS-41) — and the doctor must
+    // not be navigated before they are actually on the roster: the эфир page
+    // would otherwise open still asking them to register.
+    expect(h.calls).toEqual(["verify", "register-for-event"]);
     expect(h.replace).not.toHaveBeenCalled();
     await act(async () => completeRegistration());
     await waitFor(() =>
@@ -210,9 +231,9 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
 
     await submitCode(user);
 
-    await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/events"));
     expect(h.registerForEvent).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(["verify", "login"]);
+    expect(h.calls).toEqual(["verify"]);
   });
 
   it("005 EARS-2: a refused registration never strands the doctor — they are landed anyway", async () => {
@@ -232,65 +253,50 @@ describe("005 EARS-2 (#2005): the confirmed doctor is registered to the эфир
   });
 });
 
-describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation", () => {
-  it("021 EARS-15: when the confirm succeeds and a password is held, system shall replay the login before the success state", async () => {
+describe("003 EARS-41 / 021 EARS-15: the doctor is signed in by the accepted code itself", () => {
+  it("003 EARS-41: the held registration values go WITH the code to the doctor host's verify command, and nothing is replayed", async () => {
     const user = setupUser();
     renderPanel();
 
     await submitCode(user);
 
-    await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
-    // The real 003 EARS-5 command, with the credential the doctor just chose —
-    // the session comes from the login route, never from the confirm route.
-    expect(h.login).toHaveBeenCalledWith({
-      identifier: EMAIL,
-      password: PASSWORD,
-    });
-    // Order is the contract: confirm first (the code is the thing being
-    // proven), login second, and only then the navigation — a hop fired before
-    // the replay would land a guest on the event page.
-    expect(h.calls).toEqual(["verify", "login", "register-for-event"]);
+    await waitFor(() =>
+      expect(h.verify).toHaveBeenCalledWith({
+        email: EMAIL,
+        code: CODE,
+        registration: REGISTRATION,
+      }),
+    );
+    // The accepted verify answer IS the session (003 EARS-41): there is no
+    // second credential call to make.
+    expect(h.login).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(["verify", "register-for-event"]);
     // EARS-10 (amended 2026-09-17) — the code screen is left by NAVIGATION,
     // with no interstitial in between.
     await waitFor(() =>
       expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
     expect(h.replace).toHaveBeenCalledTimes(1);
-    // The take is single-shot: the credential is gone the moment it is
-    // replayed, so nothing survives the journey to be replayed a second time.
-    expect(takePendingRegistration(EMAIL)).toBeNull();
+    // An accepted code wipes the hold: nothing survives to be sent twice.
+    expect(peekPendingRegistration()).toBeNull();
   });
 
-  it("021 EARS-15.2: with no held password, system shall route to the sign-in door with the return context instead of the honoured target", async () => {
-    // The credential-loss case (003 EARS-39): a reload, a restored tab, or a
-    // hold past its TTL leaves the module slot empty between the submit and the
-    // code.
+  it("003 EARS-41: with no held values (reload, restored tab), the code alone signs the doctor in and the honoured target is still reached", async () => {
     const user = setupUser();
     renderPanel({}, { held: false });
 
     await submitCode(user);
 
-    await waitFor(() => expect(h.verify).toHaveBeenCalledTimes(1));
-    // The Academy rule, whole: no held credential means no session, and a
-    // doctor with no session is sent to sign in CARRYING the return context —
-    // never walked onto the эфир as a guest. Rule S3: the CARRY vocabulary,
-    // which the door re-parses on the far side.
     await waitFor(() =>
-      expect(h.push).toHaveBeenCalledWith(
-        `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
-      ),
+      expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
     );
+    expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
     expect(h.login).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(["verify"]);
-    // The onward hop exists ONLY for a doctor who is signed in.
-    expect(h.replace).not.toHaveBeenCalled();
+    // Never sent to sign in by hand: the confirmation is the sign-in.
+    expect(h.push).not.toHaveBeenCalled();
   });
 
-  it("021 EARS-15.2: a hold past its TTL (reload, restored tab, expired hold) routes to the sign-in door exactly as no hold at all", async () => {
-    // Row 70 (owner decision 2026-09-15, tech spec §5 Q2): a cold confirmation
-    // step on the doctor host is the Academy's cold `/verify` — the credential
-    // was set, but by the time the code arrives the hold has expired, so the
-    // take returns nothing and the confirmed doctor signs in by hand.
+  it("003 EARS-41: a hold past its TTL is not sent — the code goes alone, exactly as with no hold at all", async () => {
     const user = setupUser();
     renderPanel();
     const expired = Date.now() + PENDING_TTL_MS + 1;
@@ -299,39 +305,74 @@ describe("021 EARS-15 (#1996): the doctor is signed in after email confirmation"
       await submitCode(user);
 
       await waitFor(() =>
-        expect(h.push).toHaveBeenCalledWith(
-          `/login?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
-        ),
+        expect(h.replace).toHaveBeenCalledWith("/events/kardio"),
       );
+      expect(h.verify).toHaveBeenCalledWith({ email: EMAIL, code: CODE });
       expect(h.login).not.toHaveBeenCalled();
-      expect(h.calls).toEqual(["verify"]);
-      expect(h.replace).not.toHaveBeenCalled();
+      expect(h.push).not.toHaveBeenCalled();
     } finally {
       clock.mockRestore();
     }
   });
 
-  it("021 EARS-15.3: a replay the login refuses keeps the doctor on the confirmation step with the generic error, with the slot wiped and no routing", async () => {
-    // The concrete journey: the doctor re-registered the same email with a
-    // SECOND password, 003 EARS-16 answered identically, and the IdP still holds
-    // the first one — so the replay is refused with the generic 401. Owner
-    // decision 2026-09-15 (tech spec §5 Q1, «Как в Академии»): the ONE
-    // post-throw exit of both hosts is to stay on the step with the generic
-    // 003 EARS-16 sentence — no sign-in door, no onward hop.
-    h.login.mockRejectedValue(new AuthError(401, "Unauthorized"));
+  it("003 EARS-16 / EARS-41: a refused code keeps the doctor on the step with the generic error, the held values kept for the retry, no routing", async () => {
+    h.verify.mockRejectedValueOnce(new AuthError(400, "Bad Request"));
     const user = setupUser();
     renderPanel();
 
     await submitCode(user);
 
-    await waitFor(() => expect(h.login).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(CONFIRM_COPY.failed)).toBeTruthy();
     expect(h.push).not.toHaveBeenCalled();
     expect(h.replace).not.toHaveBeenCalled();
+    expect(h.login).not.toHaveBeenCalled();
     // Still the confirmation step: the code field is on screen.
     expect(screen.getByLabelText(CONFIRM_COPY.codeLabel)).toBeTruthy();
-    // The take consumes; it does not roll back on error.
-    expect(takePendingRegistration(EMAIL)).toBeNull();
+    expect(peekPendingRegistration(EMAIL)?.registration).toEqual(REGISTRATION);
+  });
+});
+
+describe("021 EARS-12: a 021 access-condition refusal on the doctor verify reads as the registration door reads it", () => {
+  const consentCopy = resolveAuthFlowCopy(DOCTOR_FIXTURE).consents;
+
+  it.each([
+    [
+      "partner-data consent",
+      PARTNER_DATA_SHARING_REQUIRED_CODE,
+      consentCopy.partnerDataItem.unmet!,
+    ],
+    [
+      "medical-worker declaration",
+      MEDICAL_WORKER_DECLARATION_REQUIRED_CODE,
+      consentCopy.medicalWorkerDeclaration.unmet!,
+    ],
+  ])(
+    "021 EARS-12: a 422 for the %s says the condition's own unmet sentence, never the code-failed one",
+    async (_kind, code, sentence) => {
+      h.verify.mockRejectedValueOnce(new AuthError(422, "refused", code));
+      const user = setupUser();
+      renderPanel();
+
+      await submitCode(user);
+
+      expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+        sentence,
+      );
+      expect(screen.queryByText(CONFIRM_COPY.failed)).toBeNull();
+      expect(h.replace).not.toHaveBeenCalled();
+    },
+  );
+
+  it("003 EARS-16: a 422 with no 021 refusal code stays the generic code-failed sentence", async () => {
+    h.verify.mockRejectedValueOnce(new AuthError(422, "refused", "other"));
+    const user = setupUser();
+    renderPanel();
+
+    await submitCode(user);
+
+    expect(await screen.findByTestId("verify-error")).toHaveTextContent(
+      CONFIRM_COPY.failed,
+    );
   });
 });
 
@@ -421,15 +462,24 @@ describe("017 #1933.10 (#2001): the confirmation step tells a rate limit from a 
 });
 
 describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify", () => {
-  it("003 EARS-24 (#2455): the doctor /verify draws the canvas «Подтверждение» frame, the «Войти» / «Сбросить пароль» way out included", () => {
+  it("003 EARS-42: the doctor /verify draws the canvas code step — heading, masked address, 6 cells, «← Изменить почту», no «Войти» / «Сбросить пароль»", () => {
     renderPanel();
 
     expect(screen.getByText(CONFIRM_COPY.title)).toBeTruthy();
-    expect(screen.getByLabelText(CONFIRM_COPY.codeLabel)).toBeTruthy();
-    expect(screen.getByTestId("verify-submit")).toBeTruthy();
+    expect(screen.getByTestId("verify-card")).toHaveTextContent(
+      "d•••@e•••.com",
+    );
+    const field = screen.getByLabelText(CONFIRM_COPY.codeLabel);
+    expect(field).toHaveAttribute("maxlength", "6");
+    expect(screen.getByTestId("verify-submit")).toHaveTextContent(
+      CONFIRM_COPY.submit,
+    );
     expect(screen.getByTestId("verify-resend")).toBeTruthy();
-    expect(screen.getByTestId("verify-go-to-login")).toBeTruthy();
-    expect(screen.getByTestId("verify-go-to-reset")).toBeTruthy();
+    expect(screen.getByTestId("verify-back")).toHaveTextContent(
+      CONFIRM_COPY.back,
+    );
+    expect(screen.queryByTestId("verify-go-to-login")).toBeNull();
+    expect(screen.queryByTestId("verify-go-to-reset")).toBeNull();
   });
 
   it("003 EARS-40: a doctor /verify with no address is replaced onto the registration door, the carried target kept", () => {
@@ -447,9 +497,9 @@ describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify"
     );
   });
 
-  it("003 EARS-3 (#2455): the doctor confirms on the one 003 command — the address and the code, no target", async () => {
+  it("003 EARS-3 (#2455): the doctor confirms with the address and the code — no target travels with them", async () => {
     const user = setupUser();
-    renderPanel();
+    renderPanel({}, { held: false });
 
     await submitCode(user);
 
@@ -458,44 +508,37 @@ describe("003 EARS-24 / row 76: the step's words and hops on the doctor /verify"
     );
   });
 
-  it("021 EARS-13: the co-equal sign-in and recovery affordances carry the rule S3 target onward", () => {
+  /** «← Изменить почту» on the doctor code step, pressed; the hop it made. */
+  async function backHref() {
+    await setupUser().click(screen.getByTestId("verify-back"));
+    return h.push.mock.calls[0]?.[0] as string;
+  }
+
+  it("021 EARS-13 / 003 EARS-42: «← Изменить почту» carries the rule S3 target back to the registration door", async () => {
     renderPanel();
 
-    const carried = `?returnTo=${encodeURIComponent(CARRIED_TARGET)}`;
-    expect(
-      screen
-        .getByRole("link", { name: CONFIRM_COPY.goToSignIn })
-        .getAttribute("href"),
-    ).toBe(`${DOCTOR_FIXTURE.routes.login}${carried}`);
-    expect(
-      screen
-        .getByRole("link", { name: CONFIRM_COPY.goToReset })
-        .getAttribute("href"),
-    ).toBe(`${DOCTOR_FIXTURE.routes.reset}${carried}`);
+    expect(await backHref()).toBe(
+      `${DOCTOR_FIXTURE.routes.register}?returnTo=${encodeURIComponent(CARRIED_TARGET)}`,
+    );
   });
 
-  /** The «Войти» hop on the doctor code step, read by its stable test id. */
-  const signInHref = () =>
-    screen.getByTestId("verify-go-to-login").getAttribute("href");
-
-  it("021 EARS-13: with no carried target the «Войти» link on the doctor code step is the plain sign-in route", () => {
+  it("021 EARS-13: with no carried target «← Изменить почту» is the plain registration route", async () => {
     renderPanel({ carriedTarget: null });
 
-    expect(signInHref()).toBe(DOCTOR_FIXTURE.routes.login);
+    expect(await backHref()).toBe(DOCTOR_FIXTURE.routes.register);
   });
 
   it.each([
     ["a protocol-relative", "//evil.example/steal"],
     ["an absolute cross-origin", "https://evil.example"],
   ])(
-    "021 EARS-13: %s carried target never decorates the «Войти» link on the doctor code step",
-    (_kind, hostile) => {
+    "021 EARS-13: %s carried target never decorates «← Изменить почту» on the doctor code step",
+    async (_kind, hostile) => {
       renderPanel({ carriedTarget: hostile });
 
-      const href = signInHref();
-      expect(href).toBe(DOCTOR_FIXTURE.routes.login);
+      const href = await backHref();
+      expect(href).toBe(DOCTOR_FIXTURE.routes.register);
       expect(href).not.toContain("evil.example");
-      expect(href).not.toContain(encodeURIComponent(hostile));
     },
   );
 });
@@ -505,7 +548,7 @@ describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NE
   // the landing is the step's own decision.
   const VERIFIED = { status: "verified" } as const;
 
-  it("021 EARS-3: a cold arrival re-decides the landing once the replay signed the doctor in", async () => {
+  it("021 EARS-3: a cold arrival re-decides the landing once the accepted code signed the doctor in", async () => {
     h.verify.mockResolvedValue(VERIFIED);
     const resolveSignedInLanding = vi.fn(async () => {
       h.calls.push("re-decide");
@@ -522,8 +565,8 @@ describe("021 EARS-3 (#2333): the confirmed-and-signed-in doctor lands by the NE
     await submitCode(user);
 
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/events"));
-    // Decided with the session the replay just created, never before it.
-    expect(h.calls.indexOf("login")).toBeLessThan(h.calls.indexOf("re-decide"));
+    // Decided with the session the accepted verify just created, never before it.
+    expect(h.calls).toEqual(["verify", "re-decide"]);
   });
 
   it("021 EARS-3: a failed re-decision falls back to the guest-time landing", async () => {

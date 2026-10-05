@@ -411,7 +411,6 @@ function RecoveryCompleteForm({
             <OtpField
               field={field}
               length={otpLength}
-              variant="slotted"
               charset="alphanumeric"
               label={copy.codeLabel}
             />

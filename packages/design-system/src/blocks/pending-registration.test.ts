@@ -3,82 +3,90 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PENDING_TTL_MS,
   clearPendingRegistration,
+  peekPendingRegistration,
   setPendingRegistration,
-  takePendingRegistration,
+  type PendingRegistration,
 } from "./pending-registration";
 
 /**
- * 003 EARS-39 / 021 EARS-15 (#1996) — the security envelope of the shared
- * held-password slot, asserted once here now that BOTH storefronts replay
- * through it. The host projections assert their own wiring (the Academy in
- * `apps/portal/app/verify/page.test.tsx`, the doctor storefront in
- * `apps/doctor/components/registration-screen.test.tsx`); what belongs HERE is
- * the invariant neither host may weaken — single slot, atomic consume-and-wipe,
- * identifier match, TTL expiry.
+ * 003 EARS-39 amended / EARS-41 (#2556) — the security envelope of the shared
+ * in-tab hold of the registration values, asserted once here for BOTH
+ * storefronts: single slot, identifier match, read-without-wipe (a refused code
+ * is retried with the same values), explicit wipe, TTL expiry, nothing after a
+ * reload. The hosts' wiring is asserted by the `@ds/auth-flow` doors.
  */
 afterEach(() => {
   vi.useRealTimers();
   clearPendingRegistration();
 });
 
-describe("021 EARS-15: the held-password slot (003 EARS-39 security envelope)", () => {
-  it("021 EARS-15.5: a held credential is returned once and only once for its identifier", () => {
-    setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
+function held(identifier: string, password: string): PendingRegistration {
+  return {
+    identifier,
+    registration: {
+      password,
+      consent: [{ purpose: "platform_terms", version: "v1" }],
+    },
+    form: {
+      email: identifier,
+      password,
+      promoCode: "",
+      consents: { "platform-terms": true },
+    },
+  };
+}
 
-    expect(takePendingRegistration("doc@example.com")).toEqual({
-      identifier: "doc@example.com",
-      password: "s3cret",
-    });
-    // Atomic consume-and-wipe: a second read finds nothing, so a replay cannot
-    // be repeated and the password does not outlive the one login it feeds.
-    expect(takePendingRegistration("doc@example.com")).toBeNull();
+describe("003 EARS-39 amended: the in-tab registration hold", () => {
+  it("003 EARS-41: the held values are read for their identifier and survive the read (a refused code is retried)", () => {
+    setPendingRegistration(held("doc@example.com", "s3cret"));
+
+    expect(peekPendingRegistration("doc@example.com")).toEqual(
+      held("doc@example.com", "s3cret"),
+    );
+    expect(peekPendingRegistration("doc@example.com")).not.toBeNull();
   });
 
-  it("021 EARS-15.6: a mismatched identifier yields nothing AND still wipes the slot", () => {
-    setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
+  it("003 EARS-39 amended: a mismatched identifier yields nothing", () => {
+    setPendingRegistration(held("doc@example.com", "s3cret"));
 
-    expect(takePendingRegistration("someone-else@example.com")).toBeNull();
-    // The stale hand-off is gone rather than left waiting for its owner.
-    expect(takePendingRegistration("doc@example.com")).toBeNull();
+    expect(peekPendingRegistration("someone-else@example.com")).toBeNull();
   });
 
-  it("021 EARS-15.7: a record older than the TTL is treated as no-hold", () => {
+  it("003 EARS-24 amended: without an identifier the hold is read for the form refill", () => {
+    setPendingRegistration(held("doc@example.com", "s3cret"));
+
+    expect(peekPendingRegistration()?.form.email).toBe("doc@example.com");
+  });
+
+  it("003 EARS-39 amended: a record older than the TTL is treated as no-hold", () => {
     vi.useFakeTimers();
-    setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
+    setPendingRegistration(held("doc@example.com", "s3cret"));
 
-    // Still in flight one millisecond before the bound.
     vi.advanceTimersByTime(PENDING_TTL_MS - 1);
-    expect(takePendingRegistration("doc@example.com")).not.toBeNull();
+    expect(peekPendingRegistration("doc@example.com")).not.toBeNull();
 
-    // Past the bound the record is dropped rather than replayed.
-    setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
-    vi.advanceTimersByTime(PENDING_TTL_MS + 1);
-    expect(takePendingRegistration("doc@example.com")).toBeNull();
+    vi.advanceTimersByTime(2);
+    expect(peekPendingRegistration("doc@example.com")).toBeNull();
   });
 
-  it("021 EARS-15.8: the slot is single-valued — a fresh register submit replaces the prior hold", () => {
-    setPendingRegistration({ identifier: "first@example.com", password: "one" });
-    setPendingRegistration({ identifier: "second@example.com", password: "two" });
+  it("003 EARS-39 amended: the slot is single-valued — a fresh register submit replaces the prior hold", () => {
+    setPendingRegistration(held("first@example.com", "one"));
+    setPendingRegistration(held("second@example.com", "two"));
 
-    expect(takePendingRegistration("first@example.com")).toBeNull();
-    setPendingRegistration({ identifier: "second@example.com", password: "two" });
-    expect(takePendingRegistration("second@example.com")).toEqual({
-      identifier: "second@example.com",
-      password: "two",
-    });
+    expect(peekPendingRegistration("first@example.com")).toBeNull();
+    expect(peekPendingRegistration("second@example.com")).toEqual(
+      held("second@example.com", "two"),
+    );
   });
 
-  it("021 EARS-15.9: clearing drops the credential without handing it back", () => {
-    setPendingRegistration({ identifier: "doc@example.com", password: "s3cret" });
+  it("003 EARS-39 amended: clearing (an accepted code) drops the values", () => {
+    setPendingRegistration(held("doc@example.com", "s3cret"));
     clearPendingRegistration();
 
-    expect(takePendingRegistration("doc@example.com")).toBeNull();
+    expect(peekPendingRegistration("doc@example.com")).toBeNull();
   });
 
-  it("021 EARS-15.10: a fresh module (hard reload) holds nothing — the caller sees the no-hold path", () => {
-    // No `setPendingRegistration` ran in this module lifetime: the reload case
-    // both hosts must survive without a dead end (the doctor host re-registers,
-    // the Academy falls back to `/login`).
-    expect(takePendingRegistration("doc@example.com")).toBeNull();
+  it("003 EARS-39 amended: a fresh module (hard reload) holds nothing — the cold step submits the code alone", () => {
+    expect(peekPendingRegistration("doc@example.com")).toBeNull();
   });
 });

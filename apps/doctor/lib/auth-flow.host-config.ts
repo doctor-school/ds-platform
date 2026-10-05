@@ -30,6 +30,7 @@ import type {
 export const DOCTOR_AUTH_FLOW_API: AuthFlowApiConfig = {
   basePath: "/v1/auth",
   registerPath: "/v1/storefront/doctor/register",
+  verifyPath: "/v1/storefront/doctor/verify",
 };
 
 /**

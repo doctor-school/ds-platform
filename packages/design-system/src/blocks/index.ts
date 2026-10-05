@@ -11,7 +11,9 @@ export { AuthCard } from "./auth-card";
 // policy (the portal #675 guard, the EARS-17 captcha disclosure) stay app glue.
 export { AuthShell } from "./auth-shell";
 export type { AuthShellProps, AuthShellCopy } from "./auth-shell";
-export { OtpFocusScreen } from "./otp-focus-screen";
+// 003 EARS-42 — the ONE code step every code flow draws (six cells, back + resend).
+export { OtpFocusScreen, CODE_STEP_LENGTH } from "./otp-focus-screen";
+export type { OtpFocusScreenTestIds } from "./otp-focus-screen";
 export { useResendCountdown } from "./use-resend-countdown";
 // The app-side half of the same resend contract (#227/#267), lifted out of
 // `apps/portal/lib/` in 021 EARS-19 (#1558): hold the nonce, bump it on a
@@ -24,7 +26,6 @@ export { maskDestination } from "./mask-destination";
 // copy, resolvers, transport, routing and the captcha element stay app glue.
 export {
   LoginCard,
-  LOGIN_OTP_LENGTH,
   LOGIN_RESEND_COOLDOWN_SECONDS,
 } from "./login-card";
 export type {
@@ -57,7 +58,6 @@ export type {
 } from "./password-recovery-card";
 export {
   EmailConfirmCard,
-  EMAIL_CONFIRM_OTP_LENGTH,
   EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
   EMAIL_CONFIRM_TEST_IDS,
 } from "./email-confirm-card";
@@ -87,20 +87,22 @@ export {
 } from "./bot-protection-error";
 export type { BotProtectionMessages } from "./bot-protection-error";
 
-// 003 EARS-39 / 021 EARS-15 (#1996) — the ONE canonical post-confirmation
-// sign-in mechanism both storefronts run: the in-flight registration password
-// held in a single module-scoped slot and replayed through the real 003 EARS-5
-// login once the email is confirmed. Lifted out of `apps/portal/lib/` (the 021
-// boundary table calls the doctor post-registration screen «a second rendition
-// of the same contract, not a fork»). App glue stays with the host — its
-// transport, its confirm command and where it lands the signed-in user.
+// 003 EARS-39 amended / EARS-41 — the ONE in-tab hold of the registration
+// values both storefronts run: the typed password, consent and form, kept in a
+// single module-scoped slot until the code step submits them WITH the code
+// (no password replay). App glue stays with the host — its transport, its
+// verify command and where it lands the signed-in user.
 export {
   setPendingRegistration,
-  takePendingRegistration,
+  peekPendingRegistration,
   clearPendingRegistration,
   PENDING_TTL_MS,
 } from "./pending-registration";
-export type { PendingRegistration } from "./pending-registration";
+export type {
+  PendingConsentAcceptance,
+  PendingRegistration,
+  PendingRegistrationValues,
+} from "./pending-registration";
 
 // 004 EARS-19 — month-calendar presentation blocks (events-feed-month.dc.html).
 export { MonthCalendarGrid } from "./month-calendar-grid";

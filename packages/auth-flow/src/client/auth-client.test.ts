@@ -75,7 +75,7 @@ describe("017 #1933: the sign-in transport", () => {
 
     await doctor.loginWithOtp({
       identifier: "doctor@clinic.ru",
-      code: "12345678",
+      code: "PVDC3R",
       channel: "email",
     });
     expect(callArgs(1)[0]).toBe("/v1/auth/login/otp");
@@ -265,23 +265,42 @@ describe("021 EARS-19: the bot-protection token on the protected commands", () =
  * the shared client resolution, never by the confirm answer. Neither host
  * carries a captcha token (row 20).
  */
-describe("003 EARS-3: the one confirmation command", () => {
+describe("003 EARS-41: the one confirmation command", () => {
   it.each([
-    ["Академия", academy],
-    ["Витрина", doctor],
-  ])("EARS-3: %s confirms the emailed code on the shipped 003 route, address and code only", async (_host, client) => {
+    ["Академия", academy, "/v1/auth/verify"],
+    ["Витрина", doctor, "/v1/storefront/doctor/verify"],
+  ])("003 EARS-41: %s posts the emailed code to its host verify route", async (_host, client, path) => {
     fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
 
     await client.verify({ email: "doctor@clinic.ru", code: "ABC123" });
 
     const [url, init] = callArgs();
-    expect(url, "003's engine, not a second code path").toBe("/v1/auth/verify");
+    expect(url, "the host's own verify command, from config").toBe(path);
     expect(JSON.parse(String(init.body))).toEqual({
       email: "doctor@clinic.ru",
       code: "ABC123",
     });
     expect("x-smartcaptcha-token" in headers(init)).toBe(false);
     expect(init.credentials).toBe("include");
+  });
+
+  it("003 EARS-41: the held registration values travel WITH the code, unchanged", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json({ status: "verified" })));
+    const registration = {
+      password: "Secret-pass-1",
+      medicalWorkerDeclaration: true as const,
+      consent: [{ purpose: "partner_data_sharing", version: "v1" }],
+    };
+
+    await doctor.verify({ email: "doctor@clinic.ru", code: "ABC123", registration });
+
+    const [url, init] = callArgs();
+    expect(url).toBe("/v1/storefront/doctor/verify");
+    expect(JSON.parse(String(init.body))).toEqual({
+      email: "doctor@clinic.ru",
+      code: "ABC123",
+      registration,
+    });
   });
 });
 

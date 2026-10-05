@@ -455,11 +455,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByTestId("register-submit").click();
     await page.waitForURL(/\/verify/);
 
-    // EARS-24: the screen offers the code field AND the co-equal sign-in / reset
-    // actions — the existence-agnostic affordances, present for every visitor.
+    // EARS-24 / EARS-42: the one code step — the code field and «← Изменить
+    // почту», the same for every visitor.
     await expect(page.locator('input[autocomplete="one-time-code"]')).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-reset")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
 
     // Complete verification so the email is now an ALREADY-REGISTERED account.
     const verifyCode = await fetchOtpCode(
@@ -485,10 +484,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByTestId("register-submit").click();
 
     // EARS-16: the response is identical — the form still routes to /verify and
-    // discloses nothing about existence (no dead-end; the same screen offers the
-    // sign-in affordance for the existing owner).
+    // discloses nothing about existence: the same code step (EARS-42).
     await page.waitForURL(/\/verify/);
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
 
     // EARS-23: an account-exists notice lands privately in the inbox carrying a
     // SINGLE «Войти» action to the portal /login route and NO password-reset link

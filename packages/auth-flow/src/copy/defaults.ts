@@ -90,13 +90,16 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
       phoneLabel: "Телефон",
       phonePlaceholder: "+79991234567",
       sendCode: "Отправить код",
-      verifyTitle: "Введите код для входа",
-      sentTo: "Код отправлен на {destination}",
-      codeLabel: "Код из сообщения",
+      // Canvas «ШАГ КОДА» (`design-source/auth.dc.html` 64-85, 394-397, 501-503):
+      // the one code step, shared with the registration confirmation (003 EARS-42).
+      verifyTitle: { email: "Проверьте почту", sms: "Проверьте телефон" },
+      sentTo: "Мы отправили код на {destination}.",
+      codeLabel: { email: "Код из письма", sms: "Код из сообщения" },
       codeInvalid: "Введите код.",
       verifySubmit: "Подтвердить и войти",
       resend: "Отправить снова",
       resendCountdown: "Отправить снова · {seconds} с",
+      resentTo: "Мы отправили новый код на {destination}.",
       changeMethod: "← Изменить способ",
     },
     failed: {
@@ -129,23 +132,19 @@ export const DEFAULT_AUTH_FLOW_COPY: AuthFlowCopy = {
   // title/description `titles.verify`, the eyebrows, the resend label and its
   // notice, the success banner and the verify-screen `errText()` branches.
   verify: {
+    // Canvas «ШАГ КОДА» (`design-source/auth.dc.html` 64-85, 497-503) — the
+    // same step as sign-in by code (003 EARS-42), its back link to the form.
     title: "Проверьте почту",
-    description:
-      "Мы отправили код на {destination}. Введите его, чтобы завершить регистрацию.",
-    newAccountHeading: "Новый аккаунт — введите код",
+    description: "Мы отправили код на {destination}.",
     codeLabel: "Код из письма",
-    submit: "Подтвердить",
+    submit: "Подтвердить и войти",
     codeAccepted: "Код принят — входим…",
     resend: "Отправить снова",
     resendCountdown: "Отправить снова · {seconds} с",
-    existingAccountHeading: "Уже регистрировались?",
-    existingAccountHint: "Войдите в существующий аккаунт или сбросьте пароль.",
-    goToSignIn: "Войти",
-    goToReset: "Сбросить пароль",
+    back: "← Изменить почту",
     failed: "Код не подошёл. Попробуйте ещё раз.",
     resendFailed: "Не удалось отправить код повторно. Попробуйте ещё раз.",
-    resendAcknowledged:
-      "Если регистрация ещё не подтверждена, мы повторно отправили код на {destination}.",
+    resendAcknowledged: "Мы отправили новый код на {destination}.",
   },
   // Canvas «Сброс» (`design-source/auth.dc.html` 246-289, 405-443): the two
   // `titles.reset` branches, the `fResetId` / `fResetPw` labels, the busy

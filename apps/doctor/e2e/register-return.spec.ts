@@ -201,6 +201,6 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     // sign-in action carrying the return context (rule S3).
     await expect(page).toHaveURL(/\/verify\?/);
     await expect(page.getByTestId("verify-submit")).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
   });
 });

@@ -780,35 +780,11 @@ const OTP_FOCUS_PROPS: PropRow[] = [
       "RHF controller for the code field — the app owns the form/resolver.",
   },
   {
-    name: "length",
-    type: "number",
-    required: true,
-    description: "Fixed code length (8 for login OTP, 6 for register/reset).",
-  },
-  {
-    name: "variant",
-    type: '"slotted" | "plain"',
-    required: false,
-    description: "OTP presentation — defaults to the unified slotted look.",
-  },
-  {
-    name: "title",
-    type: "ReactNode",
-    required: true,
-    description: "Screen title (app-supplied, localized).",
-  },
-  {
-    name: "sentToLabel",
-    type: "ReactNode",
-    required: true,
-    description:
-      'Past-tense "code sent to {masked}" — app composes it with the pre-masked destination (maskDestination).',
-  },
-  {
     name: "codeLabel",
     type: "string",
     required: true,
-    description: "Label for the code input.",
+    description:
+      "Label above the six cells («Код из письма» / «Код из сообщения»). The step's heading and «sent to» line belong to the card around it.",
   },
   {
     name: "submitLabel",
@@ -829,10 +805,10 @@ const OTP_FOCUS_PROPS: PropRow[] = [
     description: "Resend copy while counting down; receives remaining seconds.",
   },
   {
-    name: "changeMethodLabel",
+    name: "backLabel",
     type: "ReactNode",
     required: true,
-    description: "Change-method / back control copy.",
+    description: "Back control copy («← Изменить способ» / «← Изменить почту»).",
   },
   {
     name: "cooldownSeconds",
@@ -856,10 +832,47 @@ const OTP_FOCUS_PROPS: PropRow[] = [
       "App-owned in-flight flag — disables submit + guards the auto-submit race.",
   },
   {
-    name: "error",
+    name: "resendPending",
+    type: "boolean",
+    required: false,
+    description: "An in-flight resend (e.g. its challenge) — the resend control's busy state.",
+  },
+  {
+    name: "succeeded",
+    type: "boolean",
+    required: false,
+    description:
+      "Server-confirmed acceptance — draws the «Код принят — входим…» row; never optimistic.",
+  },
+  {
+    name: "succeededLabel",
     type: "ReactNode",
     required: false,
-    description: "Optional error slot (already-mapped, localized message).",
+    description: "The accepted-code row copy.",
+  },
+  {
+    name: "notice",
+    type: "ReactNode",
+    required: false,
+    description: "The after-resend notice; absent → nothing renders.",
+  },
+  {
+    name: "onComplete",
+    type: "() => void",
+    required: false,
+    description: "Fired when the sixth character lands (the app's guarded auto-submit).",
+  },
+  {
+    name: "captchaSlot",
+    type: "ReactNode",
+    required: false,
+    description: "The bot-protection challenge, drawn above the primary.",
+  },
+  {
+    name: "testIds",
+    type: "OtpFocusScreenTestIds",
+    required: false,
+    description: "submit · resend · back · notice · succeeded.",
   },
   {
     name: "onSubmit",
@@ -875,11 +888,11 @@ const OTP_FOCUS_PROPS: PropRow[] = [
       "Resend handler — the app re-requests the code and bumps the cooldown.",
   },
   {
-    name: "onChangeMethod",
+    name: "onBack",
     type: "() => void",
     required: true,
     description:
-      "Change-method / back handler — returns the surface to channel selection.",
+      "Back handler — returns the surface to where the code was asked for.",
   },
 ];
 
@@ -887,11 +900,13 @@ const OTP_FOCUS_PROPS: PropRow[] = [
 function OtpFocusDemo({
   cooldownSeconds = 0,
   isSubmitting = false,
-  error,
+  succeeded = false,
+  notice,
 }: {
   cooldownSeconds?: number;
   isSubmitting?: boolean;
-  error?: ReactNode;
+  succeeded?: boolean;
+  notice?: ReactNode;
 }) {
   const form = useForm<FieldValues>({
     defaultValues: { code: "" },
@@ -905,22 +920,19 @@ function OtpFocusDemo({
         render={({ field }) => (
           <OtpFocusScreen
             field={field}
-            length={8}
-            variant="slotted"
-            charset="numeric"
-            title="Verify it's you"
-            sentToLabel={`Code sent to ${maskDestination("doctor@example.com")}`}
-            codeLabel="Verification code"
-            submitLabel="Verify"
-            resendLabel="Resend code"
-            resendCountdownLabel={(s) => `Resend in ${s}s`}
-            changeMethodLabel="Use another method"
+            codeLabel="Code from the email"
+            submitLabel="Confirm and sign in"
+            backLabel="← Change method"
+            resendLabel="Send again"
+            resendCountdownLabel={(s) => `Send again · ${s} s`}
             cooldownSeconds={cooldownSeconds}
             isSubmitting={isSubmitting}
-            error={error}
+            succeeded={succeeded}
+            succeededLabel="Code accepted — signing in…"
+            notice={notice}
             onSubmit={(e) => e.preventDefault()}
             onResend={() => {}}
-            onChangeMethod={() => {}}
+            onBack={() => {}}
           />
         )}
       />
@@ -987,10 +999,11 @@ const LOGIN_CARD_PROPS: PropRow[] = [
     description: 'Initially selected tab. Defaults to "password".',
   },
   {
-    name: "otpLength",
-    type: "number",
+    name: "codeStepIcon",
+    type: "ReactNode",
     required: false,
-    description: "Fixed code length; defaults to the 8-digit login code.",
+    description:
+      "Header glyph while the code step is shown (canvas: the mail glyph of the one code step).",
   },
   {
     name: "resendCooldownSeconds",
@@ -1028,13 +1041,22 @@ const LOGIN_CARD_COPY: LoginCardCopy = {
     phoneLabel: "Phone",
     phonePlaceholder: "+10000000000",
     sendCode: "Send code",
-    verifyTitle: "Enter the code",
-    sentTo: (destination) => `We sent a code to ${destination}.`,
-    codeLabel: "One-time code",
-    verifySubmit: "Sign in",
-    resend: "Send another code",
-    resendCountdown: (seconds) => `Send another code in ${seconds}s`,
-    changeMethod: "Use a different method",
+    verifyTitle: { email: "Check your email", sms: "Check your phone" },
+    sentTo: (destination) => (
+      <>
+        We sent a code to <strong>{destination}</strong>.
+      </>
+    ),
+    codeLabel: { email: "Code from the email", sms: "Code from the message" },
+    verifySubmit: "Confirm and sign in",
+    resend: "Send again",
+    resendCountdown: (seconds) => `Send again · ${seconds} s`,
+    resentTo: (destination) => (
+      <>
+        We sent a new code to <strong>{destination}</strong>.
+      </>
+    ),
+    changeMethod: "← Change method",
   },
 };
 
@@ -1091,7 +1113,7 @@ function LoginCardSection() {
   return (
     <BlockSection
       title="LoginCard"
-      exportsLine="LoginCard — props: copy · links · renderLink? · icon? · password · otp · onMethodChange? · defaultMethod? · otpLength? · resendCooldownSeconds?"
+      exportsLine="LoginCard — props: copy · links · renderLink? · icon? · password · otp · codeStepIcon? · onMethodChange? · defaultMethod? · resendCooldownSeconds?"
     >
       <p className="text-sm text-muted-foreground">
         The whole sign-in composition as one reusable unit: the{" "}
@@ -1581,18 +1603,11 @@ const EMAIL_CONFIRM_PROPS: PropRow[] = [
       "Server-confirmed acceptance — the success row is presentation only and is never set optimistically.",
   },
   {
-    name: "links",
-    type: "{ login: string; reset: string }",
+    name: "onBack",
+    type: "() => void",
     required: true,
     description:
-      "Targets for the two co-equal actions offered to an already-registered owner.",
-  },
-  {
-    name: "renderLink",
-    type: "(props: { href, children }) => ReactNode",
-    required: false,
-    description:
-      "Host anchor renderer, so an app keeps its own client-side navigation. Defaults to a plain anchor.",
+      "«← Изменить почту» — the host returns the visitor to its registration form, which refills from the values still held.",
   },
   {
     name: "icon",
@@ -1603,16 +1618,21 @@ const EMAIL_CONFIRM_PROPS: PropRow[] = [
   {
     name: "resend",
     type: "EmailConfirmResendProps",
-    required: false,
+    required: true,
     description:
-      "Resend wiring: nonce, handler, error, pending flag, the neutral notice and a captcha slot. Omit it and the control is hidden — a bare deep-link has nothing to resend to.",
+      "Resend wiring: nonce, handler, error, pending flag, the after-resend notice and a captcha slot.",
   },
   {
-    name: "otpLength",
-    type: "number",
+    name: "testIds",
+    type: "Partial<EmailConfirmCardTestIds>",
     required: false,
-    description:
-      "Fixed code length; defaults to the 6-character registration code.",
+    description: "Host test ids — root, error, succeeded, submit, resend, resendNotice, back.",
+  },
+  {
+    name: "returnContextSlot",
+    type: "ReactNode",
+    required: false,
+    description: "The return-context plate drawn above the card.",
   },
   {
     name: "resendCooldownSeconds",
@@ -1624,19 +1644,18 @@ const EMAIL_CONFIRM_PROPS: PropRow[] = [
 
 /** Neutral-realistic copy — catalogue strings only, never product copy. */
 const EMAIL_CONFIRM_COPY: EmailConfirmCardCopy = {
-  title: "Confirm your email",
-  description: (destination) => `We sent a code to ${destination}.`,
-  newAccountHeading: "New here",
-  codeLabel: "Confirmation code",
-  submit: "Confirm",
-  codeAccepted: "Code accepted — signing you in…",
-  resend: "Send another code",
-  resendCountdown: (seconds) => `Send another code in ${seconds}s`,
-  existingAccountHeading: "Already registered",
-  existingAccountHint:
-    "If this address already has an account, sign in or reset the password instead.",
-  goToSignIn: "Sign in",
-  goToReset: "Reset password",
+  title: "Check your email",
+  description: (destination) => (
+    <>
+      We sent a code to <strong>{destination}</strong>.
+    </>
+  ),
+  codeLabel: "Code from the email",
+  submit: "Confirm and sign in",
+  codeAccepted: "Code accepted — signing in…",
+  resend: "Send again",
+  resendCountdown: (seconds) => `Send again · ${seconds} s`,
+  back: "← Change email",
 };
 
 const showcaseEmailConfirmResolver: Resolver<EmailConfirmValues> = async (
@@ -1646,11 +1665,11 @@ const showcaseEmailConfirmResolver: Resolver<EmailConfirmValues> = async (
 /** A live `EmailConfirmCard` at a given state, with inert host wiring. */
 function NeutralEmailConfirmCard({
   succeeded = false,
-  withResend = true,
+  error,
   notice,
 }: {
   succeeded?: boolean;
-  withResend?: boolean;
+  error?: string;
   notice?: string;
 }) {
   return (
@@ -1662,11 +1681,10 @@ function NeutralEmailConfirmCard({
         resolver={showcaseEmailConfirmResolver}
         onSubmit={() => {}}
         succeeded={succeeded}
-        links={{ login: "#", reset: "#" }}
+        error={error}
+        onBack={() => {}}
         icon={<LockGlyph className="text-tint-foreground" />}
-        resend={
-          withResend ? { nonce: 0, onResend: () => {}, notice } : undefined
-        }
+        resend={{ nonce: 0, onResend: () => {}, notice }}
       />
     </div>
   );
@@ -1676,16 +1694,17 @@ function EmailConfirmCardSection() {
   return (
     <BlockSection
       title="EmailConfirmCard"
-      exportsLine="EmailConfirmCard — props: copy · email? · destination · resolver · onSubmit · onInvalid? · error? · succeeded? · links · renderLink? · icon? · resend? · otpLength? · resendCooldownSeconds?"
+      exportsLine="EmailConfirmCard — props: copy · email? · destination · resolver · onSubmit · onInvalid? · error? · succeeded? · onBack · icon? · resend · resendCooldownSeconds? · testIds? · returnContextSlot?"
     >
       <p className="text-sm text-muted-foreground">
-        The whole post-registration confirmation composition as one reusable
-        unit: the <code className="font-mono text-xs">AuthCard</code> frame, the
-        code form with its auto-submit on the final character, the success row,
-        the resend control on the shared cooldown timer, and the two co-equal
-        actions for a visitor who turns out to be already registered. The block
-        never branches on account existence — both affordances are always
-        present — and copy, validation, transport and routing are host-supplied.
+        The post-registration confirmation: the{" "}
+        <code className="font-mono text-xs">AuthCard</code> frame around the ONE
+        code step (<code className="font-mono text-xs">OtpFocusScreen</code>,
+        003 EARS-42) — six cells with auto-submit on the final character, the
+        accepted-code row, the primary, «← Изменить почту» beside the resend
+        control on the shared cooldown timer, and the after-resend notice. The
+        block never branches on account existence; copy, validation, transport
+        and routing are host-supplied.
       </p>
 
       <SubRow label="Preview">
@@ -1702,7 +1721,7 @@ function EmailConfirmCardSection() {
         <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
           <StateCase
             label="awaiting the code"
-            note="the resting state — code entry, resend in cooldown, both owner actions"
+            note="the resting state — code entry, back link, resend in cooldown"
           >
             <Canvas>
               <NeutralEmailConfirmCard />
@@ -1718,18 +1737,18 @@ function EmailConfirmCardSection() {
           </StateCase>
           <StateCase
             label="resend acknowledged"
-            note="the host's neutral notice slot — identical copy in every case, so it discloses nothing"
+            note="the host's notice slot — identical copy for every address, so it discloses nothing"
           >
             <Canvas>
-              <NeutralEmailConfirmCard notice="If the account exists, another code is on its way." />
+              <NeutralEmailConfirmCard notice="We sent a new code to y•••@e•••.com." />
             </Canvas>
           </StateCase>
           <StateCase
-            label="no destination"
-            note="resend omitted by the host — a bare deep-link has nothing to resend to"
+            label="refused code"
+            note="the host's already-localized error on the one error plate"
           >
             <Canvas>
-              <NeutralEmailConfirmCard withResend={false} />
+              <NeutralEmailConfirmCard error="That code did not work. Try again." />
             </Canvas>
           </StateCase>
         </div>
@@ -1905,15 +1924,15 @@ function OtpFocusScreenSection() {
   return (
     <BlockSection
       title="OtpFocusScreen"
-      exportsLine="OtpFocusScreen — props: field · length · *Label copy · cooldownSeconds · resendNonce · isSubmitting · error"
+      exportsLine="OtpFocusScreen — props: field · *Label copy · cooldownSeconds · resendNonce · isSubmitting · resendPending · succeeded · notice · onBack · testIds · CODE_STEP_LENGTH"
     >
       <p className="text-sm text-muted-foreground">
-        The focused OTP-entry block a surface swaps in once a code is issued: by
-        construction it renders ONLY masked destination + code input + submit +
-        resend(cooldown) + change-method, so the user cannot wander off the
-        challenge. Every visible string is an app-supplied prop; the masked
-        destination is computed by the app via{" "}
-        <code className="font-mono text-xs">maskDestination</code>.
+        The ONE code step (003 EARS-42): sign-in by code and the
+        post-registration confirmation both draw it inside their card, whose
+        heading and «sent to {"<masked>"}» line name the channel. It renders only
+        six letter-or-digit cells, the accepted-code row, the primary, the back
+        + resend(cooldown) row and the after-resend notice — no channel switch,
+        no secondary links. Every visible string is an app-supplied prop.
       </p>
 
       <SubRow label="Preview">
@@ -1928,7 +1947,7 @@ function OtpFocusScreenSection() {
         <PropsTable rows={OTP_FOCUS_PROPS} />
       </SubRow>
 
-      <SubRow label="State matrix — resend cooldown · error · submitting">
+      <SubRow label="State matrix — resend cooldown · notice · submitting · accepted">
         <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
           <StateCase label="resend ready" note="cooldownSeconds = 0">
             <OtpFrame>
@@ -1940,17 +1959,27 @@ function OtpFocusScreenSection() {
               <OtpFocusDemo cooldownSeconds={30} />
             </OtpFrame>
           </StateCase>
-          <StateCase label="error" note="error slot populated">
+          <StateCase label="after resend" note="notice populated">
             <OtpFrame>
               <OtpFocusDemo
                 cooldownSeconds={30}
-                error="That code is incorrect."
+                notice={
+                  <>
+                    We sent a new code to{" "}
+                    <strong>{maskDestination("doctor@example.com")}</strong>.
+                  </>
+                }
               />
             </OtpFrame>
           </StateCase>
-          <StateCase label="submitting" note="isSubmitting — submit disabled">
+          <StateCase label="submitting" note="isSubmitting — submit busy">
             <OtpFrame>
               <OtpFocusDemo cooldownSeconds={30} isSubmitting />
+            </OtpFrame>
+          </StateCase>
+          <StateCase label="accepted" note="succeeded — server accepted the code">
+            <OtpFrame>
+              <OtpFocusDemo cooldownSeconds={30} succeeded />
             </OtpFrame>
           </StateCase>
         </div>

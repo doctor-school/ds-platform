@@ -10,7 +10,10 @@
 -- (issuecomment-5994702215). Any retained event or project outside it aborts the
 -- migration for explicit per-row review; there is no heuristic fallback and no
 -- default for an event without a project. An id of the mapping absent from the
--- database is not an error (dev stands and CI hold none of them).
+-- database is not an error (dev stands and CI hold none of them). The one
+-- rule-mapped set is non-production: golden-namespace fixture rows (an old
+-- `ds_golden` template, the slots cloned from it, seeded dev databases) take the
+-- golden dataset's own assignment, which `seed:golden` then upserts again.
 CREATE TYPE "public"."event_audience" AS ENUM('doctors', 'experts');--> statement-breakpoint
 CREATE TABLE "event_kinds" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -75,12 +78,18 @@ DECLARE
     'c3f1afb8-5e38-4c06-9fa6-63bb127a3743', 'a90819b1-d447-418e-a292-720ed2c4c58d',
     '95de5595-1e4d-4003-b9c2-4c579470ce44'
   ]::uuid[];
+  -- Non-production fixture rows: the golden dataset's deterministic ids
+  -- (`packages/db/src/seed/golden/ids.ts` `goldenUuid` / `isGoldenUuid`, the
+  -- EXACT shape, never a loose prefix). Production holds none (read-only prod
+  -- read 2026-10-05); the `ds_golden` template, the slots cloned from it and
+  -- seeded dev databases do, and they are mapped by the golden dataset below.
+  c_golden_re constant text := '^20630063-[0-9a-f]{4}-4d5b-8b63-[0-9a-f]{12}$';
   v_unmapped text;
   v_smysly uuid;
 BEGIN
   -- 1. Fail closed BEFORE any write: every project and every event is mapped.
   SELECT string_agg("id"::text, ', ' ORDER BY "id") INTO v_unmapped
-    FROM "projects" WHERE "id" <> c_orthobio;
+    FROM "projects" WHERE "id" <> c_orthobio AND "id"::text !~ c_golden_re;
   IF v_unmapped IS NOT NULL THEN
     RAISE EXCEPTION USING
       ERRCODE = 'check_violation',
@@ -89,7 +98,8 @@ BEGIN
   SELECT string_agg("id"::text, ', ' ORDER BY "id") INTO v_unmapped
     FROM "events"
    WHERE NOT ("id" = ANY (c_smysly_events || c_deleted_events
-                          || ARRAY[c_orthobio_webinar, c_orthobio_congress]));
+                          || ARRAY[c_orthobio_webinar, c_orthobio_congress]))
+     AND "id"::text !~ c_golden_re;
   IF v_unmapped IS NOT NULL THEN
     RAISE EXCEPTION USING
       ERRCODE = 'check_violation',
@@ -117,6 +127,12 @@ BEGIN
 
   -- 3. Project default audiences.
   UPDATE "projects" SET "default_audience" = 'doctors' WHERE "id" = c_orthobio;
+  --    Golden fixture projects: the dataset's rule — a media project's default
+  --    audience is experts, every other one doctors (`dataset.ts` base projects;
+  --    `volume.ts` `projectDefaultAudience`).
+  UPDATE "projects" SET "default_audience" =
+         CASE WHEN "kind" = 'media' THEN 'experts' ELSE 'doctors' END::"event_audience"
+   WHERE "id"::text ~ c_golden_re;
 
   -- 4. «Академия смыслов» — created only where its events exist (production),
   --    as a draft like Orthobio School: neither public read needs a published
@@ -147,6 +163,51 @@ BEGIN
     ) AS m("id", "audience", "kind_slug")
     JOIN "event_kinds" k ON k."slug" = m."kind_slug"
    WHERE e."id" = m."id";
+
+  --    Golden fixture events: the dataset's assignment, reproduced from the id.
+  --    Ordinal < 1000 (`dataset.ts` base events, all online): Вебинар, doctors.
+  --    Ordinal 1000 + i (`volume.ts` `volumeEventClassification`): the audience
+  --    of the PRIMARY project — golden project ordinal 1000 + i % 12, the twelve
+  --    `VOLUME_PROJECTS` — and the kind by format: online → Эфир (experts) or
+  --    Вебинар (doctors), hybrid → Встреча клуба, offline → Конгресс for even i,
+  --    Мастер-класс for odd i. A missing primary project leaves the row unset
+  --    and the completeness check below aborts.
+  WITH g AS (
+    SELECT e."id", e."participation_format" AS fmt,
+           ('x' || right(e."id"::text, 12))::bit(48)::bigint AS ordinal
+      FROM "events" e
+     WHERE e."id"::text ~ c_golden_re
+  ), c AS (
+    SELECT g."id", g.fmt, g.ordinal,
+           CASE WHEN g.ordinal < 1000 THEN 'doctors'
+                ELSE (SELECT CASE WHEN p."kind" = 'media' THEN 'experts' ELSE 'doctors' END
+                        FROM "projects" p
+                       WHERE p."id" = ('20630063-0003-4d5b-8b63-'
+                                       || lpad(to_hex(1000 + (g.ordinal - 1000) % 12), 12, '0'))::uuid)
+           END AS audience
+      FROM g
+  )
+  UPDATE "events" e
+     SET "audience" = c.audience::"event_audience",
+         "kind_id" = k."id"
+    FROM c
+    JOIN "event_kinds" k ON k."slug" =
+         CASE WHEN c.ordinal < 1000 THEN 'vebinar'
+              WHEN c.fmt = 'online' THEN
+                   CASE WHEN c.audience = 'experts' THEN 'efir' ELSE 'vebinar' END
+              WHEN c.fmt = 'hybrid' THEN 'vstrecha-kluba'
+              WHEN (c.ordinal - 1000) % 2 = 0 THEN 'kongress'
+              ELSE 'master-klass'
+         END
+   WHERE e."id" = c."id" AND c.audience IS NOT NULL;
+
+  SELECT string_agg("id"::text, ', ' ORDER BY "id") INTO v_unmapped
+    FROM "events" WHERE "kind_id" IS NULL OR "audience" IS NULL;
+  IF v_unmapped IS NOT NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'check_violation',
+      MESSAGE = '012 LD-12: events the mapping left without a kind or audience: ' || v_unmapped;
+  END IF;
 
   -- 6. LD-11: the mapping never assigns a kind that disallows the row's format.
   SELECT string_agg(e."id"::text, ', ' ORDER BY e."id") INTO v_unmapped

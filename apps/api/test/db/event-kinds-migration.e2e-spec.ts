@@ -78,7 +78,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await c.query(
         `INSERT INTO "events" ("id", "slug", "title", "school", "starts_at", "duration_min", "participation_format")
          VALUES ($1, $2, 'Событие', 'Школа', now(), 60, $3)`,
-        [id, `mig-0046-${id.slice(0, 8)}`, format],
+        [id, `mig-0046-${id}`, format],
       );
     }
 
@@ -259,6 +259,112 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await insertEvent(c, "11111111-1111-4111-8111-111111111111");
         await expect(applyMigration(c)).rejects.toThrow(
           /events outside the reviewed kind\/audience mapping: 11111111-1111-4111-8111-111111111111/,
+        );
+      });
+    });
+
+    // Golden fixture ids (`packages/db/src/seed/golden/ids.ts` `goldenUuid`).
+    const goldenId = (group: number, ordinal: number): string =>
+      `20630063-${group.toString(16).padStart(4, "0")}-4d5b-8b63-${ordinal
+        .toString(16)
+        .padStart(12, "0")}`;
+    const GOLDEN_PROJECTS = 0x0003;
+    const GOLDEN_EVENTS = 0x0004;
+
+    /** Golden rows as an old `ds_golden` template holds them (pre-0046 shape). */
+    async function seedGoldenFixture(c: pg.PoolClient): Promise<void> {
+      // Base projects 1 (school), 2 (media); volume slots 1000+3/+4 (media) and
+      // 1000+5 (school), as VOLUME_PROJECTS declares them.
+      for (const [ordinal, kind] of [
+        [1, "school"],
+        [2, "media"],
+        [1003, "media"],
+        [1004, "media"],
+        [1005, "school"],
+      ] as const) {
+        await c.query(
+          `INSERT INTO "projects" ("id", "slug", "kind", "title") VALUES ($1, $2, $3, 'Golden')`,
+          [goldenId(GOLDEN_PROJECTS, ordinal), `golden-p-${ordinal}`, kind],
+        );
+      }
+      for (const [ordinal, format] of [
+        [1, "online"], // base event
+        [1003, "online"], // i=3 → slot 1003 media
+        [1017, "online"], // i=17 → slot 1005 school
+        [1029, "hybrid"], // i=29 → slot 1005
+        [1015, "offline"], // i=15 → slot 1003, odd i
+        [1004, "offline"], // i=4 → slot 1004, even i
+      ] as const) {
+        await insertEvent(c, goldenId(GOLDEN_EVENTS, ordinal), format);
+      }
+    }
+
+    it("012 LD-12: golden-namespace fixture rows are mapped by the golden dataset's rule", async () => {
+      await inRewoundTransaction(async (c) => {
+        await seedProductionInventory(c);
+        await seedGoldenFixture(c);
+        await applyMigration(c);
+
+        const { rows: projects } = await c.query<{
+          id: string;
+          default_audience: string;
+        }>(
+          `SELECT "id", "default_audience" FROM "projects" WHERE "id"::text LIKE '20630063-%'`,
+        );
+        expect(
+          Object.fromEntries(projects.map((p) => [p.id, p.default_audience])),
+        ).toEqual({
+          [goldenId(GOLDEN_PROJECTS, 1)]: "doctors",
+          [goldenId(GOLDEN_PROJECTS, 2)]: "experts",
+          [goldenId(GOLDEN_PROJECTS, 1003)]: "experts",
+          [goldenId(GOLDEN_PROJECTS, 1004)]: "experts",
+          [goldenId(GOLDEN_PROJECTS, 1005)]: "doctors",
+        });
+
+        const { rows } = await c.query<{
+          id: string;
+          slug: string;
+          audience: string;
+        }>(
+          `SELECT e."id", k."slug", e."audience" FROM "events" e
+             JOIN "event_kinds" k ON k."id" = e."kind_id"
+            WHERE e."id"::text LIKE '20630063-%'`,
+        );
+        expect(
+          Object.fromEntries(rows.map((r) => [r.id, `${r.slug}/${r.audience}`])),
+        ).toEqual({
+          [goldenId(GOLDEN_EVENTS, 1)]: "vebinar/doctors",
+          [goldenId(GOLDEN_EVENTS, 1003)]: "efir/experts",
+          [goldenId(GOLDEN_EVENTS, 1017)]: "vebinar/doctors",
+          [goldenId(GOLDEN_EVENTS, 1029)]: "vstrecha-kluba/doctors",
+          [goldenId(GOLDEN_EVENTS, 1015)]: "master-klass/experts",
+          [goldenId(GOLDEN_EVENTS, 1004)]: "kongress/experts",
+        });
+      });
+    });
+
+    it("012 LD-12: a non-golden unmapped event still aborts, and a look-alike id outside the exact golden shape is not golden", async () => {
+      await inRewoundTransaction(async (c) => {
+        await seedProductionInventory(c);
+        await insertEvent(c, goldenId(GOLDEN_EVENTS, 1), "online");
+        // Golden prefix, wrong variant nibble — a loose-prefix match would admit it.
+        const lookAlike = "20630063-0004-4d5b-9b63-000000000001";
+        await insertEvent(c, lookAlike, "online");
+        await expect(applyMigration(c)).rejects.toThrow(
+          new RegExp(
+            `events outside the reviewed kind/audience mapping: ${lookAlike}$`,
+          ),
+        );
+      });
+    });
+
+    it("012 LD-12: a golden volume event whose primary project is absent aborts the migration", async () => {
+      await inRewoundTransaction(async (c) => {
+        await seedProductionInventory(c);
+        // i=30 → primary slot 1000 + 30 % 12 = 1006, not present.
+        await insertEvent(c, goldenId(GOLDEN_EVENTS, 1030), "offline");
+        await expect(applyMigration(c)).rejects.toThrow(
+          /events the mapping left without a kind or audience: 20630063-0004-4d5b-8b63-000000000406/,
         );
       });
     });

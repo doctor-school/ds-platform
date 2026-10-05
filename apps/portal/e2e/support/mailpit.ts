@@ -19,8 +19,8 @@ const sleep = (ms: number): Promise<void> =>
  *
  * The branded verify-email (#869, provision.sh step 8.ter) and login email-OTP
  * (#878, step 8.quinquies) are CODE-ONLY: the code leads the SUBJECT
- * (`GX5AVU — код подтверждения Doctor.School` / `47787462 — код для входа в
- * Doctor.School`) and the body renders it as ONE unbroken token — there is no
+ * (`GX5AVU — код подтверждения Doctor.School` / `K7Q2M9 — код для входа в
+ * Doctor.School`; both 6-char upper-alnum since #2555) and the body renders it as ONE unbroken token — there is no
  * `code=` link to scrape any more. Subject-first, then the legacy body patterns.
  */
 function extractCode(msg: {
@@ -34,7 +34,6 @@ function extractCode(msg: {
   return (
     haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
     haystack.match(/[?&]code=([A-Z0-9]{4,12})\b/)?.[1] ??
-    haystack.match(/\b([0-9]{6,8})\b/)?.[1] ??
     null
   );
 }
@@ -49,7 +48,8 @@ function extractCode(msg: {
  * email-OTP journey, which Zitadel sends < 1 s apart so the time cutoff alone
  * cannot separate them (proven live, #131): registration sends a verify-email
  * mail (a 6-char alphanumeric code, e.g. `L3VMNK`) and the login-OTP request
- * sends an email-OTP mail (an 8-digit code, e.g. `47787462`). Because the
+ * sends an email-OTP mail (the SAME 6-char shape since #2555, e.g. `K7Q2M9`, so
+ * the code shape cannot tell them apart either). Because the
  * registration mail can land INSIDE the OTP window, the OTP-login step must
  * select by subject, not by timestamp — otherwise it reads the stale
  * registration code and login fails with a wrong-code. Subjects are `ru`-locked

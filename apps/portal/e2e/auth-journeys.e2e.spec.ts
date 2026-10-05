@@ -362,7 +362,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       );
       expect(otpCode, "login OTP should reach the sink").toBeTruthy();
       // #175: auto-submit on completion (no `otp-verify` click) — same as the
-      // email-OTP journey above; the SMS code is the same fixed 8-digit length.
+      // email-OTP journey above; the SMS code is the same fixed 6-char length (#2555).
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────

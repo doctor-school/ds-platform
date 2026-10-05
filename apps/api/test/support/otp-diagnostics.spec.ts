@@ -68,7 +68,7 @@ describe("#2085 OTP failure diagnostics", () => {
         [
           {
             Created: "2026-09-09T00:00:00Z",
-            Subject: "12345678 target",
+            Subject: "K7Q2M9 target",
             To: "private",
           },
           { Created: "2026-09-09T00:00:02Z", Subject: "secret other" },

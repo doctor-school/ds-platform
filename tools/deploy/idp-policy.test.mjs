@@ -9,10 +9,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  assertLoginOtpGeneratorConverged,
   assertPasswordPolicyConverged,
+  formatLoginOtpGenerator,
   formatPasswordPolicy,
   IdpPolicyError,
+  LOGIN_OTP_GENERATOR_TYPES,
+  parseLoginOtpCodeLength,
   parsePasswordMinLength,
+  parseVerifyCodeLength,
+  resolveLoginOtpExpectation,
 } from "./idp-policy.mjs";
 
 const converged = {
@@ -126,9 +132,10 @@ test("#1997: a single omitted flag reads as false alongside explicit ones", () =
   );
 });
 
-test("#1997: a flag PRESENT but not a boolean (string \"false\") is REJECTED", () => {
+test('#1997: a flag PRESENT but not a boolean (string "false") is REJECTED', () => {
   assert.throws(
-    () => assertPasswordPolicyConverged({ ...converged, hasNumber: "false" }, 8),
+    () =>
+      assertPasswordPolicyConverged({ ...converged, hasNumber: "false" }, 8),
     (e) =>
       e instanceof IdpPolicyError &&
       /hasNumber is present but not a boolean/.test(e.message),
@@ -188,5 +195,188 @@ test("#1997: the operator line names the length and every class flag", () => {
   assert.match(
     line,
     /hasUppercase=false hasLowercase=false hasNumber=false hasSymbol=false/,
+  );
+});
+
+// --- login OTP secret generators (#2555, epic #2552 «one email code») -------
+
+const otpConverged = {
+  secretGenerator: {
+    generatorType: "SECRET_GENERATOR_TYPE_OTP_EMAIL",
+    length: 6,
+    expiry: "300s",
+    includeUpperLetters: true,
+    includeDigits: true,
+  },
+};
+
+test("#2555: the deploy reads back BOTH login OTP generators (email + SMS)", () => {
+  assert.deepEqual(LOGIN_OTP_GENERATOR_TYPES, [
+    "SECRET_GENERATOR_TYPE_OTP_EMAIL",
+    "SECRET_GENERATOR_TYPE_OTP_SMS",
+  ]);
+});
+
+test("#2555: VERIFY_CODE_LENGTH is read from the schema source, never hardcoded", () => {
+  assert.equal(
+    parseVerifyCodeLength("export const VERIFY_CODE_LENGTH = 6;\n"),
+    6,
+  );
+  assert.throws(
+    () => parseVerifyCodeLength("export const CODE_LEN = 6;"),
+    IdpPolicyError,
+  );
+  assert.throws(() => parseVerifyCodeLength(""), IdpPolicyError);
+});
+
+test("#2555: a 6-char upper-alnum generator passes; omitted proto3 `false` flags read as false", () => {
+  const verdict = assertLoginOtpGeneratorConverged(otpConverged, 6);
+  assert.deepEqual(verdict, { length: 6, expiry: "300s" });
+});
+
+test("#2555: the unwrapped generator object is accepted too", () => {
+  assert.equal(
+    assertLoginOtpGeneratorConverged(otpConverged.secretGenerator, 6).length,
+    6,
+  );
+});
+
+test("#2555: the inherited provider default (8 digits) is REJECTED", () => {
+  assert.throws(
+    () =>
+      assertLoginOtpGeneratorConverged(
+        { secretGenerator: { length: 8, expiry: "300s", includeDigits: true } },
+        6,
+      ),
+    (e) =>
+      e instanceof IdpPolicyError &&
+      /length=8, expected 6/.test(e.message) &&
+      /includeUpperLetters=false, expected true/.test(e.message),
+  );
+});
+
+test("#2555: lower letters or symbols in the alphabet are REJECTED", () => {
+  for (const flag of ["includeLowerLetters", "includeSymbols"]) {
+    assert.throws(
+      () =>
+        assertLoginOtpGeneratorConverged(
+          {
+            secretGenerator: { ...otpConverged.secretGenerator, [flag]: true },
+          },
+          6,
+        ),
+      new RegExp(`${flag}=true, expected false`),
+    );
+  }
+});
+
+test("#2555: a generator without an expiry or with a non-boolean flag is REJECTED", () => {
+  const noExpiry = { ...otpConverged.secretGenerator, expiry: undefined };
+  assert.throws(() => assertLoginOtpGeneratorConverged(noExpiry, 6), /expiry/);
+  assert.throws(
+    () =>
+      assertLoginOtpGeneratorConverged(
+        { ...otpConverged.secretGenerator, includeDigits: "true" },
+        6,
+      ),
+    /includeDigits is present but not a boolean/,
+  );
+});
+
+test("#2555: a non-object read-back is REJECTED", () => {
+  assert.throws(
+    () => assertLoginOtpGeneratorConverged(null, 6),
+    IdpPolicyError,
+  );
+  assert.throws(
+    () => assertLoginOtpGeneratorConverged("<html>", 6),
+    IdpPolicyError,
+  );
+});
+
+test("#2555: the operator line names the generator, length and expiry", () => {
+  const line = formatLoginOtpGenerator(
+    "SECRET_GENERATOR_TYPE_OTP_SMS",
+    assertLoginOtpGeneratorConverged(otpConverged, 6),
+  );
+  assert.match(
+    line,
+    /SECRET_GENERATOR_TYPE_OTP_SMS: length=6 upper letters \+ digits, expiry 300s/,
+  );
+});
+
+// --- the expected login OTP shape comes from the TARGET provision.sh --------
+// provision.sh runs from the deployed commit, so only that commit's step
+// 8.septies decides whether (and to what) the generators converge. A `--ref`
+// to a commit without the step leaves the generators as they are; the gate
+// must skip there, not fail a legitimate hotfix (PR #2568 Mode (a) blocker).
+
+const provisionWithStep = [
+  "RU_LOGIN_OTP_SUBJECT='{{.OTP}} — код для входа в Doctor.School'",
+  "# ── 8.septies. login OTP code format",
+  "LOGIN_OTP_CODE_LENGTH=6",
+  "LOGIN_OTP_GENERATORS=(SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS)",
+  "",
+].join("\n");
+const provisionWithoutStep = [
+  "RU_LOGIN_OTP_SUBJECT='{{.OTP}} — код для входа в Doctor.School'",
+  "# ── 9. MFA capability",
+  "",
+].join("\n");
+const schemaSix = "export const VERIFY_CODE_LENGTH = 6;\n";
+
+test("#2555: LOGIN_OTP_CODE_LENGTH is read from the target provision.sh", () => {
+  assert.equal(parseLoginOtpCodeLength(provisionWithStep), 6);
+});
+
+test("#2555: a target provision.sh without step 8.septies yields null (no converge)", () => {
+  assert.equal(parseLoginOtpCodeLength(provisionWithoutStep), null);
+});
+
+test("#2555: a present but non-numeric LOGIN_OTP_CODE_LENGTH is REJECTED, never guessed", () => {
+  assert.throws(
+    () => parseLoginOtpCodeLength("LOGIN_OTP_CODE_LENGTH=${LEN}\n"),
+    IdpPolicyError,
+  );
+  assert.throws(
+    () => parseLoginOtpCodeLength("LOGIN_OTP_CODE_LENGTH=0\n"),
+    IdpPolicyError,
+  );
+  assert.throws(() => parseLoginOtpCodeLength(42), IdpPolicyError);
+});
+
+test("#2555: target WITH the step → check against its LOGIN_OTP_CODE_LENGTH", () => {
+  assert.deepEqual(
+    resolveLoginOtpExpectation({
+      provisionText: provisionWithStep,
+      verifyCodeSchemaText: schemaSix,
+    }),
+    { check: true, length: 6 },
+  );
+});
+
+test("#2555: target WITHOUT the step (pre-#2568 --ref hotfix) → SKIP with a clear reason, VERIFY_CODE_LENGTH not consulted", () => {
+  const verdict = resolveLoginOtpExpectation({
+    provisionText: provisionWithoutStep,
+    verifyCodeSchemaText: schemaSix,
+  });
+  assert.equal(verdict.check, false);
+  assert.match(
+    verdict.reason,
+    /skipped: target provision\.sh does not converge login OTP generators/,
+  );
+});
+
+test("#2555: target whose provision length disagrees with VERIFY_CODE_LENGTH is REJECTED (app and IdP must agree)", () => {
+  assert.throws(
+    () =>
+      resolveLoginOtpExpectation({
+        provisionText: provisionWithStep,
+        verifyCodeSchemaText: "export const VERIFY_CODE_LENGTH = 8;\n",
+      }),
+    (e) =>
+      e instanceof IdpPolicyError &&
+      /LOGIN_OTP_CODE_LENGTH=6/.test(e.message) &&
+      /VERIFY_CODE_LENGTH=8/.test(e.message),
   );
 });

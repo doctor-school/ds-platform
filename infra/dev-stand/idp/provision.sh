@@ -946,6 +946,84 @@ api GET /admin/v1/policies/password/complexity | jq -r '.policy |
   "password-policy sweep: minLength=\(.minLength // "0") hasUppercase=\(.hasUppercase // false) hasLowercase=\(.hasLowercase // false) hasNumber=\(.hasNumber // false) hasSymbol=\(.hasSymbol // false) — length-only creation policy (003 EARS-36)"
 ' >&2
 
+# ── 8.septies. login OTP code format = the verify-email format (#2555) ───────
+# Owner decision (epic #2552, «one email code»): every code a user receives has
+# ONE format — 6 characters, upper-case letters + digits — the format the
+# instance's VERIFY_EMAIL_CODE generator already uses. The login OTP generators
+# (OTP_EMAIL for the email-code sign-in, OTP_SMS for the SMS-code sign-in) were
+# an INHERITED PROVIDER DEFAULT (8 digits) that provisioning never touched; this
+# step makes provisioning their managed owner.
+#
+# Only the character shape converges. The lifetime is read and written back
+# unchanged: the login mail copy (step 8.quinquies) promises «Код действует
+# 5 минут» against the live 300s expiry, so a provisioning run must never move it.
+# Admin API (v4 admin.proto): GET/PUT /admin/v1/secretgenerators/{generator_type};
+# the PUT body carries length + expiry + the four include* flags.
+#
+# READ-BEFORE-WRITE for idempotency (the 8.sexies precedent): a generator already
+# at the target shape skips the PUT; api_idempotent absorbs a raced code-9. A
+# PUT that still fails is FATAL (an `cmd && echo` list would swallow it under
+# `set -e`), and the step ends with a READ-BACK of both generators against the
+# target shape AND the expiry read before the write: a write Zitadel accepted
+# but did not apply exits non-zero here instead of shipping green.
+LOGIN_OTP_CODE_LENGTH=6
+LOGIN_OTP_GENERATORS=(SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS)
+LOGIN_OTP_EXPIRIES=()
+
+# Prints `true` when the generator JSON on stdin is at the target shape: length 6,
+# upper letters + digits, no lower letters, no symbols. Zitadel drops proto3
+# defaults from the body, so an absent include* flag reads as `false`.
+login_otp_generator_on_target() {
+  jq -r --argjson len "$LOGIN_OTP_CODE_LENGTH" '
+    ((.length // 0) == $len)
+    and ((.includeUpperLetters // false) == true)
+    and ((.includeDigits // false) == true)
+    and ((.includeLowerLetters // false) == false)
+    and ((.includeSymbols // false) == false)
+  '
+}
+
+for OTP_GENERATOR in "${LOGIN_OTP_GENERATORS[@]}"; do
+  OTP_GENERATOR_CURRENT="$(api GET "/admin/v1/secretgenerators/${OTP_GENERATOR}" | jq '.secretGenerator')"
+  OTP_GENERATOR_EXPIRY="$(jq -r '.expiry // empty' <<< "$OTP_GENERATOR_CURRENT")"
+  [[ -n "$OTP_GENERATOR_EXPIRY" ]] || {
+    echo "FATAL: ${OTP_GENERATOR} read back without an expiry — refusing to write a generator whose lifetime is unknown" >&2
+    exit 1
+  }
+  LOGIN_OTP_EXPIRIES+=("$OTP_GENERATOR_EXPIRY")
+  if [[ "$(login_otp_generator_on_target <<< "$OTP_GENERATOR_CURRENT")" == "true" ]]; then
+    echo "${OTP_GENERATOR}: already ${LOGIN_OTP_CODE_LENGTH} upper-alnum (expiry ${OTP_GENERATOR_EXPIRY})" >&2
+    continue
+  fi
+  if ! api_idempotent PUT "/admin/v1/secretgenerators/${OTP_GENERATOR}"     "$(jq -nc --argjson len "$LOGIN_OTP_CODE_LENGTH" --arg exp "$OTP_GENERATOR_EXPIRY" '
+      {
+        length: $len,
+        expiry: $exp,
+        includeLowerLetters: false,
+        includeUpperLetters: true,
+        includeDigits: true,
+        includeSymbols: false
+      }
+    ')" >/dev/null; then
+    echo "FATAL: ${OTP_GENERATOR}: the PUT converging it to ${LOGIN_OTP_CODE_LENGTH} upper-alnum was rejected (see the API line above)" >&2
+    exit 1
+  fi
+  echo "${OTP_GENERATOR}: ensured ${LOGIN_OTP_CODE_LENGTH} upper-alnum (expiry ${OTP_GENERATOR_EXPIRY} kept)" >&2
+done
+
+# Read-back: the instance, not the PUT exit code, is the evidence.
+for i in "${!LOGIN_OTP_GENERATORS[@]}"; do
+  OTP_GENERATOR="${LOGIN_OTP_GENERATORS[$i]}"
+  OTP_GENERATOR_EXPIRY="${LOGIN_OTP_EXPIRIES[$i]}"
+  OTP_GENERATOR_LIVE="$(api GET "/admin/v1/secretgenerators/${OTP_GENERATOR}" | jq -c '.secretGenerator')"
+  OTP_GENERATOR_LIVE_EXPIRY="$(jq -r '.expiry // empty' <<< "$OTP_GENERATOR_LIVE")"
+  if [[ "$(login_otp_generator_on_target <<< "$OTP_GENERATOR_LIVE")" != "true"         || "$OTP_GENERATOR_LIVE_EXPIRY" != "$OTP_GENERATOR_EXPIRY" ]]; then
+    echo "FATAL: ${OTP_GENERATOR} read-back did NOT converge — expected length ${LOGIN_OTP_CODE_LENGTH}, upper letters + digits only, expiry ${OTP_GENERATOR_EXPIRY}; live: ${OTP_GENERATOR_LIVE}" >&2
+    exit 1
+  fi
+  echo "${OTP_GENERATOR}: read-back ok (${LOGIN_OTP_CODE_LENGTH} upper-alnum, expiry ${OTP_GENERATOR_LIVE_EXPIRY})" >&2
+done
+
 # ── 9. MFA capability on the default login policy (011 EARS-8) ───────────────
 # Spec: apps/docs/content/specs/features/011-admin-session-2fa/011-requirements-en.md
 # (EARS-8). TOTP for `platform_admin` is mandatory (ADR-0001 §4). Zitadel supplies

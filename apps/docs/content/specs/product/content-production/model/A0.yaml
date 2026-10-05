@@ -174,7 +174,6 @@ boxes:
   - id: A6
     name: Развивать команды и систему производства
     process_blocks: [7]
-    decomposition: pending
     functions: [F-009, F-023, F-106, F-107, F-109, F-111, F-113]
     mechanisms:
       - Ядро — стандарты, рынок, калькулятор, коуч

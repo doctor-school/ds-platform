@@ -162,11 +162,12 @@ export function EventList({
                 style={{ top: stickyHeaderOffset }}
               >
                 <DayBand className="layout:hidden">{group.label}</DayBand>
-                <div className="hidden layout:flex layout:items-baseline layout:gap-4">
+                {/* One separator only (lead, 2026-10-05): the plate's bottom
+                    border is the single edge — no inline rule after the label. */}
+                <div className="hidden layout:block">
                   <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
                     {group.label}
                   </span>
-                  <span className="flex-1 border-t-2 border-foreground" />
                 </div>
               </div>
               {/* `isolate`: the cards paint in their own stacking context,

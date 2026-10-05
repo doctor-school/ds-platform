@@ -179,6 +179,8 @@ describe("<EventList>", () => {
       expect(header.className).toContain("layout:py-3");
       expect(header.className).toContain("border-b-2");
       expect(header.className).toContain("border-border");
+      // One separator only: the bottom border is the single edge, no inline rule after the label.
+      expect(header.querySelector(".border-t-2")).toBeNull();
       // The header is the section's first child: it sticks only while its own group scrolls.
       expect(header.parentElement!.firstElementChild).toBe(header);
       // The cards sit in an isolated stacking context, so no card-internal

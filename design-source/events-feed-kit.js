@@ -223,12 +223,12 @@
   function card(e, o) {
     var utc = parseMsk(e.msk), z = e.format === 'офлайн' ? 3 : o.tz, p = at(utc, z);
     var c = { variant: e.past ? 'past' : 'upcoming', href: e.past ? 'event-page-recording.dc.html' : 'event-page.dc.html', time: p.time, tzLabel: zl(z),
-      dateLabel: p.d + ' ' + MG[p.m] + (p.y !== 2026 ? ' ' + p.y : '') + ' · ' + DS[p.dow], school: e.project, title: e.title, speakers: e.speakers || [], formatLabel: e.kind + ' · ' + e.format };
+      dateLabel: p.d + ' ' + MG[p.m] + (p.y !== 2026 ? ' ' + p.y : '') + ' · ' + DS[p.dow], school: e.project, title: e.title, speakers: e.speakers || [], kindLabel: e.kind, formatLabel: e.format };
     if (e.nmo) c.nmoLabel = 'НМО · ' + e.nmo;
     if (e.pul) { c.pulCost = e.pul; c.pulCostLabel = e.pul + ' Pul'; }
     if (e.city) c.city = e.city;
     if (!e.past && typeof e.seats === 'number') { c.seatsLeft = e.seats; c.seatsLeftLabel = 'мест осталось'; c.soldOutLabel = 'мест не осталось'; }
-    if (e.format === 'гибрид' && e.venueTz) c.recordingLabel = 'На площадке ' + at(utc, e.venueTz).time + ' ' + zl(e.venueTz);
+    if (e.format === 'гибрид' && e.venueTz) c.venueTimeLabel = 'На площадке ' + at(utc, e.venueTz).time + ' ' + zl(e.venueTz);
     if (e.past) { c.recordingLabel = e.recording; if (e.rec) { c.ctaHref = 'event-page-recording.dc.html'; c.ctaLabel = 'Смотреть запись'; } }
     if (e.live && !e.past) { var reg = o.signedIn && e.registered; c.live = true; c.liveLabel = 'Идёт сейчас'; c.ctaHref = reg ? 'room.dc.html' : 'event-page.dc.html'; c.ctaLabel = reg ? 'Войти в комнату эфира' : 'Открыть страницу события'; }
     if (o.signedIn && e.registered && !e.past) { c.registered = true; c.registeredLabel = 'Вы записаны'; }

@@ -123,7 +123,7 @@ The Stage-A canvas `design-source/doctor-events.dc.html` (archived 2026-10-05, a
 
 ## Approved-mockup reference
 
-**Canvas:** [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) with its facet panel [`events-facets.dc.html`](../../../../../../design-source/events-facets.dc.html) at the doctor-storefront `host` — approved by the owner on 2026-10-05 (#2567); it absorbed the Stage-A canvas `doctor-events.dc.html` (#1450), now archived. It is the **single source of truth for composition, geometry and states**; this PRD's prose never overrides it (ADR-0013).
+**Canvas:** [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) with its facet panel drawn as the design-system block `EventsFilter`, at the doctor-storefront `host` — approved by the owner on 2026-10-05 (#2567); it absorbed the Stage-A canvas `doctor-events.dc.html` (#1450), now archived. It is the **single source of truth for composition, geometry and states**; this PRD's prose never overrides it (ADR-0013).
 
 **Canvas defaults are the working assumption for reading the design; the Stage-A pick is this PRD's fork table above.** Where a fork is still `PENDING`, the canvas default only documents what the drawing happens to show — it is **not** build authorisation: an explicit owner pick is required before implementation of that row, and no variant may be inferred from what the canvas renders (AGENTS.md §6, Stage A).
 

@@ -343,15 +343,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const email of createdEmails.splice(0))
         await deleteUserFixture(pool, "email", email);
       mailer.verificationCodeEmails.length = 0;
+      mailer.loginCodeEmails.length = 0;
       mailer.passwordResetCodeEmails.length = 0;
-      mailer.accountExistsNotices.length = 0;
+      mailer.reRegistrationCodeEmails.length = 0;
     });
 
     afterAll(async () => {
       await app.close();
     });
 
-    it("EARS-34: an email login-code request for an existing-UNVERIFIED account sends exactly one out-of-band verification email and arms NO otp_email challenge", async () => {
+    it("003 EARS-34/41: an email login-code request for an existing-UNVERIFIED account mails the verification code in the sign-in mail, and that code verifies the address and signs in", async () => {
       const email = uniqueEmail("unverified");
       await register(email); // unverified (no /verify)
       // Drop the registration cascade's own verification email — assert only what
@@ -362,24 +363,32 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(status).toBe(200);
       expect(body).toEqual({ status: "otp_sent" });
 
-      // Exactly one branded §13.3 verification-code email, out-of-band (EARS-29).
-      expect(mailer.verificationCodeEmails).toEqual([
-        { to: email, code: FAKE_VALID_CODE },
+      // EARS-34: exactly one sign-in mail carrying the verification code with
+      // its 1-hour lifetime — no registration verification mail (EARS-29).
+      expect(mailer.loginCodeEmails).toEqual([
+        { to: email, code: FAKE_VALID_CODE, lifetime: "1h" },
       ]);
+      expect(mailer.verificationCodeEmails).toEqual([]);
 
-      // NO otp_email login challenge was armed: submitting the (valid) code to the
-      // login-verify route is the same generic 401 with no session cookie.
+      // EARS-41: the same login-verify route accepts that code — it verifies
+      // the address and establishes the session.
       const verifyRes = await app.inject({
         method: "POST",
         url: "/v1/auth/login/otp",
         payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
       });
-      expect(verifyRes.statusCode).toBe(401);
+      expect(verifyRes.statusCode).toBe(200);
+      expect(verifyRes.json()).toEqual({ status: "authenticated" });
       const raw = verifyRes.headers["set-cookie"];
       const cookie = Array.isArray(raw)
         ? raw.join("\n")
         : ((raw as string) ?? "");
-      expect(cookie).not.toContain(SESSION_COOKIE_NAME);
+      expect(cookie).toContain(SESSION_COOKIE_NAME);
+      const { rows } = await pool.query(
+        "SELECT email_verified FROM users WHERE email = $1",
+        [email],
+      );
+      expect(rows[0]?.email_verified).toBe(true);
     });
 
     it("EARS-34: an email login-code request for a VERIFIED account arms the otp_email challenge and sends NO verification email", async () => {

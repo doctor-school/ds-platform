@@ -24,8 +24,9 @@ How feature 003 upholds it:
 - A registration on an **already-registered** email creates no account, consent,
   or audit row and returns the same `pending_verification` response as a fresh
   registration. The legitimate owner is reached **privately, out of band** — a
-  fire-and-forget, per-address-throttled _account-exists notice_ email that
-  carries no code or token and never alters the API response (EARS-23).
+  fire-and-forget, per-address-throttled _re-registration code_ email that
+  carries no link and never alters the API response; the code signs the owner
+  in (EARS-23).
 - The post-registration screen is **existence-agnostic** — it never branches on
   whether the account already existed (EARS-24).
 - Login and password-reset failures return a **generic** error and never reveal

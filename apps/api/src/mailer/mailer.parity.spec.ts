@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { FakeMailer } from "./mailer.fake.js";
 import { SmtpMailer } from "./smtp-mailer.js";
 import {
+  loginCodeEmail,
   verificationCodeEmail,
   passwordResetCodeEmail,
+  reRegistrationCodeEmail,
 } from "./code-emails.js";
 import {
-  accountExistsMessage,
   adminLockoutMessage,
   congressConfirmationMessage,
   congressSubmissionReceiptMessage,
@@ -28,7 +29,11 @@ describe("transactional HTML/plain-text content parity", () => {
   for (const [name, message] of [
     ["verification", verificationCodeEmail("GX5AVU")],
     ["reset", passwordResetCodeEmail("GX5AVU")],
-    ["account-exists", accountExistsMessage("https://academy.example.test")],
+    ["sign-in (verification code)", loginCodeEmail("GX5AVU", "1h")],
+    [
+      "re-registration",
+      reRegistrationCodeEmail("GX5AVU", { lifetime: "5m", passwordKept: true }),
+    ],
     ["admin-lockout", adminLockoutMessage()],
     [
       "congress-confirmation",
@@ -59,19 +64,6 @@ describe("transactional HTML/plain-text content parity", () => {
       expect(visibleHtml).toBe(message.text.replace(/\s+/g, " ").trim());
     });
   }
-
-  it("EARS-23: the configured login destination is escaped as one HTML attribute", () => {
-    const message = accountExistsMessage(
-      'https://academy.example.test/a&b"<test>',
-    );
-    expect(message.html).toContain(
-      'href="https://academy.example.test/a&amp;b&quot;&lt;test&gt;/login"',
-    );
-    expect(message.html).not.toContain("<test>");
-    expect(message.text).toContain(
-      'https://academy.example.test/a&b"<test>/login',
-    );
-  });
 });
 
 function buildSmtp(): SmtpMailer {
@@ -84,37 +76,39 @@ function buildSmtp(): SmtpMailer {
     }),
     real: undefined,
     isEnabled: () => false,
-    portalBaseUrl: "http://localhost:3001",
   });
 }
 
 describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {
-  it("EARS-23: when the email is invalid, both the fake and the real adapter shall reject", async () => {
+  const COPY = { lifetime: "1h", passwordKept: false } as const;
+
+  it("EARS-23: when the email is invalid, both the fake and the real adapter shall reject the re-registration mail", async () => {
     const fake = new FakeMailer();
     const smtp = buildSmtp();
     for (const bad of INVALID_EMAILS) {
       await expect(
-        fake.sendAccountExistsNotice(bad),
+        fake.sendReRegistrationCodeEmail(bad, "GX5AVU", COPY),
         `FakeMailer should reject ${JSON.stringify(bad)}`,
       ).rejects.toThrow();
       await expect(
-        smtp.sendAccountExistsNotice(bad),
+        smtp.sendReRegistrationCodeEmail(bad, "GX5AVU", COPY),
         `SmtpMailer should reject ${JSON.stringify(bad)}`,
       ).rejects.toThrow();
     }
   });
 
-  it("EARS-23: when the email is valid, both adapters shall accept (no throw)", async () => {
+  it("EARS-23: when the email is valid, both adapters shall accept the re-registration mail (no throw)", async () => {
     const fake = new FakeMailer();
     const smtp = buildSmtp();
     await expect(
-      fake.sendAccountExistsNotice(VALID_EMAIL),
+      fake.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", COPY),
     ).resolves.toBeUndefined();
-    // Configured SmtpMailer resolves on scripted acceptance for a valid address.
     await expect(
-      smtp.sendAccountExistsNotice(VALID_EMAIL),
+      smtp.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", COPY),
     ).resolves.toBeUndefined();
-    expect(fake.accountExistsNotices).toEqual([VALID_EMAIL]);
+    expect(fake.reRegistrationCodeEmails).toEqual([
+      { to: VALID_EMAIL, code: "GX5AVU", ...COPY },
+    ]);
   });
 });
 

@@ -74,7 +74,7 @@ lang: ru
 ## Ограничения
 
 - Заявке нужна действующая строка `registrations` для пары (аккаунт, событие) — форма сайта 044, стол регистрации 044 или путь платформы 044 EARS-16 (`packages/db/src/schema/registrations.ts`, уникальность `(user_id, event_id)`).
-- Ссылки писем на раздел — абсолютные адреса на origin витрины врача, который API читает из обязательной настройки `MAILER_DOCTOR_BASE_URL`; единственный origin почты сегодня, `MAILER_PORTAL_BASE_URL` (`apps/api/src/config/env.schema.ts`), — это Академия, и эти ссылки он не обслуживает. Значения и переход на корневой домен: `046-design.md` («Letters»).
+- Ссылки писем на раздел — абсолютные адреса на origin витрины врача, который API читает из обязательной настройки `MAILER_DOCTOR_BASE_URL` (`apps/api/src/config/env.schema.ts`). Значения и переход на корневой домен: `046-design.md` («Letters»).
 - Путь раздела `/account/congress` лежит внутри семейства аккаунта, которое `@ds/auth-flow` уже принимает как цель возврата (`packages/auth-flow/src/return-target.ts`, `parseAccountReturnTarget`, #1987); новая форма возврата и изменения входа не нужны.
 - Роли с областью события привязываются в `event_role_grants` (`packages/db/src/schema/event-role-grants.ts`, `EVENT_SCOPED_ROLES` и его CHECK); грубая роль остаётся в клейме ролей проекта Zitadel (`apps/api/src/authz/authz.types.ts`).
 - Мутации админки объявляют `revalidate: "live"` (ADR-0001 §10); A1 называет, какое право перепроверяется, и кроме `platform_admin` и `pd_officer` знает только `event-registrar`.

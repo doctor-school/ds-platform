@@ -7,6 +7,8 @@ import type {
   ConsentAcceptance,
   DoctorRegisterRequest,
   DoctorRegisterResponse,
+  DoctorVerifyRequest,
+  VerifyResponse,
 } from "@ds/schemas";
 import {
   DOCTOR_REGISTER_CONSENT_PURPOSES,
@@ -110,6 +112,56 @@ export class DoctorRegisterService {
    * is absent, then delegates the accepted registration to 003.
    */
   async register(req: DoctorRegisterRequest): Promise<DoctorRegisterResponse> {
+    const consent = this.requiredStampedConsents(req);
+
+    // The 003 engine, unchanged. Its response is the enumeration-safe
+    // `pending_verification` (EARS-16) that 021 EARS-13 requires this surface to
+    // render identically for a known and an unknown email.
+    return this.auth.register({
+      email: req.email,
+      password: req.password,
+      consent,
+      ...(req.captchaToken === undefined
+        ? {}
+        : { captchaToken: req.captchaToken }),
+    });
+  }
+
+  /**
+   * 003 EARS-23/41 — the doctor host's one code step. The in-tab registration
+   * values go through the SAME refusal and server-stamping as {@link register}
+   * (so a re-registration consent recorded after the code carries the wording
+   * version this door rendered, never a client claim), then the 003 engine
+   * checks the code, establishes the session and records only the purposes the
+   * account does not hold yet.
+   */
+  async verify(
+    req: DoctorVerifyRequest,
+    fingerprint: string,
+  ): Promise<{ cookie: string; body: VerifyResponse }> {
+    const registration = req.registration
+      ? {
+          password: req.registration.password,
+          consent: this.requiredStampedConsents(req.registration),
+        }
+      : undefined;
+    return this.auth.verify(
+      {
+        email: req.email,
+        code: req.code,
+        ...(registration ? { registration } : {}),
+      },
+      fingerprint,
+    );
+  }
+
+  /**
+   * EARS-4/5/7: the declared purposes, refused when an access condition is
+   * missing and stamped with this server's wording versions otherwise.
+   */
+  private requiredStampedConsents(
+    req: Pick<DoctorRegisterRequest, "medicalWorkerDeclaration" | "consent">,
+  ): ConsentAcceptance[] {
     const consent = this.accessConditionConsents(req);
 
     // 021 design §4 — "Record when withheld → command refused". The schema's
@@ -143,17 +195,7 @@ export class DoctorRegisterService {
       });
     }
 
-    // The 003 engine, unchanged. Its response is the enumeration-safe
-    // `pending_verification` (EARS-16) that 021 EARS-13 requires this surface to
-    // render identically for a known and an unknown email.
-    return this.auth.register({
-      email: req.email,
-      password: req.password,
-      consent,
-      ...(req.captchaToken === undefined
-        ? {}
-        : { captchaToken: req.captchaToken }),
-    });
+    return consent;
   }
 
   /**
@@ -189,7 +231,7 @@ export class DoctorRegisterService {
    * (021 design §4), not a second row and not a flag flip.
    */
   private accessConditionConsents(
-    req: DoctorRegisterRequest,
+    req: Pick<DoctorRegisterRequest, "medicalWorkerDeclaration" | "consent">,
   ): ConsentAcceptance[] {
     const granted = req.consent.flatMap((entry) => {
       // The declaration is derived from the flag above, never from the array.

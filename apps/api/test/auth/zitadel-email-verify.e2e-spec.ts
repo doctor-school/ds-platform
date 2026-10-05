@@ -43,15 +43,6 @@ const MAILPIT_BASE = (
 ).replace(/\/$/, "");
 
 /**
- * The portal origin the bare `/verify` navigation URL points at — the same
- * `MAILER_PORTAL_BASE_URL` source `IdpModule` plumbs into the adapter (#869),
- * defaulting to the api's own `DEFAULT_PORTAL_BASE_URL` recipe default.
- */
-const PORTAL_BASE = (
-  process.env.MAILER_PORTAL_BASE_URL ?? "http://localhost:3001"
-).replace(/\/+$/, "");
-
-/**
  * Mints a password that satisfies the `@ds/schemas` creation baseline
  * (`NewPassword`: ≥8 + upper + lower + digit + symbol) — which since #147 mirrors
  * the live Zitadel default complexity policy, so the same fixture clears both the
@@ -86,6 +77,7 @@ interface VerificationMail {
 async function fetchVerificationMail(
   email: string,
   afterIso: string,
+  subjectTail: string = NOTIFICATION_SUBJECTS.verifyEmail,
 ): Promise<VerificationMail | null> {
   const after = Date.parse(afterIso);
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -101,7 +93,7 @@ async function fetchVerificationMail(
         (m) =>
           m.Created &&
           Date.parse(m.Created) >= after &&
-          (m.Subject ?? "").includes(NOTIFICATION_SUBJECTS.verifyEmail),
+          (m.Subject ?? "").includes(subjectTail),
       );
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
@@ -151,12 +143,10 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
       },
       real: undefined,
       isEnabled: () => false,
-      portalBaseUrl: PORTAL_BASE,
     });
     client = new ZitadelIdpClient({
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
-      portalBaseUrl: PORTAL_BASE,
       mailer,
     });
   });
@@ -270,4 +260,40 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     // Async SMTP delivery + the create/resend settle + retry run past vitest's 5s
     // default; this is a live cross-service round-trip, not a unit test.
   }, 45_000);
+
+  it("003 EARS-41: the verification code mailed on a sign-in request verifies the address, invalidates the pre-verification password and signs in", async () => {
+    const email = newEmail();
+    const password = livePassword();
+    const created = await client.createUser({ email, password });
+    expect(created.alreadyExisted).toBe(false);
+    // Let the create-side code generation settle (see EARS-3 above).
+    await sleep(3000);
+
+    let result: Awaited<ReturnType<typeof client.submitEmailCode>> = null;
+    for (let attempt = 0; attempt < 3 && !result; attempt++) {
+      const sentAt = new Date().toISOString();
+      await expect(client.requestEmailLoginCode(email)).resolves.toBe(
+        "verification",
+      );
+      // EARS-34: the verification code travels in the sign-in mail.
+      const mail = await fetchVerificationMail(
+        email,
+        sentAt,
+        NOTIFICATION_SUBJECTS.verifyEmailOtp,
+      );
+      expect(mail, "sign-in mail should be delivered to Mailpit").toBeTruthy();
+      expect(mail!.Text).toContain("Код действует 1 час");
+      const code = mail!.Subject.slice(0, 6);
+      result = await client.submitEmailCode(email, code);
+      if (!result) await sleep(2000);
+    }
+
+    expect(result).toMatchObject({ sub: created.sub, verifiedNow: true });
+    expect(result!.session?.sessionToken).toBeTruthy();
+    expect((await client.getUser(created.sub))?.emailVerified).toBe(true);
+    // No pre-verification password survives the first accepted code.
+    await expect(client.passwordLogin(email, password)).resolves.toEqual({
+      outcome: "rejected",
+    });
+  }, 60_000);
 });

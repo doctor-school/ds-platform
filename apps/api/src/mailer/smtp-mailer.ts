@@ -1,6 +1,5 @@
 import { emailSender } from "./email-layout.js";
 import {
-  accountExistsMessage,
   adminLockoutMessage,
   congressConfirmationMessage,
   congressSubmissionReceiptMessage,
@@ -10,7 +9,10 @@ import { resolveRealSmtp } from "../config/real-smtp.js";
 import {
   loginCodeEmail,
   passwordResetCodeEmail,
+  reRegistrationCodeEmail,
   verificationCodeEmail,
+  type CodeLifetime,
+  type ReRegistrationCopyInput,
 } from "./code-emails.js";
 import {
   assertSendableCode,
@@ -66,7 +68,6 @@ export interface SmtpMailerConfig {
   resend?: ResendChannelConfig | undefined;
   observability?: RelayObservability | undefined;
   isEnabled: () => boolean;
-  portalBaseUrl: string;
   synthetic?: SyntheticSuppression | undefined;
   transportFactory?: TransportFactory | undefined;
   warn?: WarnFn | undefined;
@@ -78,14 +79,6 @@ export class SmtpMailer implements Mailer {
   constructor(private readonly config: SmtpMailerConfig) {
     this.observability =
       config.observability ?? new DefaultRelayObservability();
-  }
-  async sendAccountExistsNotice(email: string): Promise<void> {
-    assertSendableEmail(email);
-    await this.dispatch(
-      email,
-      accountExistsMessage(this.config.portalBaseUrl),
-      "account-exists notice",
-    );
   }
   async sendAdminLockoutNotice(email: string): Promise<void> {
     assertSendableEmail(email);
@@ -109,10 +102,31 @@ export class SmtpMailer implements Mailer {
       "password-reset-code email",
     );
   }
-  async sendLoginCodeEmail(email: string, code: string): Promise<void> {
+  async sendLoginCodeEmail(
+    email: string,
+    code: string,
+    lifetime: CodeLifetime = "5m",
+  ): Promise<void> {
     assertSendableEmail(email);
     assertSendableCode(code);
-    await this.dispatch(email, loginCodeEmail(code), "login-code email");
+    await this.dispatch(
+      email,
+      loginCodeEmail(code, lifetime),
+      "login-code email",
+    );
+  }
+  async sendReRegistrationCodeEmail(
+    email: string,
+    code: string,
+    input: ReRegistrationCopyInput,
+  ): Promise<void> {
+    assertSendableEmail(email);
+    assertSendableCode(code);
+    await this.dispatch(
+      email,
+      reRegistrationCodeEmail(code, input),
+      "re-registration code email",
+    );
   }
   async sendCongressRegistrationConfirmation(
     input: CongressConfirmationRequest,

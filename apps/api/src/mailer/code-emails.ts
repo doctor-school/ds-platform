@@ -90,11 +90,58 @@ export function passwordResetCodeEmail(code: string): CodeEmailMessage {
   return compose(code, RESET_COPY);
 }
 
-/** EARS-6: Zitadel login OTP retains its eight digits and five-minute lifetime. */
-export function loginCodeEmail(code: string): CodeEmailMessage {
-  return compose(code, {
-    ...VERIFY_COPY,
-    subjectTail: CODE_EMAIL_SUBJECT_TAILS.login,
-    intro: "Ваш код для входа:",
-  }, "Код действует 5 минут.");
+/**
+ * The lifetime of the code a sign-in mail carries (design §13.5): the
+ * `OTP_EMAIL` login code lives 300 s, the verification code an unverified
+ * account receives in the same mail lives 3600 s.
+ */
+export type CodeLifetime = "5m" | "1h";
+
+function expiryLine(lifetime: CodeLifetime): string {
+  return lifetime === "5m" ? "Код действует 5 минут." : EXPIRY_LINE;
+}
+
+const LOGIN_COPY: CodeEmailCopy = {
+  ...VERIFY_COPY,
+  subjectTail: CODE_EMAIL_SUBJECT_TAILS.login,
+  intro: "Ваш код для входа:",
+};
+
+/** 003 EARS-6/34: the sign-in code mail, for either code kind (design §13.5). */
+export function loginCodeEmail(
+  code: string,
+  lifetime: CodeLifetime = "5m",
+): CodeEmailMessage {
+  return compose(code, LOGIN_COPY, expiryLine(lifetime));
+}
+
+/** What the re-registration mail says about the account's password. */
+export interface ReRegistrationCopyInput {
+  lifetime: CodeLifetime;
+  /** True only for a verified account that holds a password (003 EARS-23). */
+  passwordKept: boolean;
+}
+
+/**
+ * 003 EARS-23: the re-registration mail — the code EARS-34 would issue, «already
+ * registered» copy and the password line; no link (design §13.5).
+ */
+export function reRegistrationCodeEmail(
+  code: string,
+  input: ReRegistrationCopyInput,
+): CodeEmailMessage {
+  return composeEmail({
+    subject: `${code} — ${CODE_EMAIL_SUBJECT_TAILS.login}`,
+    preheader: "Этот адрес уже зарегистрирован в Doctor.School",
+    intro:
+      "Этот адрес уже зарегистрирован в Doctor.School. Ваш код для входа:",
+    code: { value: code, expiry: expiryLine(input.lifetime) },
+    paragraphs: [
+      input.passwordKept
+        ? "Ваш пароль не изменился."
+        : "Пароль, который вы ввели при регистрации, сохранится после ввода кода.",
+      LOGIN_COPY.instruction,
+    ],
+    footer: [LOGIN_COPY.ignoreLine],
+  });
 }

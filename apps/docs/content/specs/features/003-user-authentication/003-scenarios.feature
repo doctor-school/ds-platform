@@ -83,6 +83,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then email_verified becomes true and a BFF session is established
     And the submitted password now signs in
     And profile fields the account already holds are not overwritten
+    And the platform consent ticked on the form is recorded only after the code is accepted
+
+  @EARS-23 @EARS-41 @happy
+  Scenario: Re-registration never overwrites an existing platform consent
+    Given a verified account for "owner@example.org" that already holds a platform consent
+    When a visitor submits the registration form for "owner@example.org" with accepted consent versions
+    And enters the code from the mail on the code step
+    Then a BFF session is established
+    And no second platform consent row is written and the existing consent is unchanged
 
   @EARS-23 @failure
   Scenario: Repeated duplicate registrations do not flood the inbox

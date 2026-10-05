@@ -24,13 +24,6 @@ import {
 const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
 
 /**
- * Default portal origin when `MAILER_PORTAL_BASE_URL` is unset — the notice
- * links here AND the Zitadel verification email's bare `/verify` navigation
- * URL (`IdpModule`, #869) share this single portal-origin source.
- */
-export const DEFAULT_PORTAL_BASE_URL = "http://localhost:3001";
-
-/**
  * Resolve the throttle HMAC pepper. Reuses {@link AUDIT_IDENTIFIER_PEPPER} so the
  * `register-notice:<HMAC>` key is non-reversible (#141); under VITEST a fixed
  * test pepper keeps the suite runnable without provisioning a secret. Unlike the
@@ -127,7 +120,6 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
               FLAG_EMAIL_DELIVERY_REAL,
               env.EMAIL_DELIVERY_MODE === "real",
             ),
-          portalBaseUrl: env.MAILER_PORTAL_BASE_URL ?? DEFAULT_PORTAL_BASE_URL,
         });
       },
     },

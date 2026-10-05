@@ -1,12 +1,13 @@
+import type { CodeLifetime, ReRegistrationCopyInput } from "./code-emails.js";
+
 /**
  * The BFF's own transactional-email channel (003 EARS-23/29, design §4, §14).
  * Two mail classes ride this port:
  *
- * - **Product / security notices** that must never carry a secret — the
- *   account-exists notice (EARS-23) is the first consumer; lockout / welcome
- *   mails are future ones.
- * - **One-time-code credential emails** (EARS-29, #910/#1045): the email-verify
- *   and password-reset codes are obtained from Zitadel via `returnCode`
+ * - **Product / security notices** that must never carry a secret (the 011
+ *   admin-lockout notice, the congress letters).
+ * - **One-time-code credential emails** (EARS-23/29/34, #910/#1045): the
+ *   email-verify, sign-in, re-registration and password-reset codes are obtained from Zitadel via `returnCode`
  *   (Zitadel generates/stores/expires/verifies the code but sends nothing) and
  *   delivered as the branded, Russian, code-only, fully link-free §13.3/§13.4
  *   artifacts. The BFF transports the code; it never generates or checks one.
@@ -49,17 +50,6 @@ export interface CongressSubmissionReceiptRequest {
 
 export interface Mailer {
   /**
-   * EARS-23: send the account-exists notice to `email` — a sign-in
-   * prompt for a registration attempt on an already-registered
-   * address. It carries **no** verification code, login code, token, or
-   * account/PD.
-   *
-   * Implementations MUST reject an empty / blank / syntactically invalid email
-   * (contract parity: the fake is no more permissive than the real adapter).
-   */
-  sendAccountExistsNotice(email: string): Promise<void>;
-
-  /**
    * EARS-29: dispatch the §13.3 email-verification artifact — the one-time
    * code as the ONLY payload (code-led subject, unbroken enlarged token,
    * expiry line, zero links). Serves both the EARS-1/3 registration cascade
@@ -75,8 +65,27 @@ export interface Mailer {
    */
   sendPasswordResetCodeEmail(email: string, code: string): Promise<void>;
 
-  /** EARS-6/29: login code, same validation/privacy contract, five-minute expiry. */
-  sendLoginCodeEmail(email: string, code: string): Promise<void>;
+  /**
+   * EARS-6/29/34: the sign-in code mail, same validation/privacy contract.
+   * `lifetime` states the carried code's expiry: `"5m"` for a login code
+   * (default), `"1h"` for the verification code of an unverified account.
+   */
+  sendLoginCodeEmail(
+    email: string,
+    code: string,
+    lifetime?: CodeLifetime,
+  ): Promise<void>;
+
+  /**
+   * EARS-23: the re-registration code mail for an already-registered address —
+   * same validation/privacy contract as {@link sendLoginCodeEmail}, «already
+   * registered» copy and the password line, no link.
+   */
+  sendReRegistrationCodeEmail(
+    email: string,
+    code: string,
+    input: ReRegistrationCopyInput,
+  ): Promise<void>;
 
   /**
    * 011 EARS-7: notify an admin that repeated failed second-factor attempts have

@@ -81,7 +81,6 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
                 from: "sender@ds.test",
               },
         isEnabled: () => scenario !== "smtp-stall",
-        portalBaseUrl: "https://portal.ds.test",
         observability: { relayFailure, failover, accepted },
         transportFactory: fallback
           ? () => ({
@@ -238,10 +237,12 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
           );
         }
         // Wait for every real delivery attempt before fixture teardown — per
-        // round: new account, resend, reset; plus ONE account-exists notice,
-        // since the per-address notice throttle sends the duplicate `email`
-        // a single notice however often it re-registers. Failed resend must
-        // not create a success row.
+        // round: new account, resend, reset; plus ONE re-registration code mail
+        // (003 EARS-23), since the per-address throttle sends the duplicate
+        // `email` a single code however often it re-registers. Failed resend
+        // must not create a success row; the re-registration code is recorded
+        // when it is issued, independent of its delivery — exactly as a
+        // login-code request is (EARS-18/34).
         const deliveries = 3 * rounds + 1;
         await vi.waitFor(
           () =>
@@ -253,16 +254,19 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
         await vi.waitFor(() =>
           expect(
             audit.mock.calls.filter(([event]) => event.type === "OtpSent"),
-          ).toHaveLength(scenario === "fallback-accept" ? rounds : 0),
+          ).toHaveLength(scenario === "fallback-accept" ? rounds + 1 : 1),
         );
         expect(
           audit.mock.calls.filter(
             ([event]) => event.type === "PasswordResetRequested",
           ),
         ).toHaveLength(2 * rounds);
+        // The resends, and the duplicate's one re-registration code for the
+        // still unverified account (003 EARS-23 — its verification code is
+        // re-issued, throttled per address).
         expect(
           nativeCalls.filter((p) => p.endsWith("/email/resend")),
-        ).toHaveLength(rounds);
+        ).toHaveLength(rounds + 1);
         expect(
           nativeCalls.filter((p) => p.endsWith("/password_reset")),
         ).toHaveLength(rounds);

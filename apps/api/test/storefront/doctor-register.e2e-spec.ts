@@ -217,11 +217,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(rows[0].role).toBe("doctor_guest");
     });
 
-    it("003 EARS-23: a repeat registration through the DOCTOR door dispatches the account-exists notice, with the response unchanged", async () => {
+    it("003 EARS-23: a repeat registration through the DOCTOR door dispatches the re-registration code mail, with the response unchanged", async () => {
       // The gap this closes, found while driving the Stage-B slot: a doctor who
       // registers twice on doctor.school gets the identical EARS-16 response,
-      // and the only thing that tells the legitimate owner what happened is the
-      // EARS-23 notice. `AuthService.register` dispatches it for BOTH doors —
+      // and the only thing that lets the legitimate owner continue is the
+      // EARS-23 code mail. `AuthService.register` dispatches it for BOTH doors —
       // but nothing here proved the storefront door reaches that branch, so a
       // future storefront-local short-circuit of the duplicate case would have
       // left the owner silently stranded with a green suite.
@@ -235,7 +235,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       const first = await app.inject({ method: "POST", url: URL, payload });
       expect(first.statusCode).toBe(200);
-      const noticesBefore = mailer.accountExistsNotices.length;
+      const mailsBefore = mailer.reRegistrationCodeEmails.length;
 
       const second = await app.inject({ method: "POST", url: URL, payload });
 
@@ -249,9 +249,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // assertion polls instead of reading once: a single read would be a race
       // that passes on a fast machine and flakes on CI.
       await expect
-        .poll(() => mailer.accountExistsNotices.slice(noticesBefore), {
-          timeout: 5_000,
-        })
+        .poll(
+          () =>
+            mailer.reRegistrationCodeEmails
+              .slice(mailsBefore)
+              .map((mail) => mail.to),
+          { timeout: 5_000 },
+        )
         .toEqual([email.toLowerCase()]);
 
       // The duplicate registers NOTHING: still exactly the one account the

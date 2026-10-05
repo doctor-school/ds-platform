@@ -5,11 +5,15 @@ import {
   type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
+import type {
+  CodeLifetime,
+  ReRegistrationCopyInput,
+} from "./code-emails.js";
 
 /**
  * In-memory {@link Mailer} — the unit-test double. Records every accepted send so
- * a test can assert exactly one account-exists notice (EARS-23) or exactly one
- * code-only credential email (EARS-29) fired. Mirrors `InMemoryAuthAuditLog` /
+ * a test can assert exactly one code-only credential email (EARS-23/29/34)
+ * fired. Mirrors `InMemoryAuthAuditLog` /
  * `FakeIdpClient`: the fake binding for assertions.
  *
  * Contract parity (a test fake must be no more permissive than the real
@@ -21,15 +25,22 @@ import {
  * production adapters hold it in memory only for the in-flight send, EARS-30.)
  */
 export class FakeMailer implements Mailer {
-  /** Lowercased recipient addresses of every accepted account-exists notice, in order. */
-  readonly accountExistsNotices: string[] = [];
   /** Lowercased recipients of every accepted 011 EARS-7 admin-lockout notice, in order. */
   readonly adminLockoutNotices: string[] = [];
   /** Every accepted §13.3 verification-code send (EARS-1/3/25), in order. */
   readonly verificationCodeEmails: Array<{ to: string; code: string }> = [];
   /** Every accepted §13.4 password-reset-code send (EARS-11), in order. */
   readonly passwordResetCodeEmails: Array<{ to: string; code: string }> = [];
-  readonly loginCodeEmails: Array<{ to: string; code: string }> = [];
+  /** Every accepted sign-in code send (EARS-6/34), with the stated lifetime. */
+  readonly loginCodeEmails: Array<{
+    to: string;
+    code: string;
+    lifetime: CodeLifetime;
+  }> = [];
+  /** Every accepted EARS-23 re-registration code send, in order. */
+  readonly reRegistrationCodeEmails: Array<
+    { to: string; code: string } & ReRegistrationCopyInput
+  > = [];
   /** Every accepted 044 EARS-13 congress confirmation, in order. */
   readonly congressConfirmations: Array<
     CongressConfirmationRequest & { to: string }
@@ -71,11 +82,6 @@ export class FakeMailer implements Mailer {
   // `async` so the parity guard's rejection is delivered as a rejected promise
   // (like the real adapter's `async` method), never a synchronous throw — the two
   // adapters must be indistinguishable to a caller, including in error shape.
-  async sendAccountExistsNotice(email: string): Promise<void> {
-    assertSendableEmail(email);
-    this.accountExistsNotices.push(email.trim().toLowerCase());
-  }
-
   async sendAdminLockoutNotice(email: string): Promise<void> {
     assertSendableEmail(email);
     this.adminLockoutNotices.push(email.trim().toLowerCase());
@@ -91,11 +97,34 @@ export class FakeMailer implements Mailer {
     });
   }
 
-  async sendLoginCodeEmail(email: string, code: string): Promise<void> {
+  async sendLoginCodeEmail(
+    email: string,
+    code: string,
+    lifetime: CodeLifetime = "5m",
+  ): Promise<void> {
     assertSendableEmail(email);
     assertSendableCode(code);
     if (this.nextCodeSendFailure) throw this.nextCodeSendFailure;
-    this.loginCodeEmails.push({ to: email.trim().toLowerCase(), code });
+    this.loginCodeEmails.push({
+      to: email.trim().toLowerCase(),
+      code,
+      lifetime,
+    });
+  }
+
+  async sendReRegistrationCodeEmail(
+    email: string,
+    code: string,
+    input: ReRegistrationCopyInput,
+  ): Promise<void> {
+    assertSendableEmail(email);
+    assertSendableCode(code);
+    if (this.nextCodeSendFailure) throw this.nextCodeSendFailure;
+    this.reRegistrationCodeEmails.push({
+      to: email.trim().toLowerCase(),
+      code,
+      ...input,
+    });
   }
 
   async sendPasswordResetCodeEmail(

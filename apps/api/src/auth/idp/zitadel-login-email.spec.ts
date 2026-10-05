@@ -42,7 +42,6 @@ function setup(
   const mailer = new SmtpMailer({
     intercept: { host: "smtp.test" },
     isEnabled: () => false,
-    portalBaseUrl: "https://portal.test",
     transportFactory: () => ({
       sendMail: async (email) => {
         emails.push(email);
@@ -133,6 +132,8 @@ describe("login email shared template", () => {
     expect(emails).toEqual([]);
     expect(fake.loginCodeEmails).toEqual([]);
     await fake.sendLoginCodeEmail("Doc@ds.test", CODE);
-    expect(fake.loginCodeEmails).toEqual([{ to: "doc@ds.test", code: CODE }]);
+    expect(fake.loginCodeEmails).toEqual([
+      { to: "doc@ds.test", code: CODE, lifetime: "5m" },
+    ]);
   });
 });

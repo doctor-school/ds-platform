@@ -124,7 +124,6 @@ function makeMailer(opts: MailerFixtureOptions): {
             fetchFn: opts.resendFetch,
           },
     isEnabled: () => opts.flagOn ?? true,
-    portalBaseUrl: "https://academy.doctor.school",
     transportFactory: (o) =>
       o.host === "smtp.mail.ru" ? real.transport : intercept.transport,
     observability: opts.observability,
@@ -252,7 +251,6 @@ describe("003 EARS-31 SmtpMailer failover chain (design §14.3)", () => {
         fetchFn: resend.fetchFn,
       },
       isEnabled: () => true,
-      portalBaseUrl: "https://academy.doctor.school",
       observability: obs.sink,
       warn: () => {},
     });

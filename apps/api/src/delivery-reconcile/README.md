@@ -3,7 +3,7 @@
 `DeliveryReconcileModule` reconciles the `email-delivery-real` and
 `sms-delivery-real` flags onto Zitadel notification providers. Verified-account
 login email OTP remains generated, rendered and sent by Zitadel. BFF verify/reset
-and account-exists emails use `MailerModule` and its separate send chain.
+and re-registration code emails use `MailerModule` and its separate send chain.
 
 `DeliveryReconcileService` subscribes to flag changes and initial SDK synchronization
 before the bounded startup reconcile. It uses env defaults until flags synchronize.

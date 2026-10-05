@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ConsentAcceptanceSchema,
   NewPasswordSchema,
+  VerifyRequestSchema,
 } from "../auth/auth.schema.js";
 
 /**
@@ -258,3 +259,30 @@ export const DoctorRegisterResponseSchema = z.strictObject({
 export type DoctorRegisterResponse = z.infer<
   typeof DoctorRegisterResponseSchema
 >;
+
+/**
+ * 003 EARS-23/41 on the doctor storefront — the in-tab registration values the
+ * one code step carries to `POST /v1/storefront/doctor/verify`. The same
+ * fields, with the same rules, as {@link DoctorRegisterRequestSchema}: the
+ * declaration is a literal `true`, presence of a purpose in `consent` is its
+ * grant, and every version is stamped by the server — the one this door's
+ * register stamps — so a client-sent version is never recorded.
+ */
+export const DoctorVerifyRegistrationSchema = z.object({
+  password: NewPasswordSchema,
+  medicalWorkerDeclaration: z.literal(true),
+  consent: z.array(DoctorRegisterConsentAcceptanceSchema).default([]),
+});
+export type DoctorVerifyRegistration = z.infer<
+  typeof DoctorVerifyRegistrationSchema
+>;
+
+/**
+ * The doctor host's code-step request: the 003 verify request whose optional
+ * `registration` is this door's own. The response is the 003
+ * `VerifyResponse`, and the session cookie is set exactly as on 003 `/verify`.
+ */
+export const DoctorVerifyRequestSchema = VerifyRequestSchema.extend({
+  registration: DoctorVerifyRegistrationSchema.optional(),
+});
+export type DoctorVerifyRequest = z.infer<typeof DoctorVerifyRequestSchema>;

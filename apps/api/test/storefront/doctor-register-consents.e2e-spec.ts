@@ -17,7 +17,10 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
-import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import {
+  FakeIdpClient,
+  FAKE_VALID_CODE,
+} from "../../src/auth/idp/idp.fake.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -573,6 +576,84 @@ describe.skipIf(!process.env.DATABASE_URL)(
         MEDICAL_WORKER_DECLARATION_PURPOSE,
         PARTNER_DATA_SHARING_PURPOSE,
       ]);
+    });
+
+    // 003 EARS-23/41 on the doctor host: the one code step submits the in-tab
+    // registration values to the host's own verify door, which stamps the
+    // consent wording versions exactly as this host's register door does —
+    // a client-sent version is never recorded.
+    it("003 EARS-23: the doctor verify door records a re-registration consent the account lacks with the server-stamped version, never duplicating a held one", async () => {
+      const email = uniqueEmail("verify-stamp");
+      const registered = await app.inject({
+        method: "POST",
+        url: URL,
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: [{ purpose: PARTNER_DATA_SHARING_PURPOSE, version: "x" }],
+        },
+      });
+      expect(registered.statusCode).toBe(200);
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        payload: {
+          email,
+          code: FAKE_VALID_CODE,
+          registration: {
+            password: PASSWORD,
+            medicalWorkerDeclaration: true,
+            consent: [
+              { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "client-lie" },
+              {
+                purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+                version: "client-lie",
+              },
+            ],
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: "verified" });
+      // EARS-41: the session comes from the code.
+      expect(String(res.headers["set-cookie"] ?? "")).toMatch(/^__Host-/);
+      const rows = (await consentRowsFor(email)).map((row) => ({
+        purpose: row.purpose,
+        version: row.version,
+      }));
+      expect(rows).toEqual([
+        {
+          purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+          version: MARKETING_COMMUNICATIONS_VERSION,
+        },
+        {
+          purpose: MEDICAL_WORKER_DECLARATION_PURPOSE,
+          version: MEDICAL_WORKER_DECLARATION_VERSION,
+        },
+        {
+          purpose: PARTNER_DATA_SHARING_PURPOSE,
+          version: PARTNER_DATA_SHARING_VERSION,
+        },
+      ]);
+    });
+
+    it("003 EARS-41: the doctor verify door refuses a registration without the declaration before the code is checked", async () => {
+      const email = uniqueEmail("verify-no-declaration");
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        payload: {
+          email,
+          code: FAKE_VALID_CODE,
+          registration: { password: PASSWORD, medicalWorkerDeclaration: false },
+        },
+      });
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(res.statusCode).toBeLessThan(500);
+      expect(res.headers["set-cookie"]).toBeUndefined();
     });
   },
 );

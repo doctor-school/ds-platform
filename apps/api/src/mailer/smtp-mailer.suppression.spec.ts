@@ -43,7 +43,6 @@ function buildMailer(synthetic: SyntheticSuppression): {
   const mailer = new SmtpMailer({
     intercept: interceptCfg,
     isEnabled: () => false, // intercept (Mailpit) transport — the send point under test
-    portalBaseUrl: "http://localhost:3001",
     transportFactory: rec.factory,
     synthetic,
   });
@@ -76,7 +75,7 @@ describe("SmtpMailer synthetic-send suppression (003 EARS-33)", () => {
 
     await mailer.sendVerificationCodeEmail("burst@loadtest.invalid", CODE);
     await mailer.sendPasswordResetCodeEmail("burst2@loadtest.invalid", CODE);
-    await mailer.sendAccountExistsNotice("burst3@loadtest.invalid");
+    await mailer.sendLoginCodeEmail("burst3@loadtest.invalid", CODE);
 
     // The transport is NEVER contacted — zero real send leaves the box.
     expect(sends).toHaveLength(0);
@@ -110,7 +109,6 @@ describe("SmtpMailer synthetic-send suppression (003 EARS-33)", () => {
     const mailer = new SmtpMailer({
       intercept: interceptCfg,
       isEnabled: () => false,
-      portalBaseUrl: "http://localhost:3001",
       transportFactory: rec.factory,
     });
     await mailer.sendVerificationCodeEmail("burst@loadtest.invalid", CODE);

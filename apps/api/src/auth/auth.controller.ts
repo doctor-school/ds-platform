@@ -210,7 +210,7 @@ export class AuthController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-6", "EARS-7", "EARS-8"],
+    tests: ["EARS-6", "EARS-7", "EARS-8", "EARS-41"],
   })
   async loginWithOtp(
     @Body() dto: OtpVerifyDto,
@@ -315,6 +315,12 @@ export class AuthController {
     return { status: "logged_out" };
   }
 
+  /**
+   * 003 EARS-3/41: submit the registration code step. Public (the code is the
+   * authenticator). On success it sets the `__Host-` cookie — the session comes
+   * from the code — and returns a token-free body; every failure is the same
+   * generic 400 (EARS-16).
+   */
   @Post("verify")
   @Public()
   @RateLimited()
@@ -323,10 +329,19 @@ export class AuthController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-3", "EARS-4"],
+    tests: ["EARS-3", "EARS-4", "EARS-41"],
   })
-  verify(@Body() dto: VerifyRequestDto): Promise<VerifyResponse> {
-    return this.auth.verify(dto);
+  async verify(
+    @Body() dto: VerifyRequestDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<VerifyResponse> {
+    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    const { cookie, body } = await this.auth.verify(dto, fingerprint);
+    reply.header("set-cookie", cookie);
+    return body;
   }
 
   /**

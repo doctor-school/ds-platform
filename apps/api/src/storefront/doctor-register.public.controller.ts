@@ -1,11 +1,25 @@
-import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
-import type { DoctorRegisterResponse } from "@ds/schemas";
+import {
+  Body,
+  Controller,
+  Headers,
+  HttpCode,
+  Inject,
+  Ip,
+  Post,
+  Res,
+} from "@nestjs/common";
+import type { FastifyReply } from "fastify";
+import type { DoctorRegisterResponse, VerifyResponse } from "@ds/schemas";
 
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
 import { RateLimited } from "../auth/rate-limit/index.js";
 import { TimingEqualized } from "../auth/timing/index.js";
-import { DoctorRegisterRequestDto } from "./doctor-register.dto.js";
+import { computeFingerprint } from "../auth/session/session.cookie.js";
+import {
+  DoctorRegisterRequestDto,
+  DoctorVerifyRequestDto,
+} from "./doctor-register.dto.js";
 import { DoctorRegisterService } from "./doctor-register.service.js";
 
 /**
@@ -61,5 +75,35 @@ export class DoctorRegisterPublicController {
     @Body() dto: DoctorRegisterRequestDto,
   ): Promise<DoctorRegisterResponse> {
     return this.doctorRegister.register(dto);
+  }
+
+  /**
+   * `POST /v1/storefront/doctor/verify` — the doctor host's one code step
+   * (003 EARS-23/41). The 003 `/verify` contract — same guards, same generic
+   * 400 on every failure (EARS-16), the `__Host-` session cookie on success —
+   * with this door's registration values, whose consent versions are stamped
+   * exactly as {@link register} stamps them.
+   */
+  @Post("verify")
+  @Public()
+  @RateLimited()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-41"],
+  })
+  async verify(
+    @Body() dto: DoctorVerifyRequestDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<VerifyResponse> {
+    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    const { cookie, body } = await this.doctorRegister.verify(dto, fingerprint);
+    reply.header("set-cookie", cookie);
+    return body;
   }
 }

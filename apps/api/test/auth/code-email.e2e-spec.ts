@@ -71,7 +71,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await deleteUserFixture(pool, "email", email);
       mailer.verificationCodeEmails.length = 0;
       mailer.passwordResetCodeEmails.length = 0;
-      mailer.accountExistsNotices.length = 0;
+      mailer.reRegistrationCodeEmails.length = 0;
     });
 
     afterAll(async () => {
@@ -93,9 +93,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(mailer.verificationCodeEmails).toEqual([
         { to: email, code: FAKE_VALID_CODE },
       ]);
-      // …and ONLY that artifact: no reset mail, no account-exists notice.
+      // …and ONLY that artifact: no reset mail, no re-registration code mail.
       expect(mailer.passwordResetCodeEmails).toEqual([]);
-      expect(mailer.accountExistsNotices).toEqual([]);
+      expect(mailer.reRegistrationCodeEmails).toEqual([]);
     });
 
     it("003 EARS-29.2: a resend re-issues the code as ONE more BFF-mailer email; an unknown identifier sends nothing, same response", async () => {

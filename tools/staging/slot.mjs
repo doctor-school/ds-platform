@@ -1036,7 +1036,6 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     `CENTRIFUGO_URL=https://${hosts.api}`,
     `IDP_ISSUER=https://${idpHostname(baseDomain)}`,
     `IDP_REDIRECT_URI=https://${hosts.api}/auth/callback`,
-    `MAILER_PORTAL_BASE_URL=https://${hosts.academy}`,
     // 046 «Letters» — the congress letters link to the slot's own doctor
     // storefront; a required api boot key.
     `MAILER_DOCTOR_BASE_URL=https://${hosts.doctor}`,

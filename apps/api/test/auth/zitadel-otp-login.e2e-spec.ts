@@ -338,7 +338,6 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
           port: Number(process.env.MAILER_SMTP_PORT ?? 1025),
         },
         isEnabled: () => false,
-        portalBaseUrl: process.env.IDP_REDIRECT_URI!,
       }),
       fetchImpl: diagnosticFetch(globalThis.fetch, providerDiagnostics),
       baseUrl: process.env.IDP_ISSUER!,

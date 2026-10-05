@@ -229,6 +229,73 @@ export function parseVerifyCodeLength(sourceText) {
 }
 
 /**
+ * Read `LOGIN_OTP_CODE_LENGTH` out of `infra/dev-stand/idp/provision.sh` at the
+ * deployed SHA. provision.sh runs from the TARGET commit, so only that commit's
+ * step 8.septies decides whether the login OTP generators converge at all.
+ *
+ * @param {string} provisionText contents of provision.sh at the target SHA
+ * @returns {number | null} the length, or `null` when the target has no step
+ *   8.septies (a pre-#2555 commit: the generators are left as they are)
+ * @throws {IdpPolicyError} when the constant is present but not a positive
+ *   numeric literal — the deploy refuses to guess
+ */
+export function parseLoginOtpCodeLength(provisionText) {
+  if (typeof provisionText !== "string") {
+    throw new IdpPolicyError(
+      "cannot read infra/dev-stand/idp/provision.sh at the target SHA — not a text body",
+    );
+  }
+  const line = /^LOGIN_OTP_CODE_LENGTH=(.*)$/m.exec(provisionText);
+  if (!line) return null;
+  const m = /^(\d+)\s*$/.exec(line[1]);
+  const value = m ? Number(m[1]) : NaN;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new IdpPolicyError(
+      `provision.sh defines LOGIN_OTP_CODE_LENGTH=${line[1]} — not a positive numeric` +
+        " literal; the deploy refuses to guess the login OTP code length.",
+    );
+  }
+  return value;
+}
+
+/**
+ * Decide what the deploy's login OTP read-back checks, from the TARGET commit's
+ * own sources. A target whose provision.sh has no step 8.septies never converges
+ * the generators, so the gate is skipped (a `--ref` hotfix to a pre-#2555 commit
+ * ships an app and an IdP that agree on the inherited format). A target WITH the
+ * step must also ship an app whose `VERIFY_CODE_LENGTH` matches it — otherwise
+ * the converge would succeed and every sign-in code would be rejected.
+ *
+ * @param {{provisionText: string, verifyCodeSchemaText: string}} sources
+ * @returns {{check: true, length: number} | {check: false, reason: string}}
+ * @throws {IdpPolicyError}
+ */
+export function resolveLoginOtpExpectation({
+  provisionText,
+  verifyCodeSchemaText,
+}) {
+  const length = parseLoginOtpCodeLength(provisionText);
+  if (length === null) {
+    return {
+      check: false,
+      reason:
+        "skipped: target provision.sh does not converge login OTP generators" +
+        " (no LOGIN_OTP_CODE_LENGTH / step 8.septies) — the instance keeps its" +
+        " current generators",
+    };
+  }
+  const appLength = parseVerifyCodeLength(verifyCodeSchemaText);
+  if (appLength !== length) {
+    throw new IdpPolicyError(
+      `target provision.sh converges LOGIN_OTP_CODE_LENGTH=${length} but the shipped` +
+        ` app accepts VERIFY_CODE_LENGTH=${appLength} — sign-in codes would not match` +
+        " the code input.",
+    );
+  }
+  return { check: true, length };
+}
+
+/**
  * Verdict on one LIVE login OTP generator, read back from
  * `GET /admin/v1/secretgenerators/{type}`. Absent alphabet flags read as
  * `false` (proto3 defaults are dropped from the body — see
@@ -237,7 +304,7 @@ export function parseVerifyCodeLength(sourceText) {
  * deploy's to pin.
  *
  * @param {unknown} generatorJson the body, or its `.secretGenerator` object
- * @param {number} expectedLength from {@link parseVerifyCodeLength}
+ * @param {number} expectedLength from {@link resolveLoginOtpExpectation}
  * @returns {{length: number, expiry: string}}
  * @throws {IdpPolicyError}
  */
@@ -260,7 +327,7 @@ export function assertLoginOtpGeneratorConverged(
   const length = Number(gen.length ?? 0);
   if (length !== expectedLength) {
     problems.push(
-      `length=${JSON.stringify(gen.length ?? null)}, expected ${expectedLength} (@ds/schemas VERIFY_CODE_LENGTH)`,
+      `length=${JSON.stringify(gen.length ?? null)}, expected ${expectedLength} (target provision.sh LOGIN_OTP_CODE_LENGTH)`,
     );
   }
   for (const [flag, expected] of LOGIN_OTP_ALPHABET) {

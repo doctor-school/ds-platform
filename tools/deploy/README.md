@@ -94,9 +94,15 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    surface omits proto3 defaults, an ABSENT flag reads as `false`, the same
    defaulting `provision.sh` step 8.sexies uses. It then reads back both login OTP
    secret generators (`GET /admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_OTP_EMAIL`
-   / `…_OTP_SMS`, step 8.septies, #2555) and asserts length = `@ds/schemas`
-   `VERIFY_CODE_LENGTH` at the deployed SHA, upper letters + digits only and an
-   expiry present. The provisioner also compares SMTP
+   / `…_OTP_SMS`, step 8.septies, #2555) against the shape the TARGET commit's
+   own `provision.sh` converges — `git show <sha>:infra/dev-stand/idp/provision.sh`
+   → `LOGIN_OTP_CODE_LENGTH`, which must equal `@ds/schemas` `VERIFY_CODE_LENGTH`
+   at the same SHA — and asserts that length, upper letters + digits only and an
+   expiry present. A target whose `provision.sh` has no `LOGIN_OTP_CODE_LENGTH`
+   (a `--ref` hotfix to a commit before step 8.septies) never converges the
+   generators, so the deploy prints the line
+   `skipped: target provision.sh does not converge login OTP generators` and
+   checks nothing there. The provisioner also compares SMTP
    public metadata (stable ID, description, host, TLS, sender and username) and
    reads back the active identity. HTTP success does not prove projection convergence.
    A failed converge, an unreadable read-back or a mismatch FAILS before the

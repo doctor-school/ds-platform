@@ -53,6 +53,13 @@ export interface EventListBaseProps {
   tenseControl?: "tabs" | "none";
   /** Host-owned control below the feed — e.g. 019's «показать ещё», which is a URL edit, not a page state. */
   footer?: React.ReactNode;
+  /**
+   * Where the group plates (days in «Будущие», months in «Прошедшие») stick,
+   * measured from the top of the scrolling viewport — the height of a sticky
+   * storefront header above the feed. A number is pixels; a string is any CSS
+   * length (e.g. a host header-height custom property). Default `0`.
+   */
+  stickyHeaderOffset?: number | string;
 }
 
 /**
@@ -97,6 +104,7 @@ export function EventList({
   toolbar,
   tenseControl = "tabs",
   footer,
+  stickyHeaderOffset = 0,
   paginationMode = "pages",
   hasPrevious = false,
   hasNext = false,
@@ -138,14 +146,37 @@ export function EventList({
         >
           {groups.map((group) => (
             <section key={group.key} id={`day-${group.key}`}>
-              <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
-              <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
-                <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
-                  {group.label}
-                </span>
-                <span className="flex-1 border-t-2 border-foreground" />
+              {/* The group plate sticks while its own group scrolls and is
+                  pushed out by the next one (019 EARS-3, canvas 2026-10-05):
+                  block behaviour on the page-background surface, so a host
+                  needs no page CSS — only the offset of its own header. On
+                  desktop the plate reaches 1.5 (= the cards' 6px `shadow-lg`
+                  cast) past the column so a scrolled card's offset shadow
+                  never pokes up beside it. Owner Stage-B 2026-10-05: the
+                  label gets token padding top AND bottom and the plate a
+                  `border` edge, so the stuck plate reads as a plate on the
+                  white page instead of melting into the cards. The 24px
+                  gap under the plate clears the desktop live sticker, which
+                  rises ~16px above its card (`-top-4` + `rotate-3`), so the
+                  plate never paints over it at rest. */}
+              <div
+                data-event-list-group-header=""
+                className="sticky z-10 -mx-4 border-b-2 border-border bg-background layout:mx-0 layout:-mr-1.5 layout:mb-6 layout:py-3 layout:pr-1.5"
+                style={{ top: stickyHeaderOffset }}
+              >
+                <DayBand className="layout:hidden">{group.label}</DayBand>
+                {/* One separator only (lead, 2026-10-05): the plate's bottom
+                    border is the single edge — no inline rule after the label. */}
+                <div className="hidden layout:block">
+                  <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
+                    {group.label}
+                  </span>
+                </div>
               </div>
-              <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
+              {/* `isolate`: the cards paint in their own stacking context,
+                  below the z-10 plate — a card-internal `relative z-10` (CTA,
+                  stretched link) can never paint over the stuck plate. */}
+              <div className="isolate -mx-4 flex flex-col layout:mx-0 layout:gap-7">
                 {group.items.map(
                   ({
                     id,

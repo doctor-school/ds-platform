@@ -150,4 +150,71 @@ describe("<EventList>", () => {
     await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
     expect(onPageChange).toHaveBeenCalledWith(4, "opaque-current");
   });
+  it("019 EARS-3: the day plates of «Будущие» stick under the default zero offset on the page-background surface", () => {
+    const { container } = render(
+      <EventList
+        items={[item, { ...item, id: "event-2", groupKey: "2026-08-30", groupLabel: "30 августа, воскресенье" }]}
+        selectedTab="upcoming"
+        tenseControl="none"
+        paginationMode="none"
+        labels={{ emptyTitle: "Событий нет" }}
+      />,
+    );
+
+    const headers = container.querySelectorAll<HTMLElement>(
+      "section > [data-event-list-group-header]",
+    );
+    expect(headers).toHaveLength(2);
+    for (const header of headers) {
+      expect(header.className).toContain("sticky");
+      expect(header.className).toContain("z-10");
+      expect(header.className).toContain("bg-background");
+      expect(header.style.top).toBe("0px");
+      // On desktop the opaque plate reaches over the cards' 6px `shadow-lg`
+      // cast, so a scrolled card's right edge never pokes up beside it.
+      expect(header.className).toContain("layout:-mr-1.5");
+      expect(header.className).toContain("layout:pr-1.5");
+      // Stage-B 2026-10-05: the stuck plate has breathing room under its
+      // label and a visible edge against the page.
+      expect(header.className).toContain("layout:py-3");
+      expect(header.className).toContain("border-b-2");
+      expect(header.className).toContain("border-border");
+      // One separator only: the bottom border is the single edge, no inline rule after the label.
+      expect(header.querySelector(".border-t-2")).toBeNull();
+      // The header is the section's first child: it sticks only while its own group scrolls.
+      expect(header.parentElement!.firstElementChild).toBe(header);
+      // The cards sit in an isolated stacking context, so no card-internal
+      // `z-10` (the CTA, the stretched link) can paint over the plate.
+      const cards = header.nextElementSibling as HTMLElement;
+      expect(cards.className).toContain("isolate");
+      // The desktop live sticker rises ~16px (-top-4 + rotate-3) above its
+      // card; the plate-to-card gap must clear it so the plate never paints
+      // over the sticker at rest.
+      expect(header.className).toContain("layout:mb-6");
+      expect(header.className).not.toContain("layout:mb-3");
+    }
+    expect(headers[0]!.textContent).toContain("29 августа, суббота");
+  });
+
+  it("019 EARS-3: the month plates of «Прошедшие» stick under the storefront header offset a host passes", () => {
+    const { container } = render(
+      <EventList
+        items={[{ ...item, groupKey: "2026-08", groupLabel: "Август 2026", variant: "past" as const }]}
+        selectedTab="past"
+        onTabChange={vi.fn()}
+        counts={{ upcoming: 0, past: 1 }}
+        labels={{ upcoming: "Будущие", past: "Прошедшие", emptyTitle: "Событий нет" }}
+        paginationMode="none"
+        stickyHeaderOffset={64}
+      />,
+    );
+
+    const header = container.querySelector<HTMLElement>(
+      "[data-event-list-body] section > [data-event-list-group-header]",
+    );
+    expect(header).not.toBeNull();
+    expect(header!.className).toContain("sticky");
+    expect(header!.style.top).toBe("64px");
+    expect(header!.textContent).toContain("Август 2026");
+  });
 });

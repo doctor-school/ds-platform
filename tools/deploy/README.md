@@ -92,7 +92,11 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `git show <sha>:packages/schemas/src/auth/auth.schema.ts`, never a literal) with
    every character-class flag `false` — and because Zitadel's grpc-gateway/protojson
    surface omits proto3 defaults, an ABSENT flag reads as `false`, the same
-   defaulting `provision.sh` step 8.sexies uses. The provisioner also compares SMTP
+   defaulting `provision.sh` step 8.sexies uses. It then reads back both login OTP
+   secret generators (`GET /admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_OTP_EMAIL`
+   / `…_OTP_SMS`, step 8.septies, #2555) and asserts length = `@ds/schemas`
+   `VERIFY_CODE_LENGTH` at the deployed SHA, upper letters + digits only and an
+   expiry present. The provisioner also compares SMTP
    public metadata (stable ID, description, host, TLS, sender and username) and
    reads back the active identity. HTTP success does not prove projection convergence.
    A failed converge, an unreadable read-back or a mismatch FAILS before the

@@ -65,9 +65,13 @@ import {
   parseRefFlag,
 } from "./hotfix-ref.mjs";
 import {
+  assertLoginOtpGeneratorConverged,
   assertPasswordPolicyConverged,
+  formatLoginOtpGenerator,
   formatPasswordPolicy,
   parsePasswordMinLength,
+  LOGIN_OTP_GENERATOR_TYPES,
+  parseVerifyCodeLength,
 } from "./idp-policy.mjs";
 import {
   RELEASE_GATE_EXEMPT_FLAG,
@@ -608,6 +612,9 @@ const IDP_POST_LOGOUT_URIS =
 // the deploy must verify the instance against the number the shipped code
 // enforces, which on a `--ref` hotfix is not necessarily the local checkout's.
 const SCHEMAS_AUTH_SCHEMA_PATH = "packages/schemas/src/auth/auth.schema.ts";
+// Same rule for the login OTP code length (#2555): the shipped app's constant.
+const SCHEMAS_REGISTER_FIELDS_PATH =
+  "packages/schemas/src/storefront/register-fields.ts";
 
 // Convergence must complete before the strict API is swapped into service.
 // IdP configuration is forward-only, but the previous app remains available.
@@ -679,6 +686,54 @@ sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; IDP_BASE_URL=${IDP_BAS
         ` the instance before serving registrations (#1994).`,
       { rollbackHint: true },
     );
+  }
+
+  let expectedCodeLength;
+  try {
+    expectedCodeLength = parseVerifyCodeLength(
+      localCap("git", ["show", `${sha}:${SCHEMAS_REGISTER_FIELDS_PATH}`]),
+    );
+  } catch (e) {
+    die(
+      `cannot resolve VERIFY_CODE_LENGTH from ${SCHEMAS_REGISTER_FIELDS_PATH} at ${label}` +
+        ` — ${IDP_ROLLBACK_HINT}:
+  ${e.message}`,
+      { rollbackHint: true },
+    );
+  }
+  for (const type of LOGIN_OTP_GENERATOR_TYPES) {
+    let generatorRaw;
+    try {
+      generatorRaw = await sshCapture(
+        API_PROD,
+        `sudo bash -c 'curl -fsS --max-time 30 -H "Authorization: Bearer $(cat ${IDP_BOOTSTRAP_PAT_FILE})" ${IDP_BASE_URL}/admin/v1/secretgenerators/${type}'`,
+      );
+    } catch (e) {
+      die(
+        `cannot READ BACK the prod IdP login OTP generator ${type} — ${IDP_ROLLBACK_HINT}.` +
+          ` An unreadable generator is a failed deploy, never an assumed-good one:
+  ${e.message}`,
+        { rollbackHint: true },
+      );
+    }
+    try {
+      const verdict = assertLoginOtpGeneratorConverged(
+        JSON.parse(generatorRaw),
+        expectedCodeLength,
+      );
+      console.log(
+        `  ℹ prod IdP login OTP @ ${IDP_BASE_URL}: ${formatLoginOtpGenerator(type, verdict)}`,
+      );
+    } catch (e) {
+      die(
+        `prod IdP login OTP generator read-back REJECTED — ${IDP_ROLLBACK_HINT}:
+  ${e.message}
+` +
+          `  Re-run the converge by hand (infra/deploy/README.md → step 9); sign-in codes` +
+          ` would not match the shipped code input (#2555).`,
+        { rollbackHint: true },
+      );
+    }
   }
 }
 

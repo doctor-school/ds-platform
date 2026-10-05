@@ -182,3 +182,115 @@ export function formatPasswordPolicy({ minLength, flags }) {
   ).join(" ");
   return `minLength=${minLength} ${flagText} — length-only creation policy (003 EARS-36)`;
 }
+
+// --- login OTP secret generators (#2555, epic #2552) ----------------------
+//
+// provision.sh step 8.septies converges the login OTP generators to the
+// verify-email code shape and reads them back itself; the deploy re-reads them
+// on the box for the same reason it re-reads the password policy — a green
+// provision exit code is not evidence of the instance state.
+
+/** The two generators step 8.septies owns, in the order the deploy reads them. */
+export const LOGIN_OTP_GENERATOR_TYPES = [
+  "SECRET_GENERATOR_TYPE_OTP_EMAIL",
+  "SECRET_GENERATOR_TYPE_OTP_SMS",
+];
+
+/** Alphabet flags of the converged generator and the value each must hold. */
+const LOGIN_OTP_ALPHABET = [
+  ["includeUpperLetters", true],
+  ["includeDigits", true],
+  ["includeLowerLetters", false],
+  ["includeSymbols", false],
+];
+
+/**
+ * Read `VERIFY_CODE_LENGTH` out of `packages/schemas/src/storefront/register-fields.ts`
+ * at the deployed SHA — the code length the shipped app accepts, which the
+ * login generators must produce (epic #2552: one code format). Fail-closed.
+ *
+ * @param {string} sourceText contents of `register-fields.ts` at the target SHA
+ * @returns {number}
+ */
+export function parseVerifyCodeLength(sourceText) {
+  const m =
+    typeof sourceText === "string"
+      ? /export\s+const\s+VERIFY_CODE_LENGTH\s*=\s*(\d+)\s*;/.exec(sourceText)
+      : null;
+  const value = m ? Number(m[1]) : NaN;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new IdpPolicyError(
+      "cannot read VERIFY_CODE_LENGTH from packages/schemas/src/storefront/register-fields.ts" +
+        " — the constant is absent, renamed or not a positive numeric literal; the deploy" +
+        " refuses to guess the code length.",
+    );
+  }
+  return value;
+}
+
+/**
+ * Verdict on one LIVE login OTP generator, read back from
+ * `GET /admin/v1/secretgenerators/{type}`. Absent alphabet flags read as
+ * `false` (proto3 defaults are dropped from the body — see
+ * {@link assertPasswordPolicyConverged}); a present non-boolean is an error.
+ * The expiry must be present: its value is provision.sh's to preserve, not the
+ * deploy's to pin.
+ *
+ * @param {unknown} generatorJson the body, or its `.secretGenerator` object
+ * @param {number} expectedLength from {@link parseVerifyCodeLength}
+ * @returns {{length: number, expiry: string}}
+ * @throws {IdpPolicyError}
+ */
+export function assertLoginOtpGeneratorConverged(
+  generatorJson,
+  expectedLength,
+) {
+  if (generatorJson === null || typeof generatorJson !== "object") {
+    throw new IdpPolicyError(
+      "IdP login OTP generator read-back is not an object — the generator could not be read",
+    );
+  }
+  const gen =
+    generatorJson.secretGenerator !== null &&
+    typeof generatorJson.secretGenerator === "object"
+      ? generatorJson.secretGenerator
+      : generatorJson;
+
+  const problems = [];
+  const length = Number(gen.length ?? 0);
+  if (length !== expectedLength) {
+    problems.push(
+      `length=${JSON.stringify(gen.length ?? null)}, expected ${expectedLength} (@ds/schemas VERIFY_CODE_LENGTH)`,
+    );
+  }
+  for (const [flag, expected] of LOGIN_OTP_ALPHABET) {
+    const raw = gen[flag];
+    const value = raw === undefined || raw === null ? false : raw;
+    if (typeof value !== "boolean") {
+      problems.push(
+        `${flag} is present but not a boolean in the read-back: ${JSON.stringify(raw)}`,
+      );
+    } else if (value !== expected) {
+      problems.push(`${flag}=${value}, expected ${expected}`);
+    }
+  }
+  const expiry = gen.expiry;
+  if (typeof expiry !== "string" || expiry === "") {
+    problems.push(
+      `expiry is missing from the read-back: ${JSON.stringify(expiry ?? null)}`,
+    );
+  }
+
+  if (problems.length > 0) {
+    throw new IdpPolicyError(
+      "prod IdP login OTP generator did NOT converge:\n" +
+        problems.map((p) => `    - ${p}`).join("\n"),
+    );
+  }
+  return { length, expiry };
+}
+
+/** One-line operator summary of a converged login OTP generator. */
+export function formatLoginOtpGenerator(type, { length, expiry }) {
+  return `${type}: length=${length} upper letters + digits, expiry ${expiry} (epic #2552 one code format)`;
+}

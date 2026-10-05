@@ -34,7 +34,6 @@ function extractCode(msg: {
   return (
     haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
     haystack.match(/[?&]code=([A-Z0-9]{4,12})\b/)?.[1] ??
-    haystack.match(/\b([0-9]{6,8})\b/)?.[1] ??
     null
   );
 }

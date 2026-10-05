@@ -148,7 +148,6 @@ function extractCode(msg: {
   return (
     haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
     haystack.match(/[?&]code=([A-Z0-9]{4,12})\b/)?.[1] ??
-    haystack.match(/\b([0-9]{6,8})\b/)?.[1] ??
     null
   );
 }
@@ -217,9 +216,19 @@ async function fetchOtpCode(
           record.messageId = hit.ID;
           if (subject === NOTIFICATION_SUBJECTS.verifyEmailOtp && code) {
             const expected = loginCodeEmail(code);
-            expect(message.Subject === expected.subject, "shared login subject").toBe(true);
-            expect(message.HTML?.replace(/\r\n/g, "\n") === expected.html, "shared login HTML after SMTP newline normalization").toBe(true);
-            expect(message.Text?.replace(/\r\n/g, "\n").trim() === expected.text.trim(), "shared login plain text").toBe(true);
+            expect(
+              message.Subject === expected.subject,
+              "shared login subject",
+            ).toBe(true);
+            expect(
+              message.HTML?.replace(/\r\n/g, "\n") === expected.html,
+              "shared login HTML after SMTP newline normalization",
+            ).toBe(true);
+            expect(
+              message.Text?.replace(/\r\n/g, "\n").trim() ===
+                expected.text.trim(),
+              "shared login plain text",
+            ).toBe(true);
             expect(code).toMatch(/^[A-Z0-9]{6}$/);
           }
           record.codeExtracted = !!code;

@@ -8,12 +8,14 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import {
   HEAVY_JOBS,
   classifyAffectedAreas,
   parseWorkspacePatterns,
+  readWorkspaceAt,
   workspaceFromManifests,
   outputLines,
 } from "./affected-areas.mjs";
@@ -25,12 +27,17 @@ const WORKSPACE = workspaceFromManifests(
   {
     "apps/api/package.json": {
       name: "@ds/api",
-      dependencies: { "@ds/schemas": "workspace:*", "@ds/db": "workspace:*" },
+      dependencies: {
+        "@ds/schemas": "workspace:*",
+        "@ds/db": "workspace:*",
+        "@ds/legal-content": "workspace:*",
+      },
     },
     "apps/portal/package.json": {
       name: "@ds/portal",
       dependencies: {
         "@ds/auth-flow": "workspace:*",
+        "@ds/legal-content": "workspace:*",
         "@ds/design-system": "workspace:*",
       },
     },
@@ -40,6 +47,7 @@ const WORKSPACE = workspaceFromManifests(
         "@ds/auth-flow": "workspace:*",
         "@ds/congress-submissions": "workspace:*",
         "@ds/design-system": "workspace:*",
+        "@ds/legal-content": "workspace:*",
       },
     },
     "apps/admin/package.json": {
@@ -72,6 +80,8 @@ const WORKSPACE = workspaceFromManifests(
       dependencies: { zod: "^4" },
     },
     "packages/db/package.json": { name: "@ds/db", dependencies: {} },
+    "packages/legal-content/package.json": { name: "@ds/legal-content" },
+    "packages/api-client/package.json": { name: "@ds/api-client" },
     "tools/lint/guard-tests/package.json": {
       name: "@ds/lint-guard-tests",
       devDependencies: { "@ds/schemas": "workspace:*" },
@@ -123,8 +133,9 @@ test("EARS-3: dependents are transitive and follow every dependency field", () =
 
 test("EARS-4: docs-class and agent-tooling paths affect no heavy job", () => {
   const result = pr([
-    "apps/api/README.md",
+    "README.md",
     "apps/docs/content/specs/x.mdx",
+    "apps/docs/content/specs/features/012-content-taxonomy/012-requirements.md",
     "design-source/canvas.dc.html",
     ".claude/settings.json",
     ".changeset/config.json",
@@ -196,15 +207,26 @@ test("EARS-7: workspace patterns parse the pnpm form and refuse unsupported glob
   );
 });
 
-test("EARS-8: every heavy job maps to real workspace packages and is wired in ci.yml", () => {
+test("EARS-8: every heavy job maps to real workspace packages and real extra inputs, and is wired in ci.yml", () => {
   const ci = readFileSync(
     new URL("../../.github/workflows/ci.yml", import.meta.url),
     "utf8",
   );
   assert.match(ci, /run: node tools\/ci\/affected-areas\.mjs/);
-  for (const [job, packages] of Object.entries(HEAVY_JOBS)) {
+  assert.match(ci, /GRAPH_SHA: \$\{\{ github\.sha \}\}/);
+  const real = readWorkspaceAt("HEAD");
+  const tracked = spawnSync("git", ["ls-files"], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  }).stdout.split("\n");
+  for (const [job, { packages, extraInputs }] of Object.entries(HEAVY_JOBS)) {
     for (const name of packages)
-      assert.ok(WORKSPACE.byName.has(name), `${job}: ${name}`);
+      assert.ok(real.byName.has(name), `${job}: ${name}`);
+    for (const re of extraInputs)
+      assert.ok(
+        tracked.some((file) => re.test(file)),
+        `${job}: extra input ${re} matches no tracked file`,
+      );
     assert.match(
       ci,
       new RegExp(
@@ -227,5 +249,63 @@ test("EARS-9: outputs carry one run-<job> line per heavy job", () => {
   assert.deepEqual(
     lines,
     ALL.map((job) => `run-${job}=${job === "api-e2e" || job === "admin-e2e"}`),
+  );
+});
+
+test("EARS-10: a docs-type file inside a package marks that package affected, also in a mixed PR", () => {
+  // Legal documents are runtime content of portal, doctor and the api consent stamp.
+  const legal = pr([
+    "apps/admin/app/page.tsx",
+    "packages/legal-content/documents/privacy-policy.md",
+  ]);
+  assert.equal(legal.fullRun, null);
+  for (const job of [
+    "api-e2e",
+    "playwright-axe-portal",
+    "playwright-axe-doctor",
+  ])
+    assert.ok(legal.jobs[job], job);
+  // admin-authz-floor.e2e-spec.ts reads the matrix; it lives inside @ds/api.
+  assert.ok(pr(["apps/api/docs/endpoint-authz-matrix.md"]).jobs["api-e2e"]);
+});
+
+test("EARS-11: a spec .feature runs admin-e2e (bddgen taxonomy project) and nothing else", () => {
+  const result = pr([
+    "apps/docs/content/specs/features/012-content-taxonomy/012-scenarios.feature",
+  ]);
+  assert.equal(result.fullRun, null);
+  assert.deepEqual(running(result), ["admin-e2e"]);
+});
+
+test("EARS-12: files a job reads outside its dependency closure run that job", () => {
+  // archived-speakers.e2e-spec.ts scans these; @ds/api depends on neither.
+  assert.ok(pr(["apps/portal/app/webinars/[slug]/page.tsx"]).jobs["api-e2e"]);
+  assert.ok(
+    pr(["packages/design-system/src/blocks/event-page-view.ts"]).jobs[
+      "api-e2e"
+    ],
+  );
+  // hidden-rename.e2e-spec.ts reads the generated SDK snapshot.
+  assert.deepEqual(running(pr(["packages/api-client/openapi.snapshot.json"])), [
+    "api-e2e",
+  ]);
+  assert.equal(
+    pr(["packages/design-system/src/button.tsx"]).jobs["api-e2e"],
+    false,
+  );
+});
+
+test("EARS-13: a HEAVY_JOBS package missing from the workspace throws (the caller fails open)", () => {
+  const partial = workspaceFromManifests(["apps/*"], {
+    "apps/api/package.json": { name: "@ds/api" },
+  });
+  assert.throws(
+    () =>
+      classifyAffectedAreas({
+        event: "pull_request",
+        paths: ["apps/api/src/x.ts"],
+        workspace: partial,
+      }),
+    /unknown package @ds\/admin/,
   );
 });

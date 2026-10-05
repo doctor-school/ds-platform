@@ -161,6 +161,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # The merge ref CI tests: the dependency graph is read there.
+          GRAPH_SHA: ${{ github.sha }}
         run: node tools/ci/affected-areas.mjs
       - name: Classify the changed-file set
         id: classify

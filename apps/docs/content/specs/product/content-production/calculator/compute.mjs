@@ -4,8 +4,8 @@
 
 export const SCENARIOS = ["min", "mid", "max"];
 const WEEKS_PER_MONTH = 52 / 12;
-// The team circle: its hours are split between team roles by FTE (capacity-ru.md), so its rate is
-// the FTE-weighted rate of the same roles — otherwise the plan would not reconcile with payroll.
+// The team circle: its hours are split between team roles by FTE (capacity-ru.md); its
+// composite_of in rates.yaml lists the same roles (trace-check), so the plan reconciles with payroll.
 const TEAM_CIRCLE = "Продуктовая команда";
 export const IDLE_LINE = "неиспользованная мощность штата";
 
@@ -257,11 +257,7 @@ function resolveRate(model, role, scenario) {
     const weights = Object.fromEntries(
       model.teamRoles.map((m) => [m.role, pick(m.fte, scenario)]),
     );
-    const members =
-      role === TEAM_CIRCLE
-        ? model.teamRoles.map((m) => m.role)
-        : record.composite_of;
-    const parts = members
+    const parts = record.composite_of
       .map((member) => ({
         w: weights[member] ?? 1,
         r: roleHourlyCost(model, member, scenario),
@@ -326,11 +322,15 @@ function resolveRate(model, role, scenario) {
       value: (1 - share) * own.value + share * ext.value,
       flags: [...own.flags, ...ext.flags],
       basis: `штат + доля внешнего пула ${share}`,
+      inHouse: own.value,
+      contractor: ext.value,
+      share,
     };
   }
-  return (
-    first ?? second ?? { value: null, flags: ["ставка не задана"], basis: "—" }
-  );
+  const chosen = first ?? second;
+  if (!chosen) return { value: null, flags: ["ставка не задана"], basis: "—" };
+  const own = chosen.basis === "штат" ? chosen : inHouse();
+  return { ...chosen, inHouse: own?.value ?? null, contractor: null, share: 0 };
 }
 
 function paramValue(model, productName, qty, scenario) {
@@ -629,10 +629,15 @@ function idleCapacity(model, sold, scenario) {
       const paidHours = teams * fte * P;
       const nonProd = teams * nonProduction(model, m.role, scenario);
       const load = loaded[m.role] ?? 0;
-      const free = paidHours - nonProd - load;
+      // Hours charged to the role at a blended rate are the external pool's share at the
+      // contractor rate and штат time for the rest; idle and payroll are штат time only.
+      const rate = roleHourlyCost(model, m.role, scenario);
+      const share = rate.share ?? 0;
+      const own = rate.inHouse ?? rate.value ?? 0;
+      const contractorHours = share * (nonProd + load);
+      const free = paidHours - (nonProd + load - contractorHours);
       if (free < -1e-9) flags.push(`перегрузка штата: ${m.role}`);
       const idleHours = Math.max(0, free);
-      const hourlyCost = roleHourlyCost(model, m.role, scenario).value;
       return {
         role: m.role,
         teams,
@@ -641,9 +646,12 @@ function idleCapacity(model, sold, scenario) {
         nonProduction: nonProd,
         loaded: load,
         idleHours,
-        hourlyCost,
-        idleCost: idleHours * (hourlyCost ?? 0),
-        payroll: paidHours * (hourlyCost ?? 0),
+        hourlyCost: rate.value,
+        ownHourlyCost: own,
+        idleCost: idleHours * own,
+        payroll: paidHours * own,
+        contractorHours,
+        contractorCost: contractorHours * (rate.contractor ?? 0),
       };
     });
   return {

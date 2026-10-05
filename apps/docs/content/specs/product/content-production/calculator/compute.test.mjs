@@ -403,3 +403,29 @@ test("roleHourlyCost: a pool at its lower-bound floor says max (and likely mid) 
     flags.join("; "),
   );
 });
+
+test("reconciliation at media_external_share 0,5: idle and payroll at the штат rate, contractor share per loaded hour", () => {
+  const m = buildModel(inputs, { "var:media_external_share": 0.5 });
+  for (const s of ["min", "mid", "max"]) {
+    const plan = periodPlan(m, s);
+    const host = plan.idle.byRole.find((r) => r.role === "Медиа-круг — медиа-ведущий");
+    const own = host.ownHourlyCost;
+    assert.ok(own < roleHourlyCost(m, "Медиа-круг — медиа-ведущий", s).value);
+    near(host.payroll, host.paidHours * own, 1e-6);
+    near(host.idleCost, host.idleHours * own, 1e-6);
+    near(host.idleHours, host.paidHours - 0.5 * (host.nonProduction + host.loaded), 1e-9);
+    const team = new Set(plan.idle.byRole.map((r) => r.role));
+    team.add("Продуктовая команда");
+    const payroll = plan.idle.byRole.reduce((a, r) => a + r.payroll, 0);
+    const contracted = plan.idle.byRole.reduce((a, r) => a + r.contractorCost, 0);
+    let otherDirect = 0;
+    for (const [name, n] of Object.entries(plan.sold))
+      for (const l of unitCost(m, name, s).trail)
+        if (l.class === "direct" && !team.has(l.role)) otherDirect += n * (l.cost ?? 0);
+    const otherPool = plan.poolLines
+      .filter((l) => !team.has(l.role))
+      .reduce((a, l) => a + (l.cost ?? 0), 0);
+    const full = planSum(m, s, (u) => u.direct.cost + u.overhead.cost + u.idle.cost);
+    near(full, payroll + contracted + otherDirect + otherPool, 1e-3);
+  }
+});

@@ -661,6 +661,26 @@ for (const record of asList(ratesDoc?.roles)) {
       `rates.yaml: record «${record.role}» has no source with url and accessed, nor composite_of`,
     );
 }
+// The team circle «Продуктовая команда» is the direction team: its hours split between the
+// team roles with an FTE (capacity), so its composite rate must be read over the same roles.
+const teamCircle = asList(ratesDoc?.roles).find(
+  (r) => r.role === "Продуктовая команда",
+);
+const directionTeam = asList(teamsDoc?.teams).find((t) => t.id === "direction");
+if (teamCircle && directionTeam) {
+  const fteRoles = [
+    ...asList(directionTeam.members),
+    ...asList(directionTeam.draws_on),
+  ]
+    .filter((m) => m.fte_draft != null)
+    .map((m) => m.role)
+    .sort();
+  const circle = [...asList(teamCircle.composite_of)].sort();
+  if (JSON.stringify(circle) !== JSON.stringify(fteRoles))
+    errors.push(
+      `rates.yaml: «Продуктовая команда» composite_of must equal the teams.yaml direction roles with fte_draft (${fteRoles.join(", ")})`,
+    );
+}
 console.log(
   `Rates: ${[...needsRate.keys()].filter((r) => rateRoles.has(r)).length} role strings with a record, ${[...needsRate.keys()].filter((r) => NO_OWN_RATE.has(r)).length} without own rate (NO_OWN_RATE)`,
 );

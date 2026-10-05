@@ -438,12 +438,12 @@ class Component extends DCLogic {
     const errTab = (name, first) => ({ name, onClick: () => this.setState({ errOv: name }), style: pill(errKey === name, first) });
     const toggle = (name, on, onClick) => ({ name, onClick, style: 'font:inherit;font-size:11.5px;font-weight:' + (on ? 800 : 700) + ';padding:8px 11px;cursor:pointer;white-space:nowrap;border:2px solid ' + (on ? btnBg : hairline) + ';color:' + (on ? btnFg : ink) + ';background:' + (on ? btnBg : surface) });
 
-    const spinner = R('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true', style: 'flex:none' },
+    const spinner = R('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true', style: { flex: 'none' } },
       R('g', null,
         R('circle', { cx: 12, cy: 12, r: 10, stroke: 'currentColor', strokeWidth: 4, opacity: .25 }),
         R('path', { d: 'M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z', fill: 'currentColor', opacity: .75 }),
         R('animateTransform', { attributeName: 'transform', type: 'rotate', from: '0 12 12', to: '360 12 12', dur: '1s', repeatCount: 'indefinite' })));
-    const busy = (key, label) => s.sending === key ? R('span', { style: 'display:inline-flex;align-items:center;justify-content:center;gap:8px' }, spinner, label) : label;
+    const busy = (key, label) => s.sending === key ? R('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 } }, spinner, label) : label;
 
     // Контекст возврата — карточка события на обеих витринах, на входе и регистрации
     const gateCardOn = s.returnCtx && (s.screen === 'login' || s.screen === 'register' || s.screen === 'verify');

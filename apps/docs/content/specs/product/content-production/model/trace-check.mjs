@@ -7,7 +7,8 @@
 // a control or an output); an ICOM fault against the parent box (unmapped or wrong-side code, objects
 // not on the parent arrow, a parent arrow of the box without a boundary arrow); a child diagram whose
 // F-IDs differ from its parent box's or repeat; a box that is not exactly one of leaf / decomposed /
-// `decomposition: pending`; a leaf without a full draft `effort` (one role of «Роли и круги»).
+// `decomposition: pending`; a leaf without a full draft `effort` (one role of «Роли и круги», a
+// sub-role only from the closed «Подроли» list of FORMAT-ru.md).
 // Everything else (O-ID coverage, out-of-TO-BE placement, block mismatch) is reported, never fails.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -90,18 +91,36 @@ function parseProcess(text) {
   return { outside, blocks, roles };
 }
 
-const [registryText, processText, indexText] = await Promise.all([
+const [registryText, processText, indexText, formatText] = await Promise.all([
   readFile(join(pkg, "registry-ru.md"), "utf8"),
   readFile(join(pkg, "process-to-be-ru.md"), "utf8"),
   readFile(join(here, "index.yaml"), "utf8"),
+  readFile(join(here, "FORMAT-ru.md"), "utf8"),
 ]);
 const registry = parseRegistry(registryText);
 const process_ = parseProcess(processText);
+const subRoles = parseSubRoles(formatText);
 const index = parse(indexText);
 const diagrams = [];
 for (const entry of index.diagrams) {
   const diagram = parse(await readFile(join(here, entry.file), "utf8"));
   diagrams.push({ ...diagram, id: entry.id, parent: entry.parent });
+}
+
+/** Closed sub-role list: «Подроли» table of FORMAT-ru.md, circle → set of sub-role names. */
+function parseSubRoles(text) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^Подроли — закрытый список/.test(line));
+  const map = new Map();
+  if (start < 0) return map;
+  for (const line of lines.slice(start + 1)) {
+    if (/^#/.test(line)) break;
+    if (!/^\|/.test(line) || /^\|\s*-/.test(line)) continue;
+    const [, circle, list] = cells(line);
+    if (!circle || circle === "Круг") continue;
+    map.set(circle, new Set(list.split(",").map((name) => name.trim())));
+  }
+  return map;
 }
 
 const isExcluded = (entry) => EXCLUDED_STATUS.test(entry.status);
@@ -357,16 +376,21 @@ for (const diagram of diagrams) {
       if (effort[field] == null || effort[field] === "")
         errors.push(`${diagram.id}: leaf ${box.id} effort has no ${field}`);
     if (effort.role != null) {
-      const known =
-        typeof effort.role === "string" &&
-        [...process_.roles].some(
-          (name) =>
-            effort.role === name || effort.role.startsWith(`${name} — `),
-        );
-      if (!known)
+      const role = typeof effort.role === "string" ? effort.role : "";
+      const circle = [...process_.roles].find(
+        (name) => role === name || role.startsWith(`${name} — `),
+      );
+      if (!circle)
         errors.push(
           `${diagram.id}: leaf ${box.id} role «${effort.role}» is not one role or circle of «Роли и круги» (\`<name>\` or \`<name> — <sub-role>\`)`,
         );
+      else if (role !== circle) {
+        const sub = role.slice(`${circle} — `.length);
+        if (!subRoles.get(circle)?.has(sub))
+          errors.push(
+            `${diagram.id}: leaf ${box.id} sub-role «${sub}» of «${circle}» is not in the «Подроли» list of FORMAT-ru.md`,
+          );
+      }
     }
     const hours = effort.hours_draft;
     const validHours =

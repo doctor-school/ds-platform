@@ -9,7 +9,9 @@
 // F-IDs differ from its parent box's or repeat; a box that is not exactly one of leaf / decomposed /
 // `decomposition: pending`; a leaf without a full draft `effort` (one role of «Роли и круги», a
 // sub-role only from the closed «Подроли» list of FORMAT-ru.md); a repeat box (`repeats`) that
-// names a box absent from the model or carries F-IDs of its own.
+// names a box absent from the model or carries F-IDs of its own; a leaf without a draft lead time;
+// a leaf `iterations` that is no loops.yaml entry, or a loop whose leaves do not carry it; a loop
+// fragment with a dangling step; a teams.yaml role outside «Роли и круги».
 // Everything else (O-ID coverage, out-of-TO-BE placement, block mismatch) is reported, never fails.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -433,6 +435,141 @@ for (const diagram of diagrams)
         `${diagram.id}: box ${box.id} repeats ${repeats.join(", ")} but carries F-IDs ${box.functions.join(", ")} — a repeat box has none`,
       );
   }
+
+// Lead time, loops and teams (FORMAT-ru.md «Петли одобрения», «Команды и мощность»): every leaf
+// carries a lead time; every leaf `iterations` resolves to a loops.yaml entry whose `leaves` carry
+// exactly that variable; a loop fragment is a closed step graph; team roles come from «Роли и круги».
+const isRange = (value, min = 0) =>
+  (typeof value === "number" && value >= min) ||
+  (Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((v) => typeof v === "number" && v >= min) &&
+    value[0] <= value[1]);
+const resolveRole = (role, where) => {
+  const name = typeof role === "string" ? role : "";
+  const circle = [...process_.roles].find(
+    (r) => name === r || name.startsWith(`${r} — `),
+  );
+  if (!circle) errors.push(`${where}: role «${role}» is not in «Роли и круги»`);
+  else if (
+    name !== circle &&
+    !subRoles.get(circle)?.has(name.slice(`${circle} — `.length))
+  )
+    errors.push(`${where}: sub-role «${role}» is not in the «Подроли» list`);
+};
+const [loopsDoc, teamsDoc] = await Promise.all(
+  ["loops.yaml", "teams.yaml"].map(async (file) =>
+    parse(await readFile(join(here, file), "utf8")),
+  ),
+);
+const leafById = new Map();
+for (const diagram of diagrams)
+  for (const box of diagram.boxes ?? [])
+    if (box.leaf) leafById.set(box.id, { diagram: diagram.id, box });
+const loopByName = new Map();
+for (const loop of loopsDoc?.loops ?? []) {
+  const where = `loops.yaml: «${loop.name}»`;
+  if (loopByName.has(loop.name)) errors.push(`${where} is listed twice`);
+  loopByName.set(loop.name, loop);
+  for (const field of ["approver", "exit_rule", "basis"])
+    if (loop[field] == null || loop[field] === "")
+      errors.push(`${where} has no ${field}`);
+  if ((loop.rounds_draft == null) === (loop.rounds_from == null))
+    errors.push(`${where} needs exactly one of rounds_draft, rounds_from`);
+  else if (
+    loop.rounds_draft != null &&
+    (!Array.isArray(loop.rounds_draft) || !isRange(loop.rounds_draft, 1))
+  )
+    errors.push(`${where} rounds_draft must be [min, max] with min ≥ 1`);
+  else if (
+    loop.rounds_from != null &&
+    (!loop.rounds_from.rule || !asList(loop.rounds_from.loops).length)
+  )
+    errors.push(`${where} rounds_from needs a rule and loops`);
+  if (!isRange(loop.wait_days_per_round_draft))
+    errors.push(
+      `${where} wait_days_per_round_draft must be a number or [min, max]`,
+    );
+  if (!asList(loop.leaves).length) errors.push(`${where} has no leaves`);
+  for (const id of asList(loop.leaves)) {
+    const leaf = leafById.get(id);
+    if (!leaf) errors.push(`${where} leaf ${id} is not a leaf of the model`);
+    else if (leaf.box.effort?.iterations !== loop.name)
+      errors.push(
+        `${where} leaf ${id} carries iterations «${leaf.box.effort?.iterations ?? "—"}»`,
+      );
+  }
+  const steps = asList(loop.fragment);
+  const stepIds = new Set(steps.map((step) => step.id));
+  if (!steps.length) errors.push(`${where} has no fragment`);
+  for (const step of steps) {
+    const at = `${where} step ${step.id}`;
+    if (!step.id || !step.step || !step.actor)
+      errors.push(`${at} needs id, step, actor`);
+    if (!["task", "wait", "decision"].includes(step.kind))
+      errors.push(`${at} kind «${step.kind}» — task | wait | decision`);
+    if (step.box != null && !modelBoxIds.has(step.box))
+      errors.push(`${at} box ${step.box} is not in the model`);
+    // A decision routes by explicit `yes` / `no`; task and wait steps by `next` only.
+    const routes = step.kind === "decision" ? ["yes", "no"] : ["next"];
+    for (const key of routes)
+      if (step[key] == null) errors.push(`${at} has no ${key}`);
+      else if (step[key] !== "end" && !stepIds.has(step[key]))
+        errors.push(`${at} ${key} → ${step[key]} — no such step`);
+    for (const key of ["next", "yes", "no", "loop_to"])
+      if (step[key] != null && !routes.includes(key))
+        errors.push(
+          `${at}: «${key}» — a decision routes by yes / no, other steps by next`,
+        );
+  }
+}
+// Derived rounds: every loop named in `rounds_from` exists and has its own rounds_draft (no chains).
+for (const loop of loopByName.values())
+  for (const name of asList(loop.rounds_from?.loops))
+    if (loopByName.get(name)?.rounds_draft == null)
+      errors.push(
+        `loops.yaml: «${loop.name}» rounds_from names «${name}» — no loop with rounds_draft`,
+      );
+for (const [id, { diagram, box }] of leafById) {
+  const effort = box.effort ?? {};
+  if (!isRange(effort.lead_days_draft))
+    errors.push(
+      `${diagram}: leaf ${id} lead_days_draft must be a number or [min, max]`,
+    );
+  if (!effort.lead_days_basis)
+    errors.push(`${diagram}: leaf ${id} effort has no lead_days_basis`);
+  if (effort.iterations != null) {
+    const loop = loopByName.get(effort.iterations);
+    if (!loop)
+      errors.push(
+        `${diagram}: leaf ${id} iterations «${effort.iterations}» is not a loops.yaml name`,
+      );
+    else if (!asList(loop.leaves).includes(id))
+      errors.push(
+        `${diagram}: leaf ${id} is missing from loops.yaml «${loop.name}» leaves`,
+      );
+  }
+}
+for (const team of teamsDoc?.teams ?? []) {
+  if (!asList(team.members).length)
+    errors.push(`teams.yaml: ${team.id} has no members`);
+  for (const member of asList(team.members)) {
+    resolveRole(member.role, `teams.yaml: ${team.id} member`);
+    if (!isRange(member.fte_draft))
+      errors.push(
+        `teams.yaml: ${team.id} member «${member.role}» fte_draft must be a number or [min, max]`,
+      );
+  }
+  for (const pool of asList(team.draws_on))
+    resolveRole(pool.role, `teams.yaml: ${team.id} draws_on`);
+}
+if (!isRange(teamsDoc?.capacity_variables?.productive_hours_per_month?.draft))
+  errors.push(
+    "teams.yaml: capacity_variables.productive_hours_per_month.draft is missing",
+  );
+console.log(
+  `Loops: ${loopByName.size}; leaves with lead time: ${[...leafById.values()].filter(({ box }) => box.effort?.lead_days_draft != null).length}/${leafById.size}; teams: ${asList(teamsDoc?.teams).length}`,
+);
 
 if (pending.length) console.log(`Decomposition pending: ${pending.join(", ")}`);
 console.log(`Leaves with draft effort: ${totalLeaves}`);

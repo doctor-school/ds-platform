@@ -45,7 +45,7 @@ Before claiming that a surface needs a **new** canvas or block, and before any S
 One capability, one canvas — the same rule the code follows (ADR-0013 §A1: a capability both storefronts render lives in one feature package; hosts contribute a route file and a host-config object).
 
 1. **One canvas per capability, host as a prop.** A capability both storefronts render has one `.dc.html`; host differences are props / fork panels, never a second `doctor-*` / `academy-*` file. `event-page.dc.html` (`header` prop), `document.dc.html` (`shell` prop) and `auth.dc.html` (`host` prop) are the model. Host-only screens (`doctor-feed`, `doctor-school`, `academy-invest`, …) keep their host prefix.
-2. **Tokens only in `ds-foundation.dc.html`.** No other canvas redefines a colour, radius or type step; a canvas that does is a vendoring defect, not a design decision.
+2. **Tokens only from the design system.** Colour, type, spacing, radii and shadows come only from «Doctor.School Design System» (published from `@ds/design-system`); `ds-foundation.dc.html` shows the visual language and is not a token source. No canvas defines or redefines a token value; a canvas that does is a vendoring defect, not a design decision.
 3. **Superseded and decision canvases move to `design-source/archive/`** in the PR that vendors the successor or records the decision. The `design-source/README.md` «Files» tables list canon only.
 4. **Vendoring writes the registry row.** The PR that vendors a canvas names in `apps/docs/content/specs/product/two-site-ia/capability-ownership.md` the **feature package** (not the host) that will build it; the registry row and the canvas tables stay in sync.
 5. **The owner draws once.** When a doctor screen equals an Academy screen, the request is «add the host prop to `<canon>.dc.html`» — never «draw the doctor version». The same applies in the other direction: `auth.dc.html` (#2080) received the `host` prop and the doctor-only blocks; the doctor re-cut went to `archive/`.
@@ -59,7 +59,7 @@ Change in one place, apply everywhere. If a drawing shows one of these things, i
 | Unit                            | Canvas file                                                                         | How it is used                                                                                                                          |
 | ------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Shell (header, footer, theme)   | `ds-shell.dc.html`                                                                  | As is, prop `host`; the screen wraps its content in it and draws no header/footer of its own.                                           |
-| Visual language and tokens      | `ds-foundation.dc.html`                                                             | The only source of colour, type, spacing, radii, shadows and grid; no value is invented.                                                |
+| Visual language                 | `ds-foundation.dc.html`                                                             | Shows colour, type, spacing, radii, shadows and grid as drawn from the design-system tokens; not a token source, no value is invented.  |
 | Event card                      | `unit-event-card.dc.html`                                                           | As is, both storefronts; «идёт сейчас / запланировано / вы записаны / прошедшее» are states of the unit, not new cards.                 |
 | Events feed by day              | `events-feed.dc.html`                                                               | As is, prop `host`; the screen sets only content and filters, never the rhythm or geometry of the feed.                                 |
 | Month / week calendar           | `events-feed.dc.html` (`view` `месяц`)                                              | The `view` switch of the one feed page; the compact month in the left column is the same calendar, not a second one.                    |
@@ -134,7 +134,7 @@ Rules the template encodes:
 **Do not put into a prompt:**
 
 - paste or preamble meta lines («insert after the project preamble», "read the rules above") — there is no preamble;
-- tokens, colours, spacing values or component anatomy — they come from «Doctor.School Design System» and the project canvases (`ds-foundation`, `unit-*`; see «Where context lives»); a prompt names a component by its export name and never restates it;
+- tokens, colours, spacing values or component anatomy — they come from «Doctor.School Design System» (tokens, components) and the `unit-*` canvases (reuse units; see «Where context lives»); a prompt names a component by its export name and never restates it;
 - Russian prose outside quoted UI copy;
 - options for a decision the owner has already made — name the decision and its date instead;
 - the anatomy of a reuse unit — name its canvas file and the delta;

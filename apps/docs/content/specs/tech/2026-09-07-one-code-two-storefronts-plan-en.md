@@ -198,7 +198,7 @@ The same duplication exists in `design-source/` and confuses vendoring (tokens a
 Rules (land in `design-source/README.md`, stage 1):
 
 1. **One canvas per capability, host as a prop.** A capability both storefronts render has one `.dc.html`; host differences are props / fork panels, never a second `doctor-*` / `academy-*` file. Host-only screens (`doctor-feed`, `doctor-school`, `academy-invest`, …) keep their host prefix.
-2. **Tokens only in `ds-foundation.dc.html`.** No canvas redefines a colour, radius or type step; a canvas that does is a vendoring defect, not a design decision.
+2. **Tokens only from the design system.** Tokens come only from «Doctor.School Design System» (published from `@ds/design-system`); `ds-foundation.dc.html` shows the visual language and is not a token source. No canvas defines or redefines a token value; a canvas that does is a vendoring defect, not a design decision.
 3. **Superseded and decision canvases move to `design-source/archive/`** in the PR that vendors the successor or records the decision; the README table lists only canon.
 4. **Vendoring writes the registry row.** The PR that vendors a canvas names the feature package (not the host) that will build it; the registry row and the canvas table stay in sync.
 5. **Owner draws once.** When a doctor screen equals an Academy screen, the request to the owner is «add the host prop / fork panel to `<canon>.dc.html`», never «draw the doctor version».

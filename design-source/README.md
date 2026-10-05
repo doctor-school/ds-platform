@@ -80,7 +80,7 @@ Owner-drawn screens for the two storefronts (ADR-0015): `doctor-*` = doctor.scho
 
 ## Canon rules
 
-The canon rules (one canvas per capability with a `host` prop, tokens only in `ds-foundation`, archive superseded canvases, vendoring writes the registry row, the owner draws once), the reuse-unit registry, the prompt template and the after-drawing steps live in one place: [`operate-claude-design`](../apps/docs/content/skills/operate-claude-design/SKILL.md). Read it before any Claude Design prompt, canvas request, canvas review or vendoring.
+The canon rules (one canvas per capability with a `host` prop, tokens only from the design system, archive superseded canvases, vendoring writes the registry row, the owner draws once), the reuse-unit registry, the prompt template and the after-drawing steps live in one place: [`operate-claude-design`](../apps/docs/content/skills/operate-claude-design/SKILL.md). Read it before any Claude Design prompt, canvas request, canvas review or vendoring.
 
 ### Pending consolidation
 

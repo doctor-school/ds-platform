@@ -150,7 +150,7 @@ describe("019 EARS-12 doctor-feed return target", () => {
       "/events?resume=a#frag",
       // No query at all, and a query the ONE feed codec itself rejects.
       "/events",
-      "/events?kind=not-a-uuid&resume=a",
+      "/events?kind=Not_A_Slug&resume=a",
       // Unbounded length.
       `/events?q=${"a".repeat(600)}&resume=a`,
     ]) {

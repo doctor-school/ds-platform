@@ -221,6 +221,16 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: pnpm lint:ui-parity
 
+      # change-tier: BLOCK (#2584). A declared `Change-tier:` below the minimum
+      # its changed-file set determines is refused; absent/malformed = ask.
+      - name: change-tier (BLOCK)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm lint:change-tier
+
       # pr-evidence: BLOCK. Durable delivery markers may not be missing or
       # placeholder, local touched suites may not be known-red/failed, and an
       # ADR/spec-clause deviation must point at its Issue or DEBT.md anchor.

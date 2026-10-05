@@ -14,6 +14,7 @@ import {
   isWorktreeCwd,
   latestRunsByName,
   parseModeAExempt,
+  verifyChangeTierShip,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
 
@@ -736,5 +737,66 @@ describe("merge-gate hasMergeCommits() (#1865)", () => {
     // Unusable input (a git failure the caller could not read) is NOT clean.
     expect(hasMergeCommits(null)).toBe(true);
     expect(hasMergeCommits(undefined)).toBe(true);
+  });
+});
+
+describe("merge-gate verifyChangeTierShip() (#2584)", () => {
+  const copyFile = {
+    filename: "apps/doctor/messages/ru.json",
+    status: "modified",
+    additions: 3,
+    deletions: 3,
+  };
+  const shipBody = "Change-tier: ship — date substitution in the promo copy";
+  const head = "a".repeat(40);
+  const meta = (body: string, changedFiles: number) => ({
+    body,
+    changedFiles,
+    headRefOid: head,
+  });
+
+  it("ship: a verified ship PR needs no Mode (a) verdict", () => {
+    expect(
+      verifyChangeTierShip([copyFile], meta(shipBody, 1), head, head),
+    ).toEqual({ ok: true, files: 1, lines: 6 });
+  });
+
+  it("ask: no declaration keeps the Mode (a) verdict requirement", () => {
+    expect(verifyChangeTierShip([copyFile], meta("", 1), head, head).ok).toBe(
+      false,
+    );
+  });
+
+  it("refuses an incomplete file set or a ship declaration its files do not allow", () => {
+    expect(
+      verifyChangeTierShip([copyFile], meta(shipBody, 2), head, head).ok,
+    ).toBe(false);
+    expect(
+      verifyChangeTierShip(
+        [{ ...copyFile, filename: "packages/db/src/schema/users.ts" }],
+        meta(shipBody, 1),
+        head,
+        head,
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("refuses a file listing not bound to the head being merged", () => {
+    const moved = "b".repeat(40);
+    // head moved between the metadata read and the file listing
+    expect(
+      verifyChangeTierShip([copyFile], meta(shipBody, 1), head, moved),
+    ).toEqual({
+      ok: false,
+      reason: "changed-file set not bound to the merge head",
+    });
+    // metadata describes a different head than the one being merged
+    expect(
+      verifyChangeTierShip([copyFile], meta(shipBody, 1), moved, moved).ok,
+    ).toBe(false);
+    // the after-read failed
+    expect(
+      verifyChangeTierShip([copyFile], meta(shipBody, 1), head, "").ok,
+    ).toBe(false);
   });
 });

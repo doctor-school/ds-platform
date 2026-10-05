@@ -68,6 +68,13 @@ import {
   classifyReleaseFiles,
   isVersionPackagesPr,
 } from "./release-review-exemption.mjs";
+// #2584: the change-tier rule, loaded via Node type stripping (one definition
+// for every gate).
+import {
+  normalizeTierFiles,
+  parseDeclaredTier,
+  resolveTier,
+} from "../lint/lib/change-tier.ts";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -558,6 +565,41 @@ export function verifyModeAExemption(files, metadata, headSha, runGit = git) {
   );
 }
 
+/**
+ * #2584: a Change-tier ship PR needs no Mode (a) verdict — re-proven on the
+ * CURRENT REST file listing at merge time, with the same completeness rule as
+ * the exemption path. Anything short of `effective === "ship"` keeps the
+ * head-pinned verdict requirement.
+ */
+export function verifyChangeTierShip(files, metadata, headSha, headAfter) {
+  // The file listing is unpinned (REST `pulls/<n>/files` has no sha), so the
+  // head is read before AND after it: both reads must equal the head being
+  // merged, or the listing may describe a different commit.
+  if (!headSha || metadata?.headRefOid !== headSha || headAfter !== headSha)
+    return {
+      ok: false,
+      reason: "changed-file set not bound to the merge head",
+    };
+  if (!Array.isArray(files) || files.length !== metadata?.changedFiles)
+    return { ok: false, reason: "incomplete changed-file set" };
+  const tierFiles = normalizeTierFiles(files);
+  const tier = resolveTier(
+    metadata.body ?? "",
+    tierFiles,
+    metadata.changedFiles,
+  );
+  if (tier.effective !== "ship")
+    return {
+      ok: false,
+      reason: `declared ${tier.declared}, minimum ${tier.minimum}: ${tier.reasons.join("; ")}`,
+    };
+  const lines = tierFiles.reduce(
+    (sum, file) => sum + file.additions + file.deletions,
+    0,
+  );
+  return { ok: true, files: tierFiles.length, lines };
+}
+
 /** Read the exact PR comparison blobs; filename-only bot claims are insufficient. */
 function hydrateReleaseFiles(files, headSha, baseSha, runGit) {
   const failRelease = (reason) => {
@@ -836,6 +878,55 @@ async function main() {
   // needs a Mode-a APPROVE pinned (via the review's native commit_id) to THIS
   // head SHA. If the head moves mid-poll, step 4's head pin goes RED anyway,
   // so a verdict fresh here stays fresh for any green this run can emit.
+  // #2584: only a body that DECLARES ship pays for the file listing; every
+  // other PR (ask/show, or a declaration that does not verify) falls through
+  // to the head-pinned verdict path unchanged.
+  function changeTierShip() {
+    const bodyRes = gh([
+      "pr",
+      "view",
+      String(prNumber),
+      "--json",
+      "body,changedFiles,headRefOid",
+    ]);
+    if (bodyRes.status !== 0) return false;
+    const metadata = JSON.parse(bodyRes.stdout);
+    if (parseDeclaredTier(metadata.body ?? "") !== "ship") return false;
+    const filesRes = gh([
+      "api",
+      `repos/{owner}/{repo}/pulls/${prNumber}/files?per_page=100`,
+      "--paginate",
+      "--slurp",
+    ]);
+    if (filesRes.status !== 0) return false;
+    const afterRes = gh([
+      "pr",
+      "view",
+      String(prNumber),
+      "--json",
+      "headRefOid",
+      "--jq",
+      ".headRefOid",
+    ]);
+    const headAfter = afterRes.status === 0 ? afterRes.stdout.trim() : "";
+    const ship = verifyChangeTierShip(
+      flattenApiPages(JSON.parse(filesRes.stdout)),
+      metadata,
+      sha,
+      headAfter,
+    );
+    if (!ship.ok) {
+      process.stdout.write(
+        `${TAG} Change-tier ship NOT verified for PR #${prNumber} (${ship.reason}) — Mode (a) verdict required.\n`,
+      );
+      return false;
+    }
+    process.stdout.write(
+      `${TAG} Mode (a) not required — Change-tier ship verified (${ship.files} files, ${ship.lines} lines).\n`,
+    );
+    return true;
+  }
+
   function assertCurrentReview() {
     const redispatch = `Dispatch (or re-dispatch) request-mode-a-review against the CURRENT head, or — ONLY for a sanctioned no-Mode-a class (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version Packages bot PR) — re-run with --mode-a-exempt "<reason>". Do NOT merge.`;
     if (modeAExempt.exempt) {
@@ -867,6 +958,8 @@ async function main() {
         `${TAG} MODE-A EXEMPT — verdict gate SKIPPED for PR #${prNumber}: ${modeAExempt.reason} ` +
           `(sanctioned classes only — AGENTS.md §3.8; this line is the audit record).\n`,
       );
+    } else if (changeTierShip()) {
+      return;
     } else {
       const verdict = classifyModeAVerdict(fetchReviews(prNumber), sha);
       if (verdict.state === "no-verdict") {

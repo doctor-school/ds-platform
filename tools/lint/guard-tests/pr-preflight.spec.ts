@@ -29,6 +29,7 @@ describe("pr-preflight GUARDS roster", () => {
     expect(GUARDS.map((g) => g.name)).toEqual([
       "registry-research",
       "ui-parity",
+      "change-tier",
       "spec-link",
       "prior-decisions",
       "spec-status-fresh",

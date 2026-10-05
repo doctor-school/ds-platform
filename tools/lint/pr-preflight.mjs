@@ -56,6 +56,7 @@ import { parseModeAExempt } from "../gh/merge-gate.mjs";
 export const GUARDS = [
   { name: "registry-research", file: "registry-research-lint.ts" },
   { name: "ui-parity", file: "ui-parity-lint.ts" },
+  { name: "change-tier", file: "change-tier-lint.ts" },
   { name: "spec-link", file: "spec-link-lint.ts" },
   { name: "prior-decisions", file: "prior-decisions-lint.ts" },
   { name: "spec-status-fresh", file: "spec-status-lint.ts" },

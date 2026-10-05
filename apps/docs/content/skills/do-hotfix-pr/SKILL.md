@@ -21,7 +21,7 @@ mode: inline
 ## Procedure
 
 0. **Stage-A precondition (before implementation).** For a rendered surface run `build-ui-from-design-system` research/adoption and owner design gate before the fix. Verify existing approval and its exact scope; new or changed look/behavior requires the recorded owner decision. Missing required design capability blocks UI implementation. Stage B remains required before merge.
-1. **Failing test first** — reproduce the bug in a Vitest test (or, for CI/infra hotfixes, in the smallest possible artifact that demonstrates the failure — e.g., a workflow-syntax check).
+1. **Failing test first** for a behaviour fix — reproduce the bug in a Vitest test (or, for CI/infra hotfixes, in the smallest possible artifact that demonstrates the failure — e.g., a workflow-syntax check). A Ship-tier fix (`.claude/rules/change-tiers.md`) adds no test for copy, exactly one for a value substitution, never one pinning wording; it updates existing tests that quote the old text.
 2. **Fix** — minimum code change that turns the failing test green.
 3. **UI verification gate (if the fix touches any rendered surface).** If the change touches a user-facing UI surface (`apps/portal/**`, `apps/promo/**`, `apps/admin/**`, `packages/design-system/**`) — even a "one-line" tweak like a radius, color, label, or copy string — you MUST, before the review step:
    1. Verify the pre-implementation **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — reuse the existing valid adoption decision/source; research the approved toolbox only for an uncovered element class, and **record the adoption decision** (`adopted <block> from <registry>` or `bespoke — <why the search came up empty>`) as a `registry-research:` line in the PR body. This is enforced by the `registry-research` CI gate (#251) and by AGENTS.md §6.
@@ -33,8 +33,8 @@ mode: inline
 4. **`run-iteration-end-checklist`** — record applicable evidence inline; dispatch only when independent verification/context savings justify it. Unaffected items are `N/A` with reasons; reuse valid results. Required Mode-a review stays independent.
 5. **`surface-decision-debt`** (inline) — required invocation.
 6. `git push` + `gh pr create` (label `bug`, `Closes #N`, `author:*`; include the `registry-research:` line from step 3 if it applied).
-7. **`request-mode-a-review`** (dispatch) — verdict-gated.
-8. **`respond-to-review`** (inline) — loop until APPROVE + green CI.
+7. **`request-mode-a-review`** (dispatch) — verdict-gated for a Show/Ask fix; a verified `Change-tier: ship` fix skips it (the merge gate re-proves the tier).
+8. **`respond-to-review`** (inline) — loop until APPROVE + green CI (Ship: green CI).
 9. **`write-iteration-summary`** (inline).
 10. **`merge-when-green`** (inline).
 11. **`report-task-outcome`** (inline) — the owner-facing closeout report. Read [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md) at report time and write the report in its fixed shape: product-first lines, PR / migration / EARS identifiers only in trailing parentheses or the collapsed technical appendix.
@@ -46,7 +46,7 @@ For a **behavior-preserving copy/layout/polish** fix to a design the product own
 - **No separate Issue** when an epic or a Stage-B gate Issue already tracks the surface — reference it in the PR body instead (`polish for #<gate>`).
 - **MAY reuse** an existing session worktree + already-running stand when the branch base matches the fix — no fresh worktree/stand spin-up.
 - **Live-verify ONLY the touched surface/state** (the changed element at the affected breakpoint/theme) — not the full field-kind × surface × breakpoint matrix.
-- **Still mandatory:** the PR, the `request-mode-a-review` Mode-a review, and green CI. The UI pre-flight gate (step 3) applies as written; only the _scope_ of live-verify narrows.
+- **Still mandatory:** the PR and green CI; the `request-mode-a-review` Mode-a review unless the polish qualifies as Ship (`.claude/rules/change-tiers.md` — then the lead authors it inline, Stage-B is the owner's chat decision, and no live-verify or ui-parity evidence is needed). The UI pre-flight gate (step 3) applies as written; only the _scope_ of live-verify narrows.
 
 Driver: on 2026-07-06 the owner pushed back on cost after a one-line overflow fix ran the full new-feature pipeline (fresh Issue + fresh stand + full matrix) for an already-approved surface.
 

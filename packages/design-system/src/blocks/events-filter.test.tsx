@@ -1,59 +1,66 @@
 import * as React from "react";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { EventsFilter, type AppliedFacets } from "./events-filter";
+import {
+  EventsFilter,
+  countAppliedFacets,
+  defaultAppliedFacets,
+  type AppliedFacets,
+  type EventsFilterLabels,
+  type EventsFilterOptions,
+} from "./events-filter";
 // The whole blocks barrel, loaded at collection time: EARS-7.5 asserts export
 // IDENTITY, not import speed — a cold barrel import inside the 5 s per-test
 // budget timed out on CI once the barrel grew (#1981).
 import * as blocksBarrel from "./index";
+
+/**
+ * 019 EARS-7 / EARS-13 as amended 2026-10-05 — the shared `events-filter`
+ * unit, source `design-source/events-facets.dc.html`. The facet SET is the
+ * host's (019 «Differences between storefronts» `filterSet`): the doctor
+ * storefront mounts name search, specialty, format, kind, city, «Только с
+ * НМО» and direction; the Academy mounts project, expert and topic. The
+ * header states «Фильтры», the applied count and «Сбросить» only while
+ * something is applied, and `showHeader={false}` yields the bare body the
+ * mobile sheet hosts under its own header.
+ *
+ * jsdom lacks the two browser APIs the Combobox's Radix popper and `cmdk`
+ * need — `ResizeObserver` and `scrollIntoView` — so the harness supplies them.
+ */
+beforeAll(() => {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+  Element.prototype.scrollIntoView ??= vi.fn();
+});
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
 
-/**
- * 019 EARS-7 — the shared `events-filter` unit (source
- * `design-source/doctor-events.dc.html`, F-019-1 Б sidebar). jsdom pins the
- * contract the requirement states: the full REQ-138 facet set in the canvas
- * control language (closed labelled selects stating their current value, the
- * option sheet on demand), every applied facet visible as a removable unit
- * with a working reset and a stated count, and the three D-1 fill states
- * rendering correctly so a consumer mounting fewer facets breaks neither the
- * panel nor the host grid.
- */
+const EMPTY: AppliedFacets = defaultAppliedFacets();
 
-const EMPTY: AppliedFacets = {
-  format: [],
-  kind: [],
-  specialtyScope: "mine-and-adjacent",
-  city: [],
-  nmoOnly: false,
-  freeByPul: false,
-  query: "",
-};
-
-const OPTIONS = {
-  view: [
-    { id: "week", label: "Неделя" },
-    { id: "month", label: "Месяц" },
-  ],
-  tense: [
-    { id: "upcoming", label: "Будущие" },
-    { id: "past", label: "Прошедшие" },
-  ],
+const OPTIONS: EventsFilterOptions = {
   format: [
-    { id: "webinar", label: "Вебинар" },
-    { id: "online-meeting", label: "Онлайн-встреча" },
-    { id: "offline-meetup", label: "Офлайн-встреча коллег" },
-    { id: "congress", label: "Конгресс" },
-    { id: "podcast", label: "Подкаст-эфир" },
+    { id: "online", label: "Онлайн" },
+    { id: "offline", label: "Офлайн" },
+    { id: "hybrid", label: "Гибрид" },
   ],
   kind: [
-    { id: "case-review", label: "Разбор случая" },
-    { id: "club", label: "Doctor Club" },
+    { id: "webinar", label: "Вебинар" },
+    { id: "congress", label: "Конгресс" },
+    { id: "club", label: "Встреча клуба" },
   ],
   specialty: [
     { id: "traumatology", label: "Травматология" },
@@ -63,34 +70,82 @@ const OPTIONS = {
     { id: "kazan", label: "Казань" },
     { id: "moscow", label: "Москва" },
   ],
+  direction: [
+    { id: "sports", label: "Спортивная медицина" },
+    { id: "rehab", label: "Реабилитация" },
+  ],
+  project: [
+    { id: "producers", label: "Школа продюсеров" },
+    { id: "metrics", label: "Метрики" },
+  ],
+  expert: [
+    { id: "ivanova", label: "Иванова Анна" },
+    { id: "petrov", label: "Петров Илья" },
+  ],
+  topic: [
+    { id: "funnels", label: "Воронки" },
+    { id: "retention", label: "Удержание" },
+  ],
 };
 
-const LABELS = {
-  panel: "Фильтры событий",
-  view: "Вид",
-  tense: "Время",
+const combo = (label: string, one: string, more: string, search: string) => ({
+  label,
+  placeholder: one,
+  addPlaceholder: more,
+  searchPlaceholder: search,
+});
+
+const LABELS: EventsFilterLabels = {
+  panel: "Фильтры",
+  title: "Фильтры",
+  appliedCount: (n: number) => `Применено: ${n}`,
+  reset: "Сбросить",
+  removeFacet: "Убрать",
+  combobox: {
+    emptyLabel: "Ничего не найдено",
+    searchLabel: "Найти",
+    countLabel: (s: number, t: number) => `Найдено ${s} из ${t}`,
+    loadMoreLabel: "Показать ещё",
+    loadingMoreLabel: "Загружаем…",
+    loadMoreErrorLabel: "Повторить",
+  },
+  query: { label: "Поиск по названию", placeholder: "Например, PRP" },
+  specialty: {
+    ...combo(
+      "Специальность",
+      "Выбрать специальность",
+      "Добавить специальность",
+      "Например, кардиология",
+    ),
+    mine: "Моя и смежные",
+    all: "Все специальности",
+  },
   format: "Формат",
-  kind: "Тип события",
-  specialty: "Специальность",
-  specialtyMine: "Моя и смежные",
-  specialtyAll: "Все специальности",
-  city: "Город",
-  cityHint: "Город действует на офлайн-события.",
-  anyValue: "Все",
-  cityAny: "Все города",
+  kind: "Вид события",
+  city: {
+    ...combo("Город", "Любой город", "Добавить город", "Начните вводить город"),
+    hint: "Только для офлайн-событий",
+  },
   nmoOnly: "Только с НМО",
-  nmoFacet: "НМО",
-  nmoOff: "Не важно",
-  freeByPul: "Бесплатно по Pul",
-  freeByPulFacet: "Цена в Pul",
-  freeByPulOff: "Любая",
-  closeOptions: "Закрыть список",
-  query: "Поиск по названию",
-  queryPlaceholder: "Поиск по названию",
-  applied: "Фильтры:",
-  appliedCount: (n: number) => `Применено фильтров: ${n}`,
-  removeFacet: "Убрать фильтр",
-  reset: "Сбросить фильтры",
+  direction: combo(
+    "Направление",
+    "Все направления",
+    "Добавить направление",
+    "Например, реабилитация",
+  ),
+  project: combo(
+    "Проект",
+    "Все проекты",
+    "Добавить проект",
+    "Например, школа продюсеров",
+  ),
+  expert: combo(
+    "Эксперт",
+    "Все эксперты",
+    "Добавить эксперта",
+    "Фамилия или имя",
+  ),
+  topic: combo("Тема", "Все темы", "Добавить тему", "Например, метрики"),
 };
 
 function renderPanel(
@@ -99,9 +154,8 @@ function renderPanel(
   const onChange = vi.fn();
   const utils = render(
     <EventsFilter
-      fill="full"
+      host="doctor"
       applied={EMPTY}
-      appliedCount={0}
       options={OPTIONS}
       labels={LABELS}
       onChange={onChange}
@@ -111,585 +165,500 @@ function renderPanel(
   return { onChange, ...utils };
 }
 
-/** The CLOSED control of a facet — the canvas language's resting state. */
-function facet(label: string) {
-  return screen.getByRole("button", { name: new RegExp(`^${label}: `) });
+function group(name: string) {
+  return screen.getByRole("group", { name });
 }
 
-function queryFacet(label: string) {
-  return screen.queryByRole("button", { name: new RegExp(`^${label}: `) });
+/** Wait for the Combobox panel's Radix unmount to settle (#441 orphan timers). */
+async function settlePanel() {
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 }
 
-/** Open a facet's option sheet and return the sheet as its labelled group. */
-async function openSheet(user: ReturnType<typeof userEvent.setup>, label: string) {
-  await user.click(facet(label));
-  return screen.getByRole("group", { name: label });
-}
-
-describe("EventsFilter — the REQ-138 facet set (EARS-7)", () => {
-  it("EARS-7.1: renders all seven REQ-138 facets in the `full` fill state", () => {
+describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
+  it("EARS-7.1: the doctor host renders search, specialty, format, kind, city, НМО and direction — in the canvas order", () => {
     renderPanel();
-
-    // format · kind · specialty · city — list facets, each a closed control
-    // stating its own current value.
-    expect(facet(LABELS.format)).toHaveTextContent(LABELS.anyValue);
-    expect(facet(LABELS.kind)).toHaveTextContent(LABELS.anyValue);
-    expect(facet(LABELS.specialty)).toHaveTextContent(LABELS.specialtyMine);
-    expect(facet(LABELS.city)).toHaveTextContent(LABELS.cityAny);
-    // НМО · цена в Pul — two-state facets in the same control.
-    expect(facet(LABELS.nmoFacet)).toHaveTextContent(LABELS.nmoOff);
-    expect(facet(LABELS.freeByPulFacet)).toHaveTextContent(LABELS.freeByPulOff);
-    // name search.
-    expect(screen.getByLabelText(LABELS.query)).toBeInTheDocument();
-  });
-
-  it("EARS-7.1: nothing is expanded by default — the sidebar states its answers, not its option book", () => {
-    renderPanel();
-    for (const label of [LABELS.format, LABELS.kind, LABELS.specialty, LABELS.city]) {
-      expect(screen.queryByRole("group", { name: label })).not.toBeInTheDocument();
-      expect(facet(label)).toHaveAttribute("aria-expanded", "false");
-    }
-  });
-
-  it("EARS-7.1: opening a facet closes the previously open one — one sheet at a time", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    await openSheet(user, LABELS.format);
-    await openSheet(user, LABELS.city);
-
-    expect(
-      screen.queryByRole("group", { name: LABELS.format }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: LABELS.city })).toBeInTheDocument();
-  });
-
-  it("EARS-7.1: the option sheet closes on its own ✕ without touching the applied set", async () => {
-    const user = userEvent.setup();
-    const { onChange } = renderPanel();
-
-    const sheet = await openSheet(user, LABELS.format);
-    await user.click(
-      within(sheet).getByRole("button", { name: LABELS.closeOptions }),
+    expect(screen.getByLabelText("Поиск по названию")).toHaveAttribute(
+      "placeholder",
+      "Например, PRP",
     );
-
+    const order = [
+      "Специальность",
+      "Формат",
+      "Вид события",
+      "Город",
+      "Направление",
+    ].map((name) => group(name));
+    for (let i = 1; i < order.length; i += 1) {
+      expect(
+        order[i - 1]!.compareDocumentPosition(order[i]!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
     expect(
-      screen.queryByRole("group", { name: LABELS.format }),
-    ).not.toBeInTheDocument();
-    expect(onChange).not.toHaveBeenCalled();
+      screen.getByRole("switch", { name: "Только с НМО" }),
+    ).not.toBeChecked();
   });
 
-  it("EARS-7.1: the panel is one labelled region — the sidebar the screen mounts beside the body", () => {
+  it("EARS-7.1: the doctor set carries no Academy group and no free-by-Pul facet", () => {
     renderPanel();
-    expect(
-      screen.getByRole("region", { name: LABELS.panel }),
-    ).toBeInTheDocument();
+    for (const name of ["Проект", "Эксперт", "Тема"]) {
+      expect(screen.queryByRole("group", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(/Pul/)).not.toBeInTheDocument();
   });
 
-  it("EARS-7.1: defaults the specialty facet to «моя и смежные»", async () => {
-    const user = userEvent.setup();
+  it("EARS-7.1: specialty defaults to «Моя и смежные» beside «Все специальности» and a combobox", () => {
     renderPanel();
-
-    expect(facet(LABELS.specialty)).toHaveTextContent(LABELS.specialtyMine);
-    const sheet = await openSheet(user, LABELS.specialty);
+    const specialty = group("Специальность");
     expect(
-      within(sheet).getByRole("button", {
-        name: LABELS.specialtyMine,
-        pressed: true,
+      within(specialty).getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(specialty).getByRole("button", { name: "Все специальности" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(specialty).getByRole("combobox", {
+        name: /Выбрать специальность/,
       }),
     ).toBeInTheDocument();
   });
 
-  it("EARS-7.1: city carries its offline-only hint — the facet does not silently narrow online events", async () => {
-    const user = userEvent.setup();
+  it("EARS-7.1: city states its offline-only hint", () => {
     renderPanel();
-    const sheet = await openSheet(user, LABELS.city);
-    expect(within(sheet).getByText(LABELS.cityHint)).toBeInTheDocument();
-  });
-});
-
-describe("EventsFilter — facets apply and combine (EARS-7)", () => {
-  it("EARS-7.2: a format selection is emitted as the next applied-facet set", async () => {
-    const user = userEvent.setup();
-    const { onChange } = renderPanel();
-
-    const sheet = await openSheet(user, LABELS.format);
-    await user.click(within(sheet).getByRole("button", { name: "Вебинар" }));
-
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, format: ["webinar"] });
-  });
-
-  it("EARS-7.2: facets COMBINE — a second facet extends the applied set instead of replacing it", async () => {
-    const user = userEvent.setup();
-    const applied: AppliedFacets = {
-      ...EMPTY,
-      format: ["webinar"],
-      nmoOnly: true,
-    };
-    const { onChange } = renderPanel({ applied, appliedCount: 2 });
-
-    const sheet = await openSheet(user, LABELS.city);
-    await user.click(within(sheet).getByRole("button", { name: "Казань" }));
-
-    expect(onChange).toHaveBeenCalledWith({ ...applied, city: ["kazan"] });
-  });
-
-  it("EARS-7.2: a repeatable facet toggles OFF without touching its neighbours", async () => {
-    const user = userEvent.setup();
-    const applied: AppliedFacets = {
-      ...EMPTY,
-      format: ["webinar", "podcast"],
-      freeByPul: true,
-    };
-    const { onChange } = renderPanel({ applied, appliedCount: 3 });
-
-    const sheet = await openSheet(user, LABELS.format);
-    await user.click(within(sheet).getByRole("button", { name: "Вебинар" }));
-
-    expect(onChange).toHaveBeenCalledWith({ ...applied, format: ["podcast"] });
-  });
-
-  it("EARS-7.2: a list facet states its selected values on the closed control", () => {
-    renderPanel({
-      applied: { ...EMPTY, format: ["webinar", "congress"] },
-      appliedCount: 2,
-    });
-    expect(facet(LABELS.format)).toHaveTextContent("Вебинар, Конгресс");
-  });
-
-  it("EARS-7.2: the two-state facets flip on a single click, with no sheet to open", async () => {
-    const user = userEvent.setup();
-    const { onChange } = renderPanel();
-
-    await user.click(facet(LABELS.nmoFacet));
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, nmoOnly: true });
     expect(
-      screen.queryByRole("group", { name: LABELS.nmoFacet }),
-    ).not.toBeInTheDocument();
-
-    await user.click(facet(LABELS.freeByPulFacet));
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, freeByPul: true });
+      within(group("Город")).getByText("Только для офлайн-событий"),
+    ).toBeInTheDocument();
   });
 
-  it("EARS-7.2: a two-state facet that is ON states its applied value and clears on the next click", async () => {
+  it("EARS-7.1: format and kind are multi-select chips that combine with the applied set", async () => {
     const user = userEvent.setup();
-    const applied: AppliedFacets = { ...EMPTY, nmoOnly: true };
-    const { onChange } = renderPanel({ applied, appliedCount: 1 });
-
-    expect(facet(LABELS.nmoFacet)).toHaveTextContent(LABELS.nmoOnly);
-    await user.click(facet(LABELS.nmoFacet));
-    expect(onChange).toHaveBeenCalledWith({ ...applied, nmoOnly: false });
-  });
-
-  it("EARS-7.2: the specialty facet switches scope between «моя и смежные», «все» and explicit ids", async () => {
-    const user = userEvent.setup();
-    const { onChange, rerender } = renderPanel();
-
-    let sheet = await openSheet(user, LABELS.specialty);
+    const { onChange } = renderPanel({
+      applied: { ...EMPTY, kind: ["webinar"] },
+    });
     await user.click(
-      within(sheet).getByRole("button", { name: LABELS.specialtyAll }),
-    );
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, specialtyScope: "all" });
-
-    rerender(
-      <EventsFilter
-        fill="full"
-        applied={EMPTY}
-        appliedCount={0}
-        options={OPTIONS}
-        labels={LABELS}
-        onChange={onChange}
-      />,
-    );
-    sheet = screen.getByRole("group", { name: LABELS.specialty });
-    await user.click(
-      within(sheet).getByRole("button", { name: "Травматология" }),
+      within(group("Формат")).getByRole("button", { name: "Офлайн" }),
     );
     expect(onChange).toHaveBeenLastCalledWith({
       ...EMPTY,
-      specialtyScope: [{ id: "traumatology", label: "Травматология" }],
+      kind: ["webinar"],
+      format: ["offline"],
+    });
+    await user.click(
+      within(group("Вид события")).getByRole("button", { name: "Вебинар" }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, kind: [] });
+  });
+
+  it("EARS-7.1: «Все специальности» switches the scope", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel();
+    await user.click(screen.getByRole("button", { name: "Все специальности" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      specialtyScope: "all",
     });
   });
 
-  it("EARS-7.2: the name search commits once after the typing pause, never per keystroke", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { onChange } = renderPanel();
-
-    await user.type(screen.getByLabelText(LABELS.query), "prp");
-    expect(onChange).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(400);
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, query: "prp" });
-    vi.useRealTimers();
-  });
-});
-
-describe("EventsFilter — applied set, reset and count (EARS-7)", () => {
-  const applied: AppliedFacets = {
-    format: ["webinar"],
-    kind: [],
-    specialtyScope: "all",
-    city: ["kazan"],
-    nmoOnly: true,
-    freeByPul: true,
-    query: "prp",
-  };
-
-  it("EARS-7.3: every applied facet is visible as its own REMOVABLE unit, never a bare count", () => {
-    renderPanel({ applied, appliedCount: 6 });
-    const row = screen.getByRole("group", { name: LABELS.applied });
-
-    for (const name of [
-      "Вебинар",
-      LABELS.specialtyAll,
-      "Казань",
-      LABELS.nmoOnly,
-      LABELS.freeByPul,
-    ]) {
-      expect(
-        within(row).getByRole("button", {
-          name: `${LABELS.removeFacet}: ${name}`,
-        }),
-      ).toBeInTheDocument();
-    }
-    // The free-text query is applied too and is removable on its own.
-    expect(within(row).getAllByRole("button")).toHaveLength(6);
-  });
-
-  it("EARS-7.3: removing one applied facet leaves the others applied", async () => {
-    const user = userEvent.setup();
-    const { onChange } = renderPanel({ applied, appliedCount: 6 });
-
-    await user.click(
-      screen.getByRole("button", { name: `${LABELS.removeFacet}: Казань` }),
-    );
-
-    expect(onChange).toHaveBeenCalledWith({ ...applied, city: [] });
-  });
-
-  it("EARS-7.3: the applied count is stated, not merely implied", () => {
-    renderPanel({ applied, appliedCount: 6 });
-    expect(screen.getByText(LABELS.appliedCount(6))).toBeInTheDocument();
-  });
-
-  it("EARS-7.3: reset clears the whole applied set back to the default scope", async () => {
-    const user = userEvent.setup();
-    const onReset = vi.fn();
-    renderPanel({ applied, appliedCount: 6, onReset });
-
-    await user.click(screen.getByRole("button", { name: LABELS.reset }));
-    expect(onReset).toHaveBeenCalledTimes(1);
-  });
-
-  it("EARS-7.3: a URL-driven consumer gets the reset as a real link (LD-1)", () => {
-    renderPanel({ applied, appliedCount: 6, resetHref: "/events" });
-    expect(screen.getByRole("link", { name: LABELS.reset })).toHaveAttribute(
-      "href",
-      "/events",
-    );
-  });
-
-  it("EARS-7.3: nothing applied — no applied row and no reset affordance is offered", () => {
-    renderPanel({ onReset: vi.fn() });
-    expect(
-      screen.queryByRole("group", { name: LABELS.applied }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: LABELS.reset }),
-    ).not.toBeInTheDocument();
-  });
-});
-
-describe("EventsFilter — the three D-1 fill states (EARS-7)", () => {
-  it("EARS-7.4: `wave-1` renders view + tense only — and stays a complete panel", () => {
-    renderPanel({ fill: "wave-1" });
-
-    expect(facet(LABELS.view)).toBeInTheDocument();
-    expect(facet(LABELS.tense)).toBeInTheDocument();
-    for (const absent of [
-      LABELS.format,
-      LABELS.kind,
-      LABELS.specialty,
-      LABELS.city,
-      LABELS.nmoFacet,
-      LABELS.freeByPulFacet,
-    ]) {
-      expect(queryFacet(absent)).not.toBeInTheDocument();
-    }
-    expect(screen.queryByLabelText(LABELS.query)).not.toBeInTheDocument();
-    // Still the same labelled sidebar region — a lighter fill is not a broken panel.
-    expect(screen.getByRole("region", { name: LABELS.panel })).toBeInTheDocument();
-  });
-
-  it("EARS-7.4: `intermediate` adds format and kind and nothing beyond them", () => {
-    renderPanel({ fill: "intermediate" });
-
-    expect(facet(LABELS.view)).toBeInTheDocument();
-    expect(facet(LABELS.tense)).toBeInTheDocument();
-    expect(facet(LABELS.format)).toBeInTheDocument();
-    expect(facet(LABELS.kind)).toBeInTheDocument();
-    for (const absent of [LABELS.specialty, LABELS.city]) {
-      expect(queryFacet(absent)).not.toBeInTheDocument();
-    }
-    expect(screen.queryByLabelText(LABELS.query)).not.toBeInTheDocument();
-  });
-
-  it("EARS-7.4: `full` carries every facet the lighter states carry, plus the REQ-138 remainder", () => {
-    renderPanel();
-    for (const present of [
-      LABELS.view,
-      LABELS.tense,
-      LABELS.format,
-      LABELS.kind,
-      LABELS.specialty,
-      LABELS.city,
-      LABELS.nmoFacet,
-      LABELS.freeByPulFacet,
-    ]) {
-      expect(facet(present)).toBeInTheDocument();
-    }
-  });
-
-  it("EARS-7.4: a fill state whose options the consumer omits renders no empty facet control", () => {
-    renderPanel({ options: { view: OPTIONS.view, tense: OPTIONS.tense } });
-    // `full` was asked for, but only two option sets were supplied: the panel
-    // drops the facet rather than offering a control whose sheet is empty
-    // (LD-9's «empty labelled box is a defect», applied to the panel itself).
-    expect(queryFacet(LABELS.format)).not.toBeInTheDocument();
-    expect(queryFacet(LABELS.city)).not.toBeInTheDocument();
-    // The facets that need no option list still render at `full`.
-    expect(facet(LABELS.nmoFacet)).toBeInTheDocument();
-    expect(screen.getByLabelText(LABELS.query)).toBeInTheDocument();
-  });
-
-  it("EARS-7.5: the blocks barrel exposes exactly ONE panel implementation — a consumer cannot reach a fork", () => {
-    const barrel = blocksBarrel;
-    // Identity, not shape: a second, forked panel exported under the same name
-    // (or the barrel re-pointing at a screen-local copy) fails here, which is
-    // what «019 shall create no private copy of the panel» means for a
-    // consumer — every mount resolves to this module.
-    expect(barrel.EventsFilter).toBe(EventsFilter);
-  });
-
-  it("EARS-7.4: the panel owns no width of its own — the host grid places it", () => {
-    const { container } = renderPanel();
-    const region = screen.getByRole("region", { name: LABELS.panel });
-    expect(container.firstChild).toBe(region);
-    // No hard-coded sidebar width: the same body is reusable inside #1528's
-    // mobile sheet without fighting a baked-in desktop column.
-    expect(region.className).not.toMatch(/\bw-\[|\bw-\d|\bmax-w-\[/);
-  });
-});
-
-describe("EventsFilter — all-selected normalizes to «Все» (EARS-7)", () => {
-  it("EARS-7.6: checking the LAST remaining option of a multi-select facet collapses it to the empty set", async () => {
+  it("EARS-7.1: picking a specialty in the combobox replaces the scope with that list", async () => {
     const user = userEvent.setup();
     const { onChange } = renderPanel({
-      applied: { ...EMPTY, kind: ["case-review"] },
-      appliedCount: 1,
+      applied: { ...EMPTY, specialtyScope: "all" },
     });
-
-    const sheet = await openSheet(user, LABELS.kind);
-    await user.click(within(sheet).getByRole("button", { name: "Doctor Club" }));
-
-    // Selecting every option narrows nothing, so the facet drops out of the
-    // applied set entirely instead of listing its own whole option book.
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, kind: [] });
+    await user.click(within(group("Специальность")).getByRole("combobox"));
+    await user.click(
+      await screen.findByRole("option", { name: "Ревматология" }),
+    );
+    await settlePanel();
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      specialtyScope: [{ id: "rheumatology", label: "Ревматология" }],
+    });
   });
 
-  it("EARS-7.6: the collapsed facet shows «Все», carries no chip and adds nothing to the count", () => {
-    renderPanel({ applied: { ...EMPTY, kind: [] }, appliedCount: 0 });
-
-    expect(facet(LABELS.kind)).toHaveTextContent(LABELS.anyValue);
-    expect(
-      screen.queryByRole("group", { name: LABELS.applied }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText(LABELS.appliedCount(0))).not.toBeInTheDocument();
-  });
-
-  it("EARS-7.6: naming every offered specialty returns the scope to «моя и смежные»", async () => {
+  it("EARS-7.1: picked specialties show as removable chips; removing the last returns to «Моя и смежные»", async () => {
     const user = userEvent.setup();
     const { onChange } = renderPanel({
       applied: {
         ...EMPTY,
         specialtyScope: [{ id: "traumatology", label: "Травматология" }],
       },
-      appliedCount: 1,
     });
-
-    const sheet = await openSheet(user, LABELS.specialty);
-    await user.click(within(sheet).getByRole("button", { name: "Ревматология" }));
-
-    expect(onChange).toHaveBeenCalledWith({
+    const specialty = group("Специальность");
+    // A picked list selects neither scope chip and re-labels the combobox.
+    expect(
+      within(specialty).getByRole("button", { name: "Моя и смежные" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(specialty).getByRole("combobox", {
+        name: /Добавить специальность/,
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(specialty).getByRole("button", { name: "Убрать: Травматология" }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({
       ...EMPTY,
       specialtyScope: "mine-and-adjacent",
     });
   });
 
-  it("EARS-7.6: the sheet gains no «Все» row — the collapse normalizes the value, not the canvas control", async () => {
+  it("EARS-7.1: the combobox never offers a value that is already picked", async () => {
     const user = userEvent.setup();
-    renderPanel();
-    const sheet = await openSheet(user, LABELS.format);
-    expect(within(sheet).getAllByRole("button")).toHaveLength(
-      // five format options + the sheet's own ✕
-      OPTIONS.format.length + 1,
-    );
-  });
-});
-
-describe("EventsFilter — the query is committed trimmed (EARS-7)", () => {
-  it("EARS-7.7: a whitespace-only input commits as NO query", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { onChange } = renderPanel();
-
-    await user.type(screen.getByLabelText(LABELS.query), "   ");
-    vi.advanceTimersByTime(400);
-
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, query: "" });
-    vi.useRealTimers();
-  });
-
-  it("EARS-7.7: a padded query commits trimmed — the same search as the unpadded one", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const { onChange } = renderPanel();
-
-    await user.type(screen.getByLabelText(LABELS.query), "  prp  ");
-    vi.advanceTimersByTime(400);
-
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY, query: "prp" });
-    vi.useRealTimers();
-  });
-});
-
-describe("EventsFilter — the control paints applied only when it applies (EARS-7)", () => {
-  it("EARS-7.8: `вид` and `время` read as neutral at their default values — they contribute no chip and no count", () => {
-    renderPanel({
-      view: { value: "week", onChange: vi.fn() },
-      tense: { value: "upcoming", onChange: vi.fn() },
-    });
-
-    // The value line of an applied facet carries the accent token; these two
-    // never contribute to the applied set, so they must not claim it.
-    expect(screen.getByText("Неделя")).toHaveClass("text-foreground");
-    expect(screen.getByText("Будущие")).toHaveClass("text-foreground");
-    expect(screen.getByText("Неделя")).not.toHaveClass("text-primary-action");
-  });
-
-  it("EARS-7.8: a facet that DOES contribute paints applied", () => {
-    renderPanel({ applied: { ...EMPTY, city: ["kazan"] }, appliedCount: 1 });
-    expect(screen.getByText("Казань", { selector: "span.block" })).toHaveClass(
-      "text-primary-action",
-    );
-  });
-});
-
-describe("EventsFilter — the sheet is a disclosure and keeps focus (EARS-7)", () => {
-  it("EARS-7.9: Escape closes the open sheet and returns focus to its trigger", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-
-    await openSheet(user, LABELS.format);
+    renderPanel({ applied: { ...EMPTY, city: ["kazan"] } });
+    await user.click(within(group("Город")).getByRole("combobox"));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Москва"]);
     await user.keyboard("{Escape}");
-
-    expect(
-      screen.queryByRole("group", { name: LABELS.format }),
-    ).not.toBeInTheDocument();
-    expect(facet(LABELS.format)).toHaveFocus();
+    await settlePanel();
   });
 
-  it("EARS-7.9: a click outside the panel closes the open sheet", async () => {
+  it("EARS-7.1: a picked city appends to the applied cities and shows as a removable chip", async () => {
     const user = userEvent.setup();
-    renderPanel();
-    const outside = document.createElement("button");
-    outside.textContent = "снаружи";
-    document.body.append(outside);
-
-    await openSheet(user, LABELS.format);
-    await user.click(outside);
-
-    expect(
-      screen.queryByRole("group", { name: LABELS.format }),
-    ).not.toBeInTheDocument();
-    outside.remove();
+    const { onChange } = renderPanel({
+      applied: { ...EMPTY, city: ["kazan"] },
+    });
+    // The canvas draws the chip as «label  ✕»: the label, then the cross as
+    // its own decorative element (the gap is layout, asserted in the
+    // showcase Playwright spec — jsdom has no layout).
+    const chip = within(group("Город")).getByRole("button", {
+      name: "Убрать: Казань",
+    });
+    expect(within(chip).getByText("Казань").tagName).toBe("SPAN");
+    expect(chip.querySelector('[aria-hidden="true"]')?.textContent).toBe("✕");
+    await user.click(within(group("Город")).getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: "Москва" }));
+    await settlePanel();
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      city: ["kazan", "moscow"],
+    });
   });
 
-  it("EARS-7.9: closing the sheet on its own ✕ never drops focus to the document", async () => {
+  it("EARS-7.1: «Направление» is a combobox group with removable chips on the doctor set", async () => {
     const user = userEvent.setup();
-    renderPanel();
-
-    const sheet = await openSheet(user, LABELS.format);
+    const { onChange } = renderPanel({
+      applied: { ...EMPTY, direction: ["sports", "rehab"] },
+    });
+    const direction = group("Направление");
+    expect(
+      within(direction).getByRole("combobox", {
+        name: /Добавить направление/,
+      }),
+    ).toBeInTheDocument();
     await user.click(
-      within(sheet).getByRole("button", { name: LABELS.closeOptions }),
+      within(direction).getByRole("button", {
+        name: "Убрать: Спортивная медицина",
+      }),
     );
-
-    expect(document.activeElement).not.toBe(document.body);
-    expect(facet(LABELS.format)).toHaveFocus();
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      direction: ["rehab"],
+    });
   });
 
-  it("EARS-7.9: removing an applied chip moves focus to the next chip, not to the document", async () => {
+  it("EARS-7.1: a removable chip is a remove button, never announced as a pressed toggle", () => {
+    renderPanel({
+      applied: {
+        ...EMPTY,
+        city: ["kazan"],
+        specialtyScope: [{ id: "trauma", label: "Травматология" }],
+      },
+    });
+    const chips = screen.getAllByRole("button", { name: /^Убрать: / });
+    expect(chips).toHaveLength(2);
+    for (const chip of chips) expect(chip).not.toHaveAttribute("aria-pressed");
+  });
+
+  it("EARS-7.1: a picked id the host gives no option for shows no raw-id chip", () => {
+    renderPanel({ applied: { ...EMPTY, city: ["kazan", "ghost-id"] } });
+    expect(
+      within(group("Город")).getByRole("button", { name: "Убрать: Казань" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ghost-id/)).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.1: the НМО switch label is bold, as the canvas draws it", () => {
+    renderPanel();
+    expect(screen.getByText("Только с НМО").closest("label")).toHaveClass(
+      "font-bold",
+    );
+  });
+
+  it("EARS-7.1: the НМО switch emits nmoOnly", async () => {
     const user = userEvent.setup();
-    function Harness() {
+    const { onChange } = renderPanel();
+    await user.click(screen.getByRole("switch", { name: "Только с НМО" }));
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, nmoOnly: true });
+  });
+
+  it("EARS-7.2: the name search commits once, trimmed, after the typing pause", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { onChange } = renderPanel();
+    await user.type(screen.getByLabelText("Поиск по названию"), " PRP ");
+    expect(onChange).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, query: "PRP" });
+  });
+
+  it("EARS-7.2: «Сбросить» cancels a pending search commit — a just-typed query is not re-applied", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const seen: AppliedFacets[] = [];
+    function Stateful() {
       const [applied, setApplied] = React.useState<AppliedFacets>({
         ...EMPTY,
-        format: ["webinar"],
-        city: ["kazan"],
+        nmoOnly: true,
       });
       return (
         <EventsFilter
-          fill="full"
+          host="doctor"
           applied={applied}
-          appliedCount={2}
           options={OPTIONS}
           labels={LABELS}
-          onChange={setApplied}
-          onReset={() => setApplied(EMPTY)}
+          onChange={(next) => {
+            seen.push(next);
+            setApplied(next);
+          }}
+          onReset={() => setApplied(defaultAppliedFacets())}
         />
       );
     }
-    render(<Harness />);
-
-    await user.click(
-      screen.getByRole("button", { name: `${LABELS.removeFacet}: Вебинар` }),
-    );
-
-    expect(document.activeElement).not.toBe(document.body);
+    render(<Stateful />);
+    await user.type(screen.getByLabelText("Поиск по названию"), "PRP");
+    await user.click(screen.getByRole("button", { name: "Сбросить" }));
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
+    expect(screen.getByLabelText("Поиск по названию")).toHaveValue("");
     expect(
-      screen.getByRole("button", { name: `${LABELS.removeFacet}: Казань` }),
+      screen.queryByRole("button", { name: "Сбросить" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.2: the city combobox forwards the host's paging bridge", async () => {
+    const user = userEvent.setup();
+    const onLoadMore = vi.fn();
+    renderPanel({ paging: { city: { hasMore: true, onLoadMore } } });
+    await user.click(within(group("Город")).getByRole("combobox"));
+    await user.click(
+      await screen.findByRole("button", { name: "Показать ещё" }),
+    );
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Escape}");
+    await settlePanel();
+  });
+});
+
+describe("EventsFilter — the Academy facet set (EARS-7, filterSet)", () => {
+  it("EARS-7.3: the Academy host renders «Проект», «Эксперт», «Тема» and nothing of the doctor set", () => {
+    renderPanel({ host: "academy" });
+    for (const [name, placeholder] of [
+      ["Проект", "Все проекты"],
+      ["Эксперт", "Все эксперты"],
+      ["Тема", "Все темы"],
+    ] as const) {
+      expect(
+        within(group(name)).getByRole("combobox", {
+          name: new RegExp(placeholder),
+        }),
+      ).toBeInTheDocument();
+    }
+    for (const name of [
+      "Специальность",
+      "Формат",
+      "Вид события",
+      "Город",
+      "Направление",
+    ]) {
+      expect(screen.queryByRole("group", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByLabelText("Поиск по названию"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.3: an Academy pick appends to its own key and shows as a removable chip", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderPanel({
+      host: "academy",
+      applied: { ...EMPTY, expert: ["petrov"] },
+    });
+    expect(
+      within(group("Эксперт")).getByRole("combobox", {
+        name: /Добавить эксперта/,
+      }),
+    ).toBeInTheDocument();
+    await user.click(within(group("Тема")).getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: "Воронки" }));
+    await settlePanel();
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...EMPTY,
+      expert: ["petrov"],
+      topic: ["funnels"],
+    });
+    await user.click(
+      within(group("Эксперт")).getByRole("button", {
+        name: "Убрать: Петров Илья",
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, expert: [] });
+  });
+});
+
+describe("EventsFilter — header, applied count and reset (EARS-7)", () => {
+  it("EARS-7.4: nothing applied — the header states «Фильтры» with no count and no reset", () => {
+    renderPanel();
+    expect(
+      screen.getByRole("heading", { name: "Фильтры" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Применено/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Сбросить")).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.4: the applied count is stated in the header", () => {
+    renderPanel({
+      applied: {
+        ...EMPTY,
+        format: ["online"],
+        kind: ["webinar", "club"],
+        specialtyScope: "all",
+        city: ["kazan"],
+        nmoOnly: true,
+        direction: ["sports"],
+        query: "PRP",
+      },
+    });
+    expect(screen.getByText("Применено: 8")).toBeInTheDocument();
+  });
+
+  it("EARS-7.4: countAppliedFacets counts the host's own set only", () => {
+    const applied: AppliedFacets = {
+      ...EMPTY,
+      specialtyScope: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      query: "   ",
+      project: ["producers"],
+      topic: ["funnels", "retention"],
+    };
+    expect(countAppliedFacets(applied, "doctor")).toBe(2);
+    expect(countAppliedFacets(applied, "academy")).toBe(3);
+    expect(countAppliedFacets(EMPTY, "doctor")).toBe(0);
+  });
+
+  it("EARS-7.4: «Сбросить» runs onReset when something is applied", async () => {
+    const user = userEvent.setup();
+    const onReset = vi.fn();
+    renderPanel({ applied: { ...EMPTY, nmoOnly: true }, onReset });
+    await user.click(screen.getByRole("button", { name: "Сбросить" }));
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("EARS-7.4: a URL-driven consumer gets «Сбросить» as a real link (LD-1)", () => {
+    renderPanel({
+      applied: { ...EMPTY, nmoOnly: true },
+      resetHref: "/events",
+      onReset: vi.fn(),
+    });
+    expect(screen.getByRole("link", { name: "Сбросить" })).toHaveAttribute(
+      "href",
+      "/events",
+    );
+  });
+
+  it("EARS-13.1: showHeader={false} renders the bare body for the mobile sheet — no title, count or reset", () => {
+    renderPanel({ applied: { ...EMPTY, nmoOnly: true }, showHeader: false });
+    expect(
+      screen.queryByRole("heading", { name: "Фильтры" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Применено/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Сбросить")).not.toBeInTheDocument();
+    // The body itself is intact and still one labelled region.
+    expect(group("Специальность")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Фильтры" })).toBeInTheDocument();
+  });
+});
+
+describe("EventsFilter — robustness, identity and focus (EARS-7)", () => {
+  it("EARS-7.5: the blocks barrel exposes exactly ONE panel implementation — a consumer cannot reach a fork", () => {
+    expect(blocksBarrel.EventsFilter).toBe(EventsFilter);
+    expect(blocksBarrel.countAppliedFacets).toBe(countAppliedFacets);
+  });
+
+  it("EARS-7.6: a facet whose options or label the consumer omits is dropped, never an empty labelled box", () => {
+    const { direction: _direction, ...withoutDirection } = OPTIONS;
+    const { nmoOnly: _nmoOnly, ...withoutNmo } = LABELS;
+    renderPanel({
+      options: { ...withoutDirection, kind: [] },
+      labels: withoutNmo,
+    });
+    expect(
+      screen.queryByRole("group", { name: "Вид события" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "Направление" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(group("Формат")).toBeInTheDocument();
+  });
+
+  it("EARS-7.6: the panel owns no width and no chrome of its own — the host column or sheet places it", () => {
+    renderPanel();
+    const panel = screen.getByRole("region", { name: "Фильтры" });
+    expect(panel.className).not.toMatch(/\bw-|\bborder|\bp-\d/);
+  });
+
+  it("EARS-7.7: removing a chip moves focus to the next chip, then to the group's combobox — never to the document", async () => {
+    const user = userEvent.setup();
+    function Stateful() {
+      const [applied, setApplied] = React.useState<AppliedFacets>({
+        ...EMPTY,
+        city: ["kazan", "moscow"],
+      });
+      return (
+        <EventsFilter
+          host="doctor"
+          applied={applied}
+          options={OPTIONS}
+          labels={LABELS}
+          onChange={setApplied}
+        />
+      );
+    }
+    render(<Stateful />);
+    await user.click(screen.getByRole("button", { name: "Убрать: Казань" }));
+    expect(
+      screen.getByRole("button", { name: "Убрать: Москва" }),
     ).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Убрать: Москва" }));
+    expect(within(group("Город")).getByRole("combobox")).toHaveFocus();
   });
 
-  it("EARS-7.9: resetting the whole set lands focus on the panel region, not the document", async () => {
+  it("EARS-7.7: resetting lands focus on the panel region, not the document", async () => {
     const user = userEvent.setup();
-    function Harness() {
+    function Stateful() {
       const [applied, setApplied] = React.useState<AppliedFacets>({
         ...EMPTY,
-        format: ["webinar"],
-        city: ["kazan"],
+        nmoOnly: true,
       });
       return (
         <EventsFilter
-          fill="full"
+          host="doctor"
           applied={applied}
-          appliedCount={2}
           options={OPTIONS}
           labels={LABELS}
           onChange={setApplied}
-          onReset={() => setApplied(EMPTY)}
+          onReset={() => setApplied(defaultAppliedFacets())}
         />
       );
     }
-    render(<Harness />);
-
-    // The reset control unmounts with the applied block it lives in, so the
-    // panel region is the only remaining focus target.
-    await user.click(screen.getByRole("button", { name: LABELS.reset }));
-
-    expect(screen.queryByRole("button", { name: LABELS.reset })).toBeNull();
-    expect(document.activeElement).not.toBe(document.body);
-    expect(screen.getByRole("region", { name: LABELS.panel })).toHaveFocus();
+    render(<Stateful />);
+    await user.click(screen.getByRole("button", { name: "Сбросить" }));
+    expect(screen.getByRole("region", { name: "Фильтры" })).toHaveFocus();
   });
 });

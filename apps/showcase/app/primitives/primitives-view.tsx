@@ -80,8 +80,11 @@ import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { Container } from "@ds/design-system/container";
 import {
   EventsFilter,
+  defaultAppliedFacets,
   type AppliedFacets,
-  type EventsFilterFill,
+  type EventsFilterHost,
+  type EventsFilterLabels,
+  type EventsFilterOptions,
 } from "@ds/design-system/events-filter";
 import {
   Form,
@@ -1809,118 +1812,227 @@ function ContainerSection() {
   );
 }
 
-const EVENTS_FILTER_OPTIONS = {
-  view: [
-    { id: "week", label: "Неделя" },
-    { id: "month", label: "Месяц" },
-  ],
-  tense: [
-    { id: "upcoming", label: "Будущие" },
-    { id: "past", label: "Прошедшие" },
-  ],
-  format: [
-    { id: "webinar", label: "Вебинар" },
-    { id: "online-meeting", label: "Онлайн-встреча" },
-    { id: "offline-meetup", label: "Офлайн-встреча коллег" },
-    { id: "congress", label: "Конгресс" },
-    { id: "podcast", label: "Подкаст-эфир" },
-  ],
-  kind: [
-    { id: "case-review", label: "Разбор случая" },
-    { id: "club", label: "Doctor Club" },
-    { id: "lecture", label: "Лекция" },
-  ],
-  specialty: [
-    { id: "traumatology", label: "Травматология" },
-    { id: "rheumatology", label: "Ревматология" },
-  ],
-  city: [
-    { id: "kazan", label: "Казань" },
-    { id: "moscow", label: "Москва" },
-    { id: "spb", label: "Санкт-Петербург" },
-  ],
+const opts = (rows: ReadonlyArray<readonly [string, string]>) =>
+  rows.map(([id, label]) => ({ id, label }));
+
+/** The doctor's facet values — the same strings `events-facets.dc.html` draws. */
+const EVENTS_FILTER_DOCTOR_OPTIONS: EventsFilterOptions = {
+  format: opts([
+    ["online", "Онлайн"],
+    ["offline", "Офлайн"],
+    ["hybrid", "Гибрид"],
+  ]),
+  kind: opts([
+    ["webinar", "Вебинар"],
+    ["efir", "Эфир"],
+    ["congress", "Конгресс"],
+    ["club", "Встреча клуба"],
+    ["master", "Мастер-класс"],
+    ["case", "Клинический разбор с пациентом"],
+  ]),
+  specialty: opts([
+    ["endo", "Эндокринология"],
+    ["rad", "Лучевая диагностика"],
+    ["rehab", "Реабилитация"],
+    ["rheum", "Ревматология"],
+    ["sport", "Спортивная медицина"],
+    ["ortho", "Травматология и ортопедия"],
+  ]),
+  city: opts(
+    [
+      "Москва",
+      "Казань",
+      "Новосибирск",
+      "Барнаул",
+      "Владивосток",
+      "Волгоград",
+      "Воронеж",
+      "Екатеринбург",
+      "Ижевск",
+      "Иркутск",
+      "Кемерово",
+      "Краснодар",
+      "Красноярск",
+      "Махачкала",
+      "Набережные Челны",
+      "Нижний Новгород",
+      "Омск",
+      "Пермь",
+      "Ростов-на-Дону",
+      "Самара",
+      "Санкт-Петербург",
+      "Саратов",
+      "Севастополь",
+      "Ставрополь",
+      "Тольятти",
+      "Томск",
+      "Тюмень",
+      "Ульяновск",
+      "Уфа",
+      "Хабаровск",
+      "Челябинск",
+      "Ярославль",
+    ].map((label, i) => [`c${i}`, label] as const),
+  ),
+  direction: opts([
+    ["orthobio", "Ортобиология"],
+    ["arthro", "Артроскопия"],
+    ["sportmed", "Спортивная медицина"],
+    ["rehab", "Реабилитация"],
+  ]),
 };
 
-const EVENTS_FILTER_LABELS = {
-  panel: "Фильтры событий",
-  view: "Вид",
-  tense: "Время",
-  format: "Формат",
-  kind: "Тип события",
-  specialty: "Специальность",
-  specialtyMine: "Моя и смежные",
-  specialtyAll: "Все специальности",
-  city: "Город",
-  cityHint: "Город действует на офлайн- и гибридные события.",
-  anyValue: "Все",
-  cityAny: "Все города",
-  nmoOnly: "Только с НМО",
-  nmoFacet: "НМО",
-  nmoOff: "Не важно",
-  freeByPul: "Бесплатно по Pul",
-  freeByPulFacet: "Цена в Pul",
-  freeByPulOff: "Любая",
-  closeOptions: "Закрыть список значений",
-  query: "Поиск по названию",
-  queryPlaceholder: "Поиск по названию",
-  applied: "Фильтры:",
-  appliedCount: (n: number) => `Применено фильтров: ${n}`,
-  removeFacet: "Убрать фильтр",
-  reset: "Сбросить фильтры",
+/** The Academy's facet values — projects, experts and topics of the canvas. */
+const EVENTS_FILTER_ACADEMY_OPTIONS: EventsFilterOptions = {
+  project: opts([
+    ["as", "Академия смыслов"],
+    ["sp", "Школа продюсеров"],
+    ["p1", "Школа ортобиологии"],
+    ["p2", "Школа артроскопии"],
+  ]),
+  expert: opts([
+    ["belov", "Артём Белов"],
+    ["vorontsova", "Елена Воронцова"],
+    ["gromova", "Ирина Громова"],
+  ]),
+  topic: opts([
+    ["partner", "Партнёрства"],
+    ["program", "Программа школ"],
+    ["production", "Продакшн эфиров"],
+    ["metrics", "Метрики и отчётность"],
+    ["regul", "Регуляторика"],
+  ]),
 };
 
-const EVENTS_FILTER_EMPTY: AppliedFacets = {
-  format: [],
-  kind: [],
-  specialtyScope: "mine-and-adjacent",
-  city: [],
-  nmoOnly: false,
-  freeByPul: false,
-  query: "",
+const EVENTS_FILTER_SHARED_LABELS = {
+  panel: "Фильтры",
+  title: "Фильтры",
+  appliedCount: (n: number) => `Применено: ${n}`,
+  reset: "Сбросить",
+  removeFacet: "Убрать",
+  combobox: {
+    emptyLabel: "Ничего не найдено",
+    searchLabel: "Найти",
+    countLabel: (shown: number, total: number) =>
+      `Найдено ${shown} из ${total}`,
+    loadMoreLabel: "Показать ещё",
+    loadingMoreLabel: "Загружаем…",
+    loadMoreErrorLabel: "Повторить",
+  },
 };
 
-function countAppliedFacets(applied: AppliedFacets) {
-  return (
-    applied.format.length +
-    applied.kind.length +
-    applied.city.length +
-    (applied.specialtyScope === "mine-and-adjacent"
-      ? 0
-      : Array.isArray(applied.specialtyScope)
-        ? applied.specialtyScope.length
-        : 1) +
-    (applied.nmoOnly ? 1 : 0) +
-    (applied.freeByPul ? 1 : 0) +
-    (applied.query.trim() ? 1 : 0)
-  );
-}
+const EVENTS_FILTER_LABELS: Record<EventsFilterHost, EventsFilterLabels> = {
+  doctor: {
+    ...EVENTS_FILTER_SHARED_LABELS,
+    query: { label: "Поиск по названию", placeholder: "Например, PRP" },
+    specialty: {
+      label: "Специальность",
+      mine: "Моя и смежные",
+      all: "Все специальности",
+      placeholder: "Выбрать специальность",
+      addPlaceholder: "Добавить специальность",
+      searchPlaceholder: "Например, кардиология",
+    },
+    format: "Формат",
+    kind: "Вид события",
+    city: {
+      label: "Город",
+      hint: "Только для офлайн-событий",
+      placeholder: "Любой город",
+      addPlaceholder: "Добавить город",
+      searchPlaceholder: "Начните вводить город",
+    },
+    direction: {
+      label: "Направление",
+      placeholder: "Любое направление",
+      addPlaceholder: "Добавить направление",
+      searchPlaceholder: "Например, артроскопия",
+    },
+    nmoOnly: "Только с НМО",
+  },
+  academy: {
+    ...EVENTS_FILTER_SHARED_LABELS,
+    project: {
+      label: "Проект",
+      placeholder: "Все проекты",
+      addPlaceholder: "Добавить проект",
+      searchPlaceholder: "Например, школа продюсеров",
+    },
+    expert: {
+      label: "Эксперт",
+      placeholder: "Все эксперты",
+      addPlaceholder: "Добавить эксперта",
+      searchPlaceholder: "Фамилия или имя",
+    },
+    topic: {
+      label: "Тема",
+      placeholder: "Все темы",
+      addPlaceholder: "Добавить тему",
+      searchPlaceholder: "Например, метрики",
+    },
+  },
+};
+
+const EVENTS_FILTER_PAGE = 20;
 
 function EventsFilterDemo({
-  fill,
+  host,
   initial,
+  showHeader,
 }: {
-  fill: EventsFilterFill;
+  host: EventsFilterHost;
   initial?: Partial<AppliedFacets>;
+  showHeader?: boolean;
 }) {
   const [applied, setApplied] = useState<AppliedFacets>({
-    ...EVENTS_FILTER_EMPTY,
+    ...defaultAppliedFacets(),
     ...initial,
   });
-  const [view, setView] = useState("week");
-  const [tense, setTense] = useState("upcoming");
+  // City paging as the canvas draws it: 20 per page, «Показать ещё» for the
+  // next page, the search narrowing the pool. A real host pages its server
+  // read the same way through `paging.city`.
+  const [cityQuery, setCityQuery] = useState("");
+  const [cityPages, setCityPages] = useState(1);
+  const base =
+    host === "doctor"
+      ? EVENTS_FILTER_DOCTOR_OPTIONS
+      : EVENTS_FILTER_ACADEMY_OPTIONS;
+  const q = cityQuery.trim().toLowerCase();
+  const cityPool = (base.city ?? []).filter(
+    (o) =>
+      !applied.city.includes(o.id) && (!q || o.label.toLowerCase().includes(q)),
+  );
+  const options: EventsFilterOptions =
+    host === "doctor"
+      ? {
+          ...base,
+          city: [
+            ...(base.city ?? []).filter((o) => applied.city.includes(o.id)),
+            ...cityPool.slice(0, EVENTS_FILTER_PAGE * cityPages),
+          ],
+        }
+      : base;
 
   return (
     <div className="w-full max-w-sm">
       <EventsFilter
-        fill={fill}
+        host={host}
         applied={applied}
-        appliedCount={countAppliedFacets(applied)}
-        options={EVENTS_FILTER_OPTIONS}
-        labels={EVENTS_FILTER_LABELS}
+        options={options}
+        labels={EVENTS_FILTER_LABELS[host]}
         onChange={setApplied}
-        onReset={() => setApplied(EVENTS_FILTER_EMPTY)}
-        view={{ value: view, onChange: setView }}
-        tense={{ value: tense, onChange: setTense }}
+        onReset={() => setApplied(defaultAppliedFacets())}
+        showHeader={showHeader}
+        paging={{
+          city: {
+            onSearchChange: (value) => {
+              setCityQuery(value);
+              setCityPages(1);
+            },
+            hasMore: cityPool.length > EVENTS_FILTER_PAGE * cityPages,
+            onLoadMore: () => setCityPages((n) => n + 1),
+          },
+        }}
       />
     </div>
   );
@@ -1930,57 +2042,79 @@ function EventsFilterSection() {
   return (
     <PrimitiveSection
       title="Events-filter"
-      exportsLine="EventsFilter — the shared events facet panel (REQ-138 set · applied chips + reset + count · three D-1 fill states)"
+      exportsLine="EventsFilter — the shared events facet panel; the host supplies its facet set (doctor · Академия) · header «Применено: N» + «Сбросить» · removable chips"
     >
       <p className="text-sm text-muted-foreground">
-        019 EARS-7, fork F-019-1 Б (source{" "}
-        <code className="font-mono text-xs">doctor-events.dc.html</code>): the
-        ONE shared facet panel the doctor feed mounts as a desktop sidebar —
-        format, тип события, специальность (по умолчанию «моя и смежные»), город
-        для офлайн-событий, «НМО», «цена в Pul» и поиск по названию. Каждый
-        фасет — закрытый селект в языке канваса: подпись капсом над текущим
-        значением, а список значений раскрывается листом под кнопкой («НМО» и
-        «цена в Pul» переключаются одним кликом). Every applied facet stays
-        visible as its own removable chip under the controls, the applied count
-        is stated, and one «Сбросить фильтры» returns to the default scope. The
-        panel is presentational — values in, the next applied set out; the URL
-        codec is its own unit.
+        019 EARS-7 / EARS-13 per «Amendment — 2026-10-05» (source{" "}
+        <code className="font-mono text-xs">events-facets.dc.html</code>): the
+        ONE shared facet panel of both storefronts. The{" "}
+        <code className="font-mono text-xs">host</code> prop picks the facet set
+        of the 019 <code className="font-mono text-xs">filterSet</code> row —
+        the doctor gets поиск по названию, специальность («Моя и смежные» / «Все
+        специальности» + поиск конкретных), формат, вид события, город для
+        офлайн-событий, направление и «Только с НМО»; the Академия gets проект,
+        эксперт и тема. Every picked combobox value stays visible as a removable
+        chip under its facet; once anything is applied the header states
+        «Применено: N» and offers «Сбросить».
       </p>
       <p className="text-sm text-muted-foreground">
-        The three <span className="font-medium text-foreground">D-1 fill</span>{" "}
-        states are a property of the UNIT, not of the 019 screen: a later
-        consumer mounting fewer facets must break neither the panel nor the host
-        grid. The panel declares no width of its own — the host column places
-        it, which is also what lets the mobile sheet host the same body instead
-        of forking it.
+        The panel declares no width or chrome of its own — the desktop column or
+        the mobile sheet places it. The sheet hosts the same body with{" "}
+        <code className="font-mono text-xs">showHeader=false</code> (the sheet
+        carries its own title). A facet whose labels or options the host omits
+        is not rendered.
       </p>
-      {(
-        [
-          { fill: "wave-1", label: 'fill="wave-1" — вид + время' },
-          {
-            fill: "intermediate",
-            label: 'fill="intermediate" — + формат, тип',
-          },
-          { fill: "full", label: 'fill="full" — весь набор REQ-138' },
-        ] as const
-      ).map((variant) => (
-        <SubRow key={variant.fill} label={variant.label}>
-          <ThemePair render={() => <EventsFilterDemo fill={variant.fill} />} />
-        </SubRow>
-      ))}
-      <SubRow label='fill="full" — применённые фасеты, счётчик и сброс'>
+      <SubRow label='host="doctor" — nothing applied'>
+        <ThemePair render={() => <EventsFilterDemo host="doctor" />} />
+      </SubRow>
+      <SubRow label='host="doctor" — several applied: «Применено: N», «Сбросить», removable chips, «Только с НМО» on'>
         <ThemePair
           render={() => (
             <EventsFilterDemo
-              fill="full"
+              host="doctor"
               initial={{
-                format: ["webinar", "offline-meetup"],
-                kind: ["club"],
-                specialtyScope: "all",
-                city: ["kazan"],
-                nmoOnly: true,
-                freeByPul: true,
                 query: "PRP",
+                specialtyScope: [
+                  { id: "sport", label: "Спортивная медицина" },
+                  { id: "rheum", label: "Ревматология" },
+                ],
+                format: ["offline", "hybrid"],
+                kind: ["club"],
+                city: ["c1"],
+                direction: ["arthro"],
+                nmoOnly: true,
+              }}
+            />
+          )}
+        />
+      </SubRow>
+      <SubRow label='host="academy" — nothing applied'>
+        <ThemePair render={() => <EventsFilterDemo host="academy" />} />
+      </SubRow>
+      <SubRow label='host="academy" — project, expert and topic picked'>
+        <ThemePair
+          render={() => (
+            <EventsFilterDemo
+              host="academy"
+              initial={{
+                project: ["as"],
+                expert: ["belov"],
+                topic: ["metrics", "regul"],
+              }}
+            />
+          )}
+        />
+      </SubRow>
+      <SubRow label="showHeader={false} — the mobile sheet body (doctor, applied)">
+        <ThemePair
+          render={() => (
+            <EventsFilterDemo
+              host="doctor"
+              showHeader={false}
+              initial={{
+                specialtyScope: "all",
+                kind: ["webinar"],
+                nmoOnly: true,
               }}
             />
           )}

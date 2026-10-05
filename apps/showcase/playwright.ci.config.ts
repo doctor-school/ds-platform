@@ -32,6 +32,7 @@ export default defineConfig({
     "interaction-states.e2e.spec.ts",
     "a11y-axe.e2e.spec.ts",
     "data-table-row-press-candidates.e2e.spec.ts",
+    "events-filter-layout.e2e.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

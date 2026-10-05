@@ -3,80 +3,125 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
-import { FilterChip } from "../primitives/filter-chip";
+import { FilterChip, filterChipVariants } from "../primitives/filter-chip";
 import { Input } from "../primitives/input";
-import { Label } from "../primitives/label";
+import { Link } from "../primitives/link";
+import { Switch } from "../primitives/switch";
+import { Combobox, type ComboboxOption } from "./combobox";
 
 /**
- * `<EventsFilter>` (019 EARS-7, source `design-source/doctor-events.dc.html`,
- * fork F-019-1 Б — the sidebar panel) — the ONE shared facet panel every events
- * surface mounts. 019 mounts the full REQ-138 set; no screen owns a private
- * copy (ADR-0013 A1: one canonical core, thin host projections).
+ * `<EventsFilter>` (019 EARS-7 / EARS-13 as amended 2026-10-05, source
+ * `design-source/events-facets.dc.html`) — the ONE shared facet panel of the
+ * events feed on both storefronts. No screen owns a private copy (ADR-0013
+ * A1: one canonical core, thin host projections; 019 LD-11 / EARS-18).
  *
- * THE CONTROL LANGUAGE IS THE CANVAS'S, NOT A CHOICE OF THIS UNIT (owner
- * Stage-B decision on #1522). Every list facet is a CLOSED labelled select —
- * a bordered button carrying the small-caps facet name over its CURRENT VALUE
- * with a chevron — which expands into the canvas option sheet (tinted, its own
- * heading + ✕, options as bordered buttons, the chosen ones carrying ✓) inline
- * beneath that button. Nothing is expanded by default: the sidebar column reads
- * as the panel's seven answers, not as its whole option book. НМО and «цена в
- * Pul» wear the same button and TOGGLE on a single click («Не важно» ↔ «✓
- * Только с НМО»), because a two-state facet has no book to open. The canvas
- * lays these in a horizontal grid; the sidebar fork (F-019-1 Б) stacks the same
- * controls vertically — the same language, one column wide.
+ * THE FACET SET IS THE HOST'S, NOT THE PANEL'S. 019 «Differences between
+ * storefronts» names the `filterSet` as one of the three permitted per-host
+ * parameters, so `host` selects which facets render — never a fork:
+ *   • `doctor`  — «Поиск по названию» (Input), «Специальность» (two scope
+ *                 chips + a searchable Combobox + removable chips), «Формат»
+ *                 and «Вид события» (multi-select FilterChips), «Город»
+ *                 (Combobox + removable chips, offline-only hint),
+ *                 «Направление» (Combobox + removable chips) and the «Только с
+ *                 НМО» Switch. No free-by-Pul facet.
+ *   • `academy` — «Проект», «Эксперт», «Тема»: three Combobox groups, each
+ *                 with removable chips.
+ * «Направление» is in the spec's doctor `filterSet` but not drawn on the
+ * canvas; it takes the canvas's own Combobox + removable-chip pattern.
+ *
+ * The header states «Фильтры», and — only while something is applied — the
+ * applied count and «Сбросить». `showHeader={false}` renders the bare body the
+ * mobile sheet hosts under its own header (EARS-13 as amended).
  *
  * PRESENTATIONAL BY CONTRACT. Values in, the next `AppliedFacets` out. The
- * panel writes no URL and parses none: the query/URL codec is its own unit
- * (019 design §8 step 3), so the same panel serves a URL-driven storefront and
- * a state-driven consumer without carrying either's plumbing. `resetHref` is
- * how the URL-driven consumer keeps its reset a real link (LD-1) — the panel
- * only renders the href it is handed.
- *
- * THE THREE D-1 FILL STATES ARE A PROPERTY OF THE UNIT, NOT OF 019 —
- *   • `wave-1`       — view + tense only;
- *   • `intermediate` — + format, kind;
- *   • `full`         — + specialty, city, НМО, free-by-Pul, name search.
- * A lighter fill must stay a complete, correctly laid-out panel: a later
- * consumer (030/031) mounting fewer facets breaks neither the panel nor the
- * host grid. Hence the panel declares NO width and no grid placement of its
- * own — the host places it — and a facet whose option list the consumer omits
- * is dropped entirely rather than rendered as an empty labelled box.
- *
- * Unconditional obligations, at every fill (Baymard / NN/g, and the same
- * semantics `FilterBar` (#1578) carries for the operator toolbar): the applied
- * set is visible as REMOVABLE units — a bare «Фильтры (3)» does not satisfy it
- * — one reset returns to the default scope, and the applied count is stated.
- * The panel body is deliberately layout-agnostic so #1528 can host the same
- * body inside the mobile sheet instead of forking it. All copy is app-supplied
- * (no i18n in the package).
+ * panel writes no URL and parses none; `resetHref` is how a URL-driven
+ * consumer keeps its reset a real link (LD-1). The panel declares no width,
+ * border or padding: the desktop sticky column or the mobile sheet places it.
+ * A facet whose label or options the consumer omits is dropped entirely, so a
+ * consumer mounting fewer facets breaks neither the panel nor the host grid.
+ * All copy is app-supplied (no i18n in the package).
  */
 
-export type EventsFilterFill = "wave-1" | "intermediate" | "full";
+export type EventsFilterHost = "doctor" | "academy";
 
 export interface SpecialtyRef {
   id: string;
   label: string;
 }
 
-/** The full REQ-138 facet set of LD-4, mirrored one-to-one into the URL by its consumer. */
+/**
+ * Every facet value both hosts can carry, mirrored one-to-one into the URL by
+ * the consumer. A host reads and counts only its own keys
+ * (`countAppliedFacets`); the others stay at their defaults.
+ */
 export interface AppliedFacets {
-  /** `webinar` | `online-meeting` | `offline-meetup` | `congress` | `podcast` — repeatable. */
-  format: string[];
-  /** Kind reference ids — repeatable. */
-  kind: string[];
-  /** Default is `mine-and-adjacent`; explicit ids narrow to named specialties. */
-  specialtyScope: "mine-and-adjacent" | "all" | SpecialtyRef[];
-  /** City reference ids — offline events only. */
-  city: string[];
-  nmoOnly: boolean;
-  freeByPul: boolean;
-  /** Name search. */
+  /** Doctor: name search (committed trimmed). */
   query: string;
+  /** Doctor: default `mine-and-adjacent`; a picked list replaces the scope. */
+  specialtyScope: "mine-and-adjacent" | "all" | SpecialtyRef[];
+  /** Doctor: format ids (online / offline / hybrid) — repeatable. */
+  format: string[];
+  /** Doctor: event-kind dictionary slugs (012 LD-12) — repeatable. */
+  kind: string[];
+  /** Doctor: city ids — offline events only. */
+  city: string[];
+  /** Doctor: «Только с НМО». */
+  nmoOnly: boolean;
+  /** Doctor: direction ids — repeatable. */
+  direction: string[];
+  /** Academy: project ids — repeatable. */
+  project: string[];
+  /** Academy: expert ids — repeatable. */
+  expert: string[];
+  /** Academy: topic ids — repeatable. */
+  topic: string[];
+}
+
+/** The default scope — the value «Сбросить» returns to. */
+export function defaultAppliedFacets(): AppliedFacets {
+  return {
+    query: "",
+    specialtyScope: "mine-and-adjacent",
+    format: [],
+    kind: [],
+    city: [],
+    nmoOnly: false,
+    direction: [],
+    project: [],
+    expert: [],
+    topic: [],
+  };
+}
+
+/**
+ * The applied count of one host's facet set — the «Применено: N» of the
+ * header and the N of the mobile «Фильтры (N)» control, from ONE rule.
+ * «Все специальности» counts once; each picked specialty counts once.
+ */
+export function countAppliedFacets(
+  applied: AppliedFacets,
+  host: EventsFilterHost,
+): number {
+  if (host === "academy") {
+    return (
+      applied.project.length + applied.expert.length + applied.topic.length
+    );
+  }
+  const scope = applied.specialtyScope;
+  return (
+    applied.format.length +
+    applied.kind.length +
+    applied.city.length +
+    applied.direction.length +
+    (Array.isArray(scope) ? scope.length : scope === "all" ? 1 : 0) +
+    (applied.nmoOnly ? 1 : 0) +
+    (applied.query.trim().length > 0 ? 1 : 0)
+  );
 }
 
 /** The D-1 panel state the unit declares to its host. */
 export interface FacetPanelState {
-  fill: EventsFilterFill;
+  host: EventsFilterHost;
   appliedCount: number;
   resetHref?: string;
 }
@@ -89,69 +134,80 @@ export interface EventsFilterOption {
 }
 
 export interface EventsFilterOptions {
-  view?: EventsFilterOption[];
-  tense?: EventsFilterOption[];
   format?: EventsFilterOption[];
   kind?: EventsFilterOption[];
-  /** Named specialties offered beside «моя и смежные» / «все специальности». */
+  /** Named specialties the specialty combobox offers. */
   specialty?: EventsFilterOption[];
   city?: EventsFilterOption[];
+  direction?: EventsFilterOption[];
+  project?: EventsFilterOption[];
+  expert?: EventsFilterOption[];
+  topic?: EventsFilterOption[];
+}
+
+/** The facets realised as a Combobox + removable chips. */
+export type EventsFilterComboFacet =
+  "specialty" | "city" | "direction" | "project" | "expert" | "topic";
+
+/** Copy of one Combobox facet group. */
+export interface EventsFilterComboLabels {
+  /** The group caption («Город»). */
+  label: string;
+  /** The combobox copy while nothing is picked («Любой город»). */
+  placeholder: string;
+  /** The combobox copy once something is picked («Добавить город»). */
+  addPlaceholder: string;
+  searchPlaceholder?: string;
+  /** A line under the caption («Только для офлайн-событий»). */
+  hint?: string;
+}
+
+/** The host's server-search / paging bridge for one Combobox facet. */
+export interface EventsFilterComboPaging {
+  onSearchChange?: (query: string) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void | Promise<void>;
+  loadingMore?: boolean;
+  loadMoreError?: boolean;
 }
 
 export interface EventsFilterLabels {
   /** Accessible name of the panel region. */
   panel: string;
-  view?: string;
-  tense?: string;
+  /** The header title («Фильтры»). */
+  title: string;
+  /** The stated applied count («Применено: N») — the app owns its pluralization. */
+  appliedCount: (count: number) => string;
+  reset: string;
+  /** Verb prefix of a removable chip's accessible name («Убрать» → «Убрать: Казань»). */
+  removeFacet: string;
+  /** Strings every Combobox facet shares. */
+  combobox: {
+    emptyLabel: string;
+    searchLabel?: string;
+    countLabel?: (shown: number, total: number) => string;
+    loadMoreLabel?: string;
+    loadingMoreLabel?: string;
+    loadMoreErrorLabel?: string;
+  };
+  /** Doctor facets — omit a label to drop the facet. */
+  query?: { label: string; placeholder?: string };
+  specialty?: EventsFilterComboLabels & { mine: string; all: string };
   format?: string;
   kind?: string;
-  specialty?: string;
-  specialtyMine?: string;
-  specialtyAll?: string;
-  city?: string;
-  /** Why the city facet does not narrow online events. */
-  cityHint?: string;
-  /**
-   * The value a list facet shows while nothing in it is applied («Все»). The
-   * closed control always states a value — an empty select reads as broken.
-   */
-  anyValue?: string;
-  /** The city facet's own empty value («Все города»). Falls back to `anyValue`. */
-  cityAny?: string;
-  /**
-   * `nmoOnly` / `freeByPul` are the APPLIED values («Только с НМО») — they name
-   * the chip in the applied row and the on-state of the toggle facet. The
-   * facet's own caption («НМО») and its off value («Не важно») are these.
-   */
+  city?: EventsFilterComboLabels;
   nmoOnly?: string;
-  nmoFacet?: string;
-  nmoOff?: string;
-  freeByPul?: string;
-  freeByPulFacet?: string;
-  freeByPulOff?: string;
-  /** Accessible name of the option sheet's close control. */
-  closeOptions?: string;
-  query?: string;
-  queryPlaceholder?: string;
-  /** Heading of the applied row («Фильтры:»). */
-  applied: string;
-  /** The stated applied count — the app owns its pluralization. */
-  appliedCount: (count: number) => string;
-  /**
-   * Verb-first prefix for each applied chip's accessible name («Убрать фильтр»
-   * → "Убрать фильтр: Вебинар"). Without it assistive tech announces the bare
-   * value and nothing says the control REMOVES it.
-   */
-  removeFacet: string;
-  reset: string;
+  direction?: EventsFilterComboLabels;
+  /** Academy facets. */
+  project?: EventsFilterComboLabels;
+  expert?: EventsFilterComboLabels;
+  topic?: EventsFilterComboLabels;
 }
 
 export interface EventsFilterProps {
-  /** Which of the three D-1 fill states this consumer mounts. */
-  fill: EventsFilterFill;
+  /** Which storefront's facet set renders (019 `filterSet`). */
+  host: EventsFilterHost;
   applied: AppliedFacets;
-  /** `FacetPanelState.appliedCount` — stated to the reader, never merely implied. */
-  appliedCount: number;
   options: EventsFilterOptions;
   labels: EventsFilterLabels;
   /** The next applied set. Every facet emits the WHOLE set, so facets combine. */
@@ -160,20 +216,14 @@ export interface EventsFilterProps {
   resetHref?: string;
   /** Reset as an action (state-driven consumer). */
   onReset?: () => void;
-  /** `view` facet — wave-1 upward; omit the option list to drop the group. */
-  view?: { value: string; onChange: (id: string) => void };
-  /** `tense` facet — wave-1 upward. */
-  tense?: { value: string; onChange: (id: string) => void };
+  /** Render the «Фильтры» header. `false` for the mobile sheet body. Default `true`. */
+  showHeader?: boolean;
+  /** Server-search / paging bridge per Combobox facet (the city book is paged). */
+  paging?: Partial<Record<EventsFilterComboFacet, EventsFilterComboPaging>>;
   /** Debounce window for the name search. Default 400ms (NN/g inactivity timeout). */
   queryDebounceMs?: number;
   className?: string;
 }
-
-const FILL_RANK: Record<EventsFilterFill, number> = {
-  "wave-1": 0,
-  intermediate: 1,
-  full: 2,
-};
 
 function toggle(values: string[], id: string): string[] {
   return values.includes(id)
@@ -181,237 +231,202 @@ function toggle(values: string[], id: string): string[] {
     : [...values, id];
 }
 
-/**
- * ALL-SELECTED IS «ВСЕ» (owner decision on #1522). A multi-select facet whose
- * selected set covers its whole option list narrows nothing, so it collapses to
- * the EMPTY set at selection time: the closed control returns to «Все», the
- * chips disappear and the facet stops counting toward «Применено фильтров».
- * Omit-to-drop — the consumer therefore writes no URL parameter for it either.
- * The sheet gains no «Все» row: the collapse is a normalization of the value,
- * not a new control in the canvas language.
- */
-function toggleFacet(
-  values: string[],
-  id: string,
-  all: EventsFilterOption[] | undefined,
-): string[] {
-  const next = toggle(values, id);
-  return all && all.length > 0 && next.length >= all.length ? [] : next;
-}
-
-/**
- * The canvas facet control: a bordered button stating «LABEL / current value».
- * Open switches the fill to `tint` and drops the raised shadow, exactly as the
- * source does — the control looks pressed while its sheet is out.
- */
-const FacetButton = React.forwardRef<
-  HTMLButtonElement,
-  {
-    label: string;
-    value: string;
-    active: boolean;
-    caret: string;
-    onClick: () => void;
-    "aria-expanded"?: boolean;
-    "aria-controls"?: string;
-  }
->(function FacetButton({ label, value, active, caret, onClick, ...aria }, ref) {
+/** The canvas facet caption: sm, 800, uppercase, `micro` tracking. */
+function FacetCaption({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      ref={ref}
-      type="button"
-      onClick={onClick}
-      // The name is assembled explicitly: the label and the value are two
-      // separate blocks, so the computed name would otherwise run them
-      // together («ФорматВсе»). Both visible strings are kept, in reading
-      // order, so the accessible name still contains the visible label.
-      aria-label={`${label}: ${value}`}
-      {...aria}
-      className={cn(
-        "flex w-full items-center justify-between gap-3 border-2 border-border px-4 py-3 text-left transition-all",
-        "focus-visible:outline-none focus-visible:shadow-focus",
-        aria["aria-expanded"]
-          ? "bg-tint shadow-none"
-          : "bg-card shadow-ghost hover:bg-tint",
-      )}
-    >
-      <span className="min-w-0">
-        <span className="block text-caption font-extrabold uppercase tracking-wider text-primary-action">
-          {label}
-        </span>
-        <span
-          className={cn(
-            "block truncate text-sm font-extrabold",
-            active ? "text-primary-action" : "text-foreground",
-          )}
-        >
-          {value}
-        </span>
-      </span>
-      {/*
-        The chevron (and the ✕ of the two-state facets) carries its OWN token
-        colour: with no colour class it inherits the document foreground, which
-        in the dark theme is the same ink as the panel's own surface — the
-        glyph disappears. It takes the same pair as the value line beside it,
-        which is proven against both surfaces the control wears (`bg-card`
-        closed, `bg-tint` open).
-      */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "flex-none text-caption",
-          active ? "text-primary-action" : "text-foreground",
-        )}
-      >
-        {caret}
-      </span>
-    </button>
-  );
-});
-
-/**
- * One option inside the sheet — the chosen ones filled and marked ✓. `FilterChip`
- * carries the whole selected/hover/pressed/focus state set already (ADR-0013 §7);
- * only the full-width sheet geometry is applied on top.
- */
-function FacetOption({
-  selected,
-  onClick,
-  children,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <FilterChip
-      selected={selected}
-      onClick={onClick}
-      className="w-full justify-between gap-2.5 px-3 py-2.5 text-left"
-    >
-      <span className="truncate">{children}</span>
-      <span aria-hidden="true" className="flex-none">
-        {selected ? "✓" : ""}
-      </span>
-    </FilterChip>
+    <span className="text-sm font-extrabold uppercase tracking-micro">
+      {children}
+    </span>
   );
 }
 
-/**
- * A list facet: the closed control plus, while open, the canvas option sheet
- * inline beneath it. The sheet is the labelled `group` — assistive tech reads
- * the options as the facet's set, and a closed facet contributes no group.
- */
-function FacetSelect({
-  label,
-  value,
-  active,
-  hint,
-  open,
-  onOpenChange,
-  closeLabel,
-  triggerRef,
-  children,
-}: {
+interface PickedChip {
+  id: string;
   label: string;
-  value: string;
-  active: boolean;
-  hint?: string | undefined;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  closeLabel: string;
-  /** Registers the trigger so the panel can return focus to it on close. */
-  triggerRef: (node: HTMLButtonElement | null) => void;
-  children: React.ReactNode;
+  onRemove: () => void;
+}
+
+/**
+ * A Combobox facet group: caption (+ hint), the Combobox offering only the
+ * values not yet picked, and the picked values as removable chips. Removing a
+ * chip moves focus to the next chip, else to the group's combobox — never to
+ * the document.
+ */
+function ComboFacet({
+  facet,
+  labels,
+  shared,
+  options,
+  picked,
+  onPick,
+  paging,
+  removeFacet,
+  children,
+}: {
+  facet: EventsFilterComboFacet;
+  labels: EventsFilterComboLabels;
+  shared: EventsFilterLabels["combobox"];
+  options: EventsFilterOption[];
+  picked: PickedChip[];
+  onPick: (id: string) => void;
+  paging: EventsFilterComboPaging | undefined;
+  removeFacet: string;
+  /** Extra controls between the caption and the combobox (the specialty scope chips). */
+  children?: React.ReactNode;
 }) {
-  const sheetId = React.useId();
+  const groupRef = React.useRef<HTMLDivElement | null>(null);
+  const chipReturn = React.useRef<number | null>(null);
+  const hintId = React.useId();
+
+  React.useLayoutEffect(() => {
+    const index = chipReturn.current;
+    if (index === null || !groupRef.current) return;
+    chipReturn.current = null;
+    const chips = Array.from(
+      groupRef.current.querySelectorAll<HTMLButtonElement>("[data-facet-chip]"),
+    );
+    const next = chips[Math.min(index, chips.length - 1)];
+    if (next) {
+      next.focus();
+      return;
+    }
+    groupRef.current.querySelector<HTMLElement>("[role='combobox']")?.focus();
+  });
+
+  const pickedIds = new Set(picked.map((chip) => chip.id));
+  const offered: ComboboxOption[] = options
+    .filter((option) => !pickedIds.has(option.id))
+    .map((option) => ({ value: option.id, label: option.label }));
+
   return (
-    <div className="flex flex-col">
-      <FacetButton
-        ref={triggerRef}
-        label={label}
-        value={value}
-        active={active}
-        caret={open ? "▲" : "▼"}
-        onClick={() => onOpenChange(!open)}
-        aria-expanded={open}
-        aria-controls={sheetId}
+    <div
+      ref={groupRef}
+      role="group"
+      aria-label={labels.label}
+      data-facet={facet}
+      className="flex flex-col gap-3"
+    >
+      {labels.hint ? (
+        <div className="flex flex-col gap-1">
+          <FacetCaption>{labels.label}</FacetCaption>
+          <span id={hintId} className="text-sm text-muted-foreground">
+            {labels.hint}
+          </span>
+        </div>
+      ) : (
+        <FacetCaption>{labels.label}</FacetCaption>
+      )}
+      {children}
+      <Combobox
+        options={offered}
+        value={null}
+        onValueChange={onPick}
+        placeholder={
+          picked.length > 0 ? labels.addPlaceholder : labels.placeholder
+        }
+        showSearch
+        emptyLabel={shared.emptyLabel}
+        {...(labels.hint ? { "aria-describedby": hintId } : {})}
+        {...(labels.searchPlaceholder
+          ? { searchPlaceholder: labels.searchPlaceholder }
+          : {})}
+        {...(shared.searchLabel ? { searchLabel: shared.searchLabel } : {})}
+        {...(shared.countLabel ? { countLabel: shared.countLabel } : {})}
+        {...(shared.loadMoreLabel
+          ? { loadMoreLabel: shared.loadMoreLabel }
+          : {})}
+        {...(shared.loadingMoreLabel
+          ? { loadingMoreLabel: shared.loadingMoreLabel }
+          : {})}
+        {...(shared.loadMoreErrorLabel
+          ? { loadMoreErrorLabel: shared.loadMoreErrorLabel }
+          : {})}
+        {...(paging ?? {})}
       />
-      {open ? (
-        <div
-          id={sheetId}
-          role="group"
-          aria-label={label}
-          className="flex flex-col gap-2 border-2 border-t-0 border-border bg-tint p-3"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-caption font-extrabold uppercase tracking-wider text-tint-foreground">
-              {label}
-            </span>
+      {picked.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {picked.map((chip, index) => (
+            // A remove action, not a toggle: the selected chip's look (the
+            // canvas draws a selected FilterChip) without `aria-pressed`, so
+            // a screen reader hears «Убрать: X», never «X, pressed».
             <button
+              key={chip.id}
               type="button"
-              aria-label={closeLabel}
-              onClick={() => onOpenChange(false)}
-              className="flex-none px-1 text-sm text-tint-foreground focus-visible:outline-none focus-visible:shadow-focus"
+              data-facet-chip=""
+              className={filterChipVariants({ selected: true })}
+              aria-label={`${removeFacet}: ${chip.label}`}
+              onClick={() => {
+                chipReturn.current = index;
+                chip.onRemove();
+              }}
             >
-              ✕
+              {/* The canvas sets the cross off the label («label  ✕»); in the
+                  flex chip a text space collapses, so the gap is a token. */}
+              <span className="inline-flex items-center gap-1.5">
+                <span>{chip.label}</span>
+                <span aria-hidden="true">✕</span>
+              </span>
             </button>
-          </div>
-          <div className="flex flex-col gap-2">{children}</div>
-          {hint ? (
-            <p className="text-caption font-semibold text-tint-foreground">
-              {hint}
-            </p>
-          ) : null}
+          ))}
         </div>
       ) : null}
     </div>
   );
 }
 
+/** A multi-select chip facet («Формат», «Вид события»). */
+function ChipFacet({
+  label,
+  options,
+  values,
+  onToggle,
+}: {
+  label: string;
+  options: EventsFilterOption[];
+  values: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-col gap-3">
+      <FacetCaption>{label}</FacetCaption>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <FilterChip
+            key={option.id}
+            selected={values.includes(option.id)}
+            onClick={() => onToggle(option.id)}
+          >
+            {option.label}
+          </FilterChip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function EventsFilter({
-  fill,
+  host,
   applied,
-  appliedCount,
   options,
   labels,
   onChange,
   resetHref,
   onReset,
-  view,
-  tense,
+  showHeader = true,
+  paging,
   queryDebounceMs = 400,
   className,
 }: EventsFilterProps) {
   const queryId = React.useId();
-  // ONE sheet at a time, as the canvas does: opening a facet closes the
-  // previous one, so the column never grows into the wall of options the
-  // closed controls exist to prevent.
-  const [openFacet, setOpenFacet] = React.useState<string | null>(null);
   const panelRef = React.useRef<HTMLElement | null>(null);
-  const appliedRowRef = React.useRef<HTMLDivElement | null>(null);
-  const resetRef = React.useRef<HTMLElement | null>(null);
-  // The live trigger element per facet key — the sheet is inline, so the only
-  // stable focus anchor after it unmounts is the button that opened it.
-  const triggers = React.useRef(new Map<string, HTMLButtonElement>());
-  const restoreFocus = React.useRef<{ key: string; force: boolean } | null>(
-    null,
-  );
-  // Which applied chip was just removed; the row re-renders without it, so the
-  // focus target is resolved from the NEW row, not from the removed node.
-  const chipReturn = React.useRef<number | null>(null);
-  // The reset control lives INSIDE the applied block, so activating it unmounts
-  // the control itself; the focus target is resolved after that render.
+  // «Сбросить» lives in the header and unmounts with the applied state it
+  // clears, so the focus target is resolved after that render.
   const resetReturn = React.useRef(false);
-  const rank = FILL_RANK[fill];
-  const showsFormatTier = rank >= FILL_RANK.intermediate;
-  const showsFullTier = rank >= FILL_RANK.full;
 
   // The search field owns the keystrokes; the consumer receives ONE commit per
-  // typing pause. The timer must call the callback of the LATEST render — the
+  // typing pause. The timer calls the callback of the LATEST render — the
   // consumer rebuilds `onChange` around its current applied set, so a facet
-  // toggled inside the window would otherwise be rolled back by a commit
-  // carrying the pre-toggle set.
+  // toggled inside the window is not rolled back by a stale commit.
   const [draft, setDraft] = React.useState(applied.query);
   const lastCommitted = React.useRef(applied.query);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -419,8 +434,8 @@ export function EventsFilter({
   commitRef.current = (value: string) => onChange({ ...applied, query: value });
 
   // Follow the consumer's committed value when it changes from OUTSIDE (a
-  // reset, a URL restore, the applied chip removed) — never on our own echo,
-  // which would delete in-flight typing.
+  // reset, a URL restore) — never on our own echo, which would delete
+  // in-flight typing.
   React.useEffect(() => {
     if (applied.query === lastCommitted.current) return;
     lastCommitted.current = applied.query;
@@ -434,13 +449,20 @@ export function EventsFilter({
     [],
   );
 
+  // «Сбросить» drops an uncommitted query too: the pending commit would
+  // otherwise re-apply a just-typed query on top of the reset.
+  const cancelPendingQuery = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    lastCommitted.current = "";
+    setDraft("");
+  };
+
   const onQueryChange = (value: string) => {
     setDraft(value);
     if (timer.current) clearTimeout(timer.current);
     // The COMMITTED query is trimmed: a whitespace-only field is no query at
-    // all (no chip, no count, no URL parameter), and « вебинар » must not
-    // search for a different string than «вебинар». The draft keeps the raw
-    // keystrokes, so the caret and in-word spaces survive typing.
+    // all, and « PRP » searches the same string as «PRP».
     const committed = value.trim();
     timer.current = setTimeout(() => {
       lastCommitted.current = committed;
@@ -448,502 +470,220 @@ export function EventsFilter({
     }, queryDebounceMs);
   };
 
-  /**
-   * Closing a sheet must never drop focus to `<body>`: the ✕ and the option
-   * buttons unmount with the sheet, so focus is restored to the trigger. An
-   * outside click that lands on another focusable element keeps ITS focus —
-   * only a focus that has fallen to the document is recovered — while Escape
-   * always returns to the trigger (`force`), as the disclosure pattern requires.
-   */
-  const closeFacet = React.useCallback((key: string, force = false) => {
-    restoreFocus.current = { key, force };
-    setOpenFacet((current) => (current === key ? null : current));
-  }, []);
-
   React.useLayoutEffect(() => {
-    const pending = restoreFocus.current;
-    if (!pending || openFacet !== null) return;
-    restoreFocus.current = null;
-    const trigger = triggers.current.get(pending.key);
-    if (!trigger) return;
-    const active = document.activeElement;
-    if (pending.force || !active || active === document.body) trigger.focus();
-  }, [openFacet]);
-
-  // Escape and a click outside the panel close the open sheet — the standard
-  // disclosure contract, beside the trigger and the sheet's own ✕.
-  React.useEffect(() => {
-    if (openFacet === null) return;
-    const key = openFacet;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      closeFacet(key, true);
-    };
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (target instanceof Node && panelRef.current?.contains(target)) return;
-      closeFacet(key);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("mousedown", onPointerDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousedown", onPointerDown);
-    };
-  }, [openFacet, closeFacet]);
-
-  // Removing an applied chip moves focus along the row (the next chip, else the
-  // last one), and when the row itself disappears to the reset control or the
-  // panel region — never to `<body>`. Reset shares the same contract: it clears
-  // the whole applied block, so the panel region is the only survivor.
-  React.useLayoutEffect(() => {
-    const index = chipReturn.current;
-    if (resetReturn.current) {
-      resetReturn.current = false;
-      chipReturn.current = null;
-      (resetRef.current ?? panelRef.current)?.focus();
-      return;
-    }
-    if (index === null) return;
-    chipReturn.current = null;
-    const chips = appliedRowRef.current
-      ? Array.from(
-          appliedRowRef.current.querySelectorAll<HTMLButtonElement>("button"),
-        )
-      : [];
-    const next = chips[Math.min(index, chips.length - 1)];
-    if (next) {
-      next.focus();
-      return;
-    }
-    (resetRef.current ?? panelRef.current)?.focus();
+    if (!resetReturn.current) return;
+    resetReturn.current = false;
+    panelRef.current?.focus();
   });
 
-  const scope = applied.specialtyScope;
-  const scopeIds = Array.isArray(scope) ? scope.map((ref) => ref.id) : [];
+  const appliedCount = countAppliedFacets(applied, host);
+  const hasApplied = appliedCount > 0;
 
-  // Every applied facet as its own removable unit — the obligation the bare
-  // count does not satisfy.
-  const appliedChips: { id: string; label: string; onRemove: () => void }[] = [];
-  for (const id of applied.format) {
-    const option = options.format?.find((item) => item.id === id);
-    appliedChips.push({
-      id: `format:${id}`,
-      label: option?.label ?? id,
-      onRemove: () => onChange({ ...applied, format: toggle(applied.format, id) }),
-    });
-  }
-  for (const id of applied.kind) {
-    const option = options.kind?.find((item) => item.id === id);
-    appliedChips.push({
-      id: `kind:${id}`,
-      label: option?.label ?? id,
-      onRemove: () => onChange({ ...applied, kind: toggle(applied.kind, id) }),
-    });
-  }
-  if (scope === "all" && labels.specialtyAll) {
-    appliedChips.push({
-      id: "specialty:all",
-      label: labels.specialtyAll,
-      onRemove: () =>
-        onChange({ ...applied, specialtyScope: "mine-and-adjacent" }),
-    });
-  }
-  if (Array.isArray(scope)) {
-    for (const ref of scope) {
-      appliedChips.push({
-        id: `specialty:${ref.id}`,
-        label: ref.label,
-        onRemove: () => {
-          const rest = scope.filter((item) => item.id !== ref.id);
+  const nameOf = (list: EventsFilterOption[] | undefined, id: string) =>
+    list?.find((item) => item.id === id)?.label ?? id;
+
+  /** A Combobox facet over one repeatable id list of the applied set. */
+  const listFacet = (
+    facet: "city" | "direction" | "project" | "expert" | "topic",
+  ) => {
+    const facetLabels = labels[facet];
+    const list = options[facet];
+    if (!facetLabels || !list || list.length === 0) return null;
+    const values = applied[facet];
+    return (
+      <ComboFacet
+        key={facet}
+        facet={facet}
+        labels={facetLabels}
+        shared={labels.combobox}
+        options={list}
+        // A chip names its value by the host's option label; an applied id
+        // the host gives no option for (a stale URL value) shows no chip
+        // rather than a raw id — the host keeps picked values in `options`.
+        picked={values.flatMap((id) => {
+          const option = list.find((item) => item.id === id);
+          return option
+            ? [
+                {
+                  id,
+                  label: option.label,
+                  onRemove: () =>
+                    onChange({
+                      ...applied,
+                      [facet]: values.filter((v) => v !== id),
+                    }),
+                },
+              ]
+            : [];
+        })}
+        onPick={(id) => onChange({ ...applied, [facet]: [...values, id] })}
+        paging={paging?.[facet]}
+        removeFacet={labels.removeFacet}
+      />
+    );
+  };
+
+  const chipFacet = (facet: "format" | "kind") => {
+    const label = labels[facet];
+    const list = options[facet];
+    if (!label || !list || list.length === 0) return null;
+    return (
+      <ChipFacet
+        label={label}
+        options={list}
+        values={applied[facet]}
+        onToggle={(id) =>
+          onChange({ ...applied, [facet]: toggle(applied[facet], id) })
+        }
+      />
+    );
+  };
+
+  const specialtyFacet = () => {
+    const specialty = labels.specialty;
+    if (!specialty) return null;
+    const scope = applied.specialtyScope;
+    const picked = Array.isArray(scope) ? scope : [];
+    const list = options.specialty ?? [];
+    return (
+      <ComboFacet
+        facet="specialty"
+        labels={specialty}
+        shared={labels.combobox}
+        options={list}
+        picked={picked.map((ref) => ({
+          id: ref.id,
+          label: ref.label,
+          onRemove: () => {
+            const rest = picked.filter((item) => item.id !== ref.id);
+            onChange({
+              ...applied,
+              specialtyScope: rest.length > 0 ? rest : "mine-and-adjacent",
+            });
+          },
+        }))}
+        onPick={(id) =>
           onChange({
             ...applied,
-            specialtyScope: rest.length > 0 ? rest : "mine-and-adjacent",
-          });
-        },
-      });
-    }
-  }
-  for (const id of applied.city) {
-    const option = options.city?.find((item) => item.id === id);
-    appliedChips.push({
-      id: `city:${id}`,
-      label: option?.label ?? id,
-      onRemove: () => onChange({ ...applied, city: toggle(applied.city, id) }),
-    });
-  }
-  if (applied.nmoOnly && labels.nmoOnly) {
-    appliedChips.push({
-      id: "nmo",
-      label: labels.nmoOnly,
-      onRemove: () => onChange({ ...applied, nmoOnly: false }),
-    });
-  }
-  if (applied.freeByPul && labels.freeByPul) {
-    appliedChips.push({
-      id: "free",
-      label: labels.freeByPul,
-      onRemove: () => onChange({ ...applied, freeByPul: false }),
-    });
-  }
-  if (applied.query.trim().length > 0) {
-    appliedChips.push({
-      id: "query",
-      label: applied.query,
-      onRemove: () => {
-        if (timer.current) clearTimeout(timer.current);
-        lastCommitted.current = "";
-        setDraft("");
-        onChange({ ...applied, query: "" });
-      },
-    });
-  }
-
-  const isFiltered = appliedChips.length > 0;
-
-  const anyValue = labels.anyValue ?? "";
-  const closeLabel = labels.closeOptions ?? labels.applied;
-  const sheet = (key: string) => ({
-    open: openFacet === key,
-    onOpenChange: (next: boolean) => {
-      if (next) setOpenFacet(key);
-      else closeFacet(key);
-    },
-    closeLabel,
-    triggerRef: (node: HTMLButtonElement | null) => {
-      if (node) triggers.current.set(key, node);
-      else triggers.current.delete(key);
-    },
-  });
-  const named = (ids: string[], list: EventsFilterOption[] | undefined) =>
-    ids.map((id) => list?.find((item) => item.id === id)?.label ?? id).join(", ");
-
-  const specialtyValue =
-    scope === "all"
-      ? (labels.specialtyAll ?? anyValue)
-      : Array.isArray(scope)
-        ? scope.map((ref) => ref.label).join(", ")
-        : (labels.specialtyMine ?? anyValue);
-
-  return (
-    <section
-      aria-label={labels.panel}
-      ref={panelRef}
-      // Programmatic focus target only (never in the tab order): the landing
-      // place when the last applied chip removes the whole applied row.
-      tabIndex={-1}
-      className={cn(
-        // No width and no grid placement of its own: the host column (desktop
-        // sidebar) or the #1528 sheet decides where this body sits.
-        "flex flex-col gap-3 border-2 border-border bg-card p-4",
-        "focus:outline-none",
-        className,
-      )}
-    >
-      {options.view?.length && labels.view ? (
-        <FacetSelect
-          label={labels.view}
-          value={
-            options.view.find((option) => option.id === view?.value)?.label ??
-            anyValue
-          }
-          // A control paints APPLIED only when its facet actually contributes
-          // to the applied set — a chip and a unit of the stated count. `view`
-          // and `tense` are always-present single selects that contribute
-          // neither, so at every value they read as the neutral default does.
-          active={false}
-          {...sheet("view")}
-        >
-          {options.view.map((option) => (
-            <FacetOption
-              key={option.id}
-              selected={view?.value === option.id}
-              onClick={() => {
-                view?.onChange(option.id);
-                closeFacet("view");
-              }}
-            >
-              {option.label}
-            </FacetOption>
-          ))}
-        </FacetSelect>
-      ) : null}
-
-      {options.tense?.length && labels.tense ? (
-        <FacetSelect
-          label={labels.tense}
-          value={
-            options.tense.find((option) => option.id === tense?.value)?.label ??
-            anyValue
-          }
-          active={false}
-          {...sheet("tense")}
-        >
-          {options.tense.map((option) => (
-            <FacetOption
-              key={option.id}
-              selected={tense?.value === option.id}
-              onClick={() => {
-                tense?.onChange(option.id);
-                closeFacet("tense");
-              }}
-            >
-              {option.label}
-            </FacetOption>
-          ))}
-        </FacetSelect>
-      ) : null}
-
-      {showsFormatTier && options.format?.length && labels.format ? (
-        <FacetSelect
-          label={labels.format}
-          value={
-            applied.format.length > 0
-              ? named(applied.format, options.format)
-              : anyValue
-          }
-          active={applied.format.length > 0}
-          {...sheet("format")}
-        >
-          {options.format.map((option) => (
-            <FacetOption
-              key={option.id}
-              selected={applied.format.includes(option.id)}
-              onClick={() =>
-                onChange({
-                  ...applied,
-                  format: toggleFacet(applied.format, option.id, options.format),
-                })
-              }
-            >
-              {option.label}
-            </FacetOption>
-          ))}
-        </FacetSelect>
-      ) : null}
-
-      {showsFormatTier && options.kind?.length && labels.kind ? (
-        <FacetSelect
-          label={labels.kind}
-          value={
-            applied.kind.length > 0 ? named(applied.kind, options.kind) : anyValue
-          }
-          active={applied.kind.length > 0}
-          {...sheet("kind")}
-        >
-          {options.kind.map((option) => (
-            <FacetOption
-              key={option.id}
-              selected={applied.kind.includes(option.id)}
-              onClick={() =>
-                onChange({
-                  ...applied,
-                  kind: toggleFacet(applied.kind, option.id, options.kind),
-                })
-              }
-            >
-              {option.label}
-            </FacetOption>
-          ))}
-        </FacetSelect>
-      ) : null}
-
-      {showsFullTier &&
-      labels.specialty &&
-      (labels.specialtyMine || labels.specialtyAll) ? (
-        <FacetSelect
-          label={labels.specialty}
-          value={specialtyValue}
-          active={scope !== "mine-and-adjacent"}
-          {...sheet("specialty")}
-        >
-          {labels.specialtyMine ? (
-            <FacetOption
-              selected={scope === "mine-and-adjacent"}
-              onClick={() =>
-                onChange({ ...applied, specialtyScope: "mine-and-adjacent" })
-              }
-            >
-              {labels.specialtyMine}
-            </FacetOption>
-          ) : null}
-          {labels.specialtyAll ? (
-            <FacetOption
-              selected={scope === "all"}
-              onClick={() => onChange({ ...applied, specialtyScope: "all" })}
-            >
-              {labels.specialtyAll}
-            </FacetOption>
-          ) : null}
-          {options.specialty?.map((option) => {
-            const selected = scopeIds.includes(option.id);
-            return (
-              <FacetOption
-                key={option.id}
-                selected={selected}
-                onClick={() => {
-                  // Naming every offered specialty narrows nothing beyond the
-                  // default scope, so the same all-selected normalization
-                  // returns the facet to «моя и смежные».
-                  const next = toggleFacet(
-                    scopeIds,
-                    option.id,
-                    options.specialty,
-                  );
-                  const refs = next.map((id) => {
-                    const known =
-                      options.specialty?.find((item) => item.id === id) ??
-                      (Array.isArray(scope)
-                        ? scope.find((item) => item.id === id)
-                        : undefined);
-                    return { id, label: known?.label ?? id };
-                  });
-                  onChange({
-                    ...applied,
-                    specialtyScope: refs.length > 0 ? refs : "mine-and-adjacent",
-                  });
-                }}
-              >
-                {option.label}
-              </FacetOption>
-            );
-          })}
-        </FacetSelect>
-      ) : null}
-
-      {showsFullTier && options.city?.length && labels.city ? (
-        <FacetSelect
-          label={labels.city}
-          value={
-            applied.city.length > 0
-              ? named(applied.city, options.city)
-              : (labels.cityAny ?? anyValue)
-          }
-          active={applied.city.length > 0}
-          hint={labels.cityHint}
-          {...sheet("city")}
-        >
-          {options.city.map((option) => (
-            <FacetOption
-              key={option.id}
-              selected={applied.city.includes(option.id)}
-              onClick={() =>
-                onChange({
-                  ...applied,
-                  city: toggleFacet(applied.city, option.id, options.city),
-                })
-              }
-            >
-              {option.label}
-            </FacetOption>
-          ))}
-        </FacetSelect>
-      ) : null}
-
-      {/* Two-state facets: the same control, no sheet — one click flips it. */}
-      {showsFullTier && labels.nmoOnly ? (
-        <FacetButton
-          label={labels.nmoFacet ?? labels.nmoOnly}
-          value={
-            applied.nmoOnly
-              ? `✓ ${labels.nmoOnly}`
-              : (labels.nmoOff ?? anyValue)
-          }
-          active={applied.nmoOnly}
-          caret={applied.nmoOnly ? "✕" : ""}
-          onClick={() => onChange({ ...applied, nmoOnly: !applied.nmoOnly })}
-        />
-      ) : null}
-
-      {showsFullTier && labels.freeByPul ? (
-        <FacetButton
-          label={labels.freeByPulFacet ?? labels.freeByPul}
-          value={
-            applied.freeByPul
-              ? `✓ ${labels.freeByPul}`
-              : (labels.freeByPulOff ?? anyValue)
-          }
-          active={applied.freeByPul}
-          caret={applied.freeByPul ? "✕" : ""}
-          onClick={() => onChange({ ...applied, freeByPul: !applied.freeByPul })}
-        />
-      ) : null}
-
-      {showsFullTier && labels.query ? (
-        <div className="flex flex-col gap-1.5">
-          {/*
-            `Label` carries weight and size but no colour of its own, so on the
-            panel's own surface it must be told which ink to use — otherwise it
-            inherits the document foreground and vanishes in the dark theme.
-          */}
-          <Label htmlFor={queryId} className="text-foreground">
-            {labels.query}
-          </Label>
-          <Input
-            id={queryId}
-            type="search"
-            value={draft}
-            placeholder={labels.queryPlaceholder}
-            onChange={(event) => onQueryChange(event.target.value)}
-          />
-        </div>
-      ) : null}
-
-      {isFiltered ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-caption text-muted-foreground">
-            {labels.appliedCount(appliedCount)}
-          </p>
-          <div
-            ref={appliedRowRef}
-            role="group"
-            aria-label={labels.applied}
-            className="flex flex-wrap items-center gap-2"
+            specialtyScope: [...picked, { id, label: nameOf(list, id) }],
+          })
+        }
+        paging={paging?.specialty}
+        removeFacet={labels.removeFacet}
+      >
+        <div className="flex flex-wrap gap-2">
+          <FilterChip
+            selected={scope === "mine-and-adjacent"}
+            onClick={() =>
+              onChange({ ...applied, specialtyScope: "mine-and-adjacent" })
+            }
           >
-            {appliedChips.map((chip, index) => (
-              <FilterChip
-                key={chip.id}
-                selected
-                onClick={() => {
-                  chipReturn.current = index;
-                  chip.onRemove();
-                }}
-                aria-label={`${labels.removeFacet}: ${chip.label}`}
-              >
-                {chip.label} ✕
-              </FilterChip>
-            ))}
-          </div>
-          {resetHref ? (
-            <a
-              ref={(node) => {
-                resetRef.current = node;
-              }}
-              href={resetHref}
-              onClick={() => {
-                resetReturn.current = true;
-              }}
-              className="self-start text-caption font-semibold text-primary-action underline underline-offset-4"
-            >
-              {labels.reset}
-            </a>
-          ) : onReset ? (
+            {specialty.mine}
+          </FilterChip>
+          <FilterChip
+            selected={scope === "all"}
+            onClick={() => onChange({ ...applied, specialtyScope: "all" })}
+          >
+            {specialty.all}
+          </FilterChip>
+        </div>
+      </ComboFacet>
+    );
+  };
+
+  const resetLabel = labels.reset;
+  const header = showHeader ? (
+    <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-baseline gap-2.5">
+        <h2 className="text-lg font-extrabold">{labels.title}</h2>
+        {hasApplied ? (
+          <span className="text-sm font-bold text-muted-foreground">
+            {labels.appliedCount(appliedCount)}
+          </span>
+        ) : null}
+      </div>
+      {hasApplied ? (
+        resetHref ? (
+          <Link href={resetHref} size="sm" onClick={cancelPendingQuery}>
+            {resetLabel}
+          </Link>
+        ) : onReset ? (
+          <Link asChild size="sm">
             <button
-              ref={(node) => {
-                resetRef.current = node;
-              }}
               type="button"
               onClick={() => {
+                cancelPendingQuery();
                 resetReturn.current = true;
                 onReset();
               }}
-              className="self-start text-caption font-semibold text-primary-action underline underline-offset-4"
             >
-              {labels.reset}
+              {resetLabel}
             </button>
+          </Link>
+        ) : null
+      ) : null}
+    </div>
+  ) : null;
+
+  return (
+    <section
+      ref={panelRef}
+      aria-label={labels.panel}
+      // Programmatic focus target only (never in the tab order): where focus
+      // lands when «Сбросить» unmounts with the applied state it cleared.
+      tabIndex={-1}
+      data-host={host}
+      className={cn(
+        "flex flex-col gap-8 text-foreground focus:outline-none",
+        className,
+      )}
+    >
+      {header}
+      {host === "doctor" ? (
+        <div className="flex flex-col gap-8">
+          {labels.query ? (
+            <div className="flex flex-col gap-3">
+              <label
+                htmlFor={queryId}
+                className="text-sm font-extrabold uppercase tracking-micro"
+              >
+                {labels.query.label}
+              </label>
+              <Input
+                id={queryId}
+                type="search"
+                value={draft}
+                onChange={(event) => onQueryChange(event.target.value)}
+                {...(labels.query.placeholder
+                  ? { placeholder: labels.query.placeholder }
+                  : {})}
+              />
+            </div>
+          ) : null}
+          {specialtyFacet()}
+          {chipFacet("format")}
+          {chipFacet("kind")}
+          {listFacet("city")}
+          {listFacet("direction")}
+          {labels.nmoOnly ? (
+            <Switch
+              className="font-bold"
+              checked={applied.nmoOnly}
+              onChange={(event) =>
+                onChange({ ...applied, nmoOnly: event.target.checked })
+              }
+            >
+              {labels.nmoOnly}
+            </Switch>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="flex flex-col gap-8">
+          {listFacet("project")}
+          {listFacet("expert")}
+          {listFacet("topic")}
+        </div>
+      )}
     </section>
   );
 }

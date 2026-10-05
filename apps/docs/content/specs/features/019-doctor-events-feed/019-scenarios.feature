@@ -152,17 +152,17 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And the feed shows only events matching both
 
   @EARS-7 @happy
-  Scenario Outline: The shared panel lays out correctly in every fill state
-    Given the events-filter unit is mounted in the "<fill>" fill state
+  Scenario Outline: The shared panel renders the facet set its host supplies
+    Given the events-filter unit is mounted for the "<host>" host with several facets applied
     When the showcase renders it at 1440 and at 390
-    Then the panel and the host grid render without overflow or collapse
-    And the applied-facet row and the reset stay reachable
+    Then the panel shows exactly the facets "<facets>" without overflow or collapse
+    And the header states the applied count with a working reset
+    And every picked value stays visible as a removable chip under its facet
 
     Examples:
-      | fill         |
-      | wave-1       |
-      | intermediate |
-      | full         |
+      | host    | facets                                                                |
+      | doctor  | name search, specialty, format, kind, city, direction, «только с НМО» |
+      | academy | project, expert, topic                                                |
 
   @EARS-8 @happy
   Scenario: Feed state round-trips through the URL

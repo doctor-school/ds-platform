@@ -164,6 +164,8 @@ graph TD
 
 The fill states are a property of the **unit**, not of this screen: 019 mounts `full`, and the unit must still lay out correctly at `wave-1` and `intermediate` so a later consumer breaks neither the panel nor the host grid. That obligation is verified in the showcase, not only on this route.
 
+> **Read under 019 «Amendment — 2026-10-05» → «Facet set from the host»:** the fill states above and `FacetPanelState.fill` are superseded — the unit renders the host's `filterSet` (doctor or Academy) and drops any facet whose labels or options the host omits.
+
 ## 7. Read contracts
 
 `GET /v1/storefront/doctor/events` — public, session-optional (ADR-0001: `access: public`; the viewer-dependent parts degrade rather than gate). Its controller applies Doctor specialty targeting and envelope mapping, then delegates event selection/lifecycle to `apps/api/src/events/EventsService`, LIVE truth to `apps/api/src/room/RoomService`, and registration/entry policy to `apps/api/src/registration/RegistrationService`. Academy's existing `/v1/public/events` remains a separate host projection over those same canonical owners; neither controller contains a second query engine.

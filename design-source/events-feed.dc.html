@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/styles.css">
 <script src="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/_ds_bundle.js"></script>
 <script src="events-feed-kit.js"></script>
-<style>body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--color-background)}a:not([class]){color:var(--color-primary-action)}a:not([class]):hover{color:var(--color-primary-hover)}a[class],a[class]:hover{color:revert-layer}[data-event-list-body] section>div:first-child,[data-event-list-body] section>div:nth-child(2){position:sticky;top:0;z-index:5;background:var(--color-background)}[data-event-list-body] section>div:nth-child(2){padding-top:12px}nav[aria-label="Лента событий"] li:has(>span[aria-current="page"]){display:none}</style>
+<style>body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--color-background)}a:not([class]){color:var(--color-primary-action)}a:not([class]):hover{color:var(--color-primary-hover)}a[class],a[class]:hover{color:revert-layer}nav[aria-label="Лента событий"] li:has(>span[aria-current="page"]){display:none}</style>
 </helmet>
 
 <sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
@@ -55,7 +55,7 @@
             <x-import component-from-global-scope="DsDesignSystem.MonthDotGrid" dc-props="{{ dot }}" hint-size="300px,340px"></x-import>
           </div>
         </sc-if>
-        <dc-import name="events-facets" host="{{ shellHost }}" applied="{{ applied }}" on-change="{{ setApplied }}" on-reset="{{ resetFilters }}" hint-size="300px,720px"></dc-import>
+        <x-import component-from-global-scope="DsDesignSystem.EventsFilter" dc-props="{{ filterSide }}" hint-size="300px,720px"></x-import>
       </aside>
     </sc-if>
 
@@ -73,7 +73,7 @@
               <x-import component-from-global-scope="DsDesignSystem.SheetDescription" class-name="sr-only" hint-size="0px,0px">Фасеты ленты событий</x-import>
             </x-import>
             <x-import component-from-global-scope="DsDesignSystem.SheetBody" hint-size="100%,420px">
-              <dc-import name="events-facets" host="{{ shellHost }}" applied="{{ applied }}" on-change="{{ setApplied }}" on-reset="{{ resetFilters }}" show-header="{{ false }}" hint-size="100%,720px"></dc-import>
+              <x-import component-from-global-scope="DsDesignSystem.EventsFilter" dc-props="{{ filterSheet }}" hint-size="100%,720px"></x-import>
             </x-import>
             <x-import component-from-global-scope="DsDesignSystem.SheetFooter" hint-size="100%,120px">
               <x-import component-from-global-scope="DsDesignSystem.Button" variant="outline" on-click="{{ resetFilters }}" hint-size="100%,44px">Сбросить</x-import>
@@ -212,7 +212,7 @@
 class Component extends DCLogic {
   state = { ready: false };
   componentDidMount() {
-    this.onResize = () => this.setState({ wide: window.innerWidth >= 1024 });
+    this.onResize = () => { this.setState({ wide: window.innerWidth >= 1024 }); this.measure(); };
     window.addEventListener('resize', this.onResize);
     this.onHash = () => {
       const m = location.hash.match(/^#month-(\d{4})-(\d{2})$/), fd = location.hash.match(/^#feed-day-(\d{4})-(\d{2})-(\d{2})$/);
@@ -239,6 +239,45 @@ class Component extends DCLogic {
   componentDidUpdate(pp) {
     if (['view', 'host', 'signedIn', 'tense', 'live', 'state', 'viewerTz', 'dark'].some(k => pp[k] !== this.props[k])) this.boot();
     document.documentElement.classList.toggle('dark', !!(this.state.ready && this.state.dark));
+    this.measure();
+  }
+  measure() {
+    const hd = document.querySelector('header[data-screen-label="ds-shell · шапка"]');
+    const pos = hd ? getComputedStyle(hd).position : '';
+    const v = hd && (pos === 'sticky' || pos === 'fixed') ? hd.offsetHeight : 0;
+    if (v !== (this.state.stickyTop || 0)) this.setState({ stickyTop: v });
+  }
+  filterProps(host, applied, showHeader) {
+    const K = window.EFK, O = K.options(host), a = applied, set = x => this.setState(x);
+    const D = { query: '', specialtyScope: 'mine-and-adjacent', format: [], kind: [], city: [], nmoOnly: false, direction: [], project: [], expert: [], topic: [] };
+    const combobox = { emptyLabel: 'Ничего не найдено', searchLabel: 'Найти', countLabel: (s, t) => 'Найдено ' + s + ' из ' + t, loadMoreLabel: 'Показать ещё', loadingMoreLabel: 'Загружаем…', loadMoreErrorLabel: 'Повторить' };
+    const base = { host, showHeader, combobox, onReset: () => set({ applied: K.defaultApplied(), cityQ: '', cityPage: 1 }) };
+    const head = { panel: 'Фильтры', title: 'Фильтры', appliedCount: n => 'Применено: ' + n, reset: 'Сбросить', removeFacet: 'Убрать', combobox };
+    if (host === 'academy') return Object.assign(base, {
+      applied: Object.assign(D, { project: a.format, expert: a.kind, topic: a.city }),
+      options: { project: O.format, expert: O.kind, topic: O.city },
+      labels: Object.assign(head, {
+        project: { label: 'Проект', placeholder: 'Все проекты', addPlaceholder: 'Добавить проект', searchPlaceholder: 'Например, школа продюсеров' },
+        expert: { label: 'Эксперт', placeholder: 'Все эксперты', addPlaceholder: 'Добавить эксперта', searchPlaceholder: 'Фамилия или имя' },
+        topic: { label: 'Тема', placeholder: 'Все темы', addPlaceholder: 'Добавить тему', searchPlaceholder: 'Например, метрики' } }),
+      onChange: n => set({ applied: Object.assign({}, a, { format: n.project, kind: n.expert, city: n.topic }) })
+    });
+    const per = 20, q = (this.state.cityQ || '').trim().toLowerCase(), cp = this.state.cityPage || 1;
+    const pool = O.city.filter(o => a.city.indexOf(o.id) < 0 && (!q || o.label.toLowerCase().indexOf(q) >= 0));
+    const cityOpts = O.city.filter(o => a.city.indexOf(o.id) >= 0).concat(pool.slice(0, per * cp));
+    return Object.assign(base, {
+      applied: Object.assign(D, { query: a.query, specialtyScope: a.specialtyScope, format: a.format, kind: a.kind, city: a.city, nmoOnly: a.nmoOnly }),
+      options: { specialty: O.specialty, format: O.format, kind: O.kind, city: cityOpts },
+      labels: Object.assign(head, {
+        query: { label: 'Поиск по названию', placeholder: 'Например, PRP' },
+        specialty: { label: 'Специальность', mine: 'Моя и смежные', all: 'Все специальности', placeholder: 'Выбрать специальность', addPlaceholder: 'Добавить специальность', searchPlaceholder: 'Например, кардиология' },
+        format: 'Формат', kind: 'Вид события',
+        city: { label: 'Город', hint: 'Только для офлайн-событий', placeholder: 'Любой город', addPlaceholder: 'Добавить город', searchPlaceholder: 'Начните вводить город' },
+        nmoOnly: 'Только с НМО' }),
+      paging: { city: { onSearchChange: v => set({ cityQ: v, cityPage: 1 }), hasMore: pool.length > per * cp, onLoadMore: () => set({ cityPage: cp + 1 }) } },
+      onChange: n => set(Object.assign({ applied: Object.assign({}, a, { query: n.query, specialtyScope: n.specialtyScope, format: n.format, kind: n.kind, city: n.city, nmoOnly: n.nmoOnly }) },
+        n.city.length > a.city.length ? { cityQ: '', cityPage: 1 } : {}))
+    });
   }
   jumpTo(y, m, d, toFeed) {
     const K = window.EFK, past = K.isPastDay(y, m, d), ym = { y, m };
@@ -292,7 +331,7 @@ class Component extends DCLogic {
       pageTitle: host === 'doctor' ? 'События' : 'Расписание эфиров',
       pageSub: host === 'doctor' ? 'События по вашей специальности и смежным' : F0.headCount,
       tense: s.tense, setTense: v => set({ tense: v, ym: K.monthOf(v), selDay: null, mSel: null, page: 1, focusKey: null }),
-      applied: s.applied, setApplied: a => set({ applied: a }),
+      filterSide: this.filterProps(host, s.applied, true), filterSheet: this.filterProps(host, s.applied, false),
       prevMonth: () => go(-1), nextMonth: () => go(1), goToday: () => set({ ym: { y: K.today.y, m: K.today.m }, mSel: null, focusKey: null }),
       pickerKey: ym.y + '-' + ym.m,
       switchView, switchLabel: month ? '← Лента событий' : 'Календарь на месяц →',
@@ -316,7 +355,7 @@ class Component extends DCLogic {
       feedErrOn: err('feed'),
       feedErr: { variant: 'error', title: 'Не удалось загрузить ленту событий', description: 'Сервер не ответил за 15 секунд. Проверьте соединение и попробуйте снова.', action: retry('feed') },
       feedOn: !loading && !err('feed') && count > 0,
-      feed: { items: shown, selectedTab: s.tense, tenseControl: 'none', paginationMode: 'cursor', page, hasNext: shown.length < items.length, hasPrevious: false,
+      feed: { items: shown, selectedTab: s.tense, tenseControl: 'none', stickyHeaderOffset: s.stickyTop || 0, paginationMode: 'cursor', page, hasNext: shown.length < items.length, hasPrevious: false,
         onPageChange: () => set({ page: page + 1 }),
         labels: { upcoming: 'Будущие', past: 'Прошедшие', emptyTitle: 'Событий нет', emptyDescription: '', pagination: 'Лента событий', previous: 'Назад', next: 'Показать ещё ' + Math.min(PER, items.length - shown.length) + ' из ' + (items.length - shown.length), page: n => 'Страница ' + n } },
       feedEmptyOn: !loading && !err('feed') && count === 0,

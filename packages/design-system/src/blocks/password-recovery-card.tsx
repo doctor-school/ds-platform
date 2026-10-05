@@ -439,13 +439,14 @@ function RecoveryCompleteForm({
           {copy.submit}
         </Button>
       </form>
-      {/* #267: focus-polish footer — separated from the password field with a top
-          border + spacing so «Начать заново» is no longer jammed against the input
-          (owner finding). «Начать заново» (change the identifier, back to the
-          request step) on the left, resend-with-cooldown on the right; mirrors the
-          focus-screen's change-method/resend pairing, kept inline because the reset
-          step submits the code together with a new password. */}
-      <div className="mt-6 space-y-3 border-t pt-4">
+      {/* Footer row as the canvas draws it (auth.dc.html 230/246-247): it follows
+          the submit button at the column's 18px gap (`mt-4.5`) with no divider —
+          spacing alone keeps «Начать заново» clear of the form (#267). «Начать
+          заново» (change the identifier, back to the request step) on the left,
+          resend-with-cooldown on the right; mirrors the focus-screen's
+          change-method/resend pairing, kept inline because the reset step submits
+          the code together with a new password. */}
+      <div className="mt-4.5 space-y-3">
         {captchaSlot}
         <div className="flex items-center justify-between gap-2">
           <Button

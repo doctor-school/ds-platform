@@ -206,6 +206,14 @@ describe("<PasswordRecoveryCard>", () => {
     expect(restart).toHaveClass("-mx-4", "-my-2", "shrink-0");
   });
 
+  it("#2556: the «Начать заново» / resend row follows the submit at the canvas 18px gap, with no divider (canvas 230/246-247)", () => {
+    setup({ stage: "complete", identifier: "doc@example.com" });
+    const footer = screen.getByTestId("reset-restart").parentElement
+      ?.parentElement as HTMLElement;
+    expect(footer).toHaveClass("mt-4.5");
+    expect(footer.className).not.toMatch(/\bborder-t\b|\bpt-/);
+  });
+
   it("draws the resend label at the canvas weight (auth.dc.html resendStyle, 800) — the verify step's resend", () => {
     setup({ stage: "complete", identifier: "doc@example.com" });
     expect(screen.getByTestId("reset-resend")).toHaveClass("font-extrabold");

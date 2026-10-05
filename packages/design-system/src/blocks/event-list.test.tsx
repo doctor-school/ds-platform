@@ -170,6 +170,10 @@ describe("<EventList>", () => {
       expect(header.className).toContain("z-10");
       expect(header.className).toContain("bg-background");
       expect(header.style.top).toBe("0px");
+      // On desktop the opaque plate reaches over the cards' 6px `shadow-lg`
+      // cast, so a scrolled card's right edge never pokes up beside it.
+      expect(header.className).toContain("layout:-mr-1.5");
+      expect(header.className).toContain("layout:pr-1.5");
       // The header is the section's first child: it sticks only while its own group scrolls.
       expect(header.parentElement!.firstElementChild).toBe(header);
     }

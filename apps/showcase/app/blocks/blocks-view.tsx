@@ -2853,6 +2853,13 @@ const EVENT_LIST_PROPS: PropRow[] = [
     required: false,
     description: "Optional host controls between the tabs and grouped feed.",
   },
+  {
+    name: "stickyHeaderOffset",
+    type: "number | string",
+    required: false,
+    description:
+      "019 EARS-3 — where the day (upcoming) / month (past) group plates stick: px or any CSS length; default 0. A host with a sticky site header passes that header's height.",
+  },
 ];
 
 const EVENT_LIST_LABELS = {
@@ -2880,6 +2887,63 @@ const EVENT_LIST_BASE_ITEM = {
   speakers: [{ name: "Dr Marina Volkova", affiliation: "University clinic" }],
   recordingLabel: "Recording is available",
 };
+
+/** Several groups with several cards each so a bounded scroll box shows the
+ * plate of the current group sticking and being pushed out by the next one. */
+function eventListStickyItems(tense: EventListTab) {
+  const groups =
+    tense === "past"
+      ? [
+          { key: "2026-08", label: "August 2026" },
+          { key: "2026-07", label: "July 2026" },
+          { key: "2026-06", label: "June 2026" },
+        ]
+      : [
+          { key: "2026-08-30", label: "30 August, Sunday" },
+          { key: "2026-08-31", label: "31 August, Monday" },
+          { key: "2026-09-01", label: "1 September, Tuesday" },
+        ];
+  return groups.flatMap((group) =>
+    [0, 1, 2].map((index) => ({
+      ...EVENT_LIST_BASE_ITEM,
+      id: `${tense}-${group.key}-${index}`,
+      groupKey: group.key,
+      groupLabel: group.label,
+      ...(tense === "past"
+        ? {
+            variant: "past" as const,
+            ctaHref: EVENT_LIST_BASE_ITEM.href,
+            ctaLabel: "Watch recording ↗",
+          }
+        : { recordingLabel: undefined }),
+    })),
+  );
+}
+
+function EventListStickyCase({ tense }: { tense: EventListTab }) {
+  return (
+    <div
+      className="h-96 overflow-y-auto border-2 border-border bg-background"
+      data-testid={`event-list-sticky-${tense}`}
+    >
+      {/* A stand-in for a sticky site header: the plates stick right under it
+          because the host passes its height as `stickyHeaderOffset`. */}
+      <div className="sticky top-0 z-20 flex h-16 items-center bg-header px-4 text-sm font-bold text-header-foreground">
+        Sticky site header
+      </div>
+      <div className="px-4 pb-8">
+        <EventList
+          items={eventListStickyItems(tense)}
+          selectedTab={tense}
+          tenseControl="none"
+          paginationMode="none"
+          labels={EVENT_LIST_LABELS}
+          stickyHeaderOffset="calc(var(--spacing) * 16)"
+        />
+      </div>
+    </div>
+  );
+}
 
 function EventListSection() {
   const [selectedTab, setSelectedTab] = useState<EventListTab>("upcoming");
@@ -2925,6 +2989,22 @@ function EventListSection() {
             />
           </div>
         </WideCanvas>
+      </SubRow>
+      <SubRow label="Sticky group headers">
+        <div className="grid gap-6 layout:grid-cols-2">
+          <StateCase
+            label="upcoming · day plates"
+            note="scroll the box: each day plate sticks under the 64px header and is pushed out by the next day"
+          >
+            <EventListStickyCase tense="upcoming" />
+          </StateCase>
+          <StateCase
+            label="past · month plates"
+            note="scroll the box: each month plate sticks under the same offset"
+          >
+            <EventListStickyCase tense="past" />
+          </StateCase>
+        </div>
       </SubRow>
       <SubRow label="Slots / props">
         <PropsTable rows={EVENT_LIST_PROPS} />

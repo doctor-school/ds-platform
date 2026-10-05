@@ -149,10 +149,13 @@ export function EventList({
               {/* The group plate sticks while its own group scrolls and is
                   pushed out by the next one (019 EARS-3, canvas 2026-10-05):
                   block behaviour on the page-background surface, so a host
-                  needs no page CSS — only the offset of its own header. */}
+                  needs no page CSS — only the offset of its own header. On
+                  desktop the plate reaches 1.5 (= the cards' 6px `shadow-lg`
+                  cast) past the column so a scrolled card's offset shadow
+                  never pokes up beside it. */}
               <div
                 data-event-list-group-header=""
-                className="sticky z-10 -mx-4 bg-background layout:mx-0 layout:mb-6 layout:pt-3"
+                className="sticky z-10 -mx-4 bg-background layout:mx-0 layout:-mr-1.5 layout:mb-6 layout:pr-1.5 layout:pt-3"
                 style={{ top: stickyHeaderOffset }}
               >
                 <DayBand className="layout:hidden">{group.label}</DayBand>

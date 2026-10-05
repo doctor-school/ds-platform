@@ -47,6 +47,7 @@ const ADMIN_SECTIONS = [
   "nav-projects",
   "nav-experts",
   "nav-partners",
+  "nav-event-kinds",
   "nav-directions",
   "nav-direction-specialties",
   "nav-direction-adjacency",

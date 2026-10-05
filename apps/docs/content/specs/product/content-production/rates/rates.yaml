@@ -17,46 +17,11 @@ meta:
     russia_remote: регионы РФ и удалённая работа
 
 variables:
-  calendar_hours_month:
-    default: 164.3
-    unit: ч/мес
-    basis: "норма рабочего времени 2026 при 40-часовой неделе — 1 972 ч за год (247 рабочих дней) ÷ 12"
-    sources:
-      - url: https://www.consultant.ru/law/ref/calendar/proizvodstvennye/2026/
-        publisher: "КонсультантПлюс, производственный календарь 2026"
-        accessed: 2026-10-05
-  vacation_hours_year:
-    default: 160
-    unit: ч/год
-    basis: "ежегодный основной оплачиваемый отпуск 28 календарных дней (ст. 115 ТК РФ) ≈ 20 рабочих дней × 8 ч"
-    sources:
-      - url: https://www.consultant.ru/document/cons_doc_LAW_34683/
-        publisher: "КонсультантПлюс, Трудовой кодекс РФ, ст. 115"
-        accessed: 2026-10-05
-  sick_hours_year:
-    default: 64
-    unit: ч/год
-    basis: "ДОПУЩЕНИЕ: 8 рабочих дней болезни на работника в год; официальной цифры дней на работника не найдено (Счётная палата даёт только число листков и расходы СФР)"
-    sources:
-      - url: https://iz.ru/export/google/amp/2014750
-        publisher: "Известия со ссылкой на Счётную палату — 26 млн больничных за 9 мес. 2025, без дней на работника"
-        accessed: 2026-10-05
-  utilization:
-    default: 0.72
-    range: [0.70, 0.75]
-    unit: доля доступных часов, занятая производственными листьями модели
-    basis: "ДОПУЩЕНИЕ по зарубежному бенчмарку проектных компаний: цель 75 %, факт 68,9 % (2024, n = 403 фирмы), 66,4 % (2025); российского источника не найдено"
-    sources:
-      - url: https://spiresearch.com/the-18th-annual-professional-services-maturity-benchmark-report-is-out-now/
-        publisher: "SPI Research, Professional Services Maturity Benchmark (n = 403)"
-        period: 2024
-        accessed: 2026-10-05
-  productive_hours_month:
-    default: 105
-    range: [102, 109]
-    unit: ч/мес на одну штатную единицу
-    formula: "(calendar_hours_month × 12 − vacation_hours_year − sick_hours_year) ÷ 12 × utilization = (1 972 − 160 − 64) ÷ 12 × 0,72 ≈ 145,7 × 0,72 ≈ 105"
-    basis: производная от переменных выше; калибруется по факту часов (O-177)
+  # Часы на штатную единицу здесь не определяются: делитель стоимости часа штата —
+  # paid_hours_per_month из ../model/teams.yaml (capacity_variables) — один источник для
+  # себестоимости и мощности. Его разбивка (календарь, отпуск, болезнь) — в basis той переменной.
+  # Коэффициента загрузки нет: непроизводственное время команд — накладные листья модели,
+  # которые сами оцениваются часами × ставка роли (см. rates-ru.md, «Пересчёт в стоимость часа»).
   employer_contributions_rate:
     default: 0.302
     unit: доля к gross
@@ -105,14 +70,18 @@ variables:
       взносы 30 % / 15,1 % как по зарплате, НС и ПЗ — только если указаны в договоре; НДФЛ удерживается
       из суммы, а не начисляется сверху. Форма по умолчанию для пулов и пикового медиа — самозанятый
       (0); если исполнитель — физлицо по ГПХ, калькулятор берёт gph_individual.
-    caveat: "С 01.10.2026 для платформенной занятости в ряде отраслей обсуждается предел 60 ч в месяц на одного заказчика для самозанятого — источник региональный, норма не названа; к прямым договорам DS, вероятно, не относится — проверить в КонсультантПлюс до опоры на неё"
+    caveat: "С 01.10.2026 постановление Правительства РФ № 760 ограничивает самозанятого 60 ч в месяц на одного заказчика (шесть месяцев подряд) — только при работе через онлайн-платформы в перечне отраслей, включая образование; к прямым договорам DS не относится, при найме исполнителей через платформу — проверить текст постановления в КонсультантПлюс"
     sources:
       - url: https://www.consultant.ru/law/podborki/predelnyj_dohod_samozanyatogo/
         publisher: "КонсультантПлюс — лимит НПД 2,4 млн ₽ (422-ФЗ, ч. 2 ст. 4)"
         period: 2026
         accessed: 2026-10-05
+      - url: https://npd.nalog.ru/
+        publisher: "ФНС, «Налог на профессиональный доход» — ставки 4 % с доходов от физлиц, 6 % от юрлиц и ИП (422-ФЗ, ст. 10)"
+        period: 2026
+        accessed: 2026-10-05
       - url: https://pnz.ru/tax/novye-ogranicheniya-po-rabote-i-uvelichennyj-limit-chto-menyayut-dlya-samozanyatyh-v-2026-godu/
-        publisher: "pnz.ru — ставки 4 % / 6 %, запрет на бывшего работодателя 2 года, правило 60 ч"
+        publisher: "pnz.ru — запрет на бывшего работодателя 2 года, правило 60 ч (постановление Правительства РФ № 760, с 01.10.2026, платформенная занятость)"
         period: 2026-08
         accessed: 2026-10-05
       - url: https://kontur.ru/articles/4261
@@ -120,7 +89,7 @@ variables:
         period: 2026
         accessed: 2026-10-05
   formulas:
-    in_house_hourly_cost: "monthly_gross_rub.median × (1 + employer_contributions_rate) ÷ productive_hours_month"
+    in_house_hourly_cost: "monthly_gross_rub.median × (1 + employer_contributions_rate) ÷ ../model/teams.yaml#capacity_variables.paid_hours_per_month"
     contractor_hourly_cost: "hourly_rub × (1 + contractor_on_top_rate[форма договора])"
     per_piece_cost: "per_piece.rub × (1 + contractor_on_top_rate[форма договора])"
     composite_rate: "средневзвешенная часовая стоимость ролей composite_of по долям их часов (из листьев модели или из состава команды в калькуляторе)"
@@ -624,8 +593,8 @@ roles:
         period: 2026-10-05
         accessed: 2026-10-05
       - url: https://career.hh.ru/profession/19
-        publisher: "hh Карьера — медиана 3D-визуализатора 100 823 ₽"
-        n: 13
+        publisher: "hh Карьера — медиана 3D-визуализатора 100 823 ₽ (по 4 вакансиям)"
+        n: 4
         period: 2026
         accessed: 2026-10-05
       - url: "https://hh.ru/search/vacancy?text=медицинский+иллюстратор&area=113"
@@ -747,8 +716,8 @@ roles:
         accessed: 2026-10-05
     confidence:
       {
-        level: medium,
-        why: "много вакансий Москвы; поминутная цена — 2023 год; вилка регионов — по выдаче поиска",
+        level: low,
+        why: "Москва — много вакансий (сама по себе средняя достоверность), но вилка регионов взята из выдачи поиска, а не с открытой страницы; поминутная цена — 2023 год",
       }
 
   - role: Медиа-круг — запись подкаста

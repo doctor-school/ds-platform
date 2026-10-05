@@ -334,6 +334,21 @@ routes:
     route: /directions/[id]
     file: apps/admin/app/directions/[id]/page.tsx
     status: product-ready
+  # 012 EARS-25…28 (#2509): the event-kind dictionary — the Directions resource
+  # one-to-one (owner look decision on #2509). Real product deliverables, driven
+  # live in `apps/admin/e2e/taxonomy-event-kinds.spec.ts`.
+  - app: admin
+    route: /event-kinds
+    file: apps/admin/app/event-kinds/page.tsx
+    status: product-ready
+  - app: admin
+    route: /event-kinds/create
+    file: apps/admin/app/event-kinds/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /event-kinds/[id]
+    file: apps/admin/app/event-kinds/[id]/page.tsx
+    status: product-ready
   # ADR-0016 §5 (#1483): the two managed-relation curation verticals the 017
   # targeting reads — specialty↔direction link and direction adjacency
   # (kind + weight). Same shared list shell; driven in the manual dev-stand flow

@@ -1,0 +1,245 @@
+# IDEF0 decomposition A31 «Произвести урок» (child of A3; format: FORMAT-ru.md). Lesson line of process
+# block 3, steps 1–18 (../process-to-be-ru.md). Core of the unit cost: every leaf below is one role with
+# a DRAFT effort per lesson (effort-draft-ru.md); rates are calculator variables, never numbers here.
+id: A31
+parent: A3
+title: Произвести урок
+# Child boundary code → A3 arrow touching box A31 on that side.
+icom:
+  I1: I1
+  I2: I2
+  I3: I3
+  I4: I4
+  I5: a01
+  C1: C1
+  C2: C2
+  C3: C4
+  C4: C5
+  C5: C6
+  C6: C7
+  O1: O1
+  M1: M1
+  M2: M2
+  M3: M3
+  M4: M4
+  M5: M5
+  M6: M6
+  M7: M7
+  M8: M9
+boxes:
+  - id: A311
+    name: Подготовить материал эксперта
+    functions: [F-027, F-028, F-029, F-068, F-037, F-030, F-031]
+    mechanisms:
+      - Менеджер эксперта
+      - Пул экспертов — эксперт
+      - Медредактор-сценарист
+    note: Шаги 1–4 — бриф, клинический случай, формат DS, приём и разметка материала, темы.
+  - id: A312
+    name: Написать сценарий
+    functions: [F-032, F-033, F-034, F-038, F-052, F-036, F-039, F-040]
+    mechanisms: [Медредактор-сценарист]
+    note: >-
+      Шаги 5–7 и 12: план урока и ИИ-шаблоны, сценарий с МНН, рекламный текст на уровне сценария
+      (спонсорский и брендированный контент), доработка до «зелёного» по замечаниям рецензента и
+      фармы, декомпозиция на элементы и разметка видов визуализации (снимает TK-1).
+    leaf: true
+    effort:
+      role: Медредактор-сценарист
+      unit: урок
+      hours_draft: [16, 28]
+      driver: длительность ролика и число микролернингов; доля брендированных уроков
+      iterations: итерации сценария до «зелёного»
+      basis: "оценка аналитика; опора: урок ≈ 45 мин (M:2026-08-28-0958), сценарий — «довольно много дней» (L2613)"
+  - id: A313
+    name: Проверить и согласовать сценарий
+    functions: [F-035, F-053, F-057, F-058, F-059, F-050]
+    mechanisms:
+      - Пул медрецензентов
+      - Сервисный круг — юрист
+      - Менеджер эксперта
+      - Аккаунт
+    note: >-
+      Шаги 8–11: медрецензия с вето на достоверность (В4), юрпроверка рекламы, апрув эксперта,
+      этап 1 фармы.
+  - id: A314
+    name: Произвести медиа
+    functions: [F-051, F-041, F-042, F-043, F-044, F-047, F-048]
+    mechanisms: [Медиа-круг]
+    note: >-
+      Шаги 13–14 по решению В3: медиа-ведущий ротируется в команду (раскадровка), анимация, голос и
+      монтаж идут потоком в медиа-круге; пики — внешний пул по стандарту DS. Нарезка записей
+      мероприятий — тот же монтаж.
+  - id: A315
+    name: Составить тесты и материалы
+    functions: [F-045, F-046]
+    mechanisms: [Медредактор-сценарист]
+    note: Шаг 15 — тесты обязательны, по стандарту теста; брошюра для скачивания.
+    leaf: true
+    effort:
+      role: Медредактор-сценарист
+      unit: урок
+      hours_draft: [4, 8]
+      driver: число вопросов теста; объём материала для скачивания
+      basis: "оценка аналитика; опора: урок = 4 компонента + тесты (M:2026-09-08-0952)"
+  - id: A316
+    name: Собрать, принять и одобрить урок
+    functions: [F-056, F-054, F-055, F-067, F-060]
+    mechanisms:
+      - Пул медрецензентов
+      - Продюсер
+      - Аккаунт
+    note: Шаги 16–18 — проверка монтажа, приёмка по чек-листу, этап 2 фармы и номер одобрения.
+arrows:
+  # ---- Boundary inputs ----
+  - id: I1
+    label: Знания и материалы экспертов
+    objects: [O-123, O-077, O-079, O-080]
+    from: { boundary: I1 }
+    to: { box: A311, side: I }
+  - id: I2
+    label: Исходники, бриф с допустимым утверждением
+    objects: [O-078, O-094, O-095, O-075]
+    from: { boundary: I2 }
+    to: [{ box: A311, side: I }, { box: A312, side: I }]
+  - id: I3
+    label: Записи мероприятий
+    objects: [O-064]
+    from: { boundary: I3 }
+    to: { box: A314, side: I }
+  - id: I4
+    label: Сигнал неактуальности
+    objects: [O-126]
+    from: { boundary: I4 }
+    to: { box: A311, side: I }
+  - id: I5
+    label: Запись подкаста
+    objects: [O-048]
+    from: { boundary: I5 }
+    to: { box: A316, side: I }
+  # ---- Boundary controls ----
+  - id: C1
+    label: Закон о рекламе и маркировка
+    objects: [O-153, O-157]
+    from: { boundary: C1 }
+    to: [{ box: A312, side: C }, { box: A313, side: C }]
+  - id: C2
+    label: Клинические рекомендации, МНН
+    objects: [O-149, O-150, O-139, O-151, O-152]
+    from: { boundary: C2 }
+    to: [{ box: A312, side: C }, { box: A313, side: C }]
+  - id: C3
+    label: Базовый минимум качества
+    objects: [O-138]
+    from: { boundary: C3 }
+    to: { box: A316, side: C }
+  - id: C4
+    label: Двухэтапное одобрение фармы, сроки
+    objects: [O-222, O-173]
+    from: { boundary: C4 }
+    to: [{ box: A313, side: C }, { box: A316, side: C }]
+  - id: C5
+    label: Бриф эксперту, программа
+    objects: [O-073, O-070]
+    from: { boundary: C5 }
+    to: { box: A311, side: C }
+  - id: C6
+    label: Стандарты DS, чек-листы
+    objects:
+      [O-143, O-145, O-146, O-147, O-148, O-097, O-168, O-169, O-221, O-140]
+    from: { boundary: C6 }
+    to:
+      - { box: A311, side: C }
+      - { box: A312, side: C }
+      - { box: A313, side: C }
+      - { box: A314, side: C }
+      - { box: A315, side: C }
+      - { box: A316, side: C }
+  # ---- Boundary output ----
+  - id: O1
+    label: Собранный урок с номером одобрения
+    objects: [O-041, O-197, O-093]
+    from: { box: A316, side: O }
+    to: { boundary: O1 }
+  # ---- Boundary mechanisms ----
+  - id: M1
+    label: Медредактор-сценарист, продюсер, аккаунт
+    objects: [O-010, O-011, O-004, O-015]
+    from: { boundary: M1 }
+    to:
+      - { box: A311, side: M }
+      - { box: A312, side: M }
+      - { box: A313, side: M }
+      - { box: A315, side: M }
+      - { box: A316, side: M }
+  - id: M2
+    label: Эксперты, заместители
+    objects: [O-024, O-026]
+    from: { boundary: M2 }
+    to: [{ box: A311, side: M }, { box: A313, side: M }]
+  - id: M3
+    label: Пул медрецензентов
+    objects: [O-009]
+    from: { boundary: M3 }
+    to: [{ box: A313, side: M }, { box: A316, side: M }]
+  - id: M4
+    label: Медиа-круг
+    objects: [O-012, O-013]
+    from: { boundary: M4 }
+    to: { box: A314, side: M }
+  - id: M5
+    label: Юрист
+    objects: [O-014]
+    from: { boundary: M5 }
+    to: { box: A313, side: M }
+  - id: M6
+    label: Личный кабинет
+    objects: [O-184]
+    from: { boundary: M6 }
+    to: { box: A313, side: M }
+  - id: M7
+    label: ИИ-инструменты
+    objects: [O-183]
+    from: { boundary: M7 }
+    to: [{ box: A312, side: M }, { box: A314, side: M }]
+  - id: M8
+    label: Менеджеры экспертов
+    objects: [O-001]
+    from: { boundary: M8 }
+    to: { box: A311, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Принятый материал по темам
+    objects: [O-077, O-080]
+    from: { box: A311, side: O }
+    to: { box: A312, side: I }
+  - id: a02
+    label: Сценарий, рекламный текст, реплики
+    objects: [O-083, O-082, O-092, O-089]
+    from: { box: A312, side: O }
+    to: { box: A313, side: I }
+  - id: a03
+    label: Замечания рецензента и фармы
+    objects: [O-091]
+    from: { box: A313, side: O }
+    to: { box: A312, side: I }
+  - id: a04
+    label: Одобренный сценарий
+    objects: [O-082]
+    from: { box: A313, side: O }
+    to: [{ box: A314, side: I }, { box: A315, side: I }]
+  - id: a05
+    label: Ролик и микролернинги
+    objects: [O-043, O-044]
+    from: { box: A314, side: O }
+    to: { box: A316, side: I }
+  - id: a06
+    label: Тесты, материал для скачивания
+    objects: [O-045, O-046]
+    from: { box: A315, side: O }
+    to: { box: A316, side: I }
+  - id: a07
+    label: Правки монтажа и рекламных кадров
+    objects: [O-091]
+    from: { box: A316, side: O }
+    to: { box: A314, side: I }

@@ -1,0 +1,278 @@
+# IDEF0 decomposition A3 «Произвести продукты: уроки, подкасты, мероприятия» (child of A0; format:
+# FORMAT-ru.md). Three lines of process blocks 3 and 4 (../process-to-be-ru.md): lesson (steps 1–18),
+# podcast (steps 19–23), event (block 4). Each line is decomposed to costable leaves.
+id: A3
+parent: A0
+title: "Произвести продукты: уроки, подкасты, мероприятия"
+# Child boundary code → A0 arrow touching box A3 on that side (a04 is the A0 feedback loop: it leaves
+# A3 as O4 and re-enters as I3).
+icom:
+  I1: I2
+  I2: I3
+  I3: a04
+  I4: a07
+  C1: C1
+  C2: C2
+  C3: C3
+  C4: C4
+  C5: a01
+  C6: a02
+  C7: a13
+  O1: a03
+  O2: a03
+  O3: a03
+  O4: a04
+  M1: M1
+  M2: M2
+  M3: M3
+  M4: M4
+  M5: M5
+  M6: M7
+  M7: M8
+  M8: M9
+  M9: a14
+boxes:
+  - id: A31
+    name: Произвести урок
+    process_blocks: [3]
+    note: >-
+      Линия урока, шаги 1–18: бриф → материал → сценарий → медрецензия → [этап 1 фармы] → медиа →
+      тесты и материалы → сборка → приёмка → [этап 2 фармы]. Ядро себестоимости единицы.
+    functions:
+      [
+        F-027,
+        F-028,
+        F-029,
+        F-030,
+        F-031,
+        F-032,
+        F-033,
+        F-034,
+        F-035,
+        F-036,
+        F-037,
+        F-038,
+        F-039,
+        F-040,
+        F-041,
+        F-042,
+        F-043,
+        F-044,
+        F-045,
+        F-046,
+        F-047,
+        F-048,
+        F-050,
+        F-051,
+        F-052,
+        F-053,
+        F-054,
+        F-055,
+        F-056,
+        F-057,
+        F-058,
+        F-059,
+        F-060,
+        F-067,
+        F-068,
+      ]
+    mechanisms:
+      - Медредактор-сценарист
+      - Менеджер эксперта
+      - Пул медрецензентов
+      - Медиа-круг
+      - Продюсер
+  - id: A32
+    name: Произвести подкаст
+    process_blocks: [3]
+    note: >-
+      Линия подкаста, шаги 19–23; запись — компонент урока (вход A31). Авторизация спикера и
+      коммерческая часть — здесь же для мероприятий (база авторизованных спикеров → A33).
+    functions:
+      [F-077, F-078, F-079, F-081, F-082, F-083, F-084, F-085, F-087, F-088]
+    mechanisms:
+      - Менеджер эксперта
+      - Медредактор-сценарист
+      - Медиа-круг — студия
+  - id: A33
+    name: Провести мероприятие
+    process_blocks: [4]
+    note: >-
+      Блок 4: вебинар, клуб, практическая школа, конгресс (экземпляр мероприятия); запись уходит на
+      нарезку микролернингов (обратная связь A0 a04).
+    functions:
+      [F-086, F-117, F-118, F-119, F-123, F-124, F-125, F-126, F-127, F-128]
+    mechanisms:
+      - Менеджер мероприятий
+      - Сервисный круг — оператор платформы, режиссёр трансляции, поддержка
+arrows:
+  # ---- Boundary inputs ----
+  - id: I1
+    label: Знания и материалы экспертов
+    objects: [O-123, O-077, O-079, O-080]
+    from: { boundary: I1 }
+    to: [{ box: A31, side: I }, { box: A32, side: I }]
+  - id: I2
+    label: Исходники и тезисы компаний
+    objects: [O-078, O-094, O-095, O-075, O-076]
+    from: { boundary: I2 }
+    to: [{ box: A31, side: I }, { box: A32, side: I }]
+  - id: I3
+    label: Записи мероприятий — сырьё микролернингов
+    objects: [O-064]
+    from: { boundary: I3 }
+    to: { box: A31, side: I }
+  - id: I4
+    label: Сигнал неактуальности — актуализация
+    objects: [O-126]
+    from: { boundary: I4 }
+    to: { box: A31, side: I }
+  # ---- Boundary controls ----
+  - id: C1
+    label: Закон о рекламе и маркировка
+    objects: [O-153, O-157, O-161]
+    from: { boundary: C1 }
+    to:
+      - { box: A31, side: C }
+      - { box: A32, side: C }
+      - { box: A33, side: C }
+  - id: C2
+    label: Клинические рекомендации, МНН
+    objects: [O-149, O-150, O-139, O-151, O-152]
+    from: { boundary: C2 }
+    to: [{ box: A31, side: C }, { box: A32, side: C }]
+  - id: C3
+    label: НМО и условия баллов
+    objects: [O-158, O-211]
+    from: { boundary: C3 }
+    to: [{ box: A32, side: C }, { box: A33, side: C }]
+  - id: C4
+    label: Базовый минимум качества
+    objects: [O-138]
+    from: { boundary: C4 }
+    to: { box: A31, side: C }
+  - id: C5
+    label: Маршрут одобрения фармы
+    objects: [O-222, O-170, O-173]
+    from: { boundary: C5 }
+    to:
+      - { box: A31, side: C }
+      - { box: A32, side: C }
+      - { box: A33, side: C }
+  - id: C6
+    label: Программа, план конвейера, график
+    objects: [O-070, O-071, O-072, O-073, O-213, O-214]
+    from: { boundary: C6 }
+    to:
+      - { box: A31, side: C }
+      - { box: A32, side: C }
+      - { box: A33, side: C }
+  - id: C7
+    label: Стандарты DS и СОП
+    objects:
+      [
+        O-141,
+        O-143,
+        O-144,
+        O-145,
+        O-146,
+        O-147,
+        O-148,
+        O-097,
+        O-168,
+        O-169,
+        O-221,
+        O-140,
+      ]
+    from: { boundary: C7 }
+    to:
+      - { box: A31, side: C }
+      - { box: A32, side: C }
+      - { box: A33, side: C }
+  # ---- Boundary outputs ----
+  - id: O1
+    label: Собранные уроки с номером одобрения
+    objects: [O-041, O-197, O-093]
+    from: { box: A31, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Подкасты и архив
+    objects: [O-048, O-065]
+    from: { box: A32, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Записи мероприятий
+    objects: [O-064]
+    from: { box: A33, side: O }
+    to: { boundary: O3 }
+  - id: O4
+    label: Записи — сырьё микролернингов (обратная связь A0)
+    objects: [O-064]
+    from: { box: A33, side: O }
+    to: { boundary: O4 }
+  # ---- Boundary mechanisms ----
+  - id: M1
+    label: Продуктовая команда
+    objects: [O-001, O-004, O-010, O-011, O-015, O-193]
+    from: { boundary: M1 }
+    to:
+      - { box: A31, side: M }
+      - { box: A32, side: M }
+      - { box: A33, side: M }
+  - id: M2
+    label: Эксперты и спикеры
+    objects: [O-023, O-024, O-026, O-027, O-029, O-115, O-116]
+    from: { boundary: M2 }
+    to:
+      - { box: A31, side: M }
+      - { box: A32, side: M }
+      - { box: A33, side: M }
+  - id: M3
+    label: Пул медрецензентов
+    objects: [O-009]
+    from: { boundary: M3 }
+    to: { box: A31, side: M }
+  - id: M4
+    label: Медиа-круг
+    objects: [O-012, O-013]
+    from: { boundary: M4 }
+    to: [{ box: A31, side: M }, { box: A32, side: M }]
+  - id: M5
+    label: Сервисный круг
+    objects: [O-014, O-194, O-195, O-196]
+    from: { boundary: M5 }
+    to: [{ box: A31, side: M }, { box: A33, side: M }]
+  - id: M6
+    label: Платформа DS
+    objects: [O-185, O-184, O-218]
+    from: { boundary: M6 }
+    to: [{ box: A31, side: M }, { box: A33, side: M }]
+  - id: M7
+    label: ИИ-инструменты
+    objects: [O-183]
+    from: { boundary: M7 }
+    to: { box: A31, side: M }
+  - id: M8
+    label: Студия
+    objects: [O-187]
+    from: { boundary: M8 }
+    to: [{ box: A32, side: M }, { box: A33, side: M }]
+  - id: M9
+    label: Команды и пулы
+    objects: [O-001, O-115]
+    from: { boundary: M9 }
+    to:
+      - { box: A31, side: M }
+      - { box: A32, side: M }
+      - { box: A33, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Запись подкаста — компонент урока
+    objects: [O-048]
+    from: { box: A32, side: O }
+    to: { box: A31, side: I }
+  - id: a02
+    label: База авторизованных спикеров
+    objects: [O-117, O-028]
+    from: { box: A32, side: O }
+    to: { box: A33, side: C }

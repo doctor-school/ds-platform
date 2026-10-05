@@ -1,0 +1,189 @@
+# IDEF0 decomposition A33 «Провести мероприятие» (child of A3; format: FORMAT-ru.md). Process block 4
+# (../process-to-be-ru.md). Leaves carry a DRAFT effort per event; the reference event is an online
+# webinar, offline / congress scale through the drivers.
+id: A33
+parent: A3
+title: Провести мероприятие
+# Child boundary code → A3 arrow touching box A33 on that side.
+icom:
+  C1: C6
+  C2: a02
+  C3: C1
+  C4: C3
+  C5: C5
+  C6: C7
+  O1: O3
+  O2: O4
+  M1: M1
+  M2: M2
+  M3: M5
+  M4: M6
+  M5: M8
+  M6: M9
+boxes:
+  - id: A331
+    name: Подготовить мероприятие и пригласить врачей
+    functions: [F-117, F-119]
+    mechanisms: [Менеджер мероприятий]
+    note: >-
+      Шаги 1 и 4: информация для оператора платформы, приглашение врачей через каналы партнёра;
+      очная логистика — подряд (реко Р4.1).
+    leaf: true
+    effort:
+      role: Менеджер мероприятий
+      unit: мероприятие
+      hours_draft: [4, 8]
+      driver: тип мероприятия (онлайн / офлайн); конгресс — множитель числа секций
+      basis: оценка аналитика
+  - id: A332
+    name: Завести мероприятие на платформе
+    functions: [F-118]
+    mechanisms: [Сервисный круг — оператор платформы]
+    note: Шаг 2 — карточка, спикеры, программа PDF; спикеры — из базы авторизованных.
+    leaf: true
+    effort:
+      role: Сервисный круг — оператор платформы
+      unit: мероприятие
+      hours_draft: [1, 2]
+      driver: число спикеров и секций
+      basis: оценка аналитика
+  - id: A333
+    name: Провести трансляцию или мероприятие
+    functions: [F-086]
+    mechanisms: [Сервисный круг — режиссёр трансляции]
+    note: >-
+      Шаг 5: вебинар, клуб, практическая школа, конгресс; запись пригодна для нарезки. Часы спикеров —
+      гонорар (переменная); площадка и трансляция — внешние затраты.
+    leaf: true
+    effort:
+      role: Сервисный круг — режиссёр трансляции
+      unit: мероприятие
+      hours_draft: [3, 4]
+      driver: длительность; онлайн / офлайн; число секций
+      basis: "оценка аналитика; опора: ≥ 90 мин — условие баллов НМО (P: Gateway_NMOConditions)"
+  - id: A334
+    name: Поддерживать участников и контролировать присутствие
+    functions: [F-123, F-124, F-125]
+    mechanisms: [Сервисный круг — поддержка]
+    note: >-
+      Шаги 6–7: контроль присутствия по формальному критерию механизмом платформы (снимает TK-11),
+      поддержка; на очных — регистрация на месте и бейджи.
+    leaf: true
+    effort:
+      role: Сервисный круг — поддержка
+      unit: мероприятие
+      hours_draft: [2, 4]
+      driver: число участников; онлайн / офлайн
+      basis: "оценка аналитика; опора: 100 обещано → 60 пришло (L3627)"
+  - id: A335
+    name: Отчитаться о присутствии, начислить НМО, архивировать
+    functions: [F-126, F-127, F-128]
+    mechanisms: [Сервисный круг — оператор платформы]
+    note: >-
+      Шаги 8–9: отчёт о присутствии, баллы НМО автоматически, вручную — только по формальному
+      правилу; архив, запись — на нарезку микролернингов (A31).
+    leaf: true
+    effort:
+      role: Сервисный круг — оператор платформы
+      unit: мероприятие
+      hours_draft: [1, 2]
+      driver: доля ручных начислений НМО; число участников
+      basis: оценка аналитика
+arrows:
+  - id: C1
+    label: График и программа мероприятия
+    objects: [O-214, O-213, O-071]
+    from: { boundary: C1 }
+    to: { box: A331, side: C }
+  - id: C2
+    label: База авторизованных спикеров
+    objects: [O-117]
+    from: { boundary: C2 }
+    to: { box: A332, side: C }
+  - id: C3
+    label: Маркировка, запрет прямого контакта
+    objects: [O-157, O-161]
+    from: { boundary: C3 }
+    to: [{ box: A332, side: C }, { box: A333, side: C }]
+  - id: C4
+    label: Условия баллов НМО
+    objects: [O-211, O-158]
+    from: { boundary: C4 }
+    to: [{ box: A334, side: C }, { box: A335, side: C }]
+  - id: C5
+    label: Предмет договора
+    objects: [O-170]
+    from: { boundary: C5 }
+    to: { box: A331, side: C }
+  - id: C6
+    label: Технический стандарт
+    objects: [O-168]
+    from: { boundary: C6 }
+    to: { box: A333, side: C }
+  - id: O1
+    label: Запись мероприятия
+    objects: [O-064]
+    from: { box: A335, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Запись — сырьё микролернингов
+    objects: [O-064]
+    from: { box: A335, side: O }
+    to: { boundary: O2 }
+  - id: M1
+    label: Менеджер мероприятий
+    objects: [O-193]
+    from: { boundary: M1 }
+    to: { box: A331, side: M }
+  - id: M2
+    label: Спикеры
+    objects: [O-027]
+    from: { boundary: M2 }
+    to: { box: A333, side: M }
+  - id: M3
+    label: Оператор платформы, режиссёр, поддержка
+    objects: [O-194, O-195, O-196]
+    from: { boundary: M3 }
+    to:
+      - { box: A332, side: M }
+      - { box: A333, side: M }
+      - { box: A334, side: M }
+      - { box: A335, side: M }
+  - id: M4
+    label: Платформа DS, контроль присутствия
+    objects: [O-185, O-218]
+    from: { boundary: M4 }
+    to:
+      - { box: A332, side: M }
+      - { box: A334, side: M }
+      - { box: A335, side: M }
+  - id: M5
+    label: Студия и площадка
+    objects: [O-187]
+    from: { boundary: M5 }
+    to: { box: A333, side: M }
+  - id: M6
+    label: Команда
+    objects: [O-001]
+    from: { boundary: M6 }
+    to: { box: A331, side: M }
+  - id: a01
+    label: Информация о мероприятии
+    objects: [O-213, O-214]
+    from: { box: A331, side: O }
+    to: { box: A332, side: I }
+  - id: a02
+    label: Карточка мероприятия
+    objects: [O-215]
+    from: { box: A332, side: O }
+    to: [{ box: A333, side: I }, { box: A334, side: I }]
+  - id: a03
+    label: Запись мероприятия
+    objects: [O-064]
+    from: { box: A333, side: O }
+    to: { box: A335, side: I }
+  - id: a04
+    label: Данные посещаемости, бейджи
+    objects: [O-100, O-212]
+    from: { box: A334, side: O }
+    to: { box: A335, side: I }

@@ -1,0 +1,190 @@
+# IDEF0 decomposition A2 «Спроектировать продукт» (child of A0; format: FORMAT-ru.md).
+# Steps 1–14 of process block 2 (../process-to-be-ru.md). Leaves carry a DRAFT effort for the owner's
+# calibration (effort-draft-ru.md); rates are calculator variables, never numbers here.
+id: A2
+parent: A0
+title: Спроектировать продукт
+# Child boundary code → A0 arrow touching box A2 on that side.
+icom:
+  I1: I2
+  C1: C2
+  C2: C3
+  C3: a01
+  C4: a13
+  O1: a02
+  M1: M1
+  M2: M2
+  M3: M3
+  M4: a14
+boxes:
+  - id: A21
+    name: Сформировать видение и программу курса
+    functions: [F-015, F-016, F-017, F-018, F-062]
+    mechanisms: [Методолог]
+    note: >-
+      Шаги 1, 3–5: видение с амбассадором, знания и цели, программа 60/40, пожелания компаний;
+      спонсорский контент — фарма согласует программу у себя (F-062). Решающий голос по медицине —
+      амбассадор; его часы — в A23 и в гонораре.
+    leaf: true
+    effort:
+      role: Методолог
+      unit: курс
+      hours_draft: [24, 40]
+      driver: число модулей и уроков в курсе; один курс или скелет направления
+      iterations: итерации программы с фармой (F-062)
+      basis: "оценка аналитика; опора: курс 36 ч = 3 модуля × 6 уроков + клубы (L2051, M:2026-08-28-0958)"
+  - id: A22
+    name: Нарезать программу и определить тип контента
+    functions: [F-019, F-065, F-063]
+    mechanisms: [Методолог]
+    note: Шаги 6–7 — уроки и модули, тип контента, место рекламы вне микролернинга, маркировка вебинара.
+    leaf: true
+    effort:
+      role: Методолог
+      unit: курс
+      hours_draft: [6, 12]
+      driver: число уроков и модулей; доля спонсорских и брендированных единиц
+      basis: "оценка аналитика; опора: 18 уроков + 18 подкастов + 3 клуба — пример курса (L2051)"
+  - id: A23
+    name: Закрепить экспертов, авторов и клинические случаи
+    functions: [F-020, F-021, F-022, F-024, F-025, F-026]
+    mechanisms: [Менеджер эксперта]
+    note: >-
+      Шаги 2, 8–10: амбассадор и эксперты через их менеджеров, клинические случаи сначала из
+      библиотеки, поиск недостающих экспертов, контракт с лидером на стандарты DS (авторская доля —
+      распределение прибыли, вне себестоимости).
+    leaf: true
+    effort:
+      role: Менеджер эксперта
+      unit: курс
+      hours_draft: [16, 32]
+      driver: >-
+        число амбассадоров и экспертов на курс; доля повторно используемых клинических случаев;
+        время поиска эксперта
+      basis: оценка аналитика
+  - id: A24
+    name: Назначить независимых медрецензентов
+    functions: []
+    mechanisms: [Пул медрецензентов — координатор]
+    note: "Шаг 14 (новое): рецензент ≠ автор, ≠ соавтор, ≠ команда."
+    leaf: true
+    effort:
+      role: Пул медрецензентов — координатор
+      unit: курс
+      hours_draft: [1, 3]
+      driver: число уроков курса; загрузка пула
+      basis: оценка аналитика
+  - id: A25
+    name: Спланировать подкасты и график мероприятий
+    functions: [F-073, F-074, F-115]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаги 11–12: годовой план подкастов, серия и спонсоры с лидером, график мероприятий с партнёром
+      (вместе с менеджером мероприятий).
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: курс
+      hours_draft: [4, 8]
+      driver: число подкастов и мероприятий в курсе
+      basis: "оценка аналитика; опора: 12 выпусков на тему подкаста (L2019)"
+  - id: A26
+    name: Назначить дедлайны и зарезервировать мощность
+    functions: [F-066]
+    mechanisms: [Продюсер]
+    note: "Шаг 13: дедлайны этапов и бронь слотов медиа-круга, часов рецензентов и экспертов (новое)."
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: курс
+      hours_draft: [4, 8]
+      driver: число единиц в плане × число общих пулов
+      basis: оценка аналитика
+arrows:
+  # ---- Boundary ----
+  - id: I1
+    label: Знания и материалы экспертов
+    objects: [O-123, O-077, O-079, O-080]
+    from: { boundary: I1 }
+    to: [{ box: A21, side: I }, { box: A23, side: I }]
+  - id: C1
+    label: Клинические рекомендации и консенсусы
+    objects: [O-149, O-150, O-151]
+    from: { boundary: C1 }
+    to: { box: A21, side: C }
+  - id: C2
+    label: Норматив ДПО
+    objects: [O-159]
+    from: { boundary: C2 }
+    to: [{ box: A21, side: C }, { box: A22, side: C }]
+  - id: C3
+    label: Договор, предмет, сроки
+    objects: [O-107, O-170, O-173]
+    from: { boundary: C3 }
+    to:
+      - { box: A21, side: C }
+      - { box: A25, side: C }
+      - { box: A26, side: C }
+  - id: C4
+    label: Стандарты DS
+    objects: [O-141, O-143]
+    from: { boundary: C4 }
+    to:
+      - { box: A22, side: C }
+      - { box: A23, side: C }
+      - { box: A24, side: C }
+  - id: O1
+    label: Программа, план конвейера, график мероприятий
+    objects: [O-070, O-071, O-072, O-073, O-213, O-214]
+    from: { box: A26, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Методолог, продюсер
+    objects: [O-005, O-004]
+    from: { boundary: M1 }
+    to:
+      - { box: A21, side: M }
+      - { box: A22, side: M }
+      - { box: A25, side: M }
+      - { box: A26, side: M }
+  - id: M2
+    label: Амбассадор, эксперты, база экспертов
+    objects: [O-023, O-024, O-025, O-115]
+    from: { boundary: M2 }
+    to: [{ box: A21, side: M }, { box: A23, side: M }]
+  - id: M3
+    label: Пул медрецензентов
+    objects: [O-009]
+    from: { boundary: M3 }
+    to: { box: A24, side: M }
+  - id: M4
+    label: Команда — менеджеры экспертов
+    objects: [O-001]
+    from: { boundary: M4 }
+    to: { box: A23, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Видение и программа курса
+    objects: [O-123, O-070]
+    from: { box: A21, side: O }
+    to: { box: A22, side: I }
+  - id: a02
+    label: Уроки, модули, тип контента
+    objects: [O-041, O-197, O-154]
+    from: { box: A22, side: O }
+    to: [{ box: A23, side: I }, { box: A25, side: I }]
+  - id: a03
+    label: Авторы, клинические случаи, контракты с лидерами
+    objects: [O-080, O-110]
+    from: { box: A23, side: O }
+    to: [{ box: A24, side: I }, { box: A26, side: I }]
+  - id: a04
+    label: Назначенные рецензенты
+    objects: [O-221]
+    from: { box: A24, side: O }
+    to: { box: A26, side: I }
+  - id: a05
+    label: План подкастов, график мероприятий
+    objects: [O-072, O-214]
+    from: { box: A25, side: O }
+    to: { box: A26, side: I }

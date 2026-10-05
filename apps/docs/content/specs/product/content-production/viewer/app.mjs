@@ -528,6 +528,24 @@ function layoutDiagram(diagram) {
     const pts =
       edge.prefer === "end" ? [...edge.points].reverse() : edge.points;
     let best = null;
+    const consider = (spot, block, walkedSoFar) => {
+      const r = { x: spot.x, y: spot.y, w: block.width, h: block.height };
+      if (
+        r.x < 4 ||
+        r.y < 4 ||
+        r.x + r.w > frameW - 4 ||
+        r.y + r.h > frameH - 4
+      )
+        return;
+      if (boxRects.some((q) => hits(r, q, 4))) return;
+      const overlap = labels.filter((q) => hits(r, q, 3)).length;
+      const cost =
+        overlap * 1000 +
+        crossings(r) * 40 +
+        (walkedSoFar + spot.d) * 0.05 +
+        block.lines * 6;
+      if (!best || cost < best.cost) best = { cost, r, block };
+    };
     let walked = 0;
     for (let i = 1; i < pts.length; i += 1) {
       const a = pts[i - 1];
@@ -565,31 +583,52 @@ function layoutDiagram(diagram) {
             );
           }
         }
-        for (const spot of spots) {
-          const r = { x: spot.x, y: spot.y, w: block.width, h: block.height };
-          if (
-            r.x < 4 ||
-            r.y < 4 ||
-            r.x + r.w > frameW - 4 ||
-            r.y + r.h > frameH - 4
-          )
-            continue;
-          if (boxRects.some((q) => hits(r, q, 4))) continue;
-          const overlap = labels.filter((q) => hits(r, q, 3)).length;
-          const cost =
-            overlap * 1000 +
-            crossings(r) * 40 +
-            (walked + spot.d) * 0.05 +
-            block.lines * 6;
-          if (!best || cost < best.cost) best = { cost, r, block };
-        }
+        for (const spot of spots) consider(spot, block, walked);
       }
       walked += len;
     }
-    if (best) {
-      labels.push(best.r);
-      edge.label = { text: best.block.text, x: best.r.x, y: best.r.y };
+    // Dense margins (many boundary arrows side by side) can leave no free spot on the path itself:
+    // then search outward from the path's corners, so a label moves aside instead of covering
+    // another label or disappearing.
+    if (!best || best.cost >= 1000) {
+      const block = labelBlock(
+        edge.arrow.label ?? edge.arrow.id,
+        widths[widths.length - 1],
+      );
+      for (let k = 1; k <= 16; k += 1) {
+        const step = k * 8;
+        for (const p of pts)
+          for (const [dx, dy] of [
+            [5, -block.height - step],
+            [5, step],
+            [-5 - block.width, -block.height - step],
+            [-5 - block.width, step],
+            [5 + step, -block.height / 2],
+            [-5 - block.width - step, -block.height / 2],
+          ])
+            consider({ x: p.x + dx, y: p.y + dy, d: 200 + step * 4 }, block, 0);
+        if (best && best.cost < 1000) break;
+      }
     }
+    if (!best) {
+      // Never drop a label: clamp it into the frame next to the arrow's first point.
+      const block = labelBlock(
+        edge.arrow.label ?? edge.arrow.id,
+        widths[widths.length - 1],
+      );
+      const p = pts[0];
+      best = {
+        block,
+        r: {
+          x: Math.min(Math.max(p.x + 5, 4), frameW - 4 - block.width),
+          y: Math.min(Math.max(p.y + 3, 4), frameH - 4 - block.height),
+          w: block.width,
+          h: block.height,
+        },
+      };
+    }
+    labels.push(best.r);
+    edge.label = { text: best.block.text, x: best.r.x, y: best.r.y };
   }
 
   // 6. React Flow nodes and edges. Every edge runs frame → frame through two hidden handles: the
@@ -740,6 +779,23 @@ function Ids({ ids }) {
   </div>`;
 }
 
+/** Draft effort of a leaf (model/FORMAT-ru.md «Лист и черновая трудоёмкость»). */
+function Effort({ effort }) {
+  const hours = Array.isArray(effort.hours_draft)
+    ? effort.hours_draft.join("–")
+    : effort.hours_draft;
+  return html`<div>
+    <h3>Трудоёмкость — черновик</h3>
+    <ul>
+      <li><b>Роль:</b> ${effort.role}</li>
+      <li><b>Часы на ${effort.unit}:</b> ${hours}</li>
+      ${effort.iterations ? html`<li><b>× итерации:</b> ${effort.iterations}</li>` : null}
+      <li><b>Драйвер:</b> ${effort.driver}</li>
+      <li class="muted">${effort.basis}</li>
+    </ul>
+  </div>`;
+}
+
 function Details({ diagram, focus, hasChild, onOpen }) {
   if (!focus) {
     return html`<div>
@@ -765,6 +821,7 @@ function Details({ diagram, focus, hasChild, onOpen }) {
       <h2>${box.id} — ${box.name}</h2>
       ${hasChild(box.id) ? html`<p><button onClick=${() => onOpen(box.id)}>Открыть декомпозицию ${box.id}</button></p>` : null}
       ${box.note ? html`<p>${box.note}</p>` : null}
+      ${box.effort ? html`<${Effort} effort=${box.effort} />` : null}
       <h3>Функции реестра (${(box.functions ?? []).length})</h3>
       <${Ids} ids=${box.functions} />
       <h3>Механизмы — роли</h3>

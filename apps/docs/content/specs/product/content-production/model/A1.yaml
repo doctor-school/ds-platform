@@ -1,0 +1,194 @@
+# IDEF0 decomposition A1 «Сформировать предложение и заключить договор» (child of A0; format: FORMAT-ru.md).
+# Steps 1–15 of process block 1 (../process-to-be-ru.md). Leaves carry a DRAFT effort for the owner's
+# calibration (effort-draft-ru.md); rates are calculator variables, never numbers here.
+id: A1
+parent: A0
+title: Сформировать предложение и заключить договор
+# Child boundary code → A0 arrow touching box A1 on that side.
+icom:
+  I1: I1
+  I2: a12
+  C1: C1
+  C2: C5
+  C3: C6
+  C4: a13
+  O1: a01
+  M1: M1
+  M2: M5
+  M3: M6
+  M4: a14
+boxes:
+  - id: A11
+    name: Выйти на рынок и сформировать спрос
+    functions: [F-112, F-105, F-001, F-002, F-003]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 1–3: сегменты по данным ядра (консультант рынка — советующая роль), «посев» первыми курсами,
+      презентация в окна бюджетирования, партнёрство с техоргом.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: направление
+      hours_draft: [16, 40]
+      driver: число окон выхода к фарме × число целевых партнёров; канал (прямой / техорг)
+      basis: "оценка аналитика; опора: 3 окна выхода к фарме (L1281), окно сентябрь–ноябрь (L679)"
+  - id: A12
+    name: Принять и квалифицировать запрос
+    functions: [F-013, F-114, F-014, F-012]
+    mechanisms: [Аккаунт]
+    note: Шаги 4–6 — запрос или инициатива лидера, потребности сторон, барьерные условия.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: запрос
+      hours_draft: [1, 3]
+      driver: число входящих запросов; доля отсечённых барьерными условиями
+      basis: оценка аналитика
+  - id: A13
+    name: Сформировать КП и получить решение партнёра
+    functions: [F-005, F-075, F-076, F-080, F-108, F-004, F-116, F-006]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 7–11: 2–3 стандартных варианта финансирования, слот или серия подкастов, расчёт по
+      калькулятору, КП; решение фармы (F-116, F-006) — внешний шаг, часы DS — только сопровождение.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: КП
+      hours_draft: [4, 10]
+      driver: канал продажи; длина цикла продажи против окна бюджета фармы
+      iterations: итерации КП
+      basis: "оценка аналитика; опора: 2–3 варианта финансирования устраивают 99 % клиентов (L3315)"
+  - id: A14
+    name: Зафиксировать маршрут одобрения и отступления
+    functions: [F-010, F-049, F-061]
+    mechanisms: [Аккаунт]
+    note: >-
+      Шаги 12–13: маршрут одобрения фармы (стандарт — один раз на компанию), точки гибкости — только
+      при финансировании направления; при гранте маршрут пуст.
+    leaf: true
+    effort:
+      role: Аккаунт
+      unit: договор
+      hours_draft: [1, 6]
+      driver: >-
+        новая компания или повторная (F-061 — один раз); доля нестандартных договоров (advice process
+        расширенного круга)
+      basis: оценка аналитика
+  - id: A15
+    name: Проверить мощность до подписи
+    functions: []
+    mechanisms: [Продюсер]
+    note: >-
+      Шаг 15 (новое, в реестре нет): резерв медиа-круга, рецензентов и экспертов под сроки договора.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: договор
+      hours_draft: [1, 3]
+      driver: число единиц в предмете договора × число общих пулов под резерв
+      basis: оценка аналитика
+  - id: A16
+    name: Заключить договор
+    functions: [F-007, F-008, F-011]
+    mechanisms: [Сервисный круг — юрист]
+    note: Шаг 14 — шаблон DS, рамочный и допсоглашения, агент-прослойка.
+    leaf: true
+    effort:
+      role: Сервисный круг — юрист
+      unit: договор
+      hours_draft: [1, 4]
+      driver: доля нестандартных договоров; канал через агента-прослойку
+      iterations: итерации нестандартного договора
+      basis: оценка аналитика
+arrows:
+  # ---- Boundary ----
+  - id: I1
+    label: Запросы фармы, техорга, лидеров мнений
+    objects: [O-019, O-067, O-021, O-022, O-121]
+    from: { boundary: I1 }
+    to: [{ box: A11, side: I }, { box: A12, side: I }]
+  - id: I2
+    label: Запрос на следующий цикл
+    objects: [O-109, O-205, O-179]
+    from: { boundary: I2 }
+    to: { box: A12, side: I }
+  - id: C1
+    label: Закон о рекламе, запрет прямого контакта
+    objects: [O-153, O-157, O-161]
+    from: { boundary: C1 }
+    to: { box: A13, side: C }
+  - id: C2
+    label: Шаблон договора и маршрута одобрения
+    objects: [O-107, O-108, O-222, O-166]
+    from: { boundary: C2 }
+    to: [{ box: A14, side: C }, { box: A16, side: C }]
+  - id: C3
+    label: Бюджетный цикл фармы
+    objects: [O-133, O-205]
+    from: { boundary: C3 }
+    to: [{ box: A11, side: C }, { box: A13, side: C }]
+  - id: C4
+    label: Стандарты DS, калькулятор
+    objects: [O-141, O-172]
+    from: { boundary: C4 }
+    to:
+      - { box: A12, side: C }
+      - { box: A13, side: C }
+      - { box: A15, side: C }
+  - id: O1
+    label: Договор и маршрут одобрения
+    objects: [O-107, O-108, O-142, O-222, O-170, O-173]
+    from: { box: A16, side: O }
+    to: { boundary: O1 }
+  - id: M1
+    label: Аккаунт, продюсер
+    objects: [O-015, O-004]
+    from: { boundary: M1 }
+    to:
+      - { box: A11, side: M }
+      - { box: A12, side: M }
+      - { box: A13, side: M }
+      - { box: A14, side: M }
+      - { box: A15, side: M }
+  - id: M2
+    label: Юрист
+    objects: [O-014]
+    from: { boundary: M2 }
+    to: { box: A16, side: M }
+  - id: M3
+    label: Консультант рынка (советующая роль)
+    objects: [O-223]
+    from: { boundary: M3 }
+    to: { box: A11, side: M }
+  - id: M4
+    label: Команды и пулы
+    objects: [O-001, O-115]
+    from: { boundary: M4 }
+    to: { box: A15, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Целевой сегмент, презентация DS
+    objects: [O-182, O-068]
+    from: { box: A11, side: O }
+    to: { box: A12, side: I }
+  - id: a02
+    label: Квалифицированный запрос, пересечение интересов
+    objects: [O-067, O-120, O-122]
+    from: { box: A12, side: O }
+    to: { box: A13, side: I }
+  - id: a03
+    label: Принятое КП, вариант финансирования, цена
+    objects: [O-069, O-165, O-135, O-129, O-130, O-131]
+    from: { box: A13, side: O }
+    to: { box: A14, side: I }
+  - id: a04
+    label: Предмет, маршрут одобрения, отступления
+    objects: [O-170, O-142, O-222, O-162]
+    from: { box: A14, side: O }
+    to: { box: A15, side: I }
+  - id: a05
+    label: Предмет и сроки, обеспеченные мощностью
+    objects: [O-170, O-173]
+    from: { box: A15, side: O }
+    to: { box: A16, side: I }

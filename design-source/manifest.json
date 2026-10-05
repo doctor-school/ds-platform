@@ -210,13 +210,13 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "events-feed-kit.js": {
-      "sha256": "05f087c25fcb2c755b2833d71006609c894b142de3cd2b72246c25fac60b8e90",
-      "pulledAt": "2026-10-05T11:59:10.253Z",
+      "sha256": "fe4dbe4987d7ee1d2db915da4bd754a76841dee582e41c05124161603398efad",
+      "pulledAt": "2026-10-05T12:30:31.480Z",
       "remotePath": "events-feed-kit.js"
     },
     "events-feed.dc.html": {
       "sha256": "9cee02f345b7a03ac81db58a698f647661212a5feebf3c5196a5eb6731606149",
-      "pulledAt": "2026-10-05T11:59:09.246Z",
+      "pulledAt": "2026-10-05T12:30:32.659Z",
       "remotePath": "events-feed.dc.html"
     },
     "room.dc.html": {

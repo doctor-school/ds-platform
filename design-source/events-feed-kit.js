@@ -228,7 +228,7 @@
     if (e.pul) { c.pulCost = e.pul; c.pulCostLabel = e.pul + ' Pul'; }
     if (e.city) c.city = e.city;
     if (!e.past && typeof e.seats === 'number') { c.seatsLeft = e.seats; c.seatsLeftLabel = 'мест осталось'; c.soldOutLabel = 'мест не осталось'; }
-    if (e.format === 'гибрид' && e.venueTz) { c.venueLabel = 'На площадке'; c.venueTimeLabel = at(utc, e.venueTz).time + ' ' + zl(e.venueTz); }
+    if (e.format === 'гибрид' && e.venueTz) c.venueTimeLabel = 'На площадке ' + at(utc, e.venueTz).time + ' ' + zl(e.venueTz);
     if (e.past) { c.recordingLabel = e.recording; if (e.rec) { c.ctaHref = 'event-page-recording.dc.html'; c.ctaLabel = 'Смотреть запись'; } }
     if (e.live && !e.past) { var reg = o.signedIn && e.registered; c.live = true; c.liveLabel = 'Идёт сейчас'; c.ctaHref = reg ? 'room.dc.html' : 'event-page.dc.html'; c.ctaLabel = reg ? 'Войти в комнату эфира' : 'Открыть страницу события'; }
     if (o.signedIn && e.registered && !e.past) { c.registered = true; c.registeredLabel = 'Вы записаны'; }

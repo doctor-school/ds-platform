@@ -152,7 +152,6 @@ boxes:
   - id: A5
     name: Отчитаться и закрыть
     process_blocks: [6]
-    decomposition: pending
     functions:
       [
         F-089,

@@ -26,3 +26,15 @@ describe("embedded frames keep the UA color-scheme (#2434)", () => {
     expect(iframe).toMatch(/color-scheme:\s*normal\s*;/);
   });
 });
+
+describe("`dark:` is the theme class in every app (#2556)", () => {
+  // The theme is a class on <html> (the FOUC guard resolves the stored choice,
+  // else the system scheme); Tailwind's stock `dark:` is the media query. One
+  // declaration here keeps a theme-dependent swap — the auth wordmark — on the
+  // theme the page actually shows, on both storefronts.
+  it("declares the class-based dark variant once, in the shared entry stylesheet", () => {
+    expect(globals).toMatch(
+      /@custom-variant\s+dark\s+\(&:where\(\.dark,\s*\.dark \*\)\);/,
+    );
+  });
+});

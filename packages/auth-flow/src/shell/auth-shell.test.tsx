@@ -189,7 +189,7 @@ describe("row 47: the dark-theme wordmark is a host value", () => {
     expect(dark).toHaveClass("hidden", "dark:block");
   });
 
-  it("academy: states no dark variant, so one lockup renders with no theme swap", () => {
+  it("a host that states no dark variant gets one lockup with no theme swap", () => {
     render(
       <AuthShell config={ACADEMY_FIXTURE}>
         <div>form</div>

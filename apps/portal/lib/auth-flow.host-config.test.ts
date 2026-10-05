@@ -1,3 +1,9 @@
+// @vitest-environment node
+// Pure config data, rendered nowhere — and the node environment gives
+// `import.meta.url` the file scheme the asset check below resolves against.
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { returnContextSlots } from "@ds/auth-flow/login";
@@ -145,5 +151,20 @@ describe("ACADEMY_AUTH_FLOW — the registration door this host mounts", () => {
         DEFAULT_AUTH_FLOW_COPY[key as keyof typeof DEFAULT_AUTH_FLOW_COPY],
       );
     }
+  });
+});
+
+describe("ACADEMY_AUTH_FLOW — the form-column wordmark on the dark page", () => {
+  // #2556 (found on stage): with the system scheme dark before load, the
+  // Academy form column drew its colour «Doctor School» lockup dark-on-dark —
+  // the host stated no white variant, so the shell had nothing to swap in.
+  // The doctor host states the same field; the asset is the Academy's own.
+  it("states the white lockup it ships as the dark-page variant", () => {
+    const { darkSrc } = ACADEMY_AUTH_FLOW.brand.wordmark;
+    expect(darkSrc).toBe("/brand/logo-white.svg");
+    expect(
+      existsSync(fileURLToPath(new URL(`../public${darkSrc}`, import.meta.url))),
+      "the dark variant is a real asset in public/brand",
+    ).toBe(true);
   });
 });

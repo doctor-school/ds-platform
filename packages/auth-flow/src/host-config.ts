@@ -186,8 +186,9 @@ export type AuthFlowBrand = {
     readonly alt: string;
     /**
      * The white lockup for a host whose dark theme paints the page near-black
-     * (the doctor storefront, #1955): both render and the class-based `dark:`
-     * variant picks one. Absent = this host shows one lockup in every theme.
+     * (both storefronts — #1955, #2556): both render and the class-based
+     * `dark:` variant (`@ds/design-system/globals.css`) picks one. Absent = this
+     * host shows one lockup in every theme.
      */
     readonly darkSrc?: string;
   };

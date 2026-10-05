@@ -22,6 +22,18 @@
 @source "../primitives";
 @source "../blocks";
 
+/*
+ * `dark:` means the THEME CLASS, in every app. The theme is a class on <html>:
+ * each storefront's FOUC guard resolves it before first paint (the stored
+ * explicit choice, else the system `prefers-color-scheme`) and the tokens key
+ * off `.dark`. Tailwind v4's stock `dark:` is the media query instead, which
+ * swaps a theme-dependent asset against the wrong theme whenever the choice and
+ * the OS disagree. Declared once here so the variant cannot fork per app
+ * (#1955 declared it app-locally on the doctor host; #2556 hoisted it when the
+ * Academy auth wordmark needed the same swap).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @keyframes caret-blink {
   0%,
   70%,

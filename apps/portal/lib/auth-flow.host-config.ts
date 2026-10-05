@@ -73,11 +73,13 @@ export const ACADEMY_AUTH_FLOW = {
     },
   },
   // The Doctor School wordmark (`public/brand/`, viewBox 500×164): the colour
-  // lockup on the white form column, the clean white one on the blue panel. The
-  // Academy page has no dark wordmark swap, so no `darkSrc`.
+  // lockup on the light form column, the white one on the dark page (`darkSrc`,
+  // swapped on the theme class the FOUC guard sets — the stored choice or the
+  // system scheme, #2556) and on the blue panel.
   brand: {
     wordmark: {
       src: "/brand/logo.svg",
+      darkSrc: "/brand/logo-white.svg",
       alt: m.brand.logoAlt,
       width: 500,
       height: 164,

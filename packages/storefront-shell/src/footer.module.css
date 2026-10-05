@@ -4,12 +4,9 @@
  * footer.
  *
  * 1. The brand-mark theme swap (`logoSrc`: the colour wordmark on the light
- *    page, the white one on the dark page). A CSS module rather than a `dark:`
- *    utility because the theme's source of truth is `<html class="dark">` while
- *    Tailwind's stock `dark:` variant keys off `prefers-color-scheme`, which
- *    would swap the mark against the wrong theme. The apps declare
- *    `@custom-variant dark` app-locally (#1955), but this package is mounted by
- *    BOTH storefronts and must not depend on either app's globals.
+ *    page, the white one on the dark page), keyed off the theme's source of
+ *    truth, `<html class="dark">` — the same class the design-system `dark:`
+ *    variant means (`@ds/design-system/globals.css`, #2556).
  *    Both marks are painted and CSS picks one, so the swap needs no client
  *    component and cannot flash the wrong mark before hydration.
  *

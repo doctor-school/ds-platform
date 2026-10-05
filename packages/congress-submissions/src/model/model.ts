@@ -436,9 +436,10 @@ function baseActions(
 }
 
 /**
- * The list row's meta line (046 EARS-11): the kind, then the date in the
- * words of the detail line — a draft «изменён {date}», a sent one the send
- * date «отправлена {date}», a withdrawn one «отозвана {date}». A draft that cannot be sent carries
+ * The list row's meta line (046 EARS-11): the kind, then the date in one
+ * neuter form for every kind (owner, Stage-B 2026-10-05) — a draft
+ * «изменено {date}», a sent one the send date «отправлено {date}», a
+ * withdrawn one «отозвано {date}». A draft that cannot be sent carries
  * why, lower-cased up to « — »: the age rule first (046 EARS-20, `ageRefusal`
  * as in `actionsFor`), else the closed intake (canvas `closedText`).
  */
@@ -451,10 +452,10 @@ export function rowMeta(
   const out = [
     KIND_COPY[s.kind].label,
     s.status === "draft"
-      ? `изменён ${localDate(s.updatedAt)}`
+      ? `изменено ${localDate(s.updatedAt)}`
       : s.status === "withdrawn"
-        ? `отозвана ${localDate(s.statusChangedAt)}`
-        : `отправлена ${localDate(s.submittedAt ?? s.updatedAt)}`,
+        ? `отозвано ${localDate(s.statusChangedAt)}`
+        : `отправлено ${localDate(s.submittedAt ?? s.updatedAt)}`,
   ];
   if (s.status === "submitted") out.push(COPY.sentMeta);
   if (s.status === "draft" && (ageRefusal !== null || !kindSendable(intake))) {

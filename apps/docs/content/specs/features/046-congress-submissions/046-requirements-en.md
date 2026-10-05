@@ -39,9 +39,9 @@ This amendment overrides EARS-15, verification row V-14, the `@EARS-4 @EARS-15` 
 
 ## Production amendment — the list row's date (2026-10-02, #2551)
 
-This amendment overrides «the last change» in the list row of EARS-11, and with it the row wording in `046-design.md` («Two clocks in the section»); the running-production text is retained in EARS-11 below. The product owner approved on 2026-10-02 (Issue #2551) that a sent submission's row names when it was sent, in the words of the detail line, instead of its last edit.
+This amendment overrides «the last change» in the list row of EARS-11, and with it the row wording in `046-design.md` («Two clocks in the section»); the running-production text is retained in EARS-11 below. The product owner approved on 2026-10-02 (Issue #2551) that a sent submission's row names when it was sent instead of its last edit, and on 2026-10-05 (Stage-B, «Устный доклад · отправлено») that the row's word takes one neuter form for every kind.
 
-The list row of EARS-11 shows, after the kind, «изменён {дата}» from the last change for a `draft`, «отозвана {дата}» from the status change for `withdrawn`, and «отправлена {дата}» from the send moment (`submittedAt`) for every other status — `submitted`, `in_review`, `accepted`, `rejected`, `needs_revision`; the date is the viewer's local day, as in «Two clocks in the section».
+The list row of EARS-11 shows, after the kind, in one neuter form for every kind, «изменено {дата}» from the last change for a `draft`, «отозвано {дата}» from the status change for `withdrawn`, and «отправлено {дата}» from the send moment (`submittedAt`) for every other status — `submitted`, `in_review`, `accepted`, `rejected`, `needs_revision`; the date is the viewer's local day, as in «Two clocks in the section».
 
 ## Outcomes
 

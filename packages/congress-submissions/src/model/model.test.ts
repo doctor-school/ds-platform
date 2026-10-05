@@ -302,14 +302,14 @@ describe("actions per status", () => {
 describe("row meta and date line", () => {
   it("EARS-11: kind, last change, and the sent note", () => {
     expect(rowMeta(sub(), intake(), NOW)).toBe(
-      "Устный доклад · изменён 18 декабря 2026",
+      "Устный доклад · изменено 18 декабря 2026",
     );
     expect(rowMeta(sub(), intake({ state: "closed" }), NOW)).toBe(
-      "Устный доклад · изменён 18 декабря 2026 · приём устных докладов закрыт 15 января 2027",
+      "Устный доклад · изменено 18 декабря 2026 · приём устных докладов закрыт 15 января 2027",
     );
   });
 
-  it("046 EARS-11: a draft row reads «изменён {date}», a sent row the send date «отправлена {date}» — as the detail line, not the last edit", () => {
+  it("046 EARS-11: one neuter form for every kind — a draft row «изменено {date}», a sent row the send date «отправлено {date}», a withdrawn row «отозвано {date}»", () => {
     // Sent on the 16th, touched again on the 18th (a status move): the row
     // names the send, in the words of the detail line.
     const sent = sub({
@@ -318,10 +318,10 @@ describe("row meta and date line", () => {
       updatedAt: "2026-12-18T09:00:00.000Z",
     });
     expect(rowMeta(sent, intake(), NOW)).toBe(
-      "Устный доклад · отправлена 16 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+      "Устный доклад · отправлено 16 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
     );
     expect(rowMeta({ ...sent, status: "in_review" }, intake(), NOW)).toBe(
-      "Устный доклад · отправлена 16 декабря 2026",
+      "Устный доклад · отправлено 16 декабря 2026",
     );
     expect(
       rowMeta(
@@ -333,14 +333,23 @@ describe("row meta and date line", () => {
         intake(),
         NOW,
       ),
-    ).toBe("Устный доклад · отозвана 19 декабря 2026");
+    ).toBe("Устный доклад · отозвано 19 декабря 2026");
     expect(rowMeta(sub(), intake(), NOW)).toBe(
-      "Устный доклад · изменён 18 декабря 2026",
+      "Устный доклад · изменено 18 декабря 2026",
     );
-    for (const status of ["submitted", "in_review", "withdrawn"] as const) {
-      expect(rowMeta({ ...sent, status }, intake(), NOW)).not.toContain(
-        "изменено",
+    // One neuter form for every kind (owner, Stage-B 2026-10-05): the row
+    // reads «<Kind> · отправлено / изменено / отозвано {date}».
+    for (const k of ["oral", "poster", "abstract"] as const) {
+      expect(rowMeta(sub({ kind: k }), intake({ kind: k }), NOW)).toMatch(
+        / · изменено 18 декабря 2026$/,
       );
+      expect(
+        rowMeta(
+          { ...sent, kind: k, status: "in_review" },
+          intake({ kind: k }),
+          NOW,
+        ),
+      ).toMatch(/ · отправлено 16 декабря 2026$/);
     }
   });
 
@@ -355,7 +364,7 @@ describe("row meta and date line", () => {
     });
     expect(actionsFor(poster, open, NOW).primary?.label).toBe("Продолжить");
     expect(rowMeta(poster, open, NOW, refusal)).toBe(
-      "Постерный доклад · изменён 18 декабря 2026 · постерные доклады принимают от участников младше 40 лет на дату начала конгресса",
+      "Постерный доклад · изменено 18 декабря 2026 · постерные доклады принимают от участников младше 40 лет на дату начала конгресса",
     );
     // A sent poster keeps its own meta — the age lock speaks only for drafts.
     expect(
@@ -370,14 +379,14 @@ describe("row meta and date line", () => {
         refusal,
       ),
     ).toBe(
-      "Постерный доклад · отправлена 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
+      "Постерный доклад · отправлено 18 декабря 2026 · рассмотрит программный комитет, ответ придёт на почту",
     );
   });
 
   it("EARS-11: the change, send and withdrawal times are the viewer's, not Moscow", () => {
     const late = "2026-12-18T20:00:00.000Z"; // 23:00 МСК, 06:00 19 Dec local
     expect(rowMeta(sub({ updatedAt: late }), intake(), NOW)).toBe(
-      "Устный доклад · изменён 19 декабря 2026",
+      "Устный доклад · изменено 19 декабря 2026",
     );
     expect(dateLine(sub({ updatedAt: late }))).toBe(
       "черновик изменён 19 декабря 2026",

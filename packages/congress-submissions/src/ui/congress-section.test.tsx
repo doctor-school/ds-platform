@@ -948,7 +948,7 @@ describe("CongressSection — posters (046 EARS-18…20)", () => {
     const row = (await screen.findAllByTestId("congress-row"))[0]!;
     expect(
       within(row).getByText(
-        /^Постерный доклад · изменён .+ · постерные доклады принимают от участников младше 40 лет на дату начала конгресса$/,
+        /^Постерный доклад · изменено .+ · постерные доклады принимают от участников младше 40 лет на дату начала конгресса$/,
       ),
     ).toBeInTheDocument();
     expect(

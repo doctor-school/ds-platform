@@ -1,0 +1,232 @@
+# IDEF0 decomposition A4 «Выпустить и сопровождать» (child of A0; format: FORMAT-ru.md).
+# Steps 1–7 of process block 5 (../process-to-be-ru.md). Leaves carry a DRAFT effort for the owner's
+# calibration (effort-draft-ru.md); rates are calculator variables, never numbers here.
+id: A4
+parent: A0
+title: Выпустить и сопровождать
+# Child boundary code → A0 arrow touching box A4 on that side.
+icom:
+  I1: a03
+  I2: I4
+  C1: C1
+  C2: C2
+  C3: a01
+  C4: a13
+  O1: a05
+  O2: a05
+  O3: a06
+  O4: a07
+  M1: M1
+  M2: M3
+  M3: M4
+  M4: M5
+  M5: M7
+  M6: a14
+boxes:
+  - id: A41
+    name: Промаркировать и присвоить теги
+    functions: [F-064]
+    mechanisms: [Медредактор-сценарист]
+    note: >-
+      Шаги 1–2: маркировка по типу контента и НМО; теги (препарат, МНН, рекомендация) при выпуске —
+      новое: без них поиск затронутых единиц (F-096) становится ручным.
+    leaf: true
+    effort:
+      role: Медредактор-сценарист
+      unit: урок
+      hours_draft: [0.5, 1]
+      driver: число тегов на урок; тип контента (спонсорский, брендированный, НМО)
+      basis: оценка аналитика
+  - id: A42
+    name: Опубликовать по очереди выпуска
+    functions: [F-069]
+    mechanisms: [Сервисный круг — оператор платформы]
+    note: >-
+      Шаг 3: загрузка и публикация на платформе DS по дате релиза; реклама — только в слое приложения.
+      Очередь и дату релиза держит продюсер — его часы в A3162 (приёмка и очередь). Здесь же
+      исполняется решение «промаркировать или снять» из A46.
+    leaf: true
+    effort:
+      role: Сервисный круг — оператор платформы
+      unit: публикация
+      hours_draft: [0.25, 0.5]
+      driver: число публикаций за период (ритм — 1 урок в неделю на направление); снятия по A46
+      basis: оценка аналитика
+  - id: A43
+    name: Анонсировать урок
+    functions: [F-070, F-071]
+    mechanisms: [Медиа-круг — анонсы]
+    note: Шаг 4 — тизер и анонс в соцсетях за неделю до релиза, рилсы, анонс в календаре.
+    leaf: true
+    effort:
+      role: Медиа-круг — анонсы
+      unit: урок
+      hours_draft: [2, 4]
+      driver: число анонсов на урок (тизер, рилсы, календарь); каналы партнёра
+      basis: оценка аналитика
+  - id: A44
+    name: Принять сигнал и найти затронутые единицы
+    functions: [F-095, F-096]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаги 5–6: заявка peer review или внешнее событие (отзыв препарата, новая рекомендация); поиск
+      по тегам выпуска.
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: сигнал
+      hours_draft: [0.5, 2]
+      driver: поток сигналов неактуальности на 100 уроков; полнота тегов
+      basis: оценка аналитика
+  - id: A45
+    name: Дать заключение по затронутой единице
+    functions: []
+    mechanisms: [Пул медрецензентов]
+    note: >-
+      Шаг 7, часть рецензента (в реестре отдельным шагом нет): пул рецензентов — по сигналу; решение
+      «обновить / снять» команда принимает после заключения.
+    leaf: true
+    effort:
+      role: Пул медрецензентов
+      unit: затронутая единица
+      hours_draft: [0.5, 1.5]
+      driver: число затронутых единиц на сигнал; глубина расхождения с рекомендацией
+      basis: оценка аналитика
+  - id: A46
+    name: Решить и запустить актуализацию
+    functions: [F-097, F-098, F-099]
+    mechanisms: [Продюсер]
+    note: >-
+      Шаг 7: команда-владелец решает обновить урок или сделать подкаст обновления (задание уходит в
+      линии A31 / A32 — там часы пересборки) либо промаркировать или снять урок (исполняет A42);
+      срочное снятие при отзыве препарата — директивно по закону. Резерв актуализации — параметр на
+      срок договора (решение В6).
+    leaf: true
+    effort:
+      role: Продюсер
+      unit: затронутая единица
+      hours_draft: [0.5, 1]
+      driver: доля уроков, требующих обновления; глубина (подкаст обновления или пересборка)
+      basis: оценка аналитика
+arrows:
+  # ---- Boundary ----
+  - id: I1
+    label: Собранные уроки, подкасты, записи, номер одобрения
+    objects: [O-041, O-197, O-048, O-064, O-065, O-093]
+    from: { boundary: I1 }
+    to: { box: A41, side: I }
+  - id: I2
+    label: Внешний сигнал неактуальности
+    objects: [O-126]
+    from: { boundary: I2 }
+    to: { box: A44, side: I }
+  - id: C1
+    label: Закон о рекламе и маркировка
+    objects: [O-153, O-157, O-161]
+    from: { boundary: C1 }
+    to:
+      - { box: A41, side: C }
+      - { box: A42, side: C }
+      - { box: A46, side: C }
+  - id: C2
+    label: Клинические рекомендации
+    objects: [O-149, O-150, O-139, O-151, O-152]
+    from: { boundary: C2 }
+    to: [{ box: A44, side: C }, { box: A45, side: C }]
+  - id: C3
+    label: Договор — срок сопровождения
+    objects: [O-107, O-170]
+    from: { boundary: C3 }
+    to: [{ box: A42, side: C }, { box: A46, side: C }]
+  - id: C4
+    label: Стандарты DS, полнота состава, независимое рецензирование
+    objects: [O-141, O-169, O-221]
+    from: { boundary: C4 }
+    to:
+      - { box: A41, side: C }
+      - { box: A43, side: C }
+      - { box: A45, side: C }
+  - id: O1
+    label: Опубликованный урок
+    objects: [O-041, O-197, O-048]
+    from: { box: A42, side: O }
+    to: { boundary: O1 }
+  - id: O2
+    label: Тизер, анонс, рилсы
+    objects: [O-062, O-058]
+    from: { box: A43, side: O }
+    to: { boundary: O2 }
+  - id: O3
+    label: Количество выпущенных уроков
+    objects: [O-180]
+    from: { box: A42, side: O }
+    to: { boundary: O3 }
+  - id: O4
+    label: Задание на актуализацию
+    objects: [O-126]
+    from: { box: A46, side: O }
+    to: { boundary: O4 }
+  - id: M1
+    label: Медредактор-сценарист, продюсер
+    objects: [O-010, O-004]
+    from: { boundary: M1 }
+    to:
+      - { box: A41, side: M }
+      - { box: A44, side: M }
+      - { box: A46, side: M }
+  - id: M2
+    label: Пул медрецензентов — по сигналу
+    objects: [O-009]
+    from: { boundary: M2 }
+    to: { box: A45, side: M }
+  - id: M3
+    label: Медиа-круг
+    objects: [O-013]
+    from: { boundary: M3 }
+    to: { box: A43, side: M }
+  - id: M4
+    label: Оператор платформы
+    objects: [O-194]
+    from: { boundary: M4 }
+    to: { box: A42, side: M }
+  - id: M5
+    label: Платформа DS
+    objects: [O-185]
+    from: { boundary: M5 }
+    to: [{ box: A42, side: M }, { box: A44, side: M }]
+  - id: M6
+    label: Команда-владелец направления
+    objects: [O-001]
+    from: { boundary: M6 }
+    to: { box: A46, side: M }
+  # ---- Internal ----
+  - id: a01
+    label: Промаркированный урок с тегами
+    objects: [O-157, O-125]
+    from: { box: A41, side: O }
+    to: { box: A42, side: I }
+  - id: a02
+    label: Теги выпущенных уроков
+    objects: [O-125]
+    from: { box: A41, side: O }
+    to: { box: A44, side: C }
+  - id: a03
+    label: Дата релиза
+    objects: [O-127]
+    from: { box: A42, side: O }
+    to: { box: A43, side: I }
+  - id: a04
+    label: Затронутые единицы, заявка peer review
+    objects: [O-126, O-113]
+    from: { box: A44, side: O }
+    to: { box: A45, side: I }
+  - id: a05
+    label: Заключение рецензента
+    objects: [O-221]
+    from: { box: A45, side: O }
+    to: { box: A46, side: I }
+  - id: a06
+    label: Решение промаркировать или снять
+    objects: [O-157]
+    from: { box: A46, side: O }
+    to: { box: A42, side: I }

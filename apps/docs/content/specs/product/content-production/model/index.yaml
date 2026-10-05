@@ -38,3 +38,6 @@ diagrams:
   - id: A33
     file: A33.yaml
     parent: A3
+  - id: A4
+    file: A4.yaml
+    parent: A0

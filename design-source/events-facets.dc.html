@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/styles.css">
+<script src="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/_ds_bundle.js"></script>
+<script src="events-feed-kit.js"></script>
+</helmet>
+
+<sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Фильтры" style="display:flex;flex-direction:column;gap:32px;color:var(--color-foreground)">
+
+  <sc-if value="{{ showHeader }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:var(--font-size-lg);font-weight:800;letter-spacing:-.01em">Фильтры</span>
+        <sc-if value="{{ hasApplied }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size:var(--font-size-sm);font-weight:700;color:var(--color-muted-foreground)">{{ appliedText }}</span>
+        </sc-if>
+      </div>
+      <sc-if value="{{ hasApplied }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="DsDesignSystem.Link" href="#" on-click="{{ reset }}" size="sm" class-name="font-bold" hint-size="80px,20px">Сбросить</x-import>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isDoctor }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:32px">
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <label for="facet-q" style="font-size:var(--font-size-sm);font-weight:800;letter-spacing:.12em;text-transform:uppercase">Поиск по названию</label>
+        <x-import component-from-global-scope="DsDesignSystem.Input" id="facet-q" value="{{ query }}" on-change="{{ setQuery }}" placeholder="Например, PRP" hint-size="100%,44px"></x-import>
+      </div>
+
+      <div role="group" aria-label="Специальность" style="display:flex;flex-direction:column;gap:12px">
+        <span style="font-size:var(--font-size-sm);font-weight:800;letter-spacing:.12em;text-transform:uppercase">Специальность</span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ scopeChips }}" as="c" hint-placeholder-count="2">
+            <x-import component-from-global-scope="DsDesignSystem.FilterChip" selected="{{ c.selected }}" on-click="{{ c.onClick }}" hint-size="120px,36px">{{ c.label }}</x-import>
+          </sc-for>
+        </div>
+        <x-import component-from-global-scope="DsDesignSystem.Combobox" dc-props="{{ specCombo }}" hint-size="100%,44px"></x-import>
+        <sc-if value="{{ hasSpecSel }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ specSel }}" as="c" hint-placeholder-count="0">
+              <x-import component-from-global-scope="DsDesignSystem.FilterChip" selected="{{ true }}" on-click="{{ c.onClick }}" aria-label="{{ c.aria }}" hint-size="160px,36px">{{ c.label }}  ✕</x-import>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <div role="group" aria-label="Формат" style="display:flex;flex-direction:column;gap:12px">
+        <span style="font-size:var(--font-size-sm);font-weight:800;letter-spacing:.12em;text-transform:uppercase">Формат</span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ formatChips }}" as="c" hint-placeholder-count="3">
+            <x-import component-from-global-scope="DsDesignSystem.FilterChip" selected="{{ c.selected }}" on-click="{{ c.onClick }}" hint-size="90px,36px">{{ c.label }}</x-import>
+          </sc-for>
+        </div>
+      </div>
+
+      <div role="group" aria-label="Вид события" style="display:flex;flex-direction:column;gap:12px">
+        <span style="font-size:var(--font-size-sm);font-weight:800;letter-spacing:.12em;text-transform:uppercase">Вид события</span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ kindChips }}" as="c" hint-placeholder-count="6">
+            <x-import component-from-global-scope="DsDesignSystem.FilterChip" selected="{{ c.selected }}" on-click="{{ c.onClick }}" hint-size="110px,36px">{{ c.label }}</x-import>
+          </sc-for>
+        </div>
+      </div>
+
+      <div role="group" aria-label="Город" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:var(--font-size-sm);font-weight:800;letter-spacing:.12em;text-transform:uppercase">Город</span>
+          <span style="font-size:var(--font-size-sm);color:var(--color-muted-foreground)">Только для офлайн-событий</span>
+        </div>
+        <x-import component-from-global-scope="DsDesignSystem.Combobox" dc-props="{{ cityCombo }}" hint-size="100%,44px"></x-import>
+        <sc-if value="{{ hasCitySel }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ citySel }}" as="c" hint-placeholder-count="0">
+              <x-import component-from-global-scope="DsDesignSystem.FilterChip" selected="{{ true }}" on-click="{{ c.onClick }}" aria-label="{{ c.aria }}" hint-size="120px,36px">{{ c.label }}  ✕</x-import>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <x-import component-from-global-scope="DsDesignSystem.Switch" checked="{{ nmoOnly }}" on-change="{{ toggleNmo }}" class-name="font-bold" hint-size="180px,28px">Только с НМО</x-import>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isAcademy }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:32px">
+      <sc-for list="{{ acadGroups }}" as="g" hint-placeholder-count="3">
+        <div role="group" aria-label="{{ g.label }}" style="display:flex;flex-direction:column;gap:12px">
+          <span style="font-size:var(--font-size-sm);font-weight:800;letter-spacing:.12em;text-transform:uppercase">{{ g.label }}</span>
+          <x-import component-from-global-scope="DsDesignSystem.Combobox" dc-props="{{ g.combo }}" hint-size="100%,44px"></x-import>
+          <sc-if value="{{ g.hasSel }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ g.sel }}" as="c" hint-placeholder-count="0">
+                <x-import component-from-global-scope="DsDesignSystem.FilterChip" selected="{{ true }}" on-click="{{ c.onClick }}" aria-label="{{ c.aria }}" hint-size="140px,36px">{{ c.label }}  ✕</x-import>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+</section>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;340px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;host&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;doctor&quot;,&quot;academy&quot;],&quot;default&quot;:&quot;doctor&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;applied&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;onChange&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(a: object) =&gt; void&quot;},&quot;onReset&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;showHeader&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { cityQ: '', cityPage: 1, ok: false };
+  componentDidMount() { const w = () => (window.EFK && window.DsDesignSystem) ? this.setState({ ok: true }) : (this.t = setTimeout(w, 60)); w(); }
+  componentWillUnmount() { clearTimeout(this.t); }
+  renderVals() {
+    const K = window.EFK;
+    if (!this.state.ok || !K) return { ready: false };
+    const p = this.props, host = p.host || 'doctor', a = p.applied || K.defaultApplied(), O = K.options(host);
+    const ch = patch => p.onChange && p.onChange(Object.assign({}, a, patch));
+    const tog = (arr, id) => arr.indexOf(id) >= 0 ? arr.filter(x => x !== id) : arr.concat(id);
+    const chips = (list, key) => list.map(o => ({ label: o.label, selected: a[key].indexOf(o.id) >= 0, onClick: () => ch({ [key]: tog(a[key], o.id) }) }));
+    const n = K.appliedCount(a), scope = a.specialtyScope, specSel = Array.isArray(scope) ? scope : [];
+    const base = { emptyLabel: 'Ничего не найдено', searchLabel: 'Найти', countLabel: (s, t) => 'Найдено ' + s + ' из ' + t };
+    const specCombo = Object.assign({}, base, {
+      options: O.specialty ? O.specialty.filter(o => !specSel.some(r => r.id === o.id)).map(o => ({ value: o.id, label: o.label })) : [],
+      placeholder: specSel.length ? 'Добавить специальность' : 'Выбрать специальность', searchPlaceholder: 'Например, кардиология', showSearch: true,
+      onValueChange: id => { const o = O.specialty.find(x => x.id === id); ch({ specialtyScope: specSel.concat({ id, label: o.label }) }); }
+    });
+    const q = this.state.cityQ.trim().toLowerCase(), per = 20;
+    const cityPool = (O.city || []).filter(o => a.city.indexOf(o.id) < 0 && (!q || o.label.toLowerCase().indexOf(q) >= 0));
+    const cityCombo = Object.assign({}, base, {
+      options: cityPool.slice(0, per * this.state.cityPage).map(o => ({ value: o.id, label: o.label })),
+      placeholder: a.city.length ? 'Добавить город' : 'Любой город', searchPlaceholder: 'Начните вводить город', showSearch: true,
+      onSearchChange: v => this.setState({ cityQ: v, cityPage: 1 }),
+      hasMore: cityPool.length > per * this.state.cityPage, onLoadMore: () => this.setState(s => ({ cityPage: s.cityPage + 1 })),
+      loadMoreLabel: 'Показать ещё', loadingMoreLabel: 'Загружаем…', loadMoreErrorLabel: 'Повторить',
+      onValueChange: id => { this.setState({ cityQ: '', cityPage: 1 }); ch({ city: a.city.concat(id) }); }
+    });
+    const nameOf = (list, id) => (list.find(o => o.id === id) || { label: id }).label;
+    const pick = (label, key, list, one, more, hint) => ({
+      label,
+      combo: Object.assign({}, base, { options: list.filter(o => a[key].indexOf(o.id) < 0).map(o => ({ value: o.id, label: o.label })),
+        placeholder: a[key].length ? more : one, searchPlaceholder: hint, showSearch: true, onValueChange: id => ch({ [key]: a[key].concat(id) }) }),
+      hasSel: a[key].length > 0,
+      sel: a[key].map(id => ({ label: nameOf(list, id), aria: 'Убрать: ' + nameOf(list, id), onClick: () => ch({ [key]: a[key].filter(x => x !== id) }) }))
+    });
+    return {
+      ready: true, showHeader: p.showHeader !== false, hasApplied: n > 0, appliedText: 'Применено: ' + n,
+      reset: e => { if (e && e.preventDefault) e.preventDefault(); p.onReset && p.onReset(); },
+      isDoctor: host === 'doctor', isAcademy: host === 'academy',
+      query: a.query || '', setQuery: e => ch({ query: e.target.value }),
+      scopeChips: [
+        { label: 'Моя и смежные', selected: scope === 'mine-and-adjacent', onClick: () => ch({ specialtyScope: 'mine-and-adjacent' }) },
+        { label: 'Все специальности', selected: scope === 'all', onClick: () => ch({ specialtyScope: 'all' }) }
+      ],
+      specCombo, hasSpecSel: specSel.length > 0,
+      specSel: specSel.map(r => ({ label: r.label, aria: 'Убрать: ' + r.label, onClick: () => { const rest = specSel.filter(x => x.id !== r.id); ch({ specialtyScope: rest.length ? rest : 'mine-and-adjacent' }); } })),
+      formatChips: host === 'doctor' ? chips(O.format, 'format') : [], kindChips: host === 'doctor' ? chips(O.kind, 'kind') : [],
+      cityCombo, hasCitySel: a.city.length > 0,
+      citySel: a.city.map(id => ({ label: nameOf(O.city, id), aria: 'Убрать: ' + nameOf(O.city, id), onClick: () => ch({ city: a.city.filter(x => x !== id) }) })),
+      nmoOnly: !!a.nmoOnly, toggleNmo: e => ch({ nmoOnly: !!e.target.checked }),
+      acadGroups: host === 'academy' ? [
+        pick('Проект', 'format', O.format, 'Все проекты', 'Добавить проект', 'Например, школа продюсеров'),
+        pick('Эксперт', 'kind', O.kind, 'Все эксперты', 'Добавить эксперта', 'Фамилия или имя'),
+        pick('Тема', 'city', O.city, 'Все темы', 'Добавить тему', 'Например, метрики')
+      ] : []
+    };
+  }
+}
+</script>
+</body>
+</html>

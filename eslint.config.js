@@ -84,6 +84,10 @@ export default [
       // the guards under test (missing imports, commented-out tokens, raster
       // assets). They are data, not source, and must not be linted.
       "tools/lint/guard-tests/fixtures/**",
+      // #2076 — vendored Claude Design bytes (a `*.js` canvas module included)
+      // are recorded by sha256 in design-source/manifest.json; `eslint --fix`
+      // in lint-staged would rewrite them (the .prettierignore twin).
+      "design-source/**",
     ],
   },
   js.configs.recommended,

@@ -319,9 +319,10 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     const { onChange } = renderPanel({
       applied: { ...EMPTY, city: ["kazan"] },
     });
+    // The canvas draws the chip as «label  ✕» — the cross set off by a space.
     expect(
       within(group("Город")).getByRole("button", { name: "Убрать: Казань" }),
-    ).toBeInTheDocument();
+    ).toHaveTextContent(/^Казань ✕$/);
     await user.click(within(group("Город")).getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: "Москва" }));
     await settlePanel();

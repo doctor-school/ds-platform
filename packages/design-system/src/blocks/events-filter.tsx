@@ -356,8 +356,7 @@ function ComboFacet({
                 chip.onRemove();
               }}
             >
-              {chip.label}
-              <span aria-hidden="true">✕</span>
+              {chip.label} <span aria-hidden="true">✕</span>
             </FilterChip>
           ))}
         </div>

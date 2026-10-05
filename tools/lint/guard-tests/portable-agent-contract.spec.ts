@@ -7,6 +7,8 @@ import { REPO_ROOT } from "./run-guard";
 
 const read = (path: string) => readFileSync(join(REPO_ROOT, path), "utf8");
 const skill = (name: string) => read(`apps/docs/content/skills/${name}/SKILL.md`);
+const DESIGN_SYNC_HOME = "operate-claude-design";
+const DESIGN_SYNC = /\/design-sync\b/;
 
 describe("portable agent procedure regressions (#1918)", () => {
   it("provides all four Codex roles without unsupported provider model pins", () => {
@@ -26,8 +28,20 @@ describe("portable agent procedure regressions (#1918)", () => {
       if (!existsSync(join(dir, name, "SKILL.md"))) continue;
       const source = skill(name);
       expect(source, name).toContain("../../agent-discipline.md");
-      expect(source, name).not.toMatch(/\b(?:Opus|Sonnet)\s+subagent|`\/(?:design-sync)`|`frontend-design` skill pass/);
+      expect(source, name).not.toMatch(/\b(?:Opus|Sonnet)\s+subagent|`frontend-design` skill pass/);
+      if (name !== DESIGN_SYNC_HOME) expect(source, name).not.toMatch(DESIGN_SYNC);
     }
+  });
+
+  it("allows /design-sync only as the lead's design-system publish step (#2530)", () => {
+    const uses = skill(DESIGN_SYNC_HOME)
+      .split("\n")
+      .filter((line) => DESIGN_SYNC.test(line));
+    expect(uses).toHaveLength(1);
+    expect(uses[0]).toContain("The lead publishes it from `@ds/design-system` with `/design-sync`");
+    const discipline = read("apps/docs/content/agent-discipline.md");
+    expect(discipline).toContain("`frontend-design` is outside the project catalog");
+    expect(discipline).toContain("`/design-sync` only publishes `@ds/design-system`");
   });
 
   it("requires Stage A before implementation in both feature and hotfix recipes", () => {

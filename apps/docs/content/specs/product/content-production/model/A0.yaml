@@ -218,10 +218,10 @@ arrows:
     from: { boundary: C3 }
     to: [{ box: A2, side: C }, { box: A3, side: C }]
   - id: C4
-    label: Стандарты DS
-    objects: [O-141, O-138]
+    label: Базовый минимум качества
+    objects: [O-138]
     from: { boundary: C4 }
-    to: { box: A6, side: C }
+    to: [{ box: A3, side: C }, { box: A6, side: C }]
   - id: C5
     label: Договор и маршрут одобрения фармы
     objects: [O-107, O-108, O-222, O-166]
@@ -366,16 +366,16 @@ arrows:
     to: { boundary: O4 }
   - id: a11
     label: Факт часов и итераций
-    objects: [O-177, O-174, O-179]
+    objects: [O-177, O-174]
     from: { box: A5, side: O }
     to: { box: A6, side: I }
   - id: a12
     label: Запрос на следующий цикл
-    objects: [O-109, O-205]
+    objects: [O-109, O-205, O-179]
     from: { box: A5, side: O }
     to: { box: A1, side: I }
   - id: a13
-    label: Стандарты, СОП, калькулятор
+    label: Рабочие стандарты DS, СОП, калькулятор
     objects: [O-141, O-143, O-144, O-145, O-146, O-147, O-148, O-172]
     from: { box: A6, side: O }
     to:
@@ -395,7 +395,7 @@ arrows:
       - { box: A4, side: M }
       - { box: A5, side: M }
   - id: a15
-    label: Калиброванная себестоимость
+    label: Факт часов для калибровки себестоимости
     objects: [O-172, O-177]
     from: { box: A6, side: O }
     to: { boundary: O5 }

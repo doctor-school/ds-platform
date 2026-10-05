@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IDEF0 — производство контента DS</title>
+    <!--
+      Static IDEF0 viewer, no build. Serve the content-production folder over HTTP
+      (file:// blocks fetch) and open /viewer/ — see ../README-ru.md «Просмотрщик».
+      The import map pins one React instance: jsDelivr bundles reference react by
+      several version URLs (^19.3.0, 19.1.0); all of them must resolve to the same module.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm",
+          "react-dom/client": "https://cdn.jsdelivr.net/npm/react-dom@19.3.0/client/+esm",
+          "@xyflow/react": "https://cdn.jsdelivr.net/npm/@xyflow/react@12.12.0/+esm",
+          "elkjs": "https://cdn.jsdelivr.net/npm/elkjs@0.12.0/lib/elk.bundled.js/+esm",
+          "htm": "https://cdn.jsdelivr.net/npm/htm@3.1.1/+esm",
+          "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.9.1/+esm",
+          "https://cdn.jsdelivr.net/npm/react@%5E19.3.0/+esm": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm",
+          "https://cdn.jsdelivr.net/npm/react@19.1.0/+esm": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm"
+        }
+      }
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@xyflow/react@12.12.0/dist/style.css"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f7f5;
+        --panel: #ffffff;
+        --ink: #1d1d1f;
+        --muted: #5f6368;
+        --line: #2b2b2e;
+        --frame: #9aa0a6;
+        --box-bg: #ffffff;
+        --box-border: #1d1d1f;
+        --accent: #0b57d0;
+        --hl: #d93025;
+        --i: #1a73e8;
+        --c: #b06000;
+        --o: #188038;
+        --m: #6f6f78;
+        --chip: #eef1f5;
+        --label-bg: rgba(247, 247, 245, 0.92);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body,
+      #root {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          14px/1.4 system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      .app {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100%;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--frame);
+        background: var(--panel);
+      }
+      .crumbs button,
+      .tools button {
+        font: inherit;
+        color: var(--accent);
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 2px 6px;
+        cursor: pointer;
+      }
+      .crumbs button[aria-current="page"] {
+        color: var(--ink);
+        font-weight: 600;
+        cursor: default;
+      }
+      .tools {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+      .tools button {
+        border-color: var(--frame);
+        color: var(--ink);
+      }
+      .tools button[aria-pressed="true"] {
+        background: var(--chip);
+        border-color: var(--accent);
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        min-height: 0;
+      }
+      @media (max-width: 760px) {
+        main {
+          grid-template-columns: 1fr;
+          grid-template-rows: 1fr 40%;
+        }
+      }
+      .canvas {
+        min-height: 0;
+        position: relative;
+      }
+      aside {
+        overflow: auto;
+        border-left: 1px solid var(--frame);
+        background: var(--panel);
+        padding: 12px 16px;
+      }
+      aside h2 {
+        font-size: 15px;
+        margin: 4px 0 8px;
+      }
+      aside h3 {
+        font-size: 13px;
+        margin: 12px 0 4px;
+        color: var(--muted);
+      }
+      aside ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .ids {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .id {
+        font:
+          12px ui-monospace,
+          Consolas,
+          monospace;
+        background: var(--chip);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .err {
+        color: var(--hl);
+      }
+      /* IDEF0 frame and boxes. The frame is a backdrop: React Flow raises it under the pointer
+         between the two clicks of a double-click, so it must never take pointer events. */
+      .react-flow__node-frame {
+        pointer-events: none !important;
+      }
+      .frame {
+        border: 1px dashed var(--frame);
+        width: 100%;
+        height: 100%;
+        position: relative;
+        pointer-events: none;
+      }
+      .code {
+        position: absolute;
+        font:
+          600 11px ui-monospace,
+          Consolas,
+          monospace;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .box {
+        width: 100%;
+        height: 100%;
+        border: 2px solid var(--box-border);
+        background: var(--box-bg);
+        color: var(--ink);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 8px 10px 22px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .box:hover,
+      .box.selected {
+        outline: 3px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .box .name {
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .box .num {
+        position: absolute;
+        right: 6px;
+        bottom: 3px;
+        font:
+          600 12px ui-monospace,
+          Consolas,
+          monospace;
+      }
+      .box .mech {
+        position: absolute;
+        left: 6px;
+        bottom: 4px;
+        right: 34px;
+        font-size: 10px;
+        color: var(--muted);
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .box .drill {
+        position: absolute;
+        right: 6px;
+        top: 3px;
+        font-size: 11px;
+        color: var(--accent);
+      }
+      .react-flow__handle {
+        opacity: 0;
+        width: 2px;
+        height: 2px;
+        min-width: 0;
+        min-height: 0;
+        border: 0;
+      }
+      .arrow-label {
+        position: absolute;
+        font-size: 11px;
+        line-height: 13px;
+        padding: 1px 3px;
+        background: var(--label-bg);
+        color: var(--ink);
+        border-radius: 3px;
+        white-space: pre;
+        pointer-events: all;
+        cursor: pointer;
+      }
+      .arrow-label.active {
+        outline: 2px solid var(--hl);
+      }
+      .react-flow__edge.active path.react-flow__edge-path {
+        stroke: var(--hl) !important;
+        stroke-width: 2.5px !important;
+      }
+      .legend {
+        display: flex;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .legend b {
+        display: inline-block;
+        width: 14px;
+        height: 3px;
+        vertical-align: middle;
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"><p style="padding: 16px">Загрузка модели…</p></div>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

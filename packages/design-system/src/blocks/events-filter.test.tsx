@@ -319,10 +319,14 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     const { onChange } = renderPanel({
       applied: { ...EMPTY, city: ["kazan"] },
     });
-    // The canvas draws the chip as «label  ✕» — the cross set off by a space.
-    expect(
-      within(group("Город")).getByRole("button", { name: "Убрать: Казань" }),
-    ).toHaveTextContent(/^Казань ✕$/);
+    // The canvas draws the chip as «label  ✕»: the label, then the cross as
+    // its own decorative element (the gap is layout, asserted in the
+    // showcase Playwright spec — jsdom has no layout).
+    const chip = within(group("Город")).getByRole("button", {
+      name: "Убрать: Казань",
+    });
+    expect(within(chip).getByText("Казань").tagName).toBe("SPAN");
+    expect(chip.querySelector('[aria-hidden="true"]')?.textContent).toBe("✕");
     await user.click(within(group("Город")).getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: "Москва" }));
     await settlePanel();
@@ -354,6 +358,34 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     });
   });
 
+  it("EARS-7.1: a removable chip is a remove button, never announced as a pressed toggle", () => {
+    renderPanel({
+      applied: {
+        ...EMPTY,
+        city: ["kazan"],
+        specialtyScope: [{ id: "trauma", label: "Травматология" }],
+      },
+    });
+    const chips = screen.getAllByRole("button", { name: /^Убрать: / });
+    expect(chips).toHaveLength(2);
+    for (const chip of chips) expect(chip).not.toHaveAttribute("aria-pressed");
+  });
+
+  it("EARS-7.1: a picked id the host gives no option for shows no raw-id chip", () => {
+    renderPanel({ applied: { ...EMPTY, city: ["kazan", "ghost-id"] } });
+    expect(
+      within(group("Город")).getByRole("button", { name: "Убрать: Казань" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ghost-id/)).not.toBeInTheDocument();
+  });
+
+  it("EARS-7.1: the НМО switch label is bold, as the canvas draws it", () => {
+    renderPanel();
+    expect(screen.getByText("Только с НМО").closest("label")).toHaveClass(
+      "font-bold",
+    );
+  });
+
   it("EARS-7.1: the НМО switch emits nmoOnly", async () => {
     const user = userEvent.setup();
     const { onChange } = renderPanel();
@@ -370,6 +402,40 @@ describe("EventsFilter — the doctor facet set (EARS-7, filterSet)", () => {
     vi.advanceTimersByTime(400);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, query: "PRP" });
+  });
+
+  it("EARS-7.2: «Сбросить» cancels a pending search commit — a just-typed query is not re-applied", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const seen: AppliedFacets[] = [];
+    function Stateful() {
+      const [applied, setApplied] = React.useState<AppliedFacets>({
+        ...EMPTY,
+        nmoOnly: true,
+      });
+      return (
+        <EventsFilter
+          host="doctor"
+          applied={applied}
+          options={OPTIONS}
+          labels={LABELS}
+          onChange={(next) => {
+            seen.push(next);
+            setApplied(next);
+          }}
+          onReset={() => setApplied(defaultAppliedFacets())}
+        />
+      );
+    }
+    render(<Stateful />);
+    await user.type(screen.getByLabelText("Поиск по названию"), "PRP");
+    await user.click(screen.getByRole("button", { name: "Сбросить" }));
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
+    expect(screen.getByLabelText("Поиск по названию")).toHaveValue("");
+    expect(
+      screen.queryByRole("button", { name: "Сбросить" }),
+    ).not.toBeInTheDocument();
   });
 
   it("EARS-7.2: the city combobox forwards the host's paging bridge", async () => {

@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
-import { FilterChip } from "../primitives/filter-chip";
+import { FilterChip, filterChipVariants } from "../primitives/filter-chip";
 import { Input } from "../primitives/input";
 import { Link } from "../primitives/link";
 import { Switch } from "../primitives/switch";
@@ -346,18 +346,27 @@ function ComboFacet({
       {picked.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {picked.map((chip, index) => (
-            <FilterChip
+            // A remove action, not a toggle: the selected chip's look (the
+            // canvas draws a selected FilterChip) without `aria-pressed`, so
+            // a screen reader hears «Убрать: X», never «X, pressed».
+            <button
               key={chip.id}
-              selected
+              type="button"
               data-facet-chip=""
+              className={filterChipVariants({ selected: true })}
               aria-label={`${removeFacet}: ${chip.label}`}
               onClick={() => {
                 chipReturn.current = index;
                 chip.onRemove();
               }}
             >
-              {chip.label} <span aria-hidden="true">✕</span>
-            </FilterChip>
+              {/* The canvas sets the cross off the label («label  ✕»); in the
+                  flex chip a text space collapses, so the gap is a token. */}
+              <span className="inline-flex items-center gap-1.5">
+                <span>{chip.label}</span>
+                <span aria-hidden="true">✕</span>
+              </span>
+            </button>
           ))}
         </div>
       ) : null}
@@ -440,6 +449,15 @@ export function EventsFilter({
     [],
   );
 
+  // «Сбросить» drops an uncommitted query too: the pending commit would
+  // otherwise re-apply a just-typed query on top of the reset.
+  const cancelPendingQuery = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    lastCommitted.current = "";
+    setDraft("");
+  };
+
   const onQueryChange = (value: string) => {
     setDraft(value);
     if (timer.current) clearTimeout(timer.current);
@@ -479,12 +497,25 @@ export function EventsFilter({
         labels={facetLabels}
         shared={labels.combobox}
         options={list}
-        picked={values.map((id) => ({
-          id,
-          label: nameOf(list, id),
-          onRemove: () =>
-            onChange({ ...applied, [facet]: values.filter((v) => v !== id) }),
-        }))}
+        // A chip names its value by the host's option label; an applied id
+        // the host gives no option for (a stale URL value) shows no chip
+        // rather than a raw id — the host keeps picked values in `options`.
+        picked={values.flatMap((id) => {
+          const option = list.find((item) => item.id === id);
+          return option
+            ? [
+                {
+                  id,
+                  label: option.label,
+                  onRemove: () =>
+                    onChange({
+                      ...applied,
+                      [facet]: values.filter((v) => v !== id),
+                    }),
+                },
+              ]
+            : [];
+        })}
         onPick={(id) => onChange({ ...applied, [facet]: [...values, id] })}
         paging={paging?.[facet]}
         removeFacet={labels.removeFacet}
@@ -573,7 +604,7 @@ export function EventsFilter({
       </div>
       {hasApplied ? (
         resetHref ? (
-          <Link href={resetHref} size="sm">
+          <Link href={resetHref} size="sm" onClick={cancelPendingQuery}>
             {resetLabel}
           </Link>
         ) : onReset ? (
@@ -581,6 +612,7 @@ export function EventsFilter({
             <button
               type="button"
               onClick={() => {
+                cancelPendingQuery();
                 resetReturn.current = true;
                 onReset();
               }}
@@ -635,6 +667,7 @@ export function EventsFilter({
           {listFacet("direction")}
           {labels.nmoOnly ? (
             <Switch
+              className="font-bold"
               checked={applied.nmoOnly}
               onChange={(event) =>
                 onChange({ ...applied, nmoOnly: event.target.checked })

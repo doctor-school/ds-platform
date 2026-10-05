@@ -72,6 +72,7 @@ export function validateStageB(
   paths: string[],
   gates: Record<number, string>,
   headEquivalent?: HeadEquivalence,
+  copyOnlyCertified = false,
 ): Verdict {
   const candidates = stageBDecisions(records);
   if (!candidates.length) return { ok: false, reason: "No Stage-B record" };
@@ -133,8 +134,15 @@ export function validateStageB(
       reason:
         "Stage-B requires the exact owner quote and its decision URL or explicit owner-relay session/message source",
     };
-  if (go && !/^https?:\/\/\S+$/.test(field("live-url")))
-    return { ok: false, reason: "Stage-B GO requires the reviewed live URL" };
+  // #2581: a copy-only PR (reviewer-certified `render-delta: copy-only`, the
+  // caller's `ui-parity` verdict) is approved on the owner's chat wording
+  // decision — no stand, so no live URL. Quote, source and head stay required.
+  if (go && !copyOnlyCertified && !/^https?:\/\/\S+$/.test(field("live-url")))
+    return {
+      ok: false,
+      reason:
+        "Stage-B GO requires the reviewed live URL (a reviewer-certified `ui-parity: N/A (copy-only)` PR excepted)",
+    };
   if (lead) {
     const run =
       latest.value.match(/;\s*run UTC:\s*([^;]+)/i)?.[1]?.trim() ?? "";

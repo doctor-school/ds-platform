@@ -66,7 +66,7 @@ You are a code reviewer for the DS Platform monorepo. You operate in Mode (a) pe
 
 ### Canvas-parity evidence contract (BLOCK)
 
-Before reviewing any render-capable change, read [the full shared parity evidence contract](../build-ui-from-design-system/parity-evidence.md), including current-head reviewer N/A certification. Its required fields are mandatory output lines in your review; Stage B remains an independent owner gate.
+Before reviewing any render-capable change, read [the full shared parity evidence contract](../build-ui-from-design-system/parity-evidence.md), including current-head reviewer N/A certification. For a `ui-parity: N/A (copy-only)` claim emit `render-delta: copy-only` only after confirming every hunk changes user-visible strings or their formatting inputs alone — no layout, styling, component structure or behaviour; otherwise certify what you found and the claim fails. Its required fields are mandatory output lines in your review; Stage B remains an independent owner gate.
 
 Post the report as a PR comment via `gh pr review <N> --comment --body-file <file>`. The comment body must include this header:
 

@@ -1,0 +1,20 @@
+{
+  "number": 2581,
+  "headRefOid": "cccccccccccccccccccccccccccccccccccccccc",
+  "body": "## Summary\n\nui-parity: N/A (copy-only) — take-back confirmation strings reworded; no layout, styling or behaviour touched\n\nStage-B: GO — owner chose the wording in chat\nStage-B-head: cccccccccccccccccccccccccccccccccccccccc\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-owner-quote: Approved this wording\nStage-B-source: owner-relay:session-2581#message-1\n",
+  "labels": [],
+  "files": [
+    {
+      "path": "apps/portal/src/app/account/take-back.tsx"
+    }
+  ],
+  "reviews": [
+    {
+      "body": "## Mode (a) Review — PR #2581\n\nrender-delta: copy-only\n\nVERDICT: APPROVE",
+      "submittedAt": "2026-10-05T10:00:00Z",
+      "commit": {
+        "oid": "cccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  ]
+}

@@ -297,35 +297,48 @@ export function latestModeAReview(
 }
 
 /**
- * Reviewer-certified N/A path (Issue #1708).
+ * Reviewer-certified N/A routes (Issues #1708, #2581).
  *
- * A diff can touch an `isUiSourcePath` file and still produce no rendered-output
- * delta (a behavioral-only edit inside a render-capable file). Demanding the
- * full canvas/manifest evidence set there forces fabricated evidence, so the
- * guard accepts the body marker
+ * A diff can touch an `isUiSourcePath` file without a canvas-parity question:
+ * a behavioral-only edit inside a render-capable file (no render delta), or a
+ * change to user-visible strings / their formatting inputs only (copy-only —
+ * the owner decides wording in chat, no stand). Demanding the full
+ * canvas/manifest evidence set there forces fabricated evidence, so the guard
+ * accepts the body marker
  *
  *     ui-parity: N/A (no render delta) — <reason>
+ *     ui-parity: N/A (copy-only) — <reason>
  *
  * ONLY when the latest structured Mode (a) review, pinned to the CURRENT head
- * SHA (same invalidate-on-rework rule as the merge gate), itself carries an
- * explicit `render-delta: none` certification line. An author-asserted N/A with
- * no such reviewer line stays FAIL — the author cannot self-certify.
+ * SHA (same invalidate-on-rework rule as the merge gate), itself carries the
+ * matching certification line — `render-delta: none` or
+ * `render-delta: copy-only`. An author-asserted N/A with no such reviewer line,
+ * or with a line certifying the other route, stays FAIL — the author cannot
+ * self-certify.
  */
+const NA_ROUTES = {
+  "no render delta": "none",
+  "copy-only": "copy-only",
+} as const;
+export type NaRoute = keyof typeof NA_ROUTES;
+
 export function certifiedNaVerdict(
   prBody: string,
   reviews: GhReview[] | null | undefined,
   headSha: string | null | undefined,
-): NaVerdict {
+): NaVerdict & { route: NaRoute | null } {
   const claim = marker(prBody, "ui-parity");
   if (!claim || !/^n\/?a\b/i.test(claim))
-    return { claimed: false, ok: false, missing: [] };
+    return { claimed: false, ok: false, missing: [], route: null };
   const missing: string[] = [];
-  const reason = /^n\/a\s*\(no render delta\)\s*[—-]\s*(.+)$/i.exec(
+  const parsed = /^n\/a\s*\((no render delta|copy-only)\)\s*[—-]\s*(.+)$/i.exec(
     claim.replace(/^n\/?a/i, "N/A"),
-  )?.[1];
-  if (!reason || reason.trim().length < 12)
+  );
+  const route = (parsed?.[1]?.toLowerCase() as NaRoute | undefined) ?? null;
+  const reason = parsed?.[2];
+  if (!route || !reason || reason.trim().length < 12)
     missing.push(
-      "marker exactly `ui-parity: N/A (no render delta) — <reason>` with a stated reason",
+      "marker exactly `ui-parity: N/A (no render delta) — <reason>` or `ui-parity: N/A (copy-only) — <reason>` with a stated reason",
     );
   const latest = latestModeAReview(reviews);
   if (!latest) missing.push("latest structured Mode (a) review");
@@ -335,10 +348,13 @@ export function certifiedNaVerdict(
       missing.push(
         `Mode (a) review pinned to the current head ${headSha || "(unresolved)"}`,
       );
-    if (marker(latest.body ?? "", "render-delta")?.toLowerCase() !== "none")
-      missing.push("reviewer `render-delta: none` certification line");
+    const certified = NA_ROUTES[route ?? "no render delta"];
+    if (marker(latest.body ?? "", "render-delta")?.toLowerCase() !== certified)
+      missing.push(
+        `reviewer \`render-delta: ${certified}\` certification line`,
+      );
   }
-  return { claimed: true, ok: missing.length === 0, missing };
+  return { claimed: true, ok: missing.length === 0, missing, route };
 }
 
 export function latestModeAComparisonVerdict(
@@ -431,7 +447,7 @@ export async function runUiParityGuard(): Promise<void> {
         `PR #${pr.number} asserts ui-parity N/A without reviewer certification: ${na.missing.join("; ")}`,
       );
     return info(
-      `PR #${pr.number} ui-parity N/A certified by the latest head-pinned Mode (a) review (render-delta: none)`,
+      `PR #${pr.number} ui-parity N/A certified by the latest head-pinned Mode (a) review (${na.route})`,
     );
   }
   const bodyVerdict = bodyEvidenceVerdict(pr.body ?? "", REPO_ROOT, paths);

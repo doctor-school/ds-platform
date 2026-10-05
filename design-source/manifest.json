@@ -104,6 +104,18 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
+    "archive/doctor-events.dc.html": {
+      "sha256": "8b275063f1d43f0a9750f50dc8e5a6595db1fc29f040336d2488a8274698d2cb",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
+    "archive/events-feed-month.dc.html": {
+      "sha256": "0b5d3ef6b6ea0e7b367b24bc7fa6cb0574830f64dc79c0021003e3633a8f295a",
+      "pulledAt": "2026-09-28",
+      "remotePath": null,
+      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    },
     "auth.dc.html": {
       "sha256": "a438f5d792a2d55c984aeb3aa797a718eacc40f168c994c4815884eb0b2c803a",
       "pulledAt": "2026-10-05T03:41:25.323Z",
@@ -130,12 +142,6 @@
     },
     "doctor-docs.dc.html": {
       "sha256": "157aa3ebacc91b2d9d8d1997b9f07c2201406e1650db8a50dc18b83d50d0ebeb",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
-    },
-    "doctor-events.dc.html": {
-      "sha256": "8b275063f1d43f0a9750f50dc8e5a6595db1fc29f040336d2488a8274698d2cb",
       "pulledAt": "2026-09-28",
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
@@ -182,10 +188,9 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "ds-shell.dc.html": {
-      "sha256": "5dc95bb73644afa83aadde1b64b531c0df799e4a08b766b625d0601fbc2e19f9",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "a6bfaff51b665dcc8b3d128f35bae89c355606b426b5b23ca6c5eba75f377077",
+      "pulledAt": "2026-10-05T03:52:53.831Z",
+      "remotePath": "ds-shell.dc.html"
     },
     "event-page-recording.dc.html": {
       "sha256": "04e1509122edb4defae95d84d99c4af6af6380032b284b25f577bacaaaee8156",
@@ -199,17 +204,20 @@
       "remotePath": null,
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
-    "events-feed-month.dc.html": {
-      "sha256": "0b5d3ef6b6ea0e7b367b24bc7fa6cb0574830f64dc79c0021003e3633a8f295a",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+    "events-facets.dc.html": {
+      "sha256": "f9a355d266370bf1ac83796c4588ff39c452942d217d0b5847a63899d5b25e98",
+      "pulledAt": "2026-10-05T03:52:51.905Z",
+      "remotePath": "events-facets.dc.html"
+    },
+    "events-feed-kit.js": {
+      "sha256": "bc9d6eb2397668dab565438b69d94a80418ae608b46810ab5ee4eda4ffdafc57",
+      "pulledAt": "2026-10-05T03:52:52.862Z",
+      "remotePath": "events-feed-kit.js"
     },
     "events-feed.dc.html": {
-      "sha256": "11b0713c6c16ba97bf38ee6c797c31f7f3960dca290486787ee5bebbfe7f5edf",
-      "pulledAt": "2026-09-28",
-      "remotePath": null,
-      "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
+      "sha256": "412ba8447b825f05e8809bf7a43b79c983cbb089b23d292bbaa18f54a29ae950",
+      "pulledAt": "2026-10-05T03:52:50.923Z",
+      "remotePath": "events-feed.dc.html"
     },
     "room.dc.html": {
       "sha256": "c4412357fe81a2c26782d3835da3731e6cc4c3492ec8d5ea090b5be7a18abd63",

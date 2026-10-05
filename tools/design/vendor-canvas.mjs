@@ -5,7 +5,8 @@
 //   pnpm design:vendor --check
 //
 // Vendoring = the lead's DesignSync `get_file` pull (lead-only tool) lands the
-// canvas bytes on disk; this script copies each pulled `*.dc.html` byte-exact
+// canvas bytes on disk; this script copies each pulled `*.dc.html` canvas — or
+// `*.js` canvas module a canvas loads via `<script src>` (#2076) — byte-exact
 // into `design-source/` (a file already under `design-source/` is recorded in
 // place), computes its sha256 and upserts its entry in
 // `design-source/manifest.json` with `pulledAt` = now (UTC), printing
@@ -14,7 +15,8 @@
 //
 // `--check` is the body of the `canvas-provenance` BLOCK guard
 // (tools/lint/canvas-provenance-lint.ts): every `design-source/**/*.dc.html`
-// has an entry whose sha256 equals its bytes, and every entry has its file.
+// and `*.js` canvas module has an entry whose sha256 equals its bytes, and
+// every entry has its file.
 // Honest limit: this proves the manifest and the bytes agree and that the
 // vendoring was an explicit recorded act; it cannot prove, without network,
 // that the bytes came from Claude Design. The structural control against a
@@ -43,7 +45,8 @@ import { fileURLToPath } from "node:url";
 
 export const DESIGN_SYNC_PROJECT = "8cc2f39a-d58e-4491-b539-4337881ced4f";
 export const MANIFEST_REL = "design-source/manifest.json";
-const CANVAS_RE = /\.dc\.html$/;
+/** A canvas page or a `*.js` canvas module it loads (#2076). */
+const CANVAS_RE = /\.(?:dc\.html|js)$/;
 
 const DEFAULT_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -190,7 +193,7 @@ export function vendorCanvases(
   for (const pulled of pulledFiles) {
     const source = resolve(pulled);
     if (!CANVAS_RE.test(source))
-      throw new Error(`${pulled}: not a .dc.html canvas`);
+      throw new Error(`${pulled}: not a .dc.html canvas or .js canvas module`);
     const insideBase = relative(base, source);
     const rel =
       insideBase && !insideBase.startsWith("..") && !isAbsolute(insideBase)

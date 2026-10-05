@@ -177,6 +177,14 @@ describe("canvas co-edit classification (#2389)", () => {
     expect(classifyCanvasCoEdit([ui])).toEqual({ canvases: [], ui: [ui] });
   });
 
+  it("a vendored *.js canvas module is canvas bytes too (#2076)", () => {
+    const kit = "design-source/events-feed-kit.js";
+    expect(classifyCanvasCoEdit([kit, "apps/portal/app/page.tsx"])).toEqual({
+      canvases: [kit],
+      ui: ["apps/portal/app/page.tsx"],
+    });
+  });
+
   it("design-source/README.md and the manifest are not canvases", () => {
     expect(
       classifyCanvasCoEdit([

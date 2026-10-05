@@ -58,8 +58,8 @@ export function evidenceProfilesForPaths(paths: string[]): UiEvidenceProfile[] {
   return [...profiles].sort();
 }
 
-/** A vendored Claude Design canvas, archive included (#2389). */
-const VENDORED_CANVAS_RE = /^design-source\/(?:.+\/)?[^/]+\.dc\.html$/;
+/** A vendored Claude Design canvas or `*.js` canvas module, archive included (#2389, #2076). */
+const VENDORED_CANVAS_RE = /^design-source\/(?:.+\/)?[^/]+\.(?:dc\.html|js)$/;
 
 export function isVendoredCanvasPath(path: string): boolean {
   return VENDORED_CANVAS_RE.test(path);

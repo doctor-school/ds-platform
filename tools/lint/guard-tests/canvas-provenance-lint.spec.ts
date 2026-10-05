@@ -188,6 +188,37 @@ describe("pnpm design:vendor writer (#2389)", () => {
     expect(manifest.files["auth.dc.html"].pulledAt).toBe(now.toISOString());
   });
 
+  it("vendors a *.js canvas module byte-exact and --check covers it (#2076)", () => {
+    const root = tree(goodFiles, goodManifest);
+    const pulled = join(root, "pulled");
+    mkdirSync(pulled);
+    const kit = "window.Kit = { label: 'Будущие' };\r\n";
+    writeFileSync(join(pulled, "feed-kit.js"), kit, "utf8");
+    expect(vendorCanvases(root, [join(pulled, "feed-kit.js")], { now })).toEqual(
+      [`NEW design-source/feed-kit.js ${Buffer.byteLength(kit)}`],
+    );
+    expect(
+      readFileSync(join(root, "design-source/feed-kit.js")).equals(
+        Buffer.from(kit, "utf8"),
+      ),
+    ).toBe(true);
+    expect(checkProvenance(root).ok).toBe(true);
+    writeFileSync(join(root, "design-source/feed-kit.js"), `${kit}//`, "utf8");
+    expect(checkProvenance(root).problems.join("\n")).toContain(
+      "design-source/feed-kit.js: sha256 mismatch",
+    );
+  });
+
+  it("red: an unvendored *.js canvas module under design-source/ fails --check (#2076)", () => {
+    const root = tree(
+      { ...goodFiles, "design-source/kit.js": "window.K = 1;\n" },
+      goodManifest,
+    );
+    expect(checkProvenance(root).problems.join("\n")).toContain(
+      "design-source/kit.js: no manifest entry",
+    );
+  });
+
   it("refuses a non-canvas file", () => {
     const root = tree(goodFiles, goodManifest);
     const pulled = join(root, "notes.txt");
@@ -224,10 +255,11 @@ describe("vendored canvas bytes survive git (#2389 review)", () => {
   it("design-source canvases are -text: git never EOL-normalises the recorded bytes", () => {
     const attr = spawnSync(
       "git",
-      ["check-attr", "text", "--", "design-source/auth.dc.html", "design-source/archive/archive-auth-v1.dc.html"],
+      ["check-attr", "text", "--", "design-source/auth.dc.html", "design-source/archive/archive-auth-v1.dc.html", "design-source/events-feed-kit.js"],
       { cwd: REPO_ROOT, encoding: "utf8" },
     ).stdout;
     expect(attr).toContain("design-source/auth.dc.html: text: unset");
     expect(attr).toContain("design-source/archive/archive-auth-v1.dc.html: text: unset");
+    expect(attr).toContain("design-source/events-feed-kit.js: text: unset");
   });
 });

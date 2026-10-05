@@ -448,7 +448,10 @@ function RecoveryCompleteForm({
           the code together with a new password. */}
       <div className="mt-4.5 space-y-3">
         {captchaSlot}
-        <div className="flex items-center justify-between gap-2">
+        {/* Canvas 247: `gap:12px; flex-wrap:wrap` — when «Начать заново» and the
+            resend label do not fit one row (390 with the cooldown), the resend
+            label moves to its own line, as on the focus-screen's mirrored row. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Button
             type="button"
             variant="ghost"

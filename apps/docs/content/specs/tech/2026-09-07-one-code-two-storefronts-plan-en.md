@@ -159,7 +159,7 @@ Everything below that a wave does not close on its way is owned by **#2075** (st
 - [ ] `017-design.md` / `019-design.md` sections describing doctor-local compositions of the feed / calendar / nearest-events block — point at the package.
 - [ ] Skills: `open-ears-issues` 2b, `request-mode-a-review`, `report-task-outcome` «reused / extract / new» rule — align vocabulary with «package / host-config / host-only».
 - [ ] Memory pointers (Claude auto-memory) collapse into one pointer to this spec.
-- [ ] DEBT.md: lines 2026-09-02 (msk ×3), 2026-09-03 (returnTo wrappers, theme-toggle, msk fourth home), 2026-09-05 (room strings, `ForwardedSession`), 2026-09-06 (`live-stand-env`, `escapeLike` ×6, `@custom-variant dark`) — each closed by its wave, not by a separate chore.
+- [ ] DEBT.md: lines 2026-09-02 (msk ×3), 2026-09-03 (returnTo wrappers, theme-toggle, msk fourth home), 2026-09-05 (room strings, `ForwardedSession`), 2026-09-06 (`live-stand-env`, `escapeLike` ×6) — each closed by its wave, not by a separate chore.
 
 **Code.**
 

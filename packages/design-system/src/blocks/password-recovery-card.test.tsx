@@ -224,6 +224,13 @@ describe("<PasswordRecoveryCard>", () => {
     expect(footer.className).not.toMatch(/\bborder-t\b|\bpt-/);
   });
 
+  it("#2556: the «Начать заново» / resend row wraps at the canvas 12px gap (canvas 247 gap:12px; flex-wrap:wrap)", () => {
+    setup({ stage: "complete", identifier: "doc@example.com" });
+    const row = screen.getByTestId("reset-restart").parentElement as HTMLElement;
+    expect(row).toHaveClass("flex", "flex-wrap", "gap-3");
+    expect(row.className).not.toMatch(/(^|\s)gap-2(\s|$)/);
+  });
+
   it("draws the resend label at the canvas weight (auth.dc.html resendStyle, 800) — the verify step's resend", () => {
     setup({ stage: "complete", identifier: "doc@example.com" });
     expect(screen.getByTestId("reset-resend")).toHaveClass("font-extrabold");

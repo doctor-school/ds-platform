@@ -27,8 +27,10 @@
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Ошибка</span>
       <div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ errTabs }}" as="e" hint-placeholder-count="6"><button onClick="{{ e.onClick }}" style="{{ e.style }}">{{ e.name }}</button></sc-for></div>
-      <span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-left:6px">Шаг</span>
-      <div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ stepTabs }}" as="sp" hint-placeholder-count="2"><button onClick="{{ sp.onClick }}" style="{{ sp.style }}">{{ sp.name }}</button></sc-for></div>
+      <sc-if value="{{ showStep }}" hint-placeholder-val="{{ true }}">
+        <span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-left:6px">Шаг</span>
+        <div style="display:flex;border:2px solid {{ hairline }};overflow:hidden"><sc-for list="{{ stepTabs }}" as="sp" hint-placeholder-count="2"><button onClick="{{ sp.onClick }}" style="{{ sp.style }}">{{ sp.name }}</button></sc-for></div>
+      </sc-if>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:6px"><sc-for list="{{ docToggles }}" as="g" hint-placeholder-count="2"><button onClick="{{ g.onClick }}" style="{{ g.style }}">{{ g.name }}</button></sc-for></div>
     </div>
   </div>
@@ -322,13 +324,13 @@ class Component extends DCLogic {
     return Object.assign({ loginTab: 'password', otpChannel: 'email', otpSent: false, resetStage: 'request', cooldown: 0, notice: false, verified: false, submitted: false, sending: '', values: {}, touched: {}, otp: Array(6).fill('') }, extra || {});
   }
   go(screen) { this.setState(this.resetSub({ screen })); }
-  // Твик «Шаг»: форма ↔ код отправлен. Вход — вкладка «По коду» + отправленный код; Сброс — стадия кода; Регистрация ↔ Подтверждение.
+  // Твик «Шаг»: форма ↔ код отправлен. Вход — вкладка «По коду» + отправленный код; Сброс — стадия кода.
   applyStep(sent) {
     this.setState(st => {
       const base = { verified: false, notice: false, submitted: false, sending: '', otp: Array(6).fill(''), cooldown: sent ? 30 : 0 };
       if (st.screen === 'login') return Object.assign(base, { loginTab: sent ? 'otp' : st.loginTab, otpSent: sent });
       if (st.screen === 'reset') return Object.assign(base, { resetStage: sent ? 'complete' : 'request' });
-      return Object.assign(base, { screen: sent ? 'verify' : 'register' });
+      return null;
     });
   }
   startCd() { this.setState({ cooldown: 30 }); }
@@ -515,8 +517,9 @@ class Component extends DCLogic {
       codeBack: s.screen === 'verify'
         ? () => this.setState({ screen: 'register', submitted: false, verified: false, notice: false, cooldown: 0, sending: '', otp: Array(6).fill('') })
         : () => this.setState({ otpSent: false, verified: false, notice: false, cooldown: 0, otp: Array(6).fill(''), values: Object.assign({}, s.values, { code: '' }) }),
+      showStep: s.screen === 'login' || s.screen === 'reset',
       stepTabs: (() => {
-        const sent = s.screen === 'verify' || (s.screen === 'login' && s.loginTab === 'otp' && s.otpSent) || (s.screen === 'reset' && s.resetStage === 'complete');
+        const sent = (s.screen === 'login' && s.loginTab === 'otp' && s.otpSent) || (s.screen === 'reset' && s.resetStage === 'complete');
         return [
           { name: 'форма', onClick: () => this.applyStep(false), style: pill(!sent, true) },
           { name: 'код отправлен', onClick: () => this.applyStep(true), style: pill(sent, false) }

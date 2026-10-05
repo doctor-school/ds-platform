@@ -457,9 +457,14 @@ function RecoveryCompleteForm({
             data-testid="reset-restart"
             // `shrink-0` — «Начать заново» keeps its size; the resend label is the
             // flex item that yields when the row is cramped (#542).
-            // `-mx-4 -my-2` cancel the ghost padding so the label sits on the
-            // content edge, as the canvas draws it (auth.dc.html 248).
-            className="-mx-4 -my-2 shrink-0"
+            // Canvas geometry (auth.dc.html 248: padding 6px 8px, margin -6px 0):
+            // `px-2 py-1.5` is the ghost box, `-my-1.5` keeps the row height. No
+            // horizontal offset — the hover tint's left edge sits ON the content
+            // column edge and the label insets by the 8px padding (#2556).
+            // `shadow-focus-inset` keeps the keyboard ring inside that box too
+            // (canvas line 10, `[data-ghost]:focus-visible`); scoped here, not on
+            // the ghost variant, because other ghost controls keep the outset ring.
+            className="-my-1.5 shrink-0 px-2 py-1.5 focus-visible:shadow-focus-inset"
           >
             {copy.startOver}
           </Button>

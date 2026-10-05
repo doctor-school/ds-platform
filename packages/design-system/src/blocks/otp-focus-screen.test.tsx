@@ -202,6 +202,20 @@ describe("OtpFocusScreen", () => {
     ).toBeTruthy();
   });
 
+  it("#2556: the back link highlight starts on the content edge — canvas 78 padding:6px 8px, margin:-6px 0, inset focus ring (line 10)", () => {
+    render(<Harness />);
+    const back = screen.getByTestId("otp-change-method");
+    expect(back).toHaveClass(
+      "px-2",
+      "py-1.5",
+      "-my-1.5",
+      "shrink-0",
+      "focus-visible:shadow-focus-inset",
+    );
+    expect(back.className).not.toMatch(/(^|\s)-m[xsl]-|(^|\s)px-4(\s|$)/);
+    expect(back.className).not.toMatch(/focus-visible:shadow-focus(\s|$)/);
+  });
+
   it("renders ONLY the focus-screen affordances — no channel switcher / secondary links", () => {
     render(<Harness />);
     // The block omits any channel selector or create/forgot links by construction.

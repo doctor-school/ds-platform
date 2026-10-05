@@ -200,10 +200,20 @@ describe("<PasswordRecoveryCard>", () => {
     expect(onRestart).toHaveBeenCalledTimes(1);
   });
 
-  it("#2556: «Начать заново» sits on the content edge — the ghost padding is cancelled (canvas 248 margin:-6px -8px)", () => {
+  it("#2556: «Начать заново» highlight starts on the content edge — canvas 248 padding:6px 8px, margin:-6px 0, inset focus ring (line 10)", () => {
     setup({ stage: "complete", identifier: "doc@example.com" });
     const restart = screen.getByTestId("reset-restart");
-    expect(restart).toHaveClass("-mx-4", "-my-2", "shrink-0");
+    expect(restart).toHaveClass(
+      "px-2",
+      "py-1.5",
+      "-my-1.5",
+      "shrink-0",
+      "focus-visible:shadow-focus-inset",
+    );
+    // No negative horizontal offset: the hover/focus box must not bleed past
+    // the column edge; the outset ring would bleed the same way.
+    expect(restart.className).not.toMatch(/(^|\s)-m[xsl]-|(^|\s)px-4(\s|$)/);
+    expect(restart.className).not.toMatch(/focus-visible:shadow-focus(\s|$)/);
   });
 
   it("#2556: the «Начать заново» / resend row follows the submit at the canvas 18px gap, with no divider (canvas 230/246-247)", () => {

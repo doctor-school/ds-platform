@@ -33,7 +33,8 @@ export interface SmartCaptchaConfig {
    * Non-production test token (#2605). Yandex SmartCaptcha ships no vendor test
    * keypair, so a staging stand substitutes ONLY the server-side validation: a
    * request token equal to this secret (constant-time compare) passes without a
-   * Yandex call, audited as `reason: "test-token"`. The env schema refuses to
+   * Yandex call, with the distinct result `reason: "test-token"` (a passing
+   * verify is not written to the audit ledger). The env schema refuses to
    * boot with it set in production (`BOT_PROTECTION_TEST_TOKEN`).
    */
   testToken?: string | undefined;

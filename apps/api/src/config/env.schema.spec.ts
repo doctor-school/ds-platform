@@ -67,6 +67,20 @@ describe("api env — bot-protection test token is non-production only", () => {
     ).toBeUndefined();
   });
 
+  it("trims the test token exactly as the slot coherence check does (whitespace-only is unset)", () => {
+    expect(
+      loadEnv({ ...complete, BOT_PROTECTION_TEST_TOKEN: "   " })
+        .BOT_PROTECTION_TEST_TOKEN,
+    ).toBeUndefined();
+    expect(
+      loadEnv({
+        ...complete,
+        SENTRY_ENVIRONMENT: "stage",
+        BOT_PROTECTION_TEST_TOKEN: ` ${token} `,
+      }).BOT_PROTECTION_TEST_TOKEN,
+    ).toBe(token);
+  });
+
   it("refuses to boot with the test token in production", () => {
     expect(() =>
       loadEnv({

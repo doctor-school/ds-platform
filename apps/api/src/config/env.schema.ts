@@ -24,10 +24,11 @@ export const ApiEnvSchema = z.looseObject({
   // Non-production test token (#2605): a request token equal to it passes the
   // provider without a Yandex call, so the agent drives captcha-gated journeys
   // on a staging slot. Generated ON the box (`openssl rand -hex 32`), never
-  // committed; an empty line is unset. Accepted only when SENTRY_ENVIRONMENT
+  // committed; an empty or whitespace-only line is unset and surrounding
+  // whitespace is trimmed (as `assertCaptchaCoherent` reads it). Accepted only when SENTRY_ENVIRONMENT
   // positively names a non-production environment (`ApiEnvBootSchema` below).
   BOT_PROTECTION_TEST_TOKEN: z.preprocess(
-    (v) => (v === "" ? undefined : v),
+    (v) => (typeof v === "string" ? v.trim() || undefined : v),
     z.string().min(32).optional(),
   ),
 

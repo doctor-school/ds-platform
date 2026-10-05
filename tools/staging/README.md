@@ -70,8 +70,8 @@ drives them with the box's non-production test token instead of handing them to
 the owner. stage-1 carries `BOT_PROTECTION_TEST_TOKEN` in `stage.env` (generated
 on the box with `openssl rand -hex 32`, never committed; `up`/`sync` refuse it
 while bot protection is off, shorter than 32 characters, or without
-`SENTRY_ENVIRONMENT=stage`). The api accepts it only there (audited as
-`test-token`); production refuses it at boot and in `pnpm deploy:prod`.
+`SENTRY_ENVIRONMENT=stage`). The api accepts it only there (result reason
+`test-token`, not written to the audit ledger); production refuses it at boot and in `pnpm deploy:prod`.
 
 `pnpm e2e:stage <slot>` hands it to the suite as `E2E_CAPTCHA_TEST_TOKEN`. An
 ad-hoc drive reads it from the box the way `STAGE_BASIC_AUTH_PASS` is read —

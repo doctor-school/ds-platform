@@ -70,8 +70,9 @@ Yandex SmartCaptcha ships no vendor test keypair, and the invisible widget never
 yields a token in headless Playwright, so a staging stand substitutes ONLY the
 server-side validation: when bot protection is enabled and the request token
 equals `BOT_PROTECTION_TEST_TOKEN` (constant-time compare), `verify` returns
-`{ ok: true, reason: "test-token" }` without calling Yandex — the distinct reason
-keeps every such pass visible in the audit ledger. Every other token, and every
+`{ ok: true, reason: "test-token" }` without calling Yandex. The distinct `reason`
+is on the verify result only — the guard does not write a passing verify to the
+audit ledger, so a test-token pass is not recorded there. Every other token, and every
 fail-closed path (missing token, missing server key, non-2xx, transport error),
 is unchanged. The browser half is `packages/e2e/lib/captcha-stub.ts`, which
 stubs the Yandex `captcha.js` and resolves the real widget with the token.

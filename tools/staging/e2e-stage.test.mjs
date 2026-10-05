@@ -358,6 +358,46 @@ describe("runE2eStage", () => {
     assert.equal(suiteEnv.POSTGRES_PASSWORD, undefined);
   });
 
+  it("hands the box's bot-protection test token to the suite as E2E_CAPTCHA_TEST_TOKEN (#2605)", async () => {
+    const token = "a".repeat(64);
+    const fromBox = harness({
+      readBoxEnv: async () => ({
+        ...BOX_ENV,
+        BOT_PROTECTION_TEST_TOKEN: token,
+      }),
+    });
+    await runE2eStage(["main"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects: fromBox.effects,
+    });
+    assert.equal(fromBox.calls[0].env.E2E_CAPTCHA_TEST_TOKEN, token);
+
+    const operatorWins = harness({
+      readBoxEnv: async () => ({
+        ...BOX_ENV,
+        BOT_PROTECTION_TEST_TOKEN: token,
+      }),
+    });
+    await runE2eStage(["main"], {
+      env: {
+        STAGE_BASIC_AUTH_PASS: "s3cret",
+        E2E_CAPTCHA_TEST_TOKEN: "operator-token",
+      },
+      effects: operatorWins.effects,
+    });
+    assert.equal(
+      operatorWins.calls[0].env.E2E_CAPTCHA_TEST_TOKEN,
+      "operator-token",
+    );
+
+    const none = harness();
+    await runE2eStage(["main"], {
+      env: { STAGE_BASIC_AUTH_PASS: "s3cret" },
+      effects: none.effects,
+    });
+    assert.equal(none.calls[0].env.E2E_CAPTCHA_TEST_TOKEN, undefined);
+  });
+
   it("passes the derived URLs and the basic-auth pair to the suite run", async () => {
     const { calls, effects } = harness();
     await runE2eStage(["main"], {

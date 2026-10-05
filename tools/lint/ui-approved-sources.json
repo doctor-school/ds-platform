@@ -127,6 +127,37 @@
         "https://github.com/doctor-school/ds-platform/issues/2432#issuecomment-5887310830"
       ]
     },
+    "feature-012-event-kinds-admin-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/event-kinds/page.tsx",
+        "apps/admin/app/event-kinds/create/page.tsx",
+        "apps/admin/app/event-kinds/[id]/page.tsx",
+        "apps/admin/components/event-kind-form.tsx",
+        "apps/admin/components/event-kind-lifecycle-actions.tsx",
+        "apps/admin/components/event-form.tsx",
+        "apps/admin/components/project-form.tsx",
+        "apps/admin/app/events/page.tsx",
+        "apps/admin/app/events/create/page.tsx",
+        "apps/admin/app/events/[id]/page.tsx",
+        "apps/admin/app/projects/page.tsx",
+        "apps/admin/app/projects/create/page.tsx",
+        "apps/admin/app/projects/[id]/page.tsx",
+        "apps/admin/app/providers.tsx",
+        "apps/admin/messages/ru.json"
+      ],
+      "states": [
+        "kinds-list",
+        "kind-edit",
+        "event-kind-audience",
+        "kind-narrow-refused",
+        "project-default-audience"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2509#issuecomment-5994702215",
+        "https://github.com/doctor-school/ds-platform/issues/2509#issuecomment-5995743412"
+      ]
+    },
     "feature-044-attendance-mark-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

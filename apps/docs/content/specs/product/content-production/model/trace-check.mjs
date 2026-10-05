@@ -486,9 +486,17 @@ for (const loop of loopsDoc?.loops ?? []) {
     errors.push(`${where} rounds_draft must be [min, max] with min ≥ 1`);
   else if (
     loop.rounds_from != null &&
-    (!loop.rounds_from.rule || !asList(loop.rounds_from.loops).length)
+    (!Number.isInteger(loop.rounds_from.base) ||
+      loop.rounds_from.base < 1 ||
+      !Array.isArray(loop.rounds_from.plus_extra_rounds_of) ||
+      !loop.rounds_from.plus_extra_rounds_of.length ||
+      Object.keys(loop.rounds_from).some(
+        (key) => !["base", "plus_extra_rounds_of"].includes(key),
+      ))
   )
-    errors.push(`${where} rounds_from needs a rule and loops`);
+    errors.push(
+      `${where} rounds_from must be { base: integer ≥ 1, plus_extra_rounds_of: [loop names] } — rounds = base + Σ (rounds − 1)`,
+    );
   if (!isRange(loop.wait_days_per_round_draft))
     errors.push(
       `${where} wait_days_per_round_draft must be a number or [min, max]`,
@@ -526,9 +534,9 @@ for (const loop of loopsDoc?.loops ?? []) {
         );
   }
 }
-// Derived rounds: every loop named in `rounds_from` exists and has its own rounds_draft (no chains).
+// Derived rounds: every loop named in `rounds_from.plus_extra_rounds_of` exists and has its own rounds_draft (no chains).
 for (const loop of loopByName.values())
-  for (const name of asList(loop.rounds_from?.loops))
+  for (const name of asList(loop.rounds_from?.plus_extra_rounds_of))
     if (loopByName.get(name)?.rounds_draft == null)
       errors.push(
         `loops.yaml: «${loop.name}» rounds_from names «${name}» — no loop with rounds_draft`,
@@ -651,6 +659,26 @@ for (const record of asList(ratesDoc?.roles)) {
   if (!record.composite_of && !dated.length)
     errors.push(
       `rates.yaml: record «${record.role}» has no source with url and accessed, nor composite_of`,
+    );
+}
+// The team circle «Продуктовая команда» is the direction team: its hours split between the
+// team roles with an FTE (capacity), so its composite rate must be read over the same roles.
+const teamCircle = asList(ratesDoc?.roles).find(
+  (r) => r.role === "Продуктовая команда",
+);
+const directionTeam = asList(teamsDoc?.teams).find((t) => t.id === "direction");
+if (teamCircle && directionTeam) {
+  const fteRoles = [
+    ...asList(directionTeam.members),
+    ...asList(directionTeam.draws_on),
+  ]
+    .filter((m) => m.fte_draft != null)
+    .map((m) => m.role)
+    .sort();
+  const circle = [...asList(teamCircle.composite_of)].sort();
+  if (JSON.stringify(circle) !== JSON.stringify(fteRoles))
+    errors.push(
+      `rates.yaml: «Продуктовая команда» composite_of must equal the teams.yaml direction roles with fte_draft (${fteRoles.join(", ")})`,
     );
 }
 console.log(

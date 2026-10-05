@@ -153,6 +153,19 @@ export function goldenPasswordEnv(operatorEnv, boxEnv) {
   );
 }
 
+/**
+ * The stand's bot-protection test token (#2605), handed to the suite as
+ * `E2E_CAPTCHA_TEST_TOKEN` so `packages/e2e/lib/captcha-stub.ts` can resolve the
+ * Yandex widget on a captcha-gated journey. An explicit operator value wins (the
+ * no-SSH mode); otherwise the already-read stage env supplies it. Absent on both
+ * sides ⇒ absent, and the stub throws by name the moment a journey needs it.
+ */
+export function captchaTestTokenEnv(operatorEnv, boxEnv) {
+  const value =
+    operatorEnv?.E2E_CAPTCHA_TEST_TOKEN || boxEnv?.BOT_PROTECTION_TEST_TOKEN;
+  return value ? { E2E_CAPTCHA_TEST_TOKEN: value } : {};
+}
+
 export function slotHealthUrl(slot, baseDomain) {
   return `https://${slotHostnames(slot, baseDomain).api}/v1/health`;
 }
@@ -417,6 +430,7 @@ export async function runE2eStage(
   const suiteEnv = {
     ...slotE2eEnv({ slot, baseDomain, user, password }),
     ...goldenPasswordEnv(env, boxEnv),
+    ...captchaTestTokenEnv(env, boxEnv),
     E2E_REPORT_DIR: path.resolve(REPO_ROOT, reportDir),
   };
   if (options.grep) suiteEnv.E2E_GREP = options.grep;

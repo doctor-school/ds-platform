@@ -79,7 +79,7 @@
                 <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
               </div>
               <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
-                <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Мы отправили новый код на <b>{{ maskedDest }}</b>.</p>
+                <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Мы отправили новый код на <b style="overflow-wrap:anywhere">{{ maskedDest }}</b>.</p>
               </sc-if>
             </div>
           </sc-if>
@@ -249,7 +249,7 @@
                   <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
                 </div>
                 <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
-                  <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Мы отправили новый код на <b>{{ maskedDest }}</b>.</p>
+                  <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Мы отправили новый код на <b style="overflow-wrap:anywhere">{{ maskedDest }}</b>.</p>
                 </sc-if>
               </div>
             </sc-if>
@@ -379,8 +379,9 @@ class Component extends DCLogic {
     const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;padding:8px 16px;min-height:35px;line-height:19px;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + linkColor + ';opacity:' + (s.cooldown > 0 ? '.4' : '1') + ';text-underline-offset:4px';
 
     const smsStep = s.screen === 'login' && s.otpChannel === 'sms';
-    const dest = s.values['otpId'] || s.values['resetId'] || s.values['regEmail'] || (smsStep ? '+79991234567' : 'anna@nmic.ru');
-    const maskedDest = dest.includes('@') ? dest.replace(/^(.).*(@.).*(\..*)$/, '$1•••$2•••$3') : dest.replace(/\d(?=\d{2})/g, '•');
+    const dest = s.values['otpId'] || s.values['resetId'] || s.values['regEmail'] || (smsStep ? '+7 912 345-67-89' : 'doctor.ivanova@example.com');
+    const maskedDest = dest;
+    const destEl = R('strong', { style: { overflowWrap: 'anywhere' } }, dest);
 
     const svg = (paths) => R('svg', { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, paths.map((p, i) => R('path', { key: i, d: p })));
     const icons = {
@@ -393,14 +394,14 @@ class Component extends DCLogic {
     // Шаг кода — один экран для входа по коду, регистрации и повторной регистрации (владелец 2026-10-02, #2552)
     const loginCodeStep = s.screen === 'login' && s.loginTab === 'otp' && s.otpSent;
     const isCodeStep = loginCodeStep || s.screen === 'verify';
-    const codeStepHead = [smsStep ? 'Проверьте телефон' : 'Проверьте почту', R('span', null, 'Мы отправили код на ', R('strong', null, maskedDest), '.')];
+    const codeStepHead = [smsStep ? 'Проверьте телефон' : 'Проверьте почту', R('span', null, 'Мы отправили код на ', destEl, '.')];
     const titles = {
       login: loginCodeStep ? codeStepHead : ['Вход', 'Доступ к вашему аккаунту Doctor.School.'],
       register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль.'],
       verify: codeStepHead,
       reset: s.resetStage === 'request'
         ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
-        : ['Новый пароль', 'Код отправлен на ' + maskedDest + '. Введите его и задайте новый пароль.']
+        : ['Новый пароль', R('span', null, 'Код отправлен на ', destEl, '. Введите его и задайте новый пароль.')]
     };
 
     // Ошибки операции — контекстные по экрану

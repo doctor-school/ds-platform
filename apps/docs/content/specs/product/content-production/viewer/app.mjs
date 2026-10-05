@@ -22,6 +22,8 @@ import {
 import htm from "htm";
 import { parse as parseYaml } from "yaml";
 
+// Lowest zoom at which box names and arrow labels stay legible; the initial view never goes below it.
+const READABLE_ZOOM = 0.65;
 const html = htm.bind(React.createElement);
 const { useEffect, useMemo, useState, useCallback } = React;
 
@@ -903,9 +905,11 @@ function App({ model }) {
       return [null, String(error?.message ?? error)];
     }
   }, [diagram]);
-  // Initial view: the whole drawn extent (frame, boundary codes, labels) fits the canvas — width
-  // and height — and is centred; zoom in to the diagram never past 1.3. Reading detail is a zoom
-  // or a double-click away; a first view that hides an edge of the diagram hides arrows.
+  // Initial view: a diagram whose whole drawn extent (frame, boundary codes, labels) fits the canvas
+  // at a readable zoom opens fitted — width and height — and centred, zoomed in never past 1.3. A
+  // large diagram (A0, A31) would fit only below READABLE_ZOOM, where labels are illegible: it opens
+  // at the width fit but never below READABLE_ZOOM, anchored to the top (and to the left when wider
+  // than the canvas), and the reader pans or zooms out for the rest.
   const fitWidth = useCallback(
     (instance) => {
       const canvas = document.querySelector(".canvas");
@@ -914,14 +918,21 @@ function App({ model }) {
       const pad = 16;
       const w = x1 - x0 + 2 * pad;
       const h = y1 - y0 + 2 * pad;
-      const zoom = Math.min(
-        1.3,
-        canvas.clientWidth / w,
-        canvas.clientHeight / h,
-      );
+      const cw = canvas.clientWidth;
+      const ch = canvas.clientHeight;
+      const fit = Math.min(1.3, cw / w, ch / h);
+      if (fit >= READABLE_ZOOM) {
+        instance.setViewport({
+          x: (cw - w * fit) / 2 + (pad - x0) * fit,
+          y: (ch - h * fit) / 2 + (pad - y0) * fit,
+          zoom: fit,
+        });
+        return;
+      }
+      const zoom = Math.max(READABLE_ZOOM, Math.min(1.3, cw / w));
       instance.setViewport({
-        x: (canvas.clientWidth - w * zoom) / 2 + (pad - x0) * zoom,
-        y: (canvas.clientHeight - h * zoom) / 2 + (pad - y0) * zoom,
+        x: Math.max(0, (cw - w * zoom) / 2) + (pad - x0) * zoom,
+        y: (pad - y0) * zoom,
         zoom,
       });
     },

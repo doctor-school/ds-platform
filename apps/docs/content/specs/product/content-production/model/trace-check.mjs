@@ -8,7 +8,8 @@
 // not on the parent arrow, a parent arrow of the box without a boundary arrow); a child diagram whose
 // F-IDs differ from its parent box's or repeat; a box that is not exactly one of leaf / decomposed /
 // `decomposition: pending`; a leaf without a full draft `effort` (one role of «Роли и круги», a
-// sub-role only from the closed «Подроли» list of FORMAT-ru.md).
+// sub-role only from the closed «Подроли» list of FORMAT-ru.md); a repeat box (`repeats`) that
+// names a box absent from the model or carries F-IDs of its own.
 // Everything else (O-ID coverage, out-of-TO-BE placement, block mismatch) is reported, never fails.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -410,6 +411,28 @@ for (const diagram of diagrams) {
     console.log(`  ${diagram.id}: leaves ${leaves}/${diagram.boxes.length}`);
   totalLeaves += leaves;
 }
+
+// Repeat boxes: `repeats` names the boxes of another line whose step the box repeats; every named
+// box exists in the model, and the repeat box carries no F-IDs (they stay in the named boxes).
+const modelBoxIds = new Set(
+  diagrams.flatMap((d) => (d.boxes ?? []).map((box) => box.id)),
+);
+for (const diagram of diagrams)
+  for (const box of diagram.boxes ?? []) {
+    if (box.repeats == null) continue;
+    const repeats = asList(box.repeats);
+    if (!repeats.length)
+      errors.push(`${diagram.id}: box ${box.id} \`repeats\` is empty`);
+    for (const id of repeats)
+      if (!modelBoxIds.has(id))
+        errors.push(
+          `${diagram.id}: box ${box.id} repeats ${id} — no such box in the model`,
+        );
+    if ((box.functions ?? []).length)
+      errors.push(
+        `${diagram.id}: box ${box.id} repeats ${repeats.join(", ")} but carries F-IDs ${box.functions.join(", ")} — a repeat box has none`,
+      );
+  }
 
 if (pending.length) console.log(`Decomposition pending: ${pending.join(", ")}`);
 console.log(`Leaves with draft effort: ${totalLeaves}`);

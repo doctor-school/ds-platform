@@ -140,6 +140,7 @@
         "apps/admin/app/events/page.tsx",
         "apps/admin/app/events/create/page.tsx",
         "apps/admin/app/events/[id]/page.tsx",
+        "apps/admin/app/projects/page.tsx",
         "apps/admin/app/projects/create/page.tsx",
         "apps/admin/app/projects/[id]/page.tsx",
         "apps/admin/app/providers.tsx",
@@ -149,12 +150,12 @@
         "kinds-list",
         "kind-edit",
         "event-kind-audience",
-        "event-format-refused",
-        "event-kind-mismatch",
+        "kind-narrow-refused",
         "project-default-audience"
       ],
       "approvalProvenance": [
-        "https://github.com/doctor-school/ds-platform/issues/2509#issuecomment-5994702215"
+        "https://github.com/doctor-school/ds-platform/issues/2509#issuecomment-5994702215",
+        "https://github.com/doctor-school/ds-platform/issues/2509#issuecomment-5995743412"
       ]
     },
     "feature-044-attendance-mark-v1": {

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { taxonomyErrorKey } from "./taxonomy-errors";
+import { createTranslator } from "next-intl";
+import { narrowRefusal, taxonomyErrorKey } from "./taxonomy-errors";
 
 /**
  * Drift guard for the 012 EARS-6 relationship surface (#1288).
@@ -214,5 +215,66 @@ describe("taxonomyErrorKey — 012 EARS-25/28 event kinds (#2509)", () => {
       expect(key).toBe(`eventKinds.errors.${suffix}`);
       expect(typeof lookup(key)).toBe("string");
     }
+  });
+});
+
+describe("narrowRefusal — 012 EARS-25 bounded narrowing refusal (#2509)", () => {
+  const refusal = (total: number, ids: string[]) => ({
+    errorCode: "RELATIONSHIP_CONFLICT",
+    fieldErrors: [
+      { path: "allowedFormats", message: "summary" },
+      { path: "allowedFormats.eventCount", message: String(total) },
+      ...ids.map((id) => ({
+        path: `allowedFormats.events.${id}`,
+        message: `Событие ${id}`,
+      })),
+    ],
+  });
+
+  it("012 EARS-25: reads the total count and the capped named events off the field errors", () => {
+    expect(narrowRefusal(refusal(222, ["a", "b", "c", "d", "e"]))).toEqual({
+      total: 222,
+      events: ["a", "b", "c", "d", "e"].map((id) => ({
+        id,
+        title: `Событие ${id}`,
+      })),
+      more: 217,
+    });
+  });
+
+  it("012 EARS-25: no more-count when every blocking event is named", () => {
+    expect(narrowRefusal(refusal(2, ["a", "b"]))).toMatchObject({
+      total: 2,
+      more: 0,
+    });
+  });
+
+  it("012 EARS-25: any other refusal is not a narrowing refusal", () => {
+    expect(narrowRefusal({ errorCode: "PRECONDITION_FAILED" })).toBeNull();
+    expect(narrowRefusal(undefined)).toBeNull();
+  });
+
+  it("012 EARS-25: the sentence states the count with the Russian plural of «событие», and the tail says how many more", () => {
+    const t = createTranslator({ locale: "ru", messages });
+    const say = (count: number) =>
+      t("eventKinds.errors.narrowRefused" as never, { count } as never);
+    expect(say(1)).toBe(
+      "Нельзя убрать формат: его использует 1 событие этого вида.",
+    );
+    expect(say(3)).toBe(
+      "Нельзя убрать формат: его используют 3 события этого вида.",
+    );
+    expect(say(222)).toBe(
+      "Нельзя убрать формат: его используют 222 события этого вида.",
+    );
+    expect(say(11)).toBe(
+      "Нельзя убрать формат: его используют 11 событий этого вида.",
+    );
+    expect(say(25)).toBe(
+      "Нельзя убрать формат: его используют 25 событий этого вида.",
+    );
+    expect(
+      t("eventKinds.errors.narrowRefusedMore" as never, { count: 217 } as never),
+    ).toBe("и ещё 217");
   });
 });

@@ -169,22 +169,35 @@ export class EventKindsRepository {
    * lock: an event write holds the kind `FOR SHARE`, so no event can take a
    * removed format between this read and the narrowing's commit.
    */
+  /**
+   * The events of `kindId` carrying any of `formats`: their total count and the
+   * first `limit` of them by title. Capped in SQL, so a kind with hundreds of
+   * events never loads (or returns) them all.
+   */
   async findEventsWithFormats(
     tx: Tx,
     kindId: string,
     formats: readonly EventParticipationFormat[],
-  ): Promise<Array<{ id: string; title: string }>> {
-    if (formats.length === 0) return [];
-    return tx
+    limit: number,
+  ): Promise<{ total: number; events: Array<{ id: string; title: string }> }> {
+    if (formats.length === 0) return { total: 0, events: [] };
+    const where = and(
+      eq(events.kindId, kindId),
+      inArray(events.participationFormat, [...formats]),
+    );
+    const [counted] = await tx
+      .select({ total: count() })
+      .from(events)
+      .where(where);
+    const total = counted?.total ?? 0;
+    if (total === 0) return { total: 0, events: [] };
+    const named = await tx
       .select({ id: events.id, title: events.title })
       .from(events)
-      .where(
-        and(
-          eq(events.kindId, kindId),
-          inArray(events.participationFormat, [...formats]),
-        ),
-      )
-      .orderBy(asc(events.title), asc(events.id));
+      .where(where)
+      .orderBy(asc(events.title), asc(events.id))
+      .limit(limit);
+    return { total, events: named };
   }
 
   discoverIncidentAnywhere(kindId: string): Promise<EventKindIncidentEvent[]> {

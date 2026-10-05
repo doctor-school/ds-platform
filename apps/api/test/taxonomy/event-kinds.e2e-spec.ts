@@ -640,6 +640,46 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(accepted.json()).toMatchObject({ allowedFormats: ["online"] });
     });
 
+    it("012 EARS-25: a refused narrowing states how many events block it and names at most five of them, so the refusal stays small however many events the kind has", async () => {
+      const kind = await publishKind(await newKind(["online", "hybrid"]));
+      const seeded: string[] = [];
+      for (let i = 0; i < 7; i += 1) {
+        seeded.push(
+          (
+            await seedEvent({
+              audience: "doctors",
+              kindId: kind.id,
+              format: "hybrid",
+            })
+          ).id,
+        );
+      }
+
+      const refused = await patchKind(kind, { allowedFormats: ["online"] });
+      expect(refused.statusCode).toBe(409);
+      const problem = refused.json() as {
+        errorCode: string;
+        errors?: { path: string; message: string }[];
+      };
+      expect(problem.errorCode).toBe("RELATIONSHIP_CONFLICT");
+      expect(problem.errors).toContainEqual({
+        path: "allowedFormats.eventCount",
+        message: "7",
+      });
+      const named = (problem.errors ?? []).filter((e) =>
+        e.path.startsWith("allowedFormats.events."),
+      );
+      expect(named).toHaveLength(5);
+      for (const entry of named) {
+        expect(seeded).toContain(entry.path.slice("allowedFormats.events.".length));
+      }
+      const summary = problem.errors?.find((e) => e.path === "allowedFormats");
+      expect(summary?.message).toContain("7 events");
+      // The summary names only the capped five, never all seven.
+      const inSummary = seeded.filter((id) => summary?.message.includes(id));
+      expect(inSummary).toHaveLength(5);
+    });
+
     // ── EARS-29: the event's audience ────────────────────────────────────
 
     it("012 EARS-29: an event write requires one audience doctors | experts and refuses a missing or unknown one", async () => {

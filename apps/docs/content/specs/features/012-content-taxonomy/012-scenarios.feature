@@ -1015,11 +1015,19 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   Scenario: Narrowing a kind is refused while one of its events carries a removed format
     Given an event of kind «Встреча клуба» with the format online
     When the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
-    Then the kind edit is rejected with a field error on the allowed formats that names the event
+    Then the kind edit is rejected with a field error on the allowed formats that states one conflicting event and names it
     And «Встреча клуба» still allows the formats online, offline and hybrid
     When the admin changes the event's format to offline and saves
     And the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
     Then the kind is stored with the formats offline and hybrid
+
+  @EARS-25 @edge
+  Scenario: A narrowing refused by many events states their count and names only five
+    Given seven events of kind «Встреча клуба» with the format hybrid
+    When the admin narrows «Встреча клуба» to allow only the formats online and offline
+    Then the kind edit is rejected with a field error on the allowed formats that states seven conflicting events
+    And the refusal names five of those events, each linking to its admin event page
+    And the refusal says two more events conflict
 
   @EARS-27 @happy
   Scenario: The dictionary starts with the five seed kinds

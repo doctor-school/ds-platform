@@ -12,35 +12,12 @@ import { BackToList } from "@/components/back-to-list";
 import { EventKindForm } from "@/components/event-kind-form";
 import { EventKindLifecycleActions } from "@/components/event-kind-lifecycle-actions";
 import { StatusChip } from "@/components/status-chip";
-import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
-import type {
-  TaxonomyHttpError,
-  UpdateEventKindVars,
-} from "@/providers/data-provider";
-
-/** The per-event entries of a refused narrowing (`allowedFormats.events.<id>`). */
-const NARROW_EVENT_PATH = "allowedFormats.events.";
-
-interface NarrowConflictEvent {
-  id: string;
-  title: string;
-}
-
-/**
- * The events a refused narrowing names (012 EARS-25): the API addresses one
- * field error per conflicting event under `allowedFormats.events.<id>`, its
- * message the event title — so the page names and links each one without
- * parsing the English summary sentence.
- */
-function narrowConflictEvents(error: unknown): NarrowConflictEvent[] {
-  const fieldErrors = (error as TaxonomyHttpError | undefined)?.fieldErrors;
-  return (fieldErrors ?? [])
-    .filter((entry) => entry.path.startsWith(NARROW_EVENT_PATH))
-    .map((entry) => ({
-      id: entry.path.slice(NARROW_EVENT_PATH.length),
-      title: entry.message,
-    }));
-}
+import {
+  narrowRefusal,
+  taxonomyErrorKey,
+  type NarrowRefusal,
+} from "@/lib/taxonomy-errors";
+import type { UpdateEventKindVars } from "@/providers/data-provider";
 
 /**
  * Event-kind detail / edit (012 EARS-25/28, #2509) — the Directions detail
@@ -51,8 +28,9 @@ function narrowConflictEvents(error: unknown): NarrowConflictEvent[] {
  * The owner rule on narrowing (#2509, «если таксономия не матчится, то и не
  * должно быть возможности выбора несовместимых типов»): removing a format
  * while events of this kind carry it is refused by the API, and this page
- * renders that refusal with the named events, each a link to its editor, so
- * the operator moves those events first. No mismatch state exists anywhere.
+ * renders that refusal as the count of blocking events, the first five of them
+ * each a link to its editor, and how many more remain, so the operator moves
+ * those events first. No mismatch state exists anywhere.
  */
 export default function EventKindDetailPage() {
   const t = useTranslations();
@@ -64,7 +42,7 @@ export default function EventKindDetailPage() {
   });
   const { mutate: update, mutation } = useUpdate();
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [conflicts, setConflicts] = useState<NarrowConflictEvent[]>([]);
+  const [refusal, setRefusal] = useState<NarrowRefusal | null>(null);
   const [saved, setSaved] = useState(false);
 
   const statusLabels: Record<TaxonomyStatus, string> = {
@@ -108,7 +86,7 @@ export default function EventKindDetailPage() {
               version={detail.version}
               onTransition={() => {
                 setErrorKey(null);
-                setConflicts([]);
+                setRefusal(null);
                 setSaved(false);
                 void query.refetch();
               }}
@@ -120,12 +98,17 @@ export default function EventKindDetailPage() {
                 className="mb-4"
                 data-testid="update-error"
               >
-                <p>{t(errorKey)}</p>
-                {conflicts.length > 0 ? (
+                <p>
+                  {refusal
+                    ? t("eventKinds.errors.narrowRefused", {
+                        count: refusal.total,
+                      })
+                    : t(errorKey)}
+                </p>
+                {refusal && refusal.events.length > 0 ? (
                   <div className="mt-2" data-testid="narrow-refused-events">
-                    <p>{t("eventKinds.errors.narrowRefusedEvents")}</p>
-                    <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-                      {conflicts.map((event) => (
+                    <ul className="flex list-disc flex-col gap-1 pl-5">
+                      {refusal.events.map((event) => (
                         <li key={event.id}>
                           <Link asChild>
                             <NextLink
@@ -138,6 +121,13 @@ export default function EventKindDetailPage() {
                         </li>
                       ))}
                     </ul>
+                    {refusal.more > 0 ? (
+                      <p className="mt-1" data-testid="narrow-refused-more">
+                        {t("eventKinds.errors.narrowRefusedMore", {
+                          count: refusal.more,
+                        })}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </Alert>
@@ -157,7 +147,7 @@ export default function EventKindDetailPage() {
               submitting={mutation.isPending}
               onSubmit={(values) => {
                 setErrorKey(null);
-                setConflicts([]);
+                setRefusal(null);
                 setSaved(false);
                 const vars: UpdateEventKindVars = {
                   title: values.title,
@@ -172,9 +162,18 @@ export default function EventKindDetailPage() {
                       void query.refetch();
                     },
                     onError: (error) => {
-                      setConflicts(narrowConflictEvents(error));
+                      const refused = narrowRefusal(error);
+                      const key = taxonomyErrorKey(
+                        error,
+                        "eventKinds.errors.updateFailed",
+                      );
+                      setRefusal(refused);
+                      // The narrowing sentence needs its count; a conflict
+                      // without one falls back to the generic sentence.
                       setErrorKey(
-                        taxonomyErrorKey(error, "eventKinds.errors.updateFailed"),
+                        key === "eventKinds.errors.narrowRefused" && !refused
+                          ? "eventKinds.errors.updateFailed"
+                          : key,
                       );
                     },
                   },

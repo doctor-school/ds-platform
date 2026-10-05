@@ -1,5 +1,40 @@
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 
+/** The per-event entries of a refused narrowing (`allowedFormats.events.<id>`). */
+const NARROW_EVENT_PATH = "allowedFormats.events.";
+/** The total of blocking events of a refused narrowing. */
+const NARROW_COUNT_PATH = "allowedFormats.eventCount";
+
+export interface NarrowRefusal {
+  /** How many events of the kind carry a removed format. */
+  total: number;
+  /** The few the API names (at most five), each linkable by id. */
+  events: { id: string; title: string }[];
+  /** Blocking events beyond the named ones. */
+  more: number;
+}
+
+/**
+ * The refused narrowing of an event kind (012 EARS-25), read off its field
+ * errors: the API states the total under `allowedFormats.eventCount` and names
+ * at most five events under `allowedFormats.events.<id>` (message = title), so
+ * the page states the count, links the named few and says how many remain,
+ * without parsing the English summary. `null` for any other failure.
+ */
+export function narrowRefusal(error: unknown): NarrowRefusal | null {
+  const fieldErrors = (error as TaxonomyHttpError | undefined)?.fieldErrors;
+  const countEntry = fieldErrors?.find((e) => e.path === NARROW_COUNT_PATH);
+  const total = Number(countEntry?.message);
+  if (!countEntry || !Number.isInteger(total) || total <= 0) return null;
+  const events = (fieldErrors ?? [])
+    .filter((e) => e.path.startsWith(NARROW_EVENT_PATH))
+    .map((e) => ({
+      id: e.path.slice(NARROW_EVENT_PATH.length),
+      title: e.message,
+    }));
+  return { total, events, more: Math.max(0, total - events.length) };
+}
+
 export interface TaxonomyErrorContext {
   /** The command disambiguates a shared wire code without changing fallback truth. */
   action?: "restore-curator" | "restore-primary";

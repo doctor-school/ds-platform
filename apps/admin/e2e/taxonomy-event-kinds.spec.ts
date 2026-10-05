@@ -211,7 +211,7 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
     await toggleFormat(page, "offline");
     await page.getByTestId("submit-event-kind").click();
     await expect(page.getByTestId("update-error")).toContainText(
-      "Формат нельзя убрать",
+      "Нельзя убрать формат: его использует 1 событие этого вида.",
     );
     const named = page.getByTestId("narrow-refused-events");
     await expect(named).toContainText(eventTitle);
@@ -219,6 +219,8 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
       "href",
       new URL(eventUrl).pathname,
     );
+    // One blocking event, all named: no «и ещё M» tail.
+    await expect(page.getByTestId("narrow-refused-more")).toHaveCount(0);
     // Nothing was narrowed.
     await page.reload();
     await expect(page.getByTestId("event-kind-format-offline")).toBeChecked();
@@ -262,5 +264,28 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
     await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     await page.reload();
     await expect(page.getByTestId("event-audience")).toHaveValue("experts");
+  });
+
+  test("012 EARS-30: the create-project form shows the default-audience hint the edit form shows; the required error takes its slot until an audience is chosen", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await page.goto("/projects/create");
+    await page.getByTestId("project-form").waitFor({ state: "visible" });
+    const hint = page.getByText(
+      "Подставляется в новые мероприятия проекта; у каждого мероприятия её можно изменить. Смена здесь не меняет уже созданные мероприятия.",
+    );
+    await expect(hint).toBeVisible();
+
+    // ADR-0013 §7 inline message: the error swaps into the helper's place…
+    await page.getByTestId("submit-project").click();
+    await expect(page.getByTestId("project-default-audience")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await expect(hint).toHaveCount(0);
+    // …and the hint returns once the audience is chosen.
+    await chooseProjectDefaultAudience(page, "doctors");
+    await expect(hint).toBeVisible();
   });
 });

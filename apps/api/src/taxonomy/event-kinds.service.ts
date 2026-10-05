@@ -44,8 +44,8 @@ import { allocateTaxonomySlug, taxonomySlugBase } from "./taxonomy-slug.js";
 //
 // Narrowing `allowedFormats` is REFUSED while any retained event of the kind
 // carries a removed format (EARS-25): no event can ever hold a format its kind
-// disallows, so there is no mismatch state to flag. The refusal names the
-// conflicting events so the editor can re-classify them first.
+// disallows, so there is no mismatch state to flag. The refusal states how many
+// events conflict and names the first five so the editor can re-classify them.
 
 export interface CreateEventKindInput {
   payload: CreateEventKindRequest;
@@ -219,8 +219,9 @@ export class EventKindsService {
           tx,
           input.id,
           removed,
+          NARROWING_CONFLICT_NAMED_MAX,
         );
-        if (conflicts.length > 0) throw narrowingConflict(removed, conflicts);
+        if (conflicts.total > 0) throw narrowingConflict(removed, conflicts);
       }
       const updated = await this.repo.updateVersioned(
         tx,
@@ -336,23 +337,36 @@ export class EventKindsService {
   }
 }
 
+/** How many blocking events a refused narrowing names; the rest are counted. */
+const NARROWING_CONFLICT_NAMED_MAX = 5;
+
 /**
  * 012 EARS-25 — the refusal of a narrowing that would strand events: a 409
  * `RELATIONSHIP_CONFLICT` (deterministic for the bound input, so it is replayed)
- * with a field error on `allowedFormats` naming every conflicting event.
+ * with a field error on `allowedFormats` stating how many events block it and
+ * naming at most {@link NARROWING_CONFLICT_NAMED_MAX} of them, so the response
+ * stays small however many events the kind has.
  */
 function narrowingConflict(
   removed: readonly string[],
-  conflicts: ReadonlyArray<{ id: string; title: string }>,
+  conflicts: {
+    total: number;
+    events: ReadonlyArray<{ id: string; title: string }>;
+  },
 ): TaxonomyError {
-  const named = conflicts.map((e) => `«${e.title}» (${e.id})`).join(", ");
-  const message = `events of this kind still use ${removed.join(", ")}: ${named}; change their format or kind first`;
-  // The summary entry, then one entry per event addressed under
-  // `allowedFormats.events.<id>` with the title alone, so a client names and
-  // links each event without parsing the English summary.
+  const named = conflicts.events
+    .map((e) => `«${e.title}» (${e.id})`)
+    .join(", ");
+  const rest = conflicts.total - conflicts.events.length;
+  const message = `${conflicts.total} events of this kind still use ${removed.join(", ")}: ${named}${rest > 0 ? ` and ${rest} more` : ""}; change their format or kind first`;
+  // The summary entry, the total under `allowedFormats.eventCount`, then one
+  // entry per named event addressed under `allowedFormats.events.<id>` with the
+  // title alone, so a client states the count and names and links each event
+  // without parsing the English summary.
   return new TaxonomyError("RELATIONSHIP_CONFLICT", message, [
     { path: "allowedFormats", message },
-    ...conflicts.map((e) => ({
+    { path: "allowedFormats.eventCount", message: String(conflicts.total) },
+    ...conflicts.events.map((e) => ({
       path: `allowedFormats.events.${e.id}`,
       message: e.title,
     })),

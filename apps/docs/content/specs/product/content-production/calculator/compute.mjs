@@ -4,6 +4,10 @@
 
 export const SCENARIOS = ["min", "mid", "max"];
 const WEEKS_PER_MONTH = 52 / 12;
+// The team circle: its hours are split between team roles by FTE (capacity-ru.md), so its rate is
+// the FTE-weighted rate of the same roles — otherwise the plan would not reconcile with payroll.
+const TEAM_CIRCLE = "Продуктовая команда";
+export const IDLE_LINE = "неиспользованная мощность штата";
 
 /** Reads every input file through `readText(pathRelativeToPackageRoot)` and `parseYaml(text)`. */
 export async function loadInputs(readText, parseYaml) {
@@ -64,6 +68,9 @@ export function buildModel(inputs, overrides = {}) {
         });
   const loops = new Map(src.loops.loops.map((loop) => [loop.name, loop]));
   const direction = src.teams.teams.find((t) => t.id === "direction");
+  const teamRoleNames = new Set(
+    [...direction.members, ...direction.draws_on].map((m) => m.role),
+  );
   const teamRoles = [...direction.members, ...direction.draws_on]
     .filter((m) => m.fte_draft != null)
     .map((m) => ({ role: m.role, fte: m.fte_draft }));
@@ -86,6 +93,7 @@ export function buildModel(inputs, overrides = {}) {
     leaves,
     loops,
     teamRoles,
+    teamRoleNames,
     vars,
     rates,
     rateVariables: src.rates.variables,
@@ -144,7 +152,13 @@ function applyOverride(model, key, value) {
     case "fte": {
       const member = model.teamRoles.find((m) => m.role === name);
       if (member) member.fte = value;
-      else model.teamRoles.push({ role: name, fte: value });
+      else {
+        need(
+          model.teamRoleNames.has(name) || model.rates.has(name) ? true : null,
+          "role",
+        );
+        model.teamRoles.push({ role: name, fte: value });
+      }
       return;
     }
     case "var":
@@ -241,9 +255,13 @@ function resolveRate(model, role, scenario) {
   if (!record) return { value: null, flags: ["нет записи ставки"], basis: "—" };
   if (record.composite_of && !record.monthly_gross_rub && !record.hourly_rub) {
     const weights = Object.fromEntries(
-      model.teamRoles.map((m) => [m.role, pick(m.fte, "mid")]),
+      model.teamRoles.map((m) => [m.role, pick(m.fte, scenario)]),
     );
-    const parts = record.composite_of
+    const members =
+      role === TEAM_CIRCLE
+        ? model.teamRoles.map((m) => m.role)
+        : record.composite_of;
+    const parts = members
       .map((member) => ({
         w: weights[member] ?? 1,
         r: roleHourlyCost(model, member, scenario),
@@ -282,7 +300,11 @@ function resolveRate(model, role, scenario) {
     let value = pick(h, scenario);
     if (value == null && Array.isArray(h)) {
       value = h[0] ?? h[1];
-      flags.push(h[0] != null ? "нижняя граница" : "верхняя граница");
+      flags.push(
+        h[0] != null
+          ? "нижняя граница ставки: max (и, вероятно, mid) занижен"
+          : "верхняя граница ставки: min (и, вероятно, mid) завышен",
+      );
     }
     if (value == null) return null;
     return {
@@ -360,7 +382,9 @@ function leafLine(model, id, qty, path, scenario) {
 function costLine(model, line, scenario) {
   const piece = model.piece[line.leaf];
   if (piece != null) {
-    const rub = pick(piece, scenario);
+    const record = model.rates.get(line.role);
+    const onTop = record ? contractorOnTop(model, record) : 0;
+    const rub = pick(piece, scenario) * (1 + onTop);
     return {
       ...line,
       hourlyCost: null,
@@ -416,24 +440,32 @@ function nonProduction(model, role, scenario) {
       loopRounds(model, leaf.iterations, scenario) *
       (periodLeafCount(model, entry, scenario) / teams);
     if (leaf.role === role) hours += h;
-    else if (leaf.role === "Продуктовая команда")
+    else if (leaf.role === TEAM_CIRCLE)
       hours += (h * fte) / teamFte(model, scenario);
   }
   return hours;
 }
 
-/** Team-role hours per product unit; «Продуктовая команда» lines split by FTE share. */
-function teamHours(model, productName, scenario) {
-  const { directByRole } = productHours(model, productName, scenario);
-  const out = { ...directByRole };
-  const shared = out["Продуктовая команда"] ?? 0;
-  delete out["Продуктовая команда"];
+/** Hours by role with the team circle's hours split between team roles by FTE share. */
+function splitCircle(model, byRole, scenario) {
+  const out = { ...byRole };
+  const shared = out[TEAM_CIRCLE] ?? 0;
+  delete out[TEAM_CIRCLE];
   if (shared) {
     const total = teamFte(model, scenario);
     for (const m of model.teamRoles)
       add(out, m.role, (shared * pick(m.fte, scenario)) / total);
   }
   return out;
+}
+
+/** Team-role hours per product unit (direct lines). */
+function teamHours(model, productName, scenario) {
+  return splitCircle(
+    model,
+    productHours(model, productName, scenario).directByRole,
+    scenario,
+  );
 }
 
 /** Capacity of one direction team doing only this product: C = min A(r) ÷ H(r), bottleneck role. */
@@ -559,7 +591,9 @@ export function periodPlan(model, scenario) {
     }
     const poolCost = sum(poolLines.map((l) => l.cost ?? 0));
     const unpriced = poolLines.filter((l) => l.cost == null).map((l) => l.leaf);
+    const idle = idleCapacity(model, sold, scenario);
     return {
+      sold,
       units,
       bottleneck,
       directHours,
@@ -567,8 +601,57 @@ export function periodPlan(model, scenario) {
       poolCost,
       unpriced,
       overheadPerDirectHour: directHours ? poolCost / directHours : 0,
+      idle: {
+        ...idle,
+        perDirectHour: directHours ? idle.cost / directHours : 0,
+      },
     };
   });
+}
+
+/**
+ * Paid штат time of team roles that the plan leaves unused (owner decision 2026-10-05, #2522
+ * «Idle paid time»): teams × FTE × P − non-production − hours the plan's units load, per role.
+ */
+function idleCapacity(model, sold, scenario) {
+  const teams = model.vars.teams;
+  const P = model.vars.paid_hours_per_month;
+  const loadedBy = {};
+  for (const [name, n] of Object.entries(sold))
+    for (const line of productHours(model, name, scenario).lines)
+      if (line.class !== "reserve") add(loadedBy, line.role, line.hours * n);
+  const loaded = splitCircle(model, loadedBy, scenario);
+  const flags = [];
+  const byRole = model.teamRoles
+    .filter((m) => model.rates.get(m.role)?.monthly_gross_rub)
+    .map((m) => {
+      const fte = pick(m.fte, scenario);
+      const paidHours = teams * fte * P;
+      const nonProd = teams * nonProduction(model, m.role, scenario);
+      const load = loaded[m.role] ?? 0;
+      const free = paidHours - nonProd - load;
+      if (free < -1e-9) flags.push(`перегрузка штата: ${m.role}`);
+      const idleHours = Math.max(0, free);
+      const hourlyCost = roleHourlyCost(model, m.role, scenario).value;
+      return {
+        role: m.role,
+        teams,
+        fte,
+        paidHours,
+        nonProduction: nonProd,
+        loaded: load,
+        idleHours,
+        hourlyCost,
+        idleCost: idleHours * (hourlyCost ?? 0),
+        payroll: paidHours * (hourlyCost ?? 0),
+      };
+    });
+  return {
+    byRole,
+    hours: sum(byRole.map((r) => r.idleHours)),
+    cost: sum(byRole.map((r) => r.idleCost)),
+    flags,
+  };
 }
 
 function reserveOfUnit(model, productName, scenario) {
@@ -623,6 +706,7 @@ export function unitCost(model, productName, scenario) {
     const plan = periodPlan(model, scenario);
     if (plan.unpriced.length)
       flags.add(`накладные без ставки: ${plan.unpriced.join(", ")}`);
+    for (const f of plan.idle.flags) flags.add(f);
     const directHours = sum(direct.map((l) => l.hours));
     const directCost = sum(direct.map((l) => l.cost ?? 0));
     const overheadCost = directHours * plan.overheadPerDirectHour;
@@ -654,6 +738,22 @@ export function unitCost(model, productName, scenario) {
     if (externals.some((e) => e.rub == null))
       flags.add("внешние затраты не заданы");
     const externalCost = sum(externals.map((e) => e.cost ?? 0));
+    const idleCost = directHours * plan.idle.perDirectHour;
+    const byLoad = directCost + overheadCost + reserve.cost + externalCost;
+    trail.push({
+      path: [productName],
+      leaf: null,
+      name: IDLE_LINE,
+      role: null,
+      class: "idle",
+      qty: 1,
+      hours: directHours,
+      hoursPerPass: null,
+      rounds: null,
+      hourlyCost: plan.idle.perDirectHour,
+      cost: idleCost,
+      flags: [],
+    });
     return {
       product: productName,
       scenario,
@@ -667,7 +767,8 @@ export function unitCost(model, productName, scenario) {
       },
       reserve,
       externals,
-      total: directCost + overheadCost + reserve.cost + externalCost,
+      idle: { cost: idleCost, perDirectHour: plan.idle.perDirectHour },
+      total: { byLoad, fullPayroll: byLoad + idleCost },
       flags: [...flags],
       trail,
     };

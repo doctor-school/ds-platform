@@ -1,6 +1,6 @@
 // Calculator core checks against the worked figures of ../model/capacity-ru.md and
 // ../model/effort-draft-ru.md. Run from the repo root:
-//   node --test apps/docs/content/specs/product/content-production/calculator/
+//   node --test "apps/docs/content/specs/product/content-production/calculator/*.test.mjs"
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -83,7 +83,8 @@ test("productHours: overhead leaves never land in direct hours", () => {
     }
   const lesson = productHours(model, "урок", "mid");
   assert.equal(lesson.directByRole["Сервисный круг — юрист"], undefined);
-  near(lesson.overheadByRole["Сервисный круг — юрист"], 1.25);
+  // A3132 × sponsored share 0,75 at mid
+  near(lesson.overheadByRole["Сервисный круг — юрист"], 1.25 * 0.75);
 });
 
 test("teamCapacity: 4,4 lessons a month, bottleneck Медредактор-сценарист (capacity-ru.md)", () => {
@@ -122,7 +123,7 @@ test("roleHourlyCost: in-house = monthly × (1 + contributions) ÷ paid hours; c
   // a pool rate with only a lower bound is that bound, flagged
   const reviewer = roleHourlyCost(model, "Пул медрецензентов", "max");
   assert.equal(reviewer.value, 900);
-  assert.ok(reviewer.flags.includes("нижняя граница"));
+  assert.ok(reviewer.flags.some((f) => f.startsWith("нижняя граница")));
   // composite circle = FTE-weighted member rates
   const team = roleHourlyCost(model, "Продуктовая команда", "mid").value;
   const lo = roleHourlyCost(model, "Медредактор-сценарист", "mid").value;
@@ -157,7 +158,7 @@ test("unitCost: a null external cost never contributes to totals and is flagged 
   }
   assert.ok(lesson.flags.includes("внешние затраты не заданы"));
   near(
-    lesson.total,
+    lesson.total.byLoad,
     lesson.direct.cost + lesson.overhead.cost + lesson.reserve.cost,
     1e-6,
   );
@@ -166,7 +167,8 @@ test("unitCost: a null external cost never contributes to totals and is flagged 
     "урок",
     "mid",
   );
-  near(withAi.total - lesson.total, 5000, 1e-6);
+  near(withAi.total.byLoad - lesson.total.byLoad, 5000, 1e-6);
+  near(withAi.total.fullPayroll - lesson.total.fullPayroll, 5000, 1e-6);
 });
 
 test("unitCost: overrides change exactly the targeted figures", () => {
@@ -221,7 +223,12 @@ test("unitCost: module = 6 × lesson + club + its deal share", () => {
       1e-6,
     );
     near(module.reserve.cost, 6 * lesson.reserve.cost, 1e-6);
-    near(module.total, 6 * lesson.total + club.total + deal.total, 1e-6);
+    for (const t of ["byLoad", "fullPayroll"])
+      near(
+        module.total[t],
+        6 * lesson.total[t] + club.total[t] + deal.total[t],
+        1e-6,
+      );
   }
 });
 
@@ -238,11 +245,161 @@ test("unitCost: update reserve per lesson follows the В6 formula", () => {
 
 test("computeProduct: min ≤ mid ≤ max and a trail from unit to leaf to role", () => {
   const out = computeProduct(model, "курс");
-  assert.ok(out.min.total <= out.mid.total && out.mid.total <= out.max.total);
+  for (const t of ["byLoad", "fullPayroll"])
+    assert.ok(
+      out.min.total[t] <= out.mid.total[t] &&
+        out.mid.total[t] <= out.max.total[t],
+    );
   const line = out.mid.trail.find((l) => l.leaf === "A312");
   assert.deepEqual(line.path, ["курс", "урок", "A312"]);
   assert.equal(line.role, "Медредактор-сценарист");
   assert.equal(line.qty, 18);
   assert.ok(out.mid.capacity.perMonth > 0);
   assert.ok(out.mid.leadDays > 0);
+});
+
+// ── Idle paid time of штат team roles (owner decision 2026-10-05, #2522 «Idle paid time») ──
+
+/** Σ over the plan's sold units of a unit-cost part, per month. */
+const planSum = (m, s, part) =>
+  Object.entries(periodPlan(m, s).sold).reduce(
+    (acc, [name, n]) => acc + n * part(unitCost(m, name, s)),
+    0,
+  );
+
+test("periodPlan: idle штат capacity per team role = FTE × P × teams − non-production − loaded hours", () => {
+  const plan = periodPlan(model, "mid");
+  const editor = plan.idle.byRole.find(
+    (r) => r.role === "Медредактор-сценарист",
+  );
+  near(editor.idleHours, 0, 1e-6); // the bottleneck is fully loaded
+  const account = plan.idle.byRole.find((r) => r.role === "Аккаунт");
+  near(
+    account.idleHours,
+    account.fte * 145.7 * account.teams -
+      account.nonProduction -
+      account.loaded,
+    1e-9,
+  );
+  assert.ok(account.idleHours > 50);
+  near(
+    account.idleCost,
+    account.idleHours * roleHourlyCost(model, "Аккаунт", "mid").value,
+    1e-6,
+  );
+  near(
+    plan.idle.cost,
+    plan.idle.byRole.reduce((a, r) => a + r.idleCost, 0),
+    1e-6,
+  );
+  near(plan.idle.perDirectHour, plan.idle.cost / plan.directHours, 1e-9);
+});
+
+test("unitCost: both totals — «по загрузке» and «с полным фондом оплаты» with an idle trail line", () => {
+  const lesson = unitCost(model, "урок", "mid");
+  const plan = periodPlan(model, "mid");
+  near(lesson.idle.cost, lesson.direct.hours * plan.idle.perDirectHour, 1e-6);
+  near(
+    lesson.total.byLoad,
+    lesson.direct.cost + lesson.overhead.cost + lesson.reserve.cost,
+    1e-6,
+  );
+  near(lesson.total.fullPayroll, lesson.total.byLoad + lesson.idle.cost, 1e-6);
+  const line = lesson.trail.find((l) => l.class === "idle");
+  assert.equal(line.name, "неиспользованная мощность штата");
+  near(line.cost, lesson.idle.cost, 1e-6);
+});
+
+test("reconciliation: Σ units of the plan = штат payroll of its teams + other roles' direct cost and pool", () => {
+  for (const s of ["min", "mid", "max"]) {
+    const plan = periodPlan(model, s);
+    const team = new Set(plan.idle.byRole.map((r) => r.role));
+    team.add("Продуктовая команда");
+    const payroll = plan.idle.byRole.reduce((a, r) => a + r.payroll, 0);
+    let otherDirect = 0;
+    for (const [name, n] of Object.entries(plan.sold))
+      for (const l of unitCost(model, name, s).trail)
+        if (l.class === "direct" && !team.has(l.role))
+          otherDirect += n * (l.cost ?? 0);
+    const otherPool = plan.poolLines
+      .filter((l) => !team.has(l.role))
+      .reduce((a, l) => a + (l.cost ?? 0), 0);
+    const full = planSum(
+      model,
+      s,
+      (u) => u.direct.cost + u.overhead.cost + u.idle.cost,
+    );
+    near(full, payroll + otherDirect + otherPool, 1e-3);
+    const byLoad = planSum(model, s, (u) => u.direct.cost + u.overhead.cost);
+    near(byLoad, full - plan.idle.cost, 1e-3);
+  }
+});
+
+test("roleHourlyCost: circle weights follow the scenario FTE", () => {
+  const rate = (m, r, s) => roleHourlyCost(m, r, s).value;
+  for (const s of ["min", "max"]) {
+    const team = model.teamRoles.map((m) => ({ r: m.role, w: m.fte }));
+    const pickS = (v) => (Array.isArray(v) ? (s === "min" ? v[0] : v[1]) : v);
+    const w = team.reduce((a, t) => a + pickS(t.w), 0);
+    const expected =
+      team.reduce((a, t) => a + pickS(t.w) * rate(model, t.r, s), 0) / w;
+    near(rate(model, "Продуктовая команда", s), expected, 1e-6);
+  }
+});
+
+test("урок: A3132 (lawyer, ad section) only on the sponsored share of lessons", () => {
+  const share = (s) => {
+    const v =
+      inputs.products.products["урок"].parameters["доля_спонсорских"].draft;
+    return Array.isArray(v)
+      ? s === "min"
+        ? v[0]
+        : s === "max"
+          ? v[1]
+          : (v[0] + v[1]) / 2
+      : v;
+  };
+  near(
+    productHours(model, "урок", "mid").overheadByRole["Сервисный круг — юрист"],
+    1.25 * share("mid"),
+  );
+  const none = buildModel(inputs, { "param:урок:доля_спонсорских": 0 });
+  assert.equal(
+    productHours(none, "урок", "mid").overheadByRole[
+      "Сервисный круг — юрист"
+    ] ?? 0,
+    0,
+  );
+});
+
+test("overrides: fte:<role> with an unknown role throws; a rates.yaml role may join the team", () => {
+  assert.throws(
+    () => buildModel(inputs, { "fte:Медредактор": 3 }),
+    /unknown role/,
+  );
+  const joined = buildModel(inputs, { "fte:Медиа-круг — монтажёр": 1 });
+  assert.ok(joined.teamRoles.some((m) => m.role === "Медиа-круг — монтажёр"));
+});
+
+test("overrides: piece:<leaf> applies the contractor on-top (rates.yaml per_piece_cost)", () => {
+  const leaf = "A3143";
+  const cost = (o) =>
+    unitCost(
+      buildModel(inputs, { [`piece:${leaf}`]: 1000, ...o }),
+      "урок",
+      "mid",
+    ).trail.find((l) => l.leaf === leaf);
+  const base = cost({});
+  const gph = cost({ "var:contractor_form": "gph_individual" });
+  near(gph.cost, base.cost * 1.3, 1e-6);
+});
+
+test("roleHourlyCost: a pool at its lower-bound floor says max (and likely mid) is understated", () => {
+  const flags = roleHourlyCost(model, "Пул медрецензентов", "max").flags;
+  assert.ok(
+    flags.some(
+      (f) => /нижняя граница/.test(f) && /max/.test(f) && /занижен/.test(f),
+    ),
+    flags.join("; "),
+  );
 });

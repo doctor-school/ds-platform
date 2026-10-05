@@ -61,7 +61,7 @@ The public face of a webinar: an event page that any visitor can read **without 
 - The listing shows **published upcoming** webinars ordered by nearest air date; each card carries enough to choose (date/time MSK, title, school/series, specialties, speakers). **[Amended 2026-10-02 ([#2537](https://github.com/doctor-school/ds-platform/issues/2537)) — online and hybrid events show the time in the viewer's timezone with an explicit zone label; offline events, emails/SMS and admin entry keep МСК. The canonical rule is 004 EARS-12 read under [004 «Amendment — 2026-10-02»](./004-requirements-en.md).]**
 - The page truthfully reflects the event's lifecycle state (upcoming / live / ended) from the single state machine — never a stale or contradictory signal.
 - Draft and archived events are not exposed on public surfaces.
-- The listing offers a «Неделя / Месяц» switcher; «Неделя» (the day-grouped list) is the default, and switching back and forth loses nothing.
+- The listing offers a «Неделя / Месяц» switcher; «Неделя» (the day-grouped list) is the default, and switching back and forth loses nothing. _Superseded by 004 «Amendment — 2026-10-05»: no switcher; «Календарь на месяц →» / «← Лента событий» switch the views of the same page._
 - The month view shows every publicly visible event of the selected month — upcoming as calendar pills, "live now" in red, the month's already-past events as muted notes — with today marked, a legend, and on mobile a dot calendar plus the selected day's agenda.
 - Month navigation works both by ‹ › paging and through a month picker whose 12 months carry per-month broadcast counts (past months muted).
 
@@ -84,7 +84,7 @@ Vendored canvas source (byte-verbatim from the Claude Design project «Doctor.Sc
 
 - [`design-source/event-page.dc.html`](../../../../../../design-source/event-page.dc.html) — the public event page (US-1, US-2, US-3, US-5); lifecycle states `upcoming / live / ended` (US-6) via the canvas `status` prop.
 - [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) — the upcoming-broadcasts listing (US-4), day-grouped week view («Неделя», the switcher's default; US-7).
-- [`design-source/events-feed-month.dc.html`](../../../../../../design-source/events-feed-month.dc.html) — the month-calendar view of the listing (US-7, US-8, US-9): the «Месяц» pane of the «Неделя / Месяц» switcher, month picker with per-month counts, ‹ › paging, desktop grid with pills / red live pill / muted past notes / today outline, mobile dot-grid + selected-day agenda, legend.
+- [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html), its month view (the earlier `events-feed-month.dc.html` is archived 2026-10-05; composition per 004 «Amendment — 2026-10-05») — the month-calendar view of the listing (US-7, US-8, US-9): the «Месяц» pane of the «Неделя / Месяц» switcher, month picker with per-month counts, ‹ › paging, desktop grid with pills / red live pill / muted past notes / today outline, mobile dot-grid + selected-day agenda, legend.
 - [`design-source/unit-event-card.dc.html`](../../../../../../design-source/unit-event-card.dc.html) — the card unit the listings render.
 
 **Status:** composition authored by the product owner on the Claude Design canvas (project «Doctor.School визуальный язык»); Stage-A re-confirmation at the next owner checkpoint.

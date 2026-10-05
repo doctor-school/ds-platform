@@ -47,7 +47,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 **Browse the week (US-1, US-3, US-4, US-5, US-10):**
 
 1. The doctor opens «События» inside the doctor shell → breadcrumbs «<специальность> › События», the title, the view row (Неделя / Месяц · Будущие / Прошедшие), then the live strip if there is one, then the day-grouped feed.
-2. Cards carry date and time, format, kind, speaker, the source school or project, НМО where applicable, the Pul cost (zero cost reads as **«бесплатно для врача»**) and the sign-up count.
+2. Cards carry date and time, format, kind, speaker, the source school or project, НМО where applicable, the Pul cost (zero cost reads as **«бесплатно для врача»** — superseded by 019 «Amendment — 2026-10-05»: «N Pul» only when Pul is required, no free wording) and the sign-up count.
 3. An offline card additionally carries the **city and the seat count**; a congress spans dates and may be hybrid.
 4. A click on a card opens the event page (`#d-event`, feature 020).
 
@@ -110,7 +110,7 @@ The feed is **fully readable by a guest** (REQ-20): the value is visible before 
 
 ## Stage-A развилки (owner picks)
 
-The canvas [`design-source/doctor-events.dc.html`](../../../../../../design-source/doctor-events.dc.html) carries each fork as an editor prop, and **the prop default is the working assumption, not the owner's pick**. Every row below needs an explicit pick before implementation.
+The Stage-A canvas `design-source/doctor-events.dc.html` (archived 2026-10-05, absorbed into `events-feed.dc.html`) carried each fork as an editor prop, and **the prop default is the working assumption, not the owner's pick**. Every row below needs an explicit pick before implementation.
 
 | #   | Fork                                          | Options (canvas prop)                                                                                                                                                | Canvas default             | Owner pick                                                                                                                                                                                                                                                                             |
 | --- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -123,7 +123,7 @@ The canvas [`design-source/doctor-events.dc.html`](../../../../../../design-sour
 
 ## Approved-mockup reference
 
-**Canvas:** [`design-source/doctor-events.dc.html`](../../../../../../design-source/doctor-events.dc.html) — drawn by the owner and vendored into the repo (#1450). It is the **single source of truth for composition, geometry and states**; this PRD's prose never overrides it (ADR-0013).
+**Canvas:** [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) with its facet panel [`events-facets.dc.html`](../../../../../../design-source/events-facets.dc.html) at the doctor-storefront `host` — approved by the owner on 2026-10-05 (#2567); it absorbed the Stage-A canvas `doctor-events.dc.html` (#1450), now archived. It is the **single source of truth for composition, geometry and states**; this PRD's prose never overrides it (ADR-0013).
 
 **Canvas defaults are the working assumption for reading the design; the Stage-A pick is this PRD's fork table above.** Where a fork is still `PENDING`, the canvas default only documents what the drawing happens to show — it is **not** build authorisation: an explicit owner pick is required before implementation of that row, and no variant may be inferred from what the canvas renders (AGENTS.md §6, Stage A).
 

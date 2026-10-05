@@ -474,8 +474,18 @@ for (const loop of loopsDoc?.loops ?? []) {
   for (const field of ["approver", "exit_rule", "basis"])
     if (loop[field] == null || loop[field] === "")
       errors.push(`${where} has no ${field}`);
-  if (!Array.isArray(loop.rounds_draft) || !isRange(loop.rounds_draft, 1))
+  if ((loop.rounds_draft == null) === (loop.rounds_from == null))
+    errors.push(`${where} needs exactly one of rounds_draft, rounds_from`);
+  else if (
+    loop.rounds_draft != null &&
+    (!Array.isArray(loop.rounds_draft) || !isRange(loop.rounds_draft, 1))
+  )
     errors.push(`${where} rounds_draft must be [min, max] with min ≥ 1`);
+  else if (
+    loop.rounds_from != null &&
+    (!loop.rounds_from.rule || !asList(loop.rounds_from.loops).length)
+  )
+    errors.push(`${where} rounds_from needs a rule and loops`);
   if (!isRange(loop.wait_days_per_round_draft))
     errors.push(
       `${where} wait_days_per_round_draft must be a number or [min, max]`,
@@ -500,16 +510,26 @@ for (const loop of loopsDoc?.loops ?? []) {
       errors.push(`${at} kind «${step.kind}» — task | wait | decision`);
     if (step.box != null && !modelBoxIds.has(step.box))
       errors.push(`${at} box ${step.box} is not in the model`);
-    for (const key of ["next", "loop_to"])
-      if (step[key] != null && step[key] !== "end" && !stepIds.has(step[key]))
+    // A decision routes by explicit `yes` / `no`; task and wait steps by `next` only.
+    const routes = step.kind === "decision" ? ["yes", "no"] : ["next"];
+    for (const key of routes)
+      if (step[key] == null) errors.push(`${at} has no ${key}`);
+      else if (step[key] !== "end" && !stepIds.has(step[key]))
         errors.push(`${at} ${key} → ${step[key]} — no such step`);
-    if (step.next == null) errors.push(`${at} has no next`);
-    if ((step.kind === "decision") !== (step.loop_to != null))
-      errors.push(
-        `${at}: a decision has both next and loop_to, other steps only next`,
-      );
+    for (const key of ["next", "yes", "no", "loop_to"])
+      if (step[key] != null && !routes.includes(key))
+        errors.push(
+          `${at}: «${key}» — a decision routes by yes / no, other steps by next`,
+        );
   }
 }
+// Derived rounds: every loop named in `rounds_from` exists and has its own rounds_draft (no chains).
+for (const loop of loopByName.values())
+  for (const name of asList(loop.rounds_from?.loops))
+    if (loopByName.get(name)?.rounds_draft == null)
+      errors.push(
+        `loops.yaml: «${loop.name}» rounds_from names «${name}» — no loop with rounds_draft`,
+      );
 for (const [id, { diagram, box }] of leafById) {
   const effort = box.effort ?? {};
   if (!isRange(effort.lead_days_draft))

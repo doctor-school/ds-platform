@@ -28,8 +28,8 @@ loops:
         step: Вариант выбран?
         actor: фарма
         kind: decision
-        next: end
-        loop_to: s1
+        yes: end
+        no: s1
 
   - name: итерации нестандартного договора
     leaves: [A16]
@@ -49,8 +49,8 @@ loops:
         step: Договор стандартный?
         actor: Сервисный круг — юрист
         kind: decision
-        next: s5
-        loop_to: s3
+        yes: s5
+        no: s3
       - id: s3
         step: Ждать правок юрслужбы фармы
         actor: юрслужба фармы
@@ -60,8 +60,8 @@ loops:
         step: Правки согласованы?
         actor: Сервисный круг — юрист
         kind: decision
-        next: s5
-        loop_to: s1
+        yes: s5
+        no: s1
       - id: s5
         step: Подписать договор
         actor: Аккаунт
@@ -86,8 +86,8 @@ loops:
         step: Курс спонсорский?
         actor: Аккаунт
         kind: decision
-        next: s3
-        loop_to: end
+        yes: s3
+        no: end
       - id: s3
         step: Ждать замечаний партнёра к программе
         actor: фарма
@@ -97,8 +97,8 @@ loops:
         step: Программа согласована?
         actor: фарма
         kind: decision
-        next: end
-        loop_to: s1
+        yes: end
+        no: s1
 
   - name: запросы эксперту при несоответствии (F-037)
     leaves: [A3113]
@@ -118,8 +118,8 @@ loops:
         step: Материал соответствует формату DS?
         actor: Медредактор-сценарист
         kind: decision
-        next: end
-        loop_to: s3
+        yes: end
+        no: s3
       - id: s3
         step: Запросить у эксперта недостающее
         actor: Менеджер эксперта
@@ -134,10 +134,12 @@ loops:
   - name: итерации сценария до «зелёного»
     leaves: [A312]
     approver: Пул медрецензентов и фарма (замечания этапа 1)
-    rounds_draft: [1, 3]
+    rounds_from:
+      rule: 1 + Σ (круги петли − 1)
+      loops: [круги медрецензии до «зелёного», круги этапа 1 фармы]
     wait_days_per_round_draft: [0, 1]
     exit_rule: >-
-      Сценарий получил «зелёное» заключение рецензента и прошёл этап 1 фармы. Круг доработки запускает каждое замечание — поэтому круги сценария ≈ 1 + (круги медрецензии − 1) + (круги этапа 1 фармы − 1); калькулятор держит их отдельной переменной для калибровки.
+      Сценарий получил «зелёное» заключение рецензента и прошёл этап 1 фармы. Круг доработки запускает каждый непройденный круг медрецензии и этапа 1 фармы, поэтому круги сценария не задаются отдельно, а выводятся (`rounds_from`): 1 + (круги медрецензии − 1) + (круги этапа 1 фармы − 1) — на серединах 3, диапазон 1–5.
     basis: "оценка аналитика; опора: сценарий — «довольно много дней» (L2613)"
     fragment:
       - id: s1
@@ -155,8 +157,8 @@ loops:
         step: Есть замечания к сценарию?
         actor: Медредактор-сценарист
         kind: decision
-        next: end
-        loop_to: s1
+        yes: s1
+        no: end
 
   - name: круги медрецензии до «зелёного»
     leaves: [A3131]
@@ -177,14 +179,14 @@ loops:
         step: Замечания по фактической достоверности?
         actor: Пул медрецензентов
         kind: decision
-        next: end
-        loop_to: s3
+        yes: s3
+        no: end
       - id: s3
         step: Автор оспаривает замечание?
         actor: Медредактор-сценарист
         kind: decision
-        next: s4
-        loop_to: s5
+        yes: s4
+        no: s5
       - id: s4
         step: Заключение второго рецензента или ведущего эксперта
         actor: Пул медрецензентов — координатор
@@ -200,8 +202,8 @@ loops:
         step: Замечание подтверждено?
         actor: Пул медрецензентов — координатор
         kind: decision
-        next: s5
-        loop_to: end
+        yes: s5
+        no: end
 
   - name: круги этапа 1 фармы
     leaves: [A3134]
@@ -227,14 +229,14 @@ loops:
         step: Одобрено или срок истёк?
         actor: Аккаунт
         kind: decision
-        next: end
-        loop_to: s4
+        yes: end
+        no: s4
       - id: s4
         step: Круг в пределах максимума договора?
         actor: Аккаунт
         kind: decision
-        next: s5
-        loop_to: end
+        yes: s5
+        no: end
       - id: s5
         step: Доработать сценарий по замечаниям фармы (петля сценария)
         actor: Медредактор-сценарист
@@ -265,8 +267,8 @@ loops:
         step: Раскадровка согласована или срок истёк?
         actor: Менеджер эксперта
         kind: decision
-        next: end
-        loop_to: s1
+        yes: end
+        no: s1
 
   - name: круги правок монтажа и рекламных кадров
     leaves: [A3146]
@@ -293,8 +295,8 @@ loops:
         step: Правки монтажа?
         actor: Пул медрецензентов
         kind: decision
-        next: s4
-        loop_to: s1
+        yes: s1
+        no: s4
       - id: s4
         step: Пройти этап 2 фармы (петля ниже)
         actor: Аккаунт
@@ -305,8 +307,8 @@ loops:
         step: Правки рекламных кадров?
         actor: фарма
         kind: decision
-        next: end
-        loop_to: s1
+        yes: s1
+        no: end
 
   - name: круги этапа 2 фармы
     leaves: [A3163]
@@ -331,8 +333,8 @@ loops:
         step: Номер получен или срок истёк?
         actor: Аккаунт
         kind: decision
-        next: end
-        loop_to: s4
+        yes: end
+        no: s4
       - id: s4
         step: Поправить рекламные кадры (петля монтажа)
         actor: Медиа-круг — монтажёр
@@ -363,8 +365,8 @@ loops:
         step: Лидер согласен?
         actor: Пул экспертов — амбассадор
         kind: decision
-        next: end
-        loop_to: s4
+        yes: end
+        no: s4
       - id: s4
         step: Пригласить второго лектора
         actor: Менеджер эксперта
@@ -394,8 +396,8 @@ loops:
         step: Все части согласованы?
         actor: Менеджер эксперта
         kind: decision
-        next: end
-        loop_to: s1
+        yes: end
+        no: s1
 
   - name: итерации подписания
     leaves: [A53]
@@ -420,5 +422,5 @@ loops:
         step: Акт подписан без замечаний?
         actor: Сервисный круг — бухгалтер
         kind: decision
-        next: end
-        loop_to: s1
+        yes: end
+        no: s1

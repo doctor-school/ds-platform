@@ -22,6 +22,11 @@ import {
 } from "../../src/auth/sms-budget/sms-budget.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  describeTiming,
+  medianSpread,
+  sampleInterleaved,
+} from "../support/timing-oracle.js";
 
 // Passwordless login (EARS-6 email-OTP / EARS-7 SMS-OTP) and the SMS toll-fraud
 // budget (EARS-14). Both OTP variants are native Zitadel (`otp_email` / `otp_sms`)
@@ -409,13 +414,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await register(verified);
       await verify(verified);
 
-      const none = await requestLoginCode(nonexistent);
-      const unver = await requestLoginCode(unverified);
-      const ver = await requestLoginCode(verified);
+      // Round-robin samples per class (none, unverified, verified, …) after one
+      // discarded warm-up round; the band bounds the class MEDIANS so a lone
+      // scheduler spike on a shared runner cannot decide the verdict (#2591).
+      const timing = await sampleInterleaved(
+        [nonexistent, unverified, verified].map(
+          (identifier) => () => requestLoginCode(identifier),
+        ),
+      );
+      console.info(
+        `EARS-34/16 none/unverified/verified: ${describeTiming(timing)} ms`,
+      );
 
       // Identical status + body — the response discloses neither existence nor
       // verification state (EARS-16).
-      for (const r of [none, unver, ver]) {
+      for (const r of timing.flatMap((c) => c.results)) {
         expect(r.status).toBe(200);
         expect(r.body).toEqual({ status: "otp_sent" });
       }
@@ -424,11 +437,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // interceptor floors every branch, so the existing/unknown delta collapses
       // to jitter. Assert each response engaged the floor (≥ 30 ms, allowing
       // scheduling jitter below the 40 ms floor) and the spread stays in budget.
-      const spread =
-        Math.max(none.ms, unver.ms, ver.ms) -
-        Math.min(none.ms, unver.ms, ver.ms);
-      expect(spread).toBeLessThanOrEqual(50);
-      for (const r of [none, unver, ver])
+      expect(medianSpread(timing)).toBeLessThanOrEqual(50);
+      for (const r of timing.flatMap((c) => c.results))
         expect(r.ms).toBeGreaterThanOrEqual(30);
     });
   },

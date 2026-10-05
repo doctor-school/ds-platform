@@ -55,6 +55,7 @@
  */
 import { pathToFileURL } from "node:url";
 import { createDrizzle, eventRecordings, events, streamConfig } from "@ds/db";
+import { SEED_EVENT_KINDS } from "@ds/db/seed/golden";
 import { and, eq, isNull } from "drizzle-orm";
 
 const MINUTE = 60_000;
@@ -418,6 +419,10 @@ export async function seedEvents(): Promise<void> {
           partnerRef: spec.partnerRef,
           state: spec.state,
           origin: spec.origin ?? "platform",
+          // 012 EARS-26 / EARS-29 (#2509): the portal (Academy) stand fixtures — the
+          // all-formats «Встреча клуба» kind, audience `experts` (the Academy reads).
+          kindId: SEED_EVENT_KINDS.vstrechaKluba.id,
+          audience: "experts",
           liveAt,
           updatedAt: new Date(),
         })

@@ -38,6 +38,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 044 EARS-18 — V-11. The HTTP route over the roster read model:
@@ -341,8 +342,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state,
-            participation_format)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'offline')`,
+            participation_format, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'offline', ${eventClassificationSql()})`,
         [
           eventId,
           eventSlug,

@@ -19,6 +19,7 @@ import {
   type BackfillReport,
 } from "../../src/recordings/recordings-backfill.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-29 (#1892) - the platform-born recording backfill, over the REAL
 // stack: the Nest graph, the ordinary 014 commands, Postgres.
@@ -94,9 +95,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const slug = `rec-1892-${randomUUID()}`;
       const state = opts.state ?? "ended";
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, origin, live_at)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, origin, live_at, kind_id, audience)
          VALUES ($1, $2, $3, now() - interval '3 days', 90, $4, $5,
-                 CASE WHEN $6::boolean THEN now() - interval '3 days' ELSE NULL END)
+                 CASE WHEN $6::boolean THEN now() - interval '3 days' ELSE NULL END, ${eventClassificationSql()})
          RETURNING id`,
         [
           slug,

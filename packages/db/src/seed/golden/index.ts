@@ -17,6 +17,7 @@ export {
   golden,
   goldenUuid,
   isGoldenUuid,
+  SEED_EVENT_KINDS,
   type GoldenAccountKey,
   type GoldenCatalogue,
 } from "./ids.js";

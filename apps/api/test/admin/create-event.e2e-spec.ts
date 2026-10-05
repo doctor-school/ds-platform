@@ -23,6 +23,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification, eventClassificationSql } from "../setup/event-classification.js";
 
 // 007 EARS-1 — CreateEvent (POST /v1/admin/events) + EARS-8 authz. A
 // platform_admin creates an event in `draft` with the full field set; the МСК
@@ -141,6 +142,7 @@ describe.skipIf(
     title: "Актуальная терапия ХСН",
     school: "Кардиология сегодня",
     startsAtMsk: "2026-07-17T19:00",
+    ...eventClassification(),
     durationMin: 90,
     description: "Разбор клинических рекомендаций.",
     specialties: ["cardiology", "therapy"],
@@ -296,8 +298,8 @@ describe.skipIf(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            specialties, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, ${eventClassificationSql()})`,
         [
           event.id,
           `ears22-list-${index}-${stamp}`,

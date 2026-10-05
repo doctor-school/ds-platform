@@ -225,7 +225,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       refusePuts = true;
       const mp = multipartBody(
-        { kind: "media", title: "Проект с недоступным хранилищем" },
+        { kind: "media", defaultAudience: "doctors", title: "Проект с недоступным хранилищем" },
         await stillPng(),
       );
       const k = key();
@@ -326,6 +326,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: {
           kind: "school",
+          defaultAudience: "doctors",
           title: `Опубликованный проект ${Date.now()}`,
         },
       });
@@ -346,8 +347,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const exhaustedTitle = `Исчерпанная последовательность ${Date.now()}`;
       const exhaustedBase = taxonomySlugBase(exhaustedTitle, "project");
       const sequenceHolders = await pool.query<{ id: string }>(
-        `INSERT INTO projects (slug, kind, title)
-              SELECT unnest($1::text[]), 'school', $2
+        `INSERT INTO projects (slug, kind, title, default_audience)
+              SELECT unnest($1::text[]), 'school', $2, 'doctors'
            RETURNING id`,
         [
           Array.from({ length: TAXONOMY_SLUG_ATTEMPT_LIMIT }, (_, index) =>
@@ -376,7 +377,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
                 "content-type": "application/json",
                 "idempotency-key": key(),
               },
-              payload: { kind: "media", title: exhaustedTitle },
+              payload: { kind: "media", defaultAudience: "doctors", title: exhaustedTitle },
             }) as never,
         },
         {
@@ -524,8 +525,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         contentType: "image/webp",
       });
       const { rows: created } = await pool.query<{ id: string }>(
-        `INSERT INTO projects (slug, kind, title, cover_ref)
-         VALUES ($1, 'school', 'Живой проект', $2) RETURNING id`,
+        `INSERT INTO projects (slug, kind, title, cover_ref, default_audience)
+         VALUES ($1, 'school', 'Живой проект', $2, 'doctors') RETURNING id`,
         [`p-live-${randomUUID()}`, objectKey],
       );
       const projectId = created[0]!.id;
@@ -590,7 +591,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // locator must be cleared WITHOUT deleting the bytes — deleting them would
       // blank a live cover, the worst outcome this sweep could produce.
       const mp = multipartBody(
-        { kind: "school", title: `Проект со ссылкой ${Date.now()}` },
+        { kind: "school", defaultAudience: "doctors", title: `Проект со ссылкой ${Date.now()}` },
         await stillPng(),
       );
       const liveKey = key();
@@ -751,7 +752,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       refusePuts = true;
       const k = key();
       const mp = multipartBody(
-        { kind: "media", title: `Отказ хранилища ${Date.now()}` },
+        { kind: "media", defaultAudience: "doctors", title: `Отказ хранилища ${Date.now()}` },
         await stillPng(),
       );
       const res = await app.inject({
@@ -798,7 +799,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "content-type": "application/json",
           "idempotency-key": k,
         },
-        payload: { kind: "program", title: "Проект для истечения записи" },
+        payload: { kind: "program", defaultAudience: "doctors", title: "Проект для истечения записи" },
       });
       expect(res.statusCode).toBe(201);
       createdProjectIds.push((JSON.parse(res.payload) as { id: string }).id);
@@ -836,7 +837,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           "content-type": "application/json",
           "idempotency-key": k,
         },
-        payload: { kind: "program", title: "Проект для истечения записи" },
+        payload: { kind: "program", defaultAudience: "doctors", title: "Проект для истечения записи" },
       });
       expect(reuse.statusCode).toBe(409);
       expect(

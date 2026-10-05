@@ -15,6 +15,7 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 019 EARS-3 (#1518) — the day-grouped, specialty-targeted feed over REAL rows.
@@ -91,7 +92,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }) => {
       const id = randomUUID();
       await pool.query(
-        "INSERT INTO events (id, slug, title, school, starts_at, duration_min, state) VALUES ($1, $2, $3, $4, $5, 60, 'published')",
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql("doctors")})`,
         [
           id,
           `feed-${randomUUID()}`,
@@ -310,29 +311,28 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(extended.totalCount).toBeGreaterThan(first.totalCount);
     });
 
-    it("EARS-3.5: a card's own `kind` round-trips into `?kind=`, and a non-uuid `kind` is a 4xx, never a 500", async () => {
+    it("EARS-3.5: a card's own `kind.slug` round-trips into `?kind=`, and a malformed `kind` is a 4xx, never a 500", async () => {
       const feed = await readFeed({ specialtyCode: adjacentCarryingCode });
       const card = feed.days.flatMap((day) => day.items).at(0);
       expect(card).toBeDefined();
-      // The card's `kind` IS the facet vocabulary — feeding it back filters.
-      expect(card!.kind).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      );
-      expect(card!.kindTitle.length).toBeGreaterThan(0);
+      // The card's stored kind (012 event-kind dictionary, 019 amendment) IS the
+      // facet vocabulary — feeding its slug back filters.
+      expect(card!.kind.slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+      expect(card!.kind.title.length).toBeGreaterThan(0);
 
       const roundTripped = await readFeed({
         specialtyCode: adjacentCarryingCode,
-        query: `?kind=${card!.kind}`,
+        query: `?kind=${card!.kind.slug}`,
       });
       const roundTrippedIds = roundTripped.days.flatMap((day) =>
         day.items.map((item) => item.id),
       );
       expect(roundTrippedIds).toContain(card!.id);
 
-      // A hand-edited, non-uuid `kind` never reaches the uuid column.
+      // A hand-edited value outside the slug grammar is refused at the boundary.
       const rejected = await app.inject({
         method: "GET",
-        url: "/v1/storefront/doctor/events?kind=not-a-uuid",
+        url: "/v1/storefront/doctor/events?kind=Not_A_Slug",
       });
       expect(rejected.statusCode).toBeGreaterThanOrEqual(400);
       expect(rejected.statusCode).toBeLessThan(500);

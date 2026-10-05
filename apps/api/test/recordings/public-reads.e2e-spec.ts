@@ -30,6 +30,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-4 (#1341) — the PUBLIC read behind the post-live event page, over the
 // real stack. Two promises are under test here and they pull in opposite
@@ -117,9 +118,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO events
            (slug, title, school, description, starts_at, duration_min, state,
-            specialties, partner_ref, program_pdf_ref, recording_expected_by)
+            specialties, partner_ref, program_pdf_ref, recording_expected_by, kind_id, audience)
          VALUES ($1, $2, $3, $4, now() - interval '3 days', 90, $5,
-                 $6, $7, $8, $9)
+                 $6, $7, $8, $9, ${eventClassificationSql()})
          RETURNING id`,
         [
           slug,

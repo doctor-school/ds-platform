@@ -17,6 +17,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 describe.skipIf(!process.env.DATABASE_URL)(
   "014 EARS-11 public event archive",
@@ -38,8 +39,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
       await pool.query(
         `INSERT INTO events
-       (id, slug, title, school, starts_at, duration_min, description, specialties, state)
-       VALUES ($1,$2,$3,'Школа',$4,60,'Описание',ARRAY['Кардиология'],$5)`,
+       (id, slug, title, school, starts_at, duration_min, description, specialties, state, kind_id, audience)
+       VALUES ($1,$2,$3,'Школа',$4,60,'Описание',ARRAY['Кардиология'],$5, ${eventClassificationSql()})`,
         [id, slug, `Event ${state} ${hoursAgo}`, startsAt, state],
       );
       createdExpertIds.push(

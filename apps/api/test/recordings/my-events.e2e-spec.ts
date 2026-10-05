@@ -22,6 +22,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-9 (#1347) — «Мои события» over the FULL registration history, split
 // across exactly the two canvas tabs of 014-design §8.3: «Предстоящие» (default)
@@ -81,8 +82,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state, recording_expected_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            specialties, partner_ref, program_pdf_ref, state, recording_expected_by, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, ${eventClassificationSql()})`,
         [
           id,
           slug,

@@ -16,6 +16,7 @@ import { AppModule } from "../../src/app.module.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 019 EARS-12 (#1527) — the GUEST read path, over REAL rows.
@@ -83,7 +84,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const id = randomUUID();
       const slug = `guest-${randomUUID()}`;
       await pool.query(
-        "INSERT INTO events (id, slug, title, school, starts_at, duration_min, state) VALUES ($1, $2, $3, $4, $5, 60, 'published')",
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql("doctors")})`,
         [
           id,
           slug,

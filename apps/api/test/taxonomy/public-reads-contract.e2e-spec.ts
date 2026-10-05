@@ -15,6 +15,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 012 EARS-12 (#1294) — the CROSS-route public-read contract sweep.
 //
@@ -122,8 +123,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<{ id: string; slug: string }> {
       const slug = `e-1294-${randomUUID()}`;
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state)
-         VALUES ($1, $2, 'Кардиология', ${startsAtSql}, 90, $3) RETURNING id`,
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, kind_id, audience)
+         VALUES ($1, $2, 'Кардиология', ${startsAtSql}, 90, $3, ${eventClassificationSql()}) RETURNING id`,
         [slug, title, state],
       );
       createdEntities.events.push(rows[0]!.id);
@@ -139,6 +140,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         {
           slug: `p-1294-${randomUUID()}`,
           kind: "school",
+          default_audience: "doctors",
           title,
           description: "Описание проекта",
           ...lifecycleColumns(status),
@@ -447,6 +449,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ];
     const EVENT_SUMMARY_KEYS = [
       "id",
+      "kind",
       "school",
       "slug",
       "startsAt",

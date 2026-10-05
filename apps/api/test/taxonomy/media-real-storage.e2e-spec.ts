@@ -315,6 +315,7 @@ describe.skipIf(!hasLiveDependencies)(
         refColumn: "cover_ref",
         payload: {
           kind: "school",
+          defaultAudience: "doctors",
           title: `Real store project ${randomUUID().slice(0, 8)}`,
           description: "Real S3 acceptance fixture",
         },

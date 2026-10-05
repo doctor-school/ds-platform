@@ -178,6 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     function validPayload(overrides: Record<string, unknown> = {}) {
       return {
         kind: "school",
+        defaultAudience: "doctors",
         title: `Школа кардиологии ${Math.random().toString(36).slice(2, 8)}`,
         description: "Программа для практикующих кардиологов.",
         ...overrides,

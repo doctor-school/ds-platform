@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 012 EARS-6 (#1288) — the DB half of the event↔project relationship
 // (012-design §2, §3, §6). Talks to Postgres directly via pg.Pool (no Nest
@@ -48,8 +49,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertEvent(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min)
-         VALUES ($1, $2, 'Кардиология', now(), 90)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, kind_id, audience)
+         VALUES ($1, $2, 'Кардиология', now(), 90, ${eventClassificationSql()})
          RETURNING id`,
         [`e-1288-${randomUUID()}`, "ХСН 1288"],
       );
@@ -59,8 +60,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertProject(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO projects (slug, kind, title)
-         VALUES ($1, 'school', 'Школа 1288')
+        `INSERT INTO projects (slug, kind, title, default_audience)
+         VALUES ($1, 'school', 'Школа 1288', 'doctors')
          RETURNING id`,
         [`p-1288-${randomUUID()}`],
       );

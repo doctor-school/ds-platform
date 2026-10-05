@@ -40,6 +40,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const row = {
         slug: slug(),
         kind: "school",
+        // 012 EARS-30 (#2509): every project carries a default audience.
+        default_audience: "doctors",
         title: "Проект 1283",
         ...overrides,
       } as Record<string, unknown>;

@@ -29,6 +29,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /** The coarse congress role (044 EARS-17) whose reach this suite fences. */
 const REGISTRAR = "event-registrar";
@@ -439,10 +440,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state,
-            participation_format)
+            participation_format, kind_id, audience)
          VALUES ($1,$2,$3,'Конгресс','2026-11-20T09:00:00.000Z',480,
                  'Конгресс.', ARRAY['cardiology'], 'sponsor:congress', NULL,
-                 'published', 'offline')`,
+                 'published', 'offline', ${eventClassificationSql()})`,
         [id, slug, `Конгресс ${label}`],
       );
       createdEvents.push(id);

@@ -19,6 +19,7 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 019 EARS-4 (#1519) — `GET /v1/storefront/doctor/events/month`, the `MonthGrid`
@@ -103,7 +104,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }) => {
       const id = randomUUID();
       await pool.query(
-        "INSERT INTO events (id, slug, title, school, starts_at, duration_min, state) VALUES ($1, $2, $3, $4, $5, 60, $6)",
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, $6, ${eventClassificationSql("doctors")})`,
         [
           id,
           `month-${randomUUID()}`,

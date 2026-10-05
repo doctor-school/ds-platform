@@ -36,6 +36,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   type RateLimitThresholds,
 } from "../../src/auth/rate-limit/rate-limit.types.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 044 V-4 / V-22 — the abuse surface of the public congress intake.
@@ -280,8 +281,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql()})`,
         [
           eventId,
           `congress-captcha-${eventId.slice(0, 8)}`,

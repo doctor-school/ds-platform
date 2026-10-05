@@ -17,6 +17,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 012 EARS-10 (#1292) — the project↔partner relationship and the PRIMARY slot
 // over the REAL stack: Fastify + the 011 admin session + Postgres.
@@ -103,6 +104,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const row = {
         slug: `p-1292-${randomUUID()}`,
         kind: "school",
+        // 012 EARS-30 (#2509): every project carries a default audience.
+        default_audience: "doctors",
         title: `Школа ${Math.random().toString(36).slice(2, 8)}`,
         description: "Описание проекта",
         ...overrides,
@@ -160,8 +163,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
      */
     async function insertEvent(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state)
-         VALUES ($1, 'ХСН 1292', 'Кардиология', now(), 90, 'published')
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, kind_id, audience)
+         VALUES ($1, 'ХСН 1292', 'Кардиология', now(), 90, 'published', ${eventClassificationSql()})
          RETURNING id`,
         [`e-1292-${randomUUID()}`],
       );

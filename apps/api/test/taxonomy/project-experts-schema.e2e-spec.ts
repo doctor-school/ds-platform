@@ -54,8 +54,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function insertProject(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO projects (slug, kind, title)
-         VALUES ($1, 'school', 'Школа 1291') RETURNING id`,
+        `INSERT INTO projects (slug, kind, title, default_audience)
+         VALUES ($1, 'school', 'Школа 1291', 'doctors') RETURNING id`,
         [`p-1291-${randomUUID()}`],
       );
       createdProjects.push(rows[0]!.id);

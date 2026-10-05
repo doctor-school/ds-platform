@@ -6,6 +6,7 @@ import { auditContextStore } from "../../src/audit/audit-context.js";
 import { EventsRepository } from "../../src/events/events.repository.js";
 import { MeRepository } from "../../src/me/me.repository.js";
 import { RegistrationRepository } from "../../src/registration/registration.repository.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 010 — Universal edit audit, EARS-5 (Issue #1088): the API-path actor
 // guarantee, as a SWEEP over every authenticated mutating endpoint whose write
@@ -53,6 +54,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         school: "audit-sweep-e2e",
         startsAt: new Date(Date.now() + 86_400_000),
         durationMin: 60,
+        ...eventClassification(),
       };
     }
 

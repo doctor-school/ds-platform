@@ -36,6 +36,7 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 import { registerUniqueFakeUserFixture } from "../setup/fixture-registration.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 044 slices 2 and 3 — the public congress intake, both account paths.
@@ -157,8 +158,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql()})`,
         [
           eventId,
           `congress-${eventId.slice(0, 8)}`,

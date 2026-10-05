@@ -20,6 +20,7 @@ import {
 } from "../setup/rate-limit.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 import { deleteExpertFixtures } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-21 (#1608) — the ARCHIVED event's speaker block, over the real stack.
 //
@@ -70,9 +71,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO events
            (slug, title, school, starts_at, duration_min, description,
-            specialties, state, origin)
+            specialties, state, origin, kind_id, audience)
          VALUES ($1, $2, $3, now() - interval '14 days', 90, $4,
-                 $5, 'ended', 'platform')
+                 $5, 'ended', 'platform', ${eventClassificationSql()})
          RETURNING id`,
         [
           slug,

@@ -1,0 +1,400 @@
+# Состав стандартных продуктов и переменные калькулятора себестоимости (формулы: cost-model-ru.md).
+# Часы, круги и роли — в ../model/*.yaml; ставки — в ../rates/rates.yaml; FTE и оплачиваемые часы —
+# в ../model/teams.yaml. Здесь — только состав продукта (единица × количество), параметры драйверов,
+# период плана, резерв актуализации и внешние затраты. Внешние затраты без значения — null («не
+# задано»): калькулятор не считает их нулём и показывает флаг. Своя композиция — та же схема.
+
+# Какой лист — накладные (решение В8, effort-draft-ru.md «Как это попадает в себестоимость единицы»):
+# сначала роль, затем единица. Всё прочее — прямые часы единицы.
+classification:
+  overhead_role_prefixes: [Ядро, Сервисный круг]
+  overhead_units:
+    [
+      команда·месяц,
+      новая команда,
+      деление,
+      найм,
+      ревизия стандартов,
+      СОП,
+      отчётный период,
+      направление,
+    ]
+  reserve_units: [сигнал, затронутая единица]
+  basis: effort-draft-ru.md, «Как это попадает в себестоимость единицы»; решение В8
+
+# Переменные калькулятора: одно плоское пространство имён, правка — override `var:<имя>`.
+variables:
+  region:
+    draft: moscow
+    unit: ключ региона ставок (moscow | russia_remote) в ../rates/rates.yaml
+    basis: "оценка аналитика: значения по умолчанию rates-ru.md посчитаны по Москве; роль без медианы региона берёт Москву с флагом"
+  media_external_share:
+    draft: 0
+    unit: доля часов подролей медиа-круга во внешнем пуле подрядчиков
+    basis: "решение В3 — пики сверх обязательства уходят во внешний пул; долю задаёт владелец (rates-ru.md, «Форма привлечения»), по умолчанию — весь объём в штате"
+  contractor_form:
+    draft: null
+    unit: "форма договора подрядчика: npd_self_employed | ip | gph_individual | gph_individual_with_nsipz; null — по engagement роли"
+    basis: "../rates/rates.yaml variables.contractor_on_top_rate — по умолчанию самозанятый (0)"
+  teams:
+    draft: 1
+    unit: число команд направления в плане периода
+    basis: "оценка аналитика: одна команда направления (teams.yaml)"
+  plan_mix:
+    draft: курс
+    unit: продукт, которым команда загружена на полную мощность в плане по умолчанию
+    basis: "process-to-be-ru.md, «Сквозной поток»: команда направления выпускает курсы (уроки, подкасты, клубы); направление = сумма единиц плана (capacity-ru.md)"
+  market_entries_per_team_month:
+    draft: [0.0833, 0.1667]
+    unit: проходов A11 «выйти на рынок» на команду в месяц
+    basis: "оценка аналитика: один–два выхода направления к фарме в год по окнам бюджетного цикла (O-133)"
+  reporting_periods_per_month:
+    draft: 0.3333
+    unit: отчётных периодов в месяц (A54 выплаты, A654 калибровка)
+    basis: "оценка аналитика: отчётный период — квартал"
+  new_teams_per_month:
+    draft: 0
+    unit: открытий направления (A61) в месяц
+    basis: "capacity-ru.md: в месяце примера нет открытия и деления"
+  divisions_per_month:
+    draft: 0
+    unit: делений команды (A62) в месяц
+    basis: capacity-ru.md, пример
+  hires_per_month:
+    draft: 0
+    unit: наймов (A63) в месяц
+    basis: capacity-ru.md, пример
+  standards_revisions_per_month:
+    draft: 0
+    unit: ревизий стандартов (A651) в месяц
+    basis: capacity-ru.md, пример
+  sops_per_month:
+    draft: 0
+    unit: новых СОП (A652) в месяц
+    basis: capacity-ru.md, пример
+  signals_per_unit:
+    draft: [0.05, 0.2]
+    unit: сигналов неактуальности на единицу за срок договора (В6)
+    basis: "оценка аналитика без опоры в реестре — калибровать по потоку сигналов A44"
+  affected_share:
+    draft: [0.1, 0.3]
+    unit: доля единиц, затронутых за срок договора (В6)
+    basis: "оценка аналитика без опоры в реестре"
+  rebuild_share:
+    draft: [0.1, 0.3]
+    unit: доля часов линии единицы, которая повторяется при актуализации (В6)
+    basis: "оценка аналитика без опоры в реестре"
+
+# Ставка роли, которой в rates.yaml нет как часа штата, берётся у прокси — по proxy_role записи.
+rate_proxy:
+  "Медиа-круг — голос": "Медиа-круг — монтажёр"
+rate_proxy_basis: "rates.yaml, «Медиа-круг — голос», proxy_role: работа оператора синтеза — часовая стоимость монтажёра"
+
+# Листья периода и системы: сколько проходов в месяц даёт план. `per` — произведение переменных
+# (`teams` — число команд плана). Листья с единицей продукта сюда не входят — их объём задаёт план единиц.
+period_leaves:
+  - { leaf: A11, per: [teams, market_entries_per_team_month] }
+  - { leaf: A54, per: [reporting_periods_per_month] }
+  - { leaf: A61, per: [new_teams_per_month] }
+  - { leaf: A62, per: [divisions_per_month] }
+  - { leaf: A63, per: [hires_per_month] }
+  - { leaf: A641, per: [teams] }
+  - { leaf: A642, per: [teams] }
+  - { leaf: A643, per: [teams] }
+  - { leaf: A651, per: [standards_revisions_per_month] }
+  - { leaf: A652, per: [sops_per_month] }
+  - { leaf: A653, per: [teams] }
+  - { leaf: A654, per: [reporting_periods_per_month] }
+
+# Резерв актуализации единицы (В6): лист сигнала, листья затронутой единицы, линия пересборки.
+update_reserve:
+  signal_leaf: A44
+  affected_leaves: [A45, A46]
+  basis: effort-draft-ru.md, «Выпуск и сопровождение» — резерв единицы на срок договора
+
+# Внешние затраты: названы в модели, значений нет. rub — на одну единицу `per`; null — «не задано».
+externals:
+  ai_generation:
+    name: ИИ-генерация медкадров и анимации
+    per: урок
+    rub: null
+    basis: "model/A314.yaml, A3143: генерация — внешняя затрата"
+  voices_licences:
+    name: Голоса и лицензии синтеза речи
+    per: урок
+    rub: null
+    basis: "model/A314.yaml, A3145: голоса и лицензии (O-118, O-119) — внешняя затрата"
+  podcast_studio:
+    name: Студия записи подкаста
+    per: эпизод
+    rub: null
+    basis: "model/A32.yaml, A324: студия — внешняя затрата"
+  podcast_speaker_fee:
+    name: Гонорар спикера подкаста
+    per: эпизод
+    rub: null
+    basis: "model/A32.yaml, A324: часы спикера — гонорар (переменная)"
+  event_venue_broadcast:
+    name: Площадка и трансляция мероприятия
+    per: мероприятие
+    rub: null
+    basis: "model/A33.yaml, A334: площадка и трансляция — внешние затраты"
+  event_speaker_fees:
+    name: Гонорары спикеров и амбассадора мероприятия
+    per: мероприятие
+    rub: null
+    basis: "model/A33.yaml, A334: часы спикеров — гонорар (переменная); rates.yaml: ставки амбассадора и спикера — null"
+
+# Продукты. reserve_line — номер линии модели (префикс листьев), чьи прямые часы × доля пересборки
+# входят в резерв актуализации единицы (В6). items: { leaf, qty?, per? } — лист модели; { product, qty } — другой продукт. qty — число
+# или имя параметра продукта; per — список параметров-множителей (драйверы). Параметр: draft
+# (число, [min, max] или null), unit, basis. lead — срок: chain (цепочка листов: seq — сумма,
+# par — максимум) или pipeline (первые единицы подряд + такт узкого места на остальные).
+products:
+  урок:
+    name: Урок (≈ 45 мин)
+    basis: "process-to-be-ru.md, «Сквозной поток»: урок — сериал, микролернинги, материал для скачивания, запись подкаста, тесты; линия A31 и выпуск A41–A43"
+    reserve_line: A31
+    items:
+      - { leaf: A3111 }
+      - { leaf: A3112 }
+      - { leaf: A3113 }
+      - { leaf: A312 }
+      - { leaf: A3131 }
+      - { leaf: A3132 }
+      - { leaf: A3133 }
+      - { leaf: A3134 }
+      - { leaf: A3141 }
+      - { leaf: A3142 }
+      - { leaf: A3143 }
+      - { leaf: A3144 }
+      - { leaf: A3145 }
+      - { leaf: A3146 }
+      - { leaf: A315 }
+      - { leaf: A3161 }
+      - { leaf: A3162 }
+      - { leaf: A3163 }
+      - { leaf: A41 }
+      - { leaf: A42 }
+      - { leaf: A43 }
+    externals: [ai_generation, voices_licences]
+    lead:
+      chain:
+        seq:
+          - A3111
+          - A3112
+          - A3113
+          - A312
+          - A3131
+          - A3132
+          - A3133
+          - A3134
+          - par:
+              - seq:
+                  - A3141
+                  - par: [{ seq: [A3142, A3144] }, A3143, A3145]
+                  - A3146
+              - A315
+          - A3161
+          - A3162
+          - A3163
+      basis: capacity-ru.md, «Срок единицы» — от брифа эксперту до номера одобрения
+
+  эпизод подкаста:
+    name: Эпизод подкаста
+    basis: model/A32.yaml — линия A321–A325
+    reserve_line: A32
+    items:
+      - { leaf: A321 }
+      - { leaf: A322 }
+      - { leaf: A323 }
+      - { leaf: A324 }
+      - { leaf: A325 }
+    externals: [podcast_studio, podcast_speaker_fee]
+    lead:
+      chain: { seq: [A321, A322, A323, A324, A325] }
+      basis: capacity-ru.md, «Срок единицы»
+
+  вебинар:
+    name: Вебинар (онлайн-мероприятие)
+    basis: model/A33.yaml — линия A331–A336, онлайн
+    items:
+      - { leaf: A331 }
+      - { leaf: A332 }
+      - { leaf: A333 }
+      - { leaf: A334 }
+      - { leaf: A335 }
+      - { leaf: A336 }
+    externals: [event_venue_broadcast, event_speaker_fees]
+    lead:
+      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      basis: capacity-ru.md, «Срок единицы»
+
+  клуб:
+    name: Клуб модуля
+    basis: "process-to-be-ru.md, блок 4: клуб закрывает каждый модуль; capacity-ru.md считает клуб мероприятием A33 — онлайн-формат вебинара"
+    items:
+      - { leaf: A331 }
+      - { leaf: A332 }
+      - { leaf: A333 }
+      - { leaf: A334 }
+      - { leaf: A335 }
+      - { leaf: A336 }
+    externals: [event_venue_broadcast, event_speaker_fees]
+    lead:
+      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      basis: capacity-ru.md, «Срок единицы»
+
+  практическая школа:
+    name: Практическая школа (очная)
+    basis: "model/A33.yaml — та же линия через драйверы: тип мероприятия (онлайн / офлайн), длительность, число участников"
+    parameters:
+      офлайн:
+        draft: [1.5, 3]
+        unit: множитель часов очного мероприятия к онлайн (подготовка, площадка, участники)
+        basis: "оценка аналитика; драйверы A331, A334, A335 «онлайн / офлайн»"
+      дни:
+        draft: [1, 2]
+        unit: дней мероприятия
+        basis: "оценка аналитика; драйвер A334 «длительность»"
+    items:
+      - { leaf: A331, per: [офлайн] }
+      - { leaf: A332 }
+      - { leaf: A333 }
+      - { leaf: A334, per: [офлайн, дни] }
+      - { leaf: A335, per: [офлайн, дни] }
+      - { leaf: A336 }
+    externals: [event_venue_broadcast, event_speaker_fees]
+    lead:
+      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      basis: capacity-ru.md, «Срок единицы» (срок прохода листа не масштабируется драйвером)
+
+  конгресс:
+    name: Конгресс (очный, с секциями)
+    basis: "model/A33.yaml, A331: конгресс — множитель числа секций; драйверы A332–A336"
+    parameters:
+      офлайн:
+        draft: [1.5, 3]
+        unit: множитель часов очного мероприятия к онлайн
+        basis: "оценка аналитика; драйверы A331, A334, A335 «онлайн / офлайн»"
+      секции:
+        draft: [3, 8]
+        unit: секций конгресса
+        basis: "оценка аналитика; драйвер A331 «конгресс — множитель числа секций»"
+      дни:
+        draft: [1, 3]
+        unit: дней конгресса
+        basis: "оценка аналитика; драйвер A334 «длительность»"
+    items:
+      - { leaf: A331, per: [офлайн, секции] }
+      - { leaf: A332, per: [секции] }
+      - { leaf: A333, per: [секции] }
+      - { leaf: A334, per: [секции, дни] }
+      - { leaf: A335, per: [офлайн, дни] }
+      - { leaf: A336, per: [секции] }
+    externals: [event_venue_broadcast, event_speaker_fees]
+    lead:
+      chain: { seq: [A331, A332, A333, { par: [A334, A335] }, A336] }
+      basis: capacity-ru.md, «Срок единицы» (срок прохода листа не масштабируется драйвером)
+
+  проектирование курса:
+    name: Проектирование курса (A2)
+    basis: model/A2.yaml — листья на курс
+    items:
+      - { leaf: A21 }
+      - { leaf: A22 }
+      - { leaf: A23 }
+      - { leaf: A24 }
+      - { leaf: A25 }
+      - { leaf: A26 }
+    lead:
+      chain: { seq: [A21, A22, { par: [{ seq: [A23, A24] }, A25] }, A26] }
+      basis: capacity-ru.md, «Срок единицы» — A25 ветвится от A22 параллельно A23
+
+  сделка:
+    name: Работа по сделке (КП, договор, отчётные этапы, закрытие)
+    basis: "model/A1.yaml и A5.yaml — листья на запрос, КП, договор, отчётный этап; effort-draft-ru.md, «Отчёт и закрытие»"
+    parameters:
+      запросы:
+        draft: 1
+        unit: квалифицированных запросов A12 на один договор
+        basis: "оценка аналитика; отсечённые барьерными условиями запросы — калибровка"
+      этапы:
+        draft: [1, 3]
+        unit: отчётных этапов на договор
+        basis: "оценка аналитика; число этапов — из договора (effort-draft-ru.md)"
+    items:
+      - { leaf: A12, per: [запросы] }
+      - { leaf: A13 }
+      - { leaf: A14 }
+      - { leaf: A15 }
+      - { leaf: A16 }
+      - { leaf: A51, per: [этапы] }
+      - { leaf: A52, per: [этапы] }
+      - { leaf: A53, per: [этапы] }
+      - { leaf: A55 }
+      - { leaf: A56 }
+
+  модуль:
+    name: Модуль (6 уроков + клуб)
+    basis: "process-to-be-ru.md: модуль = 6 уроков + клуб; продаётся и отдельно (ОВ1) — со своей сделкой"
+    parameters:
+      сделки:
+        draft: 1
+        unit: сделок на модуль (1 — модуль продан отдельно)
+        basis: решение владельца ОВ1
+    items:
+      - { product: урок, qty: 6 }
+      - { product: клуб, qty: 1 }
+      - { product: сделка, qty: сделки }
+    lead:
+      pipeline: { first: [урок], stream: урок, count: 6, parallel: [клуб] }
+      basis: capacity-ru.md, «Как считаются остальные единицы» — срок первого урока + 5 × такт
+
+  курс:
+    name: Курс 36 ч (18 уроков, 18 эпизодов, 3 клуба)
+    basis: "process-to-be-ru.md, «Сквозной поток» и строка 95: курс 36 ч (O-040) — 3 модуля, 18 уроков, 18 подкастов, 3 клуба; проектирование A2 на курс"
+    parameters:
+      сделки:
+        draft: 1
+        unit: сделок на курс
+        basis: оценка аналитика — курс продаётся одним договором
+    items:
+      - { product: проектирование курса, qty: 1 }
+      - { product: урок, qty: 18 }
+      - { product: эпизод подкаста, qty: 18 }
+      - { product: клуб, qty: 3 }
+      - { product: сделка, qty: сделки }
+    lead:
+      pipeline:
+        {
+          first: [проектирование курса, урок],
+          stream: урок,
+          count: 18,
+          parallel: [клуб, эпизод подкаста],
+        }
+      basis: capacity-ru.md — срок A2 + срок первого урока + 17 × такт
+
+  специальность:
+    name: Специальность 144 ч (4 курса)
+    basis: "process-to-be-ru.md, «Сквозной поток»: специальность 144 ч = 4 курса по 36 ч"
+    parameters:
+      сделки:
+        draft: 1
+        unit: сделок на специальность
+        basis: оценка аналитика — специальность продаётся одним договором
+    items:
+      - { product: проектирование курса, qty: 4 }
+      - { product: урок, qty: 72 }
+      - { product: эпизод подкаста, qty: 72 }
+      - { product: клуб, qty: 12 }
+      - { product: сделка, qty: сделки }
+    lead:
+      pipeline:
+        {
+          first: [проектирование курса, урок],
+          stream: урок,
+          count: 72,
+          parallel: [клуб, эпизод подкаста],
+        }
+      basis: "capacity-ru.md: та же формула курса; проектирование следующих курсов идёт параллельно конвейеру уроков"

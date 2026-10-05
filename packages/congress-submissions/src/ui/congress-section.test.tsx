@@ -1458,9 +1458,11 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
       screen.getByRole("button", { name: "Да, отправить" }),
     );
     await screen.findByText(/^Заявка отправлена/);
+    // The deadline sits right after the take-back it dates.
     expect(
-      screen.getByText("Можно исправить до 15 января 2027"),
-    ).toBeInTheDocument();
+      screen.getByText("Можно исправить до 15 января 2027")
+        .previousElementSibling,
+    ).toHaveTextContent("Забрать на исправление");
     fetchMock.mockResolvedValueOnce(answer(abstractDraft));
     await userEvent.click(
       screen.getByRole("button", { name: "Забрать на исправление" }),

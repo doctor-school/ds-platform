@@ -511,26 +511,27 @@ export function SubmissionDetail({
             {detailActions.length ? (
               <div className="flex flex-wrap gap-x-6 gap-y-2.5">
                 {detailActions.map((a) => (
-                  <Link
-                    key={a.action}
-                    asChild
-                    tone={a.danger ? "danger" : "default"}
-                    size="sm"
-                  >
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => runAction(a)}
+                  <React.Fragment key={a.action}>
+                    <Link
+                      asChild
+                      tone={a.danger ? "danger" : "default"}
+                      size="sm"
                     >
-                      {a.label}
-                    </button>
-                  </Link>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => runAction(a)}
+                      >
+                        {a.label}
+                      </button>
+                    </Link>
+                    {a.action === "take-back" && takeBack ? (
+                      <span className="self-center text-caption text-muted-foreground">
+                        {takeBack}
+                      </span>
+                    ) : null}
+                  </React.Fragment>
                 ))}
-                {takeBack ? (
-                  <span className="self-center text-caption text-muted-foreground">
-                    {takeBack}
-                  </span>
-                ) : null}
               </div>
             ) : null}
 

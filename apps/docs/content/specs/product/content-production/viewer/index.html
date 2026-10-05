@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>IDEF0 — производство контента DS</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect x=%271%27 y=%271%27 width=%278%27 height=%276%27 fill=%27none%27 stroke=%27%231d1d1f%27 stroke-width=%271.5%27/%3E%3Crect x=%277%27 y=%279%27 width=%278%27 height=%276%27 fill=%27none%27 stroke=%27%231d1d1f%27 stroke-width=%271.5%27/%3E%3C/svg%3E"
+    />
     <!--
       Static IDEF0 viewer, no build. Serve the content-production folder over HTTP
       (file:// blocks fetch) and open /viewer/ — see ../README-ru.md «Просмотрщик».
@@ -16,7 +20,6 @@
           "react": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm",
           "react-dom/client": "https://cdn.jsdelivr.net/npm/react-dom@19.3.0/client/+esm",
           "@xyflow/react": "https://cdn.jsdelivr.net/npm/@xyflow/react@12.12.0/+esm",
-          "elkjs": "https://cdn.jsdelivr.net/npm/elkjs@0.12.0/lib/elk.bundled.js/+esm",
           "htm": "https://cdn.jsdelivr.net/npm/htm@3.1.1/+esm",
           "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.9.1/+esm",
           "https://cdn.jsdelivr.net/npm/react@%5E19.3.0/+esm": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm",
@@ -81,8 +84,7 @@
         border-bottom: 1px solid var(--frame);
         background: var(--panel);
       }
-      .crumbs button,
-      .tools button {
+      .crumbs button {
         font: inherit;
         color: var(--accent);
         background: none;
@@ -95,19 +97,6 @@
         color: var(--ink);
         font-weight: 600;
         cursor: default;
-      }
-      .tools {
-        margin-left: auto;
-        display: flex;
-        gap: 6px;
-      }
-      .tools button {
-        border-color: var(--frame);
-        color: var(--ink);
-      }
-      .tools button[aria-pressed="true"] {
-        background: var(--chip);
-        border-color: var(--accent);
       }
       main {
         display: grid;
@@ -178,7 +167,7 @@
       .code {
         position: absolute;
         font:
-          600 11px ui-monospace,
+          600 12px ui-monospace,
           Consolas,
           monospace;
         color: var(--muted);
@@ -205,7 +194,8 @@
       }
       .box .name {
         font-weight: 600;
-        font-size: 13px;
+        font-size: 15px;
+        line-height: 19px;
       }
       .box .num {
         position: absolute;
@@ -221,7 +211,7 @@
         left: 6px;
         bottom: 4px;
         right: 34px;
-        font-size: 10px;
+        font-size: 11px;
         color: var(--muted);
         text-align: left;
         white-space: nowrap;
@@ -245,9 +235,9 @@
       }
       .arrow-label {
         position: absolute;
-        font-size: 11px;
-        line-height: 13px;
-        padding: 1px 3px;
+        font-size: 13px;
+        line-height: 16px;
+        padding: 2px 4px;
         background: var(--label-bg);
         color: var(--ink);
         border-radius: 3px;
@@ -260,7 +250,7 @@
       }
       .react-flow__edge.active path.react-flow__edge-path {
         stroke: var(--hl) !important;
-        stroke-width: 2.5px !important;
+        stroke-width: 1.8px !important;
       }
       .legend {
         display: flex;

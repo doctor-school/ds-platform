@@ -1070,7 +1070,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And the congress event has the kind «Конгресс» and the audience doctors
     And an online event of a doctors-audience project has the kind «Вебинар»
     And an online event of an experts-audience project has the kind «Эфир»
-    And an event with no project has the audience doctors
+    And an event with no project has the audience its reviewed mapping row names, never one inferred by default
     And every existing event carries exactly one kind whose allowed formats include its format and exactly one audience
 
   @EARS-29 @failure

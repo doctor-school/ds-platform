@@ -39,19 +39,18 @@ pnpm worktree:teardown <M> --keep-branch
 ## Step 1 — base freshness (merge-when-green Step 1a)
 
 ```bash
-git fetch origin -q
-git merge-base --is-ancestor "$(git rev-parse origin/main)" \
-  "$(gh pr view <N> --json headRefOid -q .headRefOid)"
+pnpm land:freshness <N>
 echo "exit=$?"
 ```
 
-Branch on the exit code rather than `&& echo fresh || echo STALE` — that form reports an unknown SHA or a failed `gh` call as `STALE` and sends you rebasing over an error you never saw.
+Branch on the exit code, as its own statement outside any pipe or `&&` chain; the terminal `[land:freshness]` line carries the reason.
 
-- `0` → fresh; go to Step 2.
-- `1` → main advanced past the tested head; rebase in the throwaway detached worktree below, push with `--force-with-lease`, then go to Step 2 and run `pr:land` exactly once.
-- anything else → STOP, return `BLOCKED: freshness check errored (exit <code>): <last line>`.
+- `0` `fresh` → the head contains `origin/main`; go to Step 2.
+- `1` `merge-as-is` → main moved, but GitHub reports the PR MERGEABLE and main touched none of its files; the squash applies the PR diff on current `main` and CI on push to `main` is the safety net. Go to Step 2 without rebasing.
+- `2` `rebase` → CONFLICTING, or main changed files the PR also changes (listed); rebase in the throwaway detached worktree below, push with `--force-with-lease`, then go to Step 2 and run `pr:land` exactly once.
+- `3` `error` or anything else → STOP, return `BLOCKED: freshness check errored (exit <code>): <last line>`. An error is never treated as stale.
 
-Stale head — rebase in a throwaway detached worktree, outside the primary tree and independent of whether the branch is free:
+Rebase verdict — rebase in a throwaway detached worktree, outside the primary tree and independent of whether the branch is free:
 
 ```bash
 git worktree add --detach .claude/worktrees/land-<N> origin/<pr-branch>

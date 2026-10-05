@@ -6,7 +6,9 @@ status: In dev
 lang: en
 ---
 
-> Companion to [`019-requirements-en.md`](./019-requirements-en.md). Engineer-facing, EN-only per ADR-0006 §4. Composition source of truth is the one events-feed canvas of both storefronts — [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) with [`events-feed-month.dc.html`](../../../../../../design-source/events-feed-month.dc.html), switched by its `host` prop; `doctor-events.dc.html` is the Stage-A record whose doctor-only blocks that canvas absorbs, after which it is archived (LD-11). Where this document and the canvas disagree on geometry, the canvas wins, and where they disagree on behaviour, the requirements win.
+> Companion to [`019-requirements-en.md`](./019-requirements-en.md). Engineer-facing, EN-only per ADR-0006 §4. Composition source of truth is the one events-feed canvas of both storefronts — [`design-source/events-feed.dc.html`](../../../../../../design-source/events-feed.dc.html) (feed and month view) with its facet panel [`events-facets.dc.html`](../../../../../../design-source/events-facets.dc.html), switched by its `host` prop and approved by the owner on 2026-10-05; it absorbed the Stage-A record `doctor-events.dc.html` and `events-feed-month.dc.html`, both archived (LD-11). Where this document and the canvas disagree on geometry, the canvas wins, and where they disagree on behaviour, the requirements win.
+>
+> **Read under 019 «Amendment — 2026-10-05»** ([requirements](./019-requirements-en.md)): the dedicated calendar page `/events/calendar` (EARS-5) becomes the month view of the same page («Календарь на месяц →» / «← Лента событий»), the tense row «Прошедшие | Будущие» is rendered with «Будущие» the default, the facets sit in a left sticky column at ≥1024 px with the compact month, and the live block is capped at two strips; the topology, composition and build-sequence rows below that name the calendar page or the absent tense row read under it.
 
 # 019 — Design
 

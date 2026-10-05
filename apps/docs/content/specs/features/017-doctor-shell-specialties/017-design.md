@@ -8,7 +8,7 @@ lang: en
 
 > Requirements: [`017-requirements-en.md`](./017-requirements-en.md) · PRD: [`017-product.md`](./017-product.md) · Scenarios: [`017-scenarios.feature`](./017-scenarios.feature)
 >
-> Composition source of truth: `design-source/doctor-home.dc.html` (screen `#d-home`) for the home-page body, `design-source/ds-shell.dc.html` (`host=doctor`) for the shell, with the event card (`unit-event-card.dc.html`) and the compact month calendar (`events-feed-month.dc.html`) reused as-is.
+> Composition source of truth: `design-source/doctor-home.dc.html` (screen `#d-home`) for the home-page body, `design-source/ds-shell.dc.html` (`host=doctor`) for the shell, with the event card (`unit-event-card.dc.html`) and the compact month calendar (the compact month of `events-feed.dc.html` — the earlier `events-feed-month.dc.html` is archived) reused as-is.
 
 # 017 — Design
 

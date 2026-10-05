@@ -4,8 +4,8 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
 
 /**
  * 003 EARS-11 / EARS-12 — `academy.doctor.school/reset`, the Academy's
- * password-recovery surface: `/login` «Забыли пароль?», the confirmation step's
- * «Сбросить пароль» and the cabinet «Сменить пароль» (003 EARS-28) all hand
+ * password-recovery surface: `/login` «Забыли пароль?» and the cabinet
+ * «Сменить пароль» (003 EARS-28) both hand
  * off here.
  *
  * The route is a MOUNT, not a composition (#2027 wave 1, PR 1.8), the way

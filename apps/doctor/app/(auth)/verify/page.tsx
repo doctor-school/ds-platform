@@ -9,9 +9,11 @@ import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
  * route (`access: public`): the registration door hops here with `?email=` and
  * the arrival `returnTo`, exactly as it does on the Academy.
  *
- * The route is a MOUNT, not a composition: the card, the code form, the
- * resend, the co-equal «Войти» / «Сбросить пароль» way out, the held-password
- * sign-in with its 021 EARS-10 landing and the #675 signed-in guard are the ONE
+ * The route is a MOUNT, not a composition: the one code step (six cells, the
+ * resend, the «← Изменить почту» back link — 003 EARS-42), the submission of
+ * the held registration values WITH the code to this host's `api.verifyPath`
+ * whose accepted answer is the session (003 EARS-41), its 021 EARS-10 landing
+ * and the #675 signed-in guard are the ONE
  * confirmation step of `@ds/auth-flow/verify`. What stays here is what this
  * host STATES about itself: `DOCTOR_AUTH_FLOW`.
  *

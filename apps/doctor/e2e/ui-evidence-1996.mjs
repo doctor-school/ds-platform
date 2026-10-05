@@ -13,7 +13,7 @@
  *
  * It runs against the same upstream double the return-context tier boots
  * (`e2e/support/return-context-api.mjs`), because the header is resolved on the
- * SERVER from the `__Host-ds_session` cookie the replayed login sets — a
+ * SERVER from the `__Host-ds_session` cookie the accepted code sets — a
  * browser-level fixture could not produce it.
  *
  *   pnpm --filter @ds/doctor build

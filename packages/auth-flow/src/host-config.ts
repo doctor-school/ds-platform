@@ -260,7 +260,7 @@ export type AuthFlowLoginCopy = {
     readonly sendCode: string;
     /** The code step's heading per channel (003 EARS-42 «Проверьте почту / телефон»). */
     readonly verifyTitle: { readonly email: string; readonly sms: string };
-    /** Template with `{destination}` — the block masks; the door bolds it. */
+    /** Template with `{destination}` — the address exactly as typed (#2607); the door bolds it. */
     readonly sentTo: string;
     /** The code label per channel («Код из письма / из сообщения»). */
     readonly codeLabel: { readonly email: string; readonly sms: string };

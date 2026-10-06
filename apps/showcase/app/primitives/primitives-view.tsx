@@ -2216,7 +2216,7 @@ function WebinarCardSection() {
                   nmoLabel="НМО · 2 ЗЕТ"
                   freeLabel="бесплатно для врача"
                   pulCostLabel="120 Pul"
-                  signUpLabel="коллег записались"
+                  signUpLabel="Коллег записались"
                   seatsLeftLabel="мест осталось"
                   soldOutLabel="мест не осталось"
                   registeredLabel="Вы записаны"
@@ -2256,7 +2256,7 @@ function WebinarCardSection() {
                   title={variant.title}
                   speakers={[{ name: "Анна Соколова", org: "К.м.н." }]}
                   nmoLabel="НМО · 2 ЗЕТ"
-                  signUpLabel="коллег записались"
+                  signUpLabel="Коллег записались"
                   seatsLeftLabel="мест осталось"
                   soldOutLabel="мест не осталось"
                   registeredLabel="Вы записаны"

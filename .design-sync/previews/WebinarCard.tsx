@@ -45,7 +45,7 @@ export const DoctorFeed = () => (
       pulCost={120}
       pulCostLabel="120 Pul"
       signUpCount={128}
-      signUpLabel="коллег записались"
+      signUpLabel="Коллег записались"
       registered
       registeredLabel="Вы записаны"
     />
@@ -63,7 +63,7 @@ export const OfflineSoldOut = () => (
       city="Казань"
       nmoLabel="НМО · 6 ЗЕТ"
       signUpCount={240}
-      signUpLabel="коллег записались"
+      signUpLabel="Коллег записались"
       seatsLeft={0}
       seatsLeftLabel="мест осталось"
       soldOutLabel="мест не осталось"
@@ -90,7 +90,7 @@ const kindFormat = {
   ...feedBase,
   speakers: [{ name: 'Анна Соколова', org: 'К.м.н.' }],
   nmoLabel: 'НМО · 2 ЗЕТ',
-  signUpLabel: 'коллег записались',
+  signUpLabel: 'Коллег записались',
   seatsLeftLabel: 'мест осталось',
   soldOutLabel: 'мест не осталось',
 };

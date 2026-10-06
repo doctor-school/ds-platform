@@ -150,7 +150,7 @@ export interface WebinarCardProps extends Omit<
   freeLabel?: string;
   /** Colleagues signed up — rendered in EVERY card state (EARS-2 invariant). */
   signUpCount?: number;
-  /** Catalog noun phrase following the count, e.g. «коллег записались». */
+  /** Catalog label preceding the count after a colon, e.g. «Коллег записались» → «Коллег записались: 128». */
   signUpLabel?: string;
   /** Offline city — required by EARS-2 wherever an offline event is rendered. */
   city?: string;
@@ -438,8 +438,10 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
               ) : null}
               {typeof signUpCount === "number" ? (
                 <span data-signup-count="" className={CHIP_CLASS}>
-                  {signUpCount}
-                  {signUpLabel ? ` ${signUpLabel}` : null}
+                  {/* Label first, count after a colon («Коллег записались:
+                    128») — one wording for every number, so no Russian plural
+                    agreement is ever needed (#2617). */}
+                  {signUpLabel ? `${signUpLabel}: ${signUpCount}` : signUpCount}
                 </span>
               ) : null}
               {/* «мест не осталось» is the seat count reaching zero — the same

@@ -436,6 +436,17 @@ describe("<LoginCard>", () => {
     }
   });
 
+  it("003 EARS-42: the «new code» notice stays absent on the code step's first open under StrictMode", () => {
+    // Both storefronts run React StrictMode in development, which mounts every
+    // effect twice: the mount itself must never read as a resend.
+    render(
+      <React.StrictMode>
+        <Card sentIdentifier="doc@example.com" />
+      </React.StrictMode>,
+    );
+    expect(screen.queryByTestId("otp-resend-notice")).toBeNull();
+  });
+
   it("verifies through the host once the stage is open", async () => {
     const onVerify = vi.fn();
     setup({ sentIdentifier: "doc@example.com", onVerify });

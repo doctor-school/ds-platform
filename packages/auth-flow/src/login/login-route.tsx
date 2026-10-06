@@ -20,6 +20,7 @@ import {
 import { signedInLandingAction } from "../server/signed-in-landing";
 import { AuthShell } from "../shell";
 import { LoginDoor } from "./login-door";
+import { LOGIN_HANDOFF_PARAM, resolveHandoffRef } from "./login-handoff";
 import { returnContextSlots } from "./return-context-card";
 
 /** 003 EARS-43 — the search param that preselects the sign-in method. */
@@ -75,6 +76,13 @@ export async function LoginRoute({
   // 003 EARS-43 — independent of the return context: it decides only which tab
   // the card opens on, never where sign-in leads.
   const defaultMethod = resolveLoginMethod(params[LOGIN_METHOD_PARAM]);
+  // 003 EARS-44 — the Congress hand-off reference, redeemed only on the code
+  // entry and only when it has the reference's shape; anything else is never
+  // sent and the door falls back to the EARS-43 state.
+  const handoffRef =
+    defaultMethod === "otp"
+      ? resolveHandoffRef(params[LOGIN_HANDOFF_PARAM])
+      : null;
   // The guard reconstruction of the эфир arrival target — the ONE vocabulary,
   // resolved before any read, and the raw param never stands in for it.
   const safeTarget = resolveReturnTargetPath(returnTo);
@@ -130,7 +138,7 @@ export async function LoginRoute({
 
   const landsOnCarriedTarget = Boolean(
     landingTarget &&
-      (gateResolved || accountLanding || roomLanding || landOnlyLanding),
+    (gateResolved || accountLanding || roomLanding || landOnlyLanding),
   );
   const landing =
     landsOnCarriedTarget && landingTarget
@@ -173,6 +181,7 @@ export async function LoginRoute({
         returnTargetGone={eventGone}
         returnContextPlate={plate}
         defaultMethod={defaultMethod}
+        handoffRef={handoffRef}
       />
     </AuthShell>
   );

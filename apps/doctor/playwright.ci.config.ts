@@ -88,6 +88,10 @@ export default defineConfig({
     // `playwright.congress.config.ts`.
     "congress-submissions.spec.ts",
     "a11y/congress-axe.e2e.spec.ts",
+    // 003 EARS-44 (#2626): the hand-off reference is minted only by a REAL
+    // Congress sign-up and the code arrives through Mailpit, so the live
+    // journey rides `playwright.congress.config.ts`.
+    "login-handoff-live.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

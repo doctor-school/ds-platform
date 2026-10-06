@@ -722,14 +722,14 @@ function OtpVerifyForm({
   // #266: on a resend (nonce bump) clear the now-superseded typed code — the
   // behaviour the old `key={resendNonce}` remount gave incidentally, now explicit so
   // the block no longer has to be remounted to reset. Skips the initial mount (the
-  // field already defaults to ""); `resetField` is keyed only on the nonce.
-  const isInitialResend = React.useRef(true);
+  // field already defaults to ""); `resetField` is keyed only on the nonce. The
+  // nonce VALUE seen last is compared, not a first-run flag: StrictMode runs the
+  // mount effect twice, and a flag would read the second run as a resend.
+  const seenResendNonce = React.useRef(resendNonce);
   const [resent, setResent] = React.useState(false);
   React.useEffect(() => {
-    if (isInitialResend.current) {
-      isInitialResend.current = false;
-      return;
-    }
+    if (seenResendNonce.current === resendNonce) return;
+    seenResendNonce.current = resendNonce;
     verifyForm.resetField("code");
     setResent(true);
     // Keyed only on the resend signal — `verifyForm` is a stable useForm handle.

@@ -1,5 +1,7 @@
 import type {
   DoctorVerifyRequest,
+  LoginHandoffRequest,
+  LoginHandoffResponse,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
@@ -177,6 +179,18 @@ export function createAuthClient(api: AuthFlowApiConfig) {
         auth("login/otp/request"),
         body,
         captchaToken,
+      ),
+
+    /**
+     * 003 EARS-44 — redeem a Congress hand-off reference: a live one sends the
+     * account's code and names the address; every refused one answers
+     * `handoff_refused`. No captcha (passed on the sign-up form); an EARS-13
+     * limit throws the generic 429 like any code request.
+     */
+    redeemLoginHandoff: (body: LoginHandoffRequest) =>
+      postJson<LoginHandoffRequest, LoginHandoffResponse>(
+        auth("login/otp/handoff"),
+        body,
       ),
 
     /** 003 EARS-6/7 — exchange the one-time code for a session on this origin. */

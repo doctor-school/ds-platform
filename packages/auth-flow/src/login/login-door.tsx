@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -39,6 +39,7 @@ import { makeResolver } from "../form-resolver";
 import { AUTH_FLOW_CHANNELS, type AuthFlowHostConfig } from "../host-config";
 import { withReturnTarget } from "../return-target-href";
 import { LoginGlyph } from "./login-glyph";
+import { stripHandoffFromAddressBar } from "./login-handoff";
 import type { ReactNode } from "react";
 
 /**
@@ -112,6 +113,13 @@ export type LoginDoorProps = {
    * tab bar stays and the visitor can still switch. Absent ⇒ «Пароль».
    */
   defaultMethod?: LoginCardMethod;
+  /**
+   * 003 EARS-44 — the Congress hand-off reference the mount read from
+   * `?handoff=` (already shape-checked; absent or malformed ⇒ `null`). The door
+   * redeems it ONCE per page load: a live one opens straight on the code step
+   * for the returned address, a refused one leaves the EARS-43 state.
+   */
+  handoffRef?: string | null;
 };
 
 /** EARS-5 — the identifier box this host serves, plus the length-only password rule. */
@@ -224,7 +232,8 @@ function loginCardCopyOf(config: AuthFlowHostConfig): LoginCardCopy {
       sendCode: copy.otp.sendCode,
       verifyTitle: copy.otp.verifyTitle,
       // Canvas 394 — the typed destination stands bold inside the sentence.
-      sentTo: (destination) => withBoldDestination(copy.otp.sentTo, destination),
+      sentTo: (destination) =>
+        withBoldDestination(copy.otp.sentTo, destination),
       codeLabel: copy.otp.codeLabel,
       verifySubmit: copy.otp.verifySubmit,
       resend: copy.otp.resend,
@@ -246,6 +255,7 @@ export function LoginDoor({
   returnTargetGone = false,
   returnContextPlate,
   defaultMethod = "password",
+  handoffRef = null,
 }: LoginDoorProps) {
   const router = useRouter();
   const { errors, login } = resolveAuthFlowCopy(config);
@@ -420,6 +430,36 @@ export function LoginDoor({
     }
   }
 
+  // ---- 003 EARS-44 Congress hand-off -----------------------------------------
+  // The reference sent the code itself (no captcha: that was passed on the
+  // sign-up form), so a live answer flips the stage exactly as a successful
+  // request does; resend and «← Изменить способ» then run their usual paths.
+  // A refused reference changes nothing — the card already stands on «По коду»
+  // with an empty field; an EARS-13 refusal shows the request's own sentence.
+  // The ref guard keeps it to ONE call per page load, StrictMode included.
+  const [handoffPending, setHandoffPending] = useState(false);
+  const handoffRedeemed = useRef(false);
+  useEffect(() => {
+    // Right after reading it, whatever happens next: a reload must not redeem
+    // again and the reference must not stay in history.
+    stripHandoffFromAddressBar();
+    if (!handoffRef || handoffRedeemed.current) return;
+    handoffRedeemed.current = true;
+    setHandoffPending(true);
+    authClient
+      .redeemLoginHandoff({ ref: handoffRef })
+      .then((answer) => {
+        if (answer.status !== "otp_sent") return;
+        setSentIdentifier(answer.identifier);
+        setResendNonce(0);
+      })
+      .catch((err: unknown) =>
+        setOtpRequestError(authErrorMessage(err, errors, failed.otpRequest)),
+      )
+      .finally(() => setHandoffPending(false));
+    // Once per page load by design: the reference is read at mount only.
+  }, []);
+
   function resetOtpStage() {
     setSentIdentifier(null);
     setOtpRequestError(null);
@@ -515,7 +555,7 @@ export function LoginDoor({
           resendNonce,
           error: otpCaptchaError ?? otpRequestError,
           screenError: otpCaptchaError ?? otpRequestError ?? otpVerifyError,
-          pending: otpCaptcha.pending,
+          pending: otpCaptcha.pending || handoffPending,
           captchaSlot: captchaSlot(otpCaptcha.fieldProps),
           onRequest: onOtpRequest,
           onResend: onOtpResend,

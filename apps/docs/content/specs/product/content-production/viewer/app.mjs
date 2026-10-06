@@ -674,7 +674,7 @@ function layoutDiagram(diagram) {
       };
     }
     labels.push(best.r);
-    edge.label = { text: best.block.text, ...best.r };
+    edge.label = { text: best.block.text, x: best.r.x, y: best.r.y };
   }
 
   // 6. React Flow nodes and edges. Every edge runs frame → frame through two hidden handles: the
@@ -718,7 +718,6 @@ function layoutDiagram(diagram) {
     width: frameW,
     height: frameH,
     bounds,
-    boxRects,
     nodes,
     edges: edges.map((e) => ({
       id: e.id,

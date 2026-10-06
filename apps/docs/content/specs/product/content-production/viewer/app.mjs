@@ -1,5 +1,5 @@
 // IDEF0 viewer for the DS content-production model (../model/index.yaml + diagram YAMLs; format: ../model/FORMAT-ru.md).
-/* global document, location, addEventListener, removeEventListener -- a browser module, served as is */
+/* global document, location, addEventListener, removeEventListener, localStorage, matchMedia, DOMRect -- a browser module, served as is */
 // React Flow renders; the layout below is the IDEF0 staircase: boxes A1 … An on a diagonal from
 // top-left to bottom-right in number order, ICOM sides fixed (I = west, C = north, O = east,
 // M = south), arrows routed orthogonally by IDEF0 convention, labels placed where they cross
@@ -21,11 +21,13 @@ import {
 } from "@xyflow/react";
 import htm from "htm";
 import { parse as parseYaml } from "yaml";
+import { loadKnowledge } from "./registry.mjs";
 
 // Lowest zoom at which box names and arrow labels stay legible; the initial view never goes below it.
 const READABLE_ZOOM = 0.65;
 const html = htm.bind(React.createElement);
-const { useEffect, useMemo, useState, useCallback } = React;
+const { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } =
+  React;
 
 const KIND_NAME = { I: "вход", C: "управление", O: "выход", M: "механизм" };
 
@@ -41,6 +43,24 @@ const U = {
   pad: 16,
 };
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+// Box title width: the narrowest width (step 10 px) at which the title takes ≤ 2 lines, else ≤ 3.
+const TITLE_MIN = 170;
+const TITLE_TWO_LINES_MAX = 300;
+const TITLE_MAX = 360;
+// Least horizontal step between neighbouring boxes of the staircase.
+const STEP_X = 120;
+const WEST_MARGIN = 230;
+function titleWidth(name) {
+  for (const maxLines of [2, 3])
+    for (
+      let w = TITLE_MIN;
+      w <= (maxLines === 2 ? TITLE_TWO_LINES_MAX : TITLE_MAX);
+      w += 10
+    )
+      if (wrapTo(name, w - 22, U.title, 600).length <= maxLines) return w;
+  return TITLE_MAX;
+}
 
 const asList = (end) => (Array.isArray(end) ? end : end ? [end] : []);
 const codeNumber = (code) => Number(String(code).slice(1)) || 0;
@@ -305,7 +325,10 @@ function layoutDiagram(diagram) {
     (l) => l.down.length + l.up.length + l.mech.length,
   );
 
-  // 3. Box sizes (title measured in its rendered font) and staircase positions.
+  // 3. Box sizes (title measured in its rendered font) and staircase positions. Diagrams may be
+  // wider than tall: a box is widened until its title takes ≤ 2 lines (≤ 3 for long titles), and
+  // the staircase steps further right than down, which also leaves room for labels on the
+  // horizontal runs between boxes.
   const margin = single ? 300 : 130;
   const sized = boxes.map((box) => {
     const s = sides.get(box.id);
@@ -316,7 +339,7 @@ function layoutDiagram(diagram) {
         .map((w) => textWidth(w, U.title, 600)),
     );
     const width = Math.max(
-      single ? 340 : 120,
+      single ? 340 : titleWidth(box.name),
       Math.ceil(longestWord) + 26,
       (Math.max(s.C.length, s.M.length) + 1) * (single ? 34 : 15),
     );
@@ -329,11 +352,12 @@ function layoutDiagram(diagram) {
     return { box, width, height };
   });
   const topBand = (single ? 170 : 130) + top.length * U.lane;
-  let x = margin + nLeft[0] * U.lane;
+  // The west margin carries the boundary-input labels: wide enough for two-line labels.
+  let x = (single ? margin : WEST_MARGIN) + nLeft[0] * U.lane;
   let y = topBand;
   const placed = sized.map((s, i) => {
     if (i) {
-      x += Math.max(40, 2 * U.pad + (nXr[i - 1] + nLeft[i]) * U.lane);
+      x += Math.max(STEP_X, 2 * U.pad + (nXr[i - 1] + nLeft[i]) * U.lane + 48);
       y += Math.max(50, U.pad + under[i - 1].length * U.lane + 34);
     }
     const p = { ...s, x, y };
@@ -528,7 +552,7 @@ function layoutDiagram(diagram) {
         1,
       );
     }).length;
-  const widths = single ? [280, 200, 140] : [240, 170, 120];
+  const widths = single ? [320, 240, 160] : [300, 220, 160];
   // Shortest paths first: they have the fewest spots, long ones can still move along.
   const pathLength = (e) =>
     e.points
@@ -560,7 +584,8 @@ function layoutDiagram(diagram) {
         overlap * 1000 +
         crossings(r) * 40 +
         (walkedSoFar + spot.d) * 0.05 +
-        block.lines * 6;
+        // An extra line costs about half a crossing: a wide one- or two-line label wins where it fits.
+        block.lines * 20;
       if (!best || cost < best.cost) best = { cost, r, block };
     };
     let walked = 0;
@@ -762,10 +787,34 @@ function BoxNode({ data }) {
   </div>`;
 }
 
+// Bend radius of an arrow: straight runs stay orthogonal (IDEF0), only the corners are rounded.
+const BEND_RADIUS = 7;
+
+/** SVG path through orthogonal points with every bend drawn as a quarter arc; the radius shrinks
+ * to half the shorter adjacent run, so two close bends never overlap. */
+function roundedPath(points, radius = BEND_RADIUS) {
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [a, b, c] = [points[i - 1], points[i], points[i + 1]];
+    const inLen = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+    const outLen = Math.abs(c.x - b.x) + Math.abs(c.y - b.y);
+    const r = Math.min(radius, inLen / 2, outLen / 2);
+    const ux = Math.sign(b.x - a.x);
+    const uy = Math.sign(b.y - a.y);
+    const vx = Math.sign(c.x - b.x);
+    const vy = Math.sign(c.y - b.y);
+    // y grows downwards: a positive cross product is a clockwise turn, SVG sweep-flag 1.
+    const sweep = ux * vy - uy * vx > 0 ? 1 : 0;
+    d += ` L ${b.x - ux * r} ${b.y - uy * r} A ${r} ${r} 0 0 ${sweep} ${b.x + vx * r} ${b.y + vy * r}`;
+  }
+  const end = points[points.length - 1];
+  return `${d} L ${end.x} ${end.y}`;
+}
+
 function IdefEdge({ id, data, markerEnd }) {
   const points = data.points;
   if (!points.length) return null;
-  const path = points.map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`).join(" ");
+  const path = roundedPath(points);
   const color = `var(--${data.kind.toLowerCase()})`;
   return html`<${React.Fragment}>
     <${BaseEdge}
@@ -779,10 +828,10 @@ function IdefEdge({ id, data, markerEnd }) {
       data.label
         ? html`<${EdgeLabelRenderer}>
             <div
-              class=${"arrow-label nodrag nopan" + (data.active ? " active" : "")}
-              style=${{ transform: `translate(${data.label.x}px, ${data.label.y}px)`, borderLeft: `3px solid ${color}` }}
+              class=${"arrow-label nodrag nopan" + (data.active ? " active" : data.lit ? " lit" : data.dim ? " dim" : "")}
+              style=${{ transform: `translate(${data.label.x}px, ${data.label.y}px)`, borderLeft: `3px solid ${color}`, outlineColor: data.lit ? color : undefined }}
               onClick=${() => data.onSelect?.(data.arrow.id)}
-              onMouseEnter=${() => data.onHover?.(data.arrow.id)}
+              onMouseEnter=${(event) => data.onHover?.(data.arrow.id, event.currentTarget.getBoundingClientRect())}
               onMouseLeave=${() => data.onHover?.(null)}
             >
               ${data.label.text}
@@ -796,15 +845,267 @@ function IdefEdge({ id, data, markerEnd }) {
 const nodeTypes = { frame: FrameNode, box: BoxNode };
 const edgeTypes = { idef: IdefEdge };
 
-// ---------- Side panel ----------
+// ---------- Explanations: registry names and definitions, TO-BE fate ----------
 
-/** Registry IDs as chips: the viewer reads only the model YAML, which carries IDs, not names. */
-function Ids({ ids }) {
-  if (!ids?.length) return html`<p class="muted">—</p>`;
-  return html`<div class="ids">
-    ${ids.map((id) => html`<span key=${id} class="id">${id}</span>`)}
+const blockRef = (knowledge, n) =>
+  knowledge?.blocks.has(n)
+    ? `блок ${n} «${knowledge.blocks.get(n)}»`
+    : `блок ${n}`;
+const missing = (knowledge) =>
+  knowledge ? "нет в реестре" : "реестр не загружен — только ID";
+
+/** One F-ID in plain words: the registry name, then the TO-BE step it became (or why it left). */
+function FunctionLine({ knowledge, id }) {
+  const f = knowledge?.functions.get(id);
+  if (!f)
+    return html`<li class="xp">
+      <div class="xp-name">${id}</div>
+      <div class="xp-id">${missing(knowledge)}</div>
+    </li>`;
+  const out = knowledge.outOfScope.get(id);
+  const steps = knowledge.steps.get(id) ?? [];
+  const cluster = f.cluster
+    ? ` · ${f.cluster} ${knowledge.clusters.get(f.cluster) ?? ""}`
+    : "";
+  return html`<li class="xp">
+    <div class="xp-name">${f.name}</div>
+    ${
+      out
+        ? html`<div class="xp-fate">Не входит в TO-BE: ${out.reason}</div>`
+        : steps.map(
+            (step, i) =>
+              html`<div class="xp-def" key=${i}>
+                <b>В TO-BE (блок ${step.block}):</b> ${step.text}
+              </div>`,
+          )
+    }
+    <div class="xp-id">${id}${cluster}</div>
+  </li>`;
+}
+
+/** One O-ID in plain words: name, definition, and what TO-BE or the registry made of it. */
+function ObjectLine({ knowledge, id }) {
+  const o = knowledge?.objects.get(id);
+  if (!o)
+    return html`<li class="xp">
+      <div class="xp-name">${id}</div>
+      <div class="xp-id">${missing(knowledge)}</div>
+    </li>`;
+  const out = knowledge.outOfScope.get(id);
+  const regFate = /^(объединён|исключён)/.test(o.status) ? o.status : "";
+  return html`<li class="xp">
+    <div class="xp-name">${o.name}</div>
+    ${
+      out
+        ? html`<div class="xp-fate">Не входит в TO-BE: ${out.reason}</div>`
+        : regFate
+          ? html`<div class="xp-fate">
+              Реестр: ${regFate}${o.decision ? ` — ${o.decision}` : ""}
+            </div>`
+          : null
+    }
+    ${
+      o.definition
+        ? html`<div class="xp-def">
+            ${out || regFate ? html`<b>Определение реестра (до TO-BE):</b> ` : null}${o.definition}
+          </div>`
+        : null
+    }
+    <div class="xp-id">${id}${o.type ? ` · ${o.type}` : ""}</div>
+  </li>`;
+}
+
+const endName = (e) =>
+  e.boundary ? `граница ${e.boundary}` : `${e.box}.${e.side ?? "O"}`;
+
+/** Arrows of a box: every arrow with the box at one of its ends (its I, C, O and M). */
+function arrowsOfBox(diagram, boxId) {
+  const touches = (end) => asList(end).some((e) => e.box === boxId);
+  return (diagram.arrows ?? []).filter((a) => touches(a.from) || touches(a.to));
+}
+
+/** What a box or an arrow means; `limit` cuts the registry list (the hover card), null = all. */
+function Explanation({
+  diagram,
+  focus,
+  knowledge,
+  limit = null,
+  onOpen,
+  hasChild,
+}) {
+  if (focus.type === "box") {
+    const box = diagram.boxes.find((b) => b.id === focus.id);
+    if (!box) return null;
+    const functions = box.functions ?? [];
+    const shown = limit === null ? functions : functions.slice(0, limit);
+    return html`<div>
+      <h2>${box.id} — ${box.name}</h2>
+      ${
+        box.process_blocks?.length
+          ? html`<p class="muted">
+              ${`Процесс TO-BE: ${box.process_blocks.map((n) => blockRef(knowledge, n)).join(", ")}`}
+            </p>`
+          : null
+      }
+      ${hasChild?.(box.id) ? html`<p><button onClick=${() => onOpen(box.id)}>Открыть декомпозицию ${box.id}</button></p>` : null}
+      ${box.note ? html`<p>${box.note}</p>` : null}
+      ${box.effort && limit === null ? html`<${Effort} effort=${box.effort} />` : null}
+      <h3>Механизмы — роли</h3>
+      <ul>
+        ${(box.mechanisms ?? []).map((m) => html`<li key=${m}>${m}</li>`)}
+      </ul>
+      <h3>Функции реестра (${functions.length})</h3>
+      <ul class="xp-list">
+        ${shown.map((id) => html`<${FunctionLine} key=${id} knowledge=${knowledge} id=${id} />`)}
+      </ul>
+      ${shown.length < functions.length ? html`<p class="muted more">… ещё ${functions.length - shown.length} — полностью в панели справа</p>` : null}
+    </div>`;
+  }
+  const arrow = diagram.arrows.find((a) => a.id === focus.id);
+  if (!arrow) return null;
+  const objects = arrow.objects ?? [];
+  const shown = limit === null ? objects : objects.slice(0, limit);
+  return html`<div>
+    <h2>${arrow.label}</h2>
+    <p class="muted">
+      ${`${arrow.id} · ${KIND_NAME[arrowKind(arrow)]} · ${asList(arrow.from).map(endName).join(", ")} → ${asList(arrow.to).map(endName).join(", ")}`}
+    </p>
+    <h3>Объекты реестра (${objects.length})</h3>
+    <ul class="xp-list">
+      ${shown.map((id) => html`<${ObjectLine} key=${id} knowledge=${knowledge} id=${id} />`)}
+    </ul>
+    ${shown.length < objects.length ? html`<p class="muted more">… ещё ${objects.length - shown.length} — полностью в панели справа</p>` : null}
   </div>`;
 }
+
+// Hover card: beside the hovered element (right, left, below, above — the first side where the
+// whole card fits), never over it. Where no side fits the whole card, it narrows into the largest
+// free side; a card taller than its room has its list cut, the panel shows the rest.
+const CARD_GAP = 12;
+const CARD_EDGE = 8;
+const CARD_WIDTH = 400;
+const CARD_MIN = { width: 200, height: 120 };
+
+function HoverCard({ diagram, focus, anchor, knowledge }) {
+  const ref = useRef(null);
+  const [limit, setLimit] = useState(null);
+  const [region, setRegion] = useState(null);
+  const [place, setPlace] = useState(null);
+  useLayoutEffect(() => {
+    const card = ref.current;
+    if (!card) return;
+    const c = card.parentElement.getBoundingClientRect();
+    const room = region ?? {
+      left: CARD_EDGE,
+      top: CARD_EDGE,
+      width: c.width - 2 * CARD_EDGE,
+      height: c.height - 2 * CARD_EDGE,
+    };
+    const own = card.getBoundingClientRect();
+    if (limit === null && own.height > room.height) {
+      // Keep the items that end above the room left for the «… ещё N» line.
+      const items = [...card.querySelectorAll(".xp-list > li")];
+      const fit = items.filter(
+        (li) => li.getBoundingClientRect().bottom - own.top <= room.height - 40,
+      ).length;
+      setLimit(Math.max(1, fit));
+      return;
+    }
+    const w = own.width;
+    const h = own.height;
+    const a = {
+      left: anchor.left - c.left,
+      right: anchor.right - c.left,
+      top: anchor.top - c.top,
+      bottom: anchor.bottom - c.top,
+    };
+    const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+    if (region) {
+      const leftOf = region.left + region.width <= a.left;
+      const above = region.top + region.height <= a.top;
+      const sideways = region.height > region.width || leftOf;
+      setPlace(
+        sideways
+          ? {
+              left: leftOf ? region.left + region.width - w : region.left,
+              top: clamp(a.top, region.top, region.top + region.height - h),
+            }
+          : {
+              left: clamp(a.left, region.left, region.left + region.width - w),
+              top: above ? region.top + region.height - h : region.top,
+            },
+      );
+      return;
+    }
+    const maxX = c.width - CARD_EDGE;
+    const maxY = c.height - CARD_EDGE;
+    const atY = clamp(a.top, CARD_EDGE, maxY - h);
+    const atX = clamp(a.left, CARD_EDGE, maxX - w);
+    const fitting = [
+      a.right + CARD_GAP + w <= maxX && { left: a.right + CARD_GAP, top: atY },
+      a.left - CARD_GAP - w >= CARD_EDGE && {
+        left: a.left - CARD_GAP - w,
+        top: atY,
+      },
+      a.bottom + CARD_GAP + h <= maxY && {
+        left: atX,
+        top: a.bottom + CARD_GAP,
+      },
+      a.top - CARD_GAP - h >= CARD_EDGE && {
+        left: atX,
+        top: a.top - CARD_GAP - h,
+      },
+    ].find(Boolean);
+    if (fitting) {
+      setPlace(fitting);
+      return;
+    }
+    const full = { top: CARD_EDGE, height: c.height - 2 * CARD_EDGE };
+    const across = { left: CARD_EDGE, width: c.width - 2 * CARD_EDGE };
+    const sides = [
+      { ...full, left: a.right + CARD_GAP, width: maxX - a.right - CARD_GAP },
+      { ...full, left: CARD_EDGE, width: a.left - CARD_GAP - CARD_EDGE },
+      {
+        ...across,
+        top: a.bottom + CARD_GAP,
+        height: maxY - a.bottom - CARD_GAP,
+      },
+      { ...across, top: CARD_EDGE, height: a.top - CARD_GAP - CARD_EDGE },
+    ].filter((r) => r.width >= CARD_MIN.width && r.height >= CARD_MIN.height);
+    if (sides.length) {
+      const widest = sides.reduce((x, y) =>
+        Math.min(y.width, CARD_WIDTH) * y.height >
+        Math.min(x.width, CARD_WIDTH) * x.height
+          ? y
+          : x,
+      );
+      setRegion(widest);
+      setLimit(null);
+      return;
+    }
+    // The element fills the canvas on every side: the card has to overlap it.
+    setPlace({
+      left: clamp(a.right + CARD_GAP, CARD_EDGE, maxX - w),
+      top: atY,
+    });
+  }, [limit, anchor, region]);
+  const width = Math.min(CARD_WIDTH, region?.width ?? CARD_WIDTH);
+  return html`<div
+    ref=${ref}
+    class="hover-card"
+    role="tooltip"
+    style=${place ? { ...place, width } : { left: 0, top: 0, width, visibility: "hidden" }}
+  >
+    <${Explanation}
+      diagram=${diagram}
+      focus=${focus}
+      knowledge=${knowledge}
+      limit=${limit ?? Infinity}
+    />
+  </div>`;
+}
+
+// ---------- Side panel ----------
 
 /** Draft effort of a leaf (model/FORMAT-ru.md «Лист и черновая трудоёмкость»). */
 function Effort({ effort }) {
@@ -823,16 +1124,26 @@ function Effort({ effort }) {
   </div>`;
 }
 
-function Details({ diagram, focus, hasChild, onOpen }) {
+function Details({
+  diagram,
+  focus,
+  knowledge,
+  knowledgeError,
+  hasChild,
+  onOpen,
+}) {
   if (!focus) {
     return html`<div>
       <h2>${diagram.id} — ${diagram.title}</h2>
       ${diagram.purpose ? html`<p>${diagram.purpose}</p>` : null}
       ${diagram.viewpoint ? html`<p><b>Точка зрения:</b> ${diagram.viewpoint}</p>` : null}
       <p class="muted">
-        Щелчок или наведение на блок или стрелку — её ID реестра. Двойной щелчок
-        по блоку с ▼ — декомпозиция.
+        Наведение на блок или стрелку — пояснение: названия и определения из
+        реестра и что с ними стало в TO-BE; наведение на блок подсвечивает его
+        стрелки. Щелчок закрепляет пояснение здесь. Двойной щелчок по блоку с ▼
+        — декомпозиция.
       </p>
+      ${knowledgeError ? html`<p class="err">Пояснения недоступны: ${knowledgeError}</p>` : null}
       <div class="legend">
         <span><b style=${{ background: "var(--i)" }}></b>вход</span>
         <span><b style=${{ background: "var(--c)" }}></b>управление</span>
@@ -841,46 +1152,36 @@ function Details({ diagram, focus, hasChild, onOpen }) {
       </div>
     </div>`;
   }
-  if (focus.type === "box") {
-    const box = diagram.boxes.find((b) => b.id === focus.id);
-    if (!box) return null;
-    return html`<div>
-      <h2>${box.id} — ${box.name}</h2>
-      ${hasChild(box.id) ? html`<p><button onClick=${() => onOpen(box.id)}>Открыть декомпозицию ${box.id}</button></p>` : null}
-      ${box.note ? html`<p>${box.note}</p>` : null}
-      ${box.effort ? html`<${Effort} effort=${box.effort} />` : null}
-      <h3>Функции реестра (${(box.functions ?? []).length})</h3>
-      <${Ids} ids=${box.functions} />
-      <h3>Механизмы — роли</h3>
-      <ul>
-        ${(box.mechanisms ?? []).map((m) => html`<li key=${m}>${m}</li>`)}
-      </ul>
-    </div>`;
-  }
-  const arrow = diagram.arrows.find((a) => a.id === focus.id);
-  if (!arrow) return null;
-  const end = (e) =>
-    e.boundary ? `граница ${e.boundary}` : `${e.box}.${e.side ?? "O"}`;
-  return html`<div>
-    <h2>${arrow.label}</h2>
-    <p class="muted">
-      ${arrow.id} · ${KIND_NAME[arrowKind(arrow)]} ·
-      ${asList(arrow.from).map(end).join(", ")} →
-      ${asList(arrow.to).map(end).join(", ")}
-    </p>
-    <h3>Объекты реестра (${(arrow.objects ?? []).length})</h3>
-    <${Ids} ids=${arrow.objects} />
-  </div>`;
+  return html`<${Explanation}
+    diagram=${diagram}
+    focus=${focus}
+    knowledge=${knowledge}
+    hasChild=${hasChild}
+    onOpen=${onOpen}
+  />`;
 }
 
 // ---------- App ----------
+
+// Arrow animation: on by default unless the reader asked the system for reduced motion; the
+// choice is remembered per browser (storage may be unavailable — then it is just not kept).
+const ANIMATE_KEY = "idef0-viewer:animate";
+function initialAnimate() {
+  try {
+    const kept = localStorage.getItem(ANIMATE_KEY);
+    if (kept === "1" || kept === "0") return kept === "1";
+  } catch {
+    // no storage: fall through to the system preference
+  }
+  return !matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 function readHash(fallback) {
   return decodeURIComponent(location.hash.replace(/^#/, "")) || fallback;
 }
 
 function App({ model }) {
-  const { index, diagrams } = model;
+  const { index, diagrams, knowledge, knowledgeError } = model;
   const byId = useMemo(
     () => new Map(diagrams.map((d) => [d.id, d])),
     [diagrams],
@@ -890,7 +1191,21 @@ function App({ model }) {
   );
   const [pinned, setPinned] = useState(null);
   const [hover, setHover] = useState(null);
+  // Screen rectangle of the hovered element: the hover card is placed beside it.
+  const [anchor, setAnchor] = useState(null);
+  const [animate, setAnimate] = useState(initialAnimate);
   const diagram = byId.get(current);
+  useEffect(() => {
+    try {
+      localStorage.setItem(ANIMATE_KEY, animate ? "1" : "0");
+    } catch {
+      // storage unavailable: the switch still works for this page
+    }
+  }, [animate]);
+  const hoverOn = useCallback((type, id, rect) => {
+    setHover(id ? { type, id } : null);
+    setAnchor(id ? rect : null);
+  }, []);
 
   useEffect(() => {
     const onHash = () =>
@@ -943,11 +1258,11 @@ function App({ model }) {
     (id) => {
       if (!byId.has(id)) return;
       setPinned(null);
-      setHover(null);
+      hoverOn(null);
       location.hash = id;
       setCurrent(id);
     },
-    [byId],
+    [byId, hoverOn],
   );
   const hasChild = useCallback(
     (boxId) => byId.has(boxId) && byId.get(boxId).parent === current,
@@ -955,6 +1270,14 @@ function App({ model }) {
   );
   const focus = hover ?? pinned;
   const activeArrow = focus?.type === "arrow" ? focus.id : null;
+  // A focused box lights its own I/C/O/M arrows and dims the rest.
+  const litArrows = useMemo(
+    () =>
+      focus?.type === "box"
+        ? new Set(arrowsOfBox(diagram, focus.id).map((a) => a.id))
+        : null,
+    [diagram, focus?.type, focus?.id],
+  );
   // Box nodes depend on the pinned box only: a hover that rebuilt the node list would re-render the
   // nodes under the pointer between the two clicks of a double-click.
   const pinnedBox = pinned?.type === "box" ? pinned.id : null;
@@ -980,14 +1303,16 @@ function App({ model }) {
     () =>
       (layout?.edges ?? []).map((edge) => {
         const active = edge.data.arrow.id === activeArrow;
+        const lit = !!litArrows?.has(edge.data.arrow.id);
+        const dim = !!litArrows && !lit;
         const stroke = active
           ? "var(--hl)"
           : `var(--${edge.data.kind.toLowerCase()})`;
         return {
           ...edge,
-          className: active ? "active" : "",
-          // The focused arrow is drawn above the others so its whole route stays visible.
-          zIndex: active ? 10 : 0,
+          className: active ? "active" : lit ? "lit" : dim ? "dim" : "",
+          // The focused arrows are drawn above the others so their whole routes stay visible.
+          zIndex: active || lit ? 10 : 0,
           markerEnd: {
             type: MarkerType.ArrowClosed,
             width: 14,
@@ -998,12 +1323,14 @@ function App({ model }) {
           data: {
             ...edge.data,
             active,
+            lit,
+            dim,
             onSelect: (id) => setPinned({ type: "arrow", id }),
-            onHover: (id) => setHover(id ? { type: "arrow", id } : null),
+            onHover: (id, rect) => hoverOn("arrow", id, rect),
           },
         };
       }),
-    [layout, activeArrow],
+    [layout, activeArrow, litArrows, hoverOn],
   );
 
   const chain = [];
@@ -1027,9 +1354,17 @@ function App({ model }) {
         )}
         <span class="muted"> ${diagram.title}</span>
       </nav>
+      <label class="switch">
+        <input
+          type="checkbox"
+          checked=${animate}
+          onChange=${(event) => setAnimate(event.target.checked)}
+        />
+        Анимация стрелок
+      </label>
     </header>
     <main>
-      <div class="canvas">
+      <div class=${"canvas" + (animate ? " animate" : "")}>
         ${
           layoutError
             ? html`<p class="err" style=${{ padding: 16 }}>
@@ -1051,22 +1386,49 @@ function App({ model }) {
                 zoomOnDoubleClick=${false}
                 proOptions=${{ hideAttribution: true }}
                 onNodeClick=${(_, node) => node.type === "box" && setPinned({ type: "box", id: node.id })}
-                onNodeMouseEnter=${(_, node) => node.type === "box" && setHover({ type: "box", id: node.id })}
-                onNodeMouseLeave=${() => setHover(null)}
+                onNodeMouseEnter=${(event, node) =>
+                  node.type === "box" &&
+                  hoverOn(
+                    "box",
+                    node.id,
+                    event.target
+                      .closest(".react-flow__node")
+                      .getBoundingClientRect(),
+                  )}
+                onNodeMouseLeave=${() => hoverOn(null)}
                 onEdgeClick=${(_, edge) => setPinned({ type: "arrow", id: edge.data.arrow.id })}
-                onEdgeMouseEnter=${(_, edge) => setHover({ type: "arrow", id: edge.data.arrow.id })}
-                onEdgeMouseLeave=${() => setHover(null)}
+                onEdgeMouseEnter=${(event, edge) =>
+                  hoverOn(
+                    "arrow",
+                    edge.data.arrow.id,
+                    new DOMRect(event.clientX - 10, event.clientY - 10, 20, 20),
+                  )}
+                onEdgeMouseLeave=${() => hoverOn(null)}
+                onMoveStart=${() => hoverOn(null)}
                 onPaneClick=${() => setPinned(null)}
               >
                 <${Background} gap=${24} size=${1} />
                 <${Controls} showInteractive=${false} />
               <//>`
         }
+        ${
+          hover && anchor && !layoutError
+            ? html`<${HoverCard}
+                key=${`${hover.type}:${hover.id}`}
+                diagram=${diagram}
+                focus=${hover}
+                anchor=${anchor}
+                knowledge=${knowledge}
+              />`
+            : null
+        }
       </div>
       <aside>
         <${Details}
           diagram=${diagram}
           focus=${focus}
+          knowledge=${knowledge}
+          knowledgeError=${knowledgeError}
           hasChild=${hasChild}
           onOpen=${open}
         />
@@ -1076,6 +1438,14 @@ function App({ model }) {
 }
 
 async function loadModel() {
+  // Explanations are optional: without the markdown the diagrams still open, with IDs only.
+  const knowledge = loadKnowledge(new URL("../", import.meta.url)).then(
+    (k) => ({ knowledge: k, knowledgeError: null }),
+    (error) => ({
+      knowledge: null,
+      knowledgeError: String(error?.message ?? error),
+    }),
+  );
   const base = new URL("../model/", import.meta.url);
   const read = async (file) => {
     const response = await fetch(new URL(file, base));
@@ -1094,7 +1464,7 @@ async function loadModel() {
       parent: entry.parent,
     });
   }
-  return { index, diagrams };
+  return { index, diagrams, ...(await knowledge) };
 }
 
 const root = createRoot(document.getElementById("root"));

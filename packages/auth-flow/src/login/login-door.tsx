@@ -428,8 +428,9 @@ export function LoginDoor({
   }
 
   // EARS-17: switching method is a TERMINAL path for anything in flight. The
-  // block unmounts the inactive tab and so drops its own state; these calls clear
-  // the state the door holds — errors, the issued-code stage, and any challenge
+  // block carries only the typed identifier across the switch (003 EARS-43) —
+  // the password, the field errors and the rest of the tab's form state are
+  // not carried; these calls clear the state the door holds — errors, the issued-code stage, and any challenge
   // in flight. Without the `reset()` calls a dismissed challenge would keep its
   // stored closure and replay it (a duplicate `requestOtp`, or a login the
   // visitor never re-submitted) when the field remounts on return to the tab.

@@ -675,3 +675,12 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the email-code method is shown without a method choice
     When the guest enters their email and the code from the mail
     Then a BFF session is established and the guest is returned to the "/account" return target
+
+  @EARS-43 @happy
+  Scenario: The typed address survives a switch between the sign-in methods
+    Given a guest on /login with the «Пароль» method
+    When the guest types their email and a password, then switches to «По коду»
+    Then the email is already in the code request field and the password is not carried
+    When the guest edits the email and switches back to «Пароль»
+    Then the edited email is in the identifier field
+    And a typed phone number opens «По коду» on the phone channel where the storefront serves it

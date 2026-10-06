@@ -137,6 +137,8 @@
         "apps/admin/components/event-kind-lifecycle-actions.tsx",
         "apps/admin/components/event-form.tsx",
         "apps/admin/components/project-form.tsx",
+        "apps/admin/components/relationship-endpoint-picker.tsx",
+        "packages/design-system/src/primitives/native-select.tsx",
         "apps/admin/app/events/page.tsx",
         "apps/admin/app/events/create/page.tsx",
         "apps/admin/app/events/[id]/page.tsx",

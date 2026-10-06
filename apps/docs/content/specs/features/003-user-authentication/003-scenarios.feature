@@ -671,10 +671,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-43 @happy
   Scenario: The code method opens directly from a link
-    Given a guest opens /login?method=code&returnTo=/account
-    Then the email-code method is shown without a method choice
-    When the guest enters their email and the code from the mail
-    Then a BFF session is established and the guest is returned to the "/account" return target
+    Given the golden doctor "verified-cardiologist" has a verified email for code sign-in
+    And a guest opens the Academy code-method link with the account return target
+    Then the email-code method is selected and the password method remains offered
+    When that doctor submits the delivered email login code without changing methods
+    Then the email-code login succeeds and opens the account return target
+    And the browser holds a host-only __Host-ds_session cookie with HttpOnly, Secure, and SameSite=Lax
+    And the doctor's own profile is readable through the BFF
+    And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
 
   @EARS-43 @happy
   Scenario: The typed address survives a switch between the sign-in methods

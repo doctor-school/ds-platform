@@ -1,5 +1,6 @@
 import {
   expect,
+  type APIRequestContext,
   type BrowserContext,
   type Page,
   type Response,
@@ -9,7 +10,7 @@ import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { goldenDoctorPassword, resolveGoldenDoctor } from "../lib/golden.js";
 import { fetchLoginCode, mailpitUrlFor } from "../lib/mailpit.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
-import { Given, Then, When } from "./support/fixtures.js";
+import { Given, Then, When, type StepWorld } from "./support/fixtures.js";
 
 const SEED = "verified-cardiologist";
 const SESSION_COOKIE = "__Host-ds_session";
@@ -22,6 +23,38 @@ const refusedLoginResponses = new WeakMap<Page, Response>();
 type SessionCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
 const preLogoutCookies = new WeakMap<Page, SessionCookie>();
 const logoutResponses = new WeakMap<Page, Response>();
+
+async function submitDeliveredEmailCode(
+  page: Page,
+  request: APIRequestContext,
+  world: StepWorld,
+): Promise<void> {
+  const doctor = resolveGoldenDoctor(SEED);
+  await page.getByTestId("otp-identifier").fill(doctor.email);
+  const requestedAt = new Date().toISOString();
+  const requestResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/v1/auth/login/otp/request" &&
+      response.request().method() === "POST",
+  );
+  await page.getByTestId("otp-send").click();
+  otpRequestResponses.set(page, await requestResponse);
+  const code = await fetchLoginCode(
+    request,
+    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+    doctor.email,
+    requestedAt,
+  );
+  const loginResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/v1/auth/login/otp" &&
+      response.request().method() === "POST",
+  );
+  // The sixth character auto-submits the shipped OTP form.
+  await page.locator('input[autocomplete="one-time-code"]').fill(code);
+  otpLoginResponses.set(page, await loginResponse);
+  world.signedInAs = doctor.seedName;
+}
 
 Given(
   'the golden doctor "verified-cardiologist" is available for password sign-in',
@@ -42,7 +75,6 @@ When(
   "that doctor requests an email login code and submits the delivered code through Academy",
   async ({ page, request, world }) => {
     expect(world.host.id).toBe("academy");
-    const doctor = resolveGoldenDoctor(SEED);
     await installCaptchaStub(page);
     await page.goto(`${world.hostBaseUrl}${world.host.loginPath}`, {
       waitUntil: "load",
@@ -50,30 +82,59 @@ When(
     await page.waitForLoadState("networkidle");
     await page.getByTestId("login-method-otp").click();
     await page.getByTestId("otp-channel-email").click();
-    await page.getByTestId("otp-identifier").fill(doctor.email);
-    const requestedAt = new Date().toISOString();
-    const requestResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/v1/auth/login/otp/request" &&
-        response.request().method() === "POST",
+    await submitDeliveredEmailCode(page, request, world);
+  },
+);
+
+Given(
+  "a guest opens the Academy code-method link with the account return target",
+  async ({ page, world }) => {
+    expect(world.host.id).toBe("academy");
+    await installCaptchaStub(page);
+    const link = new URL(world.host.loginPath, world.hostBaseUrl);
+    link.searchParams.set("method", "code");
+    link.searchParams.set("returnTo", "/account");
+    await page.goto(link.toString(), { waitUntil: "load" });
+    await page.waitForLoadState("networkidle");
+  },
+);
+
+Then(
+  "the email-code method is selected and the password method remains offered",
+  async ({ page }) => {
+    await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
-    await page.getByTestId("otp-send").click();
-    otpRequestResponses.set(page, await requestResponse);
-    const code = await fetchLoginCode(
-      request,
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
-      doctor.email,
-      requestedAt,
+    await expect(page.getByTestId("login-method-password")).toBeVisible();
+    await expect(page.getByTestId("otp-identifier")).toHaveAttribute(
+      "type",
+      "email",
     );
-    const loginResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/v1/auth/login/otp" &&
-        response.request().method() === "POST",
+  },
+);
+
+When(
+  "that doctor submits the delivered email login code without changing methods",
+  async ({ page, request, world }) => {
+    await submitDeliveredEmailCode(page, request, world);
+  },
+);
+
+Then(
+  "the email-code login succeeds and opens the account return target",
+  async ({ page, world }) => {
+    expect(otpRequestResponses.get(page)?.ok(), "code request succeeded").toBe(
+      true,
     );
-    // The sixth character auto-submits the shipped OTP form.
-    await page.locator('input[autocomplete="one-time-code"]').fill(code);
-    otpLoginResponses.set(page, await loginResponse);
-    world.signedInAs = doctor.seedName;
+    expect(
+      otpLoginResponses.get(page)?.ok(),
+      "delivered code was accepted",
+    ).toBe(true);
+    await expect(page).toHaveURL(`${world.hostBaseUrl}/account`);
+    await expect(page.getByTestId("profile-email")).toHaveText(
+      resolveGoldenDoctor(world.signedInAs ?? "").email,
+    );
   },
 );
 

@@ -739,68 +739,6 @@ function layoutDiagram(diagram) {
   };
 }
 
-/**
- * Temporary labels for a focused box. An arrow carries one label, on one branch; when that branch is
- * dimmed while another branch of the arrow is lit (the one entering the focused box), the lit branch
- * gets a copy of the label beside the focused box's port, clear of boxes and of the other lit labels.
- * Returns edge id → label rect with text.
- */
-function ghostLabels(layout, litIds, boxId) {
-  const hits = (r, q, m) =>
-    r.x < q.x + q.w + m &&
-    q.x < r.x + r.w + m &&
-    r.y < q.y + q.h + m &&
-    q.y < r.y + r.h + m;
-  const taken = layout.edges
-    .filter((e) => e.data.label && litIds.has(e.id))
-    .map((e) => e.data.label);
-  const ghosts = new Map();
-  for (const host of layout.edges) {
-    if (!host.data.label || litIds.has(host.id)) continue;
-    const arrowId = host.data.arrow.id;
-    const lit = layout.edges.filter(
-      (e) => e.data.arrow.id === arrowId && litIds.has(e.id),
-    );
-    for (const edge of lit) {
-      const pts = edge.data.points;
-      // The port at the focused box: the branch end when it enters the box, else its start.
-      const [port, prev] =
-        edge.data.to === boxId
-          ? [pts[pts.length - 1], pts[pts.length - 2]]
-          : [pts[0], pts[1]];
-      const block = labelBlock(host.data.arrow.label ?? arrowId, 160);
-      const { width: w, height: h } = block;
-      const dx = Math.sign(prev.x - port.x);
-      const dy = Math.sign(prev.y - port.y);
-      const spots = [];
-      for (let k = 0; k < 6; k += 1) {
-        if (dx === 0) {
-          // Vertical run (control from above, mechanism from below): beside the line, stacked away
-          // from the box along the run.
-          const y =
-            dy < 0 ? port.y - h - 4 - k * (h + 3) : port.y + 4 + k * (h + 3);
-          spots.push({ x: port.x + 4, y }, { x: port.x - w - 4, y });
-        } else {
-          // Horizontal run (input from the west): above or below the line, stacked away from it.
-          const x = dx < 0 ? port.x - w - 8 : port.x + 8;
-          spots.push(
-            { x, y: port.y - h - 3 - k * (h + 3) },
-            { x, y: port.y + 3 + k * (h + 3) },
-          );
-        }
-      }
-      const rects = spots.map((p) => ({ ...p, w, h }));
-      const free = (r) =>
-        !layout.boxRects.some((q) => hits(r, q, 2)) &&
-        !taken.some((q) => hits(r, q, 2));
-      const r = rects.find(free) ?? rects[0];
-      taken.push(r);
-      ghosts.set(edge.id, { ...r, text: block.text });
-    }
-  }
-  return ghosts;
-}
-
 // ---------- React Flow node / edge renderers ----------
 
 const CODE_OFFSET = {
@@ -908,19 +846,6 @@ function IdefEdge({ id, data, markerEnd }) {
           <//>`
         : null
     }
-    ${
-      data.ghost
-        ? html`<${EdgeLabelRenderer}>
-            <div
-              class="arrow-label lit ghost nodrag nopan"
-              aria-hidden="true"
-              style=${{ transform: `translate(${data.ghost.x}px, ${data.ghost.y}px)`, borderLeft: `3px solid ${color}`, outlineColor: color }}
-            >
-              ${data.ghost.text}
-            </div>
-          <//>`
-        : null
-    }
   <//>`;
 }
 
@@ -1007,8 +932,58 @@ function edgesOfBox(edges, boxId) {
   return edges.filter((e) => e.data.from === boxId || e.data.to === boxId);
 }
 
+const ICOM_SECTIONS = [
+  ["I", "Входы"],
+  ["C", "Управление"],
+  ["O", "Выходы"],
+  ["M", "Механизмы"],
+];
+
+/** The box's arrows by ICOM side, each with its other end: the source of an incoming branch, the
+ * consumers of an output (a box code or a boundary code). */
+function icomOfBox(diagram, boxId) {
+  const code = (e) => e.boundary ?? e.box;
+  const rows = { I: [], C: [], O: [], M: [] };
+  for (const arrow of diagram.arrows ?? []) {
+    const src = asList(arrow.from)[0];
+    if (src?.box === boxId)
+      rows.O.push({ arrow, other: asList(arrow.to).map(code).join(", ") });
+    for (const end of asList(arrow.to))
+      if (end.box === boxId && rows[end.side])
+        rows[end.side].push({ arrow, other: code(src) });
+  }
+  return rows;
+}
+
+/** Arrows of a box in the panel; hovering a row traces that arrow's branch on the canvas. */
+function IcomList({ diagram, boxId, onTrace }) {
+  const rows = icomOfBox(diagram, boxId);
+  return ICOM_SECTIONS.filter(([side]) => rows[side].length).map(
+    ([side, title]) =>
+      html`<${React.Fragment} key=${side}>
+        <h3>${title}</h3>
+        <ul class="icom-list">
+          ${rows[side].map(
+            ({ arrow, other }) =>
+              html`<li
+                key=${arrow.id}
+                style=${{ borderLeftColor: `var(--${side.toLowerCase()})` }}
+                onMouseEnter=${() => onTrace?.(arrow.id)}
+                onMouseLeave=${() => onTrace?.(null)}
+              >
+                ${arrow.label ?? arrow.id}
+                <span class="muted"
+                  >${side === "O" ? ` → ${other}` : ` ← ${other}`}</span
+                >
+              </li>`,
+          )}
+        </ul>
+      <//>`,
+  );
+}
+
 /** What a box or an arrow means. `brief` (the hover card) keeps only the title and the short
- * description; the linked roles, functions and objects stay in the panel. */
+ * description; the arrows, roles, functions and objects stay in the panel. */
 function Explanation({
   diagram,
   focus,
@@ -1016,6 +991,7 @@ function Explanation({
   brief = false,
   onOpen,
   hasChild,
+  onTrace,
 }) {
   if (focus.type === "box") {
     const box = diagram.boxes.find((b) => b.id === focus.id);
@@ -1037,6 +1013,11 @@ function Explanation({
           ? null
           : html`<${React.Fragment}>
               ${box.effort ? html`<${Effort} effort=${box.effort} />` : null}
+              <${IcomList}
+                diagram=${diagram}
+                boxId=${box.id}
+                onTrace=${onTrace}
+              />
               <h3>Механизмы — роли</h3>
               <ul>
                 ${(box.mechanisms ?? []).map((m) => html`<li key=${m}>${m}</li>`)}
@@ -1206,6 +1187,7 @@ function Details({
   knowledgeError,
   hasChild,
   onOpen,
+  onTrace,
 }) {
   if (!focus) {
     return html`<div>
@@ -1234,6 +1216,7 @@ function Details({
     knowledge=${knowledge}
     hasChild=${hasChild}
     onOpen=${onOpen}
+    onTrace=${onTrace}
   />`;
 }
 
@@ -1373,11 +1356,21 @@ function App({ model }) {
         : null,
     [layout, focus?.type, focus?.id],
   );
-  // A label sits on one branch and lights or dims with it; a lit branch whose label sits on a
-  // dimmed sibling shows a temporary copy beside the focused box.
-  const ghosts = useMemo(
-    () => (litEdges && layout ? ghostLabels(layout, litEdges, focus.id) : null),
-    [layout, litEdges, focus?.id],
+  // An arrow row hovered in the panel traces, like an arrow hover, the branch of that arrow that
+  // meets the panel's box; the panel and the hover card keep their focus.
+  const [trace, setTrace] = useState(null);
+  const panelBox = focus?.type === "box" ? focus.id : null;
+  useEffect(() => setTrace(null), [panelBox, current]);
+  const traced = useMemo(
+    () =>
+      trace && panelBox
+        ? new Set(
+            edgesOfBox(layout?.edges ?? [], panelBox)
+              .filter((e) => e.data.arrow.id === trace)
+              .map((e) => e.id),
+          )
+        : null,
+    [layout, trace, panelBox],
   );
   // Boxes at the ends of the focused paths stay full, the rest dim: a focused box keeps the boxes its
   // lit branches reach, a focused arrow keeps its end boxes.
@@ -1431,7 +1424,8 @@ function App({ model }) {
   const edges = useMemo(
     () =>
       (layout?.edges ?? []).map((edge) => {
-        const active = edge.data.arrow.id === activeArrow;
+        const active =
+          edge.data.arrow.id === activeArrow || !!traced?.has(edge.id);
         const lit = !!litEdges?.has(edge.id);
         const dim = !!litEdges && !lit;
         const stroke = active
@@ -1454,13 +1448,12 @@ function App({ model }) {
             active,
             lit,
             dim,
-            ghost: ghosts?.get(edge.id) ?? null,
             onSelect: (id) => setPinned({ type: "arrow", id }),
             onHover: (id, rect) => hoverOn("arrow", id, rect),
           },
         };
       }),
-    [layout, activeArrow, litEdges, ghosts, hoverOn],
+    [layout, activeArrow, traced, litEdges, hoverOn],
   );
 
   const chain = [];
@@ -1571,6 +1564,7 @@ function App({ model }) {
           knowledgeError=${knowledgeError}
           hasChild=${hasChild}
           onOpen=${open}
+          onTrace=${setTrace}
         />
       </aside>
     </main>

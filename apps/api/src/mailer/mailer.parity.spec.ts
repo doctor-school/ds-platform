@@ -49,7 +49,6 @@ describe("transactional HTML/plain-text content parity", () => {
         title: "Ранняя реабилитация",
         kindLabel: "Устный доклад",
         eventTitle: "Конгресс-2027",
-        cabinetUrl: "https://new.doctor.school/account/congress",
       }),
     ],
   ] as const) {
@@ -241,7 +240,6 @@ describe("046 EARS-14: submission-receipt FakeMailer ↔ SmtpMailer contract par
     title: "Ранняя реабилитация",
     kindLabel: "Устный доклад",
     eventTitle: "Конгресс-2027",
-    cabinetUrl: "https://new.doctor.school/account/congress",
   } as const;
 
   it("EARS-14: when the recipient is invalid, both adapters shall reject", async () => {

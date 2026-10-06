@@ -57,7 +57,6 @@ import {
 import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import { resolveCongressSubmissionConsentVersion } from "./congress-submission-consent.js";
 import {
-  CONGRESS_CABINET_URL,
   CONGRESS_SIGN_UP_CLOCK,
   type CongressSignUpClock,
 } from "./congress-signup.tokens.js";
@@ -123,7 +122,6 @@ export class CongressSubmissionsService {
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(CONGRESS_SIGN_UP_CLOCK) private readonly now: CongressSignUpClock,
     @Inject(MAILER) private readonly mailer: Mailer,
-    @Inject(CONGRESS_CABINET_URL) private readonly cabinetUrl: string,
   ) {}
 
   // ---------------------------------------------------------------- reads
@@ -613,7 +611,6 @@ export class CongressSubmissionsService {
             title: letter.title ?? "",
             kindLabel: CONGRESS_SUBMISSION_KIND_LABELS[letter.kind],
             eventTitle: letter.eventTitle,
-            cabinetUrl: this.cabinetUrl,
           });
         } catch {
           // The mailer's own diagnostics carry the sanitized provider outcome;

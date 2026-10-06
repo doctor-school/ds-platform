@@ -25,16 +25,20 @@ export function adminLockoutMessage(): EmailMessage {
 }
 
 /**
- * 046 «Letters» — the one destination the congress submission letters link to: the
- * «Мои заявки на Конгресс» section on the doctor storefront, as an absolute URL
- * on the `MAILER_DOCTOR_BASE_URL` origin.
+ * 046 «Letters» (owner 2026-10-06, #2634) — the congress letters carry no link,
+ * button or URL. The way into the cabinet is told in text: the congress site's
+ * «Войти в кабинет» button, its own domain written as plain text.
  */
-export function congressCabinetUrl(doctorBaseUrl: string): string {
-  return `${doctorBaseUrl.replace(/\/+$/, "")}/account/congress`;
-}
+const CONGRESS_AUTHOR_CABINET_ENTRY =
+  "Чтобы открыть заявку, зайдите на сайт Конгресса orthobio.ru. В разделе " +
+  "«Участникам» найдите «Как подать материалы» и нажмите «Войти в кабинет». " +
+  "Войти можно по коду из письма, пароль не нужен.";
 
-/** 046 «Letters» — the label of the link to {@link congressCabinetUrl}. */
-const CONGRESS_CABINET_ACTION_LABEL = "Мои заявки на Конгресс";
+/** 046 EARS-15 amended — the 044 confirmation's line about the cabinet. */
+const CONGRESS_CONFIRMATION_CABINET_ENTRY =
+  "Подать материалы — устные и постерные доклады, тезисы — можно в личном " +
+  "кабинете. Как войти: на сайте Конгресса orthobio.ru в разделе " +
+  "«Участникам» найдите «Как подать материалы» и нажмите «Войти в кабинет».";
 
 /**
  * 044 EARS-13 — what the congress confirmation email is rendered from: the
@@ -80,8 +84,9 @@ export function formatCongressEventDate(startsAt: Date): string {
  * just signed up for: it belongs to the product-notice class of the
  * {@link import("./mailer.types.js").Mailer} port, not the credential class.
  * It has no action: the letter confirms the registration, says nothing about a
- * Doctor.School account or signing in (#2369), and carries no link, button or
- * URL (046 EARS-15) — the same letter for the site form and the desk.
+ * Doctor.School account (#2369), and carries no link, button or URL — one line
+ * tells in text where the cabinet entry is on the congress site (046 EARS-15
+ * amended, #2634) — the same letter for the site form and the desk.
  */
 export function congressConfirmationMessage(
   content: CongressConfirmationContent,
@@ -91,7 +96,7 @@ export function congressConfirmationMessage(
     subject: `Doctor.School — вы зарегистрированы на ${content.eventTitle}`,
     preheader: headline,
     intro: `${headline}: ${content.eventDate}, ${content.eventVenue}.`,
-    paragraphs: [],
+    paragraphs: [CONGRESS_CONFIRMATION_CABINET_ENTRY],
     footer: [
       "Если это были не вы, просто проигнорируйте это письмо.",
       "Команда Doctor.School",
@@ -107,14 +112,13 @@ export interface CongressSubmissionReceiptContent {
   kindLabel: string;
   /** «{мероприятие}» — `events.title`, as the 044 confirmation names it. */
   eventTitle: string;
-  /** {@link congressCabinetUrl} on the doctor storefront origin. */
-  cabinetUrl: string;
 }
 
 /**
  * 046 EARS-14 — the receipt the author gets once a submission is `submitted`
  * (copy approved at Stage A, 2026-09-30). A product notice: it names the
- * submission and the event and links to the section, nothing else. The kind
+ * submission and the event and tells in text where the cabinet entry is, with
+ * no link (046 «Letters», #2634), nothing else. The kind
  * is named in running text, so its section label is lower-cased
  * («устный доклад»).
  */
@@ -129,8 +133,7 @@ export function congressSubmissionReceiptMessage(
       `Ваша заявка «${content.title}» (${kind}) получена и передана ` +
       `программному комитету ${content.eventTitle}. Статус можно посмотреть ` +
       "в кабинете.",
-    paragraphs: [],
-    action: { label: CONGRESS_CABINET_ACTION_LABEL, url: content.cabinetUrl },
+    paragraphs: [CONGRESS_AUTHOR_CABINET_ENTRY],
     footer: ["Команда Doctor.School"],
   });
 }

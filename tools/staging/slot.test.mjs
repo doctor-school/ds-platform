@@ -597,13 +597,9 @@ test("main's Redis database is 0 in the env file it gets", () => {
   assert.match(text, /^MAILER_SMTP_HOST=mailpit$/m);
   assert.match(text, /^MAILER_SMTP_PORT=1025$/m);
   assert.match(text, /^MAILER_SMTP_FROM=no-reply\+main@/m);
-  assert.match(
-    text,
-    new RegExp(`^MAILER_DOCTOR_BASE_URL=https://doctor-main\\.${BASE.replace(/\./g, "\\.")}$`, "m"),
-  );
 });
 
-test("046 «Letters»: a slot api gets its own doctor storefront as the congress-letter origin", () => {
+test("046 «Letters» (#2634): a slot api gets no congress-letter origin — the letters carry no link", () => {
   const text = renderSlotEnv({
     slot: "pr-7",
     sha: SHA,
@@ -611,9 +607,7 @@ test("046 «Letters»: a slot api gets its own doctor storefront as the congress
     redisDb: 4,
     goldenSubjects: SUBJECTS,
   });
-  assert.ok(
-    text.split("\n").includes(`MAILER_DOCTOR_BASE_URL=https://doctor-pr-7.${BASE}`),
-  );
+  assert.doesNotMatch(text, /MAILER_DOCTOR_BASE_URL/);
 });
 
 test("#2619: a slot admin links «Публичная ссылка» to the slot's own academy host", () => {

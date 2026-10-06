@@ -1043,9 +1043,6 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     `CENTRIFUGO_URL=https://${hosts.api}`,
     `IDP_ISSUER=https://${idpHostname(baseDomain)}`,
     `IDP_REDIRECT_URI=https://${hosts.api}/auth/callback`,
-    // 046 «Letters» — the congress letters link to the slot's own doctor
-    // storefront; a required api boot key.
-    `MAILER_DOCTOR_BASE_URL=https://${hosts.doctor}`,
     // #2619 — admin «Публичная ссылка» (project / partner / expert) opens the
     // record on the slot's own Academy, never production. Read by the admin at
     // REQUEST time: the image is shared by every slot on one commit, so a

@@ -152,7 +152,6 @@ export class SmtpMailer implements Mailer {
         title: input.title,
         kindLabel: input.kindLabel,
         eventTitle: input.eventTitle,
-        cabinetUrl: input.cabinetUrl,
       }),
       "congress submission receipt",
     );

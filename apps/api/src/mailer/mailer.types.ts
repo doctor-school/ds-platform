@@ -44,8 +44,6 @@ export interface CongressSubmissionReceiptRequest {
   kindLabel: string;
   /** `events.title` of the congress, as the 044 confirmation names it. */
   eventTitle: string;
-  /** `{MAILER_DOCTOR_BASE_URL}/account/congress`. */
-  cabinetUrl: string;
 }
 
 export interface Mailer {

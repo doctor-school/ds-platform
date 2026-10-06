@@ -39,10 +39,6 @@ export async function scanRealRouteSet(): Promise<AuthzScanResult> {
   // verifies an envelope — so a placeholder satisfies the fail-closed
   // construction check without ever signing anything.
   process.env.LIFECYCLE_IMPACT_TOKEN_SECRET ??= "authz-lint-placeholder-secret";
-  // The congress letters' doctor origin is a required boot key (046
-  // «Letters»); this gate never sends a letter, so a placeholder origin
-  // satisfies the boot check the same way the DATABASE_URL stub does.
-  process.env.MAILER_DOCTOR_BASE_URL ??= "http://authz-lint.invalid";
   // StorefrontModule seeds the 017 reference book from its init hook — a real
   // query, which the three placeholders above cannot stand in for. The gate
   // declares route-scan mode so that bootstrap step (and any later one belonging

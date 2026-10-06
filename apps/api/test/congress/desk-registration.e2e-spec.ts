@@ -360,6 +360,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(part).not.toContain("/account/congress");
         expect(part).not.toMatch(/https?:\/\//);
         expect(part).not.toContain("Подать материалы в кабинете");
+        // #2634: the congress site is named only as text.
+        expect(part).toContain("orthobio.ru");
       }
     });
 

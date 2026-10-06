@@ -58,8 +58,13 @@ const EVENT_VENUE = "Москва, МВЦ «Крокус Экспо», пави�
 const EVENT_TITLE = "Конгресс-2027";
 /** 10:00 Moscow on 2027-03-12, as a `timestamptz` instant. */
 const EVENT_STARTS_AT = "2027-03-12T07:00:00.000Z";
-/** 044 EARS-13 amendment (#2369): wording the letter must never carry. */
-const REMOVED_COPY = ["аккаунт", "Пароль не нужен", "Войти", "/login"] as const;
+/**
+ * 044 EARS-13 amendment (#2369): wording the letter must never carry. «Войти»
+ * alone is not listed: the cabinet line names the congress site's «Войти в
+ * кабинет» button in text (#2634); no sign-in ACTION is proven by the 046
+ * EARS-15 no-link test below.
+ */
+const REMOVED_COPY = ["аккаунт", "Пароль не нужен", "/login"] as const;
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "044 congress sign-up - confirmation email (e2e)",
@@ -416,6 +421,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         expect(part).not.toContain("/account/congress");
         expect(part).not.toMatch(/https?:\/\//);
         expect(part).not.toContain("Подать материалы в кабинете");
+        // #2634: the congress site is named only as text.
+        expect(part).toContain("orthobio.ru");
       }
     });
   },

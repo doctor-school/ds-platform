@@ -258,13 +258,12 @@ draft of a kind without a form is 422 `kind-not-available`.
   failure never rolls back or delays the `submitted`. No retry queue: the
   section always shows the status.
 
-**Letter link origin (046 «Letters»).** The 046 submission letters link to
-`{MAILER_DOCTOR_BASE_URL}/account/congress` (the 044 confirmation carries no
-link at all — EARS-15, the site form and the desk alike), resolved once at boot into the
-`CONGRESS_CABINET_URL` provider. `MAILER_DOCTOR_BASE_URL` is a REQUIRED api
-key (`z.url()`, no default, like `DATABASE_URL`): an api without it refuses to
-boot rather than mail a link to the wrong site. Values per environment:
-046-design «Letters».
+**No links in the letters (046 «Letters», #2634).** Neither the 046 submission
+letters nor the 044 confirmation (EARS-15, the site form and the desk alike)
+carry a link, button or URL. Each tells in text where the cabinet entry is — the
+«Войти в кабинет» button on the congress site, whose domain `orthobio.ru` is
+written as plain text (`apps/api/src/mailer/notice-emails.ts`). The api reads
+no mail-link origin.
 
 `congress_submissions` (migration 0043) carries the 010 `audit_row_change()`
 trigger — the ledger is the status history — and `authors` is a PD-masked

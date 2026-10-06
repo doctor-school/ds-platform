@@ -249,7 +249,7 @@
                   <button onClick="{{ resend }}" data-link style="{{ resendStyle }}">{{ resendLabel }}</button>
                 </div>
                 <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
-                  <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Мы отправили новый код на <b style="overflow-wrap:anywhere">{{ maskedDest }}</b>.</p>
+                  <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Если для <b style="overflow-wrap:anywhere">{{ maskedDest }}</b> есть аккаунт, мы повторно отправили код.</p>
                 </sc-if>
               </div>
             </sc-if>

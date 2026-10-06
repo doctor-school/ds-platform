@@ -398,6 +398,16 @@ describe("#2063 golden dataset", () => {
       ]),
     ).toHaveLength(1);
   });
+
+  it("#2618: no event lists the same specialty twice — the card would render the chip twice", () => {
+    const repeated = dataset.events
+      .filter((e) => {
+        const names = (e.specialties ?? []).map((n) => n.trim().toLowerCase());
+        return new Set(names).size !== names.length;
+      })
+      .map((e) => [e.slug, e.specialties]);
+    expect(repeated).toEqual([]);
+  });
 });
 
 describe("#2063 golden seed plan", () => {

@@ -550,7 +550,13 @@ function buildEvent(plan: VolumeEventPlan, now: Date): NewEvent {
     // programme is the PR #2216 defect with more paper.
     durationMin: programmeTotalMinutes(i),
     description: composeDescription(i, specialty),
-    specialties: i % 3 === 0 ? [specialty, "Терапия"] : [specialty],
+    // Every third эфир is also addressed to «Терапия» — unless «Терапия» is
+    // already its own specialty: a repeated name renders as a repeated chip on
+    // the listing card (#2618).
+    specialties:
+      i % 3 === 0 && specialty !== "Терапия"
+        ? [specialty, "Терапия"]
+        : [specialty],
     state: plan.state,
     origin,
     participationFormat,

@@ -30,7 +30,7 @@ export const DOCTOR_EVENTS_FEED_COPY = {
   live: "В эфире",
   recorded: "Есть запись",
   free: "бесплатно для врача",
-  signUp: "коллег записались",
+  signUp: "Коллег записались",
   showMore: "Показать ещё",
   /**
    * The card CTA of an open event — the guest hand-off and the doctor's own path

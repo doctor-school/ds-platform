@@ -232,7 +232,7 @@ const FEED = {
   pulCostLabel: "120 Pul",
   freeLabel: "бесплатно для врача",
   signUpCount: 128,
-  signUpLabel: "коллег записались",
+  signUpLabel: "Коллег записались",
 };
 
 describe("019 EARS-2 WebinarCard — the five formats", () => {
@@ -320,6 +320,21 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
       expect(count!.textContent).toContain("128");
       cleanup();
     }
+  });
+
+  it("019 EARS-2.6: the sign-up chip reads the label first and the count after a colon (#2617)", () => {
+    const { container } = render(<WebinarCard {...FEED} />);
+    const count = container.querySelector("[data-signup-count]");
+    expect(count!.textContent).toBe(
+      `${FEED.signUpLabel}:\u00a0${FEED.signUpCount}`,
+    );
+  });
+
+  it("019 EARS-2.6: without a label the sign-up chip is the bare count", () => {
+    const { signUpLabel: _label, ...unlabelled } = FEED;
+    const { container } = render(<WebinarCard {...unlabelled} />);
+    const count = container.querySelector("[data-signup-count]");
+    expect(count!.textContent).toBe(String(FEED.signUpCount));
   });
 
   it("019 EARS-2.7: an offline event carries its city and its remaining seats", () => {

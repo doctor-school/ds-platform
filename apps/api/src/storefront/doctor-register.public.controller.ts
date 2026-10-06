@@ -13,7 +13,7 @@ import type { DoctorRegisterResponse, VerifyResponse } from "@ds/schemas";
 
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
-import { RateLimited } from "../auth/rate-limit/index.js";
+import { RateLimited, RateLimitService } from "../auth/rate-limit/index.js";
 import { TimingEqualized } from "../auth/timing/index.js";
 import { computeFingerprint } from "../auth/session/session.cookie.js";
 import {
@@ -53,6 +53,8 @@ export class DoctorRegisterPublicController {
   constructor(
     @Inject(DoctorRegisterService)
     private readonly doctorRegister: DoctorRegisterService,
+    @Inject(RateLimitService)
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   /** `POST /v1/storefront/doctor/register` — the 021 `RegisterDoctor` command. */
@@ -104,7 +106,11 @@ export class DoctorRegisterPublicController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<VerifyResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    // A wrong code throws the generic failure; a success signs the user in and,
+    // like every successful login, forgives the per-user window keyed on
+    // `email` (003 EARS-13, #2614).
     const { cookie, body } = await this.doctorRegister.verify(dto, fingerprint);
+    this.rateLimit.reset({ ip, identifier: dto.email });
     reply.header("set-cookie", cookie);
     return body;
   }

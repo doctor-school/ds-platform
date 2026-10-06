@@ -223,6 +223,9 @@ export class AuthController {
     const result = await this.auth.loginWithOtp(dto, fingerprint);
     if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
 
+    // A code sign-in is a successful login (EARS-13, #2614): forgive the per-user
+    // window for this identifier exactly as the password login does.
+    this.rateLimit.reset({ ip, identifier: dto.identifier });
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -342,7 +345,11 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<VerifyResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    // `verify` throws the generic failure on a wrong code, so reaching the next
+    // line means the code signed the user in — a successful login that forgives
+    // the per-user window keyed on `email`, as the guard keyed it (EARS-13, #2614).
     const { cookie, body } = await this.auth.verify(dto, fingerprint);
+    this.rateLimit.reset({ ip, identifier: dto.email });
     reply.header("set-cookie", cookie);
     return body;
   }

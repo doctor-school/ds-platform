@@ -236,14 +236,15 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And no such block exists in the DOM
 
   @EARS-12 @happy
-  Scenario: A guest reads the whole screen and returns to it after registering
+  # Read under 019 «Amendment — 2026-10-06»: the card carries no action and no guest band renders.
+  Scenario: A guest reads the whole screen and signs up on the event page
     Given a visitor with no account
     When the visitor opens «События»
-    Then the feed, the month grid, the calendar page and the facet panel are fully readable
-    When the visitor follows the action on a card
-    Then feature 021's registration opens carrying that event and the current feed URL
-    When the registration completes
-    Then the doctor is returned to that exact feed URL with the action resumed on the same card
+    Then the feed, the month view and the facet panel are fully readable
+    And no band under the feed states that an account is needed
+    And an upcoming card carries no action of its own
+    When the visitor opens an upcoming card
+    Then feature 020's event page for that event opens, carrying its one-click sign-up
 
   @EARS-12 @failure
   Scenario: A gated payload is never delivered to an anonymous reader and hidden

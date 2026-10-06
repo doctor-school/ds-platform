@@ -278,7 +278,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given the golden doctor "verified-cardiologist" is signed in
     And the doctor has an active Academy profile and session cookie
     When the doctor logs out from the Academy account
-    Then the Academy returns to the sign-in page
+    Then the Academy returns to its home page
     And the logout response clears the __Host-ds_session cookie
     And the old session cookie cannot read the doctor's private profile
 

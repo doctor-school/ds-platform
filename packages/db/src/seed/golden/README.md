@@ -118,6 +118,11 @@ consent records — has no business in the production module graph.
 | `golden.recordings.pastRawDraft`             | draft raw recording — admin-only                                                                                  |
 | `golden.registrations.*`                     | verified doctor on upcoming / live / past; MFA doctor on live                                                     |
 
+Every `golden.events.*` row is an Academy event (`audience = experts`, kind
+«Эфир»): the Academy listing, archive and month view read only `experts` events
+(012 EARS-29), and the Academy-host scenarios address these rows. The doctor
+storefront's feed reads the volume half's `doctors` events.
+
 Identities are literal (`ids.ts`), never generated: a scenario compiled against
 `golden.events.live.id` must address the same row in every slot and every
 rebuild. Slugs are `golden-*`.

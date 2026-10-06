@@ -333,9 +333,14 @@ When("the doctor logs out from the Academy account", async ({ page }) => {
   logoutResponses.set(page, await logoutResponse);
 });
 
-Then("the Academy returns to the sign-in page", async ({ page, world }) => {
+Then("the Academy returns to its home page", async ({ page, world }) => {
   expect(logoutResponses.get(page)?.status(), "logout succeeded").toBe(200);
-  await expect(page).toHaveURL(new RegExp(`${world.host.loginPath}(?:\\?|$)`));
+  // #2488: sign-out lands on the storefront home on both hosts — the
+  // `SIGN_OUT_DESTINATION` ("/") of `@ds/auth-flow/host-config`.
+  await expect(page).toHaveURL(
+    (url) =>
+      url.origin === new URL(world.hostBaseUrl).origin && url.pathname === "/",
+  );
 });
 
 Then(

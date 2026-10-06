@@ -783,9 +783,14 @@ function baseEvent(options: BaseEventOptions): NewEvent {
     state: options.state,
     origin: "platform",
     participationFormat: "online",
-    // 012 EARS-26 / EARS-29 — an online event of the doctors school project.
-    kindId: SEED_EVENT_KINDS.vebinar.id,
-    audience: "doctors",
+    // 012 EARS-26 / EARS-29 (#2628) — the named эфиры are the Academy's
+    // reference contour: the Academy listing, archive and month view read only
+    // `experts` events (004 content set), and the Academy-host scenarios
+    // (004/014, the registration happy path, the room) address these rows. An
+    // online experts event is an «Эфир», as the volume half classifies it. The
+    // doctor storefront's events are the volume half's `doctors` rows.
+    kindId: SEED_EVENT_KINDS.efir.id,
+    audience: "experts",
     seatsLeft: options.seatsLeft ?? null,
     version: 1,
     recordStatus: "active",

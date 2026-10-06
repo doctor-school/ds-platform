@@ -387,6 +387,24 @@ describe("#2063 golden dataset", () => {
     }
   });
 
+  it("012 EARS-29 / #2628: the named эфиры are Academy (experts) events, so the Academy listing and archive can carry the cards 004/014 address", () => {
+    // The Academy reads only `audience = experts` (004 content set); a named
+    // эфир filed as `doctors` is never sent to the listing the Academy-host
+    // scenarios page through.
+    const named = new Set(
+      Object.values(golden.events).map((event) => event.id as string),
+    );
+    const rows = dataset.events.filter((event) =>
+      named.has(event.id as string),
+    );
+    expect(rows).toHaveLength(named.size);
+    for (const event of rows) {
+      expect(event.audience, event.slug).toBe("experts");
+      // The volume half's own classification of an online experts event.
+      expect(event.kindId, event.slug).toBe(SEED_EVENT_KINDS.efir.id);
+    }
+  });
+
   it("only references specialties the closed Минздрав book carries", () => {
     expect(goldenSpecialtyIssues(dataset.doctorSpecialties)).toEqual([]);
     expect(

@@ -14,8 +14,9 @@ export type NativeSelectProps = React.ComponentPropsWithoutRef<"select">;
  *
  * The browser keeps the actual `<select>` so keyboard navigation, type-ahead,
  * form submission, and mobile pickers remain platform-native. The wrapper only
- * positions a quiet, pointer-inert chevron; the control mirrors `Input` geometry
- * and its filled / focus-visible / invalid / disabled state language.
+ * positions a quiet, pointer-inert chevron; the control mirrors `Input`'s outer
+ * geometry (44px, 2px border, 14px inset) and its filled / focus-visible /
+ * invalid / disabled state language.
  */
 const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
   ({ className, value, defaultValue, onChange, children, ...props }, ref) => {
@@ -39,7 +40,10 @@ const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
             onChange?.(event);
           }}
           className={cn(
-            "flex h-11 w-full appearance-none border-2 bg-card px-3.5 py-3 pr-10 text-sm transition-colors",
+            // `py-2.5`, not Input's `py-3`: a native select clips its value to the
+            // content box instead of centring the line, so 44px − 2×2px border −
+            // 2×10px leaves exactly one 20px text-sm line and descenders render.
+            "flex h-11 w-full appearance-none border-2 bg-card px-3.5 py-2.5 pr-10 text-sm transition-colors",
             filled
               ? "border-border text-foreground"
               : "border-hairline text-muted-foreground",

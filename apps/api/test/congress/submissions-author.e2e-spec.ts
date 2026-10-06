@@ -30,6 +30,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 046 EARS-5…EARS-13, EARS-16, EARS-17 — the author's congress submissions,
@@ -150,10 +151,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state,
-            participation_format)
+            participation_format, kind_id, audience)
          VALUES ($1,$2,'Конгресс','Конгресс',$4,480,
                  'Ежегодный конгресс.',$3,'sponsor:congress',NULL,'published',
-                 'offline')`,
+                 'offline', ${eventClassificationSql()})`,
         [id, `congress-sub-${id.slice(0, 8)}`, ["cardiology"], startsAt],
       );
       await pool.query(

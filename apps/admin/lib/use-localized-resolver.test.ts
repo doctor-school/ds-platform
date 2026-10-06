@@ -10,6 +10,7 @@ import {
   LoginFormSchema,
   PartnerFormSchema,
   ProjectFormSchema,
+  EventKindFormSchema,
   RecordingExpectedByFormSchema,
   StreamConfigFormSchema,
   DirectionFormSchema,
@@ -183,6 +184,7 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     // authored field: the server derives it after save.
     const empty = keysFor(ProjectFormSchema, {
       kind: "school",
+      defaultAudience: "",
       title: "",
       description: "",
     });
@@ -192,6 +194,7 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     // Over-long title/description → the length key.
     const tooLong = keysFor(ProjectFormSchema, {
       kind: "school",
+      defaultAudience: "experts",
       title: "x".repeat(161),
       description: "x".repeat(2001),
     });
@@ -201,6 +204,7 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       ProjectFormSchema.parse({
         kind: "school",
+        defaultAudience: "doctors",
         title: "Школа",
         description: "Описание",
         slug: "Not valid",
@@ -211,6 +215,7 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       keysFor(ProjectFormSchema, {
         kind: "podcast",
+        defaultAudience: "doctors",
         title: "Школа",
         description: "Описание",
       }),
@@ -502,5 +507,19 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       keysFor(DeskRegistrationFormSchema, { ...valid, city: "г".repeat(201) }),
     ).toEqual(["maxLength"]);
+  });
+});
+
+describe("event-kind form (012 EARS-25, #2509)", () => {
+  it("012 EARS-25: an empty title is required and an empty format set has its own key", () => {
+    expect(
+      keysFor(EventKindFormSchema, { title: "", allowedFormats: [] }).sort(),
+    ).toEqual(["allowedFormats", "required"]);
+    expect(
+      EventKindFormSchema.safeParse({
+        title: "Лекция",
+        allowedFormats: ["online", "hybrid"],
+      }).success,
+    ).toBe(true);
   });
 });

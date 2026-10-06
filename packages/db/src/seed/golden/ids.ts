@@ -219,3 +219,32 @@ export const golden = Object.freeze({
 });
 
 export type GoldenCatalogue = typeof golden;
+
+/**
+ * 012 EARS-27 (#2509) — the five seed event kinds. They are NOT golden rows:
+ * migration 0046 inserts them into every database with these fixed ids, and
+ * the golden seed only REFERENCES them (an editor may rename or retire them
+ * like any other kind, so only the id and slug are relied on here).
+ */
+export const SEED_EVENT_KINDS = Object.freeze({
+  vebinar: Object.freeze({
+    id: "00460046-0000-4000-8000-000000000001",
+    slug: "vebinar",
+  }),
+  efir: Object.freeze({
+    id: "00460046-0000-4000-8000-000000000002",
+    slug: "efir",
+  }),
+  kongress: Object.freeze({
+    id: "00460046-0000-4000-8000-000000000003",
+    slug: "kongress",
+  }),
+  vstrechaKluba: Object.freeze({
+    id: "00460046-0000-4000-8000-000000000004",
+    slug: "vstrecha-kluba",
+  }),
+  masterKlass: Object.freeze({
+    id: "00460046-0000-4000-8000-000000000005",
+    slug: "master-klass",
+  }),
+});

@@ -23,6 +23,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-5 — OpenRoom / CloseRoom (POST /v1/admin/events/:id/open · /close).
 // The director's two air-day actions: OpenRoom transitions `published → live`
@@ -131,6 +132,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // PAST published event legitimately offers the 014 EARS-18 `ended` edge —
       // which would turn this suite red with no production change behind it.
       startsAtMsk: futureMskStart(30, "19:00"),
+      ...eventClassification(),
       durationMin: 90,
       specialties: ["cardiology"],
     };

@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
 import {
   DoctorEventsFeedDaySchema,
@@ -66,7 +68,7 @@ export const DoctorEventsMonthQuerySchema = z
     /** Defaults to the current МСК month, resolved server-side (the client owns no clock). */
     month: DoctorEventsMonthSchema.optional(),
     format: z.array(DoctorEventFormatSchema).default([]),
-    kind: z.array(z.uuid()).default([]),
+    kind: z.array(SlugSchema).default([]),
     specialty: z
       .union([
         DoctorEventsFeedSpecialtyModeSchema,

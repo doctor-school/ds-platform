@@ -23,6 +23,7 @@ import {
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
 import { futureMskStart } from "../setup/wall-clock.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-4/5/6/7 + 014 EARS-18 — optimistic concurrency on the admin event
 // aggregate (#1593). Two operators may hold the same event open in the admin
@@ -125,6 +126,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         title,
         school: "Кардиология",
         startsAtMsk,
+        ...eventClassification(),
         durationMin: 90,
         specialties: ["cardiology"],
       };
@@ -256,6 +258,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           title: `Архивный эфир ${randomUUID().slice(0, 8)}`,
           heldAtMsk: PAST(),
+          ...eventClassification(),
           durationMin: 90,
           specialties: ["cardiology"],
           // 012 EARS-24 (#1607): the `.strict()` legacy-broadcast body no longer

@@ -49,6 +49,10 @@ import {
   type TransitionFence,
   type UploadedPdf,
 } from "./events.service.js";
+import {
+  classificationProblem,
+  EventClassificationError,
+} from "./event-classification.js";
 import { withProtocolRefusalShape } from "./protocol-refusal-shape.js";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -111,7 +115,15 @@ export class EventsAdminController {
     // #1593 — the 201 already carries the aggregate, so it also carries the
     // validator for it: a client that creates then immediately transitions must
     // not have to re-read the detail just to obtain an `If-Match`.
-    return this.withETag(reply, await this.events.create(parsed.data, pdf));
+    try {
+      return this.withETag(reply, await this.events.create(parsed.data, pdf));
+    } catch (err) {
+      // 012 EARS-26 — a kind/format refusal is a field error of the payload.
+      if (err instanceof EventClassificationError) {
+        throw new BadRequestException(classificationProblem(err));
+      }
+      throw err;
+    }
   }
 
   /**
@@ -258,6 +270,9 @@ export class EventsAdminController {
       if (!updated) throw new NotFoundException("event not found");
       return this.withETag(reply, updated);
     } catch (err) {
+      if (err instanceof EventClassificationError) {
+        throw new BadRequestException(classificationProblem(err));
+      }
       if (err instanceof EventNotEditableError) {
         throw new ConflictException({
           message: "event is hidden — editing is refused",

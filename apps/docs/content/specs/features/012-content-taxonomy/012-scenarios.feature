@@ -1011,17 +1011,23 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the admin saves an event of kind «Конгресс» with the format online
     Then the event contract rejects the write with a field error on the format
 
-  @EARS-26 @failure
-  Scenario: Narrowing a kind flags an existing event and refuses its save until fixed
+  @EARS-25 @failure
+  Scenario: Narrowing a kind is refused while one of its events carries a removed format
     Given an event of kind «Встреча клуба» with the format online
     When the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
-    Then the event keeps the kind «Встреча клуба» and the format online
-    And the admin event list and editor flag the event's format as not allowed by its kind
-    And the storefront still shows the event as it is
-    When the admin saves the event without changing its format or kind
-    Then the event contract rejects the write with a field error on the format
-    When the admin changes the format to offline and saves
-    Then the event is stored and no longer flagged
+    Then the kind edit is rejected with a field error on the allowed formats that states one conflicting event and names it
+    And «Встреча клуба» still allows the formats online, offline and hybrid
+    When the admin changes the event's format to offline and saves
+    And the admin narrows «Встреча клуба» to allow only the formats offline and hybrid
+    Then the kind is stored with the formats offline and hybrid
+
+  @EARS-25 @edge
+  Scenario: A narrowing refused by many events states their count and names only five
+    Given seven events of kind «Встреча клуба» with the format hybrid
+    When the admin narrows «Встреча клуба» to allow only the formats online and offline
+    Then the kind edit is rejected with a field error on the allowed formats that states seven conflicting events
+    And the refusal names five of those events, each linking to its admin event page
+    And the refusal says two more events conflict
 
   @EARS-27 @happy
   Scenario: The dictionary starts with the five seed kinds
@@ -1070,7 +1076,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And the congress event has the kind «Конгресс» and the audience doctors
     And an online event of a doctors-audience project has the kind «Вебинар»
     And an online event of an experts-audience project has the kind «Эфир»
-    And an event with no project has the audience doctors
+    And an event with no project has the audience its reviewed mapping row names, never one inferred by default
     And every existing event carries exactly one kind whose allowed formats include its format and exactly one audience
 
   @EARS-29 @failure

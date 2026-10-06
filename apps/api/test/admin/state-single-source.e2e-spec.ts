@@ -21,6 +21,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-9 — one source of truth for event state across the whole epic. The
 // `EventLifecycleState` the 007 admin commands write (create → publish → open →
@@ -101,6 +102,7 @@ describe.skipIf(
     title: "Единый источник состояния",
     school: "Кардиология сегодня",
     startsAtMsk: futureMskStart(30, "19:00"),
+    ...eventClassification(),
     durationMin: 90,
     description: "EARS-9 single-source check.",
     speakers: [{ name: "Иванов И.И.", regalia: "д.м.н." }],

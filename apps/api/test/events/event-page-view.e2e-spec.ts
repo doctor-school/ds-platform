@@ -17,6 +17,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 020 EARS-1 (#1764) — ONE shared event-page core, read by BOTH storefronts.
 //
@@ -65,8 +66,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
             specialties, partner_ref, program_pdf_ref, state,
-            participation_format, seats_left)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            participation_format, seats_left, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, ${eventClassificationSql("doctors")})`,
         [
           id,
           slug,
@@ -324,8 +325,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'published')`,
+            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'published', ${eventClassificationSql("doctors")})`,
         [
           id,
           slug,

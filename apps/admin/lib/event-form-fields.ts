@@ -48,6 +48,14 @@ export function eventFormFields(detail?: EventAdminDetail): EventFormFields {
       provider: STREAM_PROVIDERS[0],
       embedRef: "",
     },
+    // 012 EARS-26/29 — the event's kind, format and audience. On CREATE all
+    // three are empty: the editor chooses them, and only a linked project's
+    // default prefills the audience (EARS-30) — never a platform-wide default.
+    kindId: detail?.kind.id ?? "",
+    participationFormat: detail?.participationFormat ?? "",
+    audience: detail?.audience ?? "",
+    // The project link is a create-time choice; on EDIT the «Проекты» tab owns it.
+    projectId: "",
   };
 }
 

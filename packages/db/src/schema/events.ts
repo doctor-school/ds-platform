@@ -11,7 +11,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { eventAudience, eventParticipationFormat } from "./event-vocabulary.js";
 import { recordStatus } from "./lifecycle.js";
+// A lazy `references(() => eventKinds.id)` only: taxonomy.ts imports this file
+// for its own `events.id` references, so nothing here reads `eventKinds` while
+// the module graph is still loading.
+import { eventKinds } from "./taxonomy.js";
 
 // 007 — the event-admin aggregate (the authoring vertical's write model, design
 // §3; ADR-0003 Data Layer). 007 owns this write model; 004/005/006 read
@@ -72,25 +77,6 @@ export const eventLifecycleState = pgEnum("event_lifecycle_state", [
  */
 export const eventOrigin = pgEnum("event_origin", ["platform", "legacy"]);
 
-/**
- * 020 EARS-1 / LD-5 (#1764) — the event's **participation format**: where the
- * doctor actually attends. A real Postgres enum mirroring
- * `EventParticipationFormatSchema` in `@ds/schemas`, on the same
- * DB-owns-the-column-type / schema-owns-the-wire-contract split as
- * {@link eventLifecycleState}.
- *
- * It is a SEPARATE axis from 019's five-value catalogue format
- * (`webinar` · `online-meeting` · `offline-meetup` · `congress` · `podcast`),
- * which is editorial kind, not attendance mode: a `congress` is routinely
- * hybrid. Folding the two together would make «are there seats to run out of» a
- * property of an editorial label (020-design §4).
- */
-export const eventParticipationFormat = pgEnum("event_participation_format", [
-  "online",
-  "offline",
-  "hybrid",
-]);
-
 export const events = pgTable(
   "events",
   {
@@ -126,6 +112,24 @@ export const events = pgTable(
     participationFormat: eventParticipationFormat("participation_format")
       .notNull()
       .default("online"),
+    /**
+     * 012 LD-11 / EARS-26 (#2509) — the event's one kind, a required reference
+     * into the open `event_kinds` dictionary (never a free-text tag). The kind's
+     * `allowed_formats` must contain `participation_format` when the event is
+     * created or saved; that check is the write command's, not a DB constraint,
+     * because it spans two tables. Its counterpart is the kind's narrowing
+     * command, which is refused while any event of that kind carries a removed
+     * format, so no event ever holds a format its kind does not allow.
+     */
+    kindId: uuid("kind_id")
+      .notNull()
+      .references(() => eventKinds.id, { onDelete: "restrict" }),
+    /**
+     * 012 LD-12 / EARS-29 (#2509) — the event audience, the only selector of
+     * its storefront: the doctor reads select `doctors`, the Academy reads
+     * select `experts`. No default: every create names it.
+     */
+    audience: eventAudience("audience").notNull(),
     /**
      * 020 LD-5 (#1764) — the remaining offline seats. `null` means there is no
      * seat limit to run out of (an online event, or an offline/hybrid event
@@ -215,6 +219,9 @@ export const events = pgTable(
     index("events_active_starts_at_idx")
       .on(t.startsAt)
       .where(sql`${t.recordStatus} = 'active'`),
+    // 019 EARS-17: the doctor kind facet filters `kind_id = ANY(...)`; the
+    // retire-impact preview counts the events carrying a kind.
+    index("events_kind_id_idx").on(t.kindId),
   ],
 );
 

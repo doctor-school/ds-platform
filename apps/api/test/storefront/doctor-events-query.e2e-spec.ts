@@ -15,6 +15,10 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
+import {
+  SEED_EVENT_KINDS,
+  eventClassificationSql,
+} from "../setup/event-classification.js";
 
 /**
  * 019 EARS-8 (#1523) — the query IS the state, proven at the API boundary.
@@ -114,7 +118,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const makeEvent = async (title: string, startsAt: Date) => {
         const id = randomUUID();
         await pool.query(
-          "INSERT INTO events (id, slug, title, school, starts_at, duration_min, state) VALUES ($1, $2, $3, $4, $5, 60, 'published')",
+          `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql("doctors")})`,
           [
             id,
             `query-${randomUUID()}`,
@@ -185,16 +189,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("019 EARS-8.15: repeatable facets round-trip in both wire spellings", async () => {
       const base = `?from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`;
       const repeated = await readFeed(
-        `${base}&format=webinar&format=podcast&kind=${directionId}`,
+        `${base}&format=online&format=hybrid&kind=${SEED_EVENT_KINDS.vstrechaKluba.slug}`,
       );
       const comma = await readFeed(
-        `${base}&format=webinar,podcast&kind=${directionId}`,
+        `${base}&format=online,hybrid&kind=${SEED_EVENT_KINDS.vstrechaKluba.slug}`,
       );
       expect(comma).toEqual(repeated);
 
       // The facet actually selects: the same read restricted to a format the
       // fixture has no rows for comes back empty rather than unchanged.
-      const other = await readFeed(`${base}&format=congress`);
+      const other = await readFeed(`${base}&format=offline`);
       const otherIds = other.days.flatMap((day) =>
         day.items.map((item) => item.id),
       );
@@ -221,9 +225,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const query of [
         "?from=12.09.2026",
         "?tense=sideways",
-        // `kind` is a uuid column downstream — an unconstrained value would
-        // reach Postgres and raise `22P02` as a 500 on a public URL.
-        "?kind=not-a-uuid",
+        // `kind` is an event-kind slug (019 amendment) — a value outside the
+        // slug grammar is refused at the boundary, never matched downstream.
+        "?kind=Not_A_Slug",
         "?day=2026-13-99x",
       ]) {
         const response = await read(query);

@@ -21,14 +21,14 @@ describe("doctorEventsDayHref", () => {
 
   it("EARS-4.5: a day inside the served horizon leaves the horizon alone", () => {
     const query = params(
-      doctorEventsDayHref({ format: "webinar" }, "2026-09-04", HORIZON),
+      doctorEventsDayHref({ format: "online" }, "2026-09-04", HORIZON),
     );
 
     expect(query.get("day")).toBe("2026-09-04");
     expect(query.get("month")).toBe("2026-09");
     expect(query.get("to")).toBeNull();
     expect(query.get("from")).toBeNull();
-    expect(query.get("format")).toBe("webinar");
+    expect(query.get("format")).toBe("online");
   });
 
   it("EARS-4.5: the day AT the exclusive bound widens — that day is not served yet", () => {

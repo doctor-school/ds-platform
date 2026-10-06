@@ -88,15 +88,6 @@ function dateLabelOf(startsAt: string): string {
   return `${value("day")} ${value("month")} · ${value("weekday")}`;
 }
 
-/** The format kicker on the time plate — catalog copy, never a card-owned vocabulary. */
-const FORMAT_LABEL: Record<DoctorEventCard["format"], string> = {
-  webinar: "Вебинар",
-  "online-meeting": "Онлайн-встреча",
-  "offline-meetup": "Очная встреча",
-  congress: "Конгресс",
-  podcast: "Подкаст",
-};
-
 /**
  * 019 EARS-12 (#1527) — the READER the projection is rendering for, and the feed
  * query they are reading it under.
@@ -165,13 +156,14 @@ export function toEventListItems(
       dateLabel: dateLabelOf(card.startsAt),
       school: card.source,
       title: card.title,
-      formatLabel: FORMAT_LABEL[card.format],
+      // 019 EARS-17 — the kicker is the event's kind, read from the 012
+      // dictionary (an editor-added kind needs no code change here).
+      formatLabel: card.kind.title,
       // An unauthored value renders NOTHING rather than a placeholder: the
       // chip row simply has no speaker line when 007 authored no speaker.
       ...(card.speaker.length > 0
         ? { speakers: [{ name: card.speaker }] }
         : {}),
-      ...(card.kindTitle.length > 0 ? { specialties: [card.kindTitle] } : {}),
       ...(card.nmo ? { nmoLabel: "НМО" } : {}),
       pulCost: card.pulCost,
       freeLabel: DOCTOR_EVENTS_FEED_COPY.free,

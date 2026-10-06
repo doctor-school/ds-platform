@@ -64,6 +64,14 @@ export function Providers({ children }: { children: ReactNode }) {
           edit: "/directions/:id",
           meta: { label: t("app.nav.directions") },
         },
+        // 012 EARS-25 (#2509) — the event-kind dictionary, mirroring directions.
+        {
+          name: "event-kinds",
+          list: "/event-kinds",
+          create: "/event-kinds/create",
+          edit: "/event-kinds/:id",
+          meta: { label: t("app.nav.eventKinds") },
+        },
       ]}
       options={{
         syncWithLocation: true,

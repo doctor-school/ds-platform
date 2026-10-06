@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsAdmin } from "./support/sign-in";
 
@@ -98,6 +99,7 @@ async function seedEventIfListEmpty(page: Page): Promise<void> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/);
 }

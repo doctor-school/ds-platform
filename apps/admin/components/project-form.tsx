@@ -24,6 +24,8 @@ import {
 import { FormDerivedNote } from "@ds/design-system/blocks";
 import {
   ACCEPTED_IMAGE_MIME_TYPES,
+  EVENT_AUDIENCES,
+  type EventAudience,
   MAX_IMAGE_BYTES,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_KINDS,
@@ -48,6 +50,8 @@ export interface ProjectFormValues {
   kind: ProjectFormFields["kind"];
   title: string;
   description: string;
+  /** 012 EARS-30 (#2509) — prefills the audience of the project's new events. */
+  defaultAudience: EventAudience;
   cover: File | null;
   /** True when the operator asked to drop the STORED cover (`mediaAction: "clear"`). */
   removeCover: boolean;
@@ -58,6 +62,8 @@ function defaults(detail?: ProjectAdminDetail): ProjectFormFields {
     kind: detail?.kind ?? "school",
     title: detail?.title ?? "",
     description: detail?.description ?? "",
+    // No preselected audience on create: the editor chooses it (required).
+    defaultAudience: detail?.defaultAudience ?? "",
   };
 }
 
@@ -104,6 +110,7 @@ export function ProjectForm({
             kind: fields.kind,
             title: fields.title,
             description: fields.description,
+            defaultAudience: fields.defaultAudience as EventAudience,
             cover,
             removeCover,
           });
@@ -125,6 +132,37 @@ export function ProjectForm({
                 </NativeSelect>
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* 012 EARS-30 (#2509) — the audience the project's NEW events start
+            from. Required; changing it later rewrites no existing event. */}
+        <FormField
+          control={form.control}
+          name="defaultAudience"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel htmlFor="defaultAudience">
+                {t("projects.fields.defaultAudience")}
+              </FormLabel>
+              <FormControl>
+                <NativeSelect
+                  id="defaultAudience"
+                  data-testid="project-default-audience"
+                  {...field}
+                >
+                  <option value="">
+                    {t("projects.fields.defaultAudiencePlaceholder")}
+                  </option>
+                  {EVENT_AUDIENCES.map((audience) => (
+                    <option key={audience} value={audience}>
+                      {t(`events.audiences.${audience}`)}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </FormControl>
+              <FormMessage>{t("projects.fields.defaultAudienceHint")}</FormMessage>
             </FormItem>
           )}
         />

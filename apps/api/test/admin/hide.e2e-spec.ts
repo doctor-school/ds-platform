@@ -31,6 +31,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-6 — HideEvent (POST /v1/admin/events/:id/hide). The operator's
 // post-broadcast action that transitions an `ended` event `ended → hidden`,
@@ -177,6 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Derived from `now`, never a wall-clock literal: a pinned date rots the
       // day it drifts into the past (#1386).
       startsAtMsk: futureMskStart(30, "19:00"),
+      ...eventClassification(),
       durationMin: 90,
       specialties: ["cardiology"],
     };

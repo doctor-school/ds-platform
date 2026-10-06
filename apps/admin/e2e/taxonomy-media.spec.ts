@@ -1,3 +1,4 @@
+import { chooseProjectDefaultAudience } from "./support/event-classification";
 import {
   expect,
   test,
@@ -187,6 +188,7 @@ test.describe("012 EARS-21 — reversible taxonomy entity media", () => {
       .getByTestId("project-description")
       .fill("Практическая образовательная программа для врачей-кардиологов.");
     await expectNoStorageReferenceAuthoring(page, "project-slug");
+    await chooseProjectDefaultAudience(page);
     await page.getByTestId("submit-project").click();
     await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
 
@@ -295,9 +297,9 @@ for (const variant of RENDER_MATRIX) {
       ]) {
         await page.goto(media.path);
         const fileInput = page.locator(`input[type="file"]#${media.inputId}`);
-        await expect(
-          page.locator(`label[for="${media.inputId}"]`),
-        ).toHaveText(media.label);
+        await expect(page.locator(`label[for="${media.inputId}"]`)).toHaveText(
+          media.label,
+        );
         await expect(fileInput).toHaveCount(1);
         await expect(fileInput).toHaveAttribute("accept", /image\//);
       }

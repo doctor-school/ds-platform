@@ -22,6 +22,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-2 — UpdateEvent (PATCH /v1/admin/events/:id) + replaceable program
 // PDF. A platform_admin edits an event's fields at any pre-hide state and the
@@ -140,6 +141,7 @@ describe.skipIf(
     title: "Актуальная терапия ХСН",
     school: "Кардиология сегодня",
     startsAtMsk: "2026-07-17T19:00",
+    ...eventClassification(),
     durationMin: 90,
     description: "Разбор клинических рекомендаций.",
     // 012 EARS-24 (#1607): the event write body carries no speaker list — the

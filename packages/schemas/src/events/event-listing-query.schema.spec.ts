@@ -28,8 +28,8 @@ import {
  * so the URL a link writes is stable rather than drifting per navigation.
  */
 
-const KIND_A = "6f0f6a1c-0e5a-4d6a-9f2b-6a1c0e5a4d6a";
-const KIND_B = "1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d";
+const KIND_A = "vebinar";
+const KIND_B = "kongress";
 
 /** Round-trip through the wire form the way a browser would: encode → URL → raw bag → parse. */
 const roundTrip = (query: DoctorEventsFeedQuery) =>
@@ -67,11 +67,11 @@ describe("019 EARS-8 event listing query codec", () => {
     it("019 EARS-8.4: wire entries round-trip into the raw bag, repeats preserved", () => {
       expect(
         rawQueryFromEntries([
-          ["format", "webinar"],
-          ["format", "podcast"],
+          ["format", "online"],
+          ["format", "hybrid"],
           ["tense", "past"],
         ]),
-      ).toEqual({ format: ["webinar", "podcast"], tense: "past" });
+      ).toEqual({ format: ["online", "hybrid"], tense: "past" });
       expect(
         encodeQueryString([
           ["q", "сердце"],
@@ -88,7 +88,7 @@ describe("019 EARS-8 event listing query codec", () => {
         tense: "past",
         from: "2026-09-01",
         to: "2026-09-29",
-        format: ["webinar", "offline-meetup"],
+        format: ["online", "offline"],
         kind: [KIND_A, KIND_B],
         specialty: ["cardiology", "neurology"],
         city: ["msk", "spb"],
@@ -135,7 +135,7 @@ describe("019 EARS-8 event listing query codec", () => {
       const raw = {
         q: "сердце",
         nmo: "1",
-        format: ["webinar", "podcast"],
+        format: ["online", "hybrid"],
         tense: "past",
         day: "2026-09-12",
       };
@@ -188,7 +188,7 @@ describe("019 EARS-8 event listing query codec", () => {
       ).toEqual([]);
       // `kind` is a uuid column downstream — a malformed value is a 400 here,
       // never a Postgres `22P02` on a public URL.
-      expect(parseDoctorEventsFeedQuery({ kind: "not-a-uuid" }).success).toBe(
+      expect(parseDoctorEventsFeedQuery({ kind: "Not a slug!" }).success).toBe(
         false,
       );
     });

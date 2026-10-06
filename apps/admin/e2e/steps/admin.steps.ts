@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "../support/event-classification";
 import { expect, type Page } from "@playwright/test";
 import {
   adminOrigin,
@@ -117,7 +118,11 @@ async function submitLogin(
  * non-admin token (the app then keeps the operator on `/login`). Re-submit a few
  * times until the admin surface is reached.
  */
-async function browserLoginAsAdmin(page: Page, email: string, password: string) {
+async function browserLoginAsAdmin(
+  page: Page,
+  email: string,
+  password: string,
+) {
   for (let attempt = 0; attempt < 4; attempt++) {
     if (attempt > 0) await page.waitForTimeout(2500);
     if (await submitLogin(page, email, password)) return;
@@ -140,6 +145,7 @@ async function createEvent(page: Page, world: AdminWorld, msk: string) {
     mimeType: "application/pdf",
     buffer: PDF,
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/);
   world.eventId = page.url().split("/").pop();
@@ -168,9 +174,12 @@ Given("a doctor_guest caller with a session", async ({ page, world }) => {
   await expect(page.getByTestId("login-error")).toBeVisible();
 });
 
-When("the operator creates a draft event with a program PDF", async ({ page, world }) => {
-  await createEvent(page, world, DEFAULT_MSK);
-});
+When(
+  "the operator creates a draft event with a program PDF",
+  async ({ page, world }) => {
+    await createEvent(page, world, DEFAULT_MSK);
+  },
+);
 
 When(
   "the operator creates a draft event at {string} МСК with a program PDF",
@@ -246,9 +255,12 @@ Then(
   },
 );
 
-Then("only the {string} lifecycle action is offered", async ({ page }, action: string) => {
-  await expect(page.getByTestId(`action-${action}`)).toBeVisible();
-});
+Then(
+  "only the {string} lifecycle action is offered",
+  async ({ page }, action: string) => {
+    await expect(page.getByTestId(`action-${action}`)).toBeVisible();
+  },
+);
 
 Then("no invalid transition action is offered from draft", async ({ page }) => {
   for (const forbidden of ["action-open", "action-close", "action-hide"]) {
@@ -286,12 +298,15 @@ Then(
   },
 );
 
-Then("no untranslated catalog key is visible on the surface", async ({ page }) => {
-  const body = await page.locator("body").innerText();
-  // A missing translation would render the raw dotted catalog key (e.g.
-  // `events.state.draft`) — assert none leaked onto the surface (EARS-10).
-  expect(body).not.toMatch(/\b(?:events|common|app|login)\.[a-zA-Z][\w.]+/);
-});
+Then(
+  "no untranslated catalog key is visible on the surface",
+  async ({ page }) => {
+    const body = await page.locator("body").innerText();
+    // A missing translation would render the raw dotted catalog key (e.g.
+    // `events.state.draft`) — assert none leaked onto the surface (EARS-10).
+    expect(body).not.toMatch(/\b(?:events|common|app|login)\.[a-zA-Z][\w.]+/);
+  },
+);
 
 Then("the caller is bounced to the login screen", async ({ page }) => {
   await page.waitForURL(/\/login/);
@@ -327,11 +342,14 @@ When(
   },
 );
 
-When("the operator enters {string} as the duration", async ({ page }, value: string) => {
-  await page.locator("#durationMin").fill(value);
-  // `mode: onTouched` — blur surfaces the inline error without a submit.
-  await page.locator("#durationMin").blur();
-});
+When(
+  "the operator enters {string} as the duration",
+  async ({ page }, value: string) => {
+    await page.locator("#durationMin").fill(value);
+    // `mode: onTouched` — blur surfaces the inline error without a submit.
+    await page.locator("#durationMin").blur();
+  },
+);
 
 When("the operator attaches a non-PDF program file", async ({ page }) => {
   await page.getByTestId("program-pdf").setInputFiles({
@@ -382,7 +400,10 @@ Then(
     // The Stage-B finding: the login form surfaced native «Please fill out this
     // field.» bubbles. With `noValidate` the browser never intercepts the submit,
     // so the DS RU errors below are the ONLY validation surface.
-    await expect(page.getByTestId("login-form")).toHaveAttribute("novalidate", "");
+    await expect(page.getByTestId("login-form")).toHaveAttribute(
+      "novalidate",
+      "",
+    );
   },
 );
 

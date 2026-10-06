@@ -64,7 +64,13 @@ import type {
   GoldenDirectionSpecialtyLink,
   GoldenDoctorSpecialtyLink,
 } from "./dataset.js";
-import { golden, GOLDEN_GROUP, goldenUuid, isGoldenUuid } from "./ids.js";
+import {
+  golden,
+  GOLDEN_GROUP,
+  goldenUuid,
+  isGoldenUuid,
+  SEED_EVENT_KINDS,
+} from "./ids.js";
 import { goldenDateOnly, shiftFromNow } from "./now.js";
 import {
   eventProgrammeKey,
@@ -496,6 +502,31 @@ function eventCreatedMs(plan: VolumeEventPlan, nowMs: number): number {
   );
 }
 
+/** 012 LD-12 — a project's default audience follows what it is. */
+function projectDefaultAudience(kind: NewProject["kind"]): "doctors" | "experts" {
+  return kind === "media" ? "experts" : "doctors";
+}
+
+function volumeEventClassification(
+  i: number,
+  format: "online" | "offline" | "hybrid",
+): Pick<NewEvent, "kindId" | "audience"> {
+  // The primary project slot of `buildEventProjects` (`i % projects`).
+  const primary = VOLUME_PROJECTS[i % VOLUME_PROJECTS.length]!;
+  const audience = projectDefaultAudience(primary.kind);
+  const kind =
+    format === "online"
+      ? audience === "experts"
+        ? SEED_EVENT_KINDS.efir
+        : SEED_EVENT_KINDS.vebinar
+      : format === "hybrid"
+        ? SEED_EVENT_KINDS.vstrechaKluba
+        : i % 2 === 0
+          ? SEED_EVENT_KINDS.kongress
+          : SEED_EVENT_KINDS.masterKlass;
+  return { kindId: kind.id, audience };
+}
+
 function buildEvent(plan: VolumeEventPlan, now: Date): NewEvent {
   const i = plan.index;
   const nowMs = now.getTime();
@@ -523,6 +554,10 @@ function buildEvent(plan: VolumeEventPlan, now: Date): NewEvent {
     state: plan.state,
     origin,
     participationFormat,
+    // 012 EARS-26 / EARS-29 — the audience of the event's PRIMARY project
+    // (schools → doctors, media → experts, so both storefronts carry volume)
+    // and a seed kind that allows the format.
+    ...volumeEventClassification(i, participationFormat ?? "online"),
     // Only a format with a room to fill has seats to run out of; one offline
     // event in eleven is «мест нет», which is the state the format block's
     // sold-out copy needs.
@@ -585,6 +620,7 @@ function buildProjects(at: At): NewProject[] {
     slug: `golden-volume-project-${i + 1}`,
     kind: spec.kind,
     title: spec.title,
+    defaultAudience: projectDefaultAudience(spec.kind),
     description: spec.description,
     status: "published" as const,
     firstPublishedAt: at({ days: -310 - i * 4 }),

@@ -1,11 +1,13 @@
 import { z } from "zod";
 import {
   EmbedRefSchema,
+  EventAudienceSchema,
   MSK_LOCAL_DATETIME,
   RecordingExpectedBySchema,
   refineEmbedRefForProvider,
   StreamProviderSchema,
 } from "../events/events.schema.js";
+import { EventParticipationFormatSchema } from "../events/participation.schema.js";
 import {
   ADMIN_LIST_PAGE_SIZE_DEFAULT,
   ADMIN_LIST_PAGE_SIZE_MAX,
@@ -148,6 +150,12 @@ export const LegacyBroadcastCreateBodySchema = z
     specialties: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
     /** The recording the эфир exists to carry — created `draft` (EARS-24). */
     recording: AttachRecordingRequestSchema,
+    /** 012 EARS-26 — every admin write seam requires the event's one kind. */
+    kindId: z.uuid(),
+    /** 012 EARS-26 / 020 EARS-1 — checked against the kind's allowed formats. */
+    participationFormat: EventParticipationFormatSchema.default("online"),
+    /** 012 EARS-29 — every admin write seam requires the audience. */
+    audience: EventAudienceSchema,
   })
   .strict();
 export type LegacyBroadcastCreateBody = z.infer<

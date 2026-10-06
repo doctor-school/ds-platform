@@ -23,6 +23,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 014 EARS-23…27 (#1741) — the PRE-PLATFORM (legacy) broadcast lifecycle: the
 // second state machine, selected by `events.origin`, that an эфир held before
@@ -169,6 +170,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         payload: {
           title: `Архивный эфир ${randomUUID().slice(0, 8)}`,
           heldAtMsk: mskStamp(-10),
+          ...eventClassification("doctors"),
           durationMin: 90,
           specialties: ["cardiology"],
           // 012 EARS-24 (#1607): the archived эфир carries no free-text speaker
@@ -203,6 +205,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           title: `Платформенный эфир ${randomUUID().slice(0, 8)}`,
           school: "Кардиология",
           startsAtMsk: mskStamp(-10),
+          ...eventClassification("doctors"),
           durationMin: 90,
           specialties: ["cardiology"],
         }),
@@ -402,6 +405,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     }
 
     /** The doctor storefront day feed over the эфир's own day (EARS-26). */
+    // The fixtures carry audience `doctors` (012 EARS-29): this suite reads the
+    // doctor feed, which selects only that audience.
     async function feedCardFor(
       id: string,
       heldAtMsk: string,

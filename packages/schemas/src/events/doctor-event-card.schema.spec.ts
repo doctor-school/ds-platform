@@ -17,9 +17,12 @@ const BASE = {
   href: "/events/kardio-forum",
   startsAt: "2026-09-14T16:00:00.000Z",
   endsAt: null,
-  format: "webinar" as const,
-  kind: "3f1c7d2e-8a5b-4a1e-9c33-1d0f6b2a7e41",
-  kindTitle: "Разбор клинического случая",
+  format: "online" as const,
+  kind: {
+    id: "3f1c7d2e-8a5b-4a1e-9c33-1d0f6b2a7e41",
+    slug: "klinicheskiy-razbor-s-patsientom",
+    title: "Клинический разбор с пациентом",
+  },
   title: "Кардиофорум: разбор клинических случаев",
   speaker: "Анна Соколова",
   source: "Школа кардиологии",
@@ -30,17 +33,15 @@ const BASE = {
 };
 
 describe("019 EARS-2 — DoctorEventCard payload", () => {
-  it("019 EARS-2.1: the format vocabulary is exactly the five spec formats", () => {
+  it("019 EARS-2.1: the format vocabulary is the closed delivery-mode axis online | offline | hybrid", () => {
     expect(DoctorEventFormatSchema.options).toEqual([
-      "webinar",
-      "online-meeting",
-      "offline-meetup",
-      "congress",
-      "podcast",
+      "online",
+      "offline",
+      "hybrid",
     ]);
   });
 
-  it("019 EARS-2.2: every one of the five formats parses as a card payload", () => {
+  it("019 EARS-2.2: every one of the three formats parses as a card payload", () => {
     for (const format of DoctorEventFormatSchema.options) {
       expect(DoctorEventCardSchema.parse({ ...BASE, format }).format).toBe(
         format,
@@ -51,7 +52,7 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
   it("019 EARS-2.3: an offline event carries its city and remaining seats", () => {
     const offline = DoctorEventCardSchema.parse({
       ...BASE,
-      format: "offline-meetup",
+      format: "offline",
       city: "Казань",
       seatsLeft: 12,
     });
@@ -62,7 +63,7 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
   it("019 EARS-2.4: a congress may span dates and be hybrid (an endsAt plus a city)", () => {
     const congress = DoctorEventCardSchema.parse({
       ...BASE,
-      format: "congress",
+      format: "hybrid",
       endsAt: "2026-09-16T18:00:00.000Z",
       city: "Санкт-Петербург",
       seatsLeft: 40,

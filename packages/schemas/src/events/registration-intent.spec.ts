@@ -30,7 +30,7 @@ import {
 const FEED_QUERY: RawQueryRecord = {
   tense: "upcoming",
   day: "2026-09-10",
-  format: ["webinar", "podcast"],
+  format: ["online", "hybrid"],
 };
 
 describe("019 EARS-12 — the doctor-feed registration return target", () => {
@@ -45,7 +45,7 @@ describe("019 EARS-12 — the doctor-feed registration return target", () => {
 
   it("019 EARS-12.2: the minted target is the codec's own key order with resume LAST", () => {
     expect(mintDoctorEventsFeedReturnTarget(FEED_QUERY, "kardio-forum")).toBe(
-      "/events?day=2026-09-10&tense=upcoming&format=webinar&format=podcast" +
+      "/events?day=2026-09-10&tense=upcoming&format=online&format=hybrid" +
         "&specialty=mine-and-adjacent&resume=kardio-forum",
     );
   });
@@ -64,7 +64,7 @@ describe("019 EARS-12 — the doctor-feed registration return target", () => {
 
   it("019 EARS-12.5: minting refuses a feed query the ONE codec rejects", () => {
     expect(
-      mintDoctorEventsFeedReturnTarget({ kind: "not-a-uuid" }, "kardio-forum"),
+      mintDoctorEventsFeedReturnTarget({ kind: "Not a slug!" }, "kardio-forum"),
     ).toBeNull();
   });
 

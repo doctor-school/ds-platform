@@ -14,14 +14,20 @@ import {
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import {
-  directions,
   eventDirections,
   eventExperts,
+  eventKinds,
+  eventProjects,
   events,
   experts,
+  projects,
   registrations,
 } from "@ds/db";
-import { MONTH_BROADCAST_STATES } from "@ds/schemas";
+import {
+  type EventKindRef,
+  type EventParticipationFormat,
+  MONTH_BROADCAST_STATES,
+} from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
 
@@ -49,7 +55,34 @@ export interface DoctorFeedRow {
   startsAt: Date;
   durationMin: number;
   state: (typeof MONTH_BROADCAST_STATES)[number];
+  /** 019 amendment — the event's own attendance mode (`online|offline|hybrid`). */
+  participationFormat: EventParticipationFormat;
+  /** 012 EARS-28 — the event's kind, read from the dictionary. */
+  kind: EventKindRef;
 }
+
+/**
+ * The card columns both feed reads select — the event plus its kind joined
+ * from the 012 dictionary (`events.kind_id` is a NOT NULL FK, so the inner
+ * join drops no event).
+ */
+const FEED_ROW_COLUMNS = {
+  id: events.id,
+  slug: events.slug,
+  title: events.title,
+  school: events.school,
+  startsAt: events.startsAt,
+  durationMin: events.durationMin,
+  state: events.state,
+  participationFormat: events.participationFormat,
+  kind: { id: eventKinds.id, slug: eventKinds.slug, title: eventKinds.title },
+};
+
+/**
+ * 012 LD-12 / EARS-29 — the doctor storefront reads ONLY `audience = doctors`
+ * events; an `experts` event belongs to the Academy and never shows here.
+ */
+const DOCTOR_AUDIENCE = eq(events.audience, "doctors");
 
 export interface DoctorFeedFilters {
   /** `null` = targeting off (`specialty=all`); `[]` = a targeted read with no reachable direction. */
@@ -57,8 +90,8 @@ export interface DoctorFeedFilters {
   /** Half-open horizon `[fromInstant, toInstant)` in UTC. */
   fromInstant: Date;
   toInstant: Date;
-  /** Reference ids of the `kind` facet — matched against the managed direction rows. */
-  kindIds: string[];
+  /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
+  kindSlugs: string[];
   q?: string | undefined;
 }
 
@@ -92,6 +125,7 @@ export class DoctorEventsRepository {
   private feedWhere(filters: DoctorFeedFilters) {
     const where = [
       eq(events.recordStatus, "active"),
+      DOCTOR_AUDIENCE,
       inArray(events.state, [...MONTH_BROADCAST_STATES]),
       gte(events.startsAt, filters.fromInstant),
       lt(events.startsAt, filters.toInstant),
@@ -105,8 +139,19 @@ export class DoctorEventsRepository {
         inArray(events.id, this.activeDirectionsOf(filters.directionIds)),
       );
     }
-    if (filters.kindIds.length > 0) {
-      where.push(inArray(events.id, this.activeDirectionsOf(filters.kindIds)));
+    // 019 EARS-17 — the kind facet reads the 012 dictionary: the event's own
+    // `kind_id` among the kinds the slugs name (a retired kind is still matched,
+    // because the event keeps its reference — EARS-28).
+    if (filters.kindSlugs.length > 0) {
+      where.push(
+        inArray(
+          events.kindId,
+          this.db
+            .select({ id: eventKinds.id })
+            .from(eventKinds)
+            .where(inArray(eventKinds.slug, filters.kindSlugs)),
+        ),
+      );
     }
     if (filters.q !== undefined) {
       const pattern = `%${filters.q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
@@ -131,16 +176,9 @@ export class DoctorEventsRepository {
     const where = this.feedWhere(filters);
 
     const rows = await this.db
-      .select({
-        id: events.id,
-        slug: events.slug,
-        title: events.title,
-        school: events.school,
-        startsAt: events.startsAt,
-        durationMin: events.durationMin,
-        state: events.state,
-      })
+      .select(FEED_ROW_COLUMNS)
       .from(events)
+      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
       .where(and(...where))
       .orderBy(asc(events.startsAt), asc(events.id));
 
@@ -172,6 +210,7 @@ export class DoctorEventsRepository {
 
     const where = [
       eq(events.recordStatus, "active"),
+      DOCTOR_AUDIENCE,
       eq(events.state, "live"),
     ];
     if (directionIds !== null) {
@@ -179,16 +218,9 @@ export class DoctorEventsRepository {
     }
 
     const rows = await this.db
-      .select({
-        id: events.id,
-        slug: events.slug,
-        title: events.title,
-        school: events.school,
-        startsAt: events.startsAt,
-        durationMin: events.durationMin,
-        state: events.state,
-      })
+      .select(FEED_ROW_COLUMNS)
       .from(events)
+      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
       .where(and(...where))
       .orderBy(asc(events.startsAt), asc(events.id));
 
@@ -269,40 +301,33 @@ export class DoctorEventsRepository {
   }
 
   /**
-   * The published direction each event is filed under. Both halves are returned:
-   * the ID is the card's `kind` (the facet vocabulary), the title is its display
-   * projection — one query, one row, no second vocabulary.
+   * 019 EARS-2 — the card's source line: the title of the PUBLISHED project an
+   * event is actively linked to (012 `event_projects`). An event with no such
+   * project falls back to its authored `school` in the service. Several links
+   * resolve by title order, so the answer is deterministic.
    */
-  async findPrimaryDirections(
-    eventIds: string[],
-  ): Promise<Map<string, { id: string; title: string }>> {
+  async findProjectTitles(eventIds: string[]): Promise<Map<string, string>> {
     if (eventIds.length === 0) return new Map();
     const rows = await this.db
-      .select({
-        eventId: eventDirections.eventId,
-        id: directions.id,
-        title: directions.title,
-      })
-      .from(eventDirections)
-      .innerJoin(directions, eq(directions.id, eventDirections.directionId))
+      .select({ eventId: eventProjects.eventId, title: projects.title })
+      .from(eventProjects)
+      .innerJoin(projects, eq(projects.id, eventProjects.projectId))
       .where(
         and(
-          inArray(eventDirections.eventId, eventIds),
-          eq(eventDirections.status, "active"),
-          isNull(eventDirections.deletedAt),
-          eq(directions.status, "published"),
-          isNull(directions.deletedAt),
+          inArray(eventProjects.eventId, eventIds),
+          eq(eventProjects.status, "active"),
+          isNull(eventProjects.deletedAt),
+          eq(projects.status, "published"),
+          isNull(projects.deletedAt),
         ),
       )
-      .orderBy(asc(eventDirections.eventId), asc(directions.title));
+      .orderBy(asc(eventProjects.eventId), asc(projects.title));
 
-    const primary = new Map<string, { id: string; title: string }>();
+    const titles = new Map<string, string>();
     for (const row of rows) {
-      if (!primary.has(row.eventId)) {
-        primary.set(row.eventId, { id: row.id, title: row.title });
-      }
+      if (!titles.has(row.eventId)) titles.set(row.eventId, row.title);
     }
-    return primary;
+    return titles;
   }
 
   /**

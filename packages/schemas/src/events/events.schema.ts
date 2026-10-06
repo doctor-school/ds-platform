@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { EventParticipationFormatSchema } from "./participation.schema.js";
+
 // 007 — Event-admin aggregate contracts (API SSOT, ADR-0002 §3, ADR-0006 §6.2).
 // Framework-agnostic; `apps/api` wraps these with `createZodDto` at the I/O
 // boundary and the Refine admin app (apps/admin) + the 004/005/006 consumers
@@ -42,6 +44,31 @@ export type EventLifecycleState = z.infer<typeof EventLifecycleStateSchema>;
 export const EVENT_ORIGINS = ["platform", "legacy"] as const;
 export const EventOriginSchema = z.enum(EVENT_ORIGINS);
 export type EventOrigin = z.infer<typeof EventOriginSchema>;
+
+/**
+ * 012 LD-12 / EARS-29 (#2509) — the event audience, the ONLY selector of the
+ * storefront that shows an event: `doctors` → the doctor storefront (web and
+ * mobile), `experts` → the Academy. Independent of the kind and the format.
+ * Mirrors the `event_audience` Postgres enum.
+ */
+export const EVENT_AUDIENCES = ["doctors", "experts"] as const;
+export const EventAudienceSchema = z.enum(EVENT_AUDIENCES);
+export type EventAudience = z.infer<typeof EventAudienceSchema>;
+
+/**
+ * 019 «Amendment — 2026-10-01» / 012 EARS-28 — an event's one entry of the
+ * event-kind dictionary as every read carries it: `{ id, slug, title }`, the
+ * same shape as `PublicEventKind`. `.strict()`: a kind's allowed formats and
+ * lifecycle are admin data and never ride a public read.
+ */
+export const EventKindRefSchema = z
+  .object({
+    id: z.string(),
+    slug: z.string(),
+    title: z.string(),
+  })
+  .strict();
+export type EventKindRef = z.infer<typeof EventKindRefSchema>;
 
 /**
  * The closed forward transition set, keyed by {@link EventOrigin} — 007 design
@@ -371,6 +398,24 @@ export const CreateEventRequestSchema = z.object({
   specialties: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
   /** Sponsor / partner reference (free text in wave 1). */
   partnerRef: z.string().trim().max(300).nullish(),
+  /**
+   * 012 EARS-26 (#2509) — exactly one kind of the event-kind dictionary: a
+   * published, non-retired `event_kinds` id (checked by the server, which owns
+   * the dictionary). Never a free-text string.
+   */
+  kindId: z.uuid(),
+  /**
+   * 020 EARS-1 — the attendance mode. Must be one the referenced kind allows
+   * (012 EARS-26; refused with a field error otherwise). Defaults to `online`,
+   * the format of every event the platform authored before it was editable.
+   */
+  participationFormat: EventParticipationFormatSchema.default("online"),
+  /**
+   * 012 EARS-29 (#2509) — the storefront selector. Required on every create:
+   * the form prefills it from the linked project's default audience (EARS-30),
+   * but the command never infers it.
+   */
+  audience: EventAudienceSchema,
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
 
@@ -452,6 +497,12 @@ export const UpdateEventRequestSchema = z.object({
    * the operator never entered (014-design §2).
    */
   recordingExpectedBy: RecordingExpectedBySchema.nullish(),
+  /** 012 EARS-26 — a different kind; omitted leaves it. Never clearable. */
+  kindId: z.uuid().optional(),
+  /** 020 EARS-1 / 012 EARS-26 — must be allowed by the (resulting) kind. */
+  participationFormat: EventParticipationFormatSchema.optional(),
+  /** 012 EARS-29 — the storefront selector; omitted leaves it. */
+  audience: EventAudienceSchema.optional(),
   /**
    * 014 EARS-23 (#1741) — `origin` is set once at creation and **rejected** by
    * every update path. Declared as `z.never().optional()` rather than simply
@@ -500,6 +551,12 @@ export const EventAdminDetailSchema = z.object({
   validTransitions: z.array(EventLifecycleStateSchema),
   /** 014 (#1339) — the operator's readiness date, or `null` when unpromised. */
   recordingExpectedBy: z.string().nullable(),
+  /** 012 EARS-26 — the event's one kind (retired kinds included: the reference is retained). */
+  kind: EventKindRefSchema,
+  /** 020 EARS-1 — the attendance mode. */
+  participationFormat: EventParticipationFormatSchema,
+  /** 012 EARS-29 — the storefront selector. */
+  audience: EventAudienceSchema,
   /**
    * #1593 — the aggregate's optimistic-concurrency counter, and the value the
    * admin read's `ETag` carries as `W/"<version>"` (`taxonomyETag`). It is
@@ -528,6 +585,9 @@ export const EventAdminListItemSchema = EventAdminDetailSchema.pick({
   state: true,
   origin: true,
   validTransitions: true,
+  kind: true,
+  participationFormat: true,
+  audience: true,
 });
 export type EventAdminListItem = z.infer<typeof EventAdminListItemSchema>;
 

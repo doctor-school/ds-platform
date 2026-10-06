@@ -47,6 +47,7 @@ export default function CreateProjectPage() {
               kind: values.kind,
               title: values.title,
               description: values.description,
+              defaultAudience: values.defaultAudience,
               cover: values.cover,
             };
             create(

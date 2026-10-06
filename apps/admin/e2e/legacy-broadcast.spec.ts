@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./support/event-classification";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -183,6 +184,7 @@ async function createLegacyBroadcast(
   await fillShared(page, title, school);
   await page.getByTestId("legacy-recording-provider").selectOption("rutube");
   await page.getByTestId("legacy-recording-embed-ref").fill(RUTUBE_EDITED);
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return page.url().split("/").pop()!;

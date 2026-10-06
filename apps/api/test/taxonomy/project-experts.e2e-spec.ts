@@ -102,6 +102,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const row = {
         slug: `p-1291-${randomUUID()}`,
         kind: "school",
+        // 012 EARS-30 (#2509): every project carries a default audience.
+        default_audience: "doctors",
         title: `Школа ${Math.random().toString(36).slice(2, 8)}`,
         description: "Описание проекта",
         ...overrides,

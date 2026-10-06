@@ -38,6 +38,10 @@ import type {
   UpdateProjectRequest,
   UpdateRecordingRequest,
   UpdateDirectionRequest,
+  CreateEventKindRequest,
+  EventKindAdminDetail,
+  EventKindAdminListItem,
+  UpdateEventKindRequest,
 } from "@ds/schemas";
 
 /**
@@ -112,6 +116,9 @@ const TAXONOMY_MEDIA_PART = {
   // map — so list/detail/create/update all dispatch for it — WITHOUT inventing a
   // file part the API has no route for; its writes are always JSON (#1285).
   directions: null,
+  // 012 EARS-25 (#2509) — an event kind is a title plus its allowed formats, no
+  // image; registered like a direction, so its writes are always JSON.
+  "event-kinds": null,
 } as const;
 type TaxonomyResource = keyof typeof TAXONOMY_MEDIA_PART;
 
@@ -166,18 +173,25 @@ export type CreateDirectionVars = CreateDirectionRequest;
 /** Direction edit variables. `version` becomes the `If-Match` precondition. */
 export type UpdateDirectionVars = UpdateDirectionRequest & { version: number };
 
+/** Event-kind create variables: title + allowed formats, no media part (012 EARS-25). */
+export type CreateEventKindVars = CreateEventKindRequest;
+/** Event-kind edit variables. `version` becomes the `If-Match` precondition. */
+export type UpdateEventKindVars = UpdateEventKindRequest & { version: number };
+
 /** The taxonomy detail projections this provider can return. */
 type TaxonomyDetail =
   | ProjectAdminDetail
   | ExpertAdminDetail
   | PartnerAdminDetail
-  | DirectionAdminDetail;
+  | DirectionAdminDetail
+  | EventKindAdminDetail;
 /** The taxonomy list rows this provider can return. */
 type TaxonomyListItem =
   | ProjectAdminListItem
   | ExpertAdminListItem
   | PartnerAdminListItem
-  | DirectionAdminListItem;
+  | DirectionAdminListItem
+  | EventKindAdminListItem;
 
 /**
  * The file part of a taxonomy write, resolved off the resource map. A resource
@@ -838,6 +852,20 @@ export const directionsUrl = {
     `${ADMIN_BASE}/directions/${id}/lifecycle-impact?transition=${transition}`,
   transition: (id: string, transition: TaxonomyLifecycleTransition) =>
     `${ADMIN_BASE}/directions/${id}/${transition}`,
+};
+
+/**
+ * The event-kind ENTITY's lifecycle commands (012 EARS-25/28, #2509) — the same
+ * split as {@link directionsUrl}: CRUD rides the `event-kinds` resource, the
+ * publish command and the two impact-gated transitions ride `custom`. No
+ * delete: a kind is retired, and the events that carry it keep the reference.
+ */
+export const eventKindsUrl = {
+  publish: (id: string) => `${ADMIN_BASE}/event-kinds/${id}/publish`,
+  impact: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/event-kinds/${id}/lifecycle-impact?transition=${transition}`,
+  transition: (id: string, transition: TaxonomyLifecycleTransition) =>
+    `${ADMIN_BASE}/event-kinds/${id}/${transition}`,
 };
 
 /**

@@ -23,6 +23,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 012 EARS-6 (#1288) — the event↔project relationship vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
@@ -132,6 +133,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           title,
           school: "Кардиология",
           startsAtMsk: "2026-11-17T19:00",
+          ...eventClassification(),
           durationMin: 90,
           specialties: ["cardiology"],
         }),
@@ -188,6 +190,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         },
         payload: {
           kind: "school",
+          defaultAudience: "doctors",
           title,
           description: "Программа для практикующих кардиологов.",
         },
@@ -553,7 +556,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         const page = res.json() as { data: Record<string, unknown>[] };
         expect(page.data).toHaveLength(1);
         expect(Object.keys(page.data[0]!).sort()).toEqual(
-          ["id", "school", "slug", "startsAt", "state", "title"].sort(),
+          ["id", "kind", "school", "slug", "startsAt", "state", "title"].sort(),
         );
         expect(page.data[0]).toMatchObject({
           id: event.id,

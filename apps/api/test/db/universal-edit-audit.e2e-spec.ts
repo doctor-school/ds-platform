@@ -4,6 +4,7 @@ import pg from "pg";
 
 import { AUDIT_CAPTURE_ALLOWLIST, AUDIT_PD_COLUMNS } from "@ds/db";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 010 — Universal edit audit (spec `specs/features/010-universal-edit-audit/`,
 // Issue #1087): one generic PL/pgSQL row-level AFTER trigger
@@ -85,8 +86,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     async function insertEvent(client?: pg.PoolClient): Promise<string> {
       const runner = client ?? pool;
       const { rows } = await runner.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min)
-         VALUES ($1, $2, 'audit-e2e', now() + interval '1 day', 60)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, kind_id, audience)
+         VALUES ($1, $2, 'audit-e2e', now() + interval '1 day', 60, ${eventClassificationSql()})
          RETURNING id`,
         [`audit-e2e-${randomUUID()}`, "audit e2e event"],
       );

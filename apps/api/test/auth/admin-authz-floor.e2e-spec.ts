@@ -620,6 +620,54 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/event-directions/${ABSENT_ID}/restore`,
     payload: {},
   },
+  // 012 EARS-25…28 (#2509) — the event-kind dictionary, the same authoring +
+  // lifecycle shape as directions; the lifecycle routes answer 428 on a missing
+  // token, so the guard has to refuse first.
+  {
+    endpoint: "GET /v1/admin/event-kinds",
+    method: "GET",
+    url: "/v1/admin/event-kinds",
+  },
+  {
+    endpoint: "GET /v1/admin/event-kinds/:id",
+    method: "GET",
+    url: `/v1/admin/event-kinds/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "GET /v1/admin/event-kinds/:id/lifecycle-impact",
+    method: "GET",
+    url: `/v1/admin/event-kinds/${ABSENT_ID}/lifecycle-impact?transition=retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/event-kinds",
+    method: "POST",
+    url: "/v1/admin/event-kinds",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/event-kinds/:id",
+    method: "PATCH",
+    url: `/v1/admin/event-kinds/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-kinds/:id/publish",
+    method: "POST",
+    url: `/v1/admin/event-kinds/${ABSENT_ID}/publish`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-kinds/:id/retire",
+    method: "POST",
+    url: `/v1/admin/event-kinds/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-kinds/:id/restore",
+    method: "POST",
+    url: `/v1/admin/event-kinds/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // 012 EARS-9 (#1291) — the project↔expert relationship surface, curator seat
   // included. `replace-curator` hangs off `/projects/:id` rather than off a
   // relation because the invariant it preserves belongs to the project; that

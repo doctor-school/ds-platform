@@ -24,9 +24,32 @@ function fields(over: Partial<EventFormFields> = {}): EventFormFields {
     specialtiesText: "",
     legacy: false,
     recording: { kind: "edited", provider: "rutube", embedRef: "" },
+    kindId: "44444444-4444-4444-8444-444444444444",
+    participationFormat: "online",
+    audience: "experts",
+    projectId: "",
     ...over,
   };
 }
+
+describe("EventFormSchema — kind, format and audience (012 EARS-26/29, #2509)", () => {
+  it("012 EARS-29: an event with no chosen kind, format or audience is refused on each field", () => {
+    const result = EventFormSchema.safeParse(
+      fields({ kindId: "", participationFormat: "", audience: "" }),
+    );
+    expect(result.success).toBe(false);
+    const paths = result.error!.issues.map((i) => i.path.join("."));
+    expect(paths).toEqual(
+      expect.arrayContaining(["kindId", "participationFormat", "audience"]),
+    );
+  });
+
+  it("012 EARS-30: the project link is optional — no project is a valid create", () => {
+    expect(EventFormSchema.safeParse(fields({ projectId: "" })).success).toBe(
+      true,
+    );
+  });
+});
 
 describe("EventFormSchema — legacy эфир", () => {
   it("014 EARS-24.1: legacy requires a recording embedRef of the provider's shape", () => {

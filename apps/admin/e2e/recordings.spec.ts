@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import { signInAsAdmin } from "./support/sign-in";
 
@@ -39,6 +40,7 @@ async function createEvent(page: Page, title: string): Promise<string> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/);
   return page.url().split("/").pop()!;
@@ -96,9 +98,7 @@ function visibleByTestId(page: Page, testId: string) {
  */
 async function retiredRestoreTestId(page: Page): Promise<string> {
   const button = page
-    .locator(
-      '[data-testid^="recording-row-"][data-testid$="-restore"]:visible',
-    )
+    .locator('[data-testid^="recording-row-"][data-testid$="-restore"]:visible')
     .first();
   await expect(button).toBeVisible();
   return (await button.getAttribute("data-testid"))!;
@@ -315,7 +315,8 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     // A regex, not a glob: since EARS-22 the collection read carries the list
     // query (`?page=1&pageSize=…`), which a `**/recordings` glob no longer
     // matches — the whole URL, search string included, has to match.
-    const collectionRead = /\/v1\/admin\/events\/[0-9a-f-]{36}\/recordings(\?|$)/;
+    const collectionRead =
+      /\/v1\/admin\/events\/[0-9a-f-]{36}\/recordings(\?|$)/;
     await page.route(collectionRead, async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();

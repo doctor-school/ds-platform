@@ -3,16 +3,19 @@ import { Inject, Injectable } from "@nestjs/common";
 import type {
   DrizzleHandle,
   Event,
+  EventKind,
   NewEvent,
   NewEventRecording,
 } from "@ds/db";
 import {
   auditLedger,
+  eventKinds,
   eventRecordings,
   events,
   streamConfig,
 } from "@ds/db";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
+import { assertEventClassification } from "./event-classification.js";
 import {
   type ConfigureStreamRequest,
   type EventAdminListQuery,
@@ -85,6 +88,31 @@ const activeStreamOf = (eventId: string) =>
 const ACTIVE_EVENT = eq(events.recordStatus, "active");
 
 /**
+ * 004 «Amendment — 2026-10-01» / 012 LD-12, EARS-29 — the Academy listing, its
+ * month view and its counts read ONLY `audience = experts` events, server-side;
+ * a `doctors` event belongs to the doctor storefront and is never sent here.
+ * The public event page (by slug/id) is unchanged and not audience-scoped.
+ */
+const ACADEMY_AUDIENCE = eq(events.audience, "experts");
+
+/**
+ * 012 EARS-26 — read the referenced kind `FOR SHARE` inside the write
+ * transaction: a concurrent retire / narrowing of the kind waits for this write
+ * (or this write waits for it), so the classification check cannot be raced.
+ */
+async function lockKind(tx: Tx, kindId: string): Promise<EventKind | null> {
+  const [kind] = await tx
+    .select()
+    .from(eventKinds)
+    .where(eq(eventKinds.id, kindId))
+    .for("share");
+  return kind ?? null;
+}
+
+/** The kind fields an admin event read projects (`kind`). */
+export type EventKindProjection = Pick<EventKind, "id" | "slug" | "title">;
+
+/**
  * One event aggregate with its (optional) stream config.
  *
  * 012 EARS-24 (#1607) — it carries NO speaker list any more. Speakers are
@@ -118,10 +146,31 @@ export type EventListingRow = EventAggregate & { startsAtCursor: string };
 export class EventsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
+  /** 012 EARS-26 — the kinds of a page of events, in ONE read (retired kinds included). */
+  async findKinds(
+    ids: readonly string[],
+  ): Promise<Map<string, EventKindProjection>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.db
+      .select({
+        id: eventKinds.id,
+        slug: eventKinds.slug,
+        title: eventKinds.title,
+      })
+      .from(eventKinds)
+      .where(inArray(eventKinds.id, [...new Set(ids)]));
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
   async insert(event: NewEvent): Promise<EventAggregate> {
     // 010 EARS-3/5 — the capture trigger attributes the resulting data.* rows to
     // the request actor/source (admin-ui) via the audit-context wrapper.
     return withRequestAuditContext(this.db, async (tx) => {
+      // 012 EARS-26 — classification checked against the LOCKED kind row.
+      assertEventClassification(
+        await lockKind(tx, event.kindId),
+        event.participationFormat ?? "online",
+      );
       const [row] = await tx.insert(events).values(event).returning();
       if (!row) throw new Error("event insert returned no row");
       return {
@@ -154,6 +203,10 @@ export class EventsRepository {
     // `data.events.*` and `data.event_recordings.*` ledger rows all name the
     // same acting admin.
     return withRequestAuditContext(this.db, async (tx) => {
+      assertEventClassification(
+        await lockKind(tx, event.kindId),
+        event.participationFormat ?? "online",
+      );
       const [row] = await tx.insert(events).values(event).returning();
       if (!row) throw new Error("legacy event insert returned no row");
       await tx
@@ -194,10 +247,26 @@ export class EventsRepository {
         | "partnerRef"
         | "programPdfRef"
         | "recordingExpectedBy"
+        | "kindId"
+        | "participationFormat"
+        | "audience"
       >
     >,
   ): Promise<EventAggregate | null> {
     return withRequestAuditContext(this.db, async (tx) => {
+      // 012 EARS-26 — EVERY save re-checks the EFFECTIVE (kind, format) pair
+      // under the row lock: a patch that changes only the kind or only the
+      // format is checked against the stored other half.
+      const [current] = await tx
+        .select({ kindId: events.kindId, format: events.participationFormat })
+        .from(events)
+        .where(and(eq(events.id, id), ACTIVE_EVENT))
+        .for("update");
+      if (!current) return null;
+      assertEventClassification(
+        await lockKind(tx, patch.kindId ?? current.kindId),
+        patch.participationFormat ?? current.format,
+      );
       const [row] = await tx
         .update(events)
         .set({
@@ -333,6 +402,7 @@ export class EventsRepository {
       .where(
         and(
           ACTIVE_EVENT,
+          ACADEMY_AUDIENCE,
           inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
           gte(events.startsAt, cutoff),
           cursor,
@@ -367,6 +437,7 @@ export class EventsRepository {
       .where(
         and(
           ACTIVE_EVENT,
+          ACADEMY_AUDIENCE,
           inArray(events.state, [...PAST_BROADCAST_STATES]),
           cursor,
         ),
@@ -391,6 +462,7 @@ export class EventsRepository {
         .where(
           and(
             ACTIVE_EVENT,
+            ACADEMY_AUDIENCE,
             inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
             gte(events.startsAt, cutoff),
           ),
@@ -399,7 +471,11 @@ export class EventsRepository {
         .select({ count: sql<number>`count(*)::int` })
         .from(events)
         .where(
-          and(ACTIVE_EVENT, inArray(events.state, [...PAST_BROADCAST_STATES])),
+          and(
+            ACTIVE_EVENT,
+            ACADEMY_AUDIENCE,
+            inArray(events.state, [...PAST_BROADCAST_STATES]),
+          ),
         ),
     ]);
     return {
@@ -426,6 +502,7 @@ export class EventsRepository {
       .where(
         and(
           ACTIVE_EVENT,
+          ACADEMY_AUDIENCE,
           inArray(events.state, [...MONTH_BROADCAST_STATES]),
           gte(events.startsAt, start),
           lt(events.startsAt, end),
@@ -451,6 +528,7 @@ export class EventsRepository {
       .where(
         and(
           ACTIVE_EVENT,
+          ACADEMY_AUDIENCE,
           inArray(events.state, [...MONTH_BROADCAST_STATES]),
           gte(events.startsAt, start),
           lt(events.startsAt, end),

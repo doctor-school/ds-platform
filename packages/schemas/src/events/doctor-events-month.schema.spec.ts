@@ -35,7 +35,7 @@ describe("019 EARS-4 doctor events month contract", () => {
   it("EARS-4.1: decodes the month plus the feed's own facet vocabulary", () => {
     const parsed = parseDoctorEventsMonthQuery({
       month: "2026-09",
-      format: ["webinar", "podcast"],
+      format: ["online", "hybrid"],
       city: "msk,spb",
       nmo: "true",
       free: "0",
@@ -46,7 +46,7 @@ describe("019 EARS-4 doctor events month contract", () => {
     if (!parsed.success) return;
     expect(parsed.data.month).toBe("2026-09");
     // Repeatable + comma forms are the feed codec's, not a second parser's.
-    expect(parsed.data.format).toEqual(["webinar", "podcast"]);
+    expect(parsed.data.format).toEqual(["online", "hybrid"]);
     expect(parsed.data.city).toEqual(["msk", "spb"]);
     expect(parsed.data.nmo).toBe(true);
     expect(parsed.data.free).toBe(false);
@@ -75,10 +75,10 @@ describe("019 EARS-4 doctor events month contract", () => {
   });
 
   it("EARS-4.4: refuses a malformed facet with the feed's own verdict", () => {
-    expect(parseDoctorEventsMonthQuery({ kind: "not-a-uuid" }).success).toBe(
+    expect(parseDoctorEventsMonthQuery({ kind: "Not a slug!" }).success).toBe(
       false,
     );
-    expect(parseDoctorEventsMonthQuery({ format: "webinar" }).success).toBe(
+    expect(parseDoctorEventsMonthQuery({ format: "online" }).success).toBe(
       true,
     );
     expect(parseDoctorEventsMonthQuery({ format: "vebinar" }).success).toBe(

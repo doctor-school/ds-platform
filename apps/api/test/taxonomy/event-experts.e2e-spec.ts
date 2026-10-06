@@ -19,6 +19,7 @@ import {
 } from "../setup/rate-limit.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 import { asSlotConflict } from "../../src/taxonomy/taxonomy.errors.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 012 EARS-7 (#1289) — the admin expert↔event link over the REAL stack:
 // Fastify + the 011 admin session + Postgres.
@@ -96,8 +97,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     async function insertEvent(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min)
-         VALUES ($1, $2, $3, now(), 60) RETURNING id`,
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, kind_id, audience)
+         VALUES ($1, $2, $3, now(), 60, ${eventClassificationSql()}) RETURNING id`,
         [`e-1289-${randomUUID()}`, "Эфир 1289", "Школа 1289"],
       );
       createdEventIds.push(rows[0]!.id);

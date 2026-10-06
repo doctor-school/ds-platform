@@ -26,6 +26,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-3 — ConfigureStream (PUT /v1/admin/events/:id/stream). The stream
 // config is recorded from an EXPLICIT provider in the closed enum
@@ -128,6 +129,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       title: "ХСН: stream config",
       school: "Кардиология",
       startsAtMsk: "2026-07-17T19:00",
+      ...eventClassification(),
       durationMin: 90,
       specialties: ["cardiology"],
     };

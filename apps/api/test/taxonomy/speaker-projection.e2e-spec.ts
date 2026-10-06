@@ -15,6 +15,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 012 EARS-8 (#1290) — the ONE canonical public speaker projection over the
 // REAL stack: Fastify + Postgres, zero auth (every route under test is a
@@ -57,8 +58,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     ): Promise<{ id: string; slug: string }> {
       const slug = `e-1290-${randomUUID()}`;
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state)
-         VALUES ($1, $2, $3, ${startsAt}, 60, $4) RETURNING id`,
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, kind_id, audience)
+         VALUES ($1, $2, $3, ${startsAt}, 60, $4, ${eventClassificationSql()}) RETURNING id`,
         [slug, "Эфир 1290", "Школа 1290", state],
       );
       createdEventIds.push(rows[0]!.id);

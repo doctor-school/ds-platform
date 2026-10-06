@@ -17,6 +17,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 004 EARS-5 — the hidden direct-link degrade. A sponsor-distributed direct
 // link to an event that has since been `hidden` (a link already in the wild)
@@ -62,8 +63,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql()})`,
         [
           id,
           slug,

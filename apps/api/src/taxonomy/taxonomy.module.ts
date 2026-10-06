@@ -61,6 +61,12 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 import { DirectionsAdminController } from "./directions.admin.controller.js";
 import { DirectionsRepository } from "./directions.repository.js";
 import { DirectionsService } from "./directions.service.js";
+import {
+  EventKindsAdminController,
+  EventKindsPublicController,
+} from "./event-kinds.admin.controller.js";
+import { EventKindsRepository } from "./event-kinds.repository.js";
+import { EventKindsService } from "./event-kinds.service.js";
 
 /**
  * 012 — Content taxonomy (#1283 EARS-1 opens it with the project vertical).
@@ -86,6 +92,8 @@ import { DirectionsService } from "./directions.service.js";
     ProjectsAdminController,
     ExpertsAdminController,
     DirectionsAdminController,
+    // 012 EARS-25…28 (#2509) — the event-kind dictionary.
+    EventKindsAdminController,
     PartnersAdminController,
     // #1289 EARS-7 — the expert↔event JOIN surface. It lives in this module
     // rather than in `events` because its whole contract (retained lifecycle,
@@ -113,6 +121,7 @@ import { DirectionsService } from "./directions.service.js";
     PartnerProjectsPublicController,
     EventDirectionsPublicController,
     DirectionEventsPublicController,
+    EventKindsPublicController,
     // #1290 EARS-8 — the standalone half of the canonical merged speaker
     // projection. Same reasoning: the merge policy is the taxonomy's, the
     // event contributes only the parent key.
@@ -136,6 +145,8 @@ import { DirectionsService } from "./directions.service.js";
     ExpertsService,
     DirectionsRepository,
     DirectionsService,
+    EventKindsRepository,
+    EventKindsService,
     PartnersRepository,
     PartnersService,
     EventExpertsRepository,

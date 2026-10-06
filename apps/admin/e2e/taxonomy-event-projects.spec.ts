@@ -1,3 +1,7 @@
+import {
+  chooseEventClassification,
+  chooseProjectDefaultAudience,
+} from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import {
   searchRelationshipCombobox,
@@ -33,6 +37,7 @@ async function createProject(
   await page.getByTestId("project-form").waitFor({ state: "visible" });
   await page.locator("#title").fill(title);
   await page.locator("#description").fill("Описание для проверки связей.");
+  await chooseProjectDefaultAudience(page);
   await page.getByTestId("submit-project").click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return { title, url: page.url() };
@@ -50,6 +55,7 @@ async function createEvent(page: Page, title: string): Promise<string> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return page.url();

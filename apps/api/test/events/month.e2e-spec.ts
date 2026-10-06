@@ -17,6 +17,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 004 EARS-15 + EARS-16 — the public month-calendar read side. Two endpoints:
 //   GET /v1/public/events?month=YYYY-MM      → MonthBroadcastEntry[]
@@ -51,6 +52,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       /** The canonical UTC start instant (ISO-8601) — a FIXED value, not an offset. */
       startsAt: string;
       title?: string;
+      /** 012 EARS-29 — the storefront selector; the Academy reads select `experts`. */
+      audience?: "doctors" | "experts";
     }
 
     /**
@@ -67,8 +70,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql(opts.audience)})`,
         [
           id,
           slug,
@@ -311,6 +314,40 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(byMonth.get(9)).toBe(1);
       // A month with no events is present with count 0.
       expect(byMonth.get(2)).toBe(0);
+    });
+
+    it("004 EARS-15 + EARS-16: the month read and the month counts select only events whose audience is experts (012 EARS-29)", async () => {
+      const experts = await seedEvent({
+        state: "published",
+        startsAt: "2031-11-12T09:00:00.000Z",
+      });
+      const doctors = await seedEvent({
+        state: "published",
+        startsAt: "2031-11-13T09:00:00.000Z",
+        audience: "doctors",
+      });
+
+      const month = await app.inject({
+        method: "GET",
+        url: "/v1/public/events?month=2031-11",
+      });
+      expect(month.statusCode).toBe(200);
+      const ids = (month.json() as { id: string }[]).map((e) => e.id);
+      expect(ids).toContain(experts.id);
+      expect(ids).not.toContain(doctors.id);
+
+      const counts = await app.inject({
+        method: "GET",
+        url: "/v1/public/events/month-counts?year=2031",
+      });
+      expect(counts.statusCode).toBe(200);
+      const byMonth = new Map(
+        (counts.json() as { month: number; count: number }[]).map((r) => [
+          r.month,
+          r.count,
+        ]),
+      );
+      expect(byMonth.get(11)).toBe(1);
     });
 
     it("EARS-16: the МСК boundary is consistent with the month read (late-31-July counts in August)", async () => {

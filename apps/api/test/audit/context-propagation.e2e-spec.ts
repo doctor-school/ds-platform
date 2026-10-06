@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDrizzle, events, withAuditContext } from "@ds/db";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 010 — Universal edit audit, EARS-3 (Issue #1088): the API's Drizzle
 // transaction wrapper `withAuditContext(db, {actorSub, source}, fn)` issues
@@ -40,6 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         school: "audit-ctx-e2e",
         startsAt: new Date(Date.now() + 86_400_000),
         durationMin: 60,
+        ...eventClassification(),
       };
     }
 

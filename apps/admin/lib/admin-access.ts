@@ -42,6 +42,13 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
   { href: "/projects", testId: "nav-projects", labelKey: "app.nav.projects" },
   { href: "/experts", testId: "nav-experts", labelKey: "app.nav.experts" },
   { href: "/partners", testId: "nav-partners", labelKey: "app.nav.partners" },
+  // 012 EARS-25 (#2509) — the event-kind dictionary classifies events, so it
+  // sits with the event-side books, before directions and their relations.
+  {
+    href: "/event-kinds",
+    testId: "nav-event-kinds",
+    labelKey: "app.nav.eventKinds",
+  },
   {
     href: "/directions",
     testId: "nav-directions",

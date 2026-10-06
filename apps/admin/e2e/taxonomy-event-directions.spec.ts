@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import {
   searchRelationshipCombobox,
@@ -53,6 +54,7 @@ async function createEvent(page: Page, title: string): Promise<string> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return page.url();
@@ -62,7 +64,9 @@ async function createEvent(page: Page, title: string): Promise<string> {
 async function openDirectionsTab(page: Page, eventUrl: string): Promise<void> {
   await page.goto(eventUrl);
   await page.getByTestId("tab-directions").click();
-  await page.getByTestId("event-directions-panel").waitFor({ state: "visible" });
+  await page
+    .getByTestId("event-directions-panel")
+    .waitFor({ state: "visible" });
 }
 
 test.describe.configure({ mode: "serial" });
@@ -132,9 +136,9 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     await expect(
       missingDirectionPanel.getByText(/Подходящих направлений/),
     ).toBeVisible();
-    await expect(page.getByTestId("event-direction-link-form")).not.toContainText(
-      "Создать",
-    );
+    await expect(
+      page.getByTestId("event-direction-link-form"),
+    ).not.toContainText("Создать");
 
     // ── Add a link through the searchable selector ─────────────────────────
     // The search narrows SERVER-SIDE (`?q=`), so the option list is the API's
@@ -190,9 +194,9 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     await otherTab.close();
 
     await page.getByTestId("event-direction-link-submit").click();
-    await expect(page.getByTestId("event-directions-command-error")).toContainText(
-      "Такая связь уже есть",
-    );
+    await expect(
+      page.getByTestId("event-directions-command-error"),
+    ).toContainText("Такая связь уже есть");
 
     // ── Retire: the preview is READ, its rows are RENDERED, then it confirms ─
     await openDirectionsTab(page, eventUrl);
@@ -205,7 +209,10 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
         .first()
         .innerText()
     ).trim();
-    await page.locator('[data-testid^="event-direction-retire-"]').first().click();
+    await page
+      .locator('[data-testid^="event-direction-retire-"]')
+      .first()
+      .click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("Снять связь с направлением?");
     // NO DELETE WORDING anywhere on the confirmation (§3.1 / EARS-14).
@@ -294,9 +301,9 @@ test.describe("012 EARS-11 — event↔direction relationships in the live admin
     );
     // Same row id ⇒ restored, not reinserted (the §2.1 retained-join contract).
     await expect(page.locator(`[data-testid="${rowTestId}"]`)).toBeVisible();
-    await expect(page.locator('[data-testid^="event-direction-row-"]')).toHaveCount(
-      2,
-    );
+    await expect(
+      page.locator('[data-testid^="event-direction-row-"]'),
+    ).toHaveCount(2);
 
     // ── The axis fence: `specialties` survived the whole arc untouched ──────
     // EARS-11 keeps directions and specialties as two independent axes. After

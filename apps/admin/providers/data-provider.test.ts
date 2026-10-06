@@ -167,3 +167,94 @@ describe("dataProvider.create — legacy broadcasts (014 EARS-24, #1741)", () =>
     expect(body.heldAtMsk).toBe("2024-03-01T18:00");
   });
 });
+
+describe("dataProvider — the event-kind resource (012 EARS-25, #2509)", () => {
+  function stub(body: unknown, status = 200) {
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+    return fetchStub;
+  }
+
+  it("012 EARS-25: the kind list reads /v1/admin/event-kinds with the shared taxonomy query", async () => {
+    const fetchStub = stub({ data: [], total: 0, page: 1, pageSize: 20 });
+    await dataProvider.getList({
+      resource: "event-kinds",
+      pagination: { currentPage: 1, pageSize: 20 },
+      filters: [{ field: "status", operator: "eq", value: "published" }],
+    });
+    const [url] = fetchStub.mock.calls[0] as unknown as [string];
+    expect(url).toBe("/v1/admin/event-kinds?page=1&pageSize=20&status=published");
+  });
+
+  it("012 EARS-25: a kind create posts JSON with no file part", async () => {
+    const fetchStub = stub({ id: "kind-1" }, 201);
+    await dataProvider.create({
+      resource: "event-kinds",
+      variables: { title: "Лекция", allowedFormats: ["online"] },
+    });
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("/v1/admin/event-kinds");
+    expect((init.headers as Record<string, string>)["content-type"]).toBe(
+      "application/json",
+    );
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "Лекция",
+      allowedFormats: ["online"],
+    });
+  });
+
+  it("012 EARS-25: a kind edit PATCHes with If-Match and keeps the version out of the body", async () => {
+    const fetchStub = stub({ id: "kind-1" });
+    await dataProvider.update({
+      resource: "event-kinds",
+      id: "kind-1",
+      variables: { allowedFormats: ["online", "hybrid"], version: 3 },
+    });
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("/v1/admin/event-kinds/kind-1");
+    expect((init.headers as Record<string, string>)["if-match"]).toBe('W/"3"');
+    expect(JSON.parse(init.body as string)).toEqual({
+      allowedFormats: ["online", "hybrid"],
+    });
+  });
+
+  it("012 EARS-25: a refused narrowing surfaces its errorCode and field errors", async () => {
+    stub(
+      {
+        errorCode: "RELATIONSHIP_CONFLICT",
+        errors: [
+          { path: "allowedFormats", message: "summary" },
+          { path: "allowedFormats.events.evt-1", message: "Конгресс 2026" },
+        ],
+      },
+      409,
+    );
+    const error = (await dataProvider
+      .update({
+        resource: "event-kinds",
+        id: "kind-1",
+        variables: { allowedFormats: ["online"], version: 3 },
+      })
+      .catch((e: unknown) => e)) as {
+      errorCode?: string;
+      fieldErrors?: { path: string; message: string }[];
+    };
+    expect(error.errorCode).toBe("RELATIONSHIP_CONFLICT");
+    expect(error.fieldErrors).toContainEqual({
+      path: "allowedFormats.events.evt-1",
+      message: "Конгресс 2026",
+    });
+  });
+});

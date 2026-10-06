@@ -22,6 +22,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification } from "../setup/event-classification.js";
 
 // 007 EARS-7 — the single closed-set lifecycle state machine, server-enforced.
 // The transition guard permits ONLY draft→published→live→ended→hidden; every
@@ -121,6 +122,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       title: "ХСН: closed-set lifecycle",
       school: "Кардиология",
       startsAtMsk: "2026-07-17T19:00",
+      ...eventClassification(),
       durationMin: 90,
       specialties: ["cardiology"],
     };

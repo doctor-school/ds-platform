@@ -27,6 +27,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 019 EARS-6 (#1521) — «Идёт сейчас» over REAL rows.
@@ -112,7 +113,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const id = randomUUID();
       const slug = `live-${id.slice(0, 8)}`;
       await pool.query(
-        "INSERT INTO events (id, slug, title, school, starts_at, duration_min, state) VALUES ($1, $2, $3, $4, $5, $6, 'published')",
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, 'published', ${eventClassificationSql("doctors")})`,
         [
           id,
           slug,

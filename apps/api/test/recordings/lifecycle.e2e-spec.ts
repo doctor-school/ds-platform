@@ -22,6 +22,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-1 / EARS-2 / EARS-17 (#1339) — retained event recordings over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
@@ -118,8 +119,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     /** One event in the given lifecycle state; tracked for cleanup. */
     async function insertEvent(state = "ended"): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state)
-         VALUES ($1, $2, $3, now() - interval '2 days', 90, $4)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, kind_id, audience)
+         VALUES ($1, $2, $3, now() - interval '2 days', 90, $4, ${eventClassificationSql()})
          RETURNING id`,
         [
           `rec-1339-${randomUUID()}`,
@@ -897,9 +898,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function seedEvent(state = "ended"): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, kind_id, audience)
          VALUES ($1, 'Мероприятие 1339', 'Кардиология сегодня',
-                 now() - interval '2 days', 90, $2)
+                 now() - interval '2 days', 90, $2, ${eventClassificationSql()})
          RETURNING id`,
         [`rec-db-1339-${randomUUID()}`, state],
       );

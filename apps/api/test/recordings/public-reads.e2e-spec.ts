@@ -30,6 +30,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-4 (#1341) — the PUBLIC read behind the post-live event page, over the
 // real stack. Two promises are under test here and they pull in opposite
@@ -111,15 +112,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         programPdfRef?: string | null;
         partnerRef?: string | null;
         recordingExpectedBy?: string | null;
+        audience?: "doctors" | "experts";
       } = {},
     ): Promise<{ id: string; slug: string }> {
       const slug = `pub-1341-${randomUUID()}`;
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO events
            (slug, title, school, description, starts_at, duration_min, state,
-            specialties, partner_ref, program_pdf_ref, recording_expected_by)
+            specialties, partner_ref, program_pdf_ref, recording_expected_by, kind_id, audience)
          VALUES ($1, $2, $3, $4, now() - interval '3 days', 90, $5,
-                 $6, $7, $8, $9)
+                 $6, $7, $8, $9, ${eventClassificationSql(overrides.audience)})
          RETURNING id`,
         [
           slug,
@@ -567,6 +569,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const byId = await readPlayback(id, headers);
       expect(byId.statusCode).toBe(404);
       expect(byId.payload).not.toContain(EDITED_REF);
+    });
+
+    it("012 EARS-29: the playback read of one event by its key is not audience-scoped, so a doctors-audience event's recording still plays from its event page", async () => {
+      const doctors = await insertEvent("ended", { audience: "doctors" });
+      await publishRecording(doctors.id, "edited");
+      const experts = await insertEvent("ended", { audience: "experts" });
+      await publishRecording(experts.id, "edited");
+      const headers = cookieHeader(await doctorSession("doc-2509-audience"));
+
+      for (const key of [doctors.slug, doctors.id, experts.slug]) {
+        const res = await readPlayback(key, headers);
+        expect(res.statusCode).toBe(200);
+        expect(JSON.parse(res.payload)).toMatchObject({
+          primary: { kind: "edited", embedRef: EDITED_REF },
+        });
+      }
     });
   },
 );

@@ -25,6 +25,10 @@ const base: EventFormValues = {
   programPdf: null,
   legacy: false,
   recording: null,
+  kindId: "22222222-2222-4222-8222-222222222222",
+  participationFormat: "online",
+  audience: "experts",
+  projectId: null,
 };
 
 describe("eventUpdateVars", () => {
@@ -70,6 +74,28 @@ describe("eventUpdateVars", () => {
       specialties: ["cardiology"],
       partnerRef: "ACME",
       programPdf: null,
+      kindId: "22222222-2222-4222-8222-222222222222",
+      participationFormat: "online",
+      audience: "experts",
     });
+  });
+
+  it("012 EARS-26/29: the update carries the kind, the participation format and the audience, and never a project link", () => {
+    const vars = eventUpdateVars(
+      {
+        ...base,
+        school: "Кардиошкола",
+        participationFormat: "hybrid",
+        audience: "doctors",
+        projectId: "33333333-3333-4333-8333-333333333333",
+      },
+      { legacy: false },
+    );
+    expect(vars).toMatchObject({
+      kindId: "22222222-2222-4222-8222-222222222222",
+      participationFormat: "hybrid",
+      audience: "doctors",
+    });
+    expect("projectId" in vars).toBe(false);
   });
 });

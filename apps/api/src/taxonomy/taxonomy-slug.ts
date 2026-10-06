@@ -6,7 +6,12 @@ import {
 } from "@ds/schemas";
 import { TaxonomyError } from "./taxonomy.errors.js";
 
-export type TaxonomySlugKind = "direction" | "project" | "partner" | "expert";
+export type TaxonomySlugKind =
+  | "direction"
+  | "project"
+  | "partner"
+  | "expert"
+  | "event-kind";
 
 /** Derive a valid base while keeping even non-transliterable input authorable. */
 export function taxonomySlugBase(

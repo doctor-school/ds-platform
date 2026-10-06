@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
 import { signInAsAdmin } from "./support/sign-in";
@@ -36,6 +37,7 @@ async function createEvent(page: Page, title: string): Promise<string> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return page.url().split("/").pop()!;

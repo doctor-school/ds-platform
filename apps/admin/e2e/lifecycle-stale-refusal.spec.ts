@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./support/event-classification";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -83,7 +84,10 @@ async function shot(page: Page, name: string): Promise<void> {
  * applies — so the dark evidence is captured by putting the app under exactly
  * that class rather than by inventing a control this surface does not have.
  */
-async function setPalette(page: Page, palette: "light" | "dark"): Promise<void> {
+async function setPalette(
+  page: Page,
+  palette: "light" | "dark",
+): Promise<void> {
   await page.evaluate((mode) => {
     document.documentElement.classList.toggle("dark", mode === "dark");
   }, palette);
@@ -102,6 +106,7 @@ async function createEvent(page: Page, title: string): Promise<string> {
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   return page.url().split("/").pop()!;

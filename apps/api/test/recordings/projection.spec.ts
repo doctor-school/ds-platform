@@ -18,6 +18,7 @@ import {
   RecordingsProjectionService,
 } from "../../src/recordings/recordings.projection.js";
 import { deleteEventFixture } from "../setup/fixture-cleanup.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-3 (#1340) — ONE canonical edited-over-raw projection (014-design §4).
 //
@@ -131,8 +132,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expectedBy: string | null = null,
     ): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, recording_expected_by)
-         VALUES ($1, $2, $3, now() - interval '2 days', 90, 'ended', $4)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, recording_expected_by, kind_id, audience)
+         VALUES ($1, $2, $3, now() - interval '2 days', 90, 'ended', $4, ${eventClassificationSql()})
          RETURNING id`,
         [
           `rec-1340-${randomUUID()}`,

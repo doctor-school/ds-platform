@@ -26,6 +26,7 @@ import {
   deleteEventFixture,
   deleteUserFixture,
 } from "../setup/fixture-cleanup.js";
+import { eventClassification, eventClassificationSql } from "../setup/event-classification.js";
 
 // 014 EARS-17 (#1349) — the CROSS-route write-protocol floor.
 //
@@ -222,8 +223,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     async function insertEvent(state = "ended"): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min, state)
-         VALUES ($1, $2, $3, now() - interval '2 days', 90, $4)
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, state, kind_id, audience)
+         VALUES ($1, $2, $3, now() - interval '2 days', 90, $4, ${eventClassificationSql()})
          RETURNING id`,
         [
           `rec-1349-${randomUUID()}`,
@@ -262,6 +263,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return {
         title: `Архивный эфир ${slug}`,
         heldAtMsk: "2024-03-14T18:00",
+        ...eventClassification(),
         durationMin: 90,
         recording: {
           kind: "edited",

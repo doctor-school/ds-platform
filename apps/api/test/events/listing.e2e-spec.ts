@@ -18,6 +18,7 @@ import {
   deleteExpertFixtures,
   seedEventSpeakers,
 } from "../setup/speaker-fixtures.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 004 EARS-7 + EARS-10 + EARS-11 — the public upcoming-broadcasts listing
 // endpoint (GET /v1/public/events?upcoming → UpcomingBroadcastCard[]). The
@@ -52,6 +53,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       title?: string;
       partnerRef?: string | null;
       withPdf?: boolean;
+      /** 012 EARS-29 — the storefront selector; the Academy reads select `experts`. */
+      audience?: "doctors" | "experts";
     }
 
     /**
@@ -71,8 +74,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await pool.query(
         `INSERT INTO events
            (id, slug, title, school, starts_at, duration_min, description,
-            specialties, partner_ref, program_pdf_ref, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            specialties, partner_ref, program_pdf_ref, state, kind_id, audience)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${eventClassificationSql(opts.audience)})`,
         [
           id,
           slug,
@@ -194,6 +197,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       for (const card of body) {
         expect(["published", "live"]).toContain(card.state);
       }
+    });
+
+    it("004 EARS-7: the Academy listing selects only events whose audience is experts — a doctors event never appears (012 EARS-29)", async () => {
+      const experts = await seedEvent({
+        state: "published",
+        startsAtOffsetMs: 2 * HOUR,
+        title: "Эфир для экспертов",
+      });
+      const doctors = await seedEvent({
+        state: "published",
+        startsAtOffsetMs: 2 * HOUR,
+        title: "Вебинар для врачей",
+        audience: "doctors",
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/public/events?upcoming",
+      });
+      expect(res.statusCode).toBe(200);
+      const ids = (res.json() as { id: string }[]).map((c) => c.id);
+      expect(ids).toContain(experts.id);
+      expect(ids).not.toContain(doctors.id);
     });
 
     it("EARS-10: the card projection is a thin allow-list — no operator/commercial field or registrant PII", async () => {

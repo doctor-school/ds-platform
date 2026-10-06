@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 // 012 EARS-7 (#1289) — the DB half of the expert↔event link (012-design §2,
 // §2.3, §4 LD-2, §6). Talks to Postgres directly via pg.Pool (no Nest boot),
@@ -44,8 +45,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     /** A retained event to hang links off. */
     async function insertEvent(): Promise<string> {
       const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO events (slug, title, school, starts_at, duration_min)
-         VALUES ($1, $2, $3, now(), 60) RETURNING id`,
+        `INSERT INTO events (slug, title, school, starts_at, duration_min, kind_id, audience)
+         VALUES ($1, $2, $3, now(), 60, ${eventClassificationSql()}) RETURNING id`,
         [`e-1289-${randomUUID()}`, "Эфир 1289", "Школа 1289"],
       );
       createdEventIds.push(rows[0]!.id);

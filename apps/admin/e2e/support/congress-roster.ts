@@ -1,3 +1,4 @@
+import { chooseEventClassification } from "./event-classification";
 import { expect, type Browser, type Page } from "@playwright/test";
 import { bootstrapDoctorSession } from "./admin-session";
 import { ADMIN_ORIGIN } from "./sign-in";
@@ -37,6 +38,7 @@ export async function createPublishedEvent(
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
   });
+  await chooseEventClassification(page);
   await page.getByTestId("submit-event").click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
   const id = page.url().split("/").pop()!;

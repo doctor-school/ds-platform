@@ -15,6 +15,7 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
+import { eventClassificationSql } from "../setup/event-classification.js";
 
 /**
  * 019 EARS-3 (#1518) — the day-grouped, specialty-targeted feed over REAL rows.
@@ -50,6 +51,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let lonelyEventId = "";
     /** Far past the default horizon, on the adjacency-less direction (EARS-3.7/3.8/9.1). */
     let lonelyFarEventId = "";
+    let expertsEventId = "";
 
     const at = (dayOffset: number, hour: number) =>
       new Date(
@@ -88,10 +90,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       title: string;
       startsAt: Date;
       directionId: string;
+      /** 012 EARS-29 — the storefront selector; the doctor feed selects `doctors`. */
+      audience?: "doctors" | "experts";
     }) => {
       const id = randomUUID();
       await pool.query(
-        "INSERT INTO events (id, slug, title, school, starts_at, duration_min, state) VALUES ($1, $2, $3, $4, $5, 60, 'published')",
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql(input.audience ?? "doctors")})`,
         [
           id,
           `feed-${randomUUID()}`,
@@ -201,6 +205,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
         startsAt: at(40, 12),
         directionId: lonelyDirection,
       });
+      // Same direction and day as the own events, but for the Academy audience.
+      expertsEventId = await makeEvent({
+        title: "Эфир для экспертов",
+        startsAt: at(1, 16),
+        directionId: own,
+        audience: "experts",
+      });
     }, 60_000);
 
     afterAll(async () => {
@@ -259,6 +270,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       }
     });
 
+    it("019 EARS-2: the feed selects only events whose audience is doctors — an experts event on a targeted direction never appears (012 EARS-29)", async () => {
+      const feed = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: "?specialty=all",
+      });
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(ownEventId);
+      expect(ids).not.toContain(expertsEventId);
+    });
+
     it("EARS-3.2: a specialty with no adjacency rows yields no adjacent items", async () => {
       const feed = await readFeed({ specialtyCode: lonelyCode });
 
@@ -310,29 +331,28 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(extended.totalCount).toBeGreaterThan(first.totalCount);
     });
 
-    it("EARS-3.5: a card's own `kind` round-trips into `?kind=`, and a non-uuid `kind` is a 4xx, never a 500", async () => {
+    it("EARS-3.5: a card's own `kind.slug` round-trips into `?kind=`, and a malformed `kind` is a 4xx, never a 500", async () => {
       const feed = await readFeed({ specialtyCode: adjacentCarryingCode });
       const card = feed.days.flatMap((day) => day.items).at(0);
       expect(card).toBeDefined();
-      // The card's `kind` IS the facet vocabulary — feeding it back filters.
-      expect(card!.kind).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      );
-      expect(card!.kindTitle.length).toBeGreaterThan(0);
+      // The card's stored kind (012 event-kind dictionary, 019 amendment) IS the
+      // facet vocabulary — feeding its slug back filters.
+      expect(card!.kind.slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+      expect(card!.kind.title.length).toBeGreaterThan(0);
 
       const roundTripped = await readFeed({
         specialtyCode: adjacentCarryingCode,
-        query: `?kind=${card!.kind}`,
+        query: `?kind=${card!.kind.slug}`,
       });
       const roundTrippedIds = roundTripped.days.flatMap((day) =>
         day.items.map((item) => item.id),
       );
       expect(roundTrippedIds).toContain(card!.id);
 
-      // A hand-edited, non-uuid `kind` never reaches the uuid column.
+      // A hand-edited value outside the slug grammar is refused at the boundary.
       const rejected = await app.inject({
         method: "GET",
-        url: "/v1/storefront/doctor/events?kind=not-a-uuid",
+        url: "/v1/storefront/doctor/events?kind=Not_A_Slug",
       });
       expect(rejected.statusCode).toBeGreaterThanOrEqual(400);
       expect(rejected.statusCode).toBeLessThan(500);

@@ -103,7 +103,7 @@ The «single «Войти» action» of the account-exists notice and the «Regi
 
 ## Production amendment — congress hand-off to the code step (2026-10-06, #2626)
 
-Login by code runs in production; this amendment adds one way into its code step and changes nothing else in §2, §4 or §13.2. Requirements: EARS-44 (this feature) and 044 EARS-43.
+Login by code runs in production; this amendment adds one way into its code step and changes nothing else in §2, §4 or §13.2. Requirements: EARS-44 (this feature) and 044 EARS-39.
 
 ### Congress hand-off
 

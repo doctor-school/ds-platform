@@ -168,7 +168,7 @@ Whether our Zitadel configuration accepts a human user created with no credentia
 
 Evidence: live dev-stand check 2026-09-21 — `POST /v2/users/new` with the adapter body minus `human.password` → 200, user `USER_STATE_ACTIVE`; probe user deleted. The vendor API reference marks the `password` oneof as required in error (zitadel/zitadel#12699).
 
-> **Production amendment — sign-up hands back a sign-in reference (2026-10-06, #2626).** The accepted sign-up response also carries `handoff` (EARS-43); its format, redemption and sequence are in `003-design.md`, «Congress hand-off».
+> **Production amendment — sign-up hands back a sign-in reference (2026-10-06, #2626).** The accepted sign-up response also carries `handoff` (EARS-39); its format, redemption and sequence are in `003-design.md`, «Congress hand-off».
 
 ## First platform entry
 

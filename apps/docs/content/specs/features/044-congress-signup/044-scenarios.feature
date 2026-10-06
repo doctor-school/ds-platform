@@ -249,7 +249,7 @@ Feature: 044 — Congress sign-up
     When they request any endpoint other than the session endpoints
     Then the server refuses the request
 
-  @EARS-43 @EARS-7
+  @EARS-39 @EARS-7
   Scenario: The accepted sign-up carries a sign-in reference of one shape for every address
     Given one address has no account and another already has one
     When each submits the sign-up form

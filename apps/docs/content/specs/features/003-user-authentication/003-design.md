@@ -117,7 +117,7 @@ sequenceDiagram
     B->>B: ensure account (044 EARS-7), mint opaque ref (32 random bytes), store SHA-256(ref) -> {accountId, redemptions} in Redis, TTL 24h
     B-->>S: {status:"accepted", handoff:"<ref>"}
     S->>L: «Войти в кабинет» → /login?method=code&handoff=<ref>&returnTo=/account/congress
-    L->>B: POST /v1/login/otp/handoff {ref}
+    L->>B: POST /v1/auth/login/otp/handoff {ref}
     B->>B: look up SHA-256(ref), redemptions < 3, EARS-13 count, equalize timing
     B->>Z: issue login code as EARS-34 (verified: otp_email; unverified: verification code)
     Z-->>B: code mailed to the account address

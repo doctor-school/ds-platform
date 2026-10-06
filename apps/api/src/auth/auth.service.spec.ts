@@ -1,3 +1,4 @@
+import { InMemoryLoginHandoffStore } from "./login-handoff/login-handoff.store.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   BadRequestException,
@@ -66,6 +67,7 @@ function buildService(idp: IdpClient): AuthService {
     { record: () => Promise.resolve() } as never,
     new InMemoryRegisterNoticeThrottle("test-pepper"),
     SyntheticSuppression.disabled(),
+    new InMemoryLoginHandoffStore(),
     {} as never,
     {} as never,
     {} as never,
@@ -163,6 +165,7 @@ describe("FakeIdpClient.createUser — no-email parity with real Zitadel (#202)"
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       {} as never,
       {} as never,
       {} as never,
@@ -223,6 +226,7 @@ function buildRegisterService(opts: {
     opts.audit,
     opts.throttle,
     SyntheticSuppression.disabled(),
+    new InMemoryLoginHandoffStore(),
     {} as never,
     {} as never,
     {} as never,
@@ -389,6 +393,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       // EARS-35 (#1131): a completed reset now marks the email verified, mirroring
       // the flip onto the users row — so the reset path DOES touch the mirror.
       { markEmailVerified: () => Promise.resolve() } as never,
@@ -531,6 +536,7 @@ describe("AuthService.resendEmailVerification — enumeration-safe (#319, EARS-2
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       {} as never, // mirror — unused on the resend path
       {} as never, // sessions — unused on the resend path
       {} as never, // smsBudget — unused on the resend path
@@ -649,6 +655,7 @@ describe("AuthService.requestLoginOtp — SMS synthetic-send suppression (003 EA
       okAudit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       synthetic,
+      new InMemoryLoginHandoffStore(),
       {} as never, // mirror — unused
       {} as never, // sessions — unused
       allowingBudget, // smsBudget — always allows here
@@ -723,6 +730,7 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       mirror as never,
       sessions as never,
       {} as never, // smsBudget — unused
@@ -824,6 +832,7 @@ describe("AuthService.verify — code normalization (#1109, EARS-3)", () => {
       new InMemoryAuthAuditLog(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       mirror as never, // mirror — unused on a failed submission
       {} as never, // sessions — unused
       {} as never, // smsBudget — unused
@@ -872,6 +881,7 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       {} as never, // mirror — unused on this path
       {} as never, // sessions — unused
       {} as never, // smsBudget — unused on the email path
@@ -1076,6 +1086,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       mirror as never,
       sessions,
       {} as never, // smsBudget — unused
@@ -1240,6 +1251,7 @@ describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
       audit,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
+      new InMemoryLoginHandoffStore(),
       mirror as never,
       sessions,
       {} as never,

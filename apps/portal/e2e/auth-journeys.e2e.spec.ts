@@ -305,6 +305,77 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await expect(page.getByTestId("profile-email")).not.toBeEmpty();
   });
 
+  // 003 EARS-44 · 044 EARS-39 — the Congress hand-off on the Academy: a REAL
+  // Congress sign-up (the only minter of a reference) through this host's /v1
+  // proxy, then `/login?method=code&handoff=<ref>` opens straight on the code
+  // step with the code already sent, strips the reference, and the mailed code
+  // lands on the carried returnTo. Stand prerequisite: the api runs with the
+  // `CONGRESS_SIGNUP_*` keys and its event id names an existing event.
+  test("003 EARS-44: the Congress hand-off opens the code step with the code already sent and lands on /account", async ({
+    page,
+  }) => {
+    const email = newEmail();
+    const book = await page.request.get("/v1/public/specialties");
+    expect(book.ok(), `specialties — ${book.status()}`).toBe(true);
+    const { entries } = (await book.json()) as {
+      entries: Array<{ id: string }>;
+    };
+    const signUp = await page.request.post("/v1/congress/sign-up", {
+      data: {
+        surname: "Иванова",
+        firstName: "Мария",
+        patronymic: "Петровна",
+        email,
+        specialtyId: entries[0]!.id,
+        workplace: "ГКБ № 1",
+        city: "Москва",
+        region: "Москва",
+        contactPhone: "+7 (900) 123-45-67",
+        personalDataConsent: true,
+      },
+    });
+    const accepted = (await signUp.json()) as {
+      status?: string;
+      handoff?: string;
+    };
+    expect(
+      accepted.status,
+      `congress sign-up — ${signUp.status()}: ${JSON.stringify(accepted)}`,
+    ).toBe("accepted");
+
+    const sentAt = new Date().toISOString();
+    const response = await page.goto(
+      `/login?method=code&handoff=${accepted.handoff}&returnTo=%2Faccount`,
+    );
+    expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
+    await expect(page.getByTestId("otp-verify")).toBeVisible();
+    await expect(page.getByText(email)).toBeVisible();
+    await expect(page).toHaveURL(/\/login\?method=code&returnTo=%2Faccount$/);
+
+    const code = await fetchOtpCode(email, sentAt);
+    expect(code, "the hand-off code should reach Mailpit").toBeTruthy();
+    await page.locator('input[autocomplete="one-time-code"]').fill(code!);
+
+    await page.waitForURL((url) => url.pathname === "/account");
+    await expect(page.getByTestId("profile-email")).not.toBeEmpty();
+  });
+
+  test("003 EARS-44: an unknown hand-off reference falls back to «По коду» with an empty field", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/login?method=code&handoff=Ab-_0123456789abcdefghijklmnopqrstuvwxyzABC",
+    );
+
+    await expect(page).toHaveURL(/\/login\?method=code$/);
+    await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByTestId("otp-identifier")).toHaveValue("");
+    await expect(page.getByTestId("otp-verify")).toHaveCount(0);
+  });
+
   // EARS-7 SMS-OTP — the live browser round-trip, the SAME bar the email-OTP
   // journey above sets (#170). The dev-stand Zitadel now has a generic HTTP SMS
   // provider pointing at the local `sms-sink` (the SMS analogue of Mailpit;
@@ -460,7 +531,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     // EARS-24 / EARS-42: the one code step — the code field and «← Изменить
     // почту», the same for every visitor.
-    await expect(page.locator('input[autocomplete="one-time-code"]')).toBeVisible();
+    await expect(
+      page.locator('input[autocomplete="one-time-code"]'),
+    ).toBeVisible();
     await expect(page.getByTestId("verify-back")).toBeVisible();
 
     // Complete verification so the email is now an ALREADY-REGISTERED account.
@@ -493,7 +566,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // discloses nothing about existence: the same code step (EARS-42).
     await page.waitForURL(/\/verify/);
     await expect(page.getByTestId("verify-back")).toBeVisible();
-    await expect(page.getByText(/уже занят|уже зарегистрирован/i)).toHaveCount(0);
+    await expect(page.getByText(/уже занят|уже зарегистрирован/i)).toHaveCount(
+      0,
+    );
 
     // EARS-23: a CODE mail lands privately in the inbox — «already registered»
     // and the kept password are said only there — under the sign-in subject,
@@ -503,7 +578,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       dupAt,
       NOTIFICATION_SUBJECTS.verifyEmailOtp,
     );
-    expect(reRegistration, "the re-registration code mail should reach Mailpit").toBeTruthy();
+    expect(
+      reRegistration,
+      "the re-registration code mail should reach Mailpit",
+    ).toBeTruthy();
     const body = `${reRegistration!.Text}\n${reRegistration!.HTML}`;
     expect(body).toMatch(/уже зарегистрирован/);
     expect(body).toMatch(/Ваш пароль не изменился/);

@@ -75,6 +75,17 @@ const config: NextConfig = {
   async rewrites() {
     return [{ source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` }];
   },
+  // 003 EARS-44 leak control: `/login` may carry a Congress hand-off reference
+  // in its query until the page strips it, so no request leaving it may send
+  // that address as a Referer.
+  async headers() {
+    return [
+      {
+        source: "/login",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
 };
 
 export default withNextIntl(config);

@@ -8,21 +8,41 @@ import {
 
 describe("044 congress sign-up — intake responses", () => {
   it("EARS-1: when a submission is accepted, system shall answer with one generic body that carries nothing about the submitter", () => {
-    expect(CongressSignUpAcceptedSchema.parse({ status: "accepted" })).toEqual({
-      status: "accepted",
-    });
+    const handoff = "A".repeat(43);
+    expect(
+      CongressSignUpAcceptedSchema.parse({ status: "accepted", handoff }),
+    ).toEqual({ status: "accepted", handoff });
 
     // Path-independent: slice 3's existing-account branch must be able to
     // return the byte-identical body, so the shape admits no discriminator.
     expect(
       CongressSignUpAcceptedSchema.safeParse({
         status: "accepted",
+        handoff,
         userId: "e7d4b1f0-5a2c-4a3e-9f6b-0c1d2e3f4a5b",
       }).success,
     ).toBe(false);
     expect(
       CongressSignUpAcceptedSchema.safeParse({ status: "created" }).success,
     ).toBe(false);
+  });
+
+  it("EARS-39: the accepted body always carries the sign-in hand-off, a 43-character base64url reference and nothing else", () => {
+    expect(
+      CongressSignUpAcceptedSchema.safeParse({ status: "accepted" }).success,
+    ).toBe(false);
+    for (const handoff of [
+      "",
+      "A".repeat(42),
+      "A".repeat(44),
+      `${"A".repeat(42)}=`,
+      "user@example.com",
+    ]) {
+      expect(
+        CongressSignUpAcceptedSchema.safeParse({ status: "accepted", handoff })
+          .success,
+      ).toBe(false);
+    }
   });
 
   it("EARS-28: when the submission arrives before the registration window opens, system shall refuse with a machine-readable code carrying the opening instant", () => {

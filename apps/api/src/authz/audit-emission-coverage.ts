@@ -130,13 +130,14 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
     // data ledger's `data.registration_attendance.*` row (actor = the
     // registrar, source = admin-ui), asserted by attendance.e2e EARS-34.1/.2,
     // and a no-op write appends none (EARS-34.3).
-    "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day": {
-      noneBySpec: {
-        reason:
-          "The attendance mark changes no identity, session or credential, so it owes no AuthAuditEvent; its trail is the 010 universal-edit-audit row the registration_attendance trigger appends, attributed to the acting registrar.",
-        spec: "044 EARS-34 (who/when is the 010 ledger's job; no author/time columns)",
+    "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day":
+      {
+        noneBySpec: {
+          reason:
+            "The attendance mark changes no identity, session or credential, so it owes no AuthAuditEvent; its trail is the 010 universal-edit-audit row the registration_attendance trigger appends, attributed to the acting registrar.",
+          spec: "044 EARS-34 (who/when is the 010 ledger's job; no author/time columns)",
+        },
       },
-    },
     "POST /v1/auth/login": {
       // Success and both failure branches (wrong_password / lock) emit here; the
       // tripping transition also emits AccountLocked (EARS-15).
@@ -153,6 +154,14 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       emits: ["OtpSent"],
       coveredBy:
         "login-otp.e2e (EARS-6/7); an actual send records auth.otp.sent",
+    },
+    "POST /v1/auth/login/otp/handoff": {
+      // 003 EARS-44: a live reference re-enters the EARS-34 code send, which
+      // records auth.otp.sent; a refused reference sends nothing and records
+      // nothing, so the ledger is no oracle of the reference's state.
+      emits: ["OtpSent"],
+      coveredBy:
+        "login-handoff.e2e (EARS-44): a live redemption appends exactly one auth.otp.sent row; a refused reference appends none",
     },
     "POST /v1/auth/logout": {
       emits: ["SessionRevoked"],

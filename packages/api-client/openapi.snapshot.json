@@ -3155,6 +3155,14 @@
         ],
         "type": "object"
       },
+      "LoginHandoffRequestDto": {
+        "properties": {
+          "ref": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "LoginRequestDto": {
         "properties": {
           "captchaToken": {
@@ -6110,6 +6118,28 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OtpVerifyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["Auth"]
+      }
+    },
+    "/v1/auth/login/otp/handoff": {
+      "post": {
+        "operationId": "AuthController_redeemLoginHandoff",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginHandoffRequestDto"
               }
             }
           },

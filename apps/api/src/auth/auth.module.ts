@@ -1,4 +1,5 @@
-import { Module } from "@nestjs/common";
+import { Logger, Module } from "@nestjs/common";
+import { Redis } from "ioredis";
 import { APP_PIPE } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ZodValidationPipe } from "nestjs-zod";
@@ -15,6 +16,13 @@ import {
   RECONCILE_SWEEP_INTERVAL_MS,
 } from "./auth.tokens.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import {
+  InMemoryLoginHandoffStore,
+  LOGIN_HANDOFF_STORE,
+  RedisLoginHandoffStore,
+  type HandoffRedisLike,
+  type LoginHandoffStore,
+} from "./login-handoff/login-handoff.store.js";
 import {
   DEFAULT_SMS_BUDGET_THRESHOLDS,
   SMS_BUDGET_CLOCK,
@@ -63,6 +71,28 @@ import {
     SmsBudgetService,
     { provide: SMS_BUDGET_THRESHOLDS, useValue: DEFAULT_SMS_BUDGET_THRESHOLDS },
     { provide: SMS_BUDGET_CLOCK, useValue: (() => Date.now()) satisfies Clock },
+    // 003 EARS-44 / 044 EARS-39: the Congress hand-off reference store — Redis
+    // when configured (the reference must survive across API instances and
+    // restarts for its 24 h), the in-memory binding otherwise (dev-stand / CI
+    // default, like the other Redis-backed stores). Exported: the Congress
+    // sign-up mints, the login door redeems.
+    {
+      provide: LOGIN_HANDOFF_STORE,
+      useFactory: (): LoginHandoffStore => {
+        const env = loadEnv();
+        if (env.REDIS_URL) {
+          const redis = new Redis(env.REDIS_URL, { lazyConnect: true });
+          const logger = new Logger("LoginHandoffStore");
+          redis.on("error", (e: Error) =>
+            logger.error(`redis connection error: ${e.message}`),
+          );
+          return new RedisLoginHandoffStore(
+            redis as unknown as HandoffRedisLike,
+          );
+        }
+        return new InMemoryLoginHandoffStore();
+      },
+    },
   ],
   // 021 EARS-4 (#1540): the doctor storefront's `RegisterDoctor` command is a
   // thin host projection over THIS engine — it adds the access-condition
@@ -70,6 +100,6 @@ import {
   // the consent commit here rather than re-implementing any of them. Exporting
   // the service is what makes that reuse possible; without it the only way to
   // stand a storefront door up would be a second registration path.
-  exports: [AuthService],
+  exports: [AuthService, LOGIN_HANDOFF_STORE],
 })
 export class AuthModule {}

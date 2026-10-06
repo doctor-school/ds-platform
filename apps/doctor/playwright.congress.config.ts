@@ -22,6 +22,8 @@ export default defineConfig({
   testMatch: [
     /(^|[/\\])congress-submissions\.spec\.ts$/,
     /a11y[/\\]congress-axe\.e2e\.spec\.ts$/,
+    // 003 EARS-44 — the Congress hand-off: a real sign-up mints the reference.
+    /(^|[/\\])login-handoff-live\.spec\.ts$/,
   ],
   fullyParallel: false,
   workers: 1,

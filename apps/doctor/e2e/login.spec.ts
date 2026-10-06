@@ -130,6 +130,78 @@ for (const query of ["", "?method=bogus"]) {
   });
 }
 
+// 003 EARS-44 — the Congress «Войти в кабинет» hand-off. Backend-free: the
+// redemption is fulfilled at the network edge with the endpoint's own two
+// bodies; the live journey (a real reference from a real sign-up, the mailed
+// code, the cabinet) rides `login-handoff-live.spec.ts`.
+const HANDOFF_REF = "Ab-_0123456789abcdefghijklmnopqrstuvwxyzABC";
+
+test("003 EARS-44: /login?method=code&handoff=<ref> opens the code step for the returned address and strips the reference", async ({
+  page,
+}) => {
+  const redeemed: unknown[] = [];
+  await page.route("**/v1/auth/login/otp/handoff", async (route) => {
+    redeemed.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "otp_sent", identifier: "doc@clinic.ru" }),
+    });
+  });
+
+  const response = await page.goto(
+    `/login?method=code&handoff=${HANDOFF_REF}&returnTo=%2Faccount%2Fcongress`,
+  );
+
+  // Leak control: no request leaving the page carries the reference as Referer.
+  expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
+  await expect(page.getByTestId("otp-verify")).toBeVisible();
+  await expect(page.getByText("Проверьте почту")).toBeVisible();
+  await expect(page.getByText("doc@clinic.ru")).toBeVisible();
+  await expect(page).toHaveURL(
+    /\/login\?method=code&returnTo=%2Faccount%2Fcongress$/,
+  );
+  expect(redeemed).toEqual([{ ref: HANDOFF_REF }]);
+});
+
+test("003 EARS-44: a refused reference falls back silently to «По коду» with an empty field", async ({
+  page,
+}) => {
+  await page.route("**/v1/auth/login/otp/handoff", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "handoff_refused" }),
+    }),
+  );
+
+  await page.goto(`/login?method=code&handoff=${HANDOFF_REF}`);
+
+  await expect(page).toHaveURL(/\/login\?method=code$/);
+  await expect(page.getByTestId("login-method-otp")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByTestId("otp-identifier")).toHaveValue("");
+  await expect(page.getByTestId("otp-verify")).toHaveCount(0);
+});
+
+test("003 EARS-44: a malformed reference is never sent and still leaves the address bar", async ({
+  page,
+}) => {
+  let calls = 0;
+  await page.route("**/v1/auth/login/otp/handoff", (route) => {
+    calls += 1;
+    return route.abort();
+  });
+
+  await page.goto("/login?method=code&handoff=garbage");
+
+  await expect(page).toHaveURL(/\/login\?method=code$/);
+  await expect(page.getByTestId("otp-identifier")).toHaveValue("");
+  expect(calls).toBe(0);
+});
+
 test("017 #1933: a rejected credential renders the block's own error", async ({
   page,
 }) => {
@@ -144,7 +216,9 @@ test("017 #1933: a rejected credential renders the block's own error", async ({
   await page.goto("/login");
 
   const form = passwordForm(page);
-  await form.getByLabel("Электронная почта или телефон").fill("doctor@clinic.ru");
+  await form
+    .getByLabel("Электронная почта или телефон")
+    .fill("doctor@clinic.ru");
   await form.getByLabel("Пароль", { exact: true }).fill("wrong-password-123");
   await page.getByTestId("password-login-submit").click();
 

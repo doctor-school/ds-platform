@@ -112,6 +112,12 @@ export type CongressIntake =
 export interface CongressIntakeOutcome {
   registrationId: string;
   created: boolean;
+  /**
+   * The account the registration is attached to — new or existing alike (044
+   * EARS-7). The public door mints the 003 EARS-44 sign-in hand-off for it
+   * (044 EARS-39); the desk does not.
+   */
+  accountId: string;
 }
 
 /** The human text of each window refusal (044 EARS-28). */
@@ -248,7 +254,11 @@ export class CongressSignUpService {
         const registrationId =
           inserted?.id ??
           (await this.existingRegistrationId(tx, userId, event.id));
-        outcome = { registrationId, created: inserted !== undefined };
+        outcome = {
+          registrationId,
+          created: inserted !== undefined,
+          accountId: userId,
+        };
         await this.recordConsentIfNewVersion(
           tx,
           userId,

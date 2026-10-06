@@ -299,6 +299,39 @@ export const OtpRequestResponseSchema = z.strictObject({
 export type OtpRequestResponse = z.infer<typeof OtpRequestResponseSchema>;
 
 /**
+ * 003 EARS-44 — redeem a Congress sign-in hand-off reference (044 EARS-39).
+ * `ref` is the opaque reference `/login` read from its `handoff` query. It is
+ * optional and unconstrained here on purpose: a missing or malformed reference
+ * must get the SAME fallback response as an unknown, expired or exhausted one
+ * (never a distinguishable validation error), so the shape check happens in the
+ * handler, not in the schema. No captcha token — bot protection was passed on
+ * the sign-up form that minted the reference.
+ */
+export const LoginHandoffRequestSchema = z.object({
+  ref: z.string().optional(),
+});
+export type LoginHandoffRequest = z.infer<typeof LoginHandoffRequestSchema>;
+
+/**
+ * 003 EARS-44 — the hand-off answer. A live reference sent the account's login
+ * code (EARS-34 branching) and names the address so `/login` opens straight on
+ * the code step; every refused reference (missing, malformed, unknown, expired,
+ * exhausted) gets the ONE `handoff_refused` body, identical in status and
+ * timing, with no mail. An EARS-13 limit refusal is not this response — it is
+ * the generic throttled error every code request gets.
+ */
+export const LoginHandoffResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("otp_sent"),
+    identifier: z.string().min(1),
+  }),
+  z.strictObject({
+    status: z.literal("handoff_refused"),
+  }),
+]);
+export type LoginHandoffResponse = z.infer<typeof LoginHandoffResponseSchema>;
+
+/**
  * Submit a passwordless login code (EARS-6 step 2 / EARS-7 step 2). On success
  * the BFF establishes a session exactly as password login does (design §6),
  * returning {@link LoginResponseSchema} with a `__Host-` cookie and no token;

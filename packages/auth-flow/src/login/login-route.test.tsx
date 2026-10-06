@@ -729,3 +729,72 @@ describe("003 EARS-43: /login?method=code opens sign-in by code", () => {
     );
   });
 });
+
+/**
+ * 003 EARS-44 — `/login?method=code&handoff=<ref>` hands the Congress sign-in
+ * reference to the door, which redeems it once. The mount reads it through a
+ * CLOSED shape check (32 random bytes, base64url = 43 characters): anything
+ * else is never sent to the api — the page falls back to the EARS-43 state the
+ * same way a refused reference does. Without `method=code` there is no hand-off.
+ */
+describe("003 EARS-44: /login hands a well-formed hand-off reference to the door", () => {
+  const REF = "Ab-_0123456789abcdefghijklmnopqrstuvwxyzABC";
+
+  async function handoffOf(
+    config: AuthFlowHostConfig,
+    params: Params,
+  ): Promise<string | null | undefined> {
+    const door = (await doorOf(config, params)) as unknown as ReactElement<{
+      handoffRef?: string | null;
+    }>;
+    return door.props.handoffRef;
+  }
+
+  for (const [host, config] of [
+    ["doctor", DOCTOR_FIXTURE],
+    ["Academy", ACADEMY_FIXTURE],
+  ] as const) {
+    it(`003 EARS-44: on the ${host} host, method=code&handoff=<43-char base64url> hands the reference to the door`, async () => {
+      resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+      expect(
+        await handoffOf(config, {
+          method: "code",
+          handoff: REF,
+          returnTo: "/account",
+        }),
+      ).toBe(REF);
+    });
+  }
+
+  it("003 EARS-44: a malformed reference is never handed over, so nothing is sent", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    for (const handoff of [
+      "",
+      REF.slice(1),
+      `${REF}x`,
+      `${REF.slice(1)}=`,
+      `${REF.slice(1)}+`,
+      "<script>alert(1)</script>",
+    ]) {
+      expect(
+        await handoffOf(DOCTOR_FIXTURE, { method: "code", handoff }),
+      ).toBeNull();
+    }
+  });
+
+  it("003 EARS-44: a repeated handoff param takes its FIRST value, like returnTo", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(
+      await handoffOf(DOCTOR_FIXTURE, { method: "code", handoff: [REF, "x"] }),
+    ).toBe(REF);
+  });
+
+  it("003 EARS-44: without method=code the reference is not redeemed", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+
+    expect(await handoffOf(DOCTOR_FIXTURE, { handoff: REF })).toBeNull();
+  });
+});

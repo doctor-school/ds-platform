@@ -12,11 +12,18 @@ import { z } from "zod";
  *
  * The shape is also PATH-INDEPENDENT on purpose. Slice 3 (#2299–#2301) adds the
  * existing-account branch, and that branch must be able to return the
- * byte-identical body — hence no discriminator and no optional member that a
- * caller could use to tell the two branches apart.
+ * same-shaped body — hence no discriminator and no optional member that a
+ * caller could use to tell the two branches apart. The one field beside the
+ * status (`handoff`, EARS-39) is always present and random on every path.
  */
 export const CongressSignUpAcceptedSchema = z.strictObject({
   status: z.literal("accepted"),
+  /**
+   * 044 EARS-39 — the sign-in hand-off reference `/login?method=code&handoff=`
+   * redeems (003 EARS-44). Always present, same shape on every path: 32 random
+   * bytes in base64url that carry no data at all, so it is no oracle either.
+   */
+  handoff: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 });
 export type CongressSignUpAccepted = z.infer<
   typeof CongressSignUpAcceptedSchema

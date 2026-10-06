@@ -18,7 +18,7 @@ durable `audit_ledger` writer).
 | ----------------------------------------------- | ----------------------------- | ------------------------------------ |
 | Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19                       |
 | Login + session-read routes                     | `auth.controller.ts`          | 5, 8                                 |
-| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14                          |
+| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14, 44                      |
 | Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                                |
 | Password-reset routes                           | `auth.controller.ts`          | 11, 12                               |
 | Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
@@ -26,6 +26,7 @@ durable `audit_ledger` writer).
 | Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                                   |
 | Timing equalization                             | `timing/`                     | 16                                   |
 | Login captcha-after-N policy                    | `login-challenge/`            | 17                                   |
+| Congress sign-in hand-off store (Redis, hashed) | `login-handoff/`              | 44 (minted by 044 EARS-39)           |
 | Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18                    |
 | `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26                         |
 | Reconciliation sweep                            | `reconcile.service.ts`        | 19                                   |

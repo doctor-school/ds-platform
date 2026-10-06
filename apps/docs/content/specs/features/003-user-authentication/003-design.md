@@ -114,20 +114,20 @@ sequenceDiagram
     participant L as /login (storefront)
     participant Z as Zitadel
     S->>B: POST /v1/congress/sign-up (captcha passed)
-    B->>B: ensure account (044 EARS-7), mint opaque ref (32 random bytes), store SHA-256(ref) -> {accountId, redemptions} in Redis, TTL 24h
+    B->>B: ensure account (044 EARS-7), mint opaque ref (32 random bytes), store SHA-256(ref) -> {accountId, identifier as typed, redemptions} in Redis, TTL 24h
     B-->>S: {status:"accepted", handoff:"<ref>"}
     S->>L: «Войти в кабинет» → /login?method=code&handoff=<ref>&returnTo=/account/congress
-    L->>B: POST /v1/login/otp/handoff {ref}
+    L->>B: POST /v1/auth/login/otp/handoff {ref}
     B->>B: look up SHA-256(ref), redemptions < 3, EARS-13 count, equalize timing
     B->>Z: issue login code as EARS-34 (verified: otp_email; unverified: verification code)
     Z-->>B: code mailed to the account address
-    B-->>L: {address}
+    B-->>L: {address as typed at sign-up}
     L->>L: open EARS-42 code step «Мы отправили код на address», history replace drops handoff
 ```
 
 A bad reference at the verify step returns the one generic response and `/login` renders the EARS-43 state.
 
-**Reference format.** The reference is 32 random bytes, base64url — opaque and carrying no data at all: no account id, no time, no ordering, so there is nothing to decode and no existence or age oracle (EARS-7, EARS-16). The API stores only `SHA-256(ref)` → `{accountId, redemptions}` in Redis with a 24 h TTL counted from the sign-up; the reference itself is never persisted or logged in clear. No signing secret exists (no `AUTH_HANDOFF_SECRET`), so rotation does not apply. The same reference is minted for every accepted sign-up, new or existing account, identically. A reference redeems at most three times within its 24 h; each redemption sends a code and counts as a code request under EARS-13 (per account and per IP). A fourth redemption and an expired, unknown or malformed reference get the one identical fallback response with no mail. The reference is a bearer for one thing only — asking the BFF to send the account's own login code to the account's own address; it never establishes a session. **Leak surface.** A leaked live link discloses the account address (the endpoint returns it) and can send at most three codes to that address within 24 h; the code itself still goes only to the mailbox. Controls: the `handoff` query and body are redacted from every log and audit row (EARS-18); `/login` responses carry `Referrer-Policy: no-referrer`; the page removes `handoff` from the address bar by history replace right after reading it; the congress site must not log or forward it (044 follow-up).
+**Reference format.** The reference is 32 random bytes, base64url — opaque and carrying no data at all: no account id, no time, no ordering, so there is nothing to decode and no existence or age oracle (EARS-7, EARS-16). The API stores only `SHA-256(ref)` → `{accountId, identifier, redemptions}` in Redis with a 24 h TTL counted from the sign-up, where `identifier` is the address exactly as typed in the sign-up form; redemption sends the code to that identifier and returns that same identifier for the EARS-42 step — never `users.email`, whose letter case is the existing account's first registration and would otherwise tell an existing address from a new one; the reference itself is never persisted or logged in clear. No signing secret exists (no `AUTH_HANDOFF_SECRET`), so rotation does not apply. The same reference is minted for every accepted sign-up, new or existing account, identically. A reference redeems at most three times within its 24 h; each redemption sends a code and counts as a code request under EARS-13 (per account and per IP). A fourth redemption and an expired, unknown or malformed reference get the one identical fallback response with no mail. The reference is a bearer for one thing only — asking the BFF to send the account's own login code to the account's own address; it never establishes a session. **Leak surface.** A leaked live link discloses the account address (the endpoint returns it) and can send at most three codes to that address within 24 h; the code itself still goes only to the mailbox. Controls: the `handoff` query and body are redacted from every log and audit row (EARS-18); `/login` responses carry `Referrer-Policy: no-referrer`; the page removes `handoff` from the address bar by history replace right after reading it; the congress site must not log or forward it (044 follow-up).
 
 ## 1. Architecture overview
 

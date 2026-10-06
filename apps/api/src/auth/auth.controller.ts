@@ -4,6 +4,8 @@ import {
   Get,
   Headers,
   HttpCode,
+  HttpException,
+  HttpStatus,
   Ip,
   Post,
   Req,
@@ -12,6 +14,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import type {
+  LoginHandoffResponse,
   LoginResponse,
   LogoutResponse,
   OtpRequestResponse,
@@ -32,8 +35,9 @@ import {
   LoginChallenged,
   LoginChallengePolicy,
 } from "./login-challenge/index.js";
-import { AuthService } from "./auth.service.js";
+import { AuthService, GENERIC_THROTTLED } from "./auth.service.js";
 import {
+  LoginHandoffRequestDto,
   LoginRequestDto,
   OtpRequestDto,
   OtpVerifyDto,
@@ -191,6 +195,51 @@ export class AuthController {
     @Headers("x-asn") asn: string | undefined,
   ): Promise<OtpRequestResponse> {
     return this.auth.requestLoginOtp(dto, { ip, asn });
+  }
+
+  /**
+   * 003 EARS-44: redeem a Congress sign-in hand-off reference (044 EARS-39) into
+   * the account's own login code, sent to the account's own address exactly as
+   * the email code request does (EARS-34 branching), and name that address so
+   * `/login` opens straight on the code step.
+   *
+   * Deliberately NOT `@BotProtected`: the captcha was passed on the sign-up form
+   * that minted the reference, and the reference is the bearer. It is still a
+   * code request under EARS-13 — the guard consumes the per-IP / per-ASN
+   * windows (the body carries no identifier), and the per-account window is
+   * consumed here once the reference names the account; a refusal is the same
+   * generic throttled 429 as any code request. Every refused reference
+   * (missing, malformed, unknown, expired, exhausted) answers the ONE
+   * `handoff_refused` body with no mail, and `@TimingEqualized` floors every
+   * branch, so nothing but a live reference discloses an address. The
+   * reference is never logged.
+   */
+  @Post("login/otp/handoff")
+  @Public()
+  @RateLimited()
+  @TimingEqualized()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-44"],
+  })
+  async redeemLoginHandoff(
+    @Body() dto: LoginHandoffRequestDto,
+    @Ip() ip: string,
+    @Headers("x-asn") asn: string | undefined,
+  ): Promise<LoginHandoffResponse> {
+    const email = await this.auth.resolveLoginHandoff(dto.ref);
+    if (email === null) return { status: "handoff_refused" };
+    if (!this.rateLimit.tryConsumeUser(email)) {
+      throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    await this.auth.requestLoginOtp(
+      { identifier: email, channel: "email" },
+      { ip, asn },
+    );
+    return { status: "otp_sent", identifier: email };
   }
 
   /**

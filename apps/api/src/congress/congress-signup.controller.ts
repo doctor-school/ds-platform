@@ -6,6 +6,10 @@ import { BotProtected } from "../bot-protection/index.js";
 import { RateLimited } from "../auth/rate-limit/index.js";
 import { CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE } from "../auth/rate-limit/rate-limit.types.js";
 import { TimingEqualized } from "../auth/timing/index.js";
+import {
+  LOGIN_HANDOFF_STORE,
+  type LoginHandoffStore,
+} from "../auth/login-handoff/login-handoff.store.js";
 import { readCongressSignUpTimingFloorMs } from "./congress-signup.config.js";
 import { CongressSignUpRequestDto } from "./congress-signup.dto.js";
 import { CongressSignUpService } from "./congress-signup.service.js";
@@ -47,6 +51,8 @@ export class CongressSignUpController {
   constructor(
     @Inject(CongressSignUpService)
     private readonly signUpService: CongressSignUpService,
+    @Inject(LOGIN_HANDOFF_STORE)
+    private readonly handoffs: LoginHandoffStore,
   ) {}
 
   /** `POST /v1/congress/sign-up` — the 044 `SignUpForCongress` command. */
@@ -60,14 +66,25 @@ export class CongressSignUpController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-1"],
+    tests: ["EARS-1", "EARS-39"],
   })
   async signUp(
     @Body() dto: CongressSignUpRequestDto,
   ): Promise<CongressSignUpAccepted> {
     // EARS-7: one success state whatever the intake did — the registration id
     // and whether it was new are the desk's to name (EARS-35), never this door's.
-    await this.signUpService.signUp(dto, { origin: "site" });
-    return { status: "accepted" };
+    const outcome = await this.signUpService.signUp(dto, { origin: "site" });
+    // EARS-39: the sign-in hand-off for «Войти в кабинет» (003 EARS-44). Minted
+    // for every accepted submission — new account, existing account, repeat —
+    // the same way, so its presence and shape disclose nothing (EARS-7). The
+    // reference is opaque random bytes; only its hash is stored; it is never
+    // logged. The address is stored exactly as typed here, so the redemption
+    // names back the visitor's own spelling and never the stored account's
+    // (whose letter case would tell an existing account from a new one). The
+    // mint runs after the intake has committed: if the store is down the
+    // visitor gets a 500 for a registration that was written — a retry is
+    // idempotent (EARS-7), so nothing is lost or duplicated.
+    const handoff = await this.handoffs.mint(outcome.accountId, dto.email);
+    return { status: "accepted", handoff };
   }
 }

@@ -705,6 +705,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor opens /login?method=code&handoff=<ref> with each
     Then each shows the EARS-43 state: «По коду» preselected, an empty identifier field
     And no error page, no mail and no hint whether an address has an account is shown
+    And the handoff parameter is removed from the address bar
     And the three responses are identical in status, body and timing within 50 ms
 
   @EARS-44 @EARS-13 @failure

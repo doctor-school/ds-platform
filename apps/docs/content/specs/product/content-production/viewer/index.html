@@ -251,6 +251,15 @@
       .arrow-label.dim {
         opacity: 0.3;
       }
+      /* A temporary copy of a label on the lit branch: shown only, never hovered or clicked. */
+      .arrow-label.ghost {
+        pointer-events: none;
+        cursor: default;
+      }
+      /* Boxes not reached by the focused paths dim like the dimmed arrows. */
+      .react-flow__node.dim {
+        opacity: 0.18;
+      }
       /* Flow animation: dashes run from source to target (the path is drawn in arrow
          direction); the arrowhead is a marker outside the dashed path and stays solid. */
       .canvas.animate .react-flow__edge path.react-flow__edge-path {

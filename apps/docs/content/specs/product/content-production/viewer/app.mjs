@@ -674,7 +674,7 @@ function layoutDiagram(diagram) {
       };
     }
     labels.push(best.r);
-    edge.label = { text: best.block.text, x: best.r.x, y: best.r.y };
+    edge.label = { text: best.block.text, ...best.r };
   }
 
   // 6. React Flow nodes and edges. Every edge runs frame → frame through two hidden handles: the
@@ -718,6 +718,7 @@ function layoutDiagram(diagram) {
     width: frameW,
     height: frameH,
     bounds,
+    boxRects,
     nodes,
     edges: edges.map((e) => ({
       id: e.id,
@@ -736,6 +737,68 @@ function layoutDiagram(diagram) {
       },
     })),
   };
+}
+
+/**
+ * Temporary labels for a focused box. An arrow carries one label, on one branch; when that branch is
+ * dimmed while another branch of the arrow is lit (the one entering the focused box), the lit branch
+ * gets a copy of the label beside the focused box's port, clear of boxes and of the other lit labels.
+ * Returns edge id → label rect with text.
+ */
+function ghostLabels(layout, litIds, boxId) {
+  const hits = (r, q, m) =>
+    r.x < q.x + q.w + m &&
+    q.x < r.x + r.w + m &&
+    r.y < q.y + q.h + m &&
+    q.y < r.y + r.h + m;
+  const taken = layout.edges
+    .filter((e) => e.data.label && litIds.has(e.id))
+    .map((e) => e.data.label);
+  const ghosts = new Map();
+  for (const host of layout.edges) {
+    if (!host.data.label || litIds.has(host.id)) continue;
+    const arrowId = host.data.arrow.id;
+    const lit = layout.edges.filter(
+      (e) => e.data.arrow.id === arrowId && litIds.has(e.id),
+    );
+    for (const edge of lit) {
+      const pts = edge.data.points;
+      // The port at the focused box: the branch end when it enters the box, else its start.
+      const [port, prev] =
+        edge.data.to === boxId
+          ? [pts[pts.length - 1], pts[pts.length - 2]]
+          : [pts[0], pts[1]];
+      const block = labelBlock(host.data.arrow.label ?? arrowId, 160);
+      const { width: w, height: h } = block;
+      const dx = Math.sign(prev.x - port.x);
+      const dy = Math.sign(prev.y - port.y);
+      const spots = [];
+      for (let k = 0; k < 6; k += 1) {
+        if (dx === 0) {
+          // Vertical run (control from above, mechanism from below): beside the line, stacked away
+          // from the box along the run.
+          const y =
+            dy < 0 ? port.y - h - 4 - k * (h + 3) : port.y + 4 + k * (h + 3);
+          spots.push({ x: port.x + 4, y }, { x: port.x - w - 4, y });
+        } else {
+          // Horizontal run (input from the west): above or below the line, stacked away from it.
+          const x = dx < 0 ? port.x - w - 8 : port.x + 8;
+          spots.push(
+            { x, y: port.y - h - 3 - k * (h + 3) },
+            { x, y: port.y + 3 + k * (h + 3) },
+          );
+        }
+      }
+      const rects = spots.map((p) => ({ ...p, w, h }));
+      const free = (r) =>
+        !layout.boxRects.some((q) => hits(r, q, 2)) &&
+        !taken.some((q) => hits(r, q, 2));
+      const r = rects.find(free) ?? rects[0];
+      taken.push(r);
+      ghosts.set(edge.id, { ...r, text: block.text });
+    }
+  }
+  return ghosts;
 }
 
 // ---------- React Flow node / edge renderers ----------
@@ -841,6 +904,19 @@ function IdefEdge({ id, data, markerEnd }) {
               onMouseLeave=${() => data.onHover?.(null)}
             >
               ${data.label.text}
+            </div>
+          <//>`
+        : null
+    }
+    ${
+      data.ghost
+        ? html`<${EdgeLabelRenderer}>
+            <div
+              class="arrow-label lit ghost nodrag nopan"
+              aria-hidden="true"
+              style=${{ transform: `translate(${data.ghost.x}px, ${data.ghost.y}px)`, borderLeft: `3px solid ${color}`, outlineColor: color }}
+            >
+              ${data.ghost.text}
             </div>
           <//>`
         : null
@@ -1297,18 +1373,27 @@ function App({ model }) {
         : null,
     [layout, focus?.type, focus?.id],
   );
-  // A label sits on one branch and lights with it; an arrow lit only through another branch keeps
-  // its label readable (not dimmed) without marking the sibling branch the label sits on.
-  const litArrows = useMemo(
-    () =>
-      litEdges &&
-      new Set(
-        (layout?.edges ?? [])
-          .filter((e) => litEdges.has(e.id))
-          .map((e) => e.data.arrow.id),
-      ),
-    [layout, litEdges],
+  // A label sits on one branch and lights or dims with it; a lit branch whose label sits on a
+  // dimmed sibling shows a temporary copy beside the focused box.
+  const ghosts = useMemo(
+    () => (litEdges && layout ? ghostLabels(layout, litEdges, focus.id) : null),
+    [layout, litEdges, focus?.id],
   );
+  // Boxes at the ends of the focused paths stay full, the rest dim: a focused box keeps the boxes its
+  // lit branches reach, a focused arrow keeps its end boxes.
+  const keptBoxes = useMemo(() => {
+    if (!layout || !focus) return null;
+    const focused =
+      focus.type === "box"
+        ? layout.edges.filter((e) => litEdges.has(e.id))
+        : layout.edges.filter((e) => e.data.arrow.id === focus.id);
+    const kept = new Set(focus.type === "box" ? [focus.id] : []);
+    for (const e of focused) {
+      if (e.data.from) kept.add(e.data.from);
+      if (e.data.to) kept.add(e.data.to);
+    }
+    return kept;
+  }, [layout, focus, litEdges]);
   // Box nodes depend on the pinned box only: a hover that rebuilt the node list would re-render the
   // nodes under the pointer between the two clicks of a double-click.
   const pinnedBox = pinned?.type === "box" ? pinned.id : null;
@@ -1330,13 +1415,25 @@ function App({ model }) {
       ),
     [layout, pinnedBox, hasChild, open],
   );
+  // Dimming replaces only the dimmed node objects: the hovered box (never dimmed) keeps its identity,
+  // so it is not re-rendered between the two clicks of a double-click.
+  const shownNodes = useMemo(
+    () =>
+      keptBoxes
+        ? nodes.map((node) =>
+            node.type === "box" && !keptBoxes.has(node.id)
+              ? { ...node, className: "dim" }
+              : node,
+          )
+        : nodes,
+    [nodes, keptBoxes],
+  );
   const edges = useMemo(
     () =>
       (layout?.edges ?? []).map((edge) => {
         const active = edge.data.arrow.id === activeArrow;
         const lit = !!litEdges?.has(edge.id);
         const dim = !!litEdges && !lit;
-        const arrowLit = !!litArrows?.has(edge.data.arrow.id);
         const stroke = active
           ? "var(--hl)"
           : `var(--${edge.data.kind.toLowerCase()})`;
@@ -1356,13 +1453,14 @@ function App({ model }) {
             ...edge.data,
             active,
             lit,
-            dim: dim && !arrowLit,
+            dim,
+            ghost: ghosts?.get(edge.id) ?? null,
             onSelect: (id) => setPinned({ type: "arrow", id }),
             onHover: (id, rect) => hoverOn("arrow", id, rect),
           },
         };
       }),
-    [layout, activeArrow, litEdges, litArrows, hoverOn],
+    [layout, activeArrow, litEdges, ghosts, hoverOn],
   );
 
   const chain = [];
@@ -1414,7 +1512,7 @@ function App({ model }) {
               </p>`
             : html`<${ReactFlow}
                 key=${current}
-                nodes=${nodes}
+                nodes=${shownNodes}
                 edges=${edges}
                 nodeTypes=${nodeTypes}
                 edgeTypes=${edgeTypes}

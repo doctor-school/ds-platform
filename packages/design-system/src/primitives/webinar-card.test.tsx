@@ -331,9 +331,8 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
   });
 
   it("019 EARS-2.6: without a label the sign-up chip is the bare count", () => {
-    const { container } = render(
-      <WebinarCard {...FEED} signUpLabel={undefined} />,
-    );
+    const { signUpLabel: _label, ...unlabelled } = FEED;
+    const { container } = render(<WebinarCard {...unlabelled} />);
     const count = container.querySelector("[data-signup-count]");
     expect(count!.textContent).toBe(String(FEED.signUpCount));
   });

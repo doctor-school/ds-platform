@@ -254,5 +254,5 @@ Feature: 044 — Congress sign-up
     Given one address has no account and another already has one
     When each submits the sign-up form
     Then both responses are HTTP 200 with status "accepted" and a handoff reference
-    And the two references have the same shape and neither contains the email
+    And the two references have the same shape, are random and carry no email or account data
     And the congress site shows «Войти в кабинет» linking to the doctor storefront login with that reference

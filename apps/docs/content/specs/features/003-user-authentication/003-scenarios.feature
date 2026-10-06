@@ -700,8 +700,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then a BFF session is established and the visitor is returned to "/account/congress"
 
   @EARS-44 @EARS-16 @failure
-  Scenario: An expired or tampered reference falls back to the plain code entry
-    Given an expired reference, a reference with an altered signature and an unknown reference
+  Scenario: An expired, unknown or exhausted reference falls back to the plain code entry
+    Given an expired reference, an unknown reference and a reference already redeemed three times
     When the visitor opens /login?method=code&handoff=<ref> with each
     Then each shows the EARS-43 state: «По коду» preselected, an empty identifier field
     And no error page, no mail and no hint whether an address has an account is shown
@@ -711,4 +711,5 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: A rate-limited redemption is refused like any code request
     Given the per-account or per-IP code-request window is exhausted
     When the visitor opens a valid hand-off link
-    Then the code step shows the same generic refusal as EARS-13 and no further code is sent
+    Then the response is the generic throttled response of EARS-13 with no address and no mail
+    And the page shows the EARS-43 state with the EARS-13 generic throttled message

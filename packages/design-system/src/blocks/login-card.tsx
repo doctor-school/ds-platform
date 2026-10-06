@@ -2,16 +2,12 @@
 
 import * as React from "react";
 import { useForm, type Resolver } from "react-hook-form";
+import { PhoneIdentifierSchema } from "@ds/schemas";
 
 import { Button } from "../primitives/button";
 import { Link as DsLink } from "../primitives/link";
 import { Form, FormField, FormError } from "../primitives/form";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../primitives/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs";
 import {
   EmailField,
   IdentifierField,
@@ -212,10 +208,11 @@ export interface LoginCardProps {
   otp: LoginCardOtpProps;
   /**
    * Fired when the method tab changes. Radix unmounts the inactive `TabsContent`,
-   * so the block's own per-method state (form values, channel) resets by
-   * construction — this is the signal for the host to reset the state IT holds
-   * (errors, pending, the OTP stage), reproducing exactly what the page's
-   * unmount-per-tab structure did before the lift.
+   * so each method's form remounts on a switch: the typed identifier is the one
+   * value the block carries across (003 EARS-43, owner decision 2026-10-06, #2615)
+   * — the password and the block's validation state start fresh. This is the
+   * signal for the host to reset the state IT holds (errors, pending, the OTP
+   * stage), so no error message survives the switch either.
    */
   onMethodChange?: (method: LoginCardMethod) => void;
   /**
@@ -252,9 +249,14 @@ export function LoginCard({
   resendCooldownSeconds = LOGIN_RESEND_COOLDOWN_SECONDS,
 }: LoginCardProps) {
   const channels = otp.channels ?? DEFAULT_CHANNELS;
+  // 003 EARS-43 (#2615): both method tabs share ONE typed identifier — each
+  // tab's form seeds its identifier from it on mount and writes every edit
+  // back, so switching «Пароль» ↔ «По коду» never makes the visitor retype
+  // their address. Nothing else is carried (the password, validation state).
+  const [identifier, setIdentifier] = React.useState("");
   // The channel is lifted here: the code step's HEADING (a card prop) names it.
-  const [channel, setChannel] = React.useState<LoginCardOtpChannel>(
-    channels[0] ?? "email",
+  const [channel, setChannel] = React.useState<LoginCardOtpChannel>(() =>
+    channelForIdentifier("", channels),
   );
   // 003 EARS-42 — once the host confirms a sent code, the card IS the code
   // step: its heading names the channel and the typed destination, and the
@@ -312,7 +314,14 @@ export function LoginCard({
             security posture). */}
       <Tabs
         defaultValue={defaultMethod}
-        onValueChange={(value) => onMethodChange?.(value as LoginCardMethod)}
+        onValueChange={(value) => {
+          // A carried phone opens the code tab on the phone channel where this
+          // host serves it; anything else opens it on email (003 EARS-43).
+          if (value === "otp") {
+            setChannel(channelForIdentifier(identifier, channels));
+          }
+          onMethodChange?.(value as LoginCardMethod);
+        }}
       >
         {/* Canvas 66: the switcher's name is DRAWN above the tabs, not only
             announced — it keeps its `aria-label` too, so the tablist is still
@@ -333,7 +342,12 @@ export function LoginCard({
           </>
         )}
         <TabsContent value="password">
-          <PasswordLogin copy={copy.password} {...password} />
+          <PasswordLogin
+            copy={copy.password}
+            {...password}
+            initialIdentifier={identifier}
+            onIdentifierChange={setIdentifier}
+          />
         </TabsContent>
         {/* The code step has no tab row above it, so it drops the panel's
             tab-row offset: the field sits under the description as on /verify
@@ -349,6 +363,8 @@ export function LoginCard({
             channels={channels}
             channel={channel}
             onChannelChange={setChannel}
+            initialIdentifier={identifier}
+            onIdentifierChange={setIdentifier}
           />
         </TabsContent>
       </Tabs>
@@ -363,7 +379,11 @@ function PasswordLogin({
   onSubmit,
   pending = false,
   captchaSlot,
-}: LoginCardPasswordProps & { copy: LoginCardCopy["password"] }) {
+  initialIdentifier,
+  onIdentifierChange,
+}: LoginCardPasswordProps & {
+  copy: LoginCardCopy["password"];
+} & CarriedIdentifierProps) {
   // #192: the resolver is app-owned and validates with a per-channel guard, NOT the
   // loose `LoginRequestSchema` (which stays `identifier: z.string().min(1)` so Zitadel
   // remains the credential authority). The identifier box accepts a valid email OR an
@@ -375,8 +395,9 @@ function PasswordLogin({
     // applied consistently across every auth form.
     mode: "onTouched",
     resolver,
-    defaultValues: { identifier: "", password: "" },
+    defaultValues: { identifier: initialIdentifier, password: "" },
   });
+  useCarriedIdentifier(form.watch, onIdentifierChange);
 
   return (
     <Form {...form}>
@@ -442,6 +463,47 @@ function PasswordLogin({
 
 const DEFAULT_CHANNELS: readonly LoginCardOtpChannel[] = ["email", "sms"];
 
+/** 003 EARS-43 — the identifier one tab hands the other. */
+interface CarriedIdentifierProps {
+  /** The identifier typed on either tab so far — seeds this form on mount. */
+  initialIdentifier: string;
+  /** Every edit of this form's identifier, written back to the card. */
+  onIdentifierChange: (identifier: string) => void;
+}
+
+/**
+ * The code tab's channel for a carried identifier (003 EARS-43): a phone opens on
+ * the phone channel where the host serves it; everything else — an email, a
+ * partial value, nothing yet — on email, or on the host's only channel.
+ */
+function channelForIdentifier(
+  identifier: string,
+  channels: readonly LoginCardOtpChannel[],
+): LoginCardOtpChannel {
+  if (
+    channels.includes("sms") &&
+    PhoneIdentifierSchema.safeParse(identifier).success
+  ) {
+    return "sms";
+  }
+  return channels.includes("email") ? "email" : (channels[0] ?? "email");
+}
+
+/** Writes every identifier edit of a mounted tab's form back to the card. */
+function useCarriedIdentifier(
+  watch: (callback: (values: { identifier?: string }) => void) => {
+    unsubscribe: () => void;
+  },
+  onIdentifierChange: (identifier: string) => void,
+) {
+  React.useEffect(() => {
+    const subscription = watch((values) =>
+      onIdentifierChange(values.identifier ?? ""),
+    );
+    return () => subscription.unsubscribe();
+  }, [watch, onIdentifierChange]);
+}
+
 /** EARS-6/7 passwordless OTP login: request a code, then the code step takes over. */
 function OtpLogin({
   copy,
@@ -459,13 +521,16 @@ function OtpLogin({
   onResend,
   onVerify,
   onChangeMethod,
-}: Omit<LoginCardOtpProps, "channels"> & {
-  copy: LoginCardCopy["otp"];
-  resendCooldownSeconds: number;
-  channels: readonly LoginCardOtpChannel[];
-  channel: LoginCardOtpChannel;
-  onChannelChange: (channel: LoginCardOtpChannel) => void;
-}) {
+  initialIdentifier,
+  onIdentifierChange,
+}: Omit<LoginCardOtpProps, "channels"> &
+  CarriedIdentifierProps & {
+    copy: LoginCardCopy["otp"];
+    resendCooldownSeconds: number;
+    channels: readonly LoginCardOtpChannel[];
+    channel: LoginCardOtpChannel;
+    onChannelChange: (channel: LoginCardOtpChannel) => void;
+  }) {
   // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
   // email, SMS channel requires an E.164 phone, so switching re-validates against the
   // right shape. The loose `OtpRequestSchema` is NOT used as the form guard (it stays
@@ -473,8 +538,11 @@ function OtpLogin({
   const requestForm = useForm<LoginCardOtpRequestValues>({
     mode: "onTouched", // #200: flag a malformed identifier on blur, before submit.
     resolver: requestResolvers[channel],
-    defaultValues: { identifier: "", channel: "email" },
+    // Seeded with the carried identifier and the channel the card opened this
+    // tab on, so a carried phone submits on the phone channel (003 EARS-43).
+    defaultValues: { identifier: initialIdentifier, channel },
   });
+  useCarriedIdentifier(requestForm.watch, onIdentifierChange);
 
   return (
     <div className="space-y-4" aria-label={copy.formLabel}>

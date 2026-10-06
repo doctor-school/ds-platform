@@ -79,12 +79,15 @@ const copy: LoginCardCopy = {
 };
 
 /** Permissive resolver — the HOST owns validation, so the block just forwards values. */
-const passthrough = <T extends FieldValues>(): Resolver<T> =>
+const passthrough =
+  <T extends FieldValues>(): Resolver<T> =>
   async (values) => ({ values, errors: {} });
 
 function setup(
   overrides: {
-    onPasswordSubmit?: (values: LoginCardPasswordValues) => Promise<void> | void;
+    onPasswordSubmit?: (
+      values: LoginCardPasswordValues,
+    ) => Promise<void> | void;
     onRequest?: (values: LoginCardOtpRequestValues) => void;
     onResend?: (values: LoginCardOtpRequestValues) => void;
     onVerify?: (values: LoginCardOtpVerifyValues) => Promise<void> | void;
@@ -94,6 +97,7 @@ function setup(
     sentIdentifier?: string | null;
     resendNonce?: number;
     defaultMethod?: LoginCardMethod;
+    channels?: readonly ("email" | "sms")[];
   } = {},
 ) {
   return render(<Card {...overrides} />);
@@ -126,6 +130,7 @@ function Card(
           sms: passthrough<LoginCardOtpRequestValues>(),
         },
         verifyResolver: passthrough<LoginCardOtpVerifyValues>(),
+        ...(overrides.channels ? { channels: overrides.channels } : {}),
         sentIdentifier: overrides.sentIdentifier ?? null,
         resendNonce: overrides.resendNonce ?? 0,
         captchaSlot: <div data-testid="otp-captcha" />,
@@ -218,6 +223,100 @@ describe("<LoginCard>", () => {
     expect(onMethodChange).toHaveBeenNthCalledWith(2, "password");
   });
 
+  // Owner decision 2026-10-06 (#2615): the two sign-in tabs share ONE typed
+  // identifier — switching never makes the visitor type their address again.
+  it("003 EARS-43: the typed identifier carries between «Пароль» and «По коду», both ways; the password does not", () => {
+    setup();
+
+    fireEvent.change(screen.getByLabelText("copy.password.identifierLabel"), {
+      target: { value: "doc@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("copy.password.passwordLabel"), {
+      target: { value: "Sup3r$ecretPw!9" },
+    });
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+
+    expect(screen.getByTestId("otp-identifier")).toHaveValue("doc@example.com");
+    expect(screen.getByTestId("otp-channel-email")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    fireEvent.change(screen.getByTestId("otp-identifier"), {
+      target: { value: "doctor@example.com" },
+    });
+    fireEvent.mouseDown(screen.getByTestId("login-method-password"), {
+      button: 0,
+    });
+
+    expect(screen.getByLabelText("copy.password.identifierLabel")).toHaveValue(
+      "doctor@example.com",
+    );
+    expect(screen.getByLabelText("copy.password.passwordLabel")).toHaveValue(
+      "",
+    );
+  });
+
+  it("003 EARS-43: a carried phone opens «По коду» on the phone channel where the host serves it, and the request rides that channel", async () => {
+    const onRequest = vi.fn();
+    setup({ onRequest });
+
+    fireEvent.change(screen.getByLabelText("copy.password.identifierLabel"), {
+      target: { value: "+79991234567" },
+    });
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+
+    expect(screen.getByTestId("otp-channel-sms")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("otp-identifier")).toHaveValue("+79991234567");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("otp-send"));
+    });
+    expect(onRequest).toHaveBeenCalledWith({
+      identifier: "+79991234567",
+      channel: "sms",
+    });
+  });
+
+  it("003 EARS-43: a carried phone stays on email where the host serves no phone channel", () => {
+    setup({ channels: ["email"] });
+
+    fireEvent.change(screen.getByLabelText("copy.password.identifierLabel"), {
+      target: { value: "+79991234567" },
+    });
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+
+    expect(screen.queryByTestId("otp-channel-sms")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("copy.otp.emailLabel")).toHaveValue(
+      "+79991234567",
+    );
+  });
+
+  it("003 EARS-43: an email carried after a phone puts «По коду» back on the email channel", () => {
+    setup();
+
+    fireEvent.change(screen.getByLabelText("copy.password.identifierLabel"), {
+      target: { value: "+79991234567" },
+    });
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+    fireEvent.mouseDown(screen.getByTestId("login-method-password"), {
+      button: 0,
+    });
+    fireEvent.change(screen.getByLabelText("copy.password.identifierLabel"), {
+      target: { value: "doc@example.com" },
+    });
+    fireEvent.mouseDown(screen.getByTestId("login-method-otp"), { button: 0 });
+
+    expect(screen.getByTestId("otp-channel-email")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("otp-identifier")).toHaveValue("doc@example.com");
+  });
+
   it("hands the password values to the host handler and surfaces the host's error", async () => {
     const onPasswordSubmit = vi.fn();
     setup({ onPasswordSubmit });
@@ -240,7 +339,6 @@ describe("<LoginCard>", () => {
       }),
       expect.anything(),
     );
-
   });
 
   it("renders no error of its own — the host's already-localized string is what shows", () => {
@@ -268,16 +366,20 @@ describe("<LoginCard>", () => {
     });
     // The stage is host-controlled: the request chrome is still on screen.
     expect(screen.queryByTestId("otp-verify")).not.toBeInTheDocument();
-
   });
 
   it("003 EARS-42: the sent code turns the card into the code step — channel heading, the destination as typed, no tabs, footer kept", () => {
     setup({ sentIdentifier: "doc@example.com" });
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "copy.otp.verifyTitle.email" }),
+      screen.getByRole("heading", {
+        level: 1,
+        name: "copy.otp.verifyTitle.email",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByText("copy.otp.sentTo:doc@example.com")).toBeInTheDocument();
+    expect(
+      screen.getByText("copy.otp.sentTo:doc@example.com"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("copy.title")).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByText("copy.methodSwitcherLabel")).toBeNull();
@@ -287,8 +389,12 @@ describe("<LoginCard>", () => {
       "copy.otp.changeMethod",
     );
     // The canvas keeps «Создать аккаунт / Забыли пароль?» under the code step.
-    expect(screen.getByRole("link", { name: "copy.createAccount" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "copy.forgotPassword" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "copy.createAccount" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "copy.forgotPassword" }),
+    ).toBeInTheDocument();
   });
 
   it("003 EARS-42: one six-cell alphanumeric code — no eight-cell digits-only step", () => {
@@ -304,7 +410,10 @@ describe("<LoginCard>", () => {
     fireEvent.click(screen.getByTestId("otp-channel-sms"));
     rerender(<Card sentIdentifier="+79991234567" />);
     expect(
-      screen.getByRole("heading", { level: 1, name: "copy.otp.verifyTitle.sms" }),
+      screen.getByRole("heading", {
+        level: 1,
+        name: "copy.otp.verifyTitle.sms",
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText("copy.otp.codeLabel.sms")).toBeInTheDocument();
     // #2607: the visitor's own number, exactly as sent — never masked.
@@ -428,7 +537,9 @@ describe("#2027 <LoginCard> canvas parity", () => {
   it("#2027: the password input carries the host placeholder (canvas 82, owner 2026-09-24)", () => {
     setup();
     expect(
-      screen.getByLabelText("copy.password.passwordLabel", { selector: "input" }),
+      screen.getByLabelText("copy.password.passwordLabel", {
+        selector: "input",
+      }),
     ).toHaveAttribute("placeholder", "copy.password.passwordPlaceholder");
   });
 

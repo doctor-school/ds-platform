@@ -122,10 +122,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "239e59010041e6e34ee68e714693596748e6272e9eb9a15ed6ed074915db9ea8",
-      "pulledAt": "2026-10-05T13:24:02.019Z",
+      "sha256": "13ea433738845bddf8ab5cd7273c46d450b996af74bdd63b54045dd154100ac2",
+      "pulledAt": "2026-10-06T02:14:54.902Z",
       "remotePath": "auth.dc.html",
-      "note": "2026-10-05 owner redraw via Claude Design, #2607: every code step (login/verify «Проверьте почту|телефон», reset «Новый пароль», resend note) shows the typed email/phone in full instead of the mask, long addresses wrap (overflow-wrap:anywhere); earlier 2026-10-05: ghost text buttons keep their highlight inside the content column (#2554), one code step 6 cells everywhere"
+      "note": "2026-10-06 owner redraw via Claude Design, #2607: reset «Новый пароль» resend note is enumeration-safe (#2408) — «Если для <адрес> есть аккаунт, мы повторно отправили код.»; earlier 2026-10-05: every code step shows the typed email/phone in full, long addresses wrap (#2607); ghost text buttons keep their highlight inside the content column (#2554)"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

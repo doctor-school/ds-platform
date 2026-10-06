@@ -9,7 +9,9 @@ import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
-import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
+import { RateLimitService } from "../../src/auth/rate-limit/index.js";
+import { PARTNER_DATA_SHARING_PURPOSE } from "@ds/schemas";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -141,7 +143,14 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
         },
       });
     });
-    afterAll(() => cleanup(app, [email]));
+    afterAll(() =>
+      cleanup(app, [
+        email,
+        "forgive-otp@ds.test",
+        "forgive-verify@ds.test",
+        "forgive-doctor@ds.test",
+      ]),
+    );
 
     it("EARS-13: when a login succeeds, the system shall clear the per-user window so the next attempt is not throttled", async () => {
       const wrong = () =>
@@ -169,6 +178,142 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       expect((await wrong()).statusCode).toBe(401);
       expect((await wrong()).statusCode).toBe(401);
       // The 4th post-success attempt finally re-hits the ceiling → 429.
+      expect((await wrong()).statusCode).toBe(429);
+    });
+
+    // #2614: a code sign-in IS a successful login (003 EARS-6/41) — each door that
+    // establishes a session from a code forgives the per-user window exactly as
+    // the password login does.
+    it("EARS-13: when a login by code succeeds, the system shall clear the per-user window so the next attempt is not throttled", async () => {
+      const otpEmail = "forgive-otp@ds.test";
+      // A verified account to sign in by code (register + verify).
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        headers: device,
+        payload: {
+          email: otpEmail,
+          password,
+          consent: [{ purpose: "tos", version: "2026-01" }],
+        },
+      });
+      const verified = await app.inject({
+        method: "POST",
+        url: "/v1/auth/verify",
+        headers: device,
+        payload: { email: otpEmail, code: FAKE_VALID_CODE },
+      });
+      expect(verified.statusCode).toBe(200);
+      // Arrange an empty per-user window for the code sign-in under test: the
+      // setup above spent slots on the same identifier.
+      app.get(RateLimitService).reset({ ip: "", identifier: otpEmail });
+
+      // Slot 1: request the code; slot 2: the code sign-in SUCCEEDS and forgives.
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/v1/auth/login/otp/request",
+            headers: device,
+            payload: { identifier: otpEmail, channel: "email" },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const ok = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp",
+        headers: device,
+        payload: {
+          identifier: otpEmail,
+          code: FAKE_VALID_CODE,
+          channel: "email",
+        },
+      });
+      expect(ok.statusCode).toBe(200);
+
+      const wrong = () =>
+        app.inject({
+          method: "POST",
+          url: "/v1/auth/login/otp",
+          headers: device,
+          payload: { identifier: otpEmail, code: "000000", channel: "email" },
+        });
+      // Forgiven: three more attempts are admitted (generic 401), the 4th is 429.
+      expect((await wrong()).statusCode).toBe(401);
+      expect((await wrong()).statusCode).toBe(401);
+      expect((await wrong()).statusCode).toBe(401);
+      expect((await wrong()).statusCode).toBe(429);
+    });
+
+    it("EARS-13: when a registration code submission signs the user in, the system shall clear the per-user window so the next attempt is not throttled", async () => {
+      const verifyEmail = "forgive-verify@ds.test";
+      // Slot 1: register.
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        headers: device,
+        payload: {
+          email: verifyEmail,
+          password,
+          consent: [{ purpose: "tos", version: "2026-01" }],
+        },
+      });
+      // Slot 2: the code step SUCCEEDS (session from the code) and forgives.
+      const ok = await app.inject({
+        method: "POST",
+        url: "/v1/auth/verify",
+        headers: device,
+        payload: { email: verifyEmail, code: FAKE_VALID_CODE },
+      });
+      expect(ok.statusCode).toBe(200);
+
+      const wrong = () =>
+        app.inject({
+          method: "POST",
+          url: "/v1/auth/verify",
+          headers: device,
+          payload: { email: verifyEmail, code: "000000" },
+        });
+      expect((await wrong()).statusCode).toBe(400);
+      expect((await wrong()).statusCode).toBe(400);
+      expect((await wrong()).statusCode).toBe(400);
+      expect((await wrong()).statusCode).toBe(429);
+    });
+
+    it("EARS-13: when the doctor storefront code step signs the user in, the system shall clear the per-user window so the next attempt is not throttled", async () => {
+      const doctorEmail = "forgive-doctor@ds.test";
+      // Slot 1: the doctor storefront registration.
+      const registered = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/register",
+        headers: device,
+        payload: {
+          email: doctorEmail,
+          password,
+          medicalWorkerDeclaration: true,
+          consent: [{ purpose: PARTNER_DATA_SHARING_PURPOSE, version: "x" }],
+        },
+      });
+      expect(registered.statusCode).toBe(200);
+      // Slot 2: the doctor code step SUCCEEDS (session from the code) and forgives.
+      const ok = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        headers: device,
+        payload: { email: doctorEmail, code: FAKE_VALID_CODE },
+      });
+      expect(ok.statusCode).toBe(200);
+
+      const wrong = () =>
+        app.inject({
+          method: "POST",
+          url: "/v1/storefront/doctor/verify",
+          headers: device,
+          payload: { email: doctorEmail, code: "000000" },
+        });
+      expect((await wrong()).statusCode).toBe(400);
+      expect((await wrong()).statusCode).toBe(400);
+      expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(429);
     });
   });

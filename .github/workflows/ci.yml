@@ -1629,6 +1629,10 @@ jobs:
           done
           echo "the api did not come up in time"; cat api.log; exit 1
       - name: Start the admin
+        env:
+          # #2619 — required at request time (the admin refuses to render
+          # without it); the Academy origin «Публичная ссылка» links to.
+          ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
         run: |
           pnpm --filter @ds/admin start > admin.log 2>&1 &
           echo $! > admin.pid
@@ -1718,6 +1722,9 @@ jobs:
       # app's next.config.ts, so no build flag is needed here.
       - run: pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
       - run: pnpm ci:standalone-boot portal admin doctor
+        env:
+          # #2619 — the admin's required request-time Academy origin.
+          ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
   # The PR-body-parsing guard family (spec-link BLOCK, registry-research,

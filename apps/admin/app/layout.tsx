@@ -4,6 +4,9 @@ import { Suspense, type CSSProperties, type ReactNode } from "react";
 import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import { connection } from "next/server";
+import { AcademyOriginProvider } from "@/components/academy-origin-provider";
+import { readAcademyOrigin } from "@/lib/academy-origin";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -37,6 +40,12 @@ export default async function RootLayout({
 }) {
   const locale = await getLocale();
   const messages = await getMessages();
+  // The Academy public origin is per-environment configuration read at REQUEST
+  // time (#2619): slot images are shared by every slot on one commit, so the
+  // value must not freeze into the build. `connection()` opts the shell out of
+  // static prerender so `process.env` is the running container's.
+  await connection();
+  const academyOrigin = readAcademyOrigin(process.env);
 
   return (
     <html
@@ -59,7 +68,9 @@ export default async function RootLayout({
               CSR shell (ADR-0004 §4), so a Suspense boundary lets the static
               prerender bail to the client cleanly instead of erroring. */}
           <Suspense fallback={null}>
-            <Providers>{children}</Providers>
+            <AcademyOriginProvider origin={academyOrigin}>
+              <Providers>{children}</Providers>
+            </AcademyOriginProvider>
           </Suspense>
         </NextIntlClientProvider>
       </body>

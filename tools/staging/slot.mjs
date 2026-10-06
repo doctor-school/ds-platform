@@ -1039,6 +1039,11 @@ export function renderSlotEnv({ slot, sha, baseDomain, redisDb, goldenSubjects }
     // 046 «Letters» — the congress letters link to the slot's own doctor
     // storefront; a required api boot key.
     `MAILER_DOCTOR_BASE_URL=https://${hosts.doctor}`,
+    // #2619 — admin «Публичная ссылка» (project / partner / expert) opens the
+    // record on the slot's own Academy, never production. Read by the admin at
+    // REQUEST time: the image is shared by every slot on one commit, so a
+    // build-time value would carry one slot's host into another.
+    `ACADEMY_PUBLIC_ORIGIN=https://${hosts.academy}`,
     // Sink partitioning is by sender local part, not by a Mailpit per slot
     // (spec §3 «Sink partitioning across slots»).
     `MAILER_SMTP_FROM=no-reply+${slot}@${baseDomain}`,

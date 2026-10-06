@@ -171,10 +171,18 @@ export const golden = Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.events, 2),
       slug: "golden-event-upcoming",
     }),
-    /** On air right now relative to the pin — the room happy path. */
+    /**
+     * On air right now relative to the pin — the doctor storefront's room
+     * happy path and its «Идёт сейчас» block (a `doctors` event).
+     */
     live: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.events, 3),
       slug: "golden-event-live",
+    }),
+    /** On air right now relative to the pin — the Academy's room happy path. */
+    academyLive: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.events, 7),
+      slug: "golden-event-live-academy",
     }),
     hidden: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.events, 4),
@@ -211,6 +219,10 @@ export const golden = Object.freeze({
     }),
     /** mfaEnrolled → live. */
     mfaOnLive: Object.freeze({ id: goldenUuid(GOLDEN_GROUP.registrations, 3) }),
+    /** verifiedCardiologist → academyLive (the Academy room roster). */
+    verifiedOnAcademyLive: Object.freeze({
+      id: goldenUuid(GOLDEN_GROUP.registrations, 5),
+    }),
     /** verifiedCardiologist → pastWithRecording (the «моя запись» path). */
     verifiedOnPast: Object.freeze({
       id: goldenUuid(GOLDEN_GROUP.registrations, 4),

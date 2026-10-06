@@ -387,10 +387,11 @@ describe("#2063 golden dataset", () => {
     }
   });
 
-  it("012 EARS-29 / #2628: the named эфиры are Academy (experts) events, so the Academy listing and archive can carry the cards 004/014 address", () => {
+  it("012 EARS-29 / #2628: the named эфиры are Academy (experts) events, so the Academy listing and archive can carry the cards 004/014 address; the doctor live room stays a doctors event", () => {
     // The Academy reads only `audience = experts` (004 content set); a named
     // эфир filed as `doctors` is never sent to the listing the Academy-host
-    // scenarios page through.
+    // scenarios page through. `live` is the doctor storefront's named room
+    // (019 EARS-6 «Идёт сейчас» reads only `doctors` live events).
     const named = new Set(
       Object.values(golden.events).map((event) => event.id as string),
     );
@@ -399,10 +400,39 @@ describe("#2063 golden dataset", () => {
     );
     expect(rows).toHaveLength(named.size);
     for (const event of rows) {
-      expect(event.audience, event.slug).toBe("experts");
-      // The volume half's own classification of an online experts event.
-      expect(event.kindId, event.slug).toBe(SEED_EVENT_KINDS.efir.id);
+      const doctorsRoom = event.id === golden.events.live.id;
+      expect(event.audience, event.slug).toBe(
+        doctorsRoom ? "doctors" : "experts",
+      );
+      // The volume half's own classification of an online event per audience.
+      expect(event.kindId, event.slug).toBe(
+        doctorsRoom ? SEED_EVENT_KINDS.vebinar.id : SEED_EVENT_KINDS.efir.id,
+      );
     }
+  });
+
+  it("012 EARS-29 / #2628: every audience has a live event with a named registrant", () => {
+    const namedDoctors = new Set(
+      Object.values(golden.doctors).map((doctor) => doctor.id as string),
+    );
+    const registered = new Set(
+      dataset.registrations
+        .filter(
+          (row) =>
+            namedDoctors.has(row.userId as string) &&
+            row.recordStatus === "active",
+        )
+        .map((row) => row.eventId as string),
+    );
+    const audiences = new Set(
+      dataset.events
+        .filter(
+          (event) =>
+            event.state === "live" && registered.has(event.id as string),
+        )
+        .map((event) => event.audience),
+    );
+    expect([...audiences].sort()).toEqual(["doctors", "experts"]);
   });
 
   it("only references specialties the closed Минздрав book carries", () => {

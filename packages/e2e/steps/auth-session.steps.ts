@@ -336,7 +336,9 @@ When("the doctor logs out from the Academy account", async ({ page }) => {
 Then("the Academy returns to its home page", async ({ page, world }) => {
   expect(logoutResponses.get(page)?.status(), "logout succeeded").toBe(200);
   // #2488: sign-out lands on the storefront home on both hosts — the
-  // `SIGN_OUT_DESTINATION` ("/") of `@ds/auth-flow/host-config`.
+  // `SIGN_OUT_DESTINATION` ("/") of `@ds/auth-flow/host-config`. Not imported:
+  // that module's types reach `@ds/design-system` .tsx sources, which this
+  // package's JSX-free tsconfig cannot type-check.
   await expect(page).toHaveURL(
     (url) =>
       url.origin === new URL(world.hostBaseUrl).origin && url.pathname === "/",

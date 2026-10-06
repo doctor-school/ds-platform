@@ -71,8 +71,11 @@ export const routeParams: RouteParamsMap = Object.freeze({
   academy: Object.freeze({
     /** The registration happy path — published and still to come. */
     "/webinars/[slug]": () => golden.events.upcoming.slug,
-    /** The room: only an event that is on air right now renders it. */
-    "/webinars/[slug]/room": () => golden.events.live.slug,
+    /**
+     * The room: only an event that is on air right now renders it — the
+     * Academy's own (`experts`) live эфир.
+     */
+    "/webinars/[slug]/room": () => golden.events.academyLive.slug,
     /** A file in `@ds/legal-content`, enumerated by the page itself. */
     "/documents/[slug]": firstPublishedDocumentSlug,
   }),

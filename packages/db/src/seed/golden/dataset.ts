@@ -301,6 +301,23 @@ export function buildGoldenDataset(
       // 007 stamps `live_at` on the transition; a live event without it cannot
       // render the room's live-duration element (#717).
       liveAt: at({ minutes: -15 }),
+      // 019 EARS-6 (#2628) — the doctor storefront's named room: its
+      // «Идёт сейчас» block reads only `doctors` live events.
+      kindId: SEED_EVENT_KINDS.vebinar.id,
+      audience: "doctors",
+    },
+    {
+      ...baseEvent({
+        id: golden.events.academyLive.id,
+        slug: golden.events.academyLive.slug,
+        title: "Идущий сейчас эфир Академии (эталон)",
+        startsAt: at({ minutes: -15 }),
+        state: "live",
+        created,
+        updated: at({ minutes: -15 }),
+        specialties: ["Кардиология"],
+      }),
+      liveAt: at({ minutes: -15 }),
     },
     baseEvent({
       id: golden.events.hidden.id,
@@ -348,6 +365,11 @@ export function buildGoldenDataset(
       eventId: golden.events.live.id,
       provider: "rutube",
       embedRef: "golden-live-embed",
+    },
+    {
+      eventId: golden.events.academyLive.id,
+      provider: "rutube",
+      embedRef: "golden-live-academy-embed",
     },
     {
       eventId: golden.events.pastWithRecording.id,
@@ -427,6 +449,17 @@ export function buildGoldenDataset(
       updatedAt: created,
     },
     {
+      id: goldenUuid(GOLDEN_GROUP.eventExperts, 4),
+      eventId: golden.events.academyLive.id,
+      expertId: golden.experts.published.id,
+      role: "Спикер",
+      position: 0,
+      status: "active",
+      version: 1,
+      createdAt: created,
+      updatedAt: created,
+    },
+    {
       id: goldenUuid(GOLDEN_GROUP.eventExperts, 3),
       eventId: golden.events.pastWithRecording.id,
       expertId: golden.experts.published.id,
@@ -481,6 +514,13 @@ export function buildGoldenDataset(
       id: golden.registrations.mfaOnLive.id,
       userId: doctors.mfaEnrolled.id,
       eventId: golden.events.live.id,
+      registeredAt: at({ days: -5 }),
+      recordStatus: "active",
+    },
+    {
+      id: golden.registrations.verifiedOnAcademyLive.id,
+      userId: doctors.verifiedCardiologist.id,
+      eventId: golden.events.academyLive.id,
       registeredAt: at({ days: -5 }),
       recordStatus: "active",
     },
@@ -589,6 +629,7 @@ export function buildGoldenDataset(
     [golden.events.pastWithRecording.id, "cardiology"],
     [golden.events.pastWithRecording.id, "general-practice"],
     [golden.events.archived.id, "general-practice"],
+    [golden.events.academyLive.id, "cardiology"],
   ];
   const eventDirections: NewEventDirection[] = [
     ...namedEventDirections.map(([eventId, slug], index) => ({
@@ -786,9 +827,10 @@ function baseEvent(options: BaseEventOptions): NewEvent {
     // 012 EARS-26 / EARS-29 (#2628) — the named эфиры are the Academy's
     // reference contour: the Academy listing, archive and month view read only
     // `experts` events (004 content set), and the Academy-host scenarios
-    // (004/014, the registration happy path, the room) address these rows. An
-    // online experts event is an «Эфир», as the volume half classifies it. The
-    // doctor storefront's events are the volume half's `doctors` rows.
+    // (004/014, the registration happy path, the Academy room) address these
+    // rows. An online experts event is an «Эфир», as the volume half
+    // classifies it. The one exception is `live`, the doctor storefront's
+    // named room, which overrides both to a `doctors` «Вебинар».
     kindId: SEED_EVENT_KINDS.efir.id,
     audience: "experts",
     seatsLeft: options.seatsLeft ?? null,

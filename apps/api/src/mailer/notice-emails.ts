@@ -1,3 +1,5 @@
+import { MOSCOW_TIME_ZONE, formatEventTime } from "@ds/schemas";
+
 import { composeEmail, type EmailMessage } from "./email-layout.js";
 
 /** 011 EARS-7: preserve recovery/reporting without secrets, counts or lock time. */
@@ -58,18 +60,16 @@ export interface CongressConfirmationContent {
  * congress, the organiser and the audience are all in Moscow. Rendering the
  * instant in the server's local zone would silently shift a date the owner
  * approved whenever the API runs anywhere but `Europe/Moscow`, so the zone is
- * pinned here exactly as the events read model pins it
- * (`apps/api/src/events/events.repository.ts`).
+ * pinned to Moscow through the one event-time formatter.
  */
 export function formatCongressEventDate(startsAt: Date): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Moscow",
-  }).format(startsAt);
+  // Emails keep МСК (004 EARS-12 as amended): the one event-time formatter,
+  // pinned to Moscow — «12 марта 2027 г. в 10:00».
+  const { dateWithYear, time } = formatEventTime({
+    startsAt,
+    viewerZone: MOSCOW_TIME_ZONE,
+  });
+  return `${dateWithYear} в ${time}`;
 }
 
 /**

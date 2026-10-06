@@ -1,3 +1,4 @@
+import { MOSCOW_TIME_ZONE, formatEventTime } from "@ds/schemas";
 import type {
   EventPageView,
   EventParticipationFormat,
@@ -37,24 +38,14 @@ import type { EventSpeakerCardProps } from "./event-speaker-card";
  * («no second CTA resolver») forbids.
  */
 
-const MSK_TIME_ZONE = "Europe/Moscow";
-
-const MSK_TIME = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MSK_TIME_ZONE,
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-const MSK_DATE = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MSK_TIME_ZONE,
-  day: "numeric",
-  month: "long",
-});
-
-const MSK_WEEKDAY = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MSK_TIME_ZONE,
-  weekday: "long",
-});
+/**
+ * The event page's date/time parts and its calendar-day countdown are
+ * projections of the one event-time formatter (`formatEventTime`,
+ * `@ds/schemas`, 004 EARS-12) pinned to `Europe/Moscow`.
+ */
+function inMoscow(instant: string | Date) {
+  return formatEventTime({ startsAt: instant, viewerZone: MOSCOW_TIME_ZONE });
+}
 
 /**
  * The RU copy DEFAULTS of the shared event page. A host may hand its own object
@@ -165,12 +156,8 @@ export interface EventPageTimeParts {
 }
 
 export function eventPageTimeParts(view: EventPageView): EventPageTimeParts {
-  const instant = new Date(view.startsAt);
-  return {
-    time: MSK_TIME.format(instant),
-    date: MSK_DATE.format(instant),
-    weekday: MSK_WEEKDAY.format(instant),
-  };
+  const { time, date, weekday } = inMoscow(view.startsAt);
+  return { time, date, weekday };
 }
 
 /**
@@ -337,17 +324,10 @@ export function eventLifecycleCountdown(
   return `${copy.inPrefix} ${days} ${word}`;
 }
 
-const MSK_DAY_KEY = new Intl.DateTimeFormat("en-CA", {
-  timeZone: MSK_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
 /** Whole Moscow calendar days from `from` to `to` (negative when `to` is past). */
 function mskCalendarDaysBetween(from: Date, to: Date): number {
   const utcMidnight = (d: Date) =>
-    Date.parse(`${MSK_DAY_KEY.format(d)}T00:00:00Z`);
+    Date.parse(`${inMoscow(d).groupDay}T00:00:00Z`);
   return Math.round((utcMidnight(to) - utcMidnight(from)) / 86_400_000);
 }
 

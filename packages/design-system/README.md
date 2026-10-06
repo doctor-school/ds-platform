@@ -319,6 +319,12 @@ import { Container } from "@ds/design-system/container";
   The fixed gutter is what lets a `DayBand` plate or a card bleed to the viewport
   edge cleanly (`-mx-4 layout:-mx-gutter`).
 
+### Event-time slot (`--container-zone-label`)
+
+| Token                    | Utility            | Value  | Where                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--container-zone-label` | `min-w-zone-label` | `10ch` | The zone label beside every event time (004 EARS-12 as amended, 004-design §6.1): reserves the width of the longest label «GMT+10:30», so the post-hydration swap from «МСК» to the viewer-zone label changes text only — no layout shift. Pair the time and its label with `tabular-nums`. The label comes from `formatEventTime` (`@ds/schemas`). |
+
 Baseline (source §09 «Hit-target»): interactive targets ≥ **44×44**, a **3px**
 focus ring (`shadow-focus`), **AA** text contrast — all already carried by the
 primitives' interaction contract above.

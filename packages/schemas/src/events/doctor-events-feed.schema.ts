@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
-import { DoctorEventCardSchema, DoctorEventFormatSchema } from "./doctor-event-card.schema.js";
+import {
+  DoctorEventCardSchema,
+  DoctorEventFormatSchema,
+} from "./doctor-event-card.schema.js";
+import { MOSCOW_TIME_ZONE, formatEventTime } from "./event-time.js";
 import {
   createEventListingQueryCodec,
   type EventListingQueryEntry,
@@ -182,32 +186,23 @@ export function encodeDoctorEventsFeedQueryEntries(
   return DOCTOR_EVENTS_FEED_QUERY_CODEC.reencode(raw);
 }
 
-const MOSCOW_TIME_ZONE = "Europe/Moscow";
-
-const DAY_LABEL_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MOSCOW_TIME_ZONE,
-  day: "numeric",
-  month: "long",
-  weekday: "long",
-});
-
-/** The МСК calendar day an instant falls on — the grouping key of the feed. */
+/**
+ * The МСК calendar day an instant falls on — the grouping key of the feed. The
+ * day comes from the one event-time formatter (004 EARS-12), pinned to Moscow.
+ */
 export function doctorEventsFeedDayOf(instant: Date): string {
-  // `en-CA` yields `YYYY-MM-DD`, so the key needs no manual padding.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: MOSCOW_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(instant);
+  return formatEventTime({ startsAt: instant, viewerZone: MOSCOW_TIME_ZONE })
+    .groupDay;
 }
 
 /** «12 сентября, пятница» — the one day-heading rendering rule for every host. */
 export function formatDoctorEventsFeedDayLabel(day: string): string {
-  const parts = DAY_LABEL_FORMAT.formatToParts(new Date(`${day}T12:00:00Z`));
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("day")} ${value("month")}, ${value("weekday")}`;
+  // Midday UTC of the key is the same calendar day in Moscow.
+  const { date, weekday } = formatEventTime({
+    startsAt: `${day}T12:00:00Z`,
+    viewerZone: MOSCOW_TIME_ZONE,
+  });
+  return `${date}, ${weekday}`;
 }
 
 /** Add `days` calendar days to an ISO day, staying in the `YYYY-MM-DD` space. */
@@ -220,6 +215,7 @@ export function addDoctorEventsFeedDays(day: string, days: number): string {
 /** Whole calendar days between two ISO days (`to - from`). */
 export function doctorEventsFeedHorizonWidth(from: string, to: string): number {
   const ms =
-    new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime();
+    new Date(`${to}T00:00:00Z`).getTime() -
+    new Date(`${from}T00:00:00Z`).getTime();
   return Math.round(ms / 86_400_000);
 }

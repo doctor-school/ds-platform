@@ -14,3 +14,15 @@ export {
   completeReturnTarget,
   currentReturnTarget,
 } from "./client/registration-resume";
+
+/**
+ * The one event-time formatter (004 EARS-12 as amended) — its pure core lives in
+ * `@ds/schemas` so the api and the admin import it directly; the storefronts
+ * reach it here, beside `useViewerZone` (`./ui`) that supplies `viewerZone`.
+ */
+export {
+  type EventTime,
+  type EventTimeInput,
+  MOSCOW_TIME_ZONE,
+  formatEventTime,
+} from "@ds/schemas";

@@ -41,7 +41,7 @@ interface CodeEmailCopy {
   preheader: string;
   /** Line introducing the token («Ваш код …:»). */
   intro: string;
-  /** Where to type it («Введите его на странице …»). */
+  /** Where to type it («Введите код в уже открытой вкладке …»). */
   instruction: string;
   /** The not-you closer («Если вы не … — проигнорируйте это письмо»). */
   ignoreLine: string;
@@ -52,7 +52,7 @@ const VERIFY_COPY: CodeEmailCopy = {
   preheader: "Введите код в уже открытой вкладке Doctor.School",
   intro: "Ваш код подтверждения:",
   instruction:
-    "Введите его в уже открытой вкладке Doctor.School, где вы запросили код.",
+    "Введите код в уже открытой вкладке Doctor.School, где вы его запросили.",
   ignoreLine: "Если вы не запрашивали код — проигнорируйте это письмо.",
 };
 
@@ -61,7 +61,7 @@ const RESET_COPY: CodeEmailCopy = {
   preheader: "Введите код в уже открытой вкладке Doctor.School",
   intro: "Ваш код сброса пароля:",
   instruction:
-    "Введите его в уже открытой вкладке Doctor.School, где вы запросили код сброса пароля.",
+    "Введите код в уже открытой вкладке Doctor.School, где вы запросили сброс пароля.",
   ignoreLine:
     "Если вы не запрашивали сброс пароля — проигнорируйте это письмо.",
 };

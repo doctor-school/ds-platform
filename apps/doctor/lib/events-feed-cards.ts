@@ -1,5 +1,7 @@
 import type { EventListItem } from "@ds/design-system/blocks";
 import {
+  MOSCOW_TIME_ZONE,
+  formatEventTime,
   mintDoctorEventsFeedReturnTarget,
   type DoctorEventCard,
   type DoctorEventsLiveStrip,
@@ -67,25 +69,22 @@ export const DOCTOR_EVENTS_FEED_COPY = {
   liveUntil: "до",
 } as const;
 
-const TIME_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: "Europe/Moscow",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-const DATE_LABEL_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: "Europe/Moscow",
-  day: "numeric",
-  month: "long",
-  weekday: "short",
-});
+/**
+ * Card times are projections of the one event-time formatter
+ * (`formatEventTime`, `@ds/schemas`, 004 EARS-12) pinned to `Europe/Moscow`.
+ */
+function timeOf(instant: string): string {
+  return formatEventTime({ startsAt: instant, viewerZone: MOSCOW_TIME_ZONE })
+    .time;
+}
 
 /** «16 июля · ср» — the card's date sub-label. */
 function dateLabelOf(startsAt: string): string {
-  const parts = DATE_LABEL_FORMAT.formatToParts(new Date(startsAt));
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("day")} ${value("month")} · ${value("weekday")}`;
+  const { date, weekdayShort } = formatEventTime({
+    startsAt,
+    viewerZone: MOSCOW_TIME_ZONE,
+  });
+  return `${date} · ${weekdayShort}`;
 }
 
 /**
@@ -151,7 +150,7 @@ export function toEventListItems(
       groupKey: day.day,
       groupLabel: day.label,
       href: card.href,
-      time: TIME_FORMAT.format(new Date(card.startsAt)),
+      time: timeOf(card.startsAt),
       tzLabel: DOCTOR_EVENTS_FEED_COPY.tz,
       dateLabel: dateLabelOf(card.startsAt),
       school: card.source,
@@ -207,7 +206,7 @@ export function doctorLiveStripProps(strip: DoctorEventsLiveStrip): {
   const segments = [
     `${strip.presenceCount} ${copy.liveInRoom}`,
     strip.school,
-    `${copy.liveUntil} ${TIME_FORMAT.format(new Date(strip.endsAt))} ${copy.tz}`,
+    `${copy.liveUntil} ${timeOf(strip.endsAt)} ${copy.tz}`,
   ].filter((segment) => segment.length > 0);
 
   return {

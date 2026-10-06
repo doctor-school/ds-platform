@@ -182,6 +182,7 @@
   --container-panel-headline: 16ch;
   --container-panel-lead: 38ch;
   --container-panel-assurance: 44ch;
+  --container-zone-label: 10ch;
   --container-auth: 27.5rem;
   --radius-base: 0rem;
   --radius-control: 0rem;
@@ -490,6 +491,7 @@
   --container-panel-headline: var(--container-panel-headline);
   --container-panel-lead: var(--container-panel-lead);
   --container-panel-assurance: var(--container-panel-assurance);
+  --container-zone-label: var(--container-zone-label);
   --container-auth: var(--container-auth);
   --shadow-sm: var(--shadow-sm);
   --shadow-base: var(--shadow-base);

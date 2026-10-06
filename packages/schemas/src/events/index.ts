@@ -4,6 +4,7 @@ export * from "./doctor-events-live.schema.js";
 export * from "./doctor-events-month.schema.js";
 export * from "./event-listing-query.schema.js";
 export * from "./participation.schema.js";
+export * from "./event-time.js";
 export * from "./events.schema.js";
 export * from "./public-listing.schema.js";
 export * from "./public-page.schema.js";

@@ -1,6 +1,8 @@
 import {
+  MOSCOW_TIME_ZONE,
   PublicEventPageSchema,
   RETURN_TARGET_PREFIX,
+  formatEventTime,
   parseLandOnlyReturnTarget,
   parseReturnTarget,
   type PublicEventPage,
@@ -70,38 +72,22 @@ export interface ReturnContextEvent {
   speakers: readonly { name: string; org?: string }[];
 }
 
-const MSK = "Europe/Moscow";
-
 /**
- * Both formatters pin `timeZone` explicitly: this render is a fact about the
- * event, not about where the reader sits (021 EARS-12).
+ * Both helpers are projections of the one event-time formatter
+ * (`formatEventTime`, `@ds/schemas`) pinned to `Europe/Moscow`: this render is
+ * a fact about the event, not about where the reader sits (021 EARS-12).
  */
-const TIME_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MSK,
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-const DAY_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MSK,
-  day: "numeric",
-  month: "long",
-});
-const WEEKDAY_FORMAT = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: MSK,
-  weekday: "short",
-});
-
 export function formatMskTime(startsAt: string): string {
-  return TIME_FORMAT.format(new Date(startsAt));
+  return formatEventTime({ startsAt, viewerZone: MOSCOW_TIME_ZONE }).time;
 }
 
+/** «27 августа · чт» — the card's day sub-label. */
 export function formatMskDateLabel(startsAt: string): string {
-  const at = new Date(startsAt);
-  // Some ICU builds emit the ru-RU short weekday with a trailing period
-  // («чт.»), others without; the canvas sub-label is «27 августа · чт».
-  const weekday = WEEKDAY_FORMAT.format(at).replace(/\.$/, "");
-  return `${DAY_FORMAT.format(at)} · ${weekday}`;
+  const { date, weekdayShort } = formatEventTime({
+    startsAt,
+    viewerZone: MOSCOW_TIME_ZONE,
+  });
+  return `${date} · ${weekdayShort}`;
 }
 
 /** The card projection of the public event read. */

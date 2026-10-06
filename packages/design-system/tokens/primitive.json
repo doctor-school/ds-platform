@@ -289,6 +289,10 @@
       "$value": "44ch",
       "$description": "44ch — the measure of the return-context assurance line on the auth brand panel (auth.dc.html 304 `max-width:44ch`). Surface as `max-w-panel-assurance`."
     },
+    "zone-label": {
+      "$value": "10ch",
+      "$description": "The reserved inline size of an event time's zone label (004 EARS-12 as amended, 004-design §6.1 «No layout shift»): wide enough for the longest label «GMT+10:30» (9 characters, one `ch` of slack for the capitals wider than the `0` advance), so the post-hydration swap from «МСК» to the viewer-zone label changes text only. Pair with `tabular-nums`. Surface as `min-w-zone-label`."
+    },
     "auth": {
       "$value": "27.5rem",
       "$description": "440px — the auth family's card column (`width:100%;max-width:440px`, auth.dc.html line 53 card and line 289 processing notice): the logo, the card and the notice under it share one cap. Surface as `max-w-auth`."

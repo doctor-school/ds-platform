@@ -1,32 +1,23 @@
-import { MSK_UTC_OFFSET } from "@ds/schemas";
+import { MOSCOW_TIME_ZONE, MSK_UTC_OFFSET, formatEventTime } from "@ds/schemas";
 
 /**
  * Canonical Moscow-time handling for the admin surface (007 EARS-10, design §3).
- * The read model stores ONE canonical UTC instant; every absolute date/time the
- * admin renders is presented in `Europe/Moscow` and MUST NOT drift to the
- * operator's local timezone. This is the single formatter the admin list + detail
- * share — it pins `timeZone: "Europe/Moscow"` explicitly, so the output is
- * identical regardless of the browser's locale/TZ (a Playwright `timezoneId`
- * override asserts no drift). The visible «МСК» label is copy — it lives in the
- * message catalog, not here.
+ * The admin enters and reads every event time in `Europe/Moscow` (004 EARS-12
+ * as amended — «Admin entry»), so the read side is the one event-time formatter
+ * (`formatEventTime`, `@ds/schemas`) pinned to Moscow; the output is identical
+ * regardless of the browser's locale/TZ (a Playwright `timezoneId` override
+ * asserts no drift). The visible «МСК» label is copy — it lives in the message
+ * catalog, not here.
  */
-const MSK_TIME_ZONE = "Europe/Moscow";
+const MSK_TIME_ZONE = MOSCOW_TIME_ZONE;
 
-/** Full absolute label — `17 июля 2026, 19:00` — for the list/detail air time. */
+/** Full absolute label — `17 июля 2026 г., 19:00` — for the list/detail air time. */
 export function formatMskDateTime(isoInstant: string): string {
-  const instant = new Date(isoInstant);
-  const date = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: MSK_TIME_ZONE,
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(instant);
-  const time = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: MSK_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(instant);
-  return `${date}, ${time}`;
+  const { dateWithYear, time } = formatEventTime({
+    startsAt: isoInstant,
+    viewerZone: MOSCOW_TIME_ZONE,
+  });
+  return `${dateWithYear}, ${time}`;
 }
 
 /**

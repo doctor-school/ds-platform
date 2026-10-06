@@ -24,6 +24,7 @@ import {
   type HostFreeEventPageView,
   type PublicEventPageSpeaker,
   type PublicEventState,
+  slugifyTaxonomyTitle,
   type UpcomingBroadcastCard,
   type UpcomingBroadcastState,
   type UpdateEventRequest,
@@ -467,15 +468,17 @@ function kindFields(
   };
 }
 
-/** Slugify a (possibly non-ASCII) title into a URL-safe, collision-resistant handle. */
-function slugify(title: string): string {
-  const ascii = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+/**
+ * The URL handle of a new event (007 EARS-1, #2616): the title folded through
+ * the canonical taxonomy slugify (Cyrillic transliterated — the same rule as
+ * directions/projects/experts), capped at 60 characters, plus a random 8-hex
+ * suffix that keeps it unique. A title with no sluggable character falls back
+ * to `event`. Set once at create; an edit never re-slugs (shared links stay).
+ */
+function eventSlug(title: string): string {
+  const base = slugifyTaxonomyTitle(title).slice(0, 60).replace(/-+$/g, "");
   const suffix = randomBytes(4).toString("hex");
-  return `${ascii || "event"}-${suffix}`;
+  return `${base || "event"}-${suffix}`;
 }
 
 /** Sanitize an uploaded filename into a safe object-key segment. */
@@ -530,7 +533,7 @@ export class EventsService {
     input: CreateEventRequest,
     pdf?: UploadedPdf,
   ): Promise<EventAdminDetail> {
-    const slug = slugify(input.title);
+    const slug = eventSlug(input.title);
 
     const programPdfRef = pdf ? await this.storeProgramPdf(slug, pdf) : null;
 
@@ -1079,7 +1082,7 @@ export class EventsService {
   async createLegacyBroadcast(
     input: LegacyBroadcastCreateBody,
   ): Promise<EventAdminDetail> {
-    const slug = slugify(input.title);
+    const slug = eventSlug(input.title);
     const aggregate = await this.repo.insertLegacyBroadcast(
       {
         slug,

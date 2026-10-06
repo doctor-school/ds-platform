@@ -204,11 +204,12 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And no page-level error screen replaces the feed
 
   @EARS-10 @happy
-  Scenario: «Прошедшие» leads to the recording and the materials
+  # Read under 019 «Amendment — 2026-10-06»: the past card offers the recording only; the materials live on the recording's page.
+  Scenario: «Прошедшие» leads to the recording
     Given a past event whose recording feature 014 has published
     When the doctor switches the tense to «Прошедшие»
     Then the same card unit renders in its «прошло — есть запись» state
-    And the card offers the recording and the published materials instead of a sign-up action
+    And the card offers «Смотреть запись» instead of a sign-up action and lists no materials
     And the past events are grouped by month, newest first
     And no separate archive page, tab or block below the feed is rendered
 

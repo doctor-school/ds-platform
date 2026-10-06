@@ -777,18 +777,18 @@ function FrameNode({ data }) {
 function BoxNode({ data }) {
   // Focus is drawn from data, not React Flow selection: selecting re-sorts nodes by z-index and
   // re-inserts the DOM node mid-click, which swallows the double-click that opens a child diagram.
+  // No `title` attributes: a native tooltip would duplicate the hover card, or defeat its switch;
+  // the note reaches assistive tech through aria-description.
   const { box, hasChild, onOpen, focused: selected } = data;
   const mechanisms = box.mechanisms ?? [];
   return html`<div
     class=${"box" + (selected ? " selected" : "")}
-    title=${box.note ?? ""}
+    aria-description=${box.note ?? undefined}
     onDoubleClick=${onOpen ?? undefined}
   >
-    ${hasChild ? html`<span class="drill" title="Двойной щелчок — декомпозиция">▼</span>` : null}
+    ${hasChild ? html`<span class="drill" aria-label="Двойной щелчок — декомпозиция">▼</span>` : null}
     <div class="name">${box.name}</div>
-    <div class="mech" title=${mechanisms.join("\n")}>
-      ${mechanisms.join(" · ")}
-    </div>
+    <div class="mech">${mechanisms.join(" · ")}</div>
     <div class="num">${box.id}</div>
   </div>`;
 }

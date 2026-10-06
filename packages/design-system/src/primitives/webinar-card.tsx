@@ -440,8 +440,11 @@ const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
                 <span data-signup-count="" className={CHIP_CLASS}>
                   {/* Label first, count after a colon («Коллег записались:
                     128») — one wording for every number, so no Russian plural
-                    agreement is ever needed (#2617). */}
-                  {signUpLabel ? `${signUpLabel}: ${signUpCount}` : signUpCount}
+                    agreement is ever needed (#2617). A no-break space keeps the
+                    count on the line of its label when a narrow card wraps. */}
+                  {signUpLabel
+                    ? `${signUpLabel}:\u00a0${signUpCount}`
+                    : signUpCount}
                 </span>
               ) : null}
               {/* «мест не осталось» is the seat count reaching zero — the same

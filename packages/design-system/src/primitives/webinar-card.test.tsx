@@ -325,7 +325,9 @@ describe("019 EARS-2 WebinarCard — cost, sign-ups, offline city and seats", ()
   it("019 EARS-2.6: the sign-up chip reads the label first and the count after a colon (#2617)", () => {
     const { container } = render(<WebinarCard {...FEED} />);
     const count = container.querySelector("[data-signup-count]");
-    expect(count!.textContent).toBe(`${FEED.signUpLabel}: ${FEED.signUpCount}`);
+    expect(count!.textContent).toBe(
+      `${FEED.signUpLabel}:\u00a0${FEED.signUpCount}`,
+    );
   });
 
   it("019 EARS-2.6: without a label the sign-up chip is the bare count", () => {

@@ -263,3 +263,46 @@ describe("007 EARS-2 — superseded program-PDF GC (unit; #627)", () => {
     expect(noPdf.ops.filter((o) => o.startsWith("delete:"))).toEqual([]);
   });
 });
+
+// 007 EARS-1 — the created event's slug (#2616). The slug base is the title
+// folded through the canonical taxonomy slugify (Cyrillic transliterated, same
+// as directions/projects/experts); uniqueness stays the event's own random
+// 8-hex suffix; a title with no sluggable character falls back to `event`.
+describe("007 EARS-1 — event slug from the title (unit; #2616)", () => {
+  async function createdSlug(title: string): Promise<string> {
+    const insert = vi.fn((row: Event) =>
+      Promise.resolve(
+        aggregate({ ...baseEvent(null), ...row, state: "draft" }),
+      ),
+    );
+    const repo = { ...repoStub(aggregate(baseEvent(null)), []), insert };
+    await service(new RecordingStorage(), repo).create({
+      title,
+      school: "Кардиология сегодня",
+      startsAtMsk: "2026-07-17T19:00",
+      durationMin: 90,
+      description: "",
+      specialties: ["cardiology"],
+      kindId: KIND.id,
+      participationFormat: "online",
+      audience: "doctors",
+    } as Parameters<EventsService["create"]>[0]);
+    return insert.mock.calls[0]![0].slug;
+  }
+
+  it("EARS-1: a Cyrillic title keeps its words in the slug, transliterated", async () => {
+    expect(await createdSlug("Конгресс по ортобиологии")).toMatch(
+      /^kongress-po-ortobiologii-[0-9a-f]{8}$/,
+    );
+  });
+
+  it("EARS-1: a Latin title keeps its existing slug shape", async () => {
+    expect(await createdSlug("Cardio Update 2026!")).toMatch(
+      /^cardio-update-2026-[0-9a-f]{8}$/,
+    );
+  });
+
+  it("EARS-1: a title with no sluggable character falls back to `event`", async () => {
+    expect(await createdSlug("★ ✦ ★")).toMatch(/^event-[0-9a-f]{8}$/);
+  });
+});

@@ -257,7 +257,10 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 - **`EventsService`** (`events.service.ts`) — `create()` (007 EARS-1: folds the
   МСК wall-clock into one canonical instant via `mskLocalToInstant`, uploads the
   program PDF to object storage, inserts the `draft` aggregate + ordered speaker
-  rows), `update()` (007 EARS-2: the pre-hide field edit — refuses an
+  rows; the slug is the title through the canonical `slugifyTaxonomyTitle`
+  — Cyrillic transliterated — plus a random 8-hex suffix, `event-…` when the
+  title has nothing sluggable, set once and never re-slugged on edit),
+  `update()` (007 EARS-2: the pre-hide field edit — refuses an
   `hidden` event with `EventNotEditableError`, folds a МСК re-entry into one
   instant, replaces the ordered speaker list when present, and supersedes the
   program-PDF reference when a replacement rides the request — then, after the

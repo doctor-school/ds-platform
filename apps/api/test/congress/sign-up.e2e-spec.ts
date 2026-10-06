@@ -64,6 +64,8 @@ const CONSENT_VERSION = `2026-10-01.sha256-${"a".repeat(64)}`;
 /** 044 EARS-28 — the window this suite drives the clock around, as configured. */
 const WINDOW_OPENS_AT = "2026-10-01T00:00:00.000+03:00";
 const WINDOW_CLOSES_AT = "2027-01-01T00:00:00.000+03:00";
+/** 044 EARS-39 — the hand-off: 32 random bytes, base64url, nothing else. */
+const HANDOFF_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "044 congress sign-up — public intake, new and existing email (e2e)",
@@ -197,6 +199,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(200);
       expect(CongressSignUpAcceptedSchema.parse(res.json())).toEqual({
         status: "accepted",
+        handoff: expect.stringMatching(HANDOFF_SHAPE),
       });
 
       const row = await accountRow(email);
@@ -536,14 +539,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
 
       expect(existing.statusCode).toBe(created.statusCode);
-      expect(existing.json()).toEqual(created.json());
-      // V-23 — the single `accepted` state, on every path, is the ONLY signal
-      // the congress site needs to render the confirmation screen.
+      // V-23 (amended, EARS-39) — the single `accepted` state and one random
+      // hand-off of the same shape on every path: the only signal the congress
+      // site needs, and nothing that tells the two paths apart.
       expect(existing.statusCode).toBe(200);
-      expect(CongressSignUpAcceptedSchema.parse(existing.json())).toEqual({
-        status: "accepted",
-      });
-      expect(existing.json()).toEqual({ status: "accepted" });
+      for (const res of [existing, created]) {
+        expect(CongressSignUpAcceptedSchema.parse(res.json())).toEqual({
+          status: "accepted",
+          handoff: expect.stringMatching(HANDOFF_SHAPE),
+        });
+      }
     });
 
     it("EARS-8.1: when an already-registered pair submits again, system shall answer identically and write no second registration or consent row", async () => {
@@ -554,7 +559,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const second = await post(submission(email, { workplace: "ГКБ №3" }));
 
       expect(second.statusCode).toBe(first.statusCode);
-      expect(second.json()).toEqual(first.json());
+      // Same shape as the first answer; the hand-off is a fresh random one.
+      expect(Object.keys(second.json())).toEqual(Object.keys(first.json()));
+      expect(second.json()).toEqual({
+        status: "accepted",
+        handoff: expect.stringMatching(HANDOFF_SHAPE),
+      });
 
       const row = await accountRow(email); // also asserts exactly one account
       expect(await congressRowCounts(row.id)).toEqual({
@@ -580,7 +590,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
 
       expect(second.statusCode).toBe(200);
-      expect(second.json()).toEqual({ status: "accepted" });
+      expect(second.json()).toEqual({
+        status: "accepted",
+        handoff: expect.stringMatching(HANDOFF_SHAPE),
+      });
       // Still one registration; the consent ledger gained exactly one row, at
       // the NEW version, and the original acceptance is still readable.
       expect(await congressRowCounts(row.id)).toEqual({
@@ -600,6 +613,54 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     /** A platform account created through the 003 register door, not the intake. */
+    async function redeem(ref: string) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/handoff",
+        payload: { ref },
+      });
+      return { status: res.statusCode, body: res.json() as unknown };
+    }
+
+    it("044 EARS-39: new-account, existing-account and repeat submissions each answer accepted with a fresh random hand-off that names nothing (V-23)", async () => {
+      const email = uniqueEmail("congress-handoff");
+      const { email: known } = await registerPlatformUser("congress-handoff");
+
+      const refs = [];
+      for (const target of [email, known, email]) {
+        const res = await post(submission(target));
+        expect(res.statusCode).toBe(200);
+        const body = CongressSignUpAcceptedSchema.parse(res.json());
+        expect(Object.keys(body)).toEqual(["status", "handoff"]);
+        expect(body.handoff).toMatch(HANDOFF_SHAPE);
+        expect(Buffer.from(body.handoff, "base64url")).toHaveLength(32);
+        expect(body.handoff).not.toContain(target.split("@")[0]);
+        refs.push(body.handoff);
+      }
+      // Random per submission: even the repeat of the same pair is a new one.
+      expect(new Set(refs).size).toBe(3);
+    });
+
+    it("044 EARS-39: the hand-off from a sign-up redeems for a new and an existing address up to three times, the fourth falling back (V-32)", async () => {
+      const fresh = uniqueEmail("congress-redeem-new");
+      const { email: known } = await registerPlatformUser("congress-redeem");
+
+      for (const target of [fresh, known]) {
+        const res = await post(submission(target));
+        const { handoff } = CongressSignUpAcceptedSchema.parse(res.json());
+        for (let i = 1; i <= 3; i++) {
+          expect(await redeem(handoff)).toEqual({
+            status: 200,
+            body: { status: "otp_sent", identifier: target },
+          });
+        }
+        expect(await redeem(handoff)).toEqual({
+          status: 200,
+          body: { status: "handoff_refused" },
+        });
+      }
+    });
+
     async function registerPlatformUser(
       prefix: string,
     ): Promise<{ email: string; sub: string }> {

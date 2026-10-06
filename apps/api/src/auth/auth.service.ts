@@ -55,6 +55,10 @@ import {
 } from "../mailer/synthetic-suppression.js";
 import { AUTH_AUDIT, type AuthAuditLog } from "./session/auth-audit.types.js";
 import {
+  LOGIN_HANDOFF_STORE,
+  type LoginHandoffStore,
+} from "./login-handoff/login-handoff.store.js";
+import {
   SessionService,
   type RefreshOutcome,
 } from "./session/session.service.js";
@@ -71,7 +75,7 @@ const GENERIC_FAILURE = "the request could not be completed";
 // / per-IP / per-ASN ceiling or the global daily breaker). It names no threshold
 // and no account — a refusal is not an existence oracle and not an attacker's
 // budget read-out (design §10: breaker-open returns a generic "try later").
-const GENERIC_THROTTLED = "too many requests, please try again later";
+export const GENERIC_THROTTLED = "too many requests, please try again later";
 
 // #147: one generic, non-enumerating message for a residual IdP password-policy
 // rejection (the creation schema passed but a live Zitadel stricter than the
@@ -172,6 +176,10 @@ export class AuthService {
     // (the tsx/esbuild `design:paramtypes` ordering hazard).
     @Inject(SYNTHETIC_SUPPRESSION)
     private readonly synthetic: SyntheticSuppression,
+    // 003 EARS-44: the Congress hand-off reference store. An `@Inject`-token
+    // param, so it precedes the type-inferred class deps below.
+    @Inject(LOGIN_HANDOFF_STORE)
+    private readonly handoffs: LoginHandoffStore,
     private readonly mirror: UserMirrorService,
     private readonly sessions: SessionService,
     private readonly smsBudget: SmsBudgetService,
@@ -229,6 +237,25 @@ export class AuthService {
       method: "password",
     });
     return established;
+  }
+
+  /**
+   * 003 EARS-44: resolve a Congress hand-off reference to the address its code
+   * goes to, counting one redemption. `null` for every refused reference —
+   * missing, malformed, unknown, expired, exhausted — and for an account that
+   * no longer has an email address, indistinguishably; the caller answers all
+   * of them with the one fallback. The reference is never logged.
+   */
+  async resolveLoginHandoff(ref: string | undefined): Promise<string | null> {
+    if (ref === undefined) return null;
+    const accountId = await this.handoffs.redeem(ref);
+    if (accountId === null) return null;
+    const [row] = await this.db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, accountId))
+      .limit(1);
+    return row?.email ?? null;
   }
 
   /**

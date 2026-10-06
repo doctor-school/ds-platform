@@ -230,7 +230,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const res = await post(submission(email));
 
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.payload)).toEqual({ status: "accepted" });
+      expect(JSON.parse(res.payload)).toEqual({
+        status: "accepted",
+        handoff: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      });
 
       // The mail is not part of the cascade: the account, the registration and
       // the consent row are committed whether or not the relay answers.

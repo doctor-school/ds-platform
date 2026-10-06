@@ -512,6 +512,10 @@ function layoutDiagram(diagram) {
       edges.push({
         id: `${arrow.id}#${k}`,
         arrow,
+        // Each branch is drawn whole, from the shared source to its own end: the box at each end
+        // decides which branches a focused box lights.
+        from: src.box ?? null,
+        to: end.box ?? null,
         kind:
           kind === "in" || kind === "drop" || kind === "rise"
             ? src.boundary[0]
@@ -724,6 +728,8 @@ function layoutDiagram(diagram) {
       targetHandle: "t",
       data: {
         arrow: e.arrow,
+        from: e.from,
+        to: e.to,
         kind: e.kind,
         points: e.points,
         label: e.label ?? null,
@@ -918,18 +924,20 @@ function ObjectLine({ knowledge, id }) {
 const endName = (e) =>
   e.boundary ? `граница ${e.boundary}` : `${e.box}.${e.side ?? "O"}`;
 
-/** Arrows of a box: every arrow with the box at one of its ends (its I, C, O and M). */
-function arrowsOfBox(diagram, boxId) {
-  const touches = (end) => asList(end).some((e) => e.box === boxId);
-  return (diagram.arrows ?? []).filter((a) => touches(a.from) || touches(a.to));
+/** Branches of a box: its outputs whole, and of every other arrow only the branch that enters it
+ * (drawn from the source, so the shared trunk up to the fork lights with it) — never the sibling
+ * branches that feed other boxes. */
+function edgesOfBox(edges, boxId) {
+  return edges.filter((e) => e.data.from === boxId || e.data.to === boxId);
 }
 
-/** What a box or an arrow means; `limit` cuts the registry list (the hover card), null = all. */
+/** What a box or an arrow means. `brief` (the hover card) keeps only the title and the short
+ * description; the linked roles, functions and objects stay in the panel. */
 function Explanation({
   diagram,
   focus,
   knowledge,
-  limit = null,
+  brief = false,
   onOpen,
   hasChild,
 }) {
@@ -937,7 +945,6 @@ function Explanation({
     const box = diagram.boxes.find((b) => b.id === focus.id);
     if (!box) return null;
     const functions = box.functions ?? [];
-    const shown = limit === null ? functions : functions.slice(0, limit);
     return html`<div>
       <h2>${box.id} — ${box.name}</h2>
       ${
@@ -949,38 +956,47 @@ function Explanation({
       }
       ${hasChild?.(box.id) ? html`<p><button onClick=${() => onOpen(box.id)}>Открыть декомпозицию ${box.id}</button></p>` : null}
       ${box.note ? html`<p>${box.note}</p>` : null}
-      ${box.effort && limit === null ? html`<${Effort} effort=${box.effort} />` : null}
-      <h3>Механизмы — роли</h3>
-      <ul>
-        ${(box.mechanisms ?? []).map((m) => html`<li key=${m}>${m}</li>`)}
-      </ul>
-      <h3>Функции реестра (${functions.length})</h3>
-      <ul class="xp-list">
-        ${shown.map((id) => html`<${FunctionLine} key=${id} knowledge=${knowledge} id=${id} />`)}
-      </ul>
-      ${shown.length < functions.length ? html`<p class="muted more">… ещё ${functions.length - shown.length} — полностью в панели справа</p>` : null}
+      ${
+        brief
+          ? null
+          : html`<${React.Fragment}>
+              ${box.effort ? html`<${Effort} effort=${box.effort} />` : null}
+              <h3>Механизмы — роли</h3>
+              <ul>
+                ${(box.mechanisms ?? []).map((m) => html`<li key=${m}>${m}</li>`)}
+              </ul>
+              <h3>Функции реестра (${functions.length})</h3>
+              <ul class="xp-list">
+                ${functions.map((id) => html`<${FunctionLine} key=${id} knowledge=${knowledge} id=${id} />`)}
+              </ul>
+            <//>`
+      }
     </div>`;
   }
   const arrow = diagram.arrows.find((a) => a.id === focus.id);
   if (!arrow) return null;
   const objects = arrow.objects ?? [];
-  const shown = limit === null ? objects : objects.slice(0, limit);
   return html`<div>
     <h2>${arrow.label}</h2>
     <p class="muted">
       ${`${arrow.id} · ${KIND_NAME[arrowKind(arrow)]} · ${asList(arrow.from).map(endName).join(", ")} → ${asList(arrow.to).map(endName).join(", ")}`}
     </p>
-    <h3>Объекты реестра (${objects.length})</h3>
-    <ul class="xp-list">
-      ${shown.map((id) => html`<${ObjectLine} key=${id} knowledge=${knowledge} id=${id} />`)}
-    </ul>
-    ${shown.length < objects.length ? html`<p class="muted more">… ещё ${objects.length - shown.length} — полностью в панели справа</p>` : null}
+    ${
+      brief
+        ? null
+        : html`<${React.Fragment}>
+            <h3>Объекты реестра (${objects.length})</h3>
+            <ul class="xp-list">
+              ${objects.map((id) => html`<${ObjectLine} key=${id} knowledge=${knowledge} id=${id} />`)}
+            </ul>
+          <//>`
+    }
   </div>`;
 }
 
 // Hover card: beside the hovered element (right, left, below, above — the first side where the
 // whole card fits), never over it. Where no side fits the whole card, it narrows into the largest
-// free side; a card taller than its room has its list cut, the panel shows the rest.
+// free side.
 const CARD_GAP = 12;
 const CARD_EDGE = 8;
 const CARD_WIDTH = 400;
@@ -988,29 +1004,13 @@ const CARD_MIN = { width: 200, height: 120 };
 
 function HoverCard({ diagram, focus, anchor, knowledge }) {
   const ref = useRef(null);
-  const [limit, setLimit] = useState(null);
   const [region, setRegion] = useState(null);
   const [place, setPlace] = useState(null);
   useLayoutEffect(() => {
     const card = ref.current;
     if (!card) return;
     const c = card.parentElement.getBoundingClientRect();
-    const room = region ?? {
-      left: CARD_EDGE,
-      top: CARD_EDGE,
-      width: c.width - 2 * CARD_EDGE,
-      height: c.height - 2 * CARD_EDGE,
-    };
     const own = card.getBoundingClientRect();
-    if (limit === null && own.height > room.height) {
-      // Keep the items that end above the room left for the «… ещё N» line.
-      const items = [...card.querySelectorAll(".xp-list > li")];
-      const fit = items.filter(
-        (li) => li.getBoundingClientRect().bottom - own.top <= room.height - 40,
-      ).length;
-      setLimit(Math.max(1, fit));
-      return;
-    }
     const w = own.width;
     const h = own.height;
     const a = {
@@ -1080,7 +1080,6 @@ function HoverCard({ diagram, focus, anchor, knowledge }) {
           : x,
       );
       setRegion(widest);
-      setLimit(null);
       return;
     }
     // The element fills the canvas on every side: the card has to overlap it.
@@ -1088,7 +1087,7 @@ function HoverCard({ diagram, focus, anchor, knowledge }) {
       left: clamp(a.right + CARD_GAP, CARD_EDGE, maxX - w),
       top: atY,
     });
-  }, [limit, anchor, region]);
+  }, [anchor, region]);
   const width = Math.min(CARD_WIDTH, region?.width ?? CARD_WIDTH);
   return html`<div
     ref=${ref}
@@ -1100,7 +1099,7 @@ function HoverCard({ diagram, focus, anchor, knowledge }) {
       diagram=${diagram}
       focus=${focus}
       knowledge=${knowledge}
-      limit=${limit ?? Infinity}
+      brief
     />
   </div>`;
 }
@@ -1138,10 +1137,11 @@ function Details({
       ${diagram.purpose ? html`<p>${diagram.purpose}</p>` : null}
       ${diagram.viewpoint ? html`<p><b>Точка зрения:</b> ${diagram.viewpoint}</p>` : null}
       <p class="muted">
-        Наведение на блок или стрелку — пояснение: названия и определения из
-        реестра и что с ними стало в TO-BE; наведение на блок подсвечивает его
-        стрелки. Щелчок закрепляет пояснение здесь. Двойной щелчок по блоку с ▼
-        — декомпозиция.
+        Наведение на блок или стрелку — подсказка: название и краткое описание
+        (выключается в шапке); наведение на блок подсвечивает его стрелки.
+        Щелчок закрепляет здесь полное пояснение: названия и определения из
+        реестра и что с ними стало в TO-BE. Двойной щелчок по блоку с ▼ —
+        декомпозиция.
       </p>
       ${knowledgeError ? html`<p class="err">Пояснения недоступны: ${knowledgeError}</p>` : null}
       <div class="legend">
@@ -1176,6 +1176,17 @@ function initialAnimate() {
   return !matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+// Hover card: on by default — it explains without a click; a reader whose diagram it covers turns
+// it off (the panel still explains a clicked element). Remembered like the animation switch.
+const HOVER_CARD_KEY = "idef0-viewer:hover-card";
+function initialHoverCard() {
+  try {
+    return localStorage.getItem(HOVER_CARD_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
 function readHash(fallback) {
   return decodeURIComponent(location.hash.replace(/^#/, "")) || fallback;
 }
@@ -1194,6 +1205,7 @@ function App({ model }) {
   // Screen rectangle of the hovered element: the hover card is placed beside it.
   const [anchor, setAnchor] = useState(null);
   const [animate, setAnimate] = useState(initialAnimate);
+  const [hoverCard, setHoverCard] = useState(initialHoverCard);
   const diagram = byId.get(current);
   useEffect(() => {
     try {
@@ -1202,6 +1214,13 @@ function App({ model }) {
       // storage unavailable: the switch still works for this page
     }
   }, [animate]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(HOVER_CARD_KEY, hoverCard ? "1" : "0");
+    } catch {
+      // storage unavailable: the switch still works for this page
+    }
+  }, [hoverCard]);
   const hoverOn = useCallback((type, id, rect) => {
     setHover(id ? { type, id } : null);
     setAnchor(id ? rect : null);
@@ -1270,13 +1289,25 @@ function App({ model }) {
   );
   const focus = hover ?? pinned;
   const activeArrow = focus?.type === "arrow" ? focus.id : null;
-  // A focused box lights its own I/C/O/M arrows and dims the rest.
-  const litArrows = useMemo(
+  // A focused box lights its own I/C/O/M branches and dims the rest.
+  const litEdges = useMemo(
     () =>
       focus?.type === "box"
-        ? new Set(arrowsOfBox(diagram, focus.id).map((a) => a.id))
+        ? new Set(edgesOfBox(layout?.edges ?? [], focus.id).map((e) => e.id))
         : null,
-    [diagram, focus?.type, focus?.id],
+    [layout, focus?.type, focus?.id],
+  );
+  // A label sits on one branch and lights with it; an arrow lit only through another branch keeps
+  // its label readable (not dimmed) without marking the sibling branch the label sits on.
+  const litArrows = useMemo(
+    () =>
+      litEdges &&
+      new Set(
+        (layout?.edges ?? [])
+          .filter((e) => litEdges.has(e.id))
+          .map((e) => e.data.arrow.id),
+      ),
+    [layout, litEdges],
   );
   // Box nodes depend on the pinned box only: a hover that rebuilt the node list would re-render the
   // nodes under the pointer between the two clicks of a double-click.
@@ -1303,8 +1334,9 @@ function App({ model }) {
     () =>
       (layout?.edges ?? []).map((edge) => {
         const active = edge.data.arrow.id === activeArrow;
-        const lit = !!litArrows?.has(edge.data.arrow.id);
-        const dim = !!litArrows && !lit;
+        const lit = !!litEdges?.has(edge.id);
+        const dim = !!litEdges && !lit;
+        const arrowLit = !!litArrows?.has(edge.data.arrow.id);
         const stroke = active
           ? "var(--hl)"
           : `var(--${edge.data.kind.toLowerCase()})`;
@@ -1324,13 +1356,13 @@ function App({ model }) {
             ...edge.data,
             active,
             lit,
-            dim,
+            dim: dim && !arrowLit,
             onSelect: (id) => setPinned({ type: "arrow", id }),
             onHover: (id, rect) => hoverOn("arrow", id, rect),
           },
         };
       }),
-    [layout, activeArrow, litArrows, hoverOn],
+    [layout, activeArrow, litEdges, litArrows, hoverOn],
   );
 
   const chain = [];
@@ -1354,14 +1386,24 @@ function App({ model }) {
         )}
         <span class="muted"> ${diagram.title}</span>
       </nav>
-      <label class="switch">
-        <input
-          type="checkbox"
-          checked=${animate}
-          onChange=${(event) => setAnimate(event.target.checked)}
-        />
-        Анимация стрелок
-      </label>
+      <div class="switches">
+        <label class="switch">
+          <input
+            type="checkbox"
+            checked=${hoverCard}
+            onChange=${(event) => setHoverCard(event.target.checked)}
+          />
+          Подсказка при наведении
+        </label>
+        <label class="switch">
+          <input
+            type="checkbox"
+            checked=${animate}
+            onChange=${(event) => setAnimate(event.target.checked)}
+          />
+          Анимация стрелок
+        </label>
+      </div>
     </header>
     <main>
       <div class=${"canvas" + (animate ? " animate" : "")}>
@@ -1412,7 +1454,7 @@ function App({ model }) {
               <//>`
         }
         ${
-          hover && anchor && !layoutError
+          hoverCard && hover && anchor && !layoutError
             ? html`<${HoverCard}
                 key=${`${hover.type}:${hover.id}`}
                 diagram=${diagram}

@@ -265,8 +265,13 @@
           stroke-dashoffset: 0;
         }
       }
-      .switch {
+      .switches {
         margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .switch {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -293,17 +298,8 @@
         font-size: 14px;
         margin: 2px 0 4px;
       }
-      .hover-card h3 {
-        font-size: 12px;
-        margin: 8px 0 2px;
-        color: var(--muted);
-      }
       .hover-card p {
         margin: 2px 0;
-      }
-      .hover-card ul {
-        margin: 0;
-        padding-left: 18px;
       }
       .xp-list {
         list-style: none;
@@ -330,12 +326,6 @@
           Consolas,
           monospace;
         color: var(--muted);
-      }
-      .hover-card .xp-def {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
       }
       .legend {
         display: flex;

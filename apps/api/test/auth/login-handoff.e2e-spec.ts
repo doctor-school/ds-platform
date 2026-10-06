@@ -43,9 +43,10 @@ import {
  * Bot protection is ENABLED here (a stub that accepts one token) so «no captcha
  * required» is a real assertion: the plain code request without a token is
  * refused while the hand-off goes through. The store is the in-memory binding
- * on an injected clock so the 24 h expiry is driven, not waited for; the Redis
- * binding (same contract) is exercised by the 044 sign-up suite (V-32) and the
- * store unit spec.
+ * on an injected clock so the 24 h expiry is driven, not waited for. The Redis
+ * binding (same contract) is pinned by the store unit spec against a scripted
+ * client; CI runs no Redis service, so the 044 sign-up suite (V-32) exercises
+ * whichever binding the environment selects — in-memory in CI.
  */
 const GOOD_TOKEN = "good-captcha";
 const CAPTCHA = { "x-smartcaptcha-token": GOOD_TOKEN };
@@ -141,7 +142,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "SELECT id FROM users WHERE email = $1",
         [email],
       );
-      const ref = await h.store.mint(rows[0]!.id);
+      const ref = await h.store.mint(rows[0]!.id, email);
       clearMail();
       return { email, ref };
     }
@@ -290,6 +291,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
     });
 
+    it("003 EARS-44: a live redemption appends exactly one auth.otp.sent row; a refused reference appends none (EARS-18)", async () => {
+      const { ref } = await accountWithReference("audit", true);
+      const otpSentSince = async (after: string): Promise<number> => {
+        const { rows } = await h.pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM audit_ledger
+            WHERE event_type = 'auth.otp.sent' AND created_at >= $1`,
+          [after],
+        );
+        return Number(rows[0]!.count);
+      };
+      const dbNow = async (): Promise<string> =>
+        (await h.pool.query<{ now: string }>("SELECT now() AS now")).rows[0]!
+          .now;
+
+      const beforeLive = await dbNow();
+      expect((await redeem(ref)).body).toMatchObject({ status: "otp_sent" });
+      expect(await otpSentSince(beforeLive)).toBe(1);
+
+      const beforeRefused = await dbNow();
+      expect((await redeem("Q".repeat(43))).body).toEqual(FALLBACK);
+      expect(await otpSentSince(beforeRefused)).toBe(0);
+    });
+
     it("003 EARS-44: the reference is random, carries no data and only its SHA-256 is stored", async () => {
       const { ref } = await accountWithReference("opaque", true);
       expect(ref).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -331,7 +355,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         "SELECT id FROM users WHERE email = $1",
         [email],
       );
-      const ref = await h.store.mint(rows[0]!.id);
+      const ref = await h.store.mint(rows[0]!.id, email);
       h.mailer.loginCodeEmails.length = 0;
 
       // Registration consumed one per-account unit; one redemption fits.

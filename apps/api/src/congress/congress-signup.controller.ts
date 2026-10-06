@@ -78,8 +78,13 @@ export class CongressSignUpController {
     // for every accepted submission — new account, existing account, repeat —
     // the same way, so its presence and shape disclose nothing (EARS-7). The
     // reference is opaque random bytes; only its hash is stored; it is never
-    // logged.
-    const handoff = await this.handoffs.mint(outcome.accountId);
+    // logged. The address is stored exactly as typed here, so the redemption
+    // names back the visitor's own spelling and never the stored account's
+    // (whose letter case would tell an existing account from a new one). The
+    // mint runs after the intake has committed: if the store is down the
+    // visitor gets a 500 for a registration that was written — a retry is
+    // idempotent (EARS-7), so nothing is lost or duplicated.
+    const handoff = await this.handoffs.mint(outcome.accountId, dto.email);
     return { status: "accepted", handoff };
   }
 }

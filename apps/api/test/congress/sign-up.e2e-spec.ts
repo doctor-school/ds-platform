@@ -661,6 +661,44 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       }
     });
 
+    it("044 EARS-39: the redemption names the address exactly as typed in the form — an existing account's stored spelling never leaks through letter case (V-32)", async () => {
+      const tag = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // An existing account first registered in mixed case…
+      const registered = `Case.User-${tag}@x.test`;
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: {
+          email: registered,
+          password: "Aa1!ufficiently-long-pw",
+          consent: [{ purpose: "tos", version: "2026-01" }],
+        },
+      });
+      expect(reg.statusCode).toBe(200);
+      // …signed up for the Congress in another case, and a brand-new account
+      // typed in mixed case.
+      const typedExisting = `case.user-${tag}@X.TEST`;
+      const typedNew = `New.Person-${tag}@Y.Test`;
+
+      for (const typed of [typedExisting, typedNew]) {
+        const res = await post(submission(typed));
+        expect(res.statusCode).toBe(200);
+        const { handoff } = CongressSignUpAcceptedSchema.parse(res.json());
+        expect(await redeem(handoff)).toEqual({
+          status: 200,
+          body: { status: "otp_sent", identifier: typed },
+        });
+      }
+
+      // Clean up whatever spelling each account was stored under.
+      const { rows } = await pool.query<{ email: string }>(
+        `SELECT email FROM users WHERE lower(email) = ANY($1::text[])`,
+        [[registered.toLowerCase(), typedNew.toLowerCase()]],
+      );
+      expect(rows).toHaveLength(2);
+      createdEmails.push(...rows.map((r) => r.email));
+    });
+
     async function registerPlatformUser(
       prefix: string,
     ): Promise<{ email: string; sub: string }> {

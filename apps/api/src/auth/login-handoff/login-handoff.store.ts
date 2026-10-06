@@ -8,7 +8,11 @@ import { createHash, randomBytes } from "node:crypto";
  * the visitor typing it again. The reference is 32 random bytes (base64url) and
  * carries NO data — no account id, time or ordering — so nothing decodes it and
  * it leaks no existence or age signal. Only `SHA-256(ref)` is stored, mapped to
- * `{accountId, redemptions}`, with a 24 h TTL counted from the sign-up; a
+ * `{accountId, identifier, redemptions}` — `identifier` is the address exactly
+ * as typed in the sign-up form, so a redemption names back what the visitor
+ * typed and never the stored account's spelling (the letter case of
+ * `users.email` would otherwise tell an existing account from a new one) —
+ * with a 24 h TTL counted from the sign-up; a
  * reference redeems at most {@link LOGIN_HANDOFF_MAX_REDEMPTIONS} times. There is
  * no signing secret and no env key: the state lives only in the store.
  *
@@ -16,14 +20,24 @@ import { createHash, randomBytes } from "node:crypto";
  * to the response (mint) or to {@link LoginHandoffStore.redeem}.
  */
 export interface LoginHandoffStore {
-  /** Mint a fresh reference for `accountId`; returns the reference in clear. */
-  mint(accountId: string): Promise<string>;
   /**
-   * Count one redemption of `ref`. Returns the account id for a live reference
-   * (known hash, within the TTL, this redemption ≤ the maximum); `null` for a
-   * malformed, unknown, expired or exhausted one — indistinguishably.
+   * Mint a fresh reference for `accountId`, remembering `identifier` — the
+   * address exactly as typed in the sign-up form; returns the reference in clear.
    */
-  redeem(ref: string): Promise<string | null>;
+  mint(accountId: string, identifier: string): Promise<string>;
+  /**
+   * Count one redemption of `ref`. Returns the account id and the as-typed
+   * identifier for a live reference (known hash, within the TTL, this
+   * redemption ≤ the maximum); `null` for a malformed, unknown, expired or
+   * exhausted one — indistinguishably.
+   */
+  redeem(ref: string): Promise<LoginHandoffEntry | null>;
+}
+
+/** What a live reference names: the account and the address as typed at sign-up. */
+export interface LoginHandoffEntry {
+  accountId: string;
+  identifier: string;
 }
 
 /** DI token for the {@link LoginHandoffStore} port. */
@@ -69,51 +83,56 @@ export interface HandoffRedisLike {
   ): Promise<unknown>;
 }
 
-/** Mint: write `{accountId, redemptions: 0}` and its TTL in one step. */
+/** Mint: write `{accountId, identifier, redemptions: 0}` and its TTL in one step. */
 const MINT_SCRIPT = `
-redis.call('HSET', KEYS[1], 'accountId', ARGV[1], 'redemptions', 0)
-redis.call('EXPIRE', KEYS[1], ARGV[2])
+redis.call('HSET', KEYS[1], 'accountId', ARGV[1], 'identifier', ARGV[2], 'redemptions', 0)
+redis.call('EXPIRE', KEYS[1], ARGV[3])
 return 1
 `;
 
 /**
  * Redeem atomically: a missing (unknown or expired) key answers nil WITHOUT
  * creating it, so a guessed reference never leaves state behind; otherwise the
- * counter is bumped and the account id returned only while it stays within the
- * maximum. The TTL is never extended.
+ * counter is bumped and `{accountId, identifier}` returned only while it stays
+ * within the maximum. The TTL is never extended.
  */
 const REDEEM_SCRIPT = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return false end
 local n = redis.call('HINCRBY', KEYS[1], 'redemptions', 1)
 if n > tonumber(ARGV[1]) then return false end
-return redis.call('HGET', KEYS[1], 'accountId')
+return redis.call('HMGET', KEYS[1], 'accountId', 'identifier')
 `;
 
 /** Redis-backed {@link LoginHandoffStore} — the production binding. */
 export class RedisLoginHandoffStore implements LoginHandoffStore {
   constructor(private readonly redis: HandoffRedisLike) {}
 
-  async mint(accountId: string): Promise<string> {
+  async mint(accountId: string, identifier: string): Promise<string> {
     const ref = newHandoffReference();
     await this.redis.eval(
       MINT_SCRIPT,
       1,
       handoffKey(ref),
       accountId,
+      identifier,
       LOGIN_HANDOFF_TTL_SECONDS,
     );
     return ref;
   }
 
-  async redeem(ref: string): Promise<string | null> {
+  async redeem(ref: string): Promise<LoginHandoffEntry | null> {
     if (!isWellFormedHandoffReference(ref)) return null;
-    const accountId = await this.redis.eval(
+    const reply = await this.redis.eval(
       REDEEM_SCRIPT,
       1,
       handoffKey(ref),
       LOGIN_HANDOFF_MAX_REDEMPTIONS,
     );
-    return typeof accountId === "string" ? accountId : null;
+    if (!Array.isArray(reply)) return null;
+    const [accountId, identifier] = reply as unknown[];
+    return typeof accountId === "string" && typeof identifier === "string"
+      ? { accountId, identifier }
+      : null;
   }
 }
 
@@ -125,22 +144,28 @@ export class RedisLoginHandoffStore implements LoginHandoffStore {
 export class InMemoryLoginHandoffStore implements LoginHandoffStore {
   private readonly entries = new Map<
     string,
-    { accountId: string; redemptions: number; expiresAtMs: number }
+    {
+      accountId: string;
+      identifier: string;
+      redemptions: number;
+      expiresAtMs: number;
+    }
   >();
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
-  mint(accountId: string): Promise<string> {
+  mint(accountId: string, identifier: string): Promise<string> {
     const ref = newHandoffReference();
     this.entries.set(handoffKey(ref), {
       accountId,
+      identifier,
       redemptions: 0,
       expiresAtMs: this.now() + LOGIN_HANDOFF_TTL_SECONDS * 1000,
     });
     return Promise.resolve(ref);
   }
 
-  redeem(ref: string): Promise<string | null> {
+  redeem(ref: string): Promise<LoginHandoffEntry | null> {
     if (!isWellFormedHandoffReference(ref)) return Promise.resolve(null);
     const key = handoffKey(ref);
     const entry = this.entries.get(key);
@@ -153,7 +178,7 @@ export class InMemoryLoginHandoffStore implements LoginHandoffStore {
     return Promise.resolve(
       entry.redemptions > LOGIN_HANDOFF_MAX_REDEMPTIONS
         ? null
-        : entry.accountId,
+        : { accountId: entry.accountId, identifier: entry.identifier },
     );
   }
 

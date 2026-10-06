@@ -229,14 +229,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const sharedB = uniqueEmail("dup-b");
       const other = uniqueEmail("dup-c");
 
-      // Acceptance is unchanged: the same generic EARS-7 body, byte-identical
-      // across the two submissions that share a phone and the one that does not
-      // — the intake never signals that another registration carries it.
-      const bodyA = await signUp(sharedA, "+7 (999) 123-45-67");
-      const bodyB = await signUp(sharedB, "8 999 1234567");
-      const bodyC = await signUp(other, "+7 (912) 000-11-22");
-      expect(bodyB).toEqual(bodyA);
-      expect(bodyC).toEqual(bodyA);
+      // Acceptance is unchanged: the same generic EARS-7 body across the two
+      // submissions that share a phone and the one that does not — the intake
+      // never signals that another registration carries it. Each body carries
+      // its own random 044 EARS-39 hand-off, so the bodies match in shape (same
+      // keys, `accepted`, a hand-off of one fixed form), never byte for byte.
+      const bodies = [
+        await signUp(sharedA, "+7 (999) 123-45-67"),
+        await signUp(sharedB, "8 999 1234567"),
+        await signUp(other, "+7 (912) 000-11-22"),
+      ];
+      for (const body of bodies) {
+        expect(Object.keys(body)).toEqual(["status", "handoff"]);
+        expect(body.status).toBe("accepted");
+        expect(body.handoff).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      }
+      expect(new Set(bodies.map((b) => b.handoff)).size).toBe(3);
 
       const marked = await markers();
       expect(marked.get(await userIdOf(sharedA))).toBe(true);

@@ -9,12 +9,15 @@ import {
 } from "./login-handoff.store.js";
 
 const ACCOUNT = "6f1b0c3e-0000-4000-8000-000000000001";
+/** The address as typed in the sign-up form — mixed case on purpose. */
+const TYPED = "Petr.Ivanov@Example.ORG";
+const ENTRY = { accountId: ACCOUNT, identifier: TYPED };
 
 describe("login hand-off store (003 EARS-44)", () => {
   it("003 EARS-44: a minted reference is 32 random bytes in base64url and carries no data", async () => {
     const store = new InMemoryLoginHandoffStore();
-    const a = await store.mint(ACCOUNT);
-    const b = await store.mint(ACCOUNT);
+    const a = await store.mint(ACCOUNT, TYPED);
+    const b = await store.mint(ACCOUNT, TYPED);
     expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(Buffer.from(a, "base64url")).toHaveLength(32);
     // Same account, two references: nothing derives from the account.
@@ -24,7 +27,7 @@ describe("login hand-off store (003 EARS-44)", () => {
 
   it("003 EARS-44: only SHA-256 of the reference is stored, never the reference itself", async () => {
     const store = new InMemoryLoginHandoffStore();
-    const ref = await store.mint(ACCOUNT);
+    const ref = await store.mint(ACCOUNT, TYPED);
     const sha = createHash("sha256").update(ref).digest("hex");
     expect(store.storedKeys()).toEqual([`login-handoff:${sha}`]);
     expect(store.storedKeys().join()).not.toContain(ref);
@@ -32,19 +35,19 @@ describe("login hand-off store (003 EARS-44)", () => {
 
   it("003 EARS-44: a reference redeems three times, the fourth is refused", async () => {
     const store = new InMemoryLoginHandoffStore();
-    const ref = await store.mint(ACCOUNT);
-    expect(await store.redeem(ref)).toBe(ACCOUNT);
-    expect(await store.redeem(ref)).toBe(ACCOUNT);
-    expect(await store.redeem(ref)).toBe(ACCOUNT);
+    const ref = await store.mint(ACCOUNT, TYPED);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
     expect(await store.redeem(ref)).toBeNull();
   });
 
   it("003 EARS-44: a reference expires 24 h after the sign-up", async () => {
     let t = 1_000_000;
     const store = new InMemoryLoginHandoffStore(() => t);
-    const ref = await store.mint(ACCOUNT);
+    const ref = await store.mint(ACCOUNT, TYPED);
     t += LOGIN_HANDOFF_TTL_SECONDS * 1000 - 1;
-    expect(await store.redeem(ref)).toBe(ACCOUNT);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
     t += 1;
     expect(await store.redeem(ref)).toBeNull();
   });
@@ -58,21 +61,27 @@ describe("login hand-off store (003 EARS-44)", () => {
     expect(store.storedKeys()).toEqual([]);
   });
 
+  it("003 EARS-44: a redemption returns the address exactly as typed at sign-up, letter case included", async () => {
+    const store = new InMemoryLoginHandoffStore();
+    const ref = await store.mint(ACCOUNT, TYPED);
+    expect((await store.redeem(ref))?.identifier).toBe(TYPED);
+  });
+
   it("003 EARS-44: the Redis adapter keys on the hash, sets the 24 h TTL and passes the ceiling, never the reference", async () => {
     const calls: { numKeys: number; args: (string | number)[] }[] = [];
     const redis: HandoffRedisLike = {
       eval: (_script, numKeys, ...args) => {
         calls.push({ numKeys, args });
-        return Promise.resolve(calls.length === 1 ? 1 : ACCOUNT);
+        return Promise.resolve(calls.length === 1 ? 1 : [ACCOUNT, TYPED]);
       },
     };
     const store = new RedisLoginHandoffStore(redis);
-    const ref = await store.mint(ACCOUNT);
+    const ref = await store.mint(ACCOUNT, TYPED);
     expect(calls[0]).toEqual({
       numKeys: 1,
-      args: [handoffKey(ref), ACCOUNT, LOGIN_HANDOFF_TTL_SECONDS],
+      args: [handoffKey(ref), ACCOUNT, TYPED, LOGIN_HANDOFF_TTL_SECONDS],
     });
-    expect(await store.redeem(ref)).toBe(ACCOUNT);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
     expect(calls[1]).toEqual({ numKeys: 1, args: [handoffKey(ref), 3] });
     expect(JSON.stringify(calls)).not.toContain(ref);
   });

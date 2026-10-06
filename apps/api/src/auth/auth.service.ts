@@ -241,21 +241,25 @@ export class AuthService {
 
   /**
    * 003 EARS-44: resolve a Congress hand-off reference to the address its code
-   * goes to, counting one redemption. `null` for every refused reference —
-   * missing, malformed, unknown, expired, exhausted — and for an account that
-   * no longer has an email address, indistinguishably; the caller answers all
-   * of them with the one fallback. The reference is never logged.
+   * goes to, counting one redemption. The address is the one stored with the
+   * reference — exactly as typed in the sign-up form — and NEVER `users.email`:
+   * an existing account keeps the spelling it was first registered with, so
+   * returning the stored row would tell an existing account from a new one by
+   * letter case alone (044 EARS-7, EARS-16). `null` for every
+   * refused reference — missing, malformed, unknown, expired, exhausted — and
+   * for an account that no longer exists, indistinguishably; the caller answers
+   * all of them with the one fallback. The reference is never logged.
    */
   async resolveLoginHandoff(ref: string | undefined): Promise<string | null> {
     if (ref === undefined) return null;
-    const accountId = await this.handoffs.redeem(ref);
-    if (accountId === null) return null;
+    const entry = await this.handoffs.redeem(ref);
+    if (entry === null) return null;
     const [row] = await this.db
-      .select({ email: users.email })
+      .select({ id: users.id })
       .from(users)
-      .where(eq(users.id, accountId))
+      .where(eq(users.id, entry.accountId))
       .limit(1);
-    return row?.email ?? null;
+    return row ? entry.identifier : null;
   }
 
   /**

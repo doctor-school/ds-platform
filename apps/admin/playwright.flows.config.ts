@@ -19,7 +19,8 @@ import { defineConfig, devices } from "@playwright/test";
  * env is absent, so a stray invocation fails fast rather than pretending to
  * pass. Locally, run against a booted admin + api:
  *
- *   E2E_ADMIN_URL=http://localhost:3201 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
+ *   E2E_ADMIN_URL=http://localhost:3201 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
+ *   IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin test:flows
  *
  * The api must be booted with bot-protection off (the dev-stand recipe), because

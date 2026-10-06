@@ -1,6 +1,7 @@
 import { chooseProjectDefaultAudience } from "./support/event-classification";
 import { expect, test } from "@playwright/test";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
+import { academyPublicLinkPrefix } from "./support/academy-origin";
 import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
@@ -18,7 +19,8 @@ import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
  * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
  * throws when `IDP_*` is absent. Run against a booted admin + api:
  *
- *   E2E_ADMIN_URL=http://localhost:3201 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
+ *   E2E_ADMIN_URL=http://localhost:3201 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
+ *   IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin exec playwright test e2e/taxonomy-projects.spec.ts \
  *     --config=playwright.flows.config.ts
  */
@@ -80,9 +82,12 @@ test.describe("012 EARS-1 — project authoring in the live admin", () => {
     await expect(page.getByTestId("project-heading")).toHaveText(title);
     await expect(page.getByTestId("project-status")).toHaveText("Черновик");
     const publicUrl = await page.getByTestId("project-public-link").innerText();
-    expect(publicUrl).toMatch(
-      /^https:\/\/academy\.doctor\.school\/projects\/shkola-kardiologii/,
-    );
+    expect(
+      publicUrl.startsWith(
+        academyPublicLinkPrefix("projects", "shkola-kardiologii"),
+      ),
+      `${publicUrl} points at the project on the configured Academy origin`,
+    ).toBe(true);
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {
       origin: ADMIN_ORIGIN,
     });

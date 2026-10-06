@@ -61,7 +61,7 @@ The app needs a running api (`API_PROXY_TARGET`, default `http://localhost:3000`
 ```bash
 # Boot an api whose bot-protection is OFF (dev-stand recipe) so the 003
 # register/login provisioning is not captcha-gated, then:
-E2E_ADMIN_URL=http://localhost:3200 \
+E2E_ADMIN_URL=http://localhost:3200 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
 IDP_ISSUER=… IDP_SERVICE_TOKEN=… IDP_PROJECT_ID=… \
 pnpm --filter @ds/admin test:e2e     # bddgen && playwright test
 ```

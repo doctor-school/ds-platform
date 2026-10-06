@@ -13,7 +13,8 @@ import { defineBddConfig } from "playwright-bdd";
  * so a stray invocation fails fast rather than pretending to pass.
  *
  * Run it against a provisioned dev-stand with, e.g.:
- *   E2E_ADMIN_URL=http://localhost:3200 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
+ *   E2E_ADMIN_URL=http://localhost:3200 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
+ *   IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin test:e2e
  * The admin app must be booted with `API_PROXY_TARGET` pointing at an api whose
  * bot-protection is off (`BOT_PROTECTION_ENABLED=false`, and no Unleash override

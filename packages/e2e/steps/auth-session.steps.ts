@@ -5,7 +5,9 @@ import {
   type Response,
 } from "@playwright/test";
 
+import { installCaptchaStub } from "../lib/captcha-stub.js";
 import { goldenDoctorPassword, resolveGoldenDoctor } from "../lib/golden.js";
+import { fetchLoginCode, mailpitUrlFor } from "../lib/mailpit.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
 import { Given, Then, When } from "./support/fixtures.js";
 
@@ -14,6 +16,8 @@ const SESSION_COOKIE = "__Host-ds_session";
 const GENERIC_PASSWORD_ERROR =
   "Не удалось войти. Проверьте данные и попробуйте снова.";
 const loginResponses = new WeakMap<Page, Response>();
+const otpRequestResponses = new WeakMap<Page, Response>();
+const otpLoginResponses = new WeakMap<Page, Response>();
 const refusedLoginResponses = new WeakMap<Page, Response>();
 type SessionCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
 const preLogoutCookies = new WeakMap<Page, SessionCookie>();
@@ -24,6 +28,67 @@ Given(
   async () => {
     // Resolve the named seeded identity and require its provisioned IdP password.
     goldenDoctorPassword(resolveGoldenDoctor(SEED));
+  },
+);
+
+Given(
+  'the golden doctor "verified-cardiologist" has a verified email for code sign-in',
+  async () => {
+    expect(resolveGoldenDoctor(SEED).email).toBeTruthy();
+  },
+);
+
+When(
+  "that doctor requests an email login code and submits the delivered code through Academy",
+  async ({ page, request, world }) => {
+    expect(world.host.id).toBe("academy");
+    const doctor = resolveGoldenDoctor(SEED);
+    await installCaptchaStub(page);
+    await page.goto(`${world.hostBaseUrl}${world.host.loginPath}`, {
+      waitUntil: "load",
+    });
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("login-method-otp").click();
+    await page.getByTestId("otp-channel-email").click();
+    await page.getByTestId("otp-identifier").fill(doctor.email);
+    const requestedAt = new Date().toISOString();
+    const requestResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/auth/login/otp/request" &&
+        response.request().method() === "POST",
+    );
+    await page.getByTestId("otp-send").click();
+    otpRequestResponses.set(page, await requestResponse);
+    const code = await fetchLoginCode(
+      request,
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      doctor.email,
+      requestedAt,
+    );
+    const loginResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/auth/login/otp" &&
+        response.request().method() === "POST",
+    );
+    // The sixth character auto-submits the shipped OTP form.
+    await page.locator('input[autocomplete="one-time-code"]').fill(code);
+    otpLoginResponses.set(page, await loginResponse);
+    world.signedInAs = doctor.seedName;
+  },
+);
+
+Then(
+  "the email-code login succeeds and opens the authenticated webinar listing",
+  async ({ page }) => {
+    expect(otpRequestResponses.get(page)?.ok(), "code request succeeded").toBe(
+      true,
+    );
+    expect(
+      otpLoginResponses.get(page)?.ok(),
+      "delivered code was accepted",
+    ).toBe(true);
+    await expect(page).toHaveURL(/\/webinars(?:\?|$)/);
+    await expect(page.getByTestId("storefront-header")).toBeVisible();
   },
 );
 
@@ -73,11 +138,11 @@ Then(
 Then(
   "the browser holds a host-only __Host-ds_session cookie with HttpOnly, Secure, and SameSite=Lax",
   async ({ page }) => {
-    const response = loginResponses.get(page);
-    expect(response, "password login response was captured").toBeDefined();
-    expect(response!.ok(), "password login succeeded").toBe(true);
+    const response = loginResponses.get(page) ?? otpLoginResponses.get(page);
+    expect(response, "login response was captured").toBeDefined();
+    expect(response!.ok(), "login succeeded").toBe(true);
     const setCookie = await response!.headerValue("set-cookie");
-    expect(setCookie, "password login sets the BFF session cookie").toContain(
+    expect(setCookie, "login sets the BFF session cookie").toContain(
       `${SESSION_COOKIE}=`,
     );
     expect(setCookie).not.toMatch(/(?:^|;)\s*Domain=/i);
@@ -97,8 +162,8 @@ Then(
 Then(
   "neither the login response nor JavaScript-readable browser stores expose access or refresh tokens",
   async ({ page }) => {
-    const response = loginResponses.get(page);
-    expect(response, "password login response was captured").toBeDefined();
+    const response = loginResponses.get(page) ?? otpLoginResponses.get(page);
+    expect(response, "login response was captured").toBeDefined();
     const loginBody = await response!.text();
     expect(loginBody).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
     expect(loginBody).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);

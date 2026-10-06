@@ -91,7 +91,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     "dev-stand env absent (IDP_* + E2E_PORTAL_URL) — manual gate, skipped in CI",
   );
 
-  test("password: register → verify auto-submits → auto-login → session → logout", async ({
+  test("003 EARS-1/41/10: password register → the code auto-submits and signs in → session → logout", async ({
     page,
   }) => {
     const email = newEmail();
@@ -113,11 +113,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     expect(page.url()).not.toContain(password);
 
     // ── Verify (EARS-3) — read the real code from Mailpit ────────────────
-    // #175: entering the final digit AUTO-SUBMITS (InputOTP `onComplete`). We
-    // fill the 6-digit code and do NOT click the button — the journey must
-    // advance on its own. On success the held password is replayed into the real
-    // EARS-5 password login and the user lands DIRECTLY on /account (no manual
-    // /login round-trip).
+    // #175: entering the final character AUTO-SUBMITS (InputOTP `onComplete`).
+    // We fill the 6-character code and do NOT click the button — the journey
+    // must advance on its own. 003 EARS-41: the accepted code's answer IS the
+    // session (no password replay, no manual /login round-trip).
     const verifyCode = await fetchOtpCode(
       email,
       sentAt,
@@ -127,7 +126,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
     // No `getByTestId("verify-submit").click()` — auto-submit carries the flow.
 
-    // ── Session visible (EARS-8 read side) — set by the EARS-5 login replay ──
+    // ── Session visible (EARS-8 read side) — set by the code itself (EARS-41) ──
     await waitForAuthenticatedLanding(page);
     // `profile-email` / `logout` live on the /account profile card, so step onto
     // it deliberately — the default post-auth landing is `/webinars` (013 EARS-15).
@@ -181,7 +180,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await expect(page.getByTestId("reset-request-submit")).toBeVisible();
   });
 
-  test("email-OTP: register+verify → request code → login → session", async ({
+  test("003 EARS-6/42: email-OTP — register+verify → request code → a 6-character code signs in → session", async ({
     page,
   }) => {
     const email = newEmail();
@@ -238,9 +237,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       NOTIFICATION_SUBJECTS.verifyEmailOtp,
     );
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
-    // #175: the login-OTP input AUTO-SUBMITS once the final (8th) digit lands —
-    // we fill the code and do NOT click `otp-verify`; the flow must advance on
-    // its own (the explicit button stays for a11y but is not exercised here).
+    // #175: the login-OTP input AUTO-SUBMITS once the final (6th) character
+    // lands — the same six cells as registration (003 EARS-42, #2555) — we fill
+    // the code and do NOT click `otp-verify`; the flow must advance on its own
+    // (the explicit button stays for a11y but is not exercised here).
+    expect(otpCode).toMatch(/^[A-Z0-9]{6}$/);
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
     await waitForAuthenticatedLanding(page);
@@ -312,7 +313,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   // (that would make the EARS-8/16 ack a code oracle, or need a banned backdoor).
   // SMS-Aero is the PRODUCTION sender (recorded in the specs); the dev-stand never
   // reaches it. NOT faked green — proven against REAL Zitadel.
-  test("sms-OTP: provisioned phone → request code → login → session", async ({
+  test("003 EARS-7/42: sms-OTP — provisioned phone → request code → a 6-character code signs in → session", async ({
     page,
   }) => {
     const email = newEmail();
@@ -362,7 +363,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       );
       expect(otpCode, "login OTP should reach the sink").toBeTruthy();
       // #175: auto-submit on completion (no `otp-verify` click) — same as the
-      // email-OTP journey above; the SMS code is the same fixed 6-char length (#2555).
+      // email-OTP journey above; the SMS code is the same six upper-alphanumeric
+      // characters (003 EARS-7 amended, #2555).
+      expect(otpCode).toMatch(/^[A-Z0-9]{6}$/);
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
@@ -431,17 +434,17 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await expect(pw).not.toHaveAttribute("aria-invalid", "true");
   });
 
-  // #207 EARS-23/24 — the duplicate-registration UX dead-end fix. Two halves:
-  //   EARS-24 (screen): a fresh register lands on the existence-agnostic
-  //     "check your email" /verify screen, which offers BOTH the code field AND
-  //     prominent Войти / Сбросить пароль actions (co-equal, never branching on
-  //     existence).
-  //   EARS-23 (backend): re-registering the SAME (already-registered) email
-  //     returns the IDENTICAL pending_verification AND privately sends an
-  //     account-exists notice email — a single sign-in prompt carrying NO code.
+  // 003 EARS-23/24/41/42 (#2556) — re-registration onto an existing account:
+  //   EARS-24/42 (screen): new and already-registered addresses alike land on
+  //     the one code step — six cells, resend, «← Изменить почту» — never
+  //     branching on existence.
+  //   EARS-23 (backend): re-registering the SAME (already-verified) email
+  //     returns the IDENTICAL pending_verification AND privately sends a CODE
+  //     mail: «already registered», «Ваш пароль не изменился», no link.
+  //   EARS-41: the code from that mail, typed on the same step, signs in.
   // Live-gated (manual): asserts against REAL Mailpit on the dev-stand. Requires
-  // MAILER_SMTP_* configured at the api so the notice actually sends.
-  test("EARS-23/24: duplicate register → existence-agnostic screen + account-exists notice (no code)", async ({
+  // MAILER_SMTP_* configured at the api so the mail actually sends.
+  test("003 EARS-23/41/42: duplicate register → the same code step + a code mail (no link) → the code signs the owner in", async ({
     page,
   }) => {
     const email = newEmail();
@@ -455,11 +458,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByTestId("register-submit").click();
     await page.waitForURL(/\/verify/);
 
-    // EARS-24: the screen offers the code field AND the co-equal sign-in / reset
-    // actions — the existence-agnostic affordances, present for every visitor.
+    // EARS-24 / EARS-42: the one code step — the code field and «← Изменить
+    // почту», the same for every visitor.
     await expect(page.locator('input[autocomplete="one-time-code"]')).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-reset")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
 
     // Complete verification so the email is now an ALREADY-REGISTERED account.
     const verifyCode = await fetchOtpCode(
@@ -481,26 +483,39 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.goto("/register");
     const dupAt = new Date().toISOString();
     await page.locator('input[autocomplete="email"]').fill(email);
-    await page.locator('input[autocomplete="new-password"]').fill(password);
+    // A SECOND password: on a verified account that holds one it is ignored.
+    await page
+      .locator('input[autocomplete="new-password"]')
+      .fill(`${livePassword()}-2`);
     await page.getByTestId("register-submit").click();
 
     // EARS-16: the response is identical — the form still routes to /verify and
-    // discloses nothing about existence (no dead-end; the same screen offers the
-    // sign-in affordance for the existing owner).
+    // discloses nothing about existence: the same code step (EARS-42).
     await page.waitForURL(/\/verify/);
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
+    await expect(page.getByText(/уже занят|уже зарегистрирован/i)).toHaveCount(0);
 
-    // EARS-23: an account-exists notice lands privately in the inbox carrying a
-    // SINGLE «Войти» action to the portal /login route and NO password-reset link
-    // (design §4), and NO verification/login code — it is a product notice, not a
-    // credential email.
-    const notice = await fetchMessage(email, dupAt, "уже есть аккаунт");
-    expect(notice, "account-exists notice should reach Mailpit").toBeTruthy();
-    const body = `${notice!.Text}\n${notice!.HTML}`;
-    expect(body).toMatch(/\/login/);
-    expect(body).not.toMatch(/\/reset/);
-    // No 6-8 digit / alphanumeric code anywhere in the notice.
-    expect(body).not.toMatch(/\bCode\s+[A-Z0-9]{4,12}\b/);
-    expect(body).not.toMatch(/\b[0-9]{6,8}\b/);
+    // EARS-23: a CODE mail lands privately in the inbox — «already registered»
+    // and the kept password are said only there — under the sign-in subject,
+    // with no link of any kind.
+    const reRegistration = await fetchMessage(
+      email,
+      dupAt,
+      NOTIFICATION_SUBJECTS.verifyEmailOtp,
+    );
+    expect(reRegistration, "the re-registration code mail should reach Mailpit").toBeTruthy();
+    const body = `${reRegistration!.Text}\n${reRegistration!.HTML}`;
+    expect(body).toMatch(/уже зарегистрирован/);
+    expect(body).toMatch(/Ваш пароль не изменился/);
+    expect(body).not.toMatch(/\/login|\/reset|\/verify/);
+    const code = reRegistration!.Subject.match(/^([A-Z0-9]{6})\s+—/)?.[1];
+    expect(code, "the code leads the subject").toBeTruthy();
+
+    // EARS-41: that code, typed on the same step, signs the owner in.
+    await page.locator('input[autocomplete="one-time-code"]').fill(code!);
+    await waitForAuthenticatedLanding(page);
+    await page.goto("/account");
+    await expect(page.getByTestId("profile-email")).not.toBeEmpty();
+    await assertNoTokenInClient(page);
   });
 });

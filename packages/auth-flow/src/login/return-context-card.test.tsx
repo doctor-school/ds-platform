@@ -2,6 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { AuthLayout } from "@ds/design-system/blocks";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import type { ReturnContextEvent } from "../server/return-context";
@@ -146,6 +147,29 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the arrival 
     // The plate names the event once and carries no assurance line.
     expect(plate.split(EVENT.title)).toHaveLength(2);
     expect(plate).not.toContain("После входа");
+  });
+
+  it("021 EARS-2.6: the plate bleeds by exactly the gutter its form column stands on — no horizontal overflow at 390", () => {
+    // #2556 regression: the column moved to the 16px mobile gutter while the
+    // plate still bled by the old 24px, widening the 390 page to 398. The bleed
+    // and the gutter must be the SAME spacing token, read off the real layout.
+    const { container } = render(
+      <AuthLayout logo={<span>logo</span>}>
+        <ReturnContextPlate config={DOCTOR_FIXTURE} event={EVENT} />
+      </AuthLayout>,
+    );
+    const plate = container.querySelector(
+      '[data-testid="return-context-plate"]',
+    );
+    const column = plate?.parentElement?.parentElement;
+    const gutter = column?.className
+      .split(" ")
+      .find((c) => /^px-/.test(c))
+      ?.slice("px-".length);
+    const plateClasses = plate?.className.split(" ") ?? [];
+    expect(gutter, "the form column declares a mobile gutter").toBeTruthy();
+    expect(plateClasses).toContain(`-mx-${gutter}`);
+    expect(plateClasses).toContain(`px-${gutter}`);
   });
 
   it("021 EARS-3: no resolvable return context renders no slot at all — never an empty frame", () => {

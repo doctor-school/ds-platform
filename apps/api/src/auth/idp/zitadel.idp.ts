@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { Logger } from "@nestjs/common";
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
@@ -6,6 +8,9 @@ import {
   type AdminAuthorityVerdict,
   type CreatedUser,
   type CreateUserInput,
+  type EmailCodeRegistration,
+  type EmailCodeSubmission,
+  type EmailCodeTrigger,
   type EmailLoginOutcome,
   type IdpClaims,
   type IdpClient,
@@ -94,11 +99,6 @@ export interface ZitadelConfig {
    * Plumbed from `IDP_ORG_ID`.
    */
   orgId?: string | undefined;
-  /**
-   * Portal origin retained for caller compatibility. Credential emails use
-   * returnCode and the shared mailer, with no native action URL.
-   */
-  portalBaseUrl?: string | undefined;
   /**
    * #910/#1045 (EARS-29): the BFF mailer the verify/reset send hops hand the
    * Zitadel-returned one-time code to — the hop obtains the code via
@@ -196,6 +196,7 @@ function parseIdpClaims(idToken: string): IdpClaims {
  * fail closed while the rest of the surface still works.
  */
 export class ZitadelIdpClient implements IdpClient {
+  private readonly logger = new Logger(ZitadelIdpClient.name);
   private readonly fetchImpl: FetchLike;
 
   /**
@@ -1135,19 +1136,23 @@ export class ZitadelIdpClient implements IdpClient {
     identifier: string,
     signal: AbortSignal,
   ): Promise<boolean> {
-    // EARS-25: re-issue the registration email code, enumeration-safely. Mirror
-    // `requestPasswordReset`'s discipline — resolve the identifier internally and
-    // NEVER throw or branch on existence so the caller's ack/timing is not an
-    // oracle (EARS-16). A code is re-sent ONLY for an existing, UNVERIFIED
-    // registrant; an unknown identifier, an already-verified one, or any provider
-    // hiccup is a silent no-op. The boolean is a server-side ledger decision
-    // (whether an `otp.sent` row is owed), never reflected into the response.
+    // 003 EARS-25 (amended): re-issue, enumeration-safely, the code that fits
+    // the account state — the verification code for an unverified account, the
+    // login code for a verified one (a re-registrant onto a verified address
+    // reaches the same code step and its resend). Mirror `requestPasswordReset`'s
+    // discipline — resolve the identifier internally and NEVER throw or branch on
+    // existence so the caller's ack/timing is not an oracle (EARS-16). An unknown
+    // identifier or any provider hiccup is a silent no-op. The boolean is a
+    // server-side ledger decision (whether an `otp.sent` row is owed), never
+    // reflected into the response.
     try {
       const user = await this.resolveUserVerification(identifier, signal);
-      // Unknown identifier, or already verified → no send, no ledger row. An
-      // already-verified registrant has no pending verification to re-issue, and
-      // re-sending would be an existence/state oracle, so it is a no-op.
-      if (!user || user.emailVerified) return false;
+      if (!user) return false;
+      // Verified: arm a fresh `otp_email` login challenge (EARS-6) and mail its
+      // code in the sign-in mail; `true` only when the challenge was armed.
+      if (user.emailVerified) {
+        return await this.requestOtpChallenge(identifier, "otpEmail");
+      }
       // The same `returnCode` hop the EARS-1/3 cascade uses (#910, EARS-29):
       // Zitadel re-issues + returns the fresh code (invalidating the previous
       // one) and sends nothing; the BFF mailer delivers the same §13.3
@@ -1327,12 +1332,14 @@ export class ZitadelIdpClient implements IdpClient {
   private async requestOtpChallenge(
     identifier: string,
     challenge: "otpEmail" | "otpSms",
-  ): Promise<void> {
+    deliver?: (to: string, code: string) => Promise<void>,
+  ): Promise<boolean> {
     // Enumeration-safe like `requestPasswordReset`: an unknown identifier (no
-    // user) is a silent no-op, and ANY provider error still resolves void — the
+    // user) is a silent no-op, and ANY provider error still resolves — the
     // caller's acknowledgement must never become an existence/health oracle
     // (EARS-6/7/16). A code is sent only if the user exists, but the caller can't
-    // tell which.
+    // tell which. Resolves `true` only when a challenge was armed (a code was
+    // issued) — a server-side ledger decision, never reflected to a client.
     try {
       const user =
         challenge === "otpEmail"
@@ -1342,7 +1349,7 @@ export class ZitadelIdpClient implements IdpClient {
         challenge === "otpEmail"
           ? user?.userId
           : await this.resolveUserId(identifier);
-      if (!userId) return;
+      if (!userId) return false;
       await this.ensureOtpFactor(userId, challenge);
       // Return the native login code to the existing mailer; Zitadel sends no
       // duplicate. SMS retains its native notifier and unchanged challenge.
@@ -1355,18 +1362,18 @@ export class ZitadelIdpClient implements IdpClient {
           challenges: { [challenge]: challengeBody },
         }),
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const data = (await res.json()) as {
         sessionId?: string;
         sessionToken?: string;
         challenges?: { otpEmail?: string };
       };
-      if (!data.sessionId || !data.sessionToken) return;
+      if (!data.sessionId || !data.sessionToken) return false;
       const code = data.challenges?.otpEmail;
       if (challenge === "otpEmail" && (typeof code !== "string" || !code))
-        return;
+        return false;
       // A store write failure (e.g. Redis blip) falls into the enclosing catch
-      // below — still void, enumeration-safe (a store outage must not become a
+      // below — still `false`, enumeration-safe (a store outage must not become a
       // health oracle either).
       await this.otpChallengeStore.set(identifier.toLowerCase(), {
         sessionId: data.sessionId,
@@ -1376,14 +1383,18 @@ export class ZitadelIdpClient implements IdpClient {
       if (challenge === "otpEmail") {
         // Off the acknowledgement path: SMTP latency/failure is not an oracle.
         // Transport diagnostics already scrub secrets; never log the code here.
-        void this.requireMailer()
-          .sendLoginCodeEmail(user?.email ?? identifier, code!)
-          .catch(() => {});
+        const to = user?.email ?? identifier;
+        const send =
+          deliver ??
+          ((addr: string, c: string) =>
+            this.requireMailer().sendLoginCodeEmail(addr, c));
+        void send(to, code!).catch(() => {});
       }
+      return true;
     } catch {
       // A thrown fetch (network hiccup) is indistinguishable from success to the
       // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`.
-      return;
+      return false;
     }
   }
 
@@ -1450,7 +1461,10 @@ export class ZitadelIdpClient implements IdpClient {
     await this.requestOtpChallenge(identifier, "otpEmail");
   }
 
-  async requestEmailLoginCode(identifier: string): Promise<EmailLoginOutcome> {
+  async requestEmailLoginCode(
+    identifier: string,
+    trigger: EmailCodeTrigger = "sign-in",
+  ): Promise<EmailLoginOutcome> {
     // EARS-34 (#1131): the email login-code request, branch-aware and
     // enumeration-safe. Resolve the identifier → `sub` + verification state via
     // the same `resolveUserVerification` hop `resendEmailVerification` uses; NEVER
@@ -1470,7 +1484,22 @@ export class ZitadelIdpClient implements IdpClient {
       const user = await this.resolveUserVerification(identifier);
       if (!user) return "none";
       if (user.emailVerified) {
-        await this.requestOtpChallenge(identifier, "otpEmail");
+        // 003 EARS-23: the re-registration mail tells a verified password holder
+        // the password is unchanged. An unreadable method list says so too —
+        // the mail never promises to save a password the submit may ignore.
+        const deliver =
+          trigger === "re-registration"
+            ? async (to: string, code: string) => {
+                const passwordKept =
+                  (await this.hasPassword(user.userId)) ?? true;
+                await this.requireMailer().sendReRegistrationCodeEmail(
+                  to,
+                  code,
+                  { lifetime: "5m", passwordKept },
+                );
+              }
+            : undefined;
+        await this.requestOtpChallenge(identifier, "otpEmail", deliver);
         return "challenge";
       }
       // Existing but unverified: obtain the fresh code via `returnCode` (Zitadel
@@ -1496,12 +1525,20 @@ export class ZitadelIdpClient implements IdpClient {
       // differentiate the response or turn into a 500. The code WAS issued above,
       // so the outcome ("verification") — and thus the caller's `otp.sent` ledger
       // row — is decided independently of the send's success (EARS-16/18/30).
-      void this.requireMailer()
-        .sendVerificationCodeEmail(to, code)
-        .catch(() => {
-          // Swallowed by design — the transport layer already logs + metrics the
-          // provider failure (EARS-32); nothing here alters the response.
-        });
+      // 003 EARS-34/23 (design §13.5): the verification code travels in the
+      // sign-in (or re-registration) mail, stating its 1-hour lifetime.
+      const mailer = this.requireMailer();
+      const send =
+        trigger === "re-registration"
+          ? mailer.sendReRegistrationCodeEmail(to, code, {
+              lifetime: "1h",
+              passwordKept: false,
+            })
+          : mailer.sendLoginCodeEmail(to, code, "1h");
+      void send.catch(() => {
+        // Swallowed by design — the transport layer already logs + metrics the
+        // provider failure (EARS-32); nothing here alters the response.
+      });
       return "verification";
     } catch {
       // A thrown fetch (network hiccup) is indistinguishable from success to the
@@ -1516,6 +1553,186 @@ export class ZitadelIdpClient implements IdpClient {
     code: string,
   ): Promise<IdpSession | null> {
     return this.loginWithOtpChallenge(identifier, code, "otpEmail");
+  }
+
+  async submitEmailCode(
+    identifier: string,
+    code: string,
+    registration?: EmailCodeRegistration,
+  ): Promise<EmailCodeSubmission | null> {
+    try {
+      const user = await this.resolveUserVerification(identifier);
+      if (!user) return null;
+      if (user.emailVerified) {
+        const session = await this.loginWithOtpChallenge(
+          identifier,
+          code,
+          "otpEmail",
+        );
+        if (!session) return null;
+        // 003 EARS-23: set the submitted password only when the account has
+        // none; fail-soft — an accepted code never turns into a failure.
+        if (registration) {
+          try {
+            if ((await this.hasPassword(user.userId)) === false) {
+              await this.setPassword(user.userId, registration.password);
+            }
+          } catch {
+            // The session already stands; the owner can set a password later
+            // through reset (003 EARS-11/12).
+          }
+        }
+        return { sub: session.sub, verifiedNow: false, session };
+      }
+
+      // Unverified (003 EARS-41). Read the credential state BEFORE the code is
+      // consumed, so a provider fault leaves the account untouched.
+      let invalidate = false;
+      if (!registration) {
+        const has = await this.hasPassword(user.userId);
+        if (has === null) return null;
+        invalidate = has;
+      }
+      if (!(await this.verifyEmail(user.userId, code))) return null;
+      // Lead security decision (003 EARS-41): no pre-verification password
+      // survives the first accepted code. Zitadel v4.15 serves no password
+      // removal (DELETE on the password resource is 405, proven live #2556), so
+      // invalidation is SetPassword with a random, never-recorded value.
+      if (
+        (registration || invalidate) &&
+        !(await this.replacePreVerificationPassword(
+          user.userId,
+          registration?.password,
+        ))
+      ) {
+        return { sub: user.userId, verifiedNow: true, session: null };
+      }
+      const session = await this.armAndCompleteEmailOtpSession(user.userId);
+      return { sub: user.userId, verifiedNow: true, session };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * `true`/`false` when Zitadel lists (or does not list) a password method for
+   * the user; `null` when the list could not be read.
+   */
+  private async hasPassword(userId: string): Promise<boolean | null> {
+    try {
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${userId}/authentication_methods`),
+        { method: "GET", headers: this.headers() },
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as { authMethodTypes?: string[] };
+      return (data.authMethodTypes ?? []).includes(
+        "AUTHENTICATION_METHOD_TYPE_PASSWORD",
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 003 EARS-41, after the code has already flipped the address to verified:
+   * replace the pre-verification password, failing closed. The flip cannot be
+   * undone (SetEmail on the current address is rejected, proven live #1131), so
+   * the replacement is retried: the submitted password twice, then a random,
+   * never-recorded value twice — the registrant can always set a password later
+   * through reset (EARS-11/12), but a squatter's password must not outlive the
+   * owner's first code. `false` only when every attempt failed: the caller then
+   * issues no session, and the error log names the account so an operator can
+   * force a reset.
+   */
+  private async replacePreVerificationPassword(
+    userId: string,
+    submitted: string | undefined,
+  ): Promise<boolean> {
+    const attempts = [
+      ...(submitted === undefined ? [] : [submitted, submitted]),
+      ZitadelIdpClient.unrecordedPassword(),
+      ZitadelIdpClient.unrecordedPassword(),
+    ];
+    for (const password of attempts) {
+      try {
+        if (await this.setPassword(userId, password)) return true;
+      } catch {
+        // A network fault is one more failed attempt.
+      }
+    }
+    this.logger.error(
+      `003 EARS-41: the pre-verification password of Zitadel user ${userId} could not be replaced after its first email verification; no session was issued — force a password reset for this account`,
+    );
+    return false;
+  }
+
+  /** Management SetPassword (no current password, no code) — `true` on 2xx. */
+  private async setPassword(
+    userId: string,
+    password: string,
+  ): Promise<boolean> {
+    const res = await this.fetchImpl(this.url(`/v2/users/${userId}/password`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        newPassword: { password, changeRequired: false },
+      }),
+    });
+    return res.ok;
+  }
+
+  /**
+   * A password nobody holds: 32 random bytes plus one character of each class
+   * the Zitadel default complexity policy requires.
+   */
+  private static unrecordedPassword(): string {
+    return `${randomBytes(32).toString("base64url")}aA1!`;
+  }
+
+  /**
+   * 003 EARS-41 (design amendment): establish the session of a just-verified
+   * address — arm `otp_email` with `returnCode` (no delivery) and complete the
+   * check at once with the returned code, held in a local only (EARS-30).
+   */
+  private async armAndCompleteEmailOtpSession(
+    userId: string,
+  ): Promise<IdpSession | null> {
+    await this.ensureOtpFactor(userId, "otpEmail");
+    const res = await this.fetchImpl(this.url("/v2/sessions"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        checks: { user: { userId } },
+        challenges: { otpEmail: { returnCode: {} } },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      sessionId?: string;
+      sessionToken?: string;
+      challenges?: { otpEmail?: string };
+    };
+    const returned = data.challenges?.otpEmail;
+    if (!data.sessionId || !data.sessionToken || !returned) return null;
+    const checked = await this.fetchImpl(
+      this.url(`/v2/sessions/${data.sessionId}`),
+      {
+        method: "PATCH",
+        headers: this.headers(),
+        body: JSON.stringify({
+          sessionToken: data.sessionToken,
+          checks: { otpEmail: { code: returned } },
+        }),
+      },
+    );
+    if (!checked.ok) return null;
+    const after = (await checked.json()) as { sessionToken?: string };
+    return {
+      zitadelSessionId: data.sessionId,
+      sub: userId,
+      sessionToken: after.sessionToken ?? data.sessionToken,
+    };
   }
 
   async requestSmsOtp(identifier: string): Promise<void> {

@@ -65,7 +65,7 @@ test.describe("003 EARS-40 — /verify without an address goes to /register", ()
     await expect(page.getByTestId("verify-card")).toHaveCount(0);
   });
 
-  test("EARS-40: the same-tab ?email= hop still renders the step with the masked address", async ({
+  test("EARS-40: the same-tab ?email= hop still renders the step with the address as typed", async ({
     page,
   }) => {
     // The server renders this step (so the bare-entry HTML check is not vacuous).
@@ -78,7 +78,7 @@ test.describe("003 EARS-40 — /verify without an address goes to /register", ()
     await page.goto("/verify?email=doc%40example.com");
 
     await expect(page.getByTestId("verify-card")).toContainText(
-      "d•••@e•••.com",
+      "Мы отправили код на doc@example.com.",
     );
     expect(new URL(page.url()).pathname).toBe("/verify");
   });

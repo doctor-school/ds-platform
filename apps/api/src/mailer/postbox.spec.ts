@@ -19,7 +19,6 @@ function fixture(overrides: Partial<SmtpMailerConfig> = {}) {
     },
     resend: { enabled: false, apiKey: "dormant-key", fetchFn: http },
     isEnabled: () => true,
-    portalBaseUrl: "https://academy.doctor.school",
     transportFactory: () => ({ sendMail: smtp }),
     observability: { failover, relayFailure, accepted },
     ...overrides,

@@ -101,7 +101,7 @@ function PlateBody({
   return (
     <div
       data-testid="return-context-plate"
-      className="-mx-6 bg-muted px-6 pt-4 pb-1 layout:hidden"
+      className="-mx-gutter-sm bg-muted px-gutter-sm pt-4 pb-1 layout:hidden"
     >
       <p className="mb-1.5 text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
         {copy.eyebrow}

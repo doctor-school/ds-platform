@@ -12,9 +12,10 @@ import { test, expect, type Page } from "@playwright/test";
  *      host's own `/verify` route (003 EARS-24, #2455) — the canonical academy
  *      `?returnTo=/webinars/<slug>` rides its query and the route projects it
  *      into the doctor-host `/events/<slug>` (#1945) on the SERVER;
- *   2. the accepted code (the one 003 `/v1/auth/verify` command, as on the
- *      Academy) lands the doctor ON that target — no interstitial, no second
- *      tap;
+ *   2. the accepted code (the storefront's `/v1/storefront/doctor/verify`, the
+ *      one 003 engine as on the Academy; its answer is the session, 003
+ *      EARS-41) lands the doctor ON that target, signed in — no interstitial,
+ *      no second tap;
  *   3. owner decision Б (2026-09-29): an эфир that ended still lands on its own
  *      page, which states that itself, and one that no longer exists lands on
  *      the LD-4 default;
@@ -36,14 +37,14 @@ const GONE = "udalennyy-efir";
 
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
+/** A code the double accepts — any code but {@link REFUSED_CODE}. */
+const CODE = "ABC123";
 /**
- * The credential `e2e/support/return-context-api.mjs` answers with the generic
- * 401 — the journey of a doctor who re-registered the same email with a SECOND
- * password while the IdP kept the first (003 EARS-16 answers a repeat
- * registration identically, so nothing on the way tells them). Byte-identical to
- * `REFUSED_PASSWORD` in that module; it is sent from here and only from here.
+ * The code `e2e/support/return-context-api.mjs` answers with the generic 400
+ * of a wrong, expired or used code (003 EARS-16/41). Byte-identical to
+ * `REFUSED_CODE` in that module; it is sent from here and only from here.
  */
-const REFUSED_PASSWORD = "the second password the idp never took";
+const REFUSED_CODE = "NOPE42";
 
 /**
  * The canonical gate hand-off URL, built the way the producer builds it
@@ -66,11 +67,11 @@ async function tick(page: Page, testId: string) {
 async function registerAndConfirm(
   page: Page,
   url: string,
-  password: string = PASSWORD,
+  code: string = CODE,
 ) {
   await page.goto(url);
   await page.getByTestId("register-email").fill(EMAIL);
-  await page.getByTestId("register-password").fill(password);
+  await page.getByTestId("register-password").fill(PASSWORD);
   await tick(page, "register-medworker");
   await tick(page, "register-partner-data");
   await page.getByTestId("register-submit").click();
@@ -82,9 +83,9 @@ async function registerAndConfirm(
   expect(step.searchParams.get("email")).toBe(EMAIL);
   await expect(page.getByTestId("verify-submit")).toBeVisible();
   // The slotted OTP field auto-submits on completion (#175), so filling it IS
-  // the submit. The code itself is never checked here — the double delegates
-  // that to the 003 engine exactly as the real command does.
-  await page.locator("input[autocomplete=\"one-time-code\"]").fill("ABC123");
+  // the submit. The code's verdict is the double's one constant, never a
+  // switch in this tier.
+  await page.locator("input[autocomplete=\"one-time-code\"]").fill(code);
 }
 
 /**
@@ -109,12 +110,13 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
   test("021 EARS-10.1: a live carried target IS the landing — the accepted code opens the эфир itself", async ({
     page,
   }) => {
-    // 003 EARS-3 (#2455) — the one confirm command both storefronts post: the
-    // address and the code, no target and no named destination.
+    // 003 EARS-41/23 (#2556) — the doctor storefront's code command: the
+    // address, the code and the in-tab registration values, no target and no
+    // named destination.
     const verify = page.waitForRequest(
       (request) =>
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/v1/auth/verify",
+        new URL(request.url()).pathname === "/v1/storefront/doctor/verify",
     );
     await registerAndConfirmLandingOn(
       page,
@@ -123,7 +125,11 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     );
     expect((await verify).postDataJSON()).toEqual({
       email: EMAIL,
-      code: "ABC123",
+      code: CODE,
+      registration: expect.objectContaining({
+        password: PASSWORD,
+        medicalWorkerDeclaration: true,
+      }),
     });
 
     // The owner's objection, as an assertion: no acknowledgement screen stands
@@ -163,13 +169,19 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
     page,
   }) => {
     // The defect this test exists to catch (#1996, owner Stage-B withdrawal):
-    // the confirm command verifies the email and mints NO session,
-    // so a doctor who typed the code still arrived on the эфир as a guest and
-    // «Участвовать» sent them back to the door they had just walked through.
-    // The fix is the Academy's own mechanism — the held password replayed
-    // through the real 003 EARS-5 login — and the ONLY place it is observable
-    // is here: the session is a cookie set by the upstream, read on the SERVER
-    // by `@ds/auth-flow/server` when the landing page renders.
+    // a doctor who typed the code arriving on the эфир as a guest, with
+    // «Участвовать» sending them back to the door they had just walked
+    // through. Since 003 EARS-41 (#2556) the accepted code IS the sign-in —
+    // the code command's answer sets the session, no replay follows — and the
+    // ONLY place that is observable is here: the session is a cookie set by
+    // the upstream, read on the SERVER by `@ds/auth-flow/server` when the
+    // landing page renders.
+    const replays: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/v1/auth/login") {
+        replays.push(request.url());
+      }
+    });
     await registerAndConfirmLandingOn(
       page,
       arrival(LIVE),
@@ -183,24 +195,24 @@ test.describe("021 EARS-10: the post-confirmation landing", () => {
       header.getByRole("link", { name: "Личный кабинет" }),
     ).toBeVisible();
     await expect(header.getByRole("link", { name: "Войти" })).toHaveCount(0);
+    // The session came with the code: no sign-in replay left the browser.
+    expect(replays).toEqual([]);
   });
 
-  test("021 EARS-15.3: a replay the login refuses keeps the doctor on the confirmation step with the generic error, no routing", async ({
+  test("003 EARS-41/42: a refused code keeps the doctor on the code step with the generic error, no routing", async ({
     page,
   }) => {
-    // Owner decision 2026-09-15 (tech spec §5 Q1, «Как в Академии»), driven end
-    // to end: the credential in the slot is not the one the IdP holds, so the
-    // replay is refused. The email IS verified but there is no session, so the
-    // doctor is neither walked onto the эфир as a guest (the #1996 loop) nor
-    // routed anywhere: they stay on the step with the generic 003 EARS-16
-    // sentence, the one post-throw exit both hosts share.
-    await registerAndConfirm(page, arrival(LIVE), REFUSED_PASSWORD);
+    // A wrong, expired or used code gets the one generic 003 EARS-16 answer:
+    // no session, so the doctor is neither walked onto the эфир as a guest
+    // (the #1996 loop) nor routed anywhere — they stay on the step with the
+    // generic sentence, the one post-throw exit both hosts share.
+    await registerAndConfirm(page, arrival(LIVE), REFUSED_CODE);
 
-    await expect(page.getByText("Код не подошёл. Попробуйте ещё раз.")).toBeVisible();
-    // Still the confirmation step, on the `/verify` route, with its co-equal
-    // sign-in action carrying the return context (rule S3).
+    await expect(page.getByText("Код не подошёл. Проверьте его или запросите новый.")).toBeVisible();
+    // Still the code step, on the `/verify` route, with «← Изменить почту»
+    // back to the form (003 EARS-24).
     await expect(page).toHaveURL(/\/verify\?/);
     await expect(page.getByTestId("verify-submit")).toBeVisible();
-    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+    await expect(page.getByTestId("verify-back")).toBeVisible();
   });
 });

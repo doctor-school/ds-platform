@@ -17,7 +17,7 @@ import {
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
-import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -329,8 +329,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         },
       ]);
       // EARS-7's "each granted consent … with its date", per purpose.
-      for (const row of consentRows.rows)
-        expect(row.captured_at).toBeTruthy();
+      for (const row of consentRows.rows) expect(row.captured_at).toBeTruthy();
     });
 
     /**
@@ -573,6 +572,141 @@ describe.skipIf(!process.env.DATABASE_URL)(
         MEDICAL_WORKER_DECLARATION_PURPOSE,
         PARTNER_DATA_SHARING_PURPOSE,
       ]);
+    });
+
+    // 003 EARS-23/41 on the doctor host: the one code step submits the in-tab
+    // registration values to the host's own verify door, which stamps the
+    // consent wording versions exactly as this host's register door does —
+    // a client-sent version is never recorded.
+    it("003 EARS-23: the doctor verify door records a re-registration consent the account lacks with the server-stamped version, never duplicating a held one", async () => {
+      const email = uniqueEmail("verify-stamp");
+      const registered = await app.inject({
+        method: "POST",
+        url: URL,
+        payload: {
+          email,
+          password: PASSWORD,
+          medicalWorkerDeclaration: true,
+          consent: [{ purpose: PARTNER_DATA_SHARING_PURPOSE, version: "x" }],
+        },
+      });
+      expect(registered.statusCode).toBe(200);
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        payload: {
+          email,
+          code: FAKE_VALID_CODE,
+          registration: {
+            password: PASSWORD,
+            medicalWorkerDeclaration: true,
+            consent: [
+              { purpose: PARTNER_DATA_SHARING_PURPOSE, version: "client-lie" },
+              {
+                purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+                version: "client-lie",
+              },
+            ],
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: "verified" });
+      // EARS-41: the session comes from the code.
+      expect(String(res.headers["set-cookie"] ?? "")).toMatch(/^__Host-/);
+      const rows = (await consentRowsFor(email)).map((row) => ({
+        purpose: row.purpose,
+        version: row.version,
+      }));
+      expect(rows).toEqual([
+        {
+          purpose: MARKETING_COMMUNICATIONS_PURPOSE,
+          version: MARKETING_COMMUNICATIONS_VERSION,
+        },
+        {
+          purpose: MEDICAL_WORKER_DECLARATION_PURPOSE,
+          version: MEDICAL_WORKER_DECLARATION_VERSION,
+        },
+        {
+          purpose: PARTNER_DATA_SHARING_PURPOSE,
+          version: PARTNER_DATA_SHARING_VERSION,
+        },
+      ]);
+    });
+
+    it("003 EARS-41: the doctor verify door refuses a registration without the declaration before the code is checked", async () => {
+      const email = uniqueEmail("verify-no-declaration");
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        payload: {
+          email,
+          code: FAKE_VALID_CODE,
+          registration: { password: PASSWORD, medicalWorkerDeclaration: false },
+        },
+      });
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(res.statusCode).toBeLessThan(500);
+      expect(res.headers["set-cookie"]).toBeUndefined();
+    });
+
+    // 003 EARS-41 + Invariants (code submission ≤ 50 ms) on the doctor door: a
+    // wrong code is the same generic failure — status, body AND timing — for an
+    // unknown, a verified and an unverified account. Same pattern and budget as
+    // the login-code triad (login-otp.e2e-spec, EARS-34/16).
+    it("003 EARS-41: a wrong code on the doctor verify door is byte-identical in status, body, AND timing across {unknown, verified, unverified}", async () => {
+      const unverified = uniqueEmail("verify-timing-unver");
+      const verified = uniqueEmail("verify-timing-ver");
+      const unknown = `ears41-nobody-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      for (const email of [unverified, verified]) {
+        const registered = await app.inject({
+          method: "POST",
+          url: URL,
+          payload: {
+            email,
+            password: PASSWORD,
+            medicalWorkerDeclaration: true,
+            consent: [{ purpose: PARTNER_DATA_SHARING_PURPOSE, version: "x" }],
+          },
+        });
+        expect(registered.statusCode).toBe(200);
+      }
+      const flip = await app.inject({
+        method: "POST",
+        url: "/v1/storefront/doctor/verify",
+        payload: { email: verified, code: FAKE_VALID_CODE },
+      });
+      expect(flip.statusCode).toBe(200);
+
+      async function wrongCode(email: string) {
+        const t0 = performance.now();
+        const res = await app.inject({
+          method: "POST",
+          url: "/v1/storefront/doctor/verify",
+          payload: { email, code: "ZZZZZZ" },
+        });
+        const ms = performance.now() - t0;
+        return { status: res.statusCode, body: res.json(), ms };
+      }
+      const none = await wrongCode(unknown);
+      const ver = await wrongCode(verified);
+      const unver = await wrongCode(unverified);
+
+      for (const r of [ver, unver]) {
+        expect(r.status).toBe(none.status);
+        expect(r.body).toEqual(none.body);
+      }
+      expect(none.status).toBe(400);
+      // The @TimingEqualized floor engages on every branch (≥ 30 ms allows
+      // scheduling jitter below the 40 ms floor) and the spread stays in budget.
+      const spread =
+        Math.max(none.ms, ver.ms, unver.ms) -
+        Math.min(none.ms, ver.ms, unver.ms);
+      expect(spread).toBeLessThanOrEqual(50);
+      for (const r of [none, ver, unver])
+        expect(r.ms).toBeGreaterThanOrEqual(30);
     });
   },
 );

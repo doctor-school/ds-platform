@@ -88,6 +88,14 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "audit-ledger.e2e: EARS-18 register appends one auth.register row (emitted by the delegated 003 command site)",
     },
+    // 003 EARS-23/41 — the doctor host's code step. A thin projection like the
+    // register door above: it stamps the consent versions and delegates to
+    // `AuthService.verify`, which appends every row at its own command site.
+    "POST /v1/storefront/doctor/verify": {
+      emits: ["IdentifierVerified", "LoginSucceeded", "VerifyFailed"],
+      coveredBy:
+        "doctor-register-consents.e2e (003 EARS-23) drives the door; the rows are the delegated 003 verify command site's (auth.service.spec EARS-41)",
+    },
     // 044 EARS-1 (#2294) — the public congress intake. Like the 021 command
     // above it is a host projection: account creation is delegated to
     // `AuthService.createPasswordlessAccount`, which appends the one
@@ -169,9 +177,11 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       // #1112: a REJECTED verify (no mirror row → no-account, or a bad code →
       // invalid) now emits a masked, reason-coded auth.account.verify_failed
       // observability row — the state-changing success path is unchanged.
-      emits: ["IdentifierVerified", "VerifyFailed"],
+      // 003 EARS-41: the accepted code also establishes the session, so the
+      // success path appends the email-otp auth.login.success row.
+      emits: ["IdentifierVerified", "LoginSucceeded", "VerifyFailed"],
       coveredBy:
-        "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row; auth.service.spec #1112 covers the auth.account.verify_failed row",
+        "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row; auth.service.spec #1112 covers the auth.account.verify_failed row; auth.service.spec EARS-41 covers the auth.login.success row",
     },
     "POST /v1/admin/auth/login": {
       // 011 EARS-3: primary auth at the admin origin. Success emits the canonical

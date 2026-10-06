@@ -12,6 +12,7 @@ import {
 import { eq } from "drizzle-orm";
 import { consentRecords, users, type DrizzleHandle } from "@ds/db";
 import type {
+  ConsentAcceptance,
   OtpRequest,
   OtpRequestResponse,
   OtpVerify,
@@ -19,6 +20,7 @@ import type {
   PasswordResetResponse,
   RegisterRequest,
   RegisterResponse,
+  VerifyRegistration,
   VerifyRequest,
   VerifyResendResponse,
   VerifyResponse,
@@ -43,7 +45,6 @@ import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { webhookSecretMatches } from "./webhook-secret.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
-import { MAILER, type Mailer } from "../mailer/mailer.types.js";
 import {
   REGISTER_NOTICE_THROTTLE,
   type RegisterNoticeThrottle,
@@ -161,11 +162,9 @@ export class AuthService {
     @Inject(AUTH_WEBHOOK_SECRET)
     private readonly webhookSecret: string | undefined,
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
-    // EARS-23 (#207): the BFF transactional-email channel + per-address throttle
-    // for the account-exists notice. Both are `@Inject`-token params, so they
-    // precede the type-inferred class deps below (the tsx/esbuild
-    // `design:paramtypes` ordering hazard above).
-    @Inject(MAILER) private readonly mailer: Mailer,
+    // 003 EARS-23: the per-address throttle of the re-registration code mail.
+    // An `@Inject`-token param, so it precedes the type-inferred class deps
+    // below (the tsx/esbuild `design:paramtypes` ordering hazard above).
     @Inject(REGISTER_NOTICE_THROTTLE)
     private readonly noticeThrottle: RegisterNoticeThrottle,
     // EARS-33 (design §14.8): the shared synthetic-send suppression seam. An
@@ -314,10 +313,25 @@ export class AuthService {
     req: OtpVerify,
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims } | null> {
-    const session =
-      req.channel === "email"
-        ? await this.idp.loginWithEmailOtp(req.identifier, req.code)
-        : await this.idp.loginWithSmsOtp(req.identifier, req.code);
+    if (req.channel === "email") {
+      // 003 EARS-41: the login code step and the registration step share one
+      // submission; the account state decides the Zitadel check.
+      const accepted = await this.acceptEmailCode(
+        req.identifier,
+        req.code,
+        undefined,
+        fingerprint,
+      );
+      if (!accepted) {
+        await this.audit.record({
+          type: "LoginFailed",
+          identifier: req.identifier,
+          reason: "wrong_password",
+        });
+      }
+      return accepted;
+    }
+    const session = await this.idp.loginWithSmsOtp(req.identifier, req.code);
     if (!session) {
       // EARS-18: a wrong/expired code (or unknown identifier) is one generic
       // `auth.login.failure`; the controller still answers the same 401 (EARS-16).
@@ -332,9 +346,100 @@ export class AuthService {
     await this.audit.record({
       type: "LoginSucceeded",
       sub: session.sub,
-      method: req.channel === "email" ? "email-otp" : "sms-otp",
+      method: "sms-otp",
     });
     return established;
+  }
+
+  /**
+   * 003 EARS-41: the one email-code submission behind `/login/otp` (email) and
+   * `/verify`. The IdP adapter picks the check by account state and handles the
+   * pre-verification password; this method owns the BFF half — the mirror flip
+   * and its single `auth.account.verified` row, revoking every prior session of
+   * a just-verified account (as on reset, EARS-12), the session, and the
+   * registration consent recorded only after the code is accepted (EARS-23).
+   * `null` for every failure (EARS-16); the caller writes its failure row.
+   */
+  private async acceptEmailCode(
+    identifier: string,
+    code: string,
+    registration: VerifyRegistration | undefined,
+    fingerprint: string,
+  ): Promise<{ cookie: string; claims: SessionClaims } | null> {
+    // #1109: Zitadel codes are upper-case and compared case-sensitively.
+    const result = await this.idp.submitEmailCode(
+      identifier,
+      code.trim().toUpperCase(),
+      registration ? { password: registration.password } : undefined,
+    );
+    if (!result) return null;
+    if (result.verifiedNow) {
+      await this.mirror.markEmailVerified(result.sub);
+      await this.audit.record({
+        type: "IdentifierVerified",
+        sub: result.sub,
+        channel: "email",
+      });
+      // Every session from before the first verification ends here, also when
+      // the adapter issues no new one (fail-closed, EARS-41).
+      await this.sessions.revokeAllBeforeVerification(result.sub);
+    }
+    if (!result.session) return null;
+    const established = await this.sessions.establish(
+      result.session,
+      fingerprint,
+    );
+    if (registration?.consent.length) {
+      await this.recordMissingConsent(result.sub, registration.consent);
+    }
+    await this.audit.record({
+      type: "LoginSucceeded",
+      sub: result.sub,
+      method: "email-otp",
+    });
+    return established;
+  }
+
+  /**
+   * 003 EARS-23: after an accepted code, record each consented purpose the
+   * account holds no consent for; an existing consent is never overwritten and
+   * never duplicated. No mirror row (an IdP-only account the sweep has not yet
+   * mirrored) means nothing to attach to — the next registration records it.
+   */
+  private async recordMissingConsent(
+    sub: string,
+    consent: readonly ConsentAcceptance[],
+  ): Promise<void> {
+    await withRequestAuditContext(this.db, async (tx) => {
+      const [row] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.zitadelSub, sub));
+      if (!row) return;
+      const held = new Set(
+        (
+          await tx
+            .select({ purpose: consentRecords.purpose })
+            .from(consentRecords)
+            .where(eq(consentRecords.userId, row.id))
+        ).map((r) => r.purpose),
+      );
+      const missing = [
+        ...new Map(
+          consent
+            .filter((c) => !held.has(c.purpose))
+            .map((c) => [c.purpose, c] as const),
+        ).values(),
+      ];
+      if (missing.length === 0) return;
+      await tx.insert(consentRecords).values(
+        missing.map((c) => ({
+          userId: row.id,
+          purpose: c.purpose,
+          version: c.version,
+        })),
+      );
+    });
   }
 
   /**
@@ -604,13 +709,11 @@ export class AuthService {
         })),
       });
     } else {
-      // EARS-23 (#207): the email is already registered. The form must NOT
-      // disclose this (that is precisely the oracle EARS-16 protects), so the
-      // legitimate owner's correct path is delivered PRIVATELY — an
-      // account-exists notice email (sign-in / reset prompt, no code/token/PD).
-      // The branch otherwise stays unchanged: no account, no consent row, no
-      // `auth.register` ledger entry (a duplicate registers nothing).
-      void this.dispatchAccountExistsNotice(req.email);
+      // 003 EARS-23: the email is already registered. The form must not
+      // disclose it (EARS-16), so the owner gets, privately, the code EARS-34
+      // would issue in the re-registration mail. Nothing is written to the
+      // existing account before that code is accepted (EARS-41).
+      void this.dispatchReRegistrationCode(req.email);
     }
 
     return { status: "pending_verification" };
@@ -859,25 +962,30 @@ export class AuthService {
   }
 
   /**
-   * EARS-23 (#207): dispatch the account-exists notice for an already-registered
-   * register, fire-and-forget. NOT awaited on the response path — so SMTP latency
-   * can never leak past the EARS-16 timing floor (a provider outage cannot stall
-   * or differentiate the response). Per-address throttled (an ephemeral,
-   * HMAC-keyed Redis marker, short TTL) so the form cannot flood a victim's
-   * inbox: only the first send within the window goes out. Every failure (throttle
-   * or send) is logged only and swallowed — it never throws and never alters the
-   * `pending_verification` response.
+   * 003 EARS-23: issue the re-registration code off the response path, so SMTP
+   * and IdP latency never leak past the EARS-16 timing floor. Throttled per
+   * address by the HMAC-keyed Redis marker, so the form cannot flood an inbox.
+   * `auth.otp.sent` is written only when a code was issued (EARS-18). Every
+   * failure is logged and swallowed — the response is already returned.
    */
-  private async dispatchAccountExistsNotice(email: string): Promise<void> {
+  private async dispatchReRegistrationCode(email: string): Promise<void> {
     try {
       const allowed = await this.noticeThrottle.tryAcquire(email);
       if (!allowed) return;
-      await this.mailer.sendAccountExistsNotice(email);
+      const outcome = await this.idp.requestEmailLoginCode(
+        email,
+        "re-registration",
+      );
+      if (outcome !== "none") {
+        await this.audit.record({
+          type: "OtpSent",
+          identifier: email,
+          channel: "email",
+        });
+      }
     } catch (err) {
-      // Logged only — the duplicate-register response is already returned and
-      // must stay identical to the never-registered case (EARS-16).
       this.logger.warn(
-        `account-exists notice dispatch failed: ${
+        `re-registration code dispatch failed: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
@@ -903,51 +1011,25 @@ export class AuthService {
   }
 
   /**
-   * EARS-3: verify the registration email OTP code and flip `email_verified`.
-   * Registration verification is email-only (#202 — registration is
-   * email-primary); EARS-4 phone verification is a future post-registration
-   * secondary-identifier concern, so there is no phone branch here.
+   * 003 EARS-3/41: the registration code step. The code goes through the one
+   * submission (`acceptEmailCode`) — for a new, abandoned or already-registered
+   * address alike — with the in-tab registration values when the step still
+   * holds them. On success it returns the session cookie (EARS-8); every
+   * failure is the same generic 400, its reason only in the ledger (#1112).
    */
-  async verify(req: VerifyRequest): Promise<VerifyResponse> {
-    const row = await this.mirror.findByEmail(req.email);
-    if (!row) {
-      // #1112: record the rejected verify (reason `no-account`) so a failed
-      // verify is observable on our side — the incident driver was that it was
-      // recorded NOWHERE (Zitadel's `verification.failed` carries a null payload;
-      // diagnosis needed raw SSH SQL). The client still gets the identical generic
-      // 400 (no existence oracle, EARS-16). The identifier is masked to an
-      // `identifier_hash` by the writer and the entered code is never touched
-      // (003 EARS-30). Timing safety is by SYMMETRY, not the interceptor: `/verify`
-      // is a code-gated route NOT under the EARS-16 ≤50 ms floor (it carries no
-      // `@TimingEqualized` — 003-requirements-en.md:207 does not list it), so the
-      // guarantee is that this failure write mirrors the success-path write below —
-      // the same single awaited ledger hop, no extra network I/O — introducing no
-      // new timing differential. Any future heavier failure-path write must
-      // re-evaluate that symmetry.
-      await this.audit.record({
-        type: "VerifyFailed",
-        identifier: req.email,
-        reason: "no-account",
-      });
-      throw new BadRequestException(GENERIC_FAILURE);
-    }
-
-    // #1109: Zitadel emits an UPPERCASE alphanumeric code and compares it
-    // case-sensitively with no trim — normalize the human-entered code (trim +
-    // uppercase) before the IdP hop so a lowercased / whitespace-padded entry still
-    // verifies. The client-side OtpField uppercases too; the server is the
-    // authoritative backstop (paste, autofill, non-portal callers).
-    const ok = await this.idp.verifyEmail(
-      row.zitadelSub,
-      req.code.trim().toUpperCase(),
+  async verify(
+    req: VerifyRequest,
+    fingerprint: string,
+  ): Promise<{ cookie: string; body: VerifyResponse }> {
+    const accepted = await this.acceptEmailCode(
+      req.email,
+      req.code,
+      req.registration,
+      fingerprint,
     );
-    if (!ok) {
-      // #1112: record the rejected code (reason `invalid` — the boolean IdP port
-      // collapses wrong / expired / superseded into one). Same generic 400 to the
-      // client (EARS-16); the code itself never reaches the row (003 EARS-30). Same
-      // symmetry argument as the no-account branch above: `/verify` is not under the
-      // EARS-16 interceptor floor, so the safety is that this write mirrors the
-      // awaited success-path ledger write — no new timing differential.
+    if (!accepted) {
+      // #1112: the rejected code is observable on our side; the code itself
+      // never reaches the row (003 EARS-30).
       await this.audit.record({
         type: "VerifyFailed",
         identifier: req.email,
@@ -955,34 +1037,18 @@ export class AuthService {
       });
       throw new BadRequestException(GENERIC_FAILURE);
     }
-
-    await this.mirror.markEmailVerified(row.zitadelSub);
-
-    // EARS-18: one terminal `auth.account.verified` row for this state-changing
-    // command (the mirror flag just flipped — the account is activated). Keyed
-    // by the opaque subject; the writer carries no raw PD. A FAILED verify changes
-    // no state, so it emits no `verified` row — but it DOES emit an identifier-keyed
-    // `auth.account.verify_failed` observability row above (#1112, the exact
-    // `LoginFailed` precedent: a non-state-changing failure still gets a masked,
-    // reason-coded security row — the two event types never collide).
-    await this.audit.record({
-      type: "IdentifierVerified",
-      sub: row.zitadelSub,
-      channel: "email",
-    });
-
-    return { status: "verified" };
+    return { cookie: accepted.cookie, body: { status: "verified" } };
   }
 
   /**
-   * EARS-25: resend the registration email verification code, enumeration-safely.
-   * The existence-agnostic `/verify` screen (EARS-24) needs a way to re-send the
-   * code without the held password (re-`register` is the EARS-23 path and needs
-   * it). Delegates to the IdP port's enumeration-safe
+   * 003 EARS-25 (amended): resend from the registration code step,
+   * enumeration-safely. Delegates to the IdP port's enumeration-safe
    * {@link IdpClient.resendEmailVerification} — keyed by the identifier, resolving
-   * → `sub` internally and re-issuing the `otp_email` code ONLY for an existing,
-   * UNVERIFIED registrant (an unknown identifier or an already-verified one is a
-   * silent no-op). The port never throws or branches on existence, so the response
+   * → `sub` internally and re-issuing the code that fits the account state: the
+   * verification code for an unverified account, the login code for a verified
+   * one (a re-registrant onto a verified address), so the step's resend is never
+   * a dead end; an unknown identifier is a silent no-op. The port never throws or
+   * branches on existence, so the response
    * (`resend_requested`), status, and timing are identical on every path
    * (EARS-16; the ≤50 ms budget is the F6 `@TimingEqualized` concern). It creates
    * no `users`/consent row and appends the `otp.sent` ledger row (EARS-18) ONLY
@@ -995,7 +1061,7 @@ export class AuthService {
     this.dispatchEmail("verification-resend", async () => {
       const issued = await this.idp.resendEmailVerification(identifier);
       // Keep the acceptance-dependent ledger write in the same observed tail:
-      // failures and unknown/already-verified identifiers still write no row.
+      // failures and unknown identifiers still write no row.
       if (issued) {
         await this.audit.record({
           type: "OtpSent",

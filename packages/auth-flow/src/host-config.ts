@@ -186,8 +186,9 @@ export type AuthFlowBrand = {
     readonly alt: string;
     /**
      * The white lockup for a host whose dark theme paints the page near-black
-     * (the doctor storefront, #1955): both render and the class-based `dark:`
-     * variant picks one. Absent = this host shows one lockup in every theme.
+     * (both storefronts — #1955, #2556): both render and the class-based
+     * `dark:` variant (`@ds/design-system/globals.css`) picks one. Absent = this
+     * host shows one lockup in every theme.
      */
     readonly darkSrc?: string;
   };
@@ -257,10 +258,14 @@ export type AuthFlowLoginCopy = {
     readonly phoneLabel: string;
     readonly phonePlaceholder: string;
     readonly sendCode: string;
-    readonly verifyTitle: string;
-    /** Template with `{destination}` — the block masks the destination. */
+    /** The code step's heading per channel (003 EARS-42 «Проверьте почту / телефон»). */
+    readonly verifyTitle: { readonly email: string; readonly sms: string };
+    /** Template with `{destination}` — the address exactly as typed (#2607); the door bolds it. */
     readonly sentTo: string;
-    readonly codeLabel: string;
+    /** The code label per channel («Код из письма / из сообщения»). */
+    readonly codeLabel: { readonly email: string; readonly sms: string };
+    /** Template with `{destination}` — the after-resend notice (canvas 81-83). */
+    readonly resentTo: string;
     /** The malformed sign-in code (the registration confirmation sentence differs). */
     readonly codeInvalid: string;
     readonly verifySubmit: string;
@@ -333,7 +338,6 @@ export type AuthFlowVerifyCopy = {
   readonly title: string;
   /** Template with `{destination}` — the address the code went to. */
   readonly description: string;
-  readonly newAccountHeading: string;
   readonly codeLabel: string;
   readonly submit: string;
   /** The accepted-code line, shown while the door navigates on. */
@@ -341,17 +345,15 @@ export type AuthFlowVerifyCopy = {
   readonly resend: string;
   /** Template with `{seconds}`. */
   readonly resendCountdown: string;
-  readonly existingAccountHeading: string;
-  readonly existingAccountHint: string;
-  readonly goToSignIn: string;
-  readonly goToReset: string;
+  /** «← Изменить почту» — back to the registration form, fields kept (003 EARS-24). */
+  readonly back: string;
   /** The per-action generic for a refused code (row 11) — never «войти». */
   readonly failed: string;
   readonly resendFailed: string;
   /**
-   * Template with `{destination}` — the resend acknowledgement, which states no
-   * account fact: it says what WOULD have been sent, never that an account
-   * exists (003 EARS-16).
+   * Template with `{destination}` — the after-resend notice (canvas 81-83). It
+   * is the same sentence for a new and an already-registered address: the
+   * step behind a registration never branches on existence (003 EARS-16).
    */
   readonly resendAcknowledged: string;
 };
@@ -370,7 +372,7 @@ export type AuthFlowResetCopy = {
   readonly submit: string;
   /** Complete stage (canvas `titles.reset`, complete branch). */
   readonly completeTitle: string;
-  /** Template with `{destination}` — the masked address the code went to. */
+  /** Template with `{destination}` — the address the code went to, as typed. */
   readonly completeDescription: string;
   readonly codeLabel: string;
   readonly newPasswordLabel: string;
@@ -422,6 +424,12 @@ export type AuthFlowApiConfig = {
   readonly basePath: string;
   /** `/v1/auth/register` on the Academy, the storefront command on the doctor host. */
   readonly registerPath: string;
+  /**
+   * The code step's submit after the registration form (003 EARS-41/23):
+   * `/v1/auth/verify` on the Academy, `/v1/storefront/doctor/verify` on the
+   * doctor host — each takes the host's own `registration` values.
+   */
+  readonly verifyPath: string;
 };
 
 /**

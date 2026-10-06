@@ -170,20 +170,37 @@ export const RegisterResponseSchema = z.strictObject({
 export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 
 /**
- * Verification request (EARS-3). Registration verification is **email-only**:
- * registration is email-primary (#202), so the registrant submits the email they
- * registered with plus the OTP code Zitadel sent. The dual-identifier `phone`
- * field + exactly-one `.refine` were removed with the phone-only registration
- * channel; EARS-4 phone verification is a future post-registration
- * secondary-identifier concern, not a registration step.
+ * `registration` (003 EARS-41/23) is present only while the code step still
+ * holds the in-tab registration values: the password replaces a
+ * pre-verification one (or is set on an account without one), and the consent
+ * is recorded for purposes the account does not hold yet — both only after the
+ * code is accepted. A cold step sends none.
+ */
+export const VerifyRegistrationSchema = z.object({
+  password: NewPasswordSchema,
+  consent: z.array(ConsentAcceptanceSchema).default([]),
+});
+export type VerifyRegistration = z.infer<typeof VerifyRegistrationSchema>;
+
+/**
+ * Verification request (EARS-3/41). Registration verification is
+ * **email-only**: registration is email-primary (#202), so the registrant
+ * submits the email they registered with plus the code from the mail, and —
+ * while the step still holds them — the registration values. EARS-4 phone
+ * verification is a future post-registration secondary-identifier concern, not
+ * a registration step.
  */
 export const VerifyRequestSchema = z.object({
   email: z.email(),
   code: z.string().min(1),
+  registration: VerifyRegistrationSchema.optional(),
 });
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 
-/** Verification response — `verified` on success; failures are a generic 4xx. */
+/**
+ * Verification response — `verified` on success, with the `__Host-` session
+ * cookie (003 EARS-41); failures are a generic 4xx.
+ */
 export const VerifyResponseSchema = z.strictObject({
   status: z.literal("verified"),
 });

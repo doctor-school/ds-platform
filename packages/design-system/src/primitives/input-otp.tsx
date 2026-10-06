@@ -32,8 +32,8 @@ const InputOTPGroup = React.forwardRef<
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => (
   // `min-w-0` (#544): as a flex item of the `InputOTP` container the group's default
-  // `min-width:auto` refused to shrink below its slots' content, so a long row (login
-  // = 8 slots) overflowed a narrow card. With `min-w-0` the group may shrink to the
+  // `min-width:auto` refused to shrink below its slots' content, so a long row (the
+  // former 8-slot row) overflowed a narrow card. With `min-w-0` the group may shrink to the
   // available width and its slots (also `min-w-0`) compress equally. The group stays
   // CONTENT-sized otherwise (no `w-full`), so multi-group compositions with a
   // separator («123 – 456», showcase) keep their geometry on wide layouts.
@@ -66,8 +66,8 @@ const InputOTPSlot = React.forwardRef<
         // showing the doctor glyphs that differ from what they typed — the exact
         // thing LD-9 forbids. `aspect-square min-w-0` (#544) lets the cell SHRINK below its
         // preferred 40px — staying square — only when the row would otherwise
-        // overflow a narrow card (login = 8 slots at 390px); on wide layouts every
-        // slot keeps its 40px preferred width, so 6-slot verify/reset rows and
+        // overflow a narrow card (a long row at 390px); on wide layouts every
+        // slot keeps its 40px preferred width, so the 6-slot code rows and
         // multi-group compositions are unchanged. Shared edges via `border-y-2
         // border-r-2` + `first:border-l-2` so neighbours don't double. Empty =
         // `hairline`; FILLED switches to the ink `border` (source "filled ⇒ border

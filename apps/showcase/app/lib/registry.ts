@@ -205,9 +205,8 @@ export const NON_CATALOGUED_EXPORTS: string[] = [
   "NewPasswordFieldSchema",
   "CurrentPasswordFieldSchema",
   "maskPhoneInput",
-  // `./blocks` non-component exports (resend countdown hook + mask helper)
+  // `./blocks` non-component exports (resend countdown hook)
   "useResendCountdown",
-  "maskDestination",
   // `./blocks` adopted shadcn `Table` composition fragments (#1578) — the low-level
   // parts DataTable is assembled from. The catalogued unit-as-subject is `DataTable`
   // (a bare `<TableRow>` has no standalone state matrix to show); these are exported

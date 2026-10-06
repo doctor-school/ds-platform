@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 /**
  * The Academy `/verify` route is a MOUNT (#2027 PR 1.7): its behaviour — the
- * code step, the resend, the replay exits, the bare-arrival hop and the #675
+ * one code step, the resend, the code-and-values submission, the bare-arrival hop and the #675
  * guard — is pinned once in `packages/auth-flow/src/verify/verify-door.test.tsx`
  * and `verify-route.test.tsx`. What only this tier can prove is the WIRING: this
  * route hands the package THIS host's config and the request's own params.

@@ -13,7 +13,6 @@ import {
   type PasswordRevealLabels,
 } from "../primitives/fields";
 import { AuthCard } from "./auth-card";
-import { maskDestination } from "./mask-destination";
 import { useResendCountdown } from "./use-resend-countdown";
 
 /**
@@ -26,7 +25,7 @@ import { useResendCountdown } from "./use-resend-countdown";
  *
  * What lives HERE (presentation + form mechanics):
  *   • the `<AuthCard>` frame whose title/description track the stage (the #1033
- *     `<h1>` a11y landmark; the #227 privacy-masked destination),
+ *     `<h1>` a11y landmark; the destination exactly as typed, #2607),
  *   • the EARS-11 request form (union identifier box, #196) and the EARS-12
  *     complete form (slotted 6-char alphanumeric code + new password, submitted
  *     together — which is why this surface never adopted `<OtpFocusScreen>`),
@@ -87,7 +86,7 @@ export interface PasswordRecoveryCardCopy {
   /** Card title on the complete step. */
   titleComplete: React.ReactNode;
   descriptionRequest: React.ReactNode;
-  /** "We sent a code to {masked}" — the block masks the destination. */
+  /** "We sent a code to {destination}" — the destination as typed (#2607). */
   descriptionComplete: (destination: string) => React.ReactNode;
   backToSignIn: React.ReactNode;
   request: {
@@ -155,8 +154,8 @@ export interface PasswordRecoveryCardProps {
   /** Host-owned stage: `"complete"` only once the request actually succeeded. */
   stage: PasswordRecoveryStage;
   /**
-   * The identifier the code was sent to. Seeds the complete form and is MASKED for
-   * display; empty on the request step.
+   * The identifier the code was sent to. Seeds the complete form and is shown
+   * exactly as typed (#2607); empty on the request step.
    */
   identifier: string;
   /** Target for the footer link back to sign-in. */
@@ -230,10 +229,9 @@ export function PasswordRecoveryCard({
       description={
         stage === "request"
           ? copy.descriptionRequest
-          : // #227: confirm WHERE the reset code went with a privacy-masked
-            // destination (the same `maskDestination` the login-OTP focus-screen
-            // shows), never the full identifier.
-            copy.descriptionComplete(maskDestination(identifier))
+          : // Confirm WHERE the reset code went — the identifier exactly as
+            // typed, as every code step shows it (#2607).
+            copy.descriptionComplete(identifier)
       }
       footer={
         <DsLink asChild>
@@ -411,7 +409,6 @@ function RecoveryCompleteForm({
             <OtpField
               field={field}
               length={otpLength}
-              variant="slotted"
               charset="alphanumeric"
               label={copy.codeLabel}
             />
@@ -440,15 +437,19 @@ function RecoveryCompleteForm({
           {copy.submit}
         </Button>
       </form>
-      {/* #267: focus-polish footer — separated from the password field with a top
-          border + spacing so «Начать заново» is no longer jammed against the input
-          (owner finding). «Начать заново» (change the identifier, back to the
-          request step) on the left, resend-with-cooldown on the right; mirrors the
-          focus-screen's change-method/resend pairing, kept inline because the reset
-          step submits the code together with a new password. */}
-      <div className="mt-6 space-y-3 border-t pt-4">
+      {/* Footer row as the canvas draws it (auth.dc.html 230/246-247): it follows
+          the submit button at the column's 18px gap (`mt-4.5`) with no divider —
+          spacing alone keeps «Начать заново» clear of the form (#267). «Начать
+          заново» (change the identifier, back to the request step) on the left,
+          resend-with-cooldown on the right; mirrors the focus-screen's
+          change-method/resend pairing, kept inline because the reset step submits
+          the code together with a new password. */}
+      <div className="mt-4.5 space-y-3">
         {captchaSlot}
-        <div className="flex items-center justify-between gap-2">
+        {/* Canvas 247: `gap:12px; flex-wrap:wrap` — when «Начать заново» and the
+            resend label do not fit one row (390 with the cooldown), the resend
+            label moves to its own line, as on the focus-screen's mirrored row. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Button
             type="button"
             variant="ghost"
@@ -457,7 +458,14 @@ function RecoveryCompleteForm({
             data-testid="reset-restart"
             // `shrink-0` — «Начать заново» keeps its size; the resend label is the
             // flex item that yields when the row is cramped (#542).
-            className="shrink-0"
+            // Canvas geometry (auth.dc.html 248: padding 6px 8px, margin -6px 0):
+            // `px-2 py-1.5` is the ghost box, `-my-1.5` keeps the row height. No
+            // horizontal offset — the hover tint's left edge sits ON the content
+            // column edge and the label insets by the 8px padding (#2556).
+            // `shadow-focus-inset` keeps the keyboard ring inside that box too
+            // (canvas line 10, `[data-ghost]:focus-visible`); scoped here, not on
+            // the ghost variant, because other ghost controls keep the outset ring.
+            className="-my-1.5 shrink-0 px-2 py-1.5 focus-visible:shadow-focus-inset"
           >
             {copy.startOver}
           </Button>

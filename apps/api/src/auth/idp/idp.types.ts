@@ -281,6 +281,37 @@ export type IdpRefreshResult =
 export type EmailLoginOutcome = "challenge" | "verification" | "none";
 
 /**
+ * Which surface asked for an email code (003 EARS-34 / EARS-23). The code kind
+ * is decided by the account state either way; the trigger only picks the mail
+ * copy — a sign-in code mail, or the re-registration mail that also says the
+ * address is already registered.
+ */
+export type EmailCodeTrigger = "sign-in" | "re-registration";
+
+/**
+ * 003 EARS-41: the registration values a code step submits with the code. Only
+ * the password reaches the IdP; consent is the BFF's own record.
+ */
+export interface EmailCodeRegistration {
+  password: string;
+}
+
+/**
+ * 003 EARS-41: the outcome of an accepted email code.
+ *
+ * `verifiedNow` is true when this submission flipped the address from
+ * unverified to verified at the IdP, so the caller mirrors the flip and writes
+ * the one `auth.account.verified` row. `session` is `null` only when the flip
+ * happened but the session could not be established — the caller still owes
+ * the mirror flip and then answers with the generic failure.
+ */
+export interface EmailCodeSubmission {
+  sub: string;
+  verifiedNow: boolean;
+  session: IdpSession | null;
+}
+
+/**
  * #1304: the roles a high-stakes admin mutation may be revalidated against.
  *
  * Deliberately a closed set rather than the whole {@link Role} vocabulary: live
@@ -382,19 +413,21 @@ export interface IdpClient {
     code?: string,
   ): Promise<void>;
   /**
-   * EARS-25: re-issue the registration `otp_email` verification code for an
-   * `identifier` (the email), **enumeration-safely**. Unlike
+   * 003 EARS-25 (amended): re-issue, for an `identifier` (the email) and
+   * **enumeration-safely**, the code that fits the account state — the email
+   * verification code for an unverified account, a fresh `otp_email` login
+   * challenge (sign-in mail) for a verified one. Unlike
    * {@link requestEmailVerification} (which takes a resolved `sub` from the
    * EARS-1 cascade, where the BFF just created the user), this is keyed by the
    * raw identifier the resend endpoint receives — the port has no other targeted
    * identifier→sub lookup (`listUsers` is the reconcile-sweep enumerator, not a
    * per-request lookup), so resolution lives here, in the **same** enumeration-
    * safe wrapper as {@link requestPasswordReset} / {@link requestEmailOtp}: it
-   * resolves the identifier → `sub` without disclosing existence and re-issues the
-   * code **only** for an existing, **unverified** registrant. Resolves to `true`
-   * when a code was actually issued (so the caller appends the `otp.sent` ledger
-   * row, EARS-18) and `false` on every no-op path — an unknown identifier, an
-   * already-verified one, or any provider hiccup. It **never throws or branches**
+   * resolves the identifier → `sub` without disclosing existence and re-issues a
+   * code for any existing account. Resolves to `true` when a code was actually
+   * issued (so the caller appends the `otp.sent` ledger row, EARS-18) and `false`
+   * on every no-op path — an unknown identifier or any provider hiccup. It
+   * **never throws or branches**
    * on existence, so the caller's acknowledgement and timing cannot become an
    * existence oracle (EARS-16); the returned boolean is a server-side ledger
    * decision the caller never reflects into the response.
@@ -452,8 +485,11 @@ export interface IdpClient {
    * - VERIFIED → arms the `otp_email` challenge (as {@link requestEmailOtp}) and
    *   resolves `"challenge"`;
    * - existing-UNVERIFIED → re-issues the verification code (the EARS-25/29
-   *   `returnCode` hop) and dispatches the branded §13.3 mail **fire-and-forget
-   *   off the response path**, resolving `"verification"`;
+   *   `returnCode` hop) and dispatches it in the same sign-in code mail
+   *   (EARS-34 amended) **fire-and-forget off the response path**, resolving
+   *   `"verification"`;
+   * `trigger` picks only the mail copy: `"re-registration"` sends the EARS-23
+   * re-registration mail for either code kind.
    * - unknown identifier / provider hiccup → a silent no-op resolving `"none"`.
    * It **never throws or branches** on existence in a client-visible way — the
    * returned {@link EmailLoginOutcome} is a server-side ledger decision the caller
@@ -461,7 +497,29 @@ export interface IdpClient {
    * a total outage (EARS-31) never differentiates the response, because the send
    * is off the critical path.
    */
-  requestEmailLoginCode(identifier: string): Promise<EmailLoginOutcome>;
+  requestEmailLoginCode(
+    identifier: string,
+    trigger?: EmailCodeTrigger,
+  ): Promise<EmailLoginOutcome>;
+  /**
+   * 003 EARS-41: submit an email code for `identifier` and decide, by account
+   * state, which Zitadel check applies — the armed `otp_email` login challenge
+   * for a verified address, the email-verification check for an unverified one.
+   * On the unverified branch the account's pre-verification password is
+   * replaced by `registration.password`, or invalidated when no registration is
+   * submitted, before any session exists; the session is then armed and
+   * completed in one request with the Zitadel-returned code. On the verified
+   * branch `registration.password` is set only when the account has none
+   * (fail-soft). Resolves `null` for every failure (unknown identifier, wrong /
+   * expired / used code, password step failed before the flip) —
+   * indistinguishable to the caller (EARS-16). Never generates or compares a
+   * code itself.
+   */
+  submitEmailCode(
+    identifier: string,
+    code: string,
+    registration?: EmailCodeRegistration,
+  ): Promise<EmailCodeSubmission | null>;
   /**
    * EARS-6: verify an email login OTP and, on success, return the **checked**
    * Zitadel session — the same `IdpSession` shape `passwordLogin` yields, so the

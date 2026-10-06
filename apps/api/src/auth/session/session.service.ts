@@ -168,4 +168,13 @@ export class SessionService {
     await this.store.deleteBySub(sub);
     await this.audit.record({ type: "PasswordResetCompleted", sub });
   }
+
+  /**
+   * 003 EARS-41: the first accepted code of an unverified account revokes every
+   * session the account held before it, as on reset (EARS-12). The terminal
+   * row of that command is `auth.account.verified`, written by the caller.
+   */
+  async revokeAllBeforeVerification(sub: string): Promise<void> {
+    await this.store.deleteBySub(sub);
+  }
 }

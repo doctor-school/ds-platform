@@ -244,6 +244,20 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
       expect(screen.queryByTestId("reset-request-submit")).toBeNull();
     });
 
+    it("003 EARS-42 (#2607): «Новый пароль» names the identifier exactly as typed, bold, and a long one wraps inside the column", async () => {
+      const LONG =
+        "anna.konstantinova-rozhdestvenskaya.cardiology@regional-clinical-hospital.example.ru";
+      mount();
+      await requestCode(LONG);
+
+      const address = screen.getByText(LONG);
+      expect(address.tagName).toBe("STRONG");
+      expect(address).toHaveClass("wrap-anywhere");
+      expect(address.parentElement).toHaveTextContent(
+        copy.completeDescription.replace("{destination}", LONG),
+      );
+    });
+
     it("003 EARS-11: a malformed identifier is refused with the package RU sentence before any request", async () => {
       const user = userEvent.setup();
       mount();
@@ -385,7 +399,7 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
       }
     });
 
-    it("#326: the resend confirmation is the SAME regardless of the identifier (no existence branch)", async () => {
+    it("#326: the resend confirmation is one conditional sentence whatever the identifier, naming only the typed identifier (no existence branch)", async () => {
       async function noticeTextFor(idValue: string): Promise<string> {
         vi.useFakeTimers();
         try {
@@ -410,11 +424,19 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
 
       const first = await noticeTextFor("registered@example.com");
       const second = await noticeTextFor("rarely-seen@example.com");
-      // Masked the same way for two addresses of one shape, and phrased
-      // conditionally — never «we found you».
-      expect(first).toBe(second);
+      // One conditional sentence for either identifier — never «we found
+      // you» — naming the identifier exactly as typed (#2607).
       expect(first).toBe(
-        copy.resendAcknowledged.replace("{destination}", "r•••@e•••.com"),
+        copy.resendAcknowledged.replace(
+          "{destination}",
+          "registered@example.com",
+        ),
+      );
+      expect(second).toBe(
+        copy.resendAcknowledged.replace(
+          "{destination}",
+          "rarely-seen@example.com",
+        ),
       );
     });
   });

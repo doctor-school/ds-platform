@@ -413,6 +413,35 @@ describe("<RegisterCard>", () => {
     });
   });
 
+  it("003 EARS-24: «← Изменить почту» refills the visitor's own values — and ticks only what they ticked", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderCard({
+      consentItems: [ACCESS_ITEM, MARKETING_ITEM],
+      initialValues: {
+        email: "doctor@clinic.ru",
+        password: "correct horse 8",
+        promoCode: "",
+        consents: { medicalWorkerDeclaration: true },
+      },
+    });
+
+    expect(screen.getByTestId("register-email")).toHaveValue("doctor@clinic.ru");
+    expect(screen.getByTestId("register-password")).toHaveValue(
+      "correct horse 8",
+    );
+    expect(screen.getByTestId("register-medworker")).toBeChecked();
+    expect(screen.getByTestId("register-marketing")).not.toBeChecked();
+
+    await user.click(screen.getByTestId("register-submit"));
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({
+      email: "doctor@clinic.ru",
+      consents: {
+        medicalWorkerDeclaration: true,
+        marketingCommunications: false,
+      },
+    });
+  });
+
   it("003 EARS-38: the password field's reveal toggle renders with the host's supplied labels", async () => {
     const user = userEvent.setup();
     renderCard({

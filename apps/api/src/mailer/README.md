@@ -3,11 +3,10 @@
 The BFF's **own** transactional-email channel (003 EARS-23/29, [003 design][design]
 §4, §13.3/§13.4, §14). Two mail classes ride it:
 
-- **Product / security notices** that must never carry a secret — the
-  account-exists notice (one sign-in action for a registration attempt on an
-  already-registered address) and the admin MFA lockout notice (011 EARS-7).
-- **One-time-code credential emails** (EARS-29, #910/#1045): the email-verify, login
-  and password-reset codes are obtained from Zitadel via `returnCode` (Zitadel
+- **Product / security notices** that must never carry a secret — the admin
+  MFA lockout notice (011 EARS-7) and the congress letters.
+- **One-time-code credential emails** (EARS-23/29/34, #910/#1045): the
+  email-verify, login, re-registration and password-reset codes are obtained from Zitadel via `returnCode` (Zitadel
   generates/stores/expires/verifies the code but **sends nothing**) and
   delivered as the branded, Russian, code-only, **fully link-free**
   §13.3/§13.4 artifacts (`code-emails.ts` is the copy SSOT). EARS-30 governs
@@ -20,14 +19,16 @@ All five BFF kinds reuse `email-layout.ts`, extracted from the existing
 plain text. Verification covers registration/resend and unverified-account
 login with neutral ignore guidance; verification/reset direct code entry to
 the already-open requesting tab. Both remain six uppercase/digit characters
-with 3600-second Zitadel expiry, with no links or URLs. Account-exists contains
-only the configured portal `/login` action; admin lockout preserves recovery
+with 3600-second Zitadel expiry, with no links or URLs. The re-registration
+code mail (EARS-23, a registration attempt on an already-registered address)
+says the address is already registered, states the code's lifetime and whether
+the password is kept, and carries no link; admin lockout preserves recovery
 and reporting instructions without codes, counts or remaining lock time.
 Intercept, real and fallback transports use the `Doctor.School` display name
 and retain their own configured sender address.
 
 Verified-account login email-OTP uses the same layout and existing SmtpMailer
-route. Zitadel returns its eight-digit, 300-second code through `returnCode`
+route. Zitadel returns its six-character (upper-case letters and digits), 300-second code through `returnCode`
 and sends no duplicate; the mail contains no action or URL. Session verification
 and token exchange remain IdP-owned. SMS keeps its IdP template. Broader provider
 acceptance in #2144/#2145 remains separate from this template migration.
@@ -99,7 +100,7 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
 | Port + shared send-time validation                 | `mailer.types.ts`             |
 | §13.3/§13.4 code-only artifact templates           | `code-emails.ts`              |
 | Shared existing HTML/plain-text layout and sender  | `email-layout.ts`             |
-| Account-exists and admin-lockout content           | `notice-emails.ts`            |
+| Admin-lockout content                              | `notice-emails.ts`            |
 | Production nodemailer adapter (chain + transports) | `smtp-mailer.ts`              |
 | Per-provider relay-channel contract                | `relay-channel.ts`            |
 | Resend failover channel (HTTPS adapter)            | `resend-transport.ts`         |
@@ -115,9 +116,12 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
   else the in-memory fake — the single place each backend is chosen (mirroring
   `SessionModule`). Both are `exports` so `AuthService` consumes them.
 - **`Mailer`** + **`MAILER`** (`mailer.types.ts`) — the port
-  (`sendAccountExistsNotice(email)` and `sendAdminLockoutNotice(email)` carrying
-  no secret; `sendVerificationCodeEmail(email, code)` /
-  `sendPasswordResetCodeEmail(email, code)` / `sendLoginCodeEmail(email, code)` carrying exactly one) and its
+  (`sendAdminLockoutNotice(email)` carrying no secret;
+  `sendVerificationCodeEmail(email, code)` /
+  `sendPasswordResetCodeEmail(email, code)` /
+  `sendLoginCodeEmail(email, code, lifetime)` /
+  `sendReRegistrationCodeEmail(email, code, { lifetime, passwordKept })`
+  carrying exactly one) and its
   `Symbol` DI token. `IdpModule` injects it into the IdP adapters for the EARS-29
   `returnCode` → mailer hand-off; `AdminSessionModule` injects it for the 011
   EARS-7 lockout notice. That notice carries **no code, no attempt count and no
@@ -142,8 +146,8 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
   enumeration-safe caller response. `smtp-transport.ts` owns wire deadlines;
   `config/real-smtp.ts` is the shared BFF/native provider-validation contract.
 - **`FakeMailer`** (`mailer.fake.ts`) — the in-memory unit-test double; records
-  every accepted send (`accountExistsNotices`, `verificationCodeEmails`,
-  `passwordResetCodeEmails`; `failNextCodeSends(err)` models a transport
+  every accepted send (`verificationCodeEmails`, `loginCodeEmails`,
+  `reRegistrationCodeEmails`, `passwordResetCodeEmails`; `failNextCodeSends(err)` models a transport
   outage) and runs the same `assertSendableEmail` / `assertSendableCode` guards
   so it is indistinguishable from the real adapter in both behaviour and error
   shape.

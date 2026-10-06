@@ -22,7 +22,6 @@ import {
 import { cn } from "../lib/utils";
 import { AUTH_EYEBROW, AuthCard } from "./auth-card";
 import { OtpFocusScreen } from "./otp-focus-screen";
-import { maskDestination } from "./mask-destination";
 
 /**
  * `<LoginCard>` (#1666 slice A) — the ONE canonical sign-in composition both
@@ -38,9 +37,11 @@ import { maskDestination } from "./mask-destination";
  *   • the EARS-5 password form and the EARS-6/7 OTP request form — each with its
  *     own RHF handle, `onTouched` validation (#200) and `Button.loading` pending
  *     affordance (#337),
- *   • the #227 focus-screen stage on `<OtpFocusScreen>`, including the #266
- *     no-remount resend mechanic (a `resendNonce` bump restarts the cooldown and
- *     clears the superseded code without a `key` remount).
+ *   • the one code step (003 EARS-42) on `<OtpFocusScreen>` once a code was
+ *     sent: the card's heading becomes «check your mail / phone» with the
+ *     destination exactly as typed (#2607), the method tabs are hidden, the footer stays, and the #266
+ *     no-remount resend mechanic (a `resendNonce` bump restarts the cooldown,
+ *     clears the superseded code and shows the after-resend notice).
  *
  * What stays in the HOST app (the blocks-tier contract — see `./index.ts`): copy,
  * i18n, the zod resolvers (they carry the app's localized messages and the
@@ -57,13 +58,6 @@ import { maskDestination } from "./mask-destination";
 
 /** Resend cooldown (#227): the focus-screen restarts it on every `resendNonce` bump. */
 export const LOGIN_RESEND_COOLDOWN_SECONDS = 30;
-
-/**
- * Zitadel's login email/SMS OTP codes are a FIXED 8 digits (verified live on the
- * dev-stand, #153) — that fixed length is what lets the field auto-submit on the
- * final digit (#175), in the #211 unified slotted presentation.
- */
-export const LOGIN_OTP_LENGTH = 8;
 
 /** The two sign-in methods the tab switcher offers. */
 export type LoginCardMethod = "password" | "otp";
@@ -126,13 +120,17 @@ export interface LoginCardCopy {
     phoneLabel: string;
     phonePlaceholder: string;
     sendCode: React.ReactNode;
-    verifyTitle: React.ReactNode;
-    /** Past-tense "code sent to {masked}" — the block masks the destination. */
+    /** The code step's card heading per channel (canvas «Проверьте почту / телефон»). */
+    verifyTitle: Record<LoginCardOtpChannel, React.ReactNode>;
+    /** The code step's description «Мы отправили код на {destination}» — the destination as typed. */
     sentTo: (destination: string) => React.ReactNode;
-    codeLabel: string;
+    /** The code label per channel (canvas «Код из письма / из сообщения»). */
+    codeLabel: Record<LoginCardOtpChannel, string>;
     verifySubmit: React.ReactNode;
     resend: React.ReactNode;
     resendCountdown: (seconds: number) => React.ReactNode;
+    /** The after-resend notice «Мы отправили новый код на {destination}». */
+    resentTo: (destination: string) => React.ReactNode;
     changeMethod: React.ReactNode;
   };
 }
@@ -208,6 +206,8 @@ export interface LoginCardProps {
   }) => React.ReactNode;
   /** Card glyph (app-supplied — the package carries no icon set). */
   icon?: React.ReactNode;
+  /** The code step's glyph (canvas: the envelope); absent → `icon` stays. */
+  codeStepIcon?: React.ReactNode;
   password: LoginCardPasswordProps;
   otp: LoginCardOtpProps;
   /**
@@ -227,8 +227,6 @@ export interface LoginCardProps {
    * method" — #179 deliberately keeps no auth UI state across visits.
    */
   defaultMethod?: LoginCardMethod;
-  /** Fixed OTP length; defaults to the 8-digit login code. */
-  otpLength?: number;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;
 }
@@ -246,20 +244,33 @@ export function LoginCard({
   links,
   renderLink = defaultRenderLink,
   icon,
+  codeStepIcon,
   password,
   otp,
   onMethodChange,
   defaultMethod = "password",
-  otpLength = LOGIN_OTP_LENGTH,
   resendCooldownSeconds = LOGIN_RESEND_COOLDOWN_SECONDS,
 }: LoginCardProps) {
+  const channels = otp.channels ?? DEFAULT_CHANNELS;
+  // The channel is lifted here: the code step's HEADING (a card prop) names it.
+  const [channel, setChannel] = React.useState<LoginCardOtpChannel>(
+    channels[0] ?? "email",
+  );
+  // 003 EARS-42 — once the host confirms a sent code, the card IS the code
+  // step: its heading names the channel and the typed destination, and the
+  // method tabs are hidden (canvas `showLoginTabs: !loginCodeStep`).
+  const sentIdentifier = otp.sentIdentifier;
   // Canvas `auth.dc.html:56-61` — the operation-level failure of EITHER method
   // stands above the card title. Only one can be live at a time: the host clears
   // the other method's state in `onMethodChange`.
   const operationError = password.error ?? otp.screenError ?? otp.error;
   return (
     <AuthCard
-      icon={icon}
+      icon={
+        sentIdentifier !== null && codeStepIcon !== undefined
+          ? codeStepIcon
+          : icon
+      }
       errorBanner={
         operationError ? (
           <FormError variant="banner" className="mb-5">
@@ -270,8 +281,16 @@ export function LoginCard({
       // #1033: the page title is the document's single h1 (a11y landmark).
       // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
       // so the render is pixel-identical.
-      title={<h1>{copy.title}</h1>}
-      description={copy.description}
+      title={
+        <h1>
+          {sentIdentifier !== null ? copy.otp.verifyTitle[channel] : copy.title}
+        </h1>
+      }
+      description={
+        sentIdentifier !== null
+          ? copy.otp.sentTo(sentIdentifier)
+          : copy.description
+      }
       footer={
         <>
           <DsLink asChild>
@@ -298,24 +317,38 @@ export function LoginCard({
         {/* Canvas 66: the switcher's name is DRAWN above the tabs, not only
             announced — it keeps its `aria-label` too, so the tablist is still
             named for a screen reader that never sees the eyebrow. */}
-        <p className={cn("mb-2", AUTH_EYEBROW)}>{copy.methodSwitcherLabel}</p>
-        <TabsList aria-label={copy.methodSwitcherLabel}>
-          <TabsTrigger value="password" data-testid="login-method-password">
-            {copy.methodPassword}
-          </TabsTrigger>
-          <TabsTrigger value="otp" data-testid="login-method-otp">
-            {copy.methodOtp}
-          </TabsTrigger>
-        </TabsList>
+        {sentIdentifier !== null ? null : (
+          <>
+            <p className={cn("mb-2", AUTH_EYEBROW)}>
+              {copy.methodSwitcherLabel}
+            </p>
+            <TabsList aria-label={copy.methodSwitcherLabel}>
+              <TabsTrigger value="password" data-testid="login-method-password">
+                {copy.methodPassword}
+              </TabsTrigger>
+              <TabsTrigger value="otp" data-testid="login-method-otp">
+                {copy.methodOtp}
+              </TabsTrigger>
+            </TabsList>
+          </>
+        )}
         <TabsContent value="password">
           <PasswordLogin copy={copy.password} {...password} />
         </TabsContent>
-        <TabsContent value="otp">
+        {/* The code step has no tab row above it, so it drops the panel's
+            tab-row offset: the field sits under the description as on /verify
+            (canvas «ШАГ КОДА», auth.dc.html 64-66). */}
+        <TabsContent
+          value="otp"
+          className={sentIdentifier !== null ? "mt-0" : undefined}
+        >
           <OtpLogin
             copy={copy.otp}
-            otpLength={otpLength}
             resendCooldownSeconds={resendCooldownSeconds}
             {...otp}
+            channels={channels}
+            channel={channel}
+            onChannelChange={setChannel}
           />
         </TabsContent>
       </Tabs>
@@ -407,31 +440,32 @@ function PasswordLogin({
   );
 }
 
-/** EARS-6/7 passwordless OTP login: request a code, then the focus-screen takes over. */
+const DEFAULT_CHANNELS: readonly LoginCardOtpChannel[] = ["email", "sms"];
+
+/** EARS-6/7 passwordless OTP login: request a code, then the code step takes over. */
 function OtpLogin({
   copy,
-  otpLength,
   resendCooldownSeconds,
   requestResolvers,
   verifyResolver,
   sentIdentifier,
   resendNonce,
-  channels = ["email", "sms"],
+  channels,
+  channel,
+  onChannelChange,
   pending = false,
   captchaSlot,
   onRequest,
   onResend,
   onVerify,
   onChangeMethod,
-}: LoginCardOtpProps & {
+}: Omit<LoginCardOtpProps, "channels"> & {
   copy: LoginCardCopy["otp"];
-  otpLength: number;
   resendCooldownSeconds: number;
+  channels: readonly LoginCardOtpChannel[];
+  channel: LoginCardOtpChannel;
+  onChannelChange: (channel: LoginCardOtpChannel) => void;
 }) {
-  const [channel, setChannel] = React.useState<LoginCardOtpChannel>(
-    channels[0] ?? "email",
-  );
-
   // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
   // email, SMS channel requires an E.164 phone, so switching re-validates against the
   // right shape. The loose `OtpRequestSchema` is NOT used as the form guard (it stays
@@ -479,7 +513,7 @@ function OtpLogin({
                     aria-checked={channel === c}
                     data-testid={`otp-channel-${c}`}
                     onClick={() => {
-                      setChannel(c);
+                      onChannelChange(c);
                       // Clear the identifier on channel switch so a value typed for the
                       // previous channel (e.g. an email left in the box) does not linger
                       // into the other channel's stricter shape (#192).
@@ -559,7 +593,6 @@ function OtpLogin({
         <>
           <OtpVerifyForm
             copy={copy}
-            otpLength={otpLength}
             identifier={sentIdentifier}
             channel={channel}
             resolver={verifyResolver}
@@ -577,7 +610,7 @@ function OtpLogin({
 }
 
 /**
- * EARS-6/7 verify step, rendered through `<OtpFocusScreen>` (#227). Its OWN
+ * EARS-6/7 code step, rendered through `<OtpFocusScreen>` (003 EARS-42). Its OWN
  * `useForm` lives here so the `code` field is registered on this component's first
  * render: it mounts only once a code has been requested, so there is no
  * late-mounted Controller and no post-hoc seeding (both of which left the field
@@ -585,12 +618,11 @@ function OtpLogin({
  * come in as props (the BFF re-resolves them); the user only types the code.
  *
  * `resendNonce` is bumped by the host on a successful resend — it restarts the
- * focus-screen cooldown and clears the now-stale code here, both WITHOUT a
- * remount (#266).
+ * cooldown, clears the now-stale code and shows the after-resend notice, all
+ * WITHOUT a remount (#266, canvas 81-83).
  */
 function OtpVerifyForm({
   copy,
-  otpLength,
   identifier,
   channel,
   resolver,
@@ -602,7 +634,6 @@ function OtpVerifyForm({
   onChangeMethod,
 }: {
   copy: LoginCardCopy["otp"];
-  otpLength: number;
   identifier: string;
   channel: LoginCardOtpChannel;
   resolver: Resolver<LoginCardOtpVerifyValues>;
@@ -625,16 +656,18 @@ function OtpVerifyForm({
   // the block no longer has to be remounted to reset. Skips the initial mount (the
   // field already defaults to ""); `resetField` is keyed only on the nonce.
   const isInitialResend = React.useRef(true);
+  const [resent, setResent] = React.useState(false);
   React.useEffect(() => {
     if (isInitialResend.current) {
       isInitialResend.current = false;
       return;
     }
     verifyForm.resetField("code");
+    setResent(true);
     // Keyed only on the resend signal — `verifyForm` is a stable useForm handle.
   }, [resendNonce]);
 
-  // #175: auto-submit once the fixed-length login OTP is fully entered. The in-flight
+  // #175: auto-submit once the sixth character of the code lands. The in-flight
   // guard (`isSubmitting`) prevents a double network call if completion races a manual
   // click / the Enter key, and stops a re-fire if a later keystroke/paste keeps the
   // value at full length.
@@ -654,27 +687,26 @@ function OtpVerifyForm({
         render={({ field }) => (
           <OtpFocusScreen
             field={field}
-            length={otpLength}
-            variant="slotted"
-            charset="numeric"
-            title={copy.verifyTitle}
-            sentToLabel={copy.sentTo(maskDestination(identifier))}
-            codeLabel={copy.codeLabel}
+            codeLabel={copy.codeLabel[channel]}
             submitLabel={copy.verifySubmit}
+            backLabel={copy.changeMethod}
             resendLabel={copy.resend}
             resendCountdownLabel={copy.resendCountdown}
-            changeMethodLabel={copy.changeMethod}
             cooldownSeconds={cooldownSeconds}
             resendNonce={resendNonce}
             isSubmitting={verifyForm.formState.isSubmitting}
+            notice={resent ? copy.resentTo(identifier) : null}
             onComplete={onCodeComplete}
             onSubmit={submit}
             onResend={onResend}
-            onChangeMethod={onChangeMethod}
+            onBack={onChangeMethod}
             captchaSlot={captchaSlot}
-            submitTestId="otp-verify"
-            resendTestId="otp-resend"
-            changeMethodTestId="otp-change-method"
+            testIds={{
+              submit: "otp-verify",
+              resend: "otp-resend",
+              back: "otp-change-method",
+              notice: "otp-resend-notice",
+            }}
           />
         )}
       />

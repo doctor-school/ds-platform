@@ -786,7 +786,7 @@ export class AdminSessionService {
     });
     if (!justLocked) return;
     await this.audit.record({ type: "LockoutTriggered", sub });
-    // Fire-and-forget, exactly like the EARS-23 account-exists notice (the
+    // Fire-and-forget, exactly like the EARS-23 re-registration code mail (the
     // subject is all this needs — the address is resolved from the IdP). The
     // response for the threshold-crossing attempt must land in the same ≤50 ms
     // band as every other failure (EARS-7), and an SMTP round-trip inside the

@@ -13,6 +13,7 @@ import {
   type IdpClient,
 } from "./idp/idp.types.js";
 import type { RegisterRequest } from "@ds/schemas";
+import { consentRecords, users } from "@ds/db";
 import { InMemoryAuthAuditLog } from "./session/auth-audit.fake.js";
 import { InMemorySessionStore } from "./session/session-store.fake.js";
 import { SessionService } from "./session/session.service.js";
@@ -63,7 +64,6 @@ function buildService(idp: IdpClient): AuthService {
     explodingDb as never,
     undefined,
     { record: () => Promise.resolve() } as never,
-    new FakeMailer(),
     new InMemoryRegisterNoticeThrottle("test-pepper"),
     SyntheticSuppression.disabled(),
     {} as never,
@@ -161,7 +161,6 @@ describe("FakeIdpClient.createUser — no-email parity with real Zitadel (#202)"
       stubDb as never,
       undefined,
       audit,
-      new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
       {} as never,
@@ -187,12 +186,10 @@ describe("FakeIdpClient.createUser — no-email parity with real Zitadel (#202)"
   });
 });
 
-// EARS-23 (#207): account-exists notice on a duplicate-registration. The
-// `alreadyExisted` branch is the EARS-16 hinge — it returns the IDENTICAL
-// `pending_verification` and creates nothing — so the legitimate owner's path is
-// delivered privately by email (a sign-in / reset notice) instead of leaving them
-// stranded on the /verify "enter your code" screen. The send is fire-and-forget,
-// per-address throttled, and never alters the response or throws.
+// 003 EARS-23: re-registration onto an existing account. The `alreadyExisted`
+// branch returns the IDENTICAL `pending_verification` and writes nothing; the
+// owner receives, privately and fire-and-forget, the code EARS-34 would issue
+// in the re-registration mail, throttled per address.
 
 /** A stub DB whose insert/transaction chain succeeds (the new-account branch writes). */
 function makeStubDb() {
@@ -202,8 +199,10 @@ function makeStubDb() {
     returning: () => Promise.resolve([{ id: "stub-user-id" }]),
     then: (resolve: (v: unknown) => void) => resolve(undefined),
   };
-  return { transaction: (fn: (tx: unknown) => Promise<unknown>) =>
-    fn({ insert: () => insertChain }) };
+  return {
+    transaction: (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ insert: () => insertChain }),
+  };
 }
 
 /** Let the fire-and-forget notice chain settle (it runs off the response path). */
@@ -222,7 +221,6 @@ function buildRegisterService(opts: {
     makeStubDb() as never,
     undefined,
     opts.audit,
-    opts.mailer,
     opts.throttle,
     SyntheticSuppression.disabled(),
     {} as never,
@@ -231,85 +229,101 @@ function buildRegisterService(opts: {
   );
 }
 
-describe("AuthService.register — account-exists notice (#207, EARS-23)", () => {
+describe("AuthService.register — re-registration code mail (003 EARS-23)", () => {
   const reg: RegisterRequest = {
     email: "owner@ds.test",
     password: "Aa1!sufficiently-long",
     consent,
   };
 
-  it("EARS-23: when a register targets a NEW email, the system shall dispatch NO account-exists notice", async () => {
-    const mailer = new FakeMailer();
-    const service = buildRegisterService({
-      idp: new FakeIdpClient(),
-      audit: new InMemoryAuthAuditLog(),
-      mailer,
-      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
-    });
-
-    const res = await service.register(reg);
-    await flushMicrotasks();
-
-    expect(res).toEqual({ status: "pending_verification" });
-    expect(mailer.accountExistsNotices).toEqual([]);
-  });
-
-  it("EARS-23: when a register targets an ALREADY-REGISTERED email, the system shall dispatch exactly one account-exists notice", async () => {
-    const idp = new FakeIdpClient();
-    const mailer = new FakeMailer();
-    const service = buildRegisterService({
-      idp,
-      audit: new InMemoryAuthAuditLog(),
-      mailer,
-      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
-    });
-
-    // Pre-register so the second register hits the `alreadyExisted` branch.
-    await service.register(reg);
-    await flushMicrotasks();
-    expect(mailer.accountExistsNotices).toEqual([]); // none on the new branch
-
-    const res = await service.register(reg);
-    await flushMicrotasks();
-
-    expect(res).toEqual({ status: "pending_verification" });
-    expect(mailer.accountExistsNotices).toEqual(["owner@ds.test"]);
-  });
-
-  it("EARS-23: when a duplicate register repeats within the throttle window, the second notice shall be suppressed", async () => {
-    const idp = new FakeIdpClient();
-    const mailer = new FakeMailer();
-    const service = buildRegisterService({
-      idp,
-      audit: new InMemoryAuthAuditLog(),
-      mailer,
-      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
-    });
-
-    await service.register(reg); // new account
-    await service.register(reg); // duplicate → notice #1
-    await service.register(reg); // duplicate → throttled
-    await flushMicrotasks();
-
-    expect(mailer.accountExistsNotices).toEqual(["owner@ds.test"]);
-  });
-
-  it("EARS-23: the already-existed branch shall write no account/consent/auth.register ledger row", async () => {
-    const idp = new FakeIdpClient();
+  function build(mailer: Mailer = new FakeMailer()) {
+    const idp = new FakeIdpClient(mailer);
     const audit = new InMemoryAuthAuditLog();
     const service = buildRegisterService({
       idp,
       audit,
-      mailer: new FakeMailer(),
+      mailer,
       throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
     });
+    return { idp, audit, service };
+  }
 
-    await service.register(reg); // new account → one Registered row
-    await service.register(reg); // duplicate → NO new row
+  it("003 EARS-23: when a register targets a NEW email, the system shall send no re-registration mail", async () => {
+    const mailer = new FakeMailer();
+    const { service } = build(mailer);
+
+    const res = await service.register(reg);
     await flushMicrotasks();
 
-    // Exactly the single new-account terminal row; the duplicate added nothing.
-    expect(audit.events).toEqual([
+    expect(res).toEqual({ status: "pending_verification" });
+    expect(mailer.reRegistrationCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-23: when a register targets an UNVERIFIED registered email, the system shall send one code mail saying the password will be saved after the code", async () => {
+    const mailer = new FakeMailer();
+    const { service, audit } = build(mailer);
+    await service.register(reg);
+    await flushMicrotasks();
+
+    const res = await service.register(reg);
+    await flushMicrotasks();
+
+    expect(res).toEqual({ status: "pending_verification" });
+    expect(mailer.reRegistrationCodeEmails).toEqual([
+      {
+        to: "owner@ds.test",
+        code: FAKE_VALID_CODE,
+        lifetime: "1h",
+        passwordKept: false,
+      },
+    ]);
+    expect(audit.events.filter((e) => e.type === "OtpSent")).toEqual([
+      { type: "OtpSent", identifier: "owner@ds.test", channel: "email" },
+    ]);
+  });
+
+  it("003 EARS-23: when a register targets a VERIFIED email with a password, the mail carries the login code and «Ваш пароль не изменился»", async () => {
+    const mailer = new FakeMailer();
+    const { service, idp } = build(mailer);
+    const created = await idp.createUser({
+      email: reg.email,
+      password: reg.password,
+    });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+
+    await service.register(reg);
+    await flushMicrotasks();
+
+    expect(mailer.reRegistrationCodeEmails).toEqual([
+      {
+        to: "owner@ds.test",
+        code: FAKE_VALID_CODE,
+        lifetime: "5m",
+        passwordKept: true,
+      },
+    ]);
+  });
+
+  it("003 EARS-23: when a duplicate register repeats within the throttle window, the second code mail shall be suppressed", async () => {
+    const mailer = new FakeMailer();
+    const { service } = build(mailer);
+
+    await service.register(reg); // new account
+    await service.register(reg); // duplicate → mail #1
+    await service.register(reg); // duplicate → throttled
+    await flushMicrotasks();
+
+    expect(mailer.reRegistrationCodeEmails).toHaveLength(1);
+  });
+
+  it("003 EARS-23: the already-existed branch shall write no account, consent or auth.register row before a code is accepted", async () => {
+    const { service, audit } = build();
+
+    await service.register(reg); // new account → one Registered row
+    await service.register(reg); // duplicate → no Registered row
+    await flushMicrotasks();
+
+    expect(audit.events.filter((e) => e.type === "Registered")).toEqual([
       {
         type: "Registered",
         sub: expect.stringMatching(/^fake-sub-/),
@@ -319,17 +333,11 @@ describe("AuthService.register — account-exists notice (#207, EARS-23)", () =>
     ]);
   });
 
-  it("EARS-23: when the notice send rejects, the duplicate-register response shall stay identical and not throw", async () => {
-    const idp = new FakeIdpClient();
-    // A mailer that always rejects — the fire-and-forget rejection must be
-    // swallowed, never surfacing on the response path (EARS-16 unchanged).
+  it("003 EARS-23: when the code mail send rejects, the duplicate-register response shall stay identical and not throw", async () => {
     const exploding: Mailer = {
-      sendAccountExistsNotice: () =>
-        Promise.reject(new Error("smtp down")),
-      sendVerificationCodeEmail: () =>
-        Promise.reject(new Error("smtp down")),
-      sendPasswordResetCodeEmail: () =>
-        Promise.reject(new Error("smtp down")),
+      sendReRegistrationCodeEmail: () => Promise.reject(new Error("smtp down")),
+      sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
+      sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
       sendLoginCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendCongressRegistrationConfirmation: () =>
@@ -337,15 +345,10 @@ describe("AuthService.register — account-exists notice (#207, EARS-23)", () =>
       sendCongressSubmissionReceipt: () =>
         Promise.reject(new Error("smtp down")),
     };
-    const service = buildRegisterService({
-      idp,
-      audit: new InMemoryAuthAuditLog(),
-      mailer: exploding,
-      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
-    });
+    const { service } = build(exploding);
 
     await service.register(reg); // new account
-    const res = await service.register(reg); // duplicate → notice rejects
+    const res = await service.register(reg); // duplicate → mail rejects
     await flushMicrotasks();
 
     expect(res).toEqual({ status: "pending_verification" });
@@ -384,7 +387,6 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
       explodingDb as never, // the reset path touches no DB
       undefined,
       audit,
-      new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
       // EARS-35 (#1131): a completed reset now marks the email verified, mirroring
@@ -402,7 +404,8 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     sessions: SessionService,
   ): Promise<string> {
     const login = await idp.passwordLogin(email, oldPassword);
-    if (login.outcome !== "authenticated") throw new Error("login setup failed");
+    if (login.outcome !== "authenticated")
+      throw new Error("login setup failed");
     const { cookie } = await sessions.establish(login.session, fingerprint);
     return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
   }
@@ -441,7 +444,10 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     );
 
     // Force-logout audit is preserved…
-    expect(audit.events).toContainEqual({ type: "PasswordResetCompleted", sub });
+    expect(audit.events).toContainEqual({
+      type: "PasswordResetCompleted",
+      sub,
+    });
     // …and the new session records the same session-created row as login.
     expect(audit.events).toContainEqual({
       type: "LoginSucceeded",
@@ -523,7 +529,6 @@ describe("AuthService.resendEmailVerification — enumeration-safe (#319, EARS-2
       explodingDb as never, // the resend path touches no DB
       undefined,
       audit,
-      new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
       {} as never, // mirror — unused on the resend path
@@ -560,20 +565,32 @@ describe("AuthService.resendEmailVerification — enumeration-safe (#319, EARS-2
     expect(audit.events).toEqual([]);
   });
 
-  it("EARS-25/16: an ALREADY-VERIFIED registrant yields the identical ack with NO code and NO ledger row", async () => {
-    const idp = new FakeIdpClient();
+  it("EARS-25: when a VERIFIED account requests a resend, the system shall issue a fresh login code under the identical ack and append exactly one otp.sent row", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
     const audit = new InMemoryAuthAuditLog();
     const email = "verified@ds.test";
     const created = await idp.createUser({ email, password });
-    // Flip the registrant to verified (mirrors a completed EARS-3 verify).
+    // Flip the account to verified (a re-registrant onto a verified address).
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     const service = buildResendService(idp, audit);
 
     const res = await service.resendEmailVerification(email);
+    await new Promise((r) => setImmediate(r)); // the send runs off the response path
 
+    // Identical body to the unverified and unknown paths (EARS-16)…
     expect(res).toEqual({ status: "resend_requested" });
-    // A verified registrant has no pending verification — no send, no row.
-    expect(audit.events).toEqual([]);
+    // …and the code that fits the state is the LOGIN code (003 EARS-25 amended),
+    // so the code step's «Отправить код ещё раз» is never a dead end.
+    expect(mailer.loginCodeEmails.map((m) => m.to)).toEqual([email]);
+    expect(mailer.verificationCodeEmails).toEqual([]);
+    expect(audit.events).toEqual([
+      { type: "OtpSent", identifier: email, channel: "email" },
+    ]);
+    // The armed challenge accepts the fresh code: the submission signs in.
+    await expect(
+      idp.submitEmailCode(email, FAKE_VALID_CODE),
+    ).resolves.toMatchObject({ verifiedNow: false });
   });
 });
 
@@ -599,11 +616,14 @@ describe("FakeIdpClient.resendEmailVerification — parity with real adapter (#3
     );
   });
 
-  it("resolves false (no send) for an already-verified registrant", async () => {
+  it("resolves true and arms the login challenge for a verified account (003 EARS-25 amended)", async () => {
     const idp = new FakeIdpClient();
     const created = await idp.createUser({ email: "v@ds.test", password });
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
-    await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(false);
+    await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(true);
+    await expect(
+      idp.loginWithEmailOtp("v@ds.test", FAKE_VALID_CODE),
+    ).resolves.not.toBeNull();
   });
 });
 
@@ -618,13 +638,15 @@ describe("AuthService.requestLoginOtp — SMS synthetic-send suppression (003 EA
   const allowingBudget = { tryConsume: () => true } as never;
   const okAudit = { record: () => Promise.resolve() } as never;
 
-  function buildOtpService(synthetic: SyntheticSuppression, idp: FakeIdpClient) {
+  function buildOtpService(
+    synthetic: SyntheticSuppression,
+    idp: FakeIdpClient,
+  ) {
     return new AuthService(
       idp as unknown as IdpClient,
       explodingDb as never, // the otp-request path touches no DB
       undefined,
       okAudit,
-      new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       synthetic,
       {} as never, // mirror — unused
@@ -699,7 +721,6 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
       explodingDb as never, // verify/reset touch no DB directly
       undefined,
       audit,
-      new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
       mirror as never,
@@ -708,37 +729,34 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     );
   }
 
-  it("#1112: a verify with NO mirror row records one VerifyFailed(no-account) and still returns the generic 400", async () => {
+  it("#1112: a verify for an UNKNOWN email records one VerifyFailed(invalid) and returns the generic 400", async () => {
     const idp = new FakeIdpClient();
     const audit = new InMemoryAuthAuditLog();
-    const mirror = { findByEmail: () => Promise.resolve(null) };
-    const service = buildFailObsService(idp as unknown as IdpClient, mirror, audit);
+    const service = buildFailObsService(idp as unknown as IdpClient, {}, audit);
 
     const err = await service
-      .verify({ email: "ghost@ds.test", code: FAKE_VALID_CODE })
+      .verify({ email: "ghost@ds.test", code: FAKE_VALID_CODE }, "fp")
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as BadRequestException).getStatus()).toBe(400);
     expect(audit.events).toEqual([
-      { type: "VerifyFailed", identifier: "ghost@ds.test", reason: "no-account" },
+      { type: "VerifyFailed", identifier: "ghost@ds.test", reason: "invalid" },
     ]);
   });
 
   it("#1112: a verify with a WRONG code records one VerifyFailed(invalid) — and NEVER the plaintext code (EARS-30)", async () => {
     const idp = new FakeIdpClient();
+    await idp.createUser({
+      email: "u@ds.test",
+      password: "Aa1!long-enough-pw",
+    });
     const audit = new InMemoryAuthAuditLog();
-    // A mirror row exists (so the failure is the code, not the account), but the
-    // sub is unknown to the fake IdP so verifyEmail returns false.
-    const mirror = {
-      findByEmail: () => Promise.resolve({ zitadelSub: "sub-unknown" }),
-      markEmailVerified: () => Promise.resolve(),
-    };
-    const service = buildFailObsService(idp as unknown as IdpClient, mirror, audit);
+    const service = buildFailObsService(idp as unknown as IdpClient, {}, audit);
     const code = "ZZZZZZ";
 
     const err = await service
-      .verify({ email: "u@ds.test", code })
+      .verify({ email: "u@ds.test", code }, "fp")
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(BadRequestException);
@@ -747,26 +765,6 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     ]);
     // 003 EARS-30: the recorded payload never carries the one-time code.
     expect(JSON.stringify(audit.events)).not.toContain(code);
-  });
-
-  it("#1112: a SUCCESSFUL verify records the terminal IdentifierVerified row and NO failure row", async () => {
-    const idp = new FakeIdpClient();
-    const created = await idp.createUser({
-      email: "ok@ds.test",
-      password: "Aa1!sufficiently-long",
-    });
-    const audit = new InMemoryAuthAuditLog();
-    const mirror = {
-      findByEmail: () => Promise.resolve({ zitadelSub: created.sub }),
-      markEmailVerified: () => Promise.resolve(),
-    };
-    const service = buildFailObsService(idp as unknown as IdpClient, mirror, audit);
-
-    await service.verify({ email: "ok@ds.test", code: FAKE_VALID_CODE });
-
-    expect(audit.events).toEqual([
-      { type: "IdentifierVerified", sub: created.sub, channel: "email" },
-    ]);
   });
 
   it("#1112: a completePasswordReset with a bad/expired code records one PasswordResetFailed(invalid) — never the code (EARS-30) — and returns the generic 400", async () => {
@@ -800,7 +798,11 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
     // Only the failure row — the throw precedes any revoke/mint, so no
     // PasswordResetCompleted / LoginSucceeded row leaks (EARS-16 unchanged).
     expect(audit.events).toEqual([
-      { type: "PasswordResetFailed", identifier: "reset@ds.test", reason: "invalid" },
+      {
+        type: "PasswordResetFailed",
+        identifier: "reset@ds.test",
+        reason: "invalid",
+      },
     ]);
     expect(JSON.stringify(audit.events)).not.toContain(code);
   });
@@ -819,32 +821,27 @@ describe("AuthService.verify — code normalization (#1109, EARS-3)", () => {
       idp,
       explodingDb as never, // the verify path touches no DB directly
       undefined,
-      { record: () => Promise.resolve() } as never,
-      new FakeMailer(),
+      new InMemoryAuthAuditLog(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
-      mirror as never, // mirror — USED on the verify path
+      mirror as never, // mirror — unused on a failed submission
       {} as never, // sessions — unused
       {} as never, // smsBudget — unused
     );
   }
 
-  it("EARS-3: normalizes a lowercase, whitespace-padded code to trimmed-uppercase before the IdP verify (#1109)", async () => {
+  it("EARS-3: normalizes a lowercase, whitespace-padded code to trimmed-uppercase before the IdP submission (#1109)", async () => {
     const idp = new FakeIdpClient();
-    const mirror = {
-      findByEmail: () => Promise.resolve({ zitadelSub: "sub-1" }),
-      markEmailVerified: () => Promise.resolve(),
-    };
-    const spy = vi.spyOn(idp as unknown as IdpClient, "verifyEmail");
-    const service = buildVerifyService(idp as unknown as IdpClient, mirror);
+    const spy = vi.spyOn(idp as unknown as IdpClient, "submitEmailCode");
+    const service = buildVerifyService(idp as unknown as IdpClient, {});
 
-    // Outcome is a generic 400 (the fake's only valid code is FAKE_VALID_CODE);
-    // we assert the NORMALIZED argument the IdP port receives.
+    // Outcome is a generic 400 (unknown address); we assert the NORMALIZED
+    // argument the IdP port receives.
     await service
-      .verify({ email: "u@ds.test", code: "  pvdc3r  " })
+      .verify({ email: "u@ds.test", code: "  pvdc3r  " }, "fp")
       .catch(() => undefined);
 
-    expect(spy).toHaveBeenCalledWith("sub-1", "PVDC3R");
+    expect(spy).toHaveBeenCalledWith("u@ds.test", "PVDC3R", undefined);
   });
 });
 
@@ -873,7 +870,6 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
       explodingDb as never, // the email otp-request path touches no DB
       undefined,
       audit,
-      mailer,
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
       {} as never, // mirror — unused on this path
@@ -882,7 +878,7 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
     );
   }
 
-  it("003 EARS-34: an existing-UNVERIFIED account gets exactly one branded verification email out-of-band and arms NO otp_email challenge", async () => {
+  it("003 EARS-34: an existing-UNVERIFIED account gets its verification code in the sign-in mail (1-hour lifetime) and arms NO otp_email challenge", async () => {
     const mailer = new FakeMailer();
     const idp = new FakeIdpClient(mailer);
     const email = "unverified-login@ds.test";
@@ -896,10 +892,11 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
     );
 
     expect(res).toEqual({ status: "otp_sent" });
-    // Exactly one §13.3 verification-code email, out-of-band (EARS-29).
-    expect(mailer.verificationCodeEmails).toEqual([
-      { to: email, code: FAKE_VALID_CODE },
+    // The same sign-in mail as a verified account gets, stating 1 hour.
+    expect(mailer.loginCodeEmails).toEqual([
+      { to: email, code: FAKE_VALID_CODE, lifetime: "1h" },
     ]);
+    expect(mailer.verificationCodeEmails).toEqual([]);
     // No otp_email login challenge was armed: a follow-up verify with the VALID
     // code still yields null (nothing to check against).
     await expect(
@@ -962,7 +959,7 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
     // The out-of-band send is off the response path: a total mailer outage
     // (EARS-31) must never differentiate the response or turn into a 500.
     const exploding: Mailer = {
-      sendAccountExistsNotice: () => Promise.reject(new Error("smtp down")),
+      sendReRegistrationCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
       sendAdminLockoutNotice: () => Promise.reject(new Error("smtp down")),
@@ -1001,15 +998,15 @@ describe("AuthService.requestLoginOtp — email unverified out-of-band recovery 
 describe("FakeIdpClient.requestEmailLoginCode — parity with real adapter (003 EARS-34, #1131)", () => {
   const password = "Aa1!sufficiently-long-pw";
 
-  it("resolves 'verification' and dispatches the branded code for an existing UNVERIFIED account", async () => {
+  it("resolves 'verification' and mails the code in the sign-in mail for an existing UNVERIFIED account", async () => {
     const mailer = new FakeMailer();
     const idp = new FakeIdpClient(mailer);
     await idp.createUser({ email: "u@ds.test", password });
     await expect(idp.requestEmailLoginCode("u@ds.test")).resolves.toBe(
       "verification",
     );
-    expect(mailer.verificationCodeEmails).toEqual([
-      { to: "u@ds.test", code: FAKE_VALID_CODE },
+    expect(mailer.loginCodeEmails).toEqual([
+      { to: "u@ds.test", code: FAKE_VALID_CODE, lifetime: "1h" },
     ]);
   });
 
@@ -1077,7 +1074,6 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       explodingDb as never, // the reset path touches no DB directly
       undefined,
       audit,
-      new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
       mirror as never,
@@ -1180,5 +1176,289 @@ describe("FakeIdpClient.markEmailVerified — parity with real adapter (003 EARS
   it("resolves false for an unknown sub", async () => {
     const idp = new FakeIdpClient();
     await expect(idp.markEmailVerified("no-such-sub")).resolves.toBe(false);
+  });
+});
+
+// 003 EARS-41: one email-code submission. The account state — never the caller
+// — picks the Zitadel check; the first accepted code of an unverified account
+// flips the address, writes ONE auth.account.verified row, leaves no
+// pre-verification password and no prior session behind, and signs the user
+// in. Registration values apply only after the code is accepted (EARS-23).
+// Service altitude over the fake IdP, the real SessionService over the
+// in-memory store, a recording mirror and a consent-table stub.
+describe("AuthService — one email-code submission (003 EARS-41/23)", () => {
+  const first = "Aa1!first-pass-long";
+  const second = "Aa1!second-pass-long";
+  const ctx = { ip: "203.0.113.7" };
+
+  function consentDb(held: string[]) {
+    const inserted: Array<{ purpose: string; version: string }> = [];
+    const tx = {
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () =>
+            Promise.resolve(
+              table === users
+                ? [{ id: "user-1" }]
+                : table === consentRecords
+                  ? held.map((purpose) => ({ purpose }))
+                  : [],
+            ),
+        }),
+      }),
+      insert: () => ({
+        values: (rows: Array<{ purpose: string; version: string }>) => {
+          inserted.push(...rows);
+          return Promise.resolve();
+        },
+      }),
+    };
+    return {
+      db: { transaction: (fn: (t: unknown) => Promise<unknown>) => fn(tx) },
+      inserted,
+    };
+  }
+
+  function build(held: string[] = []) {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    const audit = new InMemoryAuthAuditLog();
+    const store = new InMemorySessionStore();
+    const sessions = new SessionService(idp, store, audit);
+    const flips: string[] = [];
+    const mirror = {
+      markEmailVerified: (sub: string) => {
+        flips.push(sub);
+        return Promise.resolve();
+      },
+    };
+    const { db, inserted } = consentDb(held);
+    const service = new AuthService(
+      idp as unknown as IdpClient,
+      db as never,
+      undefined,
+      audit,
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
+      mirror as never,
+      sessions,
+      {} as never,
+    );
+    return { idp, audit, store, sessions, flips, inserted, service, mailer };
+  }
+
+  async function signInByCode(
+    service: AuthService,
+    email: string,
+  ): Promise<{ cookie: string } | null> {
+    await service.requestLoginOtp({ identifier: email, channel: "email" }, ctx);
+    return service.loginWithOtp(
+      { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
+      "fp",
+    );
+  }
+
+  it("003 EARS-41: an unverified account signs in with the code from the sign-in mail — verified, one auth.account.verified row, a session", async () => {
+    const { idp, audit, flips, service } = build();
+    const created = await idp.createUser({
+      email: "late@ds.test",
+      password: first,
+    });
+
+    const result = await signInByCode(service, "late@ds.test");
+
+    expect(result?.cookie).toContain(SESSION_COOKIE_NAME);
+    expect(flips).toEqual([created.sub]);
+    expect(audit.events.filter((e) => e.type === "IdentifierVerified")).toEqual(
+      [{ type: "IdentifierVerified", sub: created.sub, channel: "email" }],
+    );
+    expect((await idp.getUser(created.sub))?.emailVerified).toBe(true);
+  });
+
+  it("003 EARS-41: login by code on an unverified account invalidates the pre-verification password", async () => {
+    const { idp, service } = build();
+    await idp.createUser({ email: "victim@ds.test", password: first });
+
+    await signInByCode(service, "victim@ds.test");
+
+    await expect(idp.passwordLogin("victim@ds.test", first)).resolves.toEqual({
+      outcome: "rejected",
+    });
+  });
+
+  it("003 EARS-41: a credential-less account stays credential-less after its first code (044 EARS-14)", async () => {
+    const { idp, service } = build();
+    const created = await idp.createUser({
+      email: "guest@ds.test",
+      credential: "none",
+      profile: { givenName: "Г", familyName: "Гость" },
+    });
+
+    const result = await signInByCode(service, "guest@ds.test");
+
+    expect(result).not.toBeNull();
+    expect(idp.hasCredential(created.sub)).toBe(false);
+  });
+
+  it("003 EARS-41: every session the account held before the first accepted code is revoked", async () => {
+    const { idp, store, sessions, service } = build();
+    await idp.createUser({ email: "squat@ds.test", password: first });
+    const squatter = await idp.passwordLogin("squat@ds.test", first);
+    if (squatter.outcome !== "authenticated") throw new Error("seed login");
+    const before = await sessions.establish(squatter.session, "fp-attacker");
+    const sid = parseCookies(before.cookie)[SESSION_COOKIE_NAME] as string;
+
+    await signInByCode(service, "squat@ds.test");
+
+    await expect(store.get(sid)).resolves.toBeUndefined();
+  });
+
+  it("003 EARS-41/23: the registration step's password replaces a pre-verification password", async () => {
+    const { idp, service } = build();
+    await idp.createUser({ email: "again@ds.test", password: first });
+
+    const res = await service.verify(
+      {
+        email: "again@ds.test",
+        code: FAKE_VALID_CODE,
+        registration: { password: second, consent: [] },
+      },
+      "fp",
+    );
+
+    expect(res.body).toEqual({ status: "verified" });
+    expect(res.cookie).toContain(SESSION_COOKIE_NAME);
+    expect((await idp.passwordLogin("again@ds.test", second)).outcome).toBe(
+      "authenticated",
+    );
+    expect((await idp.passwordLogin("again@ds.test", first)).outcome).toBe(
+      "rejected",
+    );
+  });
+
+  it("003 EARS-23: a verified password holder who re-registers keeps the password; the submitted one is ignored", async () => {
+    const { idp, flips, service } = build();
+    const created = await idp.createUser({
+      email: "owner@ds.test",
+      password: first,
+    });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    await idp.requestEmailLoginCode("owner@ds.test", "re-registration");
+
+    await service.verify(
+      {
+        email: "owner@ds.test",
+        code: FAKE_VALID_CODE,
+        registration: { password: second, consent: [] },
+      },
+      "fp",
+    );
+
+    expect(flips).toEqual([]); // already verified: no flip, no verified row
+    expect((await idp.passwordLogin("owner@ds.test", first)).outcome).toBe(
+      "authenticated",
+    );
+    expect((await idp.passwordLogin("owner@ds.test", second)).outcome).toBe(
+      "rejected",
+    );
+  });
+
+  it("003 EARS-23: a verified account without a password gets the submitted one after the code", async () => {
+    const { idp, service } = build();
+    const created = await idp.createUser({
+      email: "pwless@ds.test",
+      credential: "none",
+      profile: { givenName: "Г", familyName: "Гость" },
+    });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    await idp.requestEmailLoginCode("pwless@ds.test", "re-registration");
+
+    await service.verify(
+      {
+        email: "pwless@ds.test",
+        code: FAKE_VALID_CODE,
+        registration: { password: second, consent: [] },
+      },
+      "fp",
+    );
+
+    expect((await idp.passwordLogin("pwless@ds.test", second)).outcome).toBe(
+      "authenticated",
+    );
+  });
+
+  it("003 EARS-23: the form consent is recorded after the code only for purposes the account does not hold", async () => {
+    const { idp, inserted, service } = build(["congress-personal-data", "tos"]);
+    await idp.createUser({
+      email: "congress@ds.test",
+      credential: "none",
+      profile: { givenName: "Г", familyName: "Гость" },
+    });
+
+    await service.verify(
+      {
+        email: "congress@ds.test",
+        code: FAKE_VALID_CODE,
+        registration: {
+          password: second,
+          consent: [
+            { purpose: "tos", version: "2026-10" },
+            { purpose: "medical-worker-declaration", version: "2026-09" },
+          ],
+        },
+      },
+      "fp",
+    );
+
+    expect(inserted).toEqual([
+      {
+        userId: "user-1",
+        purpose: "medical-worker-declaration",
+        version: "2026-09",
+      },
+    ]);
+  });
+
+  it("003 EARS-23/41: a refused code writes nothing — no password, no consent, no flip", async () => {
+    const { idp, inserted, flips, service } = build();
+    await idp.createUser({ email: "wrong@ds.test", password: first });
+
+    const err = await service
+      .verify(
+        {
+          email: "wrong@ds.test",
+          code: "ZZZZZZ",
+          registration: {
+            password: second,
+            consent: [{ purpose: "tos", version: "2026-10" }],
+          },
+        },
+        "fp",
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(inserted).toEqual([]);
+    expect(flips).toEqual([]);
+    expect((await idp.passwordLogin("wrong@ds.test", first)).outcome).toBe(
+      "authenticated",
+    );
+  });
+
+  it("003 EARS-41/16: an unknown identifier and a wrong code are the same null on the login path", async () => {
+    const { idp, service } = build();
+    await idp.createUser({ email: "known@ds.test", password: first });
+
+    const unknown = await service.loginWithOtp(
+      { identifier: "nobody@ds.test", code: FAKE_VALID_CODE, channel: "email" },
+      "fp",
+    );
+    const wrong = await service.loginWithOtp(
+      { identifier: "known@ds.test", code: "ZZZZZZ", channel: "email" },
+      "fp",
+    );
+
+    expect(unknown).toBeNull();
+    expect(wrong).toBeNull();
   });
 });

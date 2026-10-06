@@ -2148,6 +2148,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DoctorRegisterPublicController_verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2592,6 +2608,21 @@ export interface components {
             medicalWorkerDeclaration: true;
             password: string;
         };
+        DoctorVerifyRequestDto: {
+            code: string;
+            /** Format: email */
+            email: string;
+            registration?: {
+                /** @default [] */
+                consent: {
+                    purpose: string;
+                    version: string;
+                }[];
+                /** @constant */
+                medicalWorkerDeclaration: true;
+                password: string;
+            };
+        };
         EligibleExpertUserListDto: {
             data: {
                 displayName: string | null;
@@ -2894,6 +2925,14 @@ export interface components {
             code: string;
             /** Format: email */
             email: string;
+            registration?: {
+                /** @default [] */
+                consent: {
+                    purpose: string;
+                    version: string;
+                }[];
+                password: string;
+            };
         };
         VerifyResendRequestDto: {
             captchaToken?: string;
@@ -6180,6 +6219,27 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DoctorRegisterRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DoctorRegisterPublicController_verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoctorVerifyRequestDto"];
             };
         };
         responses: {

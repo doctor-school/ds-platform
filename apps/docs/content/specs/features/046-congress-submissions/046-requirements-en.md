@@ -74,7 +74,7 @@ The list row of EARS-11 shows, after the kind, in one neuter form for every kind
 ## Constraints
 
 - A submission needs an active `registrations` row for (account, event) — the 044 site form, the 044 desk or the 044 EARS-16 platform path (`packages/db/src/schema/registrations.ts`, unique `(user_id, event_id)`).
-- Letter links to the section are absolute URLs on the doctor storefront origin, which the API reads from the required setting `MAILER_DOCTOR_BASE_URL`; the only mailer origin today, `MAILER_PORTAL_BASE_URL` (`apps/api/src/config/env.schema.ts`), is the Academy and cannot serve them. Values and the root-domain cut-over: `046-design.md` («Letters»).
+- Letter links to the section are absolute URLs on the doctor storefront origin, which the API reads from the required setting `MAILER_DOCTOR_BASE_URL` (`apps/api/src/config/env.schema.ts`). Values and the root-domain cut-over: `046-design.md` («Letters»).
 - The cabinet path `/account/congress` is inside the account family that `@ds/auth-flow` already admits as a return target (`packages/auth-flow/src/return-target.ts`, `parseAccountReturnTarget`, #1987); no new return shape and no login change is needed.
 - Event-scoped roles are bound in `event_role_grants` (`packages/db/src/schema/event-role-grants.ts`, `EVENT_SCOPED_ROLES` plus its CHECK); the coarse role stays in the Zitadel project-roles claim (`apps/api/src/authz/authz.types.ts`).
 - Admin mutations declare `revalidate: "live"` (ADR-0001 §10); A1 names which grant is revalidated and knows only `event-registrar` besides `platform_admin` and `pd_officer`.

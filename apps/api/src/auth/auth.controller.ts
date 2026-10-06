@@ -210,7 +210,7 @@ export class AuthController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-6", "EARS-7", "EARS-8"],
+    tests: ["EARS-6", "EARS-7", "EARS-8", "EARS-41"],
   })
   async loginWithOtp(
     @Body() dto: OtpVerifyDto,
@@ -315,31 +315,50 @@ export class AuthController {
     return { status: "logged_out" };
   }
 
+  /**
+   * 003 EARS-3/41: submit the registration code step. Public (the code is the
+   * authenticator). On success it sets the `__Host-` cookie — the session comes
+   * from the code — and returns a token-free body; every failure is the same
+   * generic 400 (EARS-16). `@TimingEqualized` — the unknown, verified and
+   * unverified branches make different IdP round-trips, so the latency floor
+   * keeps a wrong code from disclosing existence or state (EARS-41, ≤50 ms).
+   */
   @Post("verify")
   @Public()
   @RateLimited()
+  @TimingEqualized()
   @HttpCode(200)
   @Authz({
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-3", "EARS-4"],
+    tests: ["EARS-3", "EARS-4", "EARS-41"],
   })
-  verify(@Body() dto: VerifyRequestDto): Promise<VerifyResponse> {
-    return this.auth.verify(dto);
+  async verify(
+    @Body() dto: VerifyRequestDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<VerifyResponse> {
+    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    const { cookie, body } = await this.auth.verify(dto, fingerprint);
+    reply.header("set-cookie", cookie);
+    return body;
   }
 
   /**
-   * EARS-25: resend the registration email verification code (#319). Public
-   * (unauthenticated entry point — the existence-agnostic `/verify` screen,
-   * EARS-24, calls it without the held password). The decorators mirror the other
+   * 003 EARS-25 (amended): resend from the registration code step (#319).
+   * Public (unauthenticated entry point — the code step calls it without the
+   * held values). The decorators mirror the other
    * abuse-prone unauthenticated message-spending surfaces (`password/reset`):
    * `@RateLimited` (EARS-13), `@TimingEqualized` (EARS-16's ≤50 ms budget), and
    * `@BotProtected("verify-resend")` (EARS-17; the guard no-ops until a provider
    * is configured). The body is the same `resend_requested` acknowledgement
-   * whether or not the identifier exists or is already verified — a code is
-   * re-issued only for an existing, unverified registrant, but the response,
-   * status, and timing disclose nothing (enumeration-resistant, EARS-16).
+   * whether or not the identifier exists or is already verified — the code that
+   * fits the account state is re-issued (verification code when unverified,
+   * login code when verified), but the response, status, and timing disclose
+   * nothing (enumeration-resistant, EARS-16).
    */
   @Post("verify/resend")
   @Public()

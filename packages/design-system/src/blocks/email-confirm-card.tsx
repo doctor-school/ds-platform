@@ -3,151 +3,97 @@
 import * as React from "react";
 import { useForm, type Resolver } from "react-hook-form";
 
-import { Alert } from "../primitives/alert";
-import { Button } from "../primitives/button";
-import { Form, FormField, FormError } from "../primitives/form";
-import { OtpField } from "../primitives/fields";
-import { AUTH_EYEBROW, AuthCard } from "./auth-card";
-import { useResendCountdown } from "./use-resend-countdown";
+import { FormError, FormField, Form } from "../primitives/form";
+import { AuthCard } from "./auth-card";
+import { OtpFocusScreen } from "./otp-focus-screen";
 
 /**
- * `<EmailConfirmCard>` (#1666 slice B) — the ONE canonical post-registration
- * email-confirmation composition both storefronts mount (AGENTS.md §6 «Cross-front
- * capability reuse before invention», ADR-0013 A1). Lifted VERBATIM out of
- * `apps/portal/app/verify/page.tsx` (#131 → #175 → #207 → #267 → #326 → #904):
- * same elements, order, classes, `data-testid`s and state presentation — only the
- * app glue was replaced by props.
+ * `<EmailConfirmCard>` — the post-registration code step both storefronts mount
+ * on `/verify` (003 EARS-24 amended, EARS-42; ADR-0013 A1). It is the canvas
+ * «ШАГ КОДА» (`design-source/auth.dc.html` 64-85) in its own card: heading
+ * «Проверьте почту», «Мы отправили код на <address as typed>.», the SAME
+ * `<OtpFocusScreen>` the sign-in card draws once a code was sent, and the
+ * «← Изменить почту» back control. A new and an already-registered address get
+ * the identical step — it never branches on existence (003 EARS-16), and there
+ * is no co-equal «Уже регистрировались?» block any more.
  *
- * The surface is EXISTENCE-AGNOSTIC by construction (EARS-16): the BFF returns an
- * identical `pending_verification` for a brand-new and an already-registered
- * address, so the block renders two CO-EQUAL affordances and never branches on
- * account existence — (a) enter the emailed code, (b) sign in / reset password for
- * the owner who is already registered. The per-case routing happens in the inbox or
- * by the user's own choice, never by this form disclosing anything.
+ * What lives HERE: the `<AuthCard>` frame with the #1035 `<h1>` landmark, the
+ * one operation-error plate above the title (canvas 53-56), the RHF code form
+ * with the #175 guarded auto-submit, and the resend wiring the step draws.
  *
- * What lives HERE (presentation + form mechanics):
- *   • the `<AuthCard>` frame with the #1035 `<h1>` landmark and the masked
- *     destination in the description,
- *   • the EARS-3 code form: slotted 6-char alphanumeric `<OtpField>` with the #175
- *     auto-submit + in-flight guard, the `Alert` success row and the error slot,
- *   • the #267 resend control on the shared `useResendCountdown` timer (restarted by
- *     a `resendNonce` bump, clearing the now-stale code without a remount) and the
- *     #326 neutral acknowledgement slot,
- *   • the already-registered section with its two co-equal actions.
- *
- * What stays in the HOST app (the blocks-tier contract — see `./index.ts`): copy,
- * i18n, the zod resolver, BFF transport (including the EARS-25 dedicated resend
- * endpoint), the identifier and its masked label,
- * the auto-login replay, routing, and the bot-protection element (a slot).
+ * What stays in the HOST: copy, the resolver, BFF transport (the code submit
+ * and the EARS-25 resend), the destination, routing (including where
+ * «back» goes) and the bot-protection element (a slot).
  */
 
-/** The registration verification code is a FIXED 6 characters (Zitadel default) —
- * and ALPHANUMERIC (the email code is not digits-only). `<OtpField>` uses its slotted
- * variant, which accepts letters (no digit-only filter); #211 also moved the 8-char
- * login OTP onto the same slotted look. */
-export const EMAIL_CONFIRM_OTP_LENGTH = 6;
-
-/**
- * Resend cooldown (#227/#267). Bumping the nonce restarts the live countdown (the
- * same `useResendCountdown` timer the `<OtpFocusScreen>` block uses) without a
- * remount, and clears the now-stale typed code — matching the proven `/login` pattern.
- */
+/** Resend cooldown (#227/#267) — the same timer the sign-in code step runs. */
 export const EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS = 30;
 
-/** EARS-3 verification values — the address is carried, only the code is typed. */
+/** The address is carried, only the code is typed. */
 export interface EmailConfirmValues {
   email: string;
   code: string;
 }
 
-/**
- * Every visible string the block renders. No copy lives in the package (the #235
- * i18n contract); the masked destination is host-derived and interpolated here.
- */
+/** Every visible string the block renders. No copy lives in the package (#235). */
 export interface EmailConfirmCardCopy {
   title: React.ReactNode;
   /** Rich description — the host may embed markup around the destination. */
   description: (destination: string) => React.ReactNode;
-  newAccountHeading: string;
   codeLabel: string;
   submit: React.ReactNode;
   /** Success row shown once the server accepted the code. */
   codeAccepted: React.ReactNode;
   resend: React.ReactNode;
   resendCountdown: (seconds: number) => React.ReactNode;
-  existingAccountHeading: string;
-  existingAccountHint: React.ReactNode;
-  goToSignIn: React.ReactNode;
-  goToReset: React.ReactNode;
+  /** «← Изменить почту». */
+  back: React.ReactNode;
 }
 
-/** #267/EARS-25 resend wiring — omitted entirely when there is nothing to resend to. */
+/** #267/EARS-25 resend wiring. */
 export interface EmailConfirmResendProps {
   /** Bumped by the host on each SUCCESSFUL resend — restarts the cooldown. */
   nonce: number;
   /** Fire-and-forget: the host's protected resend bumps `nonce` on success. */
   onResend: () => void;
-  /** Already-localized resend/captcha error. */
+  /** Already-localized resend/captcha error — said in the one plate. */
   error?: React.ReactNode | undefined;
   /** Host-side pending signal (an in-flight captcha challenge). */
   pending?: boolean | undefined;
-  /** #326 neutral, enumeration-safe acknowledgement (host-composed copy). */
+  /** The after-resend notice (host-composed copy, canvas 81-83). */
   notice?: React.ReactNode | undefined;
-  /** The host's bot-protection element, where the page rendered it. */
+  /** The host's bot-protection element. */
   captchaSlot?: React.ReactNode | undefined;
 }
 
 export interface EmailConfirmCardProps {
   copy: EmailConfirmCardCopy;
-  /**
-   * The address the code was sent to — seeds the non-rendered `email` field the
-   * request carries. `undefined` on a bare deep-link (#904).
-   */
+  /** The address the code was sent to — seeds the non-rendered `email` field. */
   email?: string | undefined;
-  /** The already-masked destination label the description interpolates. */
+  /** The destination exactly as typed (#2607) the description interpolates. */
   destination: string;
   /** App-owned RHF resolver (localized messages + the `@ds/schemas` SSOT). */
   resolver: Resolver<EmailConfirmValues>;
   /** Awaited by RHF, so it drives `isSubmitting`. Transport + routing are the host's. */
   onSubmit: (values: EmailConfirmValues) => Promise<void> | void;
-  /**
-   * A submit blocked by validation (#904): the host decides the message, since only
-   * it knows whether the identifier is missing or the code is bad.
-   */
+  /** A submit blocked by validation (#904): the host decides the message. */
   onInvalid?: (() => void) | undefined;
-  /** Already-localized verification error. */
+  /** Already-localized code error. */
   error?: React.ReactNode | undefined;
   /** Server-confirmed acceptance — never set optimistically. */
   succeeded?: boolean | undefined;
-  /** Targets for the already-registered owner's two co-equal actions. */
-  links: { login: string; reset: string };
-  /**
-   * Host anchor renderer — the apps pass Next.js `<Link>` so client-side navigation
-   * (and prefetch) survives the lift. Defaults to a plain `<a>`.
-   */
-  renderLink?: (props: {
-    href: string;
-    children: React.ReactNode;
-  }) => React.ReactNode;
+  /** «← Изменить почту» — the host returns to its registration form. */
+  onBack: () => void;
   /** Card glyph (app-supplied — the package carries no icon set). */
   icon?: React.ReactNode | undefined;
-  /** Omit to hide the resend control (nothing to resend to — a bare deep-link). */
-  resend?: EmailConfirmResendProps | undefined;
-  /** Fixed code length; defaults to the 6-char registration code. */
-  otpLength?: number;
+  resend: EmailConfirmResendProps;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;
-  /**
-   * The `data-testid` map (#2027 PR 1.7). Every key defaults to the id this block
-   * has always shipped, so a host that passes nothing keeps its journeys; a host
-   * that renames one does it here, in one map, rather than around the block.
-   */
+  /** The `data-testid` map — every key defaults to the shipped id. */
   testIds?: Partial<EmailConfirmCardTestIds> | undefined;
   /**
    * 021 EARS-2 — the gate-context plate above the card, the slot the
-   * registration door carries (`RegisterCard.returnContextSlot`), so the step
-   * that follows it keeps what the visitor came for. Absent → NOTHING renders
-   * (EARS-3 honest-empty rule).
+   * registration door carries. Absent → NOTHING renders (EARS-3 honest-empty).
    */
   returnContextSlot?: React.ReactNode | undefined;
 }
@@ -164,11 +110,10 @@ export interface EmailConfirmCardTestIds {
   submit: string;
   resend: string;
   resendNotice: string;
-  goToLogin: string;
-  goToReset: string;
+  back: string;
 }
 
-/** The ids the block shipped with (#1666) — the defaults of `testIds`. */
+/** The ids the block ships with — the defaults of `testIds`. */
 export const EMAIL_CONFIRM_TEST_IDS: EmailConfirmCardTestIds = {
   root: undefined,
   returnContext: undefined,
@@ -177,17 +122,8 @@ export const EMAIL_CONFIRM_TEST_IDS: EmailConfirmCardTestIds = {
   submit: "verify-submit",
   resend: "verify-resend",
   resendNotice: "verify-resend-notice",
-  goToLogin: "verify-go-to-login",
-  goToReset: "verify-go-to-reset",
+  back: "verify-back",
 };
-
-const defaultRenderLink = ({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) => <a href={href}>{children}</a>;
 
 export function EmailConfirmCard({
   copy,
@@ -198,37 +134,28 @@ export function EmailConfirmCard({
   onInvalid,
   error,
   succeeded = false,
-  links,
-  renderLink = defaultRenderLink,
+  onBack,
   icon,
   resend,
-  otpLength = EMAIL_CONFIRM_OTP_LENGTH,
   resendCooldownSeconds = EMAIL_CONFIRM_RESEND_COOLDOWN_SECONDS,
   testIds,
   returnContextSlot,
 }: EmailConfirmCardProps) {
   const form = useForm<EmailConfirmValues>({
     resolver,
-    // Seed the address from the host (registration is email-only, #202); the field
-    // is not user-editable here — they only type the code. A host may resolve the
-    // address after mount, so it is also seeded reactively below once resolved.
-    // Spread-if-present rather than `email: undefined`: with
-    // `exactOptionalPropertyTypes` an explicit `undefined` is not assignable to the
-    // `string` field. RHF reads both as "no default", so the render is unchanged.
+    // Spread-if-present: with `exactOptionalPropertyTypes` an explicit
+    // `undefined` is not assignable to the `string` field.
     defaultValues: { ...(email === undefined ? {} : { email }), code: "" },
   });
 
   // An address the host resolves after mount is pushed into the non-rendered
-  // `email` field once known — otherwise the submit carries an empty identifier
-  // and the code never reaches the api.
+  // `email` field once known — otherwise the submit carries an empty identifier.
   React.useEffect(() => {
     if (email) form.setValue("email", email);
     // Keyed only on the resolved address — `form` is a stable useForm handle.
   }, [email]);
 
-  // On a successful resend (nonce bump) clear the now-superseded typed code, so the
-  // user re-enters the fresh code — same explicit reset /login's verify step uses.
-  const resendNonce = resend?.nonce ?? 0;
+  // On a successful resend (nonce bump) clear the now-superseded typed code.
   const isInitialResend = React.useRef(true);
   React.useEffect(() => {
     if (isInitialResend.current) {
@@ -237,11 +164,9 @@ export function EmailConfirmCard({
     }
     form.resetField("code");
     // Keyed only on the resend signal — `form` is a stable useForm handle.
-  }, [resendNonce]);
+  }, [resend.nonce]);
 
-  // Auto-submit when the fixed-length OTP completes. Guard against a double
-  // network call if `onComplete` and a manual button click race, or if
-  // `onComplete` re-fires: skip while a submit is already in flight.
+  // #175 — auto-submit on the sixth character, guarded against a double call.
   const submit = form.handleSubmit(onSubmit, onInvalid);
   const onComplete = React.useCallback(() => {
     if (form.formState.isSubmitting) return;
@@ -249,11 +174,9 @@ export function EmailConfirmCard({
   }, [form.formState.isSubmitting, submit]);
 
   const ids = { ...EMAIL_CONFIRM_TEST_IDS, ...testIds };
-  // Canvas 53-56 — ONE operation-level plate above the title on every auth
-  // screen: a refused code and a refused resend (`errText()` «повтор») are both
-  // said there, never in two places at once. The code failure wins while both
-  // are live, because it is the one the visitor just acted on.
-  const operationError = error ?? resend?.error;
+  // Canvas 53-56 — ONE operation plate: the code failure wins over a resend
+  // failure while both are live, because it is the one just acted on.
+  const operationError = error ?? resend.error;
 
   const card = (
     <AuthCard
@@ -266,123 +189,49 @@ export function EmailConfirmCard({
           </FormError>
         ) : null
       }
-      // #1035: the page title is the document's single h1 (a11y landmark) — same
-      // root cause + fix as #1033/#1034 on /login /register /reset. Bare h1 —
-      // Tailwind preflight makes it inherit the CardTitle styling, so the render is
-      // pixel-identical.
+      // #1035: the page title is the document's single h1 (a11y landmark).
       title={<h1>{copy.title}</h1>}
       description={copy.description(destination)}
-      // Canvas 213 — 24px between the code group and the already-registered rule.
-      contentClassName="flex flex-col gap-6"
     >
-      {/* (a) New-registrant path — enter the email code (unchanged auto-submit
-            + post-verify auto-login). A co-equal affordance, not the only one.
-            Canvas 214 — one 16px column: eyebrow, field, banner, submit, resend. */}
-      <section
-        className="flex flex-col gap-4"
-        aria-label={copy.newAccountHeading}
-      >
-        <h2 className={AUTH_EYEBROW}>{copy.newAccountHeading}</h2>
-        <Form {...form}>
-          {/* Same pre-hydration rule as `<LoginCard>`: a native submit before
-              the bundle loads must POST, never GET the one-time code into the
-              URL and the access logs. */}
-          <form
-            method="post"
-            onSubmit={submit}
-            className="flex flex-col gap-4"
-            noValidate
-          >
-            <FormField
-              control={form.control}
-              name="code"
-              render={({ field }) => (
-                <OtpField
-                  field={field}
-                  length={otpLength}
-                  variant="slotted"
-                  charset="alphanumeric"
-                  label={copy.codeLabel}
-                  onComplete={onComplete}
-                />
-              )}
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name="code"
+          render={({ field }) => (
+            <OtpFocusScreen
+              field={field}
+              codeLabel={copy.codeLabel}
+              submitLabel={copy.submit}
+              backLabel={copy.back}
+              resendLabel={copy.resend}
+              resendCountdownLabel={copy.resendCountdown}
+              cooldownSeconds={resendCooldownSeconds}
+              resendNonce={resend.nonce}
+              isSubmitting={form.formState.isSubmitting}
+              resendPending={resend.pending ?? false}
+              succeeded={succeeded}
+              succeededLabel={copy.codeAccepted}
+              notice={resend.notice}
+              onComplete={onComplete}
+              onSubmit={submit}
+              onResend={resend.onResend}
+              onBack={onBack}
+              captchaSlot={resend.captchaSlot}
+              testIds={{
+                submit: ids.submit,
+                resend: ids.resend,
+                back: ids.back,
+                notice: ids.resendNotice,
+                succeeded: ids.succeeded,
+              }}
             />
-            {/* Canvas success row: confirms acceptance while the host's auto-login
-                  replay completes. Adopts the DS `Alert` success variant (✓ +
-                  success-tint frame, role=status) — no bespoke callout. */}
-            {succeeded ? (
-              <Alert variant="success" data-testid={ids.succeeded}>
-                {copy.codeAccepted}
-              </Alert>
-            ) : null}
-            <Button
-              type="submit"
-              className="w-full"
-              loading={form.formState.isSubmitting}
-              data-testid={ids.submit}
-            >
-              {copy.submit}
-            </Button>
-          </form>
-        </Form>
-        {/* #267 resend-with-cooldown, wired by the host to the real EARS-25
-              endpoint. Only meaningful when a destination is known; on a bare
-              deep-link there is nothing to resend to, so the host omits the whole
-              `resend` group and the control is hidden rather than firing an empty
-              request. The countdown reuses the SAME timer the focus-screen block
-              runs. */}
-        {resend ? (
-          <EmailConfirmResend
-            copy={copy}
-            cooldownSeconds={resendCooldownSeconds}
-            testIds={ids}
-            {...resend}
-          />
-        ) : null}
-      </section>
-
-      {/* (b) Already-registered owner's path — prominent, co-equal sign-in /
-            reset actions (NOT a footnote link). The screen never branches on
-            account existence; the owner's path is also reinforced out-of-band by
-            the EARS-23 notice email. Canvas 236-241: a 2px hairline rule, 22px
-            above a 14px column, the two actions sharing one wrapping row. At
-            390px the canvas keeps them in ONE row (147px each) and wraps the
-            longer label inside its button; the shell's 24px mobile gutter leaves
-            this row 290px (canvas 306px), so the floor is `min-w-32` (128px)
-            rather than the canvas 140px — the row, not the label, stays put. */}
-      <section
-        className="flex flex-col gap-3.5 border-t-2 border-hairline pt-5.5"
-        aria-label={copy.existingAccountHeading}
-      >
-        <h2 className={AUTH_EYEBROW}>{copy.existingAccountHeading}</h2>
-        {/* Canvas 237 — 13px / 1.5, the `caption` step of the type scale. */}
-        <p className="text-caption leading-normal text-muted-foreground">
-          {copy.existingAccountHint}
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button
-            asChild
-            variant="default"
-            className="min-w-32 flex-1 whitespace-normal"
-            data-testid={ids.goToLogin}
-          >
-            {renderLink({ href: links.login, children: copy.goToSignIn })}
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="min-w-32 flex-1 whitespace-normal"
-            data-testid={ids.goToReset}
-          >
-            {renderLink({ href: links.reset, children: copy.goToReset })}
-          </Button>
-        </div>
-      </section>
+          )}
+        />
+      </Form>
     </AuthCard>
   );
 
-  // Supplied or absent, never an empty frame (021 EARS-2 / EARS-3) — the same
-  // column and gap the registration door stacks its plate in.
+  // Supplied or absent, never an empty frame (021 EARS-2 / EARS-3).
   if (!returnContextSlot) return card;
   return (
     <div className="flex w-full flex-col gap-4.5">
@@ -390,69 +239,6 @@ export function EmailConfirmCard({
         {returnContextSlot}
       </div>
       {card}
-    </div>
-  );
-}
-
-/**
- * The #267 resend row: shared cooldown timer, captcha slot and #326 ack. Its
- * failure is said in the card's one operation plate (canvas 53-56), not here.
- */
-function EmailConfirmResend({
-  copy,
-  cooldownSeconds,
-  testIds,
-  nonce,
-  onResend,
-  pending = false,
-  notice,
-  captchaSlot,
-}: EmailConfirmResendProps & {
-  copy: EmailConfirmCardCopy;
-  cooldownSeconds: number;
-  testIds: EmailConfirmCardTestIds;
-}) {
-  const remaining = useResendCountdown(cooldownSeconds, nonce);
-  const resendDisabled = remaining > 0;
-
-  return (
-    <div className="flex flex-col gap-2">
-      {captchaSlot}
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          disabled={resendDisabled || pending}
-          loading={pending}
-          onClick={onResend}
-          data-testid={testIds.resend}
-          // `tabular-nums` — fixed-width digits so the countdown label does not
-          // jitter as the seconds tick down (#227/#267 owner finding). `min-w-0` +
-          // `whitespace-normal` override the Button base `whitespace-nowrap` so the
-          // label wraps instead of overflowing the card at any width (#542).
-          // `font-extrabold` — canvas 406 draws the resend label at 13px / 800;
-          // the `sm` size already gives the 13px `caption` step.
-          className="min-w-0 whitespace-normal text-right font-extrabold tabular-nums"
-        >
-          {resendDisabled ? copy.resendCountdown(remaining) : copy.resend}
-        </Button>
-      </div>
-      {/* #326: neutral, enumeration-safe confirmation — NOT destructive (it is a
-            success ack, not an error). Identical copy in every case; the
-            account-exists fact is disclosed out-of-band by email, never here.
-            Canvas 231 draws it at 12.5px / 1.5; the type scale has no 12.5px
-            step, so it takes the nearest one, `caption` (13px). */}
-      {notice && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="text-caption leading-normal text-muted-foreground"
-          data-testid={testIds.resendNotice}
-        >
-          {notice}
-        </p>
-      )}
     </div>
   );
 }

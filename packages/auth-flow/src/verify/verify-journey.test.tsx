@@ -139,7 +139,11 @@ beforeEach(() => {
     }),
   );
   clearPendingRegistration();
-  setPendingRegistration({ identifier: EMAIL, password: "Sup3rSecret!" });
+  setPendingRegistration({
+    identifier: EMAIL,
+    registration: { password: "Sup3rSecret!", consent: [] },
+    form: { email: EMAIL, password: "Sup3rSecret!", promoCode: "", consents: {} },
+  });
   document.elementFromPoint = () => document.body;
 });
 

@@ -96,8 +96,8 @@ never touches it.
 
 Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
 
-**Mail link origins (api).** `MAILER_PORTAL_BASE_URL` (optional) is the Academy
-origin of the sign-in / verification links. `MAILER_DOCTOR_BASE_URL` is
+**Mail link origin (api).** The code mails (sign-in, verification,
+re-registration, reset) carry no link. `MAILER_DOCTOR_BASE_URL` is
 **required** — the api refuses to boot without it, like `DATABASE_URL` — and is
 the doctor storefront origin every congress letter links to
 (`{origin}/account/congress`: the 046 submission letters and the 044
@@ -968,18 +968,7 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    pnpm deploy:smoke                                    # PORTAL_HOST already academy.
    ```
 
-5. **On-box env — only after step 4 is verified green.** In
-   `/etc/ds-platform/api.env` set
-   `MAILER_PORTAL_BASE_URL=https://academy.doctor.school`, then restart the api.
-   This moves **newly sent** e-mail links (Zitadel OTP `sendCode` template + the
-   BFF duplicate-registration notice) onto the new host.
-
-   This is last **on purpose**: flip it before the deploy and mail sent in the gap
-   points at a host with DNS but no Caddy site block and no ACME certificate — the
-   TLS handshake simply fails, and an OTP link with a real expiry clock is dead on
-   arrival. Once `academy.` serves, the window is closed in both directions.
-
-6. **External blackbox probe — retarget it, in the `bbm` repo.** The portal's
+5. **External blackbox probe — retarget it, in the `bbm` repo.** The portal's
    availability probe is **not** derived from this repository and no CI guard here
    can see it. Skipping this step is what left the probe on `app.doctor.school` for
    the twelve days after #1171 and turned the #1173 retirement into a firing
@@ -1037,7 +1026,7 @@ failure), not a redirect.
 
 Retiring a portal host in future follows the same shape: repo config first, then
 DNS, then the captcha domain list, then the Zitadel `PUT`, then the deploy — and
-then the blackbox probe (step 6). The probe is last and easiest to forget, and it
+then the blackbox probe (step 5). The probe is last and easiest to forget, and it
 is the one step whose omission is silent at the time and loud two weeks later: the
 retired host keeps answering until DNS is actually removed, so a stale probe stays
 green and the miss surfaces only when the name dies.
@@ -1148,13 +1137,9 @@ Order:
    pnpm smoke:prod                                  # doctor / + TLS probes included
    ```
 
-   **What this roll-out does NOT re-point:** `MAILER_PORTAL_BASE_URL` stays
-   `academy.doctor.school`, so every transactional link (verification, OTP,
-   notifications) keeps pointing at the academy origin even after a doctor
-   registration surface ships on `new.doctor.school` (#1558/021). Re-pointing it
-   is a separate, deliberate decision — not part of the routing change. The
-   congress letters use their own key, `MAILER_DOCTOR_BASE_URL` (runtime
-   contract above), which already points at `new.doctor.school`.
+   **Mail links:** the code mails carry no link, so nothing in them needs
+   re-pointing. The congress letters use their own key, `MAILER_DOCTOR_BASE_URL`
+   (runtime contract above), which already points at `new.doctor.school`.
 
 5. **Release-gate sequencing.** Both `apps/doctor` routes are still `deferred` in
    `tools/lint/prod-surface-manifest.yaml` and #1440's "no public placeholder on

@@ -1,29 +1,31 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import type { DoctorVerifyRequest, VerifyRequest } from "@ds/schemas";
 import {
   botProtectionFailureMessage,
   BotProtectionField,
+  clearPendingRegistration,
   EmailConfirmCard,
   isBotProtectionRejected,
   isBotProtectionRequired,
-  maskDestination,
-  takePendingRegistration,
+  peekPendingRegistration,
   useBotProtectedAction,
   useResendCooldown,
   type EmailConfirmCardCopy,
   type EmailConfirmCardProps,
   type EmailConfirmCardTestIds,
   type EmailConfirmValues,
+  type PendingRegistrationValues,
 } from "@ds/design-system/blocks";
 
 import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeResolvedReturnTarget } from "../client/return-completion";
 import { resolveAuthFlowCopy } from "../copy";
+import { withBoldDestination } from "../copy/destination";
 import { authErrorMessage } from "../errors";
 import { resolveVerificationCode } from "../fields";
 import { makeResolver } from "../form-resolver";
@@ -33,31 +35,30 @@ import {
   landingAfterSignIn,
   type CompletionTarget,
 } from "../client/signed-in-landing";
+import { consentRefusalMessage } from "../register/consent-refusal";
 import { withReturnTarget } from "../return-target-href";
 import { VerifyGlyph } from "./verify-glyph";
 
 /**
- * The ONE confirmation step of the platform (#2027 PR 1.7, tech spec §2.6 rows
- * 65–77) — the canvas «Подтверждение» screen (`design-source/auth.dc.html`
- * 212-244), drawn by the design-system `<EmailConfirmCard>` block.
+ * The code step after the registration form (003 EARS-24 amended, EARS-42) —
+ * the canvas «ШАГ КОДА» (`design-source/auth.dc.html` 64-85), drawn by the
+ * design-system `<EmailConfirmCard>` around the SAME `<OtpFocusScreen>` the
+ * sign-in card shows once a code was sent.
  *
- * Both storefronts confirm an address through THIS component, on their own
- * `/verify` route (`VerifyRoute` → `VerifyEntry`, 003 EARS-24). What differs
- * between them is data — the host config and the two targets below — never a
- * branch.
+ * Both storefronts reach it on their own `/verify` route (`VerifyRoute` →
+ * `VerifyEntry`). What differs between them is data — the host config (its
+ * `api.verifyPath` and the `registration` its register command held) and the
+ * targets below — never a branch. A new and an already-registered address get
+ * the identical step (003 EARS-16; re-registration, 044 EARS-14).
  *
- * The surface is EXISTENCE-AGNOSTIC (003 EARS-16): the BFF answers a new and an
- * already-registered address identically, so the card offers the code AND the
- * co-equal «Войти» / «Сбросить пароль» way out, and never says which applies.
- *
- * Past an accepted code (003 EARS-3 mints no session) the rule is one on both
- * hosts, owner decisions 2026-09-15 (tech spec §5 Q1/Q2, 003 EARS-39):
- *   • a held credential → replay the real password login, complete the carried
- *     эфир (005 EARS-2) and replace onto the landing (021 EARS-10);
- *   • no held credential (a reload, a restored tab, the mail's cold link) → the
- *     email is verified and there is no session, so the visitor goes to the
- *     sign-in door carrying the arrival target — never onward as a guest;
- *   • a replay the login refuses → stay on THIS step with the generic sentence.
+ * One submission (003 EARS-41): the code goes to the host's verify command
+ * together with the in-tab registration values while this tab still holds
+ * them; the answer sets the session itself — there is no password replay
+ * (003 EARS-39 amended). A cold step (a reload, an expired hold) submits the
+ * code alone and is signed in just the same. On success the carried эфир is
+ * completed (005 EARS-2, 021 EARS-10) and the visitor replaced onto the target
+ * or the landing; a refused code stays on this step with the generic sentence,
+ * the held values kept for the retry.
  */
 export type VerifyDoorProps = {
   config: AuthFlowHostConfig;
@@ -70,7 +71,7 @@ export type VerifyDoorProps = {
   landing: string;
   /**
    * #2333 — the mount's server action that decides the landing AGAIN once the
-   * confirmed doctor is signed in; absent where it cannot change.
+   * confirmed visitor is signed in; absent where it cannot change.
    */
   resolveSignedInLanding?: () => Promise<string>;
   /**
@@ -80,13 +81,10 @@ export type VerifyDoorProps = {
   resolveCompletionTarget?: () => Promise<CompletionTarget>;
   /**
    * The resolved эфир intent of the arrival (021 EARS-10), in this host's
-   * vocabulary. It is what 005 EARS-2 completes once the visitor is signed in
-   * — the shared rule guards it. `null` when the arrival named no эфир or one
-   * that no longer exists (021 EARS-10); a parked target (014 EARS-6) is
-   * consumed but never stands in for it.
+   * vocabulary — what 005 EARS-2 completes once the visitor is signed in.
    */
   returnTarget?: string | null;
-  /** Rule S3 — the target the sideways hops and the cold exit carry onward. */
+  /** Rule S3 — the target «← Изменить почту» carries back to the form. */
   carriedTarget?: string | null;
   /**
    * 021 EARS-2 — the mobile return-context plate above the card, the one the
@@ -95,7 +93,7 @@ export type VerifyDoorProps = {
   returnContextPlate?: ReactNode;
 };
 
-/** The canonical `data-testid` map, one on both hosts (the ids #1666 shipped). */
+/** The canonical `data-testid` map, one on both hosts. */
 export const VERIFY_TEST_IDS: Partial<EmailConfirmCardTestIds> = {
   root: "verify-card",
   // The registration door's id: the step shows the same plate the form did.
@@ -105,9 +103,19 @@ export const VERIFY_TEST_IDS: Partial<EmailConfirmCardTestIds> = {
   submit: "verify-submit",
   resend: "verify-resend",
   resendNotice: "verify-resend-notice",
-  goToLogin: "verify-go-to-login",
-  goToReset: "verify-go-to-reset",
+  back: "verify-back",
 };
+
+/** The verify request: the code, plus the held registration values when present. */
+function verifyRequestOf(
+  email: string,
+  code: string,
+  held: PendingRegistrationValues | undefined,
+): VerifyRequest | DoctorVerifyRequest {
+  if (!held) return { email, code };
+  const { consent, ...rest } = held;
+  return { email, code, registration: { ...rest, consent: [...consent] } };
+}
 
 export function VerifyDoor({
   config,
@@ -127,18 +135,18 @@ export function VerifyDoor({
   const authClient = useMemo(() => createAuthClient(config.api), [config.api]);
   const cardCopy = useMemo(() => cardCopyOf(copy), [copy]);
   const resolver = useMemo(() => codeResolver(config), [config]);
-  const destination = maskDestination(email);
+  // #2607 — the address exactly as typed, never masked.
+  const destination = email;
 
   const [error, setError] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  // Canvas 221-224 — «Код принят — входим…», set only AFTER the server accepted
-  // the code (never optimistically) and withdrawn if the replay is refused.
+  const [notice, setNotice] = useState<ReactNode>(null);
+  // Canvas 73-75 — «Код принят — входим…», set only AFTER the server accepted
+  // the code (never optimistically).
   const [succeeded, setSucceeded] = useState(false);
 
-  // A resend is its own protected action, separate from any registration form:
-  // every resend mints its own token through the same challenge.
+  // A resend is its own protected action: every resend mints its own token.
   const captcha = useBotProtectedAction({
     onVerified: () => setCaptchaError(null),
     onChallengeError: (failure) =>
@@ -171,40 +179,23 @@ export function VerifyDoor({
       setNotice(null);
       setSucceeded(false);
     },
-    // 003 EARS-16 — conditionally phrased, so it is the same sentence for a
-    // registrant, a stranger and an already-verified owner.
+    // Canvas 81-83 — the same sentence for every address (003 EARS-16).
     onSuccess: () =>
-      setNotice(
-        fillTemplate(copy.resendAcknowledged, "destination", destination),
-      ),
+      setNotice(withBoldDestination(copy.resendAcknowledged, destination)),
   });
 
   async function onSubmit(values: EmailConfirmValues) {
     setError(null);
-    try {
-      // 003 EARS-3 — the one confirm command on both hosts: the address and the
-      // code. Where the visitor goes next is decided below, on the client.
-      await authClient.verify({ email, code: values.code });
-    } catch (err) {
-      // 003 EARS-16 — generic, except 429 / 5xx / network (rows 12, 14).
-      setError(authErrorMessage(err, errors, copy.failed));
-      return;
-    }
-    setSucceeded(true);
-
-    // The slot is wiped by the take whether the replay then succeeds or throws.
-    const held = takePendingRegistration(email);
-    if (!held) {
-      // Q2 — verified, no session: the sign-in door, carrying the target.
-      router.push(withReturnTarget(config.routes.login, carriedTarget));
-      return;
-    }
+    // 003 EARS-41 — read, not taken: a refused code is retried with the same
+    // values; only an accepted code wipes them.
+    const held = peekPendingRegistration(email);
     let destinationHref: string;
     try {
-      await authClient.login({
-        identifier: held.identifier,
-        password: held.password,
-      });
+      await authClient.verify(
+        verifyRequestOf(email, values.code, held?.registration),
+      );
+      clearPendingRegistration();
+      setSucceeded(true);
       // #2333 — the session exists now, so the landing is decided again for
       // it: the guest-render one could not see a profile specialty.
       const signedInLanding = await landingAfterSignIn(
@@ -217,17 +208,22 @@ export function VerifyDoor({
         { returnTarget, landing: signedInLanding },
         resolveCompletionTarget,
       );
-      // 005 EARS-2 — completed before the visitor is sent anywhere; a parked
-      // value never replaces the mount's target (021 EARS-10).
+      // 005 EARS-2 — completed before the visitor is sent anywhere.
       destinationHref = await completeResolvedReturnTarget(
         config,
         target.returnTarget,
         target.landing,
       );
     } catch (err) {
-      // Q1 — a refused replay stays on this step, generic (003 EARS-16).
       setSucceeded(false);
-      setError(authErrorMessage(err, errors, copy.failed));
+      // 021 EARS-12 — a 422 access-condition refusal (the doctor command checks
+      // the held consent it received with the code) reads exactly as the
+      // registration door reads that condition; otherwise 003 EARS-16 —
+      // generic, except 429 / 5xx / network (rows 12, 14).
+      setError(
+        consentRefusalMessage(err, resolvedCopy.consents) ??
+          authErrorMessage(err, errors, copy.failed),
+      );
       return;
     }
     // `replace`: the spent code form must not sit behind a back gesture; then
@@ -249,12 +245,12 @@ export function VerifyDoor({
       onInvalid={() => setError(resolvedCopy.fields.code.invalid)}
       error={error}
       succeeded={succeeded}
-      // Same-site and relative, with the arrival target carried onward (rule S3).
-      links={{
-        login: withReturnTarget(config.routes.login, carriedTarget),
-        reset: withReturnTarget(config.routes.reset, carriedTarget),
-      }}
-      renderLink={({ href, children }) => <Link href={href}>{children}</Link>}
+      // 003 EARS-24 amended — «← Изменить почту»: back to this host's form,
+      // which refills from the values still held in this tab, the arrival
+      // target carried onward (rule S3).
+      onBack={() =>
+        router.push(withReturnTarget(config.routes.register, carriedTarget))
+      }
       resend={{
         nonce: resendNonce,
         onResend: () => captcha.request(onResend),
@@ -274,56 +270,26 @@ export function VerifyDoor({
   );
 }
 
-/**
- * The block takes two lines as FUNCTIONS of a runtime value and a host config
- * holds only strings, so the config carries templates closed over here. The
- * description is split around its placeholder so the address stands in its own
- * `<strong>` inside the sentence.
- */
+/** The block takes two lines as FUNCTIONS of a runtime value; the config holds templates. */
 function cardCopyOf(copy: AuthFlowVerifyCopy): EmailConfirmCardCopy {
-  const [before, after] = splitTemplate(copy.description, "destination");
   return {
     title: copy.title,
-    description: (destination) => (
-      <>
-        {before}
-        <strong>{destination}</strong>
-        {after}
-      </>
-    ),
-    newAccountHeading: copy.newAccountHeading,
+    // Canvas 394 — the typed address stands bold inside the sentence.
+    description: (destination) =>
+      withBoldDestination(copy.description, destination),
     codeLabel: copy.codeLabel,
     submit: copy.submit,
     codeAccepted: copy.codeAccepted,
     resend: copy.resend,
     resendCountdown: (seconds) =>
-      fillTemplate(copy.resendCountdown, "seconds", String(seconds)),
-    existingAccountHeading: copy.existingAccountHeading,
-    existingAccountHint: copy.existingAccountHint,
-    goToSignIn: copy.goToSignIn,
-    goToReset: copy.goToReset,
+      copy.resendCountdown.split("{seconds}").join(String(seconds)),
+    back: copy.back,
   };
-}
-
-/** Split a one-placeholder template into the text on either side of it. */
-function splitTemplate(template: string, token: string): [string, string] {
-  const marker = `{${token}}`;
-  const at = template.indexOf(marker);
-  if (at === -1) return [template, ""];
-  return [template.slice(0, at), template.slice(at + marker.length)];
-}
-
-/** Substitute a template's single placeholder. */
-function fillTemplate(template: string, token: string, value: string): string {
-  return template.split(`{${token}}`).join(value);
 }
 
 /**
  * 021 EARS-11 — the code rule and its message come from ONE FieldSpec
- * projection, so the rule that rejects and the copy that explains cannot drift.
- * Client guard only: the confirm contract's `code` stays a plain string and the
- * 003 engine normalises again server-side. The slotted field itself keeps the
- * shipped code facts — 6 cells, a text keyboard, UPPERCASE normalisation.
+ * projection. Client guard only: the server normalises again.
  */
 function codeResolver(
   config: AuthFlowHostConfig,

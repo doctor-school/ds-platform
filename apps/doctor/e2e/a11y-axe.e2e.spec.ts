@@ -178,7 +178,7 @@ for (const [state, drive] of [
     // 021 EARS-19 (#1558) — the POST-SUBMIT state the wired command opens. It is
     // a whole second composition on this route (the canonical
     // `<EmailConfirmCard>` block: a slotted code field, a live resend countdown,
-    // an alert row and the two co-equal already-registered actions), reachable
+    // an alert row and the «← Изменить почту» back link), reachable
     // only by actually submitting — so without this case the gate would scan the
     // door and never the screen behind it.
     "post-submit confirmation",

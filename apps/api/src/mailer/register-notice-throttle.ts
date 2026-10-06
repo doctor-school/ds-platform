@@ -1,9 +1,9 @@
 import { createHmac } from "node:crypto";
 
 /**
- * Per-address throttle for the EARS-23 account-exists notice (anti
+ * Per-address throttle for the EARS-23 re-registration code mail (anti
  * inbox-flooding): the registration form must not be weaponisable to flood a
- * victim's inbox with notice emails. {@link tryAcquire} answers one question —
+ * victim's inbox with code emails. {@link tryAcquire} answers one question —
  * may a notice be sent for this email right now? — and is `true` only the first
  * time within the window.
  *

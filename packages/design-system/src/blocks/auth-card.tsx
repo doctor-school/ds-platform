@@ -112,8 +112,11 @@ export function AuthCard({
       >
         {children}
       </CardContent>
+      {/* Canvas 140: the footer links share ONE row, ends apart, 16px between
+          them and wrapping when the card is too narrow. A single-link footer
+          (register, reset) stands at the start of that row. */}
       {footer ? (
-        <CardFooter className="flex-col items-start gap-1 text-caption layout:px-9 layout:pb-9">
+        <CardFooter className="flex-wrap items-center justify-between gap-4 text-caption layout:px-9 layout:pb-9">
           {footer}
         </CardFooter>
       ) : null}

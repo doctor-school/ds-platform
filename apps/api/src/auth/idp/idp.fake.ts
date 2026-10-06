@@ -6,6 +6,9 @@ import {
   type AdminAuthorityVerdict,
   type CreatedUser,
   type CreateUserInput,
+  type EmailCodeRegistration,
+  type EmailCodeSubmission,
+  type EmailCodeTrigger,
   type EmailLoginOutcome,
   type IdpClient,
   type IdpRefreshResult,
@@ -266,17 +269,27 @@ export class FakeIdpClient implements IdpClient {
   }
 
   async resendEmailVerification(identifier: string): Promise<boolean> {
-    // EARS-25 fake/real parity (no more permissive than the real adapter): a
-    // code is re-issued ONLY for an existing, UNVERIFIED registrant. The real
-    // Zitadel adapter resolves the identifier and skips an already-verified one
-    // (its User v2 search carries `human.email.isVerified`); the fake mirrors that
-    // exact unverified-vs-verified distinction off its own `emailVerified` flag,
-    // so a regression that re-sends to a verified (or unknown) identifier fails in
-    // unit tests, not only live. Every path resolves (never throws) so the caller
-    // stays enumeration-safe (EARS-16); the boolean drives only the server-side
-    // `otp.sent` ledger decision, never the response.
+    // 003 EARS-25 (amended) fake/real parity: the code that fits the account
+    // state is re-issued — the verification code for an existing, UNVERIFIED
+    // account; a fresh `otp_email` login challenge (sign-in mail) for a VERIFIED
+    // one, exactly the split the real adapter draws off `human.email.isVerified`;
+    // an unknown identifier is a no-op. Every path resolves (never throws) so the
+    // caller stays enumeration-safe (EARS-16); the boolean drives only the
+    // server-side `otp.sent` ledger decision, never the response.
     const record = this.findByIdentifier(identifier);
-    if (!record || record.emailVerified) return false;
+    if (!record) return false;
+    if (record.emailVerified) {
+      this.emailOtpChallenges.add(record.sub);
+      if (this.mailer) {
+        const to = record.email ?? identifier;
+        try {
+          await this.mailer.sendLoginCodeEmail(to, FAKE_VALID_CODE);
+        } catch {
+          // Fire-and-forget parity with the real adapter: the challenge is armed.
+        }
+      }
+      return true;
+    }
     // EARS-29: the re-issued code rides the BFF mailer (same §13.3 artifact as
     // the initial send). A mailer failure = no code delivered = `false`, the
     // real adapter's exact swallow (EARS-30: nothing thrown, nothing leaked).
@@ -801,7 +814,10 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
-  async requestEmailLoginCode(identifier: string): Promise<EmailLoginOutcome> {
+  async requestEmailLoginCode(
+    identifier: string,
+    trigger: EmailCodeTrigger = "sign-in",
+  ): Promise<EmailLoginOutcome> {
     // EARS-34 fake/real parity (no more permissive than the real adapter): the
     // real ZitadelIdpClient resolves the identifier + `human.email.isVerified` and
     // routes VERIFIED → arm otp_email, existing-UNVERIFIED → out-of-band
@@ -816,6 +832,19 @@ export class FakeIdpClient implements IdpClient {
       // Existing + verified: arm the otp_email login challenge, exactly as
       // requestEmailOtp does — the branch EARS-6 leaves unchanged.
       this.emailOtpChallenges.add(record.sub);
+      if (this.mailer) {
+        const to = record.email ?? identifier;
+        try {
+          await (trigger === "re-registration"
+            ? this.mailer.sendReRegistrationCodeEmail(to, FAKE_VALID_CODE, {
+                lifetime: "5m",
+                passwordKept: record.password != null,
+              })
+            : this.mailer.sendLoginCodeEmail(to, FAKE_VALID_CODE));
+        } catch {
+          // Fire-and-forget parity with the real adapter.
+        }
+      }
       return "challenge";
     }
     // Existing + unverified: re-issue the verify-to-sign-in code and dispatch the
@@ -826,7 +855,12 @@ export class FakeIdpClient implements IdpClient {
     if (this.mailer) {
       const to = record.email ?? identifier;
       try {
-        await this.mailer.sendVerificationCodeEmail(to, FAKE_VALID_CODE);
+        await (trigger === "re-registration"
+          ? this.mailer.sendReRegistrationCodeEmail(to, FAKE_VALID_CODE, {
+              lifetime: "1h",
+              passwordKept: false,
+            })
+          : this.mailer.sendLoginCodeEmail(to, FAKE_VALID_CODE, "1h"));
       } catch {
         // Fire-and-forget parity: a delivery failure never changes the outcome —
         // the code was issued, so the caller still writes the otp.sent row.
@@ -851,6 +885,36 @@ export class FakeIdpClient implements IdpClient {
     }
     this.emailOtpChallenges.delete(record.sub); // single-use
     return Promise.resolve(this.checkedSession(record.sub));
+  }
+
+  submitEmailCode(
+    identifier: string,
+    code: string,
+    registration?: EmailCodeRegistration,
+  ): Promise<EmailCodeSubmission | null> {
+    // 003 EARS-41 fake/real parity: the account state, never the caller,
+    // picks the check; every miss is the same `null`.
+    const record = this.findByIdentifier(identifier);
+    if (!record || code !== FAKE_VALID_CODE) return Promise.resolve(null);
+    if (record.emailVerified) {
+      if (!this.emailOtpChallenges.has(record.sub))
+        return Promise.resolve(null);
+      this.emailOtpChallenges.delete(record.sub);
+      if (registration && record.password == null) {
+        record.password = registration.password;
+      }
+      const session = this.checkedSession(record.sub);
+      return Promise.resolve({ sub: record.sub, verifiedNow: false, session });
+    }
+    record.emailVerified = true;
+    if (registration) {
+      record.password = registration.password;
+    } else if (record.password != null) {
+      // Invalidated: a value nobody holds, as the real adapter sets.
+      record.password = `unrecorded-${randomUUID()}`;
+    }
+    const session = this.checkedSession(record.sub);
+    return Promise.resolve({ sub: record.sub, verifiedNow: true, session });
   }
 
   requestSmsOtp(identifier: string): Promise<void> {

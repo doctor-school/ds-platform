@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -9,7 +9,6 @@ import {
   BotProtectionField,
   isBotProtectionRejected,
   isBotProtectionRequired,
-  maskDestination,
   PasswordRecoveryCard,
   useBotProtectedAction,
   useResendCooldown,
@@ -27,6 +26,7 @@ import { botProtectionMessages, botProtectionSiteKey } from "../bot-protection";
 import { createAuthClient } from "../client/auth-client";
 import { completeReturnTarget } from "../client/return-completion";
 import { resolveAuthFlowCopy } from "../copy";
+import { withBoldDestination } from "../copy/destination";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema } from "../fields";
 import { makeResolver } from "../form-resolver";
@@ -105,8 +105,9 @@ export function ResetDoor({
     null,
   );
   // #326: neutral, enumeration-safe resend acknowledgement — identical whether
-  // or not an account exists; the account fact goes out of band, by email.
-  const [notice, setNotice] = useState<string | null>(null);
+  // or not an account exists; the account fact goes out of band, by email. It
+  // names the identifier exactly as typed (#2607), bold like every code step.
+  const [notice, setNotice] = useState<ReactNode>(null);
 
   /** A token the guard refused, or a request that arrived without one (003 EARS-17). */
   function challengeMessage(error: unknown): string | null {
@@ -167,13 +168,7 @@ export function ResetDoor({
     },
     onBeforeResend: withdrawStaleOutcomes,
     onSuccess: () =>
-      setNotice(
-        fillTemplate(
-          copy.resendAcknowledged,
-          "destination",
-          maskDestination(identifier),
-        ),
-      ),
+      setNotice(withBoldDestination(copy.resendAcknowledged, identifier)),
   });
 
   function onRequest(values: PasswordRecoveryRequestValues) {
@@ -322,8 +317,9 @@ function cardCopyOf(copy: AuthFlowResetCopy): PasswordRecoveryCardCopy {
     title: copy.title,
     titleComplete: copy.completeTitle,
     descriptionRequest: copy.description,
+    // Canvas 404 — the typed identifier stands bold inside the sentence.
     descriptionComplete: (destination) =>
-      fillTemplate(copy.completeDescription, "destination", destination),
+      withBoldDestination(copy.completeDescription, destination),
     backToSignIn: copy.backToSignIn,
     request: {
       identifierLabel: copy.identifierLabel,

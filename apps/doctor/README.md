@@ -56,18 +56,22 @@ apps/doctor/
 
 Registration hands the doctor to this host's own `/verify` route
 (`app/(auth)/verify/page.tsx`, the thin mount of `@ds/auth-flow/verify/route`) —
-the same confirmation step the Academy serves, carrying the address and the
-return target in the query (003 EARS-24, 021 EARS-10). The code goes to the one
-003 command both storefronts post, `POST /v1/auth/verify`, which verifies and
-mints no session.
+the same one code step the Academy serves (six cells, resend, «← Изменить
+почту»), carrying the address and the return target in the query (003 EARS-24 /
+EARS-42, 021 EARS-10). The step posts the code to this host's verify command,
+named by `api.verifyPath` in `lib/auth-flow.host-config.ts`:
+`POST /v1/storefront/doctor/verify`, the 003 `/verify` contract with this
+door's medical-worker declaration and server-stamped consent versions.
 
-The doctor is then SIGNED IN (021 EARS-15): the registration door held the
-just-entered password in the shared `pending-registration` slot
-(`@ds/design-system/blocks`), and the step replays the real 003 EARS-5
-`POST /v1/auth/login` once the code is accepted, which sets
-`__Host-ds_session`. With no held password (a reload, a new tab) the step sends
-the doctor to the sign-in door carrying the target; a replay the login refuses
-keeps the step with the generic sentence.
+The doctor is then SIGNED IN (021 EARS-15) by the code itself (003 EARS-41):
+the registration door holds the just-entered values (password and consent) in
+the shared `pending-registration` slot (`@ds/design-system/blocks`), the step
+submits them WITH the code, and the accepted answer sets `__Host-ds_session` —
+there is no password replay. A cold step (a reload, a new tab, an expired
+hold) still signs in by the code but submits no password, so the account's
+pre-verification password is invalidated and a password is set later through
+reset (003 EARS-39 amended). A refused code keeps the step with the generic
+sentence.
 
 Where the doctor lands is decided the same way on both storefronts (owner
 decision Б, 2026-09-29): the page of the эфир they came from — an ended or full

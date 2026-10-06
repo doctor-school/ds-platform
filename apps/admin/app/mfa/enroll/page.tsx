@@ -211,7 +211,6 @@ export default function MfaEnrollPage() {
                         field={field}
                         length={CODE_LENGTH}
                         label={t("codeLabel")}
-                        variant="slotted"
                         charset="numeric"
                         onComplete={() => void form.handleSubmit(submit)()}
                       />

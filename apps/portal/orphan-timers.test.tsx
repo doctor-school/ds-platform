@@ -36,7 +36,6 @@ function SlottedHarness() {
           <OtpField
             field={field as ControllerRenderProps<{ code: string }>}
             length={6}
-            variant="slotted"
             charset="numeric"
             label="Code"
           />

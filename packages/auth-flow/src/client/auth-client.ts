@@ -1,4 +1,5 @@
 import type {
+  DoctorVerifyRequest,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
@@ -207,13 +208,18 @@ export function createAuthClient(api: AuthFlowApiConfig) {
       postJson<TReq, TRes>(api.registerPath, body, captchaToken),
 
     /**
-     * 003 EARS-3 — confirm the registration code; the one command on both
-     * hosts (#2455). Deliberately takes NO token (row 20): the confirmation
-     * submit is not a bot-protected route, and sending a spent token there
-     * would fail a check nothing asked for.
+     * 003 EARS-41/23 — submit the code of the step after the registration
+     * form, with the in-tab `registration` values when they are still held;
+     * the answer sets the session itself. The ROUTE is `api.verifyPath`: the
+     * Academy's `/v1/auth/verify` or the doctor storefront's own command, each
+     * with its own `registration` contract. Deliberately takes NO token (row
+     * 20): the code submit is not a bot-protected route.
      */
-    verify: (body: VerifyRequest) =>
-      postJson<VerifyRequest, VerifyResponse>(auth("verify"), body),
+    verify: (body: VerifyRequest | DoctorVerifyRequest) =>
+      postJson<VerifyRequest | DoctorVerifyRequest, VerifyResponse>(
+        api.verifyPath,
+        body,
+      ),
 
     /** 003 EARS-25 — re-issue the registration code. `@BotProtected("verify-resend")`. */
     resendVerification: (body: VerifyResendRequest, captchaToken?: string) =>

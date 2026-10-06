@@ -1040,7 +1040,6 @@ function FieldsSection() {
                 <OtpField
                   field={field}
                   length={6}
-                  variant="slotted"
                   charset="alphanumeric"
                   label="Verification code"
                 />
@@ -1057,7 +1056,6 @@ function FieldsSection() {
                 <OtpField
                   field={field}
                   length={6}
-                  variant="slotted"
                   charset="alphanumeric"
                   label="Verification code"
                 />

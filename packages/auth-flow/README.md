@@ -152,7 +152,7 @@ calls the guard and the data decides.
 
 **S3 — every transition BETWEEN auth screens carries the target forward.** The
 «Войти» / «Зарегистрироваться» / «Забыли пароль» / «Вернуться ко входу» links, the
-post-registration confirmation screen's two co-equal actions, and every
+post-registration code step's «← Изменить почту» back link, and every
 `router.push` between these surfaces go through the host's carry helper
 (`withReturnTarget` for the Academy shapes, `withReturnContext` for the doctor
 ones — both package modules since PR 1.6:

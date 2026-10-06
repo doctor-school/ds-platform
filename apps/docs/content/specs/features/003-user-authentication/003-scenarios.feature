@@ -83,6 +83,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then email_verified becomes true and a BFF session is established
     And the submitted password now signs in
     And profile fields the account already holds are not overwritten
+    And the platform consent ticked on the form is recorded only after the code is accepted
+
+  @EARS-23 @EARS-41 @happy
+  Scenario: Re-registration never overwrites an existing platform consent
+    Given a verified account for "owner@example.org" that already holds a platform consent
+    When a visitor submits the registration form for "owner@example.org" with accepted consent versions
+    And enters the code from the mail on the code step
+    Then a BFF session is established
+    And no second platform consent row is written and the existing consent is unchanged
 
   @EARS-23 @failure
   Scenario: Repeated duplicate registrations do not flood the inbox
@@ -96,7 +105,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: The post-registration screen is the one code step for new and existing visitors
     Given a visitor has submitted the registration form
     When the storefront shows the post-registration screen
-    Then it is the one code step: "check your email", the masked address, six code cells and a resend with cooldown
+    Then it is the one code step: "check your email", the address exactly as typed, six code cells and a resend with cooldown
     And it offers «← Изменить почту» back to the registration form with the entered fields kept
     And it offers no separate Sign in or Reset password block
     And the screen never branches on whether the email was already registered
@@ -655,7 +664,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-42 @happy
   Scenario: No eight-cell code step exists on either storefront
     When a user reaches the code step from login by code, registration or re-registration
-    Then the step shows six code cells, the masked address and a resend with cooldown
+    Then the step shows six code cells, the address exactly as typed and a resend with cooldown
     And the back link reads «← Изменить способ» in login and «← Изменить почту» in registration
 
   @EARS-43 @happy

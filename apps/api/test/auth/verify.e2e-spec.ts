@@ -131,9 +131,10 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   // verification becomes a future post-registration secondary-identifier path.
 
   // EARS-25 (#319): resend the registration email verification code,
-  // enumeration-safely. A code is re-issued ONLY for an existing, UNVERIFIED
-  // registrant; an unknown or already-verified identifier is a silent no-op with
-  // an IDENTICAL ack/status/timing (EARS-16) and NO ledger row.
+  // enumeration-safely (003 EARS-25 amended). The code that fits the account
+  // state is re-issued — the verification code for an unverified account, the
+  // login code for a verified one; an unknown identifier is a silent no-op. The
+  // ack/status/timing are IDENTICAL (EARS-16); a ledger row only for an issue.
   async function resend(identifier: string) {
     return app.inject({
       method: "POST",
@@ -183,7 +184,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     expect(await otpSentCountSince(markerUnknown)).toBe(0);
   });
 
-  it("EARS-25/16: an ALREADY-VERIFIED registrant yields the IDENTICAL ack with no code and no ledger row", async () => {
+  it("EARS-25: when a VERIFIED account requests a resend, the system shall issue a fresh login code under the IDENTICAL ack and append exactly one auth.otp.sent row", async () => {
     const email = `ears25-verified-${runId}@ds.test`;
     createdEmails.push(email);
     await register({ email });
@@ -200,7 +201,60 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ status: "resend_requested" });
-    // A verified registrant has no pending verification — no send, no row.
-    expect(await otpSentCountSince(marker)).toBe(0);
+    // 003 EARS-25 (amended): the code that fits a verified account is the LOGIN
+    // code — one issue, one row; the code step's resend is never a dead end.
+    expect(await otpSentCountSince(marker)).toBe(1);
+    // The fresh code signs in through the same code submission.
+    const signIn = await app.inject({
+      method: "POST",
+      url: "/v1/auth/verify",
+      payload: { email, code: FAKE_VALID_CODE },
+    });
+    expect(signIn.statusCode).toBe(200);
+  });
+
+  // 003 EARS-41 + Invariants (code submission ≤ 50 ms): a wrong code yields the
+  // same generic failure — status, body AND timing — for an unknown, a verified
+  // and an unverified account, so the code step is no existence oracle. Same
+  // pattern and budget as the login-code triad (login-otp.e2e-spec, EARS-34/16).
+  it("EARS-41: a wrong code is byte-identical in status, body, AND timing across {unknown, verified, unverified}", async () => {
+    const unverified = `ears41-unver-${runId}@ds.test`;
+    const verified = `ears41-ver-${runId}@ds.test`;
+    const unknown = `ears41-nobody-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+    createdEmails.push(unverified, verified);
+    await register({ email: unverified });
+    await register({ email: verified });
+    const flip = await app.inject({
+      method: "POST",
+      url: "/v1/auth/verify",
+      payload: { email: verified, code: FAKE_VALID_CODE },
+    });
+    expect(flip.statusCode).toBe(200);
+
+    async function wrongCode(email: string) {
+      const t0 = performance.now();
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/verify",
+        payload: { email, code: "ZZZZZZ" },
+      });
+      const ms = performance.now() - t0;
+      return { status: res.statusCode, body: res.json(), ms };
+    }
+    const none = await wrongCode(unknown);
+    const ver = await wrongCode(verified);
+    const unver = await wrongCode(unverified);
+
+    for (const r of [ver, unver]) {
+      expect(r.status).toBe(none.status);
+      expect(r.body).toEqual(none.body);
+    }
+    expect(none.status).toBe(400);
+    // The @TimingEqualized floor engages on every branch (≥ 30 ms allows
+    // scheduling jitter below the 40 ms floor) and the spread stays in budget.
+    const spread =
+      Math.max(none.ms, ver.ms, unver.ms) - Math.min(none.ms, ver.ms, unver.ms);
+    expect(spread).toBeLessThanOrEqual(50);
+    for (const r of [none, ver, unver]) expect(r.ms).toBeGreaterThanOrEqual(30);
   });
 });

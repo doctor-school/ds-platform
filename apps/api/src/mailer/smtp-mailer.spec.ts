@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SmtpMailer, type TransportFactory } from "./smtp-mailer.js";
 
-// EARS-23 (flag-gated transport, #209): the BFF account-exists notice now honors
+// EARS-23 (flag-gated transport, #209): the BFF re-registration mail honors
 // the `email-delivery-real` Unleash flag with a DUAL transport — intercept
 // (`MAILER_SMTP_*`, Mailpit on the dev-stand) by default, the real
 // (`IDP_SMTP_REAL_*`) relay when the flag is ON — mirroring the Zitadel
@@ -69,24 +69,25 @@ function buildMailer(
     intercept: interceptCfg,
     real: "real" in opts ? opts.real : realCfg,
     isEnabled,
-    portalBaseUrl: "http://localhost:3001",
     warn: opts.warn,
     transportFactory: opts.factory ?? rec.factory,
   });
   return { mailer, rec };
 }
 
+const REREG = { lifetime: "5m", passwordKept: true } as const;
+
 describe("SmtpMailer dual-transport flag gate (#209)", () => {
-  it("EARS-23: when email-delivery-real is ON, system shall dispatch the notice via the real transport", async () => {
+  it("EARS-23: when email-delivery-real is ON, system shall dispatch the re-registration mail via the real transport", async () => {
     const { mailer, rec } = buildMailer(() => true);
-    await mailer.sendAccountExistsNotice(VALID_EMAIL);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
     expect(rec.sends).toHaveLength(1);
     expect(rec.sends[0]?.host).toBe(realCfg.host);
   });
 
-  it("EARS-23: when email-delivery-real is OFF (env default mailpit), system shall dispatch the notice via the Mailpit intercept transport", async () => {
+  it("EARS-23: when email-delivery-real is OFF (env default mailpit), system shall dispatch the re-registration mail via the Mailpit intercept transport", async () => {
     const { mailer, rec } = buildMailer(() => false);
-    await mailer.sendAccountExistsNotice(VALID_EMAIL);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
     expect(rec.sends).toHaveLength(1);
     expect(rec.sends[0]?.host).toBe(interceptCfg.host);
   });
@@ -94,9 +95,9 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
   it("EARS-23: when the flag is read LIVE, a mid-session flip switches transport with no rebuild", async () => {
     let live = false;
     const { mailer, rec } = buildMailer(() => live);
-    await mailer.sendAccountExistsNotice(VALID_EMAIL);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
     live = true;
-    await mailer.sendAccountExistsNotice(VALID_EMAIL);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
     expect(rec.sends.map((s) => s.host)).toEqual([
       interceptCfg.host,
       realCfg.host,
@@ -106,15 +107,15 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
   it("EARS-23: when real creds are unconfigured, system shall fail closed without intercept", async () => {
     const warn = vi.fn();
     const { mailer, rec } = buildMailer(() => true, { real: undefined, warn });
-    await expect(mailer.sendAccountExistsNotice(VALID_EMAIL)).rejects.toThrow(
-      /configuration/,
-    );
+    await expect(
+      mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG),
+    ).rejects.toThrow(/configuration/);
     expect(rec.sends).toHaveLength(0);
   });
 
   it("EARS-23: derives secure=true for the real transport on port 465", async () => {
     const { mailer, rec } = buildMailer(() => true);
-    await mailer.sendAccountExistsNotice(VALID_EMAIL);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
     const realTransport = rec.created.find((c) => c.host === realCfg.host);
     expect(realTransport?.secure).toBe(true);
   });
@@ -122,7 +123,7 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
   it("EARS-23: rejects an invalid email before any transport decision (parity)", async () => {
     const { mailer, rec } = buildMailer(() => true);
     await expect(
-      mailer.sendAccountExistsNotice("no-at-sign"),
+      mailer.sendReRegistrationCodeEmail("no-at-sign", "GX5AVU", REREG),
     ).rejects.toThrow();
     expect(rec.sends).toHaveLength(0);
   });
@@ -134,20 +135,19 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
       intercept: { host: undefined, from: "noreply@doctor.school" },
       real: undefined,
       isEnabled: () => false,
-      portalBaseUrl: "http://localhost:3001",
       warn,
       transportFactory: rec.factory,
     });
-    await expect(mailer.sendAccountExistsNotice(VALID_EMAIL)).rejects.toThrow(
-      /configuration/,
-    );
+    await expect(
+      mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG),
+    ).rejects.toThrow(/configuration/);
     expect(rec.sends).toHaveLength(0);
   });
 });
 
 // 003 EARS-29/30 (#910/#1045): the verify/reset one-time codes ride returnCode
 // off Zitadel and the BFF mailer dispatches the §13.3/§13.4 code-only artifacts
-// through the SAME dual flag-gated transport as the account-exists notice. The
+// through the SAME dual flag-gated transport as the re-registration mail. The
 // transiting code is a SECRET: it must never leak into a log line, a thrown
 // error, or a provider-response echo (EARS-30 — testable across every outcome).
 describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
@@ -191,7 +191,6 @@ describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
       intercept: interceptCfg,
       real: undefined,
       isEnabled: () => false,
-      portalBaseUrl: "http://localhost:3001",
       warn: opts.warn,
       transportFactory: opts.factory,
     });
@@ -278,7 +277,6 @@ describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
       intercept: { host: undefined, from: "noreply@doctor.school" },
       real: undefined,
       isEnabled: () => false,
-      portalBaseUrl: "http://localhost:3001",
       warn,
       transportFactory: rec.factory,
     });
@@ -293,8 +291,8 @@ describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
 
 describe("shared existing transactional layout (#2171)", () => {
   const methods = [
-    "sendAccountExistsNotice",
     "sendAdminLockoutNotice",
+    "sendLoginCodeEmail",
     "sendVerificationCodeEmail",
     "sendPasswordResetCodeEmail",
   ] as const;
@@ -308,7 +306,6 @@ describe("shared existing transactional layout (#2171)", () => {
         },
         real: { ...realCfg, from: "configured@doctor.school" },
         isEnabled: () => real,
-        portalBaseUrl: "https://academy.example.test/",
         transportFactory: () => ({
           sendMail: async (message) => {
             messages.push(message);
@@ -317,6 +314,12 @@ describe("shared existing transactional layout (#2171)", () => {
         }),
       });
       for (const method of methods) await mailer[method](VALID_EMAIL, "GX5AVU");
+      // 003 EARS-23: the re-registration code mail rides the same layout.
+      await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", {
+        lifetime: "5m",
+        passwordKept: true,
+      });
+      expect(messages).toHaveLength(methods.length + 1);
       for (const message of messages) {
         expect
           .soft(message.from)
@@ -335,21 +338,16 @@ describe("shared existing transactional layout (#2171)", () => {
             "padding:32px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#2d84f2;",
           );
       }
-      const account = messages[0]!;
-      expect(account.html.match(/<a\s/g)).toHaveLength(1);
-      expect(account.html).toContain(
-        'href="https://academy.example.test/login"',
-      );
-      expect(account.text.match(/https?:\/\/\S+/g)).toEqual([
-        "https://academy.example.test/login",
-      ]);
-      for (const body of [account.html, account.text]) {
-        expect(body).not.toContain("/reset");
-        expect(body).not.toContain("Сбросить пароль");
-        expect(body).not.toContain("GX5AVU");
-        expect(body).not.toContain("Код действует");
+      // 003 EARS-23/29: no code mail — the re-registration one included —
+      // carries a link of any kind.
+      for (const code of [messages[1]!, messages[4]!]) {
+        for (const body of [code.html, code.text]) {
+          expect(body).toContain("GX5AVU");
+          expect(body).not.toMatch(/<a[\s>]|https?:\/\//);
+          expect(body).not.toContain("/reset");
+        }
       }
-      const admin = messages[1]!;
+      const admin = messages[0]!;
       for (const body of [admin.html, admin.text]) {
         expect(body).toContain(
           "Пароль и данные учётной записи не изменились. Попробуйте войти позже.",
@@ -372,7 +370,6 @@ describe("shared existing transactional layout (#2171)", () => {
       intercept: interceptCfg,
       real: realCfg,
       isEnabled: () => true,
-      portalBaseUrl: "https://academy.example.test",
       transportFactory: () => ({
         sendMail: async (message) => {
           primary.push(message);

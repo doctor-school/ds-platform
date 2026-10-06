@@ -148,14 +148,14 @@ describe("<PasswordRecoveryCard>", () => {
 
   // The stage is host-controlled — it flips only once the host's protected request
   // actually succeeded, exactly as `<LoginCard>`'s `sentIdentifier` does.
-  it("shows the complete step with the masked destination once the host flips the stage", () => {
+  it("shows the complete step with the destination as typed once the host flips the stage", () => {
     setup({ stage: "complete", identifier: "doc@example.com" });
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "copy.titleComplete",
     );
     expect(
-      screen.getByText("copy.descriptionComplete:d•••@e•••.com"),
+      screen.getByText("copy.descriptionComplete:doc@example.com"),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("reset-request-submit"),
@@ -198,6 +198,37 @@ describe("<PasswordRecoveryCard>", () => {
 
     fireEvent.click(screen.getByTestId("reset-restart"));
     expect(onRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("#2556: «Начать заново» highlight starts on the content edge — canvas 248 padding:6px 8px, margin:-6px 0, inset focus ring (line 10)", () => {
+    setup({ stage: "complete", identifier: "doc@example.com" });
+    const restart = screen.getByTestId("reset-restart");
+    expect(restart).toHaveClass(
+      "px-2",
+      "py-1.5",
+      "-my-1.5",
+      "shrink-0",
+      "focus-visible:shadow-focus-inset",
+    );
+    // No negative horizontal offset: the hover/focus box must not bleed past
+    // the column edge; the outset ring would bleed the same way.
+    expect(restart.className).not.toMatch(/(^|\s)-m[xsl]-|(^|\s)px-4(\s|$)/);
+    expect(restart.className).not.toMatch(/focus-visible:shadow-focus(\s|$)/);
+  });
+
+  it("#2556: the «Начать заново» / resend row follows the submit at the canvas 18px gap, with no divider (canvas 230/246-247)", () => {
+    setup({ stage: "complete", identifier: "doc@example.com" });
+    const footer = screen.getByTestId("reset-restart").parentElement
+      ?.parentElement as HTMLElement;
+    expect(footer).toHaveClass("mt-4.5");
+    expect(footer.className).not.toMatch(/\bborder-t\b|\bpt-/);
+  });
+
+  it("#2556: the «Начать заново» / resend row wraps at the canvas 12px gap (canvas 247 gap:12px; flex-wrap:wrap)", () => {
+    setup({ stage: "complete", identifier: "doc@example.com" });
+    const row = screen.getByTestId("reset-restart").parentElement as HTMLElement;
+    expect(row).toHaveClass("flex", "flex-wrap", "gap-3");
+    expect(row.className).not.toMatch(/(^|\s)gap-2(\s|$)/);
   });
 
   it("draws the resend label at the canvas weight (auth.dc.html resendStyle, 800) — the verify step's resend", () => {

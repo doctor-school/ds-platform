@@ -1,10 +1,7 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { Redis } from "ioredis";
 import { loadEnv } from "../../config/env.schema.js";
-import {
-  DEFAULT_PORTAL_BASE_URL,
-  MailerModule,
-} from "../../mailer/mailer.module.js";
+import { MailerModule } from "../../mailer/mailer.module.js";
 import { MAILER, type Mailer } from "../../mailer/mailer.types.js";
 import { FakeIdpClient } from "./idp.fake.js";
 import { IDP_CLIENT, type IdpClient } from "./idp.types.js";
@@ -84,12 +81,6 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
               // require in the request body. Absent ⇒ the adapter resolves it once
               // from the service account's own org and caches it.
               orgId: env.IDP_ORG_ID,
-              // #878: the portal origin whose bare `/login` URL rides the
-              // still-Zitadel-sent login email-OTP challenge. The SAME
-              // portal-origin source the mailer channel uses — never a
-              // hardcoded host (recipe-specific).
-              portalBaseUrl:
-                env.MAILER_PORTAL_BASE_URL ?? DEFAULT_PORTAL_BASE_URL,
               // #910/#1045 (EARS-29): the BFF mailer the verify/reset hops hand
               // the Zitadel-returned code to — the §13.3/§13.4 code-only
               // artifacts ride the shared MAILER binding.

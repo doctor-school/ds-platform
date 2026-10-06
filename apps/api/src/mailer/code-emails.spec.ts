@@ -76,7 +76,7 @@ for (const render of [verificationCodeEmail, passwordResetCodeEmail]) {
     const message = render(CODE);
     for (const body of [message.html, message.text]) {
       expect(body).toContain("уже открытой вкладке");
-      expect(body).toContain("запросили код");
+      expect(body).toContain("Введите код в уже открытой вкладке");
     }
   });
   it("EARS-29: interpolated tokens cannot inject HTML", () => {

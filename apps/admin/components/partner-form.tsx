@@ -22,6 +22,7 @@ import {
 } from "@ds/schemas";
 import { PartnerFormSchema, type PartnerFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useAcademyPublicUrl } from "@/components/academy-origin-provider";
 
 /**
  * The «Основное» tab of the partner detail (012 EARS-4, #1286) — the twin of
@@ -89,9 +90,7 @@ export function PartnerForm({
   const [removeLogo, setRemoveLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const publicUrl = detail?.slug
-    ? `https://academy.doctor.school/partners/${detail.slug}`
-    : null;
+  const publicUrl = useAcademyPublicUrl("partners", detail?.slug);
 
   return (
     <Form {...form}>

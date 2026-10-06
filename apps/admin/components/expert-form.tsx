@@ -37,13 +37,12 @@ import {
 } from "@ds/schemas";
 import { ExpertFormSchema, type ExpertFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useAcademyPublicUrl } from "@/components/academy-origin-provider";
 import { useServerCombobox } from "@/lib/use-server-combobox";
 import {
   fetchEligibleExpertUsers,
   type EligibleExpertUserOption,
 } from "@/providers/data-provider";
-
-const ACADEMY_ORIGIN = "https://academy.doctor.school";
 
 export interface ExpertFormValues {
   familyName: string;
@@ -133,9 +132,7 @@ export function ExpertForm({
     selectedId: selectedUserId || detail?.userId || null,
   });
 
-  const publicUrl = detail?.slug
-    ? `${ACADEMY_ORIGIN}/experts/${detail.slug}`
-    : null;
+  const publicUrl = useAcademyPublicUrl("experts", detail?.slug);
   const showInitials =
     !photo && (removePhoto || !detail?.photoUrl) && Boolean(detail?.initials);
 

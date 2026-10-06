@@ -1440,6 +1440,10 @@ jobs:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_admin_e2e
       IDP_ISSUER: http://localhost:9080
       E2E_ADMIN_URL: http://localhost:3200
+      # #2619 — the Academy origin «Публичная ссылка» links to. Job-level so the
+      # admin (required at request time; it refuses to render without it) and the
+      # Playwright steps that assert that link read ONE value.
+      ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -1718,6 +1722,9 @@ jobs:
       # app's next.config.ts, so no build flag is needed here.
       - run: pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin --filter=@ds/doctor
       - run: pnpm ci:standalone-boot portal admin doctor
+        env:
+          # #2619 — the admin's required request-time Academy origin.
+          ACADEMY_PUBLIC_ORIGIN: http://localhost:3001
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
   # The PR-body-parsing guard family (spec-link BLOCK, registry-research,

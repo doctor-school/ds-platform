@@ -52,7 +52,7 @@ pnpm --filter @ds/admin test       # vitest — pure-TS helpers (МСК, lifecyc
 pnpm --filter @ds/admin build
 ```
 
-The app needs a running api (`API_PROXY_TARGET`, default `http://localhost:3000`) with a live dev stand behind it (Postgres + Zitadel + MinIO). Read endpoints from `~/.ds-platform/.env.local` — never hardcode (`.claude/rules/dev-stand.md`).
+The app needs a running api (`API_PROXY_TARGET`, default `http://localhost:3000`) with a live dev stand behind it (Postgres + Zitadel + MinIO). Read endpoints from `~/.ds-platform/.env.local` — never hardcode (`.claude/rules/dev-stand.md`). It also needs `ACADEMY_PUBLIC_ORIGIN` (#2619) — the Academy origin «Публичная ссылка» on a project / partner / expert links to, read at request time by the root layout; the admin refuses to render without it (local: `apps/admin/.env.example`; stage slot: rendered by `tools/staging/slot.mjs`; production: `/etc/ds-platform/api.env`).
 
 ## Browser E2E (playwright-bdd, dev-stand-gated)
 
@@ -61,7 +61,7 @@ The app needs a running api (`API_PROXY_TARGET`, default `http://localhost:3000`
 ```bash
 # Boot an api whose bot-protection is OFF (dev-stand recipe) so the 003
 # register/login provisioning is not captcha-gated, then:
-E2E_ADMIN_URL=http://localhost:3200 \
+E2E_ADMIN_URL=http://localhost:3200 ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
 IDP_ISSUER=… IDP_SERVICE_TOKEN=… IDP_PROJECT_ID=… \
 pnpm --filter @ds/admin test:e2e     # bddgen && playwright test
 ```

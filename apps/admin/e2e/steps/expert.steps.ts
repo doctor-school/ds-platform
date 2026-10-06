@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { academyPublicLinkPrefix } from "../support/academy-origin";
 import { Then, When } from "../support/fixtures";
 
 When(
@@ -75,9 +76,12 @@ Then(
     world.expert.publicUrl = await page
       .getByTestId("expert-public-link")
       .innerText();
-    expect(world.expert.publicUrl).toMatch(
-      /^https:\/\/academy\.doctor\.school\/experts\/petrov-/,
-    );
+    expect(
+      world.expert.publicUrl.startsWith(
+        academyPublicLinkPrefix("experts", "petrov-"),
+      ),
+      `${world.expert.publicUrl} points at the expert on the configured Academy origin`,
+    ).toBe(true);
   },
 );
 

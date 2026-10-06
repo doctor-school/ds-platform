@@ -597,6 +597,19 @@ test("046 «Letters»: a slot api gets its own doctor storefront as the congress
   );
 });
 
+test("#2619: a slot admin links «Публичная ссылка» to the slot's own academy host", () => {
+  const text = renderSlotEnv({
+    slot: "pr-7",
+    sha: SHA,
+    baseDomain: BASE,
+    redisDb: 4,
+    goldenSubjects: SUBJECTS,
+  });
+  assert.ok(
+    text.split("\n").includes(`ACADEMY_PUBLIC_ORIGIN=https://academy-pr-7.${BASE}`),
+  );
+});
+
 test("a teardown renders only what compose needs to ADDRESS the project", () => {
   const text = renderSlotDownEnv({ slot: "pr-7" });
   assert.match(text, /^SLOT=pr-7$/m);

@@ -73,7 +73,7 @@ jobs:
             -e DATABASE_URL=postgres://ds:ds@localhost:5432/ds_image \
             -e AUDIT_IDENTIFIER_PEPPER=ci-image-audit-pepper \
             -e LIFECYCLE_IMPACT_TOKEN_SECRET=ci-image-impact-secret \
-            -e MAILER_DOCTOR_BASE_URL=http://localhost:3004 \
+            -e MAILER_DOCTOR_BASE_URL=http://localhost:3004             -e ACADEMY_PUBLIC_ORIGIN=http://localhost:3001 \
             "ds-runtime:$APP"
           path=/
           if [ "$APP" = api ]; then path=/v1/ready; fi

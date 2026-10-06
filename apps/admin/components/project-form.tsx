@@ -33,6 +33,7 @@ import {
 } from "@ds/schemas";
 import { ProjectFormSchema, type ProjectFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useAcademyPublicUrl } from "@/components/academy-origin-provider";
 
 /**
  * The «Основное» tab of the project detail (Stage A #1282 — composition B).
@@ -94,9 +95,7 @@ export function ProjectForm({
   const [removeCover, setRemoveCover] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const publicUrl = detail?.slug
-    ? `https://academy.doctor.school/projects/${detail.slug}`
-    : null;
+  const publicUrl = useAcademyPublicUrl("projects", detail?.slug);
 
   return (
     <Form {...form}>

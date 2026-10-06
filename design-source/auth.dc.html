@@ -506,7 +506,8 @@ class Component extends DCLogic {
       isLogin: s.screen === 'login', isRegister: s.screen === 'register', isVerify: s.screen === 'verify', isReset: s.screen === 'reset',
       // вход
       loginPw: s.loginTab === 'password', loginOtp: s.loginTab === 'otp',
-      tabPw: () => this.setState({ loginTab: 'password' }), tabOtp: () => this.setState({ loginTab: 'otp' }),
+      tabPw: () => { if (s.loginTab === 'password') return; this.setState(st => ({ loginTab: 'password', submitted: false, values: Object.assign({}, st.values, { loginId: st.values['otpId'] || '' }), touched: Object.assign({}, st.touched, { loginId: false, loginPw: false }) })); },
+      tabOtp: () => { if (s.loginTab === 'otp') return; this.setState(st => { const v = st.values['loginId'] || ''; return { loginTab: 'otp', submitted: false, otpChannel: phoneOk(v) && !emailOk(v) ? 'sms' : 'email', values: Object.assign({}, st.values, { otpId: v }), touched: Object.assign({}, st.touched, { otpId: false }) }; }); },
       tabPwOn: s.loginTab === 'password', tabOtpOn: s.loginTab === 'otp',
       tabPwStyle: segTab(s.loginTab === 'password'), tabOtpStyle: segTab(s.loginTab === 'otp') + ';border-left:2px solid ' + border,
       otpNotSent: !s.otpSent, otpSent: s.otpSent,

@@ -35,7 +35,10 @@ import {
 } from "@ds/schemas";
 import { TokenSelect, TokenTextarea } from "@/components/fields";
 import { RecordingSourceFieldSet } from "@/components/recording-source-fields";
-import { RelationshipEndpointPicker } from "@/components/relationship-endpoint-picker";
+import {
+  RelationshipEndpointPicker,
+  relationshipEndpointPickerId,
+} from "@/components/relationship-endpoint-picker";
 import {
   FORM_SAVED_RESET_OPTIONS,
   FORM_SYNC_RESET_OPTIONS,
@@ -686,27 +689,39 @@ function EventClassificationFields({
       </div>
 
       {detail ? null : (
-        <div className="flex flex-col gap-2" data-testid="event-project">
-          <RelationshipEndpointPicker
-            endpoint="project"
-            excludedIds={[]}
-            value={projectId}
-            onChange={(next) =>
-              form.setValue("projectId", next, { shouldDirty: true })
-            }
-            testIdPrefix="event-project"
-            copy={{
-              search: t("events.fields.projectSearch"),
-              searchPlaceholder: t("events.fields.projectSearchPlaceholder"),
-              select: t("events.fields.project"),
-              selectPlaceholder: t("events.fields.projectPlaceholder"),
-              noOptions: t("events.fields.projectNoOptions"),
-            }}
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("events.fields.projectHint")}
-          </p>
-        </div>
+        <FormField
+          control={form.control}
+          name="projectId"
+          render={() => (
+            <FormItem data-testid="event-project">
+              <FormLabel
+                htmlFor={relationshipEndpointPickerId("event-project")}
+              >
+                {t("events.fields.project")}
+              </FormLabel>
+              <RelationshipEndpointPicker
+                endpoint="project"
+                excludedIds={[]}
+                value={projectId}
+                onChange={(next) =>
+                  form.setValue("projectId", next, { shouldDirty: true })
+                }
+                testIdPrefix="event-project"
+                labelMode="external"
+                copy={{
+                  search: t("events.fields.projectSearch"),
+                  searchPlaceholder: t(
+                    "events.fields.projectSearchPlaceholder",
+                  ),
+                  select: t("events.fields.project"),
+                  selectPlaceholder: t("events.fields.projectPlaceholder"),
+                  noOptions: t("events.fields.projectNoOptions"),
+                }}
+              />
+              <FormMessage>{t("events.fields.projectHint")}</FormMessage>
+            </FormItem>
+          )}
+        />
       )}
 
       <FormField
@@ -718,8 +733,14 @@ function EventClassificationFields({
               {t("events.fields.audience")}
             </FormLabel>
             <FormControl>
-              <NativeSelect id="audience" data-testid="event-audience" {...field}>
-                <option value="">{t("events.fields.audiencePlaceholder")}</option>
+              <NativeSelect
+                id="audience"
+                data-testid="event-audience"
+                {...field}
+              >
+                <option value="">
+                  {t("events.fields.audiencePlaceholder")}
+                </option>
                 {EVENT_AUDIENCES.map((audience) => (
                   <option key={audience} value={audience}>
                     {t(`events.audiences.${audience}`)}

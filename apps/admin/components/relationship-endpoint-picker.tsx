@@ -19,10 +19,20 @@ const RESOURCE: Record<EndpointKind, "events" | "projects"> = {
   project: "projects",
 };
 
+/** The id of the picker's combobox trigger — what an external label targets. */
+export function relationshipEndpointPickerId(testIdPrefix: string): string {
+  return `${testIdPrefix}-combobox`;
+}
+
 /**
  * The shared endpoint picker used when a relationship is authored from its
  * reverse detail page. It is the same approved search + select composition the
  * existing relation panels use; only the queried endpoint and host copy vary.
+ *
+ * `labelMode="external"` is for a host that renders the picker as one field of a
+ * design-system form: the host owns the `FormItem` / `FormLabel` / hint (aimed
+ * at `relationshipEndpointPickerId`), so the field keeps the form's label and
+ * hint rhythm; the panels keep the picker's own label.
  */
 export function RelationshipEndpointPicker({
   endpoint,
@@ -31,6 +41,7 @@ export function RelationshipEndpointPicker({
   onChange,
   testIdPrefix,
   copy,
+  labelMode = "inline",
 }: {
   endpoint: EndpointKind;
   excludedIds: string[];
@@ -38,6 +49,7 @@ export function RelationshipEndpointPicker({
   onChange: (next: string) => void;
   testIdPrefix: string;
   copy: PickerCopy;
+  labelMode?: "inline" | "external";
 }) {
   const t = useTranslations();
   const picker = useRelationshipCombobox({
@@ -48,14 +60,16 @@ export function RelationshipEndpointPicker({
 
   return (
     <div className="flex flex-col gap-2" data-testid={`${testIdPrefix}-picker`}>
-      <label
-        className="text-sm text-foreground"
-        htmlFor={`${testIdPrefix}-combobox`}
-      >
-        {copy.select}
-      </label>
+      {labelMode === "inline" ? (
+        <label
+          className="text-sm text-foreground"
+          htmlFor={relationshipEndpointPickerId(testIdPrefix)}
+        >
+          {copy.select}
+        </label>
+      ) : null}
       <Combobox
-        id={`${testIdPrefix}-combobox`}
+        id={relationshipEndpointPickerId(testIdPrefix)}
         options={picker.options}
         value={value || null}
         onValueChange={(next) => {

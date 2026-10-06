@@ -95,4 +95,25 @@ describe("NativeSelect — official shadcn native semantics with DS Input parity
     expect(chevron).toHaveAttribute("aria-hidden", "true");
     expect(chevron).toHaveClass("pointer-events-none", "text-muted-foreground");
   });
+
+  it("EARS-8: when a selected value with descenders renders, the system shall leave the select a content box at least one text-sm line tall", () => {
+    // A native <select> clips its value to the content box (unlike <input>,
+    // which centres its line). With `h-11` (44px) and `border-2`, `py-3`
+    // left 16px for a 20px text-sm line, cutting «р»/«у» descenders (#2509).
+    render(<RoleSelect defaultValue="Участник подкаста" />);
+
+    const select = screen.getByRole("combobox", { name: "Роль" });
+    const classes = select.className.split(/\s+/);
+    const SPACING_PX = 4;
+    const TEXT_SM_LINE_PX = 20;
+    const height = classes.includes("h-11") ? 11 * SPACING_PX : NaN;
+    const border = classes.includes("border-2") ? 2 : NaN;
+    const py = classes
+      .map((c) => /^py-(\d+(?:\.\d+)?)$/.exec(c)?.[1])
+      .find((v) => v !== undefined);
+    const paddingY = py === undefined ? 0 : Number(py) * SPACING_PX;
+    const contentBox = height - 2 * border - 2 * paddingY;
+
+    expect(contentBox).toBeGreaterThanOrEqual(TEXT_SM_LINE_PX);
+  });
 });

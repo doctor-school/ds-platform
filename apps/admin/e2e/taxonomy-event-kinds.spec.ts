@@ -266,6 +266,63 @@ test.describe("012 EARS-25…30 — event kinds and event classification in the 
     await expect(page.getByTestId("event-audience")).toHaveValue("experts");
   });
 
+  test("012 EARS-29/30: the classification fields render in the form's rhythm — the project field takes the form's label and hint, and no select clips its value", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await page.goto("/events/create");
+    await expect(page.getByTestId("event-form")).toBeVisible();
+    await page.getByTestId("event-audience").selectOption("doctors");
+
+    // The project field is one field of the design-system form: its label and
+    // hint carry exactly the sibling audience field's FormLabel / FormMessage
+    // type, not the relation panels' standalone label.
+    const typeOf = (selector: string) =>
+      page.locator(selector).evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+          lineHeight: cs.lineHeight,
+          color: cs.color,
+        };
+      });
+    const projectLabel = typeOf('label[for="event-project-combobox"]');
+    expect(await projectLabel).toEqual(await typeOf('label[for="audience"]'));
+    const fieldHint = (testId: string, name: string) =>
+      `[data-testid="${testId}"] p:has-text("${name}")`;
+    expect(
+      await typeOf(fieldHint("event-project", "Мероприятие будет привязано")),
+    ).toEqual(
+      await typeOf(fieldHint("event-classification", "Аудитория решает")),
+    );
+
+    // A native select clips its value to its content box: every select keeps
+    // a content box at least one line tall, so «р»/«у» descenders render.
+    for (const testId of [
+      "event-kind",
+      "event-participation-format",
+      "event-audience",
+    ]) {
+      const { content, line } = await page
+        .getByTestId(testId)
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          const px = (v: string) => Number.parseFloat(v);
+          return {
+            content:
+              el.getBoundingClientRect().height -
+              px(cs.borderTopWidth) -
+              px(cs.borderBottomWidth) -
+              px(cs.paddingTop) -
+              px(cs.paddingBottom),
+            line: px(cs.lineHeight),
+          };
+        });
+      expect(content, testId).toBeGreaterThanOrEqual(line);
+    }
+  });
+
   test("012 EARS-30: the create-project form shows the default-audience hint the edit form shows; the required error takes its slot until an audience is chosen", async ({
     page,
   }) => {

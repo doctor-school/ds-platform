@@ -14,9 +14,9 @@ describe("resolveRoute", () => {
     );
   });
 
-  it("uses the live golden event for the room route on both hosts", () => {
+  it("uses each storefront's live golden event for its room route", () => {
     expect(resolveRoute("academy", "/webinars/[slug]/room")).toBe(
-      "/webinars/golden-event-live/room",
+      "/webinars/golden-event-live-academy/room",
     );
     expect(resolveRoute("doctor", "/events/[slug]/room")).toBe(
       "/events/golden-event-live/room",

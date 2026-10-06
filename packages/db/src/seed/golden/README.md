@@ -110,13 +110,22 @@ consent records — has no business in the production module graph.
 | `golden.projects.publishedSchool` / `.draft` | published `school` / draft `media`                                                                                |
 | `golden.events.draft`                        | `draft`                                                                                                           |
 | `golden.events.upcoming`                     | `published`, starts `+14d`, seats left — the registration happy path; a configured congress (046 intake settings) |
-| `golden.events.live`                         | `live`, started `-15m`, `live_at` stamped, `stream_config` attached                                               |
+| `golden.events.live`                         | `live`, started `-15m`, `live_at` stamped, `stream_config` attached — the doctor storefront room (`doctors`)      |
+| `golden.events.academyLive`                  | same shape — the Academy room (`experts`)                                                                         |
 | `golden.events.hidden`                       | `hidden`                                                                                                          |
 | `golden.events.pastWithRecording`            | `ended` at `-30d`, carries the recordings below                                                                   |
 | `golden.events.archived`                     | `in_archive`, `origin = legacy`                                                                                   |
 | `golden.recordings.pastEdited`               | published edited recording (poster + duration)                                                                    |
 | `golden.recordings.pastRawDraft`             | draft raw recording — admin-only                                                                                  |
-| `golden.registrations.*`                     | verified doctor on upcoming / live / past; MFA doctor on live                                                     |
+| `golden.registrations.*`                     | verified doctor on upcoming / live / academyLive / past; MFA doctor on live                                       |
+
+Every `golden.events.*` row except `live` is an Academy event (`audience =
+experts`, kind «Эфир»): the Academy listing, archive and month view read only
+`experts` events (012 EARS-29), and the Academy-host scenarios address these
+rows. `golden.events.live` is the doctor storefront's named room (`doctors`,
+kind «Вебинар») — its «Идёт сейчас» block (019 EARS-6) reads only `doctors` live
+events — and `golden.events.academyLive` is the Academy's. Each carries a named
+registrant. The doctor feed's other events are the volume half's `doctors` rows.
 
 Identities are literal (`ids.ts`), never generated: a scenario compiled against
 `golden.events.live.id` must address the same row in every slot and every

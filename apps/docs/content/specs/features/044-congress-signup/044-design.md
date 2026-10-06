@@ -168,6 +168,8 @@ Whether our Zitadel configuration accepts a human user created with no credentia
 
 Evidence: live dev-stand check 2026-09-21 — `POST /v2/users/new` with the adapter body minus `human.password` → 200, user `USER_STATE_ACTIVE`; probe user deleted. The vendor API reference marks the `password` oneof as required in error (zitadel/zitadel#12699).
 
+> **Production amendment — sign-up hands back a sign-in reference (2026-10-06, #2626).** The accepted sign-up response also carries `handoff` (EARS-43); its format, redemption and sequence are in `003-design.md`, «Congress hand-off».
+
 ## First platform entry
 
 > **Production amendment — one email code (2026-10-02, #2552 / #2553).** The two paragraphs below describe the deployed baseline. Target: the first entry is «email → code» through 003 EARS-41 — the sign-in code request for the unverified congress account mails the verification code in the sign-in code mail (003 EARS-34 amended), and submitting it on the one code step verifies the address and establishes the session in the same BFF operation (Zitadel email verify, then a `returnCode` `otp_email` challenge armed and completed server-side; `003-design.md`, production amendment of the same date). There is no separate «verify, then log in» step and no eight-cell step. Entry from the congress site is `/login?method=code&returnTo=/account/congress` (003 EARS-43); the confirmation letter carries no link (046 EARS-15 amended).

@@ -688,3 +688,27 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the guest edits the email and switches back to «Пароль»
     Then the edited email is in the identifier field
     And a typed phone number opens «По коду» on the phone channel where the storefront serves it
+
+  @EARS-44 @happy
+  Scenario: A valid hand-off reference opens the code step with the code already sent
+    Given a congress sign-up was accepted and returned a hand-off reference
+    When the visitor opens /login?method=code&handoff=<ref>&returnTo=/account/congress
+    Then the login code is issued to that account exactly as for a code request
+    And the code step opens with «Мы отправили код на <address>» without a method choice or a captcha
+    And the handoff parameter is removed from the address bar
+    When the visitor enters the code from the mail
+    Then a BFF session is established and the visitor is returned to "/account/congress"
+
+  @EARS-44 @EARS-16 @failure
+  Scenario: An expired or tampered reference falls back to the plain code entry
+    Given an expired reference, a reference with an altered signature and an unknown reference
+    When the visitor opens /login?method=code&handoff=<ref> with each
+    Then each shows the EARS-43 state: «По коду» preselected, an empty identifier field
+    And no error page, no mail and no hint whether an address has an account is shown
+    And the three responses are identical in status, body and timing within 50 ms
+
+  @EARS-44 @EARS-13 @failure
+  Scenario: A rate-limited redemption is refused like any code request
+    Given the per-account or per-IP code-request window is exhausted
+    When the visitor opens a valid hand-off link
+    Then the code step shows the same generic refusal as EARS-13 and no further code is sent

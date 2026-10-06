@@ -248,3 +248,11 @@ Feature: 044 — Congress sign-up
     Given another principal holds the event-registrar role with no event binding
     When they request any endpoint other than the session endpoints
     Then the server refuses the request
+
+  @EARS-43 @EARS-7
+  Scenario: The accepted sign-up carries a sign-in reference of one shape for every address
+    Given one address has no account and another already has one
+    When each submits the sign-up form
+    Then both responses are HTTP 200 with status "accepted" and a handoff reference
+    And the two references have the same shape and neither contains the email
+    And the congress site shows «Войти в кабинет» linking to the doctor storefront login with that reference

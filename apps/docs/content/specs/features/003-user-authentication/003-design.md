@@ -101,6 +101,34 @@ The «single «Войти» action» of the account-exists notice and the «Regi
 - _Re-registration as a code-spam vector._ The registration form now mails a code to an existing address, so it is throttled per address by the EARS-23 marker and protected by EARS-17 CAPTCHA, like the login-code request it mirrors. On a verified account nothing — password, profile, consent — is written before the code proves the mailbox, an existing password is never replaced, and profile values never overwrite.
 - _Password set on a credential-less account._ Only the mailbox owner, after the code is accepted, can give a congress-created account its first password; this is the same proof EARS-35 already treats as sufficient to mark the address verified.
 
+## Production amendment — congress hand-off to the code step (2026-10-06, #2626)
+
+Login by code runs in production; this amendment adds one way into its code step and changes nothing else in §2, §4 or §13.2. Requirements: EARS-44 (this feature) and 044 EARS-43.
+
+### Congress hand-off
+
+```mermaid
+sequenceDiagram
+    participant S as Congress site (orthobio-site)
+    participant B as BFF (apps/api)
+    participant L as /login (storefront)
+    participant Z as Zitadel
+    S->>B: POST /v1/congress/sign-up (captcha passed)
+    B->>B: ensure account (044 EARS-7), mint ref {v:1, sub, exp=+24h}, HMAC-SHA256
+    B-->>S: {status:"accepted", handoff:"<ref>"}
+    S->>L: «Войти в кабинет» → /login?method=code&handoff=<ref>&returnTo=/account/congress
+    L->>B: POST /v1/login/otp/handoff {ref}
+    B->>B: verify HMAC (constant-time) + exp, EARS-13 count, equalize timing
+    B->>Z: issue login code as EARS-34 (verified: otp_email; unverified: verification code)
+    Z-->>B: code mailed to the account address
+    B-->>L: {address}
+    L->>L: open EARS-42 code step «Мы отправили код на address», history replace drops handoff
+```
+
+A bad reference at the verify step returns the one generic response and `/login` renders the EARS-43 state.
+
+**Reference format.** Payload `{v:1, sub, exp}` (account id and expiry, no email or other PII), base64url, followed by an HMAC-SHA256 tag keyed by `AUTH_HANDOFF_SECRET` (required boot key, at least 32 bytes); verification is a constant-time compare, then the expiry check. The reference is a bearer for one thing only — asking the BFF to send the account's own login code to the account's own address; it never establishes a session, so a leaked link yields at most a repeat of that mail under EARS-13. Key rotation = change the secret; every outstanding reference then fails verification and falls back to EARS-43.
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

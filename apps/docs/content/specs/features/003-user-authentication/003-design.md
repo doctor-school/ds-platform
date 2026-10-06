@@ -101,6 +101,34 @@ The «single «Войти» action» of the account-exists notice and the «Regi
 - _Re-registration as a code-spam vector._ The registration form now mails a code to an existing address, so it is throttled per address by the EARS-23 marker and protected by EARS-17 CAPTCHA, like the login-code request it mirrors. On a verified account nothing — password, profile, consent — is written before the code proves the mailbox, an existing password is never replaced, and profile values never overwrite.
 - _Password set on a credential-less account._ Only the mailbox owner, after the code is accepted, can give a congress-created account its first password; this is the same proof EARS-35 already treats as sufficient to mark the address verified.
 
+## Production amendment — congress hand-off to the code step (2026-10-06, #2626)
+
+Login by code runs in production; this amendment adds one way into its code step and changes nothing else in §2, §4 or §13.2. Requirements: EARS-44 (this feature) and 044 EARS-39.
+
+### Congress hand-off
+
+```mermaid
+sequenceDiagram
+    participant S as Congress site (orthobio-site)
+    participant B as BFF (apps/api)
+    participant L as /login (storefront)
+    participant Z as Zitadel
+    S->>B: POST /v1/congress/sign-up (captcha passed)
+    B->>B: ensure account (044 EARS-7), mint opaque ref (32 random bytes), store SHA-256(ref) -> {accountId, redemptions} in Redis, TTL 24h
+    B-->>S: {status:"accepted", handoff:"<ref>"}
+    S->>L: «Войти в кабинет» → /login?method=code&handoff=<ref>&returnTo=/account/congress
+    L->>B: POST /v1/login/otp/handoff {ref}
+    B->>B: look up SHA-256(ref), redemptions < 3, EARS-13 count, equalize timing
+    B->>Z: issue login code as EARS-34 (verified: otp_email; unverified: verification code)
+    Z-->>B: code mailed to the account address
+    B-->>L: {address}
+    L->>L: open EARS-42 code step «Мы отправили код на address», history replace drops handoff
+```
+
+A bad reference at the verify step returns the one generic response and `/login` renders the EARS-43 state.
+
+**Reference format.** The reference is 32 random bytes, base64url — opaque and carrying no data at all: no account id, no time, no ordering, so there is nothing to decode and no existence or age oracle (EARS-7, EARS-16). The API stores only `SHA-256(ref)` → `{accountId, redemptions}` in Redis with a 24 h TTL counted from the sign-up; the reference itself is never persisted or logged in clear. No signing secret exists (no `AUTH_HANDOFF_SECRET`), so rotation does not apply. The same reference is minted for every accepted sign-up, new or existing account, identically. A reference redeems at most three times within its 24 h; each redemption sends a code and counts as a code request under EARS-13 (per account and per IP). A fourth redemption and an expired, unknown or malformed reference get the one identical fallback response with no mail. The reference is a bearer for one thing only — asking the BFF to send the account's own login code to the account's own address; it never establishes a session. **Leak surface.** A leaked live link discloses the account address (the endpoint returns it) and can send at most three codes to that address within 24 h; the code itself still goes only to the mailbox. Controls: the `handoff` query and body are redacted from every log and audit row (EARS-18); `/login` responses carry `Referrer-Policy: no-referrer`; the page removes `handoff` from the address bar by history replace right after reading it; the congress site must not log or forward it (044 follow-up).
+
 ## 1. Architecture overview
 
 `apps/api` is a **Backend-for-Frontend (BFF)** sitting between the portal's headless forms and Zitadel. It owns the domain mirror, consent, RBAC role grant, audit, and abuse guards; it delegates every credential operation to Zitadel via the Session / User v2 API. The portal renders inline forms on its own origin (Variant B, ADR-0001 §2) and talks only to the BFF; it never sees a token.

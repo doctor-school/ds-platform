@@ -417,7 +417,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 // `identifier` / `email` / `phone`, so the guard's per-user window has nothing
 // to key on. And per this route's OWN bucket — the decorator carries the
 // `storefront:specialty-choice` scope tag, so the window it spends is disjoint
-// from the one register / login / reset share from the same address.
+// from the auth doors' per-IP windows for the same address (003 EARS-13).
 describe.skipIf(!process.env.DATABASE_URL)(
   "017 EARS-6 (#1646): the guest choice POST is rate-limited in its own per-address bucket",
   () => {
@@ -556,9 +556,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-6.18: the route's bucket is disjoint from the auth surface's — neither exhausts the other", async () => {
       const member = await anyMember();
 
-      // Spend this address's AUTH budget the way register / login / reset do:
-      // the unscoped source-address window, the shape every `@RateLimited()`
-      // call site under `src/auth` uses.
+      // Spend this address's AUTH verification window the way the argument-less
+      // `@RateLimited()` verification doors (login, verify, reset-complete) do:
+      // the unscoped bare-address window (003 EARS-13).
       for (let i = 0; i < PER_IP_CEILING; i++) {
         expect(limiter.tryConsume({ ip: OTHER_GUEST_IP })).toBe(true);
       }

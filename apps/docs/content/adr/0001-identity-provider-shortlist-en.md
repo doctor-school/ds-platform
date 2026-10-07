@@ -203,6 +203,24 @@ The `unavailable` row is load-bearing, not defensive boilerplate. Every provider
 
 **Affects.** 044 EARS-35 / EARS-38; #1304; spec 011 admin session, design §9 (Endpoint-authz — the raised floor); `apps/api/src/authz/README.md` (live revalidation table); `apps/api/docs/endpoint-authz-matrix.md` (`revalidate` column).
 
+### A2 — Per-IP auth window split by door: verification counts failures, sending doors own 60 / 15 min (2026-10-07, #2684)
+
+**Context.** §7 per-IP (20 / 15 min) is running in production as one window shared by every auth door (003 EARS-13). A code sign-in spends two units (code request + code submission), so doctors behind one hospital address were throttled after about ten sign-ins. Shared public addresses (hospital, congress hall, carrier CGNAT) are a real usage shape; the congress intake is already sized for it at 60 / 15 min (044 EARS-1).
+
+**Decision.**
+
+- **Verification doors** (password login, code login, registration verify, password-reset-complete): a request that succeeds gives back the one per-IP unit it consumed — its own unit only, the window is never cleared. The per-IP window therefore counts failed verifications, 20 / 15 min / IP; successes interleaved by a valid account cannot buy extra failures.
+- **Sending doors** (code request, register, resend, password-reset request, sign-in hand-off redemption): each request consumes one unit of the sending doors' own per-IP window, **60 / 15 min / IP**.
+- **Unchanged.** Per-user (10 / 15 min, forgiven on success), per-ASN (100 / h, shared by both doors), CAPTCHA, the SMS toll-fraud budget, and the generic throttled response.
+
+**Consequences.** About 60 doctors behind one address can sign in by code within 15 minutes instead of about 10; the bound on failed guesses from one address is unchanged. The ops per-IP override moves both per-IP windows.
+
+**Why now.** Production incident: shared hospital addresses hit the generic throttle on legitimate code sign-ins (#2684).
+
+**Open follow-up.** None.
+
+**Affects.** 003 EARS-13 (production amendment 2026-10-07); `apps/api/src/auth/rate-limit/`; `apps/api/src/auth/README.md` (rate-limit section); design §5.5 SD1.
+
 ## Consequences
 
 ### Positive

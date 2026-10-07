@@ -10,7 +10,10 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
-import { RateLimitService } from "../../src/auth/rate-limit/index.js";
+import {
+  DEFAULT_RATE_LIMIT_THRESHOLDS,
+  RateLimitService,
+} from "../../src/auth/rate-limit/index.js";
 import { PARTNER_DATA_SHARING_PURPOSE } from "@ds/schemas";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
@@ -315,6 +318,114 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
       expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(400);
       expect((await wrong()).statusCode).toBe(429);
+    });
+  });
+
+  // ── #2684 (EARS-13): the per-IP window splits by door ─────────────────────
+  // One shared public address (a hospital, a congress hall) signs many doctors
+  // in by code. A verification door that SUCCEEDS gives back its own per-IP
+  // unit, so the 20/15 min window counts failed verifications; the sending
+  // doors (code request, register, resend, reset request, hand-off) consume
+  // their own 60/15 min window. Production ceilings, per-user wide open so only
+  // the per-IP windows can trip; every request comes from the one loopback IP.
+  describe("#2684 EARS-13: per-IP counts failed verifications; sending doors own a 60 window", () => {
+    let app: NestFastifyApplication;
+    const password = "Aa1!ufficiently-long-pw";
+    const doctor = "shared-ip-doctor@ds.test";
+
+    const requestCode = (identifier: string) =>
+      app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/request",
+        headers: device,
+        payload: { identifier, channel: "email" },
+      });
+    const signInByCode = (identifier: string, code: string) =>
+      app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp",
+        headers: device,
+        payload: { identifier, code, channel: "email" },
+      });
+
+    /** A fresh app (fresh limiter) with one verified account to sign in. */
+    async function bootWithDoctor(): Promise<void> {
+      app = await bootApp((b) =>
+        b.overrideProvider(RATE_LIMIT_THRESHOLDS).useValue({
+          ...DEFAULT_RATE_LIMIT_THRESHOLDS,
+          perUserPer15Min: 1_000_000,
+          perAsnPerHour: 1_000_000,
+        }),
+      );
+      // Sending window: 1 (register). Verification window: the successful
+      // verify gives its unit back, so it stays at 0.
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        headers: device,
+        payload: {
+          email: doctor,
+          password,
+          consent: [{ purpose: "tos", version: "2026-01" }],
+        },
+      });
+      const verified = await app.inject({
+        method: "POST",
+        url: "/v1/auth/verify",
+        headers: device,
+        payload: { email: doctor, code: FAKE_VALID_CODE },
+      });
+      expect(verified.statusCode).toBe(200);
+    }
+    afterAll(() => cleanup(app, [doctor]));
+
+    it("EARS-13: when many code sign-ins succeed from one address, the system shall admit them up to the 60 sending ceiling and refuse the 61st sending request", async () => {
+      await bootWithDoctor();
+      // 25 complete code sign-ins (request + verify) — more than the 20
+      // verification ceiling and than the ~10 the shared window used to allow.
+      for (let i = 0; i < 25; i++) {
+        expect((await requestCode(doctor)).statusCode).toBe(200);
+        expect((await signInByCode(doctor, FAKE_VALID_CODE)).statusCode).toBe(
+          200,
+        );
+      }
+      // Sending window now holds 1 (register) + 25 = 26; 34 more fill it to 60.
+      for (let i = 0; i < 34; i++) {
+        expect((await requestCode(doctor)).statusCode).toBe(200);
+      }
+      expect((await requestCode(doctor)).statusCode).toBe(429);
+      // The sending ceiling does not touch the verification window.
+      expect((await signInByCode(doctor, FAKE_VALID_CODE)).statusCode).toBe(
+        200,
+      );
+      await app.close();
+    });
+
+    it("EARS-13: when 20 verifications from one address fail, the system shall refuse the 21st, and a success interleaved shall not reset that count", async () => {
+      await bootWithDoctor();
+      // 19 failed verifications.
+      for (let i = 0; i < 19; i++) {
+        expect((await signInByCode(doctor, "000000")).statusCode).toBe(401);
+      }
+      // An interleaved success refunds ONLY its own unit — the 19 stay.
+      expect((await requestCode(doctor)).statusCode).toBe(200);
+      expect((await signInByCode(doctor, FAKE_VALID_CODE)).statusCode).toBe(
+        200,
+      );
+      // The 20th failure is admitted; the 21st verification is throttled.
+      expect((await signInByCode(doctor, "000000")).statusCode).toBe(401);
+      expect((await signInByCode(doctor, "000000")).statusCode).toBe(429);
+      expect((await signInByCode(doctor, FAKE_VALID_CODE)).statusCode).toBe(
+        429,
+      );
+      // A password-login failure from the same address meets the same ceiling.
+      const login = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: doctor, password: "wrong-pw-here" },
+      });
+      expect(login.statusCode).toBe(429);
     });
   });
 

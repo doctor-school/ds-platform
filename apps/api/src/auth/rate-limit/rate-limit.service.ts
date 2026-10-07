@@ -1,9 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   RATE_LIMIT_CLOCK,
   RATE_LIMIT_THRESHOLDS,
   type Clock,
   type RateLimitContext,
+  type RateLimitReceipt,
   type RateLimitThresholds,
 } from "./rate-limit.types.js";
 
@@ -27,8 +29,9 @@ interface Dimension {
 /**
  * Key a SOURCE-ADDRESS dimension (per-IP, per-ASN) inside its bucket (#1646).
  *
- * No scope => the bare address, byte-for-byte the key every 003 auth call site
- * has always used, so the shared auth budget is untouched. A scope => the
+ * No bucket => the bare address: the 003 verification doors' per-IP window and
+ * the per-ASN window both auth doors share (003 EARS-13). A bucket (a scope, or
+ * the sending doors' bucket) => the
  * address namespaced under the tag, joined by a separator that occurs in
  * neither an IP nor an `x-asn` value, so a scoped key can never collide with an
  * unscoped one, nor one scope with another, whatever tag a future call site picks.
@@ -48,11 +51,16 @@ function scoped(scope: string | undefined, address: string): string {
  * **every applicable window has room**; a refused request consumes **nothing**
  * (so a single over-limit dimension cannot spuriously burn the others).
  *
+ * The per-IP window splits by auth door (#2684): a verification door keys it on
+ * the bare address and, on success, gives its own unit back
+ * ({@link refundIpUnit}), so that window counts failed verifications; a sending
+ * door keys it under its own bucket with its own ceiling. The per-ASN window is
+ * shared by both doors.
+ *
  * The source-address counters are keyed inside the caller's optional
- * {@link RateLimitContext.scope} bucket (#1646): unscoped — every 003 auth
- * endpoint — they share one budget per address exactly as before; a scoped
- * consumer gets a disjoint window, so a non-auth route can neither exhaust the
- * ceiling register / login / reset consume nor be exhausted by them. This is
+ * {@link RateLimitContext.scope} bucket (#1646): a scoped consumer gets a
+ * disjoint window, so a non-auth route can neither exhaust the auth doors'
+ * per-IP windows nor be exhausted by them (003 EARS-13). This is
  * the request-rate sibling of {@link SmsBudgetService}; the same fixed-window
  * shape, gating every decorated auth endpoint.
  *
@@ -82,13 +90,30 @@ export class RateLimitService {
    * missing edge `x-asn` simply skips that dimension).
    */
   tryConsume(ctx: RateLimitContext): boolean {
+    return this.consume(ctx) !== null;
+  }
+
+  /**
+   * {@link tryConsume} that also hands back a receipt naming the per-IP window
+   * the unit was taken from (`null` when refused). A refund presents it, so a
+   * success gives back the unit it consumed rather than one from a window that
+   * opened after it (003 EARS-13, #2684).
+   */
+  consume(ctx: RateLimitContext): RateLimitReceipt | null {
     const t = this.now();
+    // #2684: an unscoped SENDING door keys its per-IP window under its own
+    // bucket (60 / 15 min); every other attempt keeps the caller's scope.
+    const ipBucket =
+      ctx.scope ??
+      (ctx.door === "sending"
+        ? AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET
+        : undefined);
     const dims: Dimension[] = [
       {
         map: this.byIp,
-        key: scoped(ctx.scope, ctx.ip),
+        key: scoped(ipBucket, ctx.ip),
         windowMs: FIFTEEN_MIN_MS,
-        limit: this.perIpLimit(ctx.scope),
+        limit: this.perIpLimit(ipBucket),
       },
     ];
     if (ctx.identifier !== undefined) {
@@ -111,11 +136,12 @@ export class RateLimitService {
     // Phase 1 — check every window before mutating any, so a request refused on
     // the last dimension does not leave the earlier ones spuriously incremented.
     for (const d of dims) {
-      if (this.current(d, t) >= d.limit) return false;
+      if (this.current(d, t) >= d.limit) return null;
     }
     // Phase 2 — allowed: consume one unit from each window.
     for (const d of dims) this.bump(d, t);
-    return true;
+    const ipWindow = this.byIp.get(dims[0]!.key)!;
+    return { ipWindowResetAtMs: ipWindow.resetAtMs };
   }
 
   /**
@@ -156,13 +182,41 @@ export class RateLimitService {
    * — clear the counter so a recovering user who just succeeded starts fresh. Only
    * the per-user dimension is cleared (keyed identically to {@link tryConsume}'s
    * lower-cased identifier); the per-IP and per-ASN windows are deliberately left
-   * intact, so a success cannot be used to refund an origin's / network's broader
-   * budget (an attacker spraying identifiers from one IP still hits the per-IP
-   * ceiling). An identifier-less context (no per-user key) is a no-op.
+   * intact here: a success gives back at most its OWN per-IP unit
+   * ({@link refundIpUnit}, #2684), never an origin's / network's broader budget
+   * (an attacker spraying identifiers from one IP still hits the per-IP ceiling
+   * of failed verifications). An identifier-less context (no per-user key) is a
+   * no-op.
    */
   reset(ctx: RateLimitContext): void {
     if (ctx.identifier === undefined) return;
     this.byUser.delete(ctx.identifier.toLowerCase());
+  }
+
+  /**
+   * EARS-13 (#2684): a VERIFICATION door that succeeded gives back the one
+   * per-IP unit its own request consumed, so the bare-address window counts
+   * failed verifications only. It is a refund of one unit, never a clear: the
+   * failures already in the window stay, so interleaving one valid account's
+   * successes cannot buy an origin extra failed guesses. The sending doors'
+   * window, the per-user window (see {@link reset}) and the per-ASN window are
+   * untouched. The refund names the window its unit came from
+   * (`consumedWindowResetAtMs`, the guard's receipt): if that window has since
+   * rolled over — or no receipt exists — there is nothing of this request's to
+   * give back, and decrementing the fresh window would erase a failure.
+   */
+  refundIpUnit(ip: string, consumedWindowResetAtMs: number | undefined): void {
+    if (consumedWindowResetAtMs === undefined) return;
+    const w = this.byIp.get(scoped(undefined, ip));
+    if (
+      w === undefined ||
+      w.resetAtMs !== consumedWindowResetAtMs ||
+      this.now() >= w.resetAtMs ||
+      w.count === 0
+    ) {
+      return;
+    }
+    w.count--;
   }
 
   /**

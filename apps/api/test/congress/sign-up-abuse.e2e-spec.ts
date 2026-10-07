@@ -51,8 +51,8 @@ import { eventClassificationSql } from "../setup/event-classification.js";
  * The ceiling is the intake's OWN (60 / 15 min per client address), not the
  * platform default of 20: a congress landing page behind one corporate NAT
  * legitimately submits far more than an auth door does, and the scoped bucket is
- * what keeps that traffic from consuming the budget register / login / reset
- * share (rate-limit.types §scope).
+ * what keeps that traffic from consuming the auth doors' per-IP windows, or
+ * being consumed by them (003 EARS-13; rate-limit.types §scope).
  */
 describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
   "044 congress sign-up — abuse limits (e2e)",

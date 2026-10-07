@@ -163,7 +163,7 @@ async function flushMount() {
   });
 }
 
-/** The 6-char code submits itself once the last character lands (003 EARS-24). */
+/** The 6-digit code submits itself once the last digit lands (003 EARS-24). */
 async function enterCode(arrival?: Arrival) {
   const user = userEvent.setup();
   await mountSettled(arrival);

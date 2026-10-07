@@ -172,7 +172,7 @@ export interface PasswordRecoveryCardProps {
   icon?: React.ReactNode | undefined;
   request: PasswordRecoveryRequestProps;
   complete: PasswordRecoveryCompleteProps;
-  /** Fixed code length; defaults to the 6-char reset code. */
+  /** Fixed code length; defaults to the 6-digit reset code. */
   otpLength?: number;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;

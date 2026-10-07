@@ -114,7 +114,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     // ── Verify (EARS-3) — read the real code from Mailpit ────────────────
     // #175: entering the final character AUTO-SUBMITS (InputOTP `onComplete`).
-    // We fill the 6-character code and do NOT click the button — the journey
+    // We fill the 6-digit code and do NOT click the button — the journey
     // must advance on its own. 003 EARS-41: the accepted code's answer IS the
     // session (no password replay, no manual /login round-trip).
     const verifyCode = await fetchOtpCode(
@@ -180,7 +180,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await expect(page.getByTestId("reset-request-submit")).toBeVisible();
   });
 
-  test("003 EARS-6/42: email-OTP — register+verify → request code → a 6-character code signs in → session", async ({
+  test("003 EARS-6/42: email-OTP — register+verify → request code → a 6-digit code signs in → session", async ({
     page,
   }) => {
     const email = newEmail();
@@ -384,7 +384,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   // (that would make the EARS-8/16 ack a code oracle, or need a banned backdoor).
   // SMS-Aero is the PRODUCTION sender (recorded in the specs); the dev-stand never
   // reaches it. NOT faked green — proven against REAL Zitadel.
-  test("003 EARS-7/42: sms-OTP — provisioned phone → request code → a 6-character code signs in → session", async ({
+  test("003 EARS-7/42: sms-OTP — provisioned phone → request code → a 6-digit code signs in → session", async ({
     page,
   }) => {
     const email = newEmail();

@@ -578,6 +578,17 @@ export class AuthService {
     // audit) BEFORE minting the new one, so the credential change leaves no stale
     // session behind and the fresh session is the only survivor.
     await this.sessions.revokeAllForSub(session.sub);
+    // 003 EARS-35: verify only after the reset code succeeds, but before the
+    // OIDC exchange; an unverified account cannot complete that exchange.
+    const emailFlipped = await this.idp.markEmailVerified(session.sub);
+    if (emailFlipped) {
+      await this.mirror.markEmailVerified(session.sub);
+      await this.audit.record({
+        type: "IdentifierVerified",
+        sub: session.sub,
+        channel: "email",
+      });
+    }
     // Mint the fresh session on the identical login convergence point (EARS-8).
     const established = await this.sessions.establish(session, fingerprint);
     // Mirror login's session-created audit row (EARS-18): the reset just minted an
@@ -588,28 +599,6 @@ export class AuthService {
       sub: session.sub,
       method: "password",
     });
-    // EARS-35 (#1131): a proven reset code was delivered to the account's email
-    // and returned by the caller — that is itself proof-of-mailbox-ownership, so
-    // mark the email verified. This runs ONLY here, after a valid token
-    // (`session` is non-null): no state is mutated before the code+password
-    // succeed (OWASP). It closes the stuck-unverified trap through the existing
-    // recovery path — an owner who never verified at registration is no longer
-    // barred from the verified-only login-code path (EARS-6/EARS-34). The IdP flip
-    // is idempotent and reports whether it actually changed state; the mirror flip
-    // and the terminal `auth.account.verified` (channel email) row are emitted
-    // ONLY on a real change, so an already-verified account is a no-op with no
-    // duplicate row. The flip fails soft (never throws) so a proven reset is never
-    // 500'd by the verification tail — the EARS-19 webhook / EARS-26 self-heal
-    // backstop the mirror if the direct flip missed.
-    const emailFlipped = await this.idp.markEmailVerified(session.sub);
-    if (emailFlipped) {
-      await this.mirror.markEmailVerified(session.sub);
-      await this.audit.record({
-        type: "IdentifierVerified",
-        sub: session.sub,
-        channel: "email",
-      });
-    }
     return { cookie: established.cookie, body: { status: "reset_completed" } };
   }
 

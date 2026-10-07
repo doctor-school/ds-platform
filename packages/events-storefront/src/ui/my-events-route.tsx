@@ -23,7 +23,7 @@ function resolveTab(raw: string | string[] | undefined): MyEventsTab {
  *     NEAREST first, each linking to its event page and admitting the viewer
  *     into a live room through the room href the api resolved for this host;
  *   • **Записи** — every registered `ended` event, month-grouped, newest first,
- *     each badged with its recording state («Запись готовится» included).
+ *     each stating its recording state on a line under the date («Запись готовится» included).
  *     `hidden` events appear in NEITHER tab.
  *
  * Each tab is one read of the host's `contentSet.myEventsPath`; the envelope

@@ -42,7 +42,7 @@ export interface MyEventListContext {
  * The room CTA of a registered live row is the `roomHref` the api resolved for
  * the calling host (gate §4.3 D8) — the projection never builds a room path. An
  * `ended` row's CTA leads back to its event page on the host, where the recording
- * lives; its badge carries the recording state (including `preparing`).
+ * lives; its recording-state line (under the date) carries the state (including `preparing`).
  */
 export function buildMyEventListItems(
   events: readonly MyEventItem[],

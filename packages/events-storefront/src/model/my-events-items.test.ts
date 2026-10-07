@@ -111,7 +111,7 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
     expect(published!.ctaLabel).toBeUndefined();
   });
 
-  it("014 EARS-9.4: Записи groups the newest-first ended rows by Moscow month and badges every row with its recording state", () => {
+  it("014 EARS-9.4: Записи groups the newest-first ended rows by Moscow month and states every row's recording state on a line under its date", () => {
     const ended: MyEventItem[] = [
       {
         ...upcoming[0]!,

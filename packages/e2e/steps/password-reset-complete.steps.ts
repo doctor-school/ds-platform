@@ -4,10 +4,13 @@ import {
   type Browser,
   type BrowserContext,
   type BrowserContextOptions,
-  type Locator,
   type Page,
   type Response,
 } from "@playwright/test";
+import {
+  inputSecret as input,
+  registerOwnedCredentials,
+} from "../lib/owned-registration.js";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import {
   fetchRecoveryCode,
@@ -44,18 +47,6 @@ async function privatePage(browser: Browser, state: Recovery): Promise<Page> {
   state.contexts.push(context);
   await installCaptchaStub(context);
   return context.newPage();
-}
-async function input(locator: Locator, value: string): Promise<void> {
-  await locator.waitFor({ state: "visible" });
-  // evaluate keeps secret values out of Playwright fill() timeout call logs.
-  await locator.evaluate((element, text) => {
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
-    setter.call(element, text);
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-  }, value);
 }
 async function open(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: "load" });
@@ -115,27 +106,10 @@ async function registerOwnedAccount(
   };
   recoveries.set(key, state);
   const first = await privatePage(browser, state);
-  await open(first, `${base}/register`);
-  await input(first.locator('input[autocomplete="email"]'), state.email);
-  await input(
-    first.locator('input[autocomplete="new-password"]'),
-    state.oldPassword,
-  );
-  const sentAt = new Date().toISOString();
-  const registered = post(first, "/v1/auth/register");
-  await first.getByTestId("register-submit").click();
-  expect((await registered).ok(), "owned account registration accepted").toBe(
-    true,
-  );
-  await first.waitForURL((url) => url.pathname === "/verify");
-  await first.waitForLoadState("networkidle");
-  const code = await fetchRecoveryCode(
-    nativeRecoveryMail(),
-    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base),
-    state.email,
-    sentAt,
-    "register",
-  );
+  const { code } = await registerOwnedCredentials(first, base, {
+    email: state.email,
+    password: state.oldPassword,
+  });
   return { state, first, code };
 }
 
@@ -303,7 +277,9 @@ Then(
       false,
     );
     expect(
-      (await reset.context().cookies()).some((cookie) => cookie.name === SESSION),
+      (await reset.context().cookies()).some(
+        (cookie) => cookie.name === SESSION,
+      ),
       "rejected reset holds no private session",
     ).toBe(false);
     expect(

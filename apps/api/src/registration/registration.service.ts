@@ -26,8 +26,8 @@ import {
  * §4.3 D8). Every row of this read is the caller's own registration, so the
  * decision is the ONE participation policy's `enter-room` branch (a registered
  * viewer on a `live` event) evaluated over the host's route table — the same
- * rule the event page's CTA and the Academy client's `resolveRoomEntryHref`
- * apply. Any other action means the room is not open to the caller: `null`.
+ * rule the event page's CTA applies (`resolveParticipationCta` in
+ * `apps/api/src/events/participation-cta.resolver.ts`). Any other action means the room is not open to the caller: `null`.
  * `seatsLeft` cannot change the `enter-room` decision, so none is read.
  */
 function myEventRoomHref(

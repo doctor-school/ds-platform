@@ -112,11 +112,16 @@ async function freshAddressedMail(
     throw new Error(`Mailpit search failed with HTTP ${search.status()}`);
   const list = (await search.json()) as {
     messages?: AddressedMail[];
-    total?: number;
+    messages_count?: number;
+    start?: number;
   };
+  // Mailpit's total counts the whole inbox; messages_count counts query matches.
   if (
+    !list ||
     !Array.isArray(list.messages) ||
-    (list.total !== undefined && list.total > list.messages.length)
+    !Number.isSafeInteger(list.messages_count) ||
+    list.messages_count !== list.messages.length ||
+    list.start !== 0
   ) {
     throw new Error("Invalid or incomplete Mailpit search payload");
   }

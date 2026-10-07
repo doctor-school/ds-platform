@@ -11,18 +11,73 @@ const message = (overrides = {}) => ({
   To: [{ Address: email }],
   ...overrides,
 });
-function client(messages: unknown[], searchStatus = 200, detailStatus = 200) {
+function client(
+  messages: unknown[],
+  searchStatus = 200,
+  detailStatus = 200,
+  metadata: Record<string, unknown> = {},
+) {
   return {
     get: vi.fn(async (url: string) => ({
       ok: () =>
         (url.includes("/search?") ? searchStatus : detailStatus) === 200,
       status: () => (url.includes("/search?") ? searchStatus : detailStatus),
-      json: async () => (url.includes("/search?") ? { messages } : message()),
+      json: async () =>
+        url.includes("/search?")
+          ? {
+              total: 200,
+              messages_count: messages.length,
+              start: 0,
+              ...metadata,
+              messages,
+            }
+          : message(),
     })),
   } as unknown as APIRequestContext;
 }
 afterEach(() => vi.useRealTimers());
 describe("reset delivery evidence", () => {
+  it("EARS-11: accepts all query matches when the shared mailbox contains unrelated mail", async () => {
+    await expect(
+      waitForResetMail(
+        client([message()]),
+        "https://mailpit.example.test",
+        email,
+        after,
+      ),
+    ).resolves.toBeUndefined();
+  });
+  it("EARS-16: accepts zero query matches in a nonempty shared mailbox", async () => {
+    vi.useFakeTimers();
+    const result = assertNoAddressedMail(
+      client([]),
+      "https://mailpit.example.test",
+      email,
+      after,
+    );
+    const assertion = expect(result).resolves.toBeUndefined();
+    await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
+  });
+  it.each([
+    { messages_count: 1 },
+    { messages_count: undefined },
+    { messages_count: -1 },
+    { messages_count: 0.5 },
+    { messages_count: "0" },
+    { start: 1 },
+    { start: undefined },
+  ])("EARS-16: rejects incomplete or malformed query metadata %j", async (metadata) => {
+    vi.useFakeTimers();
+    const assertion = expect(
+      assertNoAddressedMail(
+        client([], 200, 200, { total: 0, ...metadata }),
+        "https://mailpit.example.test",
+        email,
+        after,
+      ),
+    ).rejects.toThrow("search payload");
+    await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
+  });
   it("EARS-11: ignores stale, unrelated-subject and wrong-recipient mail before fresh reset delivery", async () => {
     vi.useFakeTimers();
     const messages = [

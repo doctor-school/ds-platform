@@ -83,8 +83,8 @@ export class InvalidEventCursorError extends Error {
 
 export interface EventListingInput {
   timeframe: "upcoming" | "past";
-  cursor?: string;
-  limit?: number;
+  cursor?: string | undefined;
+  limit?: number | undefined;
 }
 
 /**

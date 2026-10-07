@@ -10,7 +10,6 @@ import {
 } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
-import { fetchMonthBroadcasts, fetchMonthlyCounts } from "@/lib/public-events";
 import {
   buildMonthGrid,
   capDayEntries,
@@ -23,7 +22,11 @@ import {
   monthShortLabels,
   shiftMonth,
   weekdayShortLabels,
-} from "@/lib/month-grid";
+} from "@ds/events-storefront";
+import {
+  fetchMonthBroadcasts,
+  fetchMonthlyCounts,
+} from "@ds/events-storefront/server";
 import { CalendarShell } from "./calendar-shell";
 import { MonthCalendarMobile, type AgendaDay } from "./month-calendar-mobile";
 import { ViewSwitcher } from "./view-switcher";

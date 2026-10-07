@@ -84,9 +84,9 @@ describe("buildMonthGrid — July 2026 (canvas reference)", () => {
 
   it("EARS-19: opens with the June 29–30 leading filler, then July 1 in the Wednesday column", () => {
     // 1 July 2026 is a Wednesday (Monday-first index 2) → two leading fillers.
-    expect(grid.weeks[0][0]).toMatchObject({ day: 29, inMonth: false });
-    expect(grid.weeks[0][1]).toMatchObject({ day: 30, inMonth: false });
-    expect(grid.weeks[0][2]).toMatchObject({ day: 1, inMonth: true });
+    expect(grid.weeks[0]![0]).toMatchObject({ day: 29, inMonth: false });
+    expect(grid.weeks[0]![1]).toMatchObject({ day: 30, inMonth: false });
+    expect(grid.weeks[0]![2]).toMatchObject({ day: 1, inMonth: true });
   });
 
   it("EARS-19: closes with next-month trailing filler completing the last row", () => {

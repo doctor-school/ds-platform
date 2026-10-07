@@ -6,7 +6,7 @@ import {
   fetchRoomConfig,
   resolveRoomEntry,
 } from "@ds/room/server";
-import { fetchPublicEventPage } from "../../../../lib/public-events";
+import { fetchPublicEventPage } from "@ds/events-storefront/server";
 import { forwardedSessionFrom } from "../../../../lib/registration-state";
 import { buildRoomCopyStrings } from "./copy";
 import { RoomClient } from "./room-client";

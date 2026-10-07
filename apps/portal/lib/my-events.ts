@@ -1,84 +1,24 @@
-import type { MyEventItem, MyEvents, MyEventsTab } from "@ds/schemas";
+import type { MyEventItem, MyEventsTab } from "@ds/schemas";
 import type { EventListItem } from "@ds/design-system/blocks";
-
 import {
   formatMskDayLabel,
   formatMskMonth,
   formatMskParts,
   formatMskWeekdayShort,
+  isRecordingPlayable,
   mskDayKey,
   mskMonthKey,
-} from "./msk";
-import {
-  forwardedHeaders,
-  resolveRoomEntryHref,
-  type ForwardedSession,
-} from "./registration-state";
-import { toCanvasStatus } from "./event-lifecycle";
-import { isRecordingPlayable } from "./recording-cta";
+  toCanvasStatus,
+} from "@ds/events-storefront";
 
-/**
- * 005 EARS-6 / 014 EARS-9 — the `MyEvents` read composed onto the «Мои события»
- * surface, a SEPARATE authenticated read like {@link fetchEventRegistrationState}.
- *
- * `GET /v1/me/events?tab=upcoming|recordings` is `doctor_guest`-authenticated
- * (EARS-10): the surface is server-rendered, so this runs on the server and
- * forwards the incoming request's session cookie AND its fingerprint headers (the
- * BFF session is fingerprint-bound, ADR-0001 §6 — a server-to-server read must
- * present the same `user-agent`, `accept-language` AND client address the browser
- * bound at login, or the api 401s a valid session — #2054, the bounce this page
- * showed to signed-in doctors in production). The upstream is the same env-driven
- * `API_PROXY_TARGET` the rest of the portal's server reads use — never a
- * hardcoded host.
+import { resolveRoomEntryHref } from "./registration-state";
+
+/*
+ * The «Мои события» READ (`fetchMyEvents`) lives in `@ds/events-storefront/server`;
+ * this row→card projection stays on the Academy host until wave-2 PR 2.3, where the
+ * api resolves the per-host room href onto `MyEventItem` (entry gate §2.1 row 15,
+ * §4.3 D8) and the projection moves without importing `@ds/room`.
  */
-const API_BASE = (process.env.API_PROXY_TARGET ?? "http://localhost:3000").replace(
-  /\/$/,
-  "",
-);
-
-/**
- * The read outcome the «Мои события» page renders from:
- *   • `{ authenticated: true, events }` — the `MyEvents` envelope for the requested
- *     tab (`{ tab, data, counts }`; `data` may be `[]`, which renders the tab's
- *     empty-state, EARS-6/EARS-12), the `counts` feeding BOTH tab chips so the
- *     other tab's number is right without a second read;
- *   • `{ authenticated: false }` — no/expired session (401) or no cookie rode the
- *     request; the page redirects the guest to login (the surface is authenticated,
- *     unlike the public 004 pages).
- */
-export type MyEventsResult =
-  | { readonly authenticated: true; readonly events: MyEvents }
-  | { readonly authenticated: false };
-
-/**
- * Read one tab of the calling doctor's `MyEvents` envelope, forwarding the
- * request's session cookie + fingerprint headers. A missing cookie or a 401
- * collapses to `{ authenticated: false }` (the page sends the guest to login); an
- * empty `data` array is a valid authenticated result (the empty-state). Per-user
- * ⇒ never shared-cacheable (`cache: "no-store"`), keeping this out of the data
- * cache that backs the public projections (design §5).
- */
-export async function fetchMyEvents(
-  session: ForwardedSession,
-  tab: MyEventsTab = "upcoming",
-): Promise<MyEventsResult> {
-  // No session cookie rode the request → a guest; never issue the authed read.
-  if (!session.cookie) return { authenticated: false };
-
-  const res = await fetch(`${API_BASE}/v1/me/events?tab=${tab}`, {
-    // The whole fingerprint surface (ADR-0001 §6), forwarded client address
-    // included — without it the api re-derives a different fingerprint and 401s
-    // a valid session (#2054).
-    headers: forwardedHeaders(session),
-    // Per-user, authenticated — MUST NOT be shared-cached (design §5).
-    cache: "no-store",
-  });
-  if (res.status === 401) return { authenticated: false };
-  if (!res.ok) {
-    throw new Error(`my events fetch failed (${res.status})`);
-  }
-  return { authenticated: true, events: (await res.json()) as MyEvents };
-}
 
 /** Copy the pure row→card projection needs; every string comes from the catalog. */
 export interface MyEventListCopy {
@@ -100,7 +40,7 @@ export interface MyEventListCopy {
  * Grouping mirrors the public listing so the two feeds share one rhythm: the
  * **Предстоящие** tab is grouped by Europe/Moscow calendar DAY (the server's
  * nearest-first order preserved, EARS-6/EARS-11), the **Записи** tab by МСК MONTH
- * over the newest-first history. Both keys come from `lib/msk`, never recomputed
+ * over the newest-first history. Both keys come from the package МСК helpers, never recomputed
  * here, so the grouping can never drift to the viewer's timezone.
  *
  * A `live` row is one of the caller's OWN registrations (the read returns only

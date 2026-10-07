@@ -365,8 +365,9 @@ describe("RateLimitService (EARS-13)", () => {
     it("EARS-13: when a verification succeeds, the system shall give back that request's own per-IP unit", () => {
       // Many successes from one address: each consumes then refunds its unit.
       for (let i = 0; i < 100; i++) {
-        expect(split.tryConsume({ ip })).toBe(true);
-        split.refundIpUnit(ip);
+        const receipt = split.consume({ ip });
+        expect(receipt).not.toBeNull();
+        split.refundIpUnit(ip, receipt?.ipWindowResetAtMs);
       }
       // The window is empty again — the full failure budget is still there.
       for (let i = 0; i < thresholds.perIpPer15Min; i++) {
@@ -379,26 +380,42 @@ describe("RateLimitService (EARS-13)", () => {
       for (let i = 0; i < thresholds.perIpPer15Min - 1; i++) {
         expect(split.tryConsume({ ip })).toBe(true); // failures
       }
-      expect(split.tryConsume({ ip })).toBe(true); // the 20th: a success
-      split.refundIpUnit(ip);
+      const success = split.consume({ ip }); // the 20th: a success
+      expect(success).not.toBeNull();
+      split.refundIpUnit(ip, success?.ipWindowResetAtMs);
       expect(split.tryConsume({ ip })).toBe(true); // 20th failure
       expect(split.tryConsume({ ip })).toBe(false); // 21st → refused
     });
 
     it("EARS-13: a refund on an empty or rolled-over window grants no credit", () => {
-      split.refundIpUnit(ip); // nothing consumed yet
-      split.tryConsume({ ip });
+      split.refundIpUnit(ip, undefined); // nothing consumed yet
+      const stale = split.consume({ ip });
       now += 15 * 60 * 1000; // the window rolls over
-      split.refundIpUnit(ip);
+      split.refundIpUnit(ip, stale?.ipWindowResetAtMs);
       for (let i = 0; i < thresholds.perIpPer15Min; i++) {
         expect(split.tryConsume({ ip })).toBe(true);
       }
       expect(split.tryConsume({ ip })).toBe(false);
     });
 
+    it("EARS-13: a refund after the window rolled over does not decrement the fresh window", () => {
+      // The success's own unit was consumed in window A…
+      const receipt = split.consume({ ip });
+      expect(receipt).not.toBeNull();
+      now += 15 * 60 * 1000; // …window A rolls over before the handler refunds
+      // Window B opens with a failure the refund must not erase.
+      for (let i = 0; i < thresholds.perIpPer15Min; i++) {
+        expect(split.tryConsume({ ip })).toBe(true);
+      }
+      split.refundIpUnit(ip, receipt?.ipWindowResetAtMs);
+      expect(split.tryConsume({ ip })).toBe(false);
+    });
+
     it("EARS-13: a refund leaves the sending-door window untouched", () => {
-      for (let i = 0; i < 60; i++) split.tryConsume({ ip, door: "sending" });
-      split.refundIpUnit(ip);
+      let last = null;
+      for (let i = 0; i < 60; i++)
+        last = split.consume({ ip, door: "sending" });
+      split.refundIpUnit(ip, last?.ipWindowResetAtMs);
       expect(split.tryConsume({ ip, door: "sending" })).toBe(false);
     });
   });

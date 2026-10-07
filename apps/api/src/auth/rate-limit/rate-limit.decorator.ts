@@ -1,6 +1,12 @@
-import { SetMetadata } from "@nestjs/common";
+import {
+  createParamDecorator,
+  SetMetadata,
+  type ExecutionContext,
+} from "@nestjs/common";
 import {
   RATE_LIMITED_KEY,
+  RATE_LIMIT_RECEIPT_KEY,
+  type RateLimitReceipt,
   type RateLimitDoor,
   type RateLimitedMarker,
 } from "./rate-limit.types.js";
@@ -36,3 +42,18 @@ export function RateLimited(
   const marker: RateLimitedMarker = scopeOrDoor ?? true;
   return SetMetadata(RATE_LIMITED_KEY, marker);
 }
+
+/**
+ * EARS-13 (#2684): the per-IP window the guard took this request's unit from
+ * (`undefined` when the guard admitted nothing), for the verification handler
+ * to hand to `RateLimitService.refundIpUnit` on success — so the refund returns
+ * this request's own unit and never one from a window opened after it.
+ */
+export const ConsumedIpWindow = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): number | undefined =>
+    ctx
+      .switchToHttp()
+      .getRequest<{ [RATE_LIMIT_RECEIPT_KEY]?: RateLimitReceipt }>()[
+      RATE_LIMIT_RECEIPT_KEY
+    ]?.ipWindowResetAtMs,
+);

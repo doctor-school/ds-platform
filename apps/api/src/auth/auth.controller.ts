@@ -29,7 +29,11 @@ import type {
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
-import { RateLimited, RateLimitService } from "./rate-limit/index.js";
+import {
+  ConsumedIpWindow,
+  RateLimited,
+  RateLimitService,
+} from "./rate-limit/index.js";
 import { TimingEqualized } from "./timing/index.js";
 import {
   LoginChallenged,
@@ -141,6 +145,7 @@ export class AuthController {
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
     @Ip() ip: string,
+    @ConsumedIpWindow() consumedIpWindow: number | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
@@ -163,7 +168,7 @@ export class AuthController {
     // it counts failed verifications; the per-ASN window is left intact.
     this.loginChallenge.reset(ip);
     this.rateLimit.reset({ ip, identifier: dto.identifier });
-    this.rateLimit.refundIpUnit(ip);
+    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -283,6 +288,7 @@ export class AuthController {
     @Headers("accept-language") acceptLanguage: string | undefined,
     @Headers("cookie") cookieHeader: string | undefined,
     @Ip() ip: string,
+    @ConsumedIpWindow() consumedIpWindow: number | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
@@ -300,7 +306,7 @@ export class AuthController {
     // window for this identifier exactly as the password login does.
     this.rateLimit.reset({ ip, identifier: dto.identifier });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip);
+    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -417,6 +423,7 @@ export class AuthController {
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
     @Ip() ip: string,
+    @ConsumedIpWindow() consumedIpWindow: number | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<VerifyResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
@@ -426,7 +433,7 @@ export class AuthController {
     const { cookie, body } = await this.auth.verify(dto, fingerprint);
     this.rateLimit.reset({ ip, identifier: dto.email });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip);
+    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", cookie);
     return body;
   }
@@ -515,6 +522,7 @@ export class AuthController {
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
     @Ip() ip: string,
+    @ConsumedIpWindow() consumedIpWindow: number | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<PasswordResetCompleteResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
@@ -528,7 +536,7 @@ export class AuthController {
     // the guard; mint the fresh session by setting its __Host- cookie.
     this.rateLimit.reset({ ip, identifier: dto.identifier });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip);
+    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", cookie);
     return body;
   }

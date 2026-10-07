@@ -13,7 +13,11 @@ import type { DoctorRegisterResponse, VerifyResponse } from "@ds/schemas";
 
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
-import { RateLimited, RateLimitService } from "../auth/rate-limit/index.js";
+import {
+  ConsumedIpWindow,
+  RateLimited,
+  RateLimitService,
+} from "../auth/rate-limit/index.js";
 import { TimingEqualized } from "../auth/timing/index.js";
 import { computeFingerprint } from "../auth/session/session.cookie.js";
 import {
@@ -104,6 +108,7 @@ export class DoctorRegisterPublicController {
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
     @Ip() ip: string,
+    @ConsumedIpWindow() consumedIpWindow: number | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<VerifyResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
@@ -113,7 +118,7 @@ export class DoctorRegisterPublicController {
     const { cookie, body } = await this.doctorRegister.verify(dto, fingerprint);
     this.rateLimit.reset({ ip, identifier: dto.email });
     // #2684: a successful verification gives back its own per-IP unit.
-    this.rateLimit.refundIpUnit(ip);
+    this.rateLimit.refundIpUnit(ip, consumedIpWindow);
     reply.header("set-cookie", cookie);
     return body;
   }

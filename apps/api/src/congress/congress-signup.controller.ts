@@ -25,8 +25,8 @@ import { CongressSignUpService } from "./congress-signup.service.js";
  *   unchanged; 044 defines no provider or challenge logic of its own.
  * - `@RateLimited(CONGRESS_SIGN_UP_RATE_LIMIT_SCOPE)` — its OWN bucket, with
  *   its own 60/15-min per-client-address ceiling. A scoped bucket means this
- *   page can never exhaust the budget register / login / reset share, nor be
- *   exhausted by them (#1646 mechanism, #2294 ceiling).
+ *   page can never exhaust the auth doors' per-IP windows, nor be exhausted by
+ *   them (003 EARS-13; #1646 mechanism, #2294 ceiling).
  * - `@TimingEqualized({ floorMs })` — the existing-account path must not answer
  *   faster than the new-account one; an existence oracle in the timing is an
  *   existence oracle whatever the body says. The floor is this route's OWN

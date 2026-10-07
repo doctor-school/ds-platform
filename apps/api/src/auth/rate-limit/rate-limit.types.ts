@@ -36,7 +36,8 @@ export interface RateLimitThresholds extends RateLimitCeilings {
    * magnitude from an auth door's (the public congress intake: one corporate
    * NAT submitting a whole department's sign-ups, 044 EARS-1) needs its own
    * number, and expressing that as a raised PLATFORM default would raise it for
-   * register, login and reset too — the opposite of what the scope exists for.
+   * the auth verification doors too (003 EARS-13) — the opposite of what the
+   * scope exists for.
    *
    * A scope with no entry here falls back to the platform ceiling, so adding a
    * scope is never silently unlimited. The auth sending doors' bucket
@@ -146,6 +147,19 @@ export interface RateLimitContext {
    */
   door?: RateLimitDoor | undefined;
 }
+
+/**
+ * EARS-13 (#2684): proof of which per-IP window an allowed attempt took its
+ * unit from. The guard leaves it on the request ({@link RATE_LIMIT_RECEIPT_KEY})
+ * so a succeeding verification refunds that unit and no other — a window that
+ * opened after the request was admitted holds none of its units.
+ */
+export interface RateLimitReceipt {
+  ipWindowResetAtMs: number;
+}
+
+/** Request property the guard stores the {@link RateLimitReceipt} under. */
+export const RATE_LIMIT_RECEIPT_KEY = "dsRateLimitReceipt";
 
 /** EARS-13 (#2684): the two kinds of auth door the per-IP window splits by. */
 export type RateLimitDoor = "verification" | "sending";

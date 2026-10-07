@@ -5,6 +5,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   type Clock,
   type RateLimitContext,
+  type RateLimitReceipt,
   type RateLimitThresholds,
 } from "./rate-limit.types.js";
 
@@ -56,10 +57,9 @@ function scoped(scope: string | undefined, address: string): string {
  * shared by both doors.
  *
  * The source-address counters are keyed inside the caller's optional
- * {@link RateLimitContext.scope} bucket (#1646): unscoped — every 003 auth
- * endpoint — they share one budget per address exactly as before; a scoped
- * consumer gets a disjoint window, so a non-auth route can neither exhaust the
- * ceiling register / login / reset consume nor be exhausted by them. This is
+ * {@link RateLimitContext.scope} bucket (#1646): a scoped consumer gets a
+ * disjoint window, so a non-auth route can neither exhaust the auth doors'
+ * per-IP windows nor be exhausted by them (003 EARS-13). This is
  * the request-rate sibling of {@link SmsBudgetService}; the same fixed-window
  * shape, gating every decorated auth endpoint.
  *
@@ -89,6 +89,16 @@ export class RateLimitService {
    * missing edge `x-asn` simply skips that dimension).
    */
   tryConsume(ctx: RateLimitContext): boolean {
+    return this.consume(ctx) !== null;
+  }
+
+  /**
+   * {@link tryConsume} that also hands back a receipt naming the per-IP window
+   * the unit was taken from (`null` when refused). A refund presents it, so a
+   * success gives back the unit it consumed rather than one from a window that
+   * opened after it (003 EARS-13, #2684).
+   */
+  consume(ctx: RateLimitContext): RateLimitReceipt | null {
     const t = this.now();
     // #2684: an unscoped SENDING door keys its per-IP window under its own
     // bucket (60 / 15 min); every other attempt keeps the caller's scope.
@@ -125,11 +135,12 @@ export class RateLimitService {
     // Phase 1 — check every window before mutating any, so a request refused on
     // the last dimension does not leave the earlier ones spuriously incremented.
     for (const d of dims) {
-      if (this.current(d, t) >= d.limit) return false;
+      if (this.current(d, t) >= d.limit) return null;
     }
     // Phase 2 — allowed: consume one unit from each window.
     for (const d of dims) this.bump(d, t);
-    return true;
+    const ipWindow = this.byIp.get(dims[0]!.key)!;
+    return { ipWindowResetAtMs: ipWindow.resetAtMs };
   }
 
   /**
@@ -188,11 +199,22 @@ export class RateLimitService {
    * failures already in the window stay, so interleaving one valid account's
    * successes cannot buy an origin extra failed guesses. The sending doors'
    * window, the per-user window (see {@link reset}) and the per-ASN window are
-   * untouched; an empty or rolled-over window is left as it is (no credit).
+   * untouched. The refund names the window its unit came from
+   * (`consumedWindowResetAtMs`, the guard's receipt): if that window has since
+   * rolled over — or no receipt exists — there is nothing of this request's to
+   * give back, and decrementing the fresh window would erase a failure.
    */
-  refundIpUnit(ip: string): void {
+  refundIpUnit(ip: string, consumedWindowResetAtMs: number | undefined): void {
+    if (consumedWindowResetAtMs === undefined) return;
     const w = this.byIp.get(scoped(undefined, ip));
-    if (w === undefined || this.now() >= w.resetAtMs || w.count === 0) return;
+    if (
+      w === undefined ||
+      w.resetAtMs !== consumedWindowResetAtMs ||
+      this.now() >= w.resetAtMs ||
+      w.count === 0
+    ) {
+      return;
+    }
     w.count--;
   }
 

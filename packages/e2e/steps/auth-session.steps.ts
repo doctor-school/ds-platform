@@ -7,6 +7,7 @@ import {
 } from "@playwright/test";
 
 import { installCaptchaStub } from "../lib/captcha-stub.js";
+import { captureResponse } from "../lib/captured-response.js";
 import { goldenDoctorPassword, resolveGoldenDoctor } from "../lib/golden.js";
 import { fetchLoginCode, mailpitUrlFor } from "../lib/mailpit.js";
 import { signInGoldenDoctor } from "../lib/sign-in.js";
@@ -20,6 +21,9 @@ const loginResponses = new WeakMap<Page, Response>();
 const otpRequestResponses = new WeakMap<Page, Response>();
 const otpLoginResponses = new WeakMap<Page, Response>();
 const refusedLoginResponses = new WeakMap<Page, Response>();
+// Login bodies are read on arrival: later steps navigate, and Playwright drops
+// a body once the page leaves it (#2683).
+const loginBodies = new WeakMap<Page, string>();
 type SessionCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
 const preLogoutCookies = new WeakMap<Page, SessionCookie>();
 const logoutResponses = new WeakMap<Page, Response>();
@@ -45,14 +49,12 @@ async function submitDeliveredEmailCode(
     doctor.email,
     requestedAt,
   );
-  const loginResponse = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/v1/auth/login/otp" &&
-      response.request().method() === "POST",
-  );
+  const loginResponse = captureResponse(page, "/v1/auth/login/otp");
   // The sixth character auto-submits the shipped OTP form.
   await page.locator('input[autocomplete="one-time-code"]').fill(code);
-  otpLoginResponses.set(page, await loginResponse);
+  const login = await loginResponse;
+  otpLoginResponses.set(page, login.response);
+  loginBodies.set(page, login.body);
   world.signedInAs = doctor.seedName;
 }
 
@@ -157,14 +159,12 @@ When(
   "that doctor signs in through the Academy password form",
   async ({ page, world }) => {
     expect(world.host.id).toBe("academy");
-    const loginResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/v1/auth/login" &&
-        response.request().method() === "POST",
-    );
+    const loginResponse = captureResponse(page, "/v1/auth/login");
     const doctor = await signInGoldenDoctor(page, world.host, SEED);
     world.signedInAs = doctor.seedName;
-    loginResponses.set(page, await loginResponse);
+    const login = await loginResponse;
+    loginResponses.set(page, login.response);
+    loginBodies.set(page, login.body);
   },
 );
 
@@ -223,9 +223,8 @@ Then(
 Then(
   "neither the login response nor JavaScript-readable browser stores expose access or refresh tokens",
   async ({ page }) => {
-    const response = loginResponses.get(page) ?? otpLoginResponses.get(page);
-    expect(response, "login response was captured").toBeDefined();
-    const loginBody = await response!.text();
+    const loginBody = loginBodies.get(page);
+    expect(loginBody, "login response body was captured").toBeDefined();
     expect(loginBody).not.toMatch(/access[_-]?token|refresh[_-]?token/i);
     expect(loginBody).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
     const clientState = await page.evaluate(() => ({

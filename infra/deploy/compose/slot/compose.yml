@@ -79,6 +79,15 @@ services:
       # IS the S3 secret key, as S3_ACCESS_KEY is its root user.
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in /etc/ds-platform/stage.env}
       PORT: "3000"
+      # Test-runner auth ceilings, the same values CI gives its runner
+      # (.github/workflows/ci.yml, api-e2e env): `pnpm e2e:stage` plays hundreds
+      # of users from ONE runner address, which the 003 EARS-13 production
+      # per-IP window (20 / 15 min) throttles into a false 429 red (#2683).
+      # EARS-13 itself is proven by the apps/api unit and api-e2e suites.
+      # Literals here, not in stage.env: one file serves every slot incl. `main`.
+      RATE_LIMIT_PER_IP_15MIN: "100000"
+      RATE_LIMIT_PER_USER_15MIN: "100000"
+      RATE_LIMIT_PER_ASN_1H: "1000000"
     networks:
       - default
       - stg-infra

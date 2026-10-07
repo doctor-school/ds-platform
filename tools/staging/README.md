@@ -206,6 +206,11 @@ worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist`
 does not answer — a suite pointed at a half-raised slot reports topology as product
 regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
 
+Every slot (incl. `main`) runs the api with the CI test-runner auth ceilings (`RATE_LIMIT_*`
+in `infra/deploy/compose/slot/compose.yml`): the suite signs in hundreds of times from one
+runner address, which the production per-IP window throttles into a false 429; the rate
+limits themselves are proven by the `apps/api` unit and api-e2e suites (#2683).
+
 Everything it needs comes from the same places the converge reads: the hostnames from
 `slotHostnames()`, the base domain and the basic-auth user from `/etc/ds-platform/stage.env`
 over SSH, the password from `STAGE_BASIC_AUTH_PASS` on THIS machine. An operator without

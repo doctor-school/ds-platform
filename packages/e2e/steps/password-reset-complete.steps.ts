@@ -14,6 +14,10 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import {
+  captureResponse,
+  type CapturedResponse,
+} from "../lib/captured-response.js";
+import {
   fetchRecoveryCode,
   mailpitUrlFor,
   nativeRecoveryMail,
@@ -29,7 +33,8 @@ interface Recovery {
   prior: Page[];
   priorCookies: string[];
   recovered?: Page;
-  completion?: Response;
+  // Read on arrival: a successful completion navigates the page (#2683).
+  completion?: CapturedResponse;
   httpCredentials: BrowserContextOptions["httpCredentials"];
 }
 const recoveries = new WeakMap<Page, Recovery>();
@@ -208,7 +213,10 @@ When(
       reset.locator('input[autocomplete="new-password"]'),
       state.newPassword,
     );
-    const completed = post(reset, "/v1/auth/password/reset/complete");
+    const completed = captureResponse(
+      reset,
+      "/v1/auth/password/reset/complete",
+    );
     await reset.locator('form button[type="submit"]').click();
     state.completion = await completed;
   },
@@ -219,9 +227,9 @@ Then(
   async ({ page }) => {
     const state = recovery(page);
     const reset = state.recovered!;
-    const response = state.completion!;
+    const { response, body: text } = state.completion!;
     expect(response.status(), "bad reset code rejected").toBe(400);
-    const body = await response.json();
+    const body = JSON.parse(text);
     expect(
       body.message === "the request could not be completed",
       "generic reset rejection",
@@ -258,9 +266,8 @@ Then(
   async ({ page, world }) => {
     const state = recovery(page);
     const reset = state.recovered!;
-    const response = state.completion!;
+    const { response, body } = state.completion!;
     expect(response.status(), "reset completion accepted").toBe(200);
-    const body = await response.text();
     expect(
       body === JSON.stringify({ status: "reset_completed" }),
       "token-free reset acknowledgement",
@@ -365,7 +372,7 @@ Then(
   "the same account profile is email-verified immediately after reset before any login-code request",
   async ({ page, world }) => {
     const state = recovery(page);
-    expect(state.completion!.status(), "reset completed").toBe(200);
+    expect(state.completion!.response.status(), "reset completed").toBe(200);
     const reset = state.recovered!;
     await reset.waitForURL(
       (url) =>
@@ -422,7 +429,7 @@ When(
       requestedAt,
       "login",
     );
-    const completed = post(reset, "/v1/auth/login/otp");
+    const completed = captureResponse(reset, "/v1/auth/login/otp");
     await input(reset.locator('input[autocomplete="one-time-code"]'), code);
     state.completion = await completed;
   },
@@ -432,9 +439,8 @@ Then(
   "the delivered login code opens that same account with a new secure host-only session",
   async ({ page, world }) => {
     const state = recovery(page);
-    const response = state.completion!;
+    const { response, body } = state.completion!;
     expect(response.status(), "login code accepted").toBe(200);
-    const body = await response.text();
     expect(
       /access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
         body,

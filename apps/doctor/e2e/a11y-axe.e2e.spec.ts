@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -6,10 +7,12 @@ import { test, expect, type Page } from "@playwright/test";
  * `apps/portal/e2e/a11y-axe.e2e.spec.ts`.
  *
  * The showcase `playwright-axe` gate scans the DS primitives in isolation; THIS
- * spec scans the composed page for what only a real page can violate: shell
- * landmark structure (`landmark-one-main`), heading hierarchy, plus the full
- * WCAG 2.0/2.1 A+AA rule set. The explicit exactly-one-non-empty-`h1` assertion
- * is BOTH the composed-page check (axe's `page-has-heading-one` only asserts
+ * spec scans the composed page for what only a real page can violate: the
+ * one-`<main>` landmark structure (`landmark-one-main`,
+ * `landmark-no-duplicate-main`, `landmark-main-is-top-level` — best-practice
+ * rules, enabled explicitly beside the tag set via `MAIN_LANDMARK_RULES`, #2664),
+ * heading hierarchy, plus the full WCAG 2.0/2.1 A+AA rule set. The explicit
+ * exactly-one-non-empty-`h1` assertion is BOTH the composed-page check (axe's `page-has-heading-one` only asserts
  * "at least one") and the loud empty-shell sentinel: a page that rendered
  * nothing would otherwise be trivially axe-clean.
  *
@@ -65,6 +68,7 @@ test("#1440 storefront root passes WCAG 2 A/AA + one-h1 shell check", async ({
   await expect(h1, "h1 text on /").not.toHaveText(/^\s*$/);
 
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(WCAG_TAGS)
     // #2189 — the shared shell's BBM topbar keeps the contrast its owner-approved
     // canvas paints (`design-source/ds-shell.dc.html`, #2180); the owner accepted
@@ -116,6 +120,7 @@ test("#1440 the hero counters' loading render passes WCAG 2 A/AA", async ({
     "loading",
   );
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(WCAG_TAGS)
     // #2189 — the shared shell's BBM topbar keeps the contrast its owner-approved
     // canvas paints (`design-source/ds-shell.dc.html`, #2180); the owner accepted
@@ -212,6 +217,7 @@ for (const [state, drive] of [
     await expect(h1, "h1 text on /register").not.toHaveText(/^\s*$/);
 
     const results = await new AxeBuilder({ page })
+      .options({ rules: MAIN_LANDMARK_RULES })
       .withTags(WCAG_TAGS)
       .analyze();
 
@@ -275,6 +281,7 @@ for (const [state, drive] of [
     await expect(h1, "h1 text on /login").not.toHaveText(/^\s*$/);
 
     const results = await new AxeBuilder({ page })
+      .options({ rules: MAIN_LANDMARK_RULES })
       .withTags(WCAG_TAGS)
       .analyze();
 
@@ -352,6 +359,7 @@ for (const stage of ["request", "complete"] as const) {
         ).toBeLessThanOrEqual(measured.innerWidth);
 
         const results = await new AxeBuilder({ page })
+          .options({ rules: MAIN_LANDMARK_RULES })
           .withTags(WCAG_TAGS)
           .analyze();
         const summary = results.violations.map((v) => ({
@@ -492,7 +500,7 @@ for (const [label, path] of [
     // wins over the tag filter inside axe, so `heading-order` runs beside the
     // WCAG set instead of replacing it.
     const results = await new AxeBuilder({ page })
-      .options({ rules: { "heading-order": { enabled: true } } })
+      .options({ rules: { ...MAIN_LANDMARK_RULES, "heading-order": { enabled: true } } })
       .withTags(WCAG_TAGS)
       // #2189 — see the note on the storefront-root scan above: the shared
       // shell's BBM topbar is the one accepted contrast exception, leaf-scoped.

@@ -115,7 +115,7 @@ export default async function DocumentsIndexPage() {
   );
 
   return (
-    <main className="flex flex-col">
+    <div className="flex flex-col">
       <div className="bg-hero px-4 pt-9 pb-10 sm:px-8 lg:px-12">
         <div className="mx-auto w-full max-w-content">
           <p className="mb-4.5 text-xs font-extrabold tracking-wide text-hero-muted uppercase">
@@ -188,6 +188,6 @@ export default async function DocumentsIndexPage() {
           {ACADEMY_REQUISITES}
         </p>
       </div>
-    </main>
+    </div>
   );
 }

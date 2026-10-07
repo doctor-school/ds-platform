@@ -5,8 +5,9 @@ import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { StorefrontFooter } from "@ds/storefront-shell";
+import { RouteMain } from "../components/route-main";
 import { ThemeWatcher } from "../components/theme-watcher";
-import { academyShellConfig } from "../lib/shell-config";
+import { ROOM_SHELL_PATHS, academyShellConfig } from "../lib/shell-config";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
@@ -93,8 +94,15 @@ export default async function RootLayout({
               pushed to the bottom edge instead of ending with the content. Pages
               therefore never claim `min-h-screen` of their own: this frame owns
               the fill (a page-level full-height wrapper would push the footer a
-              whole viewport below the fold). */}
-          <div className="flex-1">{children}</div>
+              whole viewport below the fold).
+              #2664 — the same frame is the page's ONE `<main>` landmark: pages,
+              package compositions and design-system blocks render none of
+              their own. The webinar room is the exception — its `RoomShell` is
+              the room's shell and opens the landmark itself — so on the room
+              paths the frame stays a `<div>` (`RouteMain`). */}
+          <RouteMain roomShellPaths={ROOM_SHELL_PATHS} className="flex-1">
+            {children}
+          </RouteMain>
           {/* 008 EARS-14 — the storefront footer, mounted from the ROOT layout
               rather than from the `@chrome` slot: the slot owns the header only,
               and the footer must close every route's document. It carries the

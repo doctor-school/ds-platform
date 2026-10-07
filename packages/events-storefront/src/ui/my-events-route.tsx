@@ -67,7 +67,7 @@ export async function MyEventsRoute({
   const recordings = tab === "recordings";
 
   return (
-    <main className="bg-background text-foreground">
+    <div className="bg-background text-foreground">
       <header className="bg-header text-header-foreground">
         <Container className="py-10 layout:py-16">
           {/* No page-level time zone line: each time carries its own zone label
@@ -95,6 +95,6 @@ export async function MyEventsRoute({
           routes={config.routes}
         />
       </Container>
-    </main>
+    </div>
   );
 }

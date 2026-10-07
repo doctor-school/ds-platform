@@ -150,3 +150,12 @@ describe("<EventPageShell> single right column", () => {
     );
   });
 });
+
+describe("#2664 one main landmark per page", () => {
+  it("#2664: <EventPageShell> renders no main landmark — the host shell owns it", () => {
+    render(<EventPageShell aside={<div />}>flow</EventPageShell>);
+    expect(screen.queryByRole("main")).toBeNull();
+    // The grid keeps its test id on the non-landmark element.
+    expect(screen.getByTestId("event-page-main").tagName).toBe("DIV");
+  });
+});

@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
@@ -251,6 +252,7 @@ async function expectAxeClean(page: Page, render: string) {
   await expect(h1, `h1 text on / (${render})`).not.toHaveText(/^\s*$/);
 
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(WCAG_TAGS)
     // #2189 — the shared shell's BBM topbar keeps its owner-approved canvas
     // contrast; leaf-scoped, every interactive shell control stays IN the scan.

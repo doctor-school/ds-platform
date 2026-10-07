@@ -154,25 +154,25 @@ export function AccountProfile() {
 
   if (state.kind === "loading") {
     return (
-      <main className="bg-background text-foreground">
+      <div className="bg-background text-foreground">
         <Container className="py-16">
           <p className="text-sm text-muted-foreground" role="status">
             {t("loading")}
           </p>
         </Container>
-      </main>
+      </div>
     );
   }
 
   if (state.kind === "error") {
     return (
-      <main className="bg-background text-foreground">
+      <div className="bg-background text-foreground">
         <Container className="py-16">
           <p className="text-sm text-muted-foreground" role="alert">
             {t("error")}
           </p>
         </Container>
-      </main>
+      </div>
     );
   }
 

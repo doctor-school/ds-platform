@@ -27,9 +27,15 @@ vi.mock("next-intl", () => ({
     children,
 }));
 vi.mock("../components/theme-watcher", () => ({ ThemeWatcher: () => null }));
-vi.mock("../lib/shell-config", () => ({ academyShellConfig: () => ({}) }));
+vi.mock("../lib/shell-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/shell-config")>()),
+  academyShellConfig: () => ({}),
+}));
+const nav = vi.hoisted(() => ({ pathname: "/webinars" }));
+vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }));
 vi.mock("../lib/theme", () => ({ THEME_INIT_SCRIPT: "" }));
-vi.mock("@ds/storefront-shell", () => ({
+vi.mock("@ds/storefront-shell", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/storefront-shell")>()),
   StorefrontFooter: () => <footer data-testid="storefront-footer" />,
 }));
 
@@ -37,7 +43,7 @@ import RootLayout from "./layout";
 
 async function renderLayout(): Promise<Document> {
   const tree = await RootLayout({
-    children: <main data-testid="route-content">short page</main>,
+    children: <p data-testid="route-content">short page</p>,
     chrome: <header data-testid="chrome" />,
   });
   return new DOMParser().parseFromString(
@@ -69,5 +75,29 @@ describe("008 EARS-14 (#2228): the root layout pins the footer to the viewport b
       growing!.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING,
       "footer comes after the growing area",
     ).toBeTruthy();
+  });
+});
+
+describe("#2664: the root layout owns the page's one main landmark", () => {
+  it("#2664: a storefront route's content sits in exactly one top-level main", async () => {
+    nav.pathname = "/webinars";
+    const doc = await renderLayout();
+    const mains = doc.querySelectorAll("main");
+    expect(mains).toHaveLength(1);
+    expect(mains[0]!.querySelector('[data-testid="route-content"]')).not.toBeNull();
+    // The landmark carries the sticky-footer fill (EARS-14.2) and leaves the
+    // chrome header and the footer outside it.
+    expect(mains[0]!.classList.contains("flex-1")).toBe(true);
+    expect(mains[0]!.querySelector('[data-testid="chrome"]')).toBeNull();
+    expect(mains[0]!.querySelector('[data-testid="storefront-footer"]')).toBeNull();
+  });
+
+  it("#2664: on the webinar room the layout opens no main — RoomShell owns the room's landmark", async () => {
+    nav.pathname = "/webinars/some-slug/room";
+    const doc = await renderLayout();
+    expect(doc.querySelectorAll("main")).toHaveLength(0);
+    expect(
+      doc.querySelector('[data-testid="route-content"]')?.closest(".flex-1"),
+    ).not.toBeNull();
   });
 });

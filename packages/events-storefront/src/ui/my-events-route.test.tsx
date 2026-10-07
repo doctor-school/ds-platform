@@ -122,3 +122,17 @@ describe("004 EARS-12 «Мои события» times (gate row 26)", () => {
     expect(header).not.toMatch(/UTC|часовой пояс/i);
   });
 });
+
+describe("#2664 one main landmark per page", () => {
+  it("#2664: <MyEventsRoute> renders no main landmark — the host shell owns it", async () => {
+    fetchMyEvents.mockResolvedValue({
+      authenticated: true,
+      events: { data: [], counts: { upcoming: 0, recordings: 0 } },
+    });
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(
+      await MyEventsPage({ searchParams: Promise.resolve({}) }),
+    );
+    expect(html).not.toMatch(/<main[\s>]/);
+  });
+});

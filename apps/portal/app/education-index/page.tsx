@@ -287,7 +287,7 @@ export default function EducationIndexPage() {
         Демонстрационные данные · так будет выглядеть Образовательный индекс
       </DemoPlaque>
       <Poster />
-      <main className={styles.main}>
+      <div className={styles.main}>
         <div className={styles.inner}>
           <HeroPlates />
           <section className={styles.section}>
@@ -303,7 +303,7 @@ export default function EducationIndexPage() {
           <IndexNews />
           <BecomePartner />
         </div>
-      </main>
+      </div>
     </>
   );
 }

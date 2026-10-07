@@ -387,7 +387,7 @@ export default function PartnerDemoPage() {
         Демонстрационные данные · так будет выглядеть кабинет партнёра
       </DemoPlaque>
       <Poster />
-      <main className={styles.main}>
+      <div className={styles.main}>
         <div className={styles.inner}>
           <KpiTiles />
           <Awareness />
@@ -396,7 +396,7 @@ export default function PartnerDemoPage() {
           <Audience />
           <ResearchAndPlace />
         </div>
-      </main>
+      </div>
     </>
   );
 }

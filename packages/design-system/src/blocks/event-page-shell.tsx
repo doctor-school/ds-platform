@@ -136,7 +136,7 @@ export function EventPageShell({
        * body flow on ONE left edge.
        */}
       <div className="relative z-10 -mt-20 px-4 pb-16 layout:px-gutter layout:pb-24">
-        <main
+        <div
           data-testid="event-page-main"
           className={cn(
             "mx-auto grid max-w-content grid-cols-1 gap-10",
@@ -165,7 +165,7 @@ export function EventPageShell({
           >
             {aside}
           </aside>
-        </main>
+        </div>
       </div>
     </div>
   );

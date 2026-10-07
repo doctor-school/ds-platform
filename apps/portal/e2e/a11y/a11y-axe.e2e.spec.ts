@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import {
   LIVE_STAND,
   submitRegisterAndVerify,
@@ -58,6 +59,7 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   );
   await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(WCAG_TAGS)
     // 004's reduced-opacity decorative poster kickers/chips only (`data-testid=
     // "poster-decor"`) — their standing contrast findings are 004 canvas debt

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 
 const SECTION_ORDER = [
@@ -279,6 +280,7 @@ test.describe("Feature 013 — static public Academy home", () => {
         ).toBe(true);
 
         const results = await new AxeBuilder({ page })
+          .options({ rules: MAIN_LANDMARK_RULES })
           .withTags(WCAG_TAGS)
           .exclude('[data-testid="academy-footer-wordmark"]')
           // #2189 — the shared shell's BBM topbar (#2180) keeps its
@@ -344,6 +346,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     await expect(form.getByLabel(/^Имя/)).toBeFocused();
 
     const invalidResults = await new AxeBuilder({ page })
+      .options({ rules: MAIN_LANDMARK_RULES })
       .withTags(WCAG_TAGS)
       .exclude('[data-testid="academy-footer-wordmark"]')
       // #2189 — the shared shell's BBM topbar (#2180) keeps its owner-accepted
@@ -584,6 +587,7 @@ test.describe("Feature 013 — static public Academy home", () => {
     ).toBeVisible();
 
     const results = await new AxeBuilder({ page })
+      .options({ rules: MAIN_LANDMARK_RULES })
       .withTags(WCAG_TAGS)
       .exclude('[data-testid="academy-footer-wordmark"]')
       // #2189 — the shared shell's BBM topbar (#2180) keeps its owner-accepted

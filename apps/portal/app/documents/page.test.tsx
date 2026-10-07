@@ -129,17 +129,15 @@ describe("028 Academy documents index", () => {
     expect(outbound).toHaveLength(0);
   });
 
-  it("028 EARS-15: the index exposes exactly one main landmark wrapping the page content", async () => {
+  it("#2664: the index renders no main landmark — the host shell owns it", async () => {
     render(await DocumentsPage());
 
-    // A screen-reader "skip to content" jump needs a landmark to land on: the
-    // Academy root layout renders `{children}` straight into `<body>`, so the
-    // `main` is page-owned here (`app/account/page.tsx`, `academy-home-view.tsx`).
-    const main = screen.getByRole("main");
-    expect(within(main).getByRole("heading", { level: 1 })).toHaveTextContent(
+    // The "skip to content" landmark is the Academy root layout's one `<main>`
+    // (`app/layout.test.tsx`); the page renders its content inside it.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Документы и контакты",
     );
-    expect(within(main).getByTestId("documents-list")).toBeInTheDocument();
-    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.getByTestId("documents-list")).toBeInTheDocument();
+    expect(screen.queryByRole("main")).toBeNull();
   });
 });

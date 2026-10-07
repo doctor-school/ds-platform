@@ -282,7 +282,7 @@ export function AccountProfileCard({
   }
 
   return (
-    <main className="bg-background text-foreground">
+    <div className="bg-background text-foreground">
       {/* Blue poster header (canvas «Разделы» masthead). */}
       <header className="bg-header text-header-foreground">
         <Container className="py-10 layout:py-16">
@@ -456,6 +456,6 @@ export function AccountProfileCard({
           </Button>
         </div>
       </Container>
-    </main>
+    </div>
   );
 }

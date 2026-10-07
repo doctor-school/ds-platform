@@ -534,7 +534,7 @@ function AcademyFooter() {
 export function AcademyHomeView() {
   return (
     <div lang="ru" className="min-h-screen bg-background text-foreground">
-      <main>
+      <div>
         <AcademyHero />
         <WhatSection />
         <ExpertsSection />
@@ -544,7 +544,7 @@ export function AcademyHomeView() {
         <PartnerValueSection />
         <FormatsSection />
         <LeadDemoSection />
-      </main>
+      </div>
       <AcademyFooter />
     </div>
   );

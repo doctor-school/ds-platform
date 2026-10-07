@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -153,6 +154,7 @@ test.describe("020 EARS-2 — the registration-free decision set", () => {
     await expect(page.getByTestId("event-page-open-part")).toBeVisible();
 
     const results = await new AxeBuilder({ page })
+      .options({ rules: MAIN_LANDMARK_RULES })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       // #2189 / #2180 — the shared shell's two leaf-scoped decorations: the BBM
       // topbar (owner-accepted canvas contrast) and the footer's aria-hidden

@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import {
   test,
   expect,
@@ -196,6 +197,7 @@ async function expectOperable(page: Page, control: Locator, label: string) {
 
 async function expectAxeClean(page: Page, label: string) {
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(WCAG_TAGS)
     // #2189 / #2180 — the shared shell's two leaf-scoped decorations: the BBM
     // topbar (owner-accepted canvas contrast) and the footer's aria-hidden giant

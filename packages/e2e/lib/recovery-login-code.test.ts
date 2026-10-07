@@ -6,7 +6,7 @@ const after = "2026-10-07T00:00:00Z";
 const mail = {
   ID: "login",
   Created: after,
-  Subject: "AB12CD — код для входа в Doctor.School",
+  Subject: "123456 — код для входа в Doctor.School",
   To: [{ Address: email }],
 };
 function client(search = mail, detail: unknown = mail) {
@@ -28,12 +28,12 @@ describe("owned recovery account login mail", () => {
     vi.useFakeTimers();
     const assertion = expect(
       fetchRecoveryCode(client(), "https://mail.test", email, after, "login"),
-    ).resolves.toBe("AB12CD");
+    ).resolves.toBe("123456");
     await Promise.all([assertion, vi.advanceTimersByTimeAsync(15_000)]);
   });
   it.each([
-    { ...mail, Subject: "AB12CD — код подтверждения Doctor.School" },
-    { ...mail, Subject: "AB12CD — код сброса пароля Doctor.School" },
+    { ...mail, Subject: "123456 — код подтверждения Doctor.School" },
+    { ...mail, Subject: "123456 — код сброса пароля Doctor.School" },
     { ...mail, To: [{ Address: "other@example.test" }] },
     { ...mail, Created: "2026-10-06T00:00:00Z" },
   ])(
@@ -55,7 +55,7 @@ describe("owned recovery account login mail", () => {
   it.each([
     { ...mail, ID: "other" },
     { ...mail, To: [{ Address: "other@example.test" }] },
-    { ...mail, Subject: "AB12CD — код подтверждения Doctor.School" },
+    { ...mail, Subject: "123456 — код подтверждения Doctor.School" },
   ])(
     "EARS-35: binds login detail to the addressed search result %#",
     async (detail) => {

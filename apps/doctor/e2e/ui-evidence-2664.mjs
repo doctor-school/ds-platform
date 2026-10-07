@@ -45,18 +45,27 @@ const VIEWPORTS = {
 const name = (host, path, vp) =>
   `${host}${path === "/" ? "-home" : path.replaceAll("/", "-")}-${vp}-light.png`;
 
-/** The newest Mailpit code for `email` sent after `after` whose subject names `kind`. */
+/** Codes already handed out — a second host's sign-in must not reuse the first's. */
+const usedCodes = new Set();
+
+/** The newest unused Mailpit code for `email` sent after `after` whose subject names `kind`. */
 async function mailCode(mailpit, email, after, kind) {
   for (let i = 0; i < 40; i++) {
     const res = await fetch(
       `${mailpit}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
     );
     const data = res.ok ? await res.json() : {};
-    const hit = (data.messages ?? []).find(
-      (m) => Date.parse(m.Created) >= after - 1000 && m.Subject.includes(kind),
-    );
-    const code = hit?.Subject.match(/^([A-Za-z0-9]{4,12})\s+—/)?.[1];
-    if (code) return code;
+    const code = (data.messages ?? [])
+      .filter(
+        (m) =>
+          Date.parse(m.Created) >= after - 1000 && m.Subject.includes(kind),
+      )
+      .map((m) => m.Subject.match(/^([A-Za-z0-9]{4,12})\s+—/)?.[1])
+      .find((c) => c && !usedCodes.has(c));
+    if (code) {
+      usedCodes.add(code);
+      return code;
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(`no «${kind}» code for ${email}`);
@@ -113,10 +122,19 @@ async function capture(out) {
     const ctx = await browser.newContext({ locale: "ru-RU", viewport: size });
     await ctx.addInitScript(() => localStorage.setItem("ds-theme", "light"));
     const page = await ctx.newPage();
+    const signedIn = new Set();
     for (const [host, path] of SHOTS) {
       const base = host === "doctor" ? DOCTOR : PORTAL;
+      if (signedIn.has(host)) {
+        await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
+        await shoot(page, out, host, path, vp);
+        continue;
+      }
+      signedIn.add(host);
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-      // Email-code sign-in (003 login OTP): one fresh code per host session.
+      // Email-code sign-in (003 login OTP): one fresh code per host session —
+      // the session cookie then serves the host's later shots (the login
+      // endpoint is rate-limited).
       const requestedAt = Date.now();
       await page.evaluate(
         async (identifier) =>
@@ -143,18 +161,22 @@ async function capture(out) {
       );
       if (status !== 200) throw new Error(`sign-in on ${host}: ${status}`);
       await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
-      await page.evaluate(() => document.fonts.ready);
-      const mains = await page.locator("main").count();
-      console.log(`${host}${path} ${vp}: ${mains} <main>`);
-      await page.screenshot({
-        path: join(out, name(host, path, vp)),
-        fullPage: true,
-        animations: "disabled",
-      });
+      await shoot(page, out, host, path, vp);
     }
     await ctx.close();
   }
   await browser.close();
+}
+
+async function shoot(page, out, host, path, vp) {
+  await page.evaluate(() => document.fonts.ready);
+  const mains = await page.locator("main").count();
+  console.log(`${host}${path} ${vp}: ${mains} <main>`);
+  await page.screenshot({
+    path: join(out, name(host, path, vp)),
+    fullPage: true,
+    animations: "disabled",
+  });
 }
 
 async function compare(a, b) {

@@ -1504,6 +1504,41 @@ describe("CongressSection — the filling guide (046 EARS-36)", () => {
     expectGuideInNewTab(guide());
   });
 
+  it("EARS-36: a submission on revision links to the guide before its deadline, not after", async () => {
+    const onRevision = (dueInMs: number) =>
+      sub({
+        status: "needs_revision",
+        committeeComment: "Уточните цель",
+        revisionDueAt: new Date(Date.now() + dueInMs).toISOString(),
+      });
+    const open = onRevision(2 * 86_400_000);
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${open.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(answer(section({ submissions: [open] })));
+    const { unmount } = render(<CongressSection host={HOST} />);
+    await screen.findByRole("button", { name: "← Мои заявки" });
+    expectGuideInNewTab(guide());
+    unmount();
+
+    const expired = onRevision(-86_400_000);
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${expired.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ submissions: [expired] })),
+    );
+    render(<CongressSection host={HOST} />);
+    expect(
+      (await screen.findAllByText(/Срок доработки истёк/)).length,
+    ).toBeGreaterThan(0);
+    expect(guide()).toBeNull();
+  });
+
   it("EARS-36: a decided submission and the no-registration line carry no guide link", async () => {
     const decided = sub({ status: "accepted" });
     window.history.replaceState(

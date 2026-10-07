@@ -59,6 +59,7 @@ function renderRouter({
 } = {}) {
   return render(
     <EventListRouter
+      basePath="/webinars"
       items={[item]}
       selectedTab="past"
       counts={{ upcoming: 3, past: 12 }}
@@ -101,21 +102,36 @@ describe("<EventListRouter>", () => {
     expect(controls).toContain("Назад");
     expect(controls).toContain("Вперёд");
     expect(controls).not.toContain("1");
-    expect(screen.queryByRole("button", { name: "Страница 1" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Страница 1" }),
+    ).not.toBeInTheDocument();
   });
 
   it("#1641: the first page offers no previous control, and the last no next", () => {
     renderRouter({ page: 1 });
-    expect(screen.queryByRole("button", { name: "Назад" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Назад" }),
+    ).not.toBeInTheDocument();
 
     cleanup();
-    renderRouter({ page: 2, cursor: "cursor-2", nextCursor: null, hasMore: false });
-    expect(screen.queryByRole("button", { name: "Вперёд" })).not.toBeInTheDocument();
+    renderRouter({
+      page: 2,
+      cursor: "cursor-2",
+      nextCursor: null,
+      hasMore: false,
+    });
+    expect(
+      screen.queryByRole("button", { name: "Вперёд" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Назад" })).toBeInTheDocument();
   });
 
   it("#1641: forward paging pushes the next cursor and remembers the current one", async () => {
-    routerMock.searchParams = new URLSearchParams({ tab: "past", cursor: "cursor-2", page: "2" });
+    routerMock.searchParams = new URLSearchParams({
+      tab: "past",
+      cursor: "cursor-2",
+      page: "2",
+    });
     renderRouter({ page: 2, cursor: "cursor-2" });
 
     await userEvent.click(screen.getByRole("button", { name: "Вперёд" }));
@@ -145,7 +161,11 @@ describe("<EventListRouter>", () => {
 
     cleanup();
     routerMock.push.mockReset();
-    routerMock.searchParams = new URLSearchParams({ tab: "past", cursor: "cursor-2", page: "2" });
+    routerMock.searchParams = new URLSearchParams({
+      tab: "past",
+      cursor: "cursor-2",
+      page: "2",
+    });
     renderRouter({ page: 2, cursor: "cursor-2" });
 
     await userEvent.click(screen.getByRole("button", { name: "Назад" }));
@@ -187,7 +207,9 @@ describe("<EventListRouter>", () => {
     });
     renderRouter({ page: 40, cursor: "cursor-far" });
 
-    expect(screen.queryByRole("button", { name: "Назад" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Назад" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Вперёд" })).toBeInTheDocument();
   });
 });

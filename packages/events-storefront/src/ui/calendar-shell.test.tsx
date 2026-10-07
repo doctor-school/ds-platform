@@ -51,7 +51,9 @@ describe("<CalendarShell>", () => {
     );
     // The body column is the `calendar` Container (1240px content), not the
     // default 1104px — so the «Неделя ⇄ Месяц» round-trip never jumps the edges.
-    const body = screen.getByTestId("pane-body").closest('[class*="max-w-calendar"]');
+    const body = screen
+      .getByTestId("pane-body")
+      .closest('[class*="max-w-calendar"]');
     expect(body).not.toBeNull();
     expect(body).toContainElement(screen.getByTestId("toolbar-slot"));
     // No default-width column is used for the shared shell.

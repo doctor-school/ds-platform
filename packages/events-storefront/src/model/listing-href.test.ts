@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildWebinarsHref } from "./webinars-url";
+import { buildListingHref } from "./listing-href";
 
-describe("buildWebinarsHref", () => {
+describe("buildListingHref", () => {
   it("EARS-11: week/month navigation preserves tab, facets and feed page state loss-free", () => {
     const state = {
       tab: "past",
@@ -10,7 +10,7 @@ describe("buildWebinarsHref", () => {
       cursorTrail: "older-cursor",
       page: "3",
     };
-    const month = buildWebinarsHref(state, {
+    const month = buildListingHref("/webinars", state, {
       view: "month",
       month: "2026-09",
     });
@@ -19,7 +19,8 @@ describe("buildWebinarsHref", () => {
     expect(month).toContain("cursor=opaque-cursor");
     expect(month).toContain("page=3");
 
-    const roundTrip = buildWebinarsHref(
+    const roundTrip = buildListingHref(
+      "/webinars",
       Object.fromEntries(new URL(month, "https://academy.test").searchParams),
       { view: "week", month: "2026-10" },
     );
@@ -31,7 +32,8 @@ describe("buildWebinarsHref", () => {
   });
 
   it("EARS-11: only a feed-membership change explicitly resets cursor and page", () => {
-    const href = buildWebinarsHref(
+    const href = buildListingHref(
+      "/webinars",
       { tab: "past", cursor: "opaque", cursorTrail: "older", page: "4" },
       { view: "week", resetFeedPage: true },
     );

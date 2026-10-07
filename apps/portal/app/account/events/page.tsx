@@ -8,7 +8,7 @@ import { buildMyEventListItems } from "../../../lib/my-events";
 import { forwardedSessionFrom } from "../../../lib/registration-state";
 import { ACADEMY_AUTH_ROUTES } from "../../../lib/auth-flow-routes";
 import { withReturnTarget } from "../../../lib/registration-handoff";
-import { EventListRouter } from "../../../components/event-list-router";
+import { EventListRouter } from "@ds/events-storefront/ui";
 
 /**
  * 005 EARS-6 + 014 EARS-9 — the «Мои события» account surface
@@ -37,7 +37,7 @@ import { EventListRouter } from "../../../components/event-list-router";
  * own registrations, never another doctor's.
  *
  * The listing renders through the SHARED `EventList` block (#1346) by way of the
- * portal's one `EventListRouter` projection — the same unit the public `/webinars`
+ * package's one `EventListRouter` projection (`@ds/events-storefront/ui`) — the same unit the public `/webinars`
  * feed uses, never a section-local copy (AGENTS.md cross-front reuse). Only the
  * route, the `?tab=` value and the copy differ.
  *
@@ -150,9 +150,7 @@ export default async function MyEventsPage({
           labels={{
             upcoming: t("tabs.upcoming"),
             past: t("tabs.recordings"),
-            emptyTitle: t(
-              recordings ? "recordingsEmpty.title" : "empty.title",
-            ),
+            emptyTitle: t(recordings ? "recordingsEmpty.title" : "empty.title"),
             emptyDescription: t(
               recordings ? "recordingsEmpty.body" : "empty.body",
             ),

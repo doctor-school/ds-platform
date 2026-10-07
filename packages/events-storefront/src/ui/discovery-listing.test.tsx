@@ -1,3 +1,4 @@
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -7,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * `/webinars` pagination is THREE query params, not two: `cursor`, `page` and
  * `cursorTrail` (the back-stack of previously visited cursors, written by
  * `event-list-router.tsx` alongside every "next"). The repo has one canonical
- * reset and it clears all three together (`lib/webinars-url.ts` →
+ * reset and it clears all three together (`model/listing-href.ts` →
  * `resetFeedPage`, and the tab switch in `event-list-router.tsx`).
  *
  * The server component can reset only what it passes down; `cursorTrail` lives
@@ -24,25 +25,29 @@ const redirect = vi.fn((url: string) => {
 });
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => redirect(url),
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next/headers", () => ({
   headers: async () => new Map<string, string>(),
 }));
 
-vi.mock("next-intl/server", () => ({
-  getTranslations: async () => (key: string) => key,
-}));
-
 const fetchEventListingWithCursorFallback = vi.fn();
-vi.mock("@ds/events-storefront/server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@ds/events-storefront/server")>()),
+vi.mock("../server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server")>()),
   fetchEventListingWithCursorFallback: (input: unknown) =>
     fetchEventListingWithCursorFallback(input),
   fetchMyEvents: async () => ({ authenticated: false }),
 }));
 
-import DiscoveryListing from "./discovery-listing";
+import { DiscoveryListing } from "./discovery-listing";
+import type { EventsStorefrontHostConfig } from "../host-config";
+
+const CONFIG: EventsStorefrontHostConfig = {
+  headerCopy: { title: "Расписание эфиров", subline: "Ближайшие эфиры" },
+  routes: { listing: "/webinars", eventPage: "/webinars" },
+};
 
 const EMPTY_LISTING = {
   data: [],
@@ -63,7 +68,9 @@ describe("DiscoveryListing cursor rejection", () => {
 
     await expect(
       DiscoveryListing({
+        config: CONFIG,
         monthViewHref: "/webinars?view=month",
+        weekViewHref: "/webinars",
         timeframe: "past",
         cursor: "GARBAGE",
         page: 3,
@@ -86,7 +93,9 @@ describe("DiscoveryListing cursor rejection", () => {
     });
 
     await DiscoveryListing({
+      config: CONFIG,
       monthViewHref: "/webinars?view=month",
+      weekViewHref: "/webinars",
       timeframe: "past",
       cursor: "c2",
       page: 2,
@@ -99,5 +108,27 @@ describe("DiscoveryListing cursor rejection", () => {
     });
 
     expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("DiscoveryListing page head", () => {
+  it("gate row 19: the host's header copy renders as the title and the upcoming subline", async () => {
+    fetchEventListingWithCursorFallback.mockResolvedValue({
+      listing: EMPTY_LISTING,
+      cursorRejected: false,
+    });
+
+    render(
+      await DiscoveryListing({
+        config: CONFIG,
+        monthViewHref: "/webinars?view=month",
+        weekViewHref: "/webinars",
+      }),
+    );
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Расписание эфиров",
+    );
+    expect(screen.getByText("Ближайшие эфиры")).toBeInTheDocument();
   });
 });

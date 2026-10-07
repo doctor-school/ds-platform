@@ -20,7 +20,7 @@ import type { NavigationItem, NavigationModel } from "@ds/e2e/navigation-model";
  * rendered byte, and the key is what the host resolves.
  *
  * `landing` carries the §6.2 evidence: the `h1` each destination actually paints
- * (`messages/ru.json` → `webinars.title`, `account.title`, `myEvents.title`,
+ * (`lib/events-storefront.host-config.ts` → `headerCopy.title`; `messages/ru.json` → `account.title`, `myEvents.title`,
  * `login.title`), so
  * «200 on the wrong page» is a red check rather than a pass.
  *

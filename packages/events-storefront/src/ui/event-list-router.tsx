@@ -33,7 +33,7 @@ export function EventListRouter({
   hasMore,
   page,
   toolbar,
-  basePath = "/webinars",
+  basePath,
   pastTabParam = "past",
   paginationMode = "cursor",
   pageCount = 1,
@@ -45,10 +45,11 @@ export function EventListRouter({
    * The route this router navigates within. The shared feed is hosted by more
    * than one surface — the public `/webinars` listing and the authenticated
    * `/account/events` «Мои события» (014 EARS-9) — so the path is a host
-   * projection prop, never hardcoded here; a per-host copy of this router is
+   * projection prop (the listing passes `routes.listing` of the host config),
+   * never hardcoded here; a per-host copy of this router is
    * forbidden (AGENTS.md cross-front reuse).
    */
-  basePath?: string;
+  basePath: string;
   /**
    * The `?tab=` VALUE the host uses for the block's `past` tab. The block's own
    * union stays `upcoming | past`; «Мои события» spells its second tab
@@ -74,7 +75,7 @@ export function EventListRouter({
     next: string;
     pagePrefix: string;
   };
-  cursor?: string;
+  cursor?: string | undefined;
   nextCursor: string | null;
   hasMore: boolean;
   page: number;
@@ -126,7 +127,7 @@ export function EventListRouter({
       counts={counts}
       labels={{ ...eventLabels, page: (number) => `${pagePrefix} ${number}` }}
       page={page}
-      cursor={cursor}
+      {...(cursor === undefined ? {} : { cursor })}
       onPageChange={(nextPage) =>
         navigate((params) => {
           const trail = readTrail(params);

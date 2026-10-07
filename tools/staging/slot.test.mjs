@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GOLDEN_SUBJECTS_PATH, GOLDEN_SUBJECT_ENV_VARS } from "./idp.mjs";
+import { terminateBackendsStatement } from "./golden-db.mjs";
 import {
   BUILD_CACHE_RESERVED_SPACE,
   CADDY_CONTAINER,
@@ -323,9 +324,25 @@ test("free space on the box is read from `df`, never from the operator's own dis
 
 test("a preview database is dropped and re-cloned from the golden template", () => {
   const statements = cloneDatabaseStatements("pr-7");
-  assert.equal(statements.length, 4);
-  assert.match(statements[1], /DROP DATABASE IF EXISTS "ds_pr_7"/);
-  assert.match(statements[3], /CREATE DATABASE "ds_pr_7" TEMPLATE "ds_golden"/);
+  assert.deepEqual(statements, [
+    'DROP DATABASE IF EXISTS "ds_pr_7" WITH (FORCE)',
+    terminateBackendsStatement("ds_golden"),
+    'CREATE DATABASE "ds_pr_7" TEMPLATE "ds_golden"',
+  ]);
+});
+
+test("a slot database is dropped in ONE forced statement — no terminate-then-drop gap for the running api to reconnect into", () => {
+  for (const statements of [
+    cloneDatabaseStatements("pr-7"),
+    dropDatabaseStatements("pr-7"),
+    dropDatabaseStatements("main", { allowMain: true }),
+  ]) {
+    const dropIndex = statements.findIndex((statement) => /DROP DATABASE/.test(statement));
+    assert.match(statements[dropIndex], /^DROP DATABASE IF EXISTS "ds_[a-z0-9_]+" WITH \(FORCE\)$/);
+    const before = statements.slice(0, dropIndex);
+    assert.ok(!before.some((statement) => /pg_terminate_backend/.test(statement)));
+  }
+  assert.deepEqual(dropDatabaseStatements("pr-7"), ['DROP DATABASE IF EXISTS "ds_pr_7" WITH (FORCE)']);
 });
 
 test("main is never cloned and never dropped — it is forward-migrated", () => {
@@ -333,7 +350,9 @@ test("main is never cloned and never dropped — it is forward-migrated", () => 
   assert.throws(() => dropDatabaseStatements("main"), SlotError);
   const bootstrap = cloneDatabaseStatements("main", { bootstrap: true });
   assert.ok(!bootstrap.some((statement) => /DROP DATABASE/.test(statement)));
-  assert.deepEqual(dropDatabaseStatements("main", { allowMain: true }).length, 2);
+  assert.deepEqual(dropDatabaseStatements("main", { allowMain: true }), [
+    'DROP DATABASE IF EXISTS "ds_main" WITH (FORCE)',
+  ]);
 });
 
 test("what a converge does to the slot database", () => {

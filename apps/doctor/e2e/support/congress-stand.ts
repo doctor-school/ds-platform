@@ -115,8 +115,19 @@ export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
       true,
     );
     const code = await mailedCode(email, "verify", sentAt);
-    const confirm = await api.post("/v1/auth/verify", {
-      data: { email, code },
+    // 003 EARS-23/41: the doctor door's code step carries the in-tab
+    // registration values; the bare 003 `/v1/auth/verify` leaves the account
+    // without its password (#2678).
+    const confirm = await api.post("/v1/storefront/doctor/verify", {
+      data: {
+        email,
+        code,
+        registration: {
+          password,
+          medicalWorkerDeclaration: true,
+          consent: [{ purpose: "partner-data-sharing", version: "v1" }],
+        },
+      },
     });
     expect(
       confirm.ok(),

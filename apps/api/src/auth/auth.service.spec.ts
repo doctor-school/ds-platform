@@ -1103,6 +1103,8 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
   async function buildFlipService(seedVerified: boolean): Promise<{
     service: AuthService;
     idp: FakeIdpClient;
+    store: InMemorySessionStore;
+    sessions: SessionService;
     audit: InMemoryAuthAuditLog;
     mirrorFlips: string[];
     sub: string;
@@ -1132,7 +1134,7 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
       sessions,
       {} as never, // smsBudget — unused
     );
-    return { service, idp, audit, mirrorFlips, sub: created.sub };
+    return { service, idp, store, sessions, audit, mirrorFlips, sub: created.sub };
   }
 
   it("003 EARS-35: a completed reset on an UNVERIFIED account flips email_verified at the IdP + mirror and appends one auth.account.verified (channel email) row", async () => {
@@ -1178,26 +1180,50 @@ describe("AuthService.completePasswordReset — proof-of-mailbox email verify (0
     });
   });
 
-  it("003 EARS-35/16: a bad/expired reset code mutates nothing — no verify flip, no verified row (still generic 400)", async () => {
-    const { service, idp, audit, mirrorFlips, sub } =
+  it("003 EARS-35/16: a bad reset code preserves credentials, sessions and verification with only failure auditing", async () => {
+    const { service, idp, store, sessions, audit, mirrorFlips, sub } =
       await buildFlipService(false);
+    const login = await idp.passwordLogin(email, oldPassword);
+    if (login.outcome !== "authenticated") throw new Error("seed login failed");
+    const existing = await sessions.establish(login.session, fingerprint);
+    const sid = parseCookies(existing.cookie)[SESSION_COOKIE_NAME] as string;
+    const before = structuredClone(await store.get(sid));
+    expect(before).toBeDefined();
     await service.requestPasswordReset(email);
+    const auditStart = audit.events.length;
+    const revoke = vi.spyOn(sessions, "revokeAllForSub");
+    const establish = vi.spyOn(sessions, "establish");
+    const verify = vi.spyOn(idp, "markEmailVerified");
+    const code = "000000";
+    expect(code).not.toBe(FAKE_VALID_CODE);
 
     const err = await service
-      .completePasswordReset(email, "000000", newPassword, fingerprint)
+      .completePasswordReset(email, code, newPassword, fingerprint)
       .catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(BadRequestException);
-    // No state mutated before a valid token (OWASP).
+    expect((err as BadRequestException).getResponse()).toMatchObject({
+      statusCode: 400,
+      message: "the request could not be completed",
+    });
     await expect(idp.getUser(sub)).resolves.toMatchObject({
       emailVerified: false,
     });
+    expect(verify).not.toHaveBeenCalled();
     expect(mirrorFlips).toEqual([]);
-    expect(audit.events).not.toContainEqual({
-      type: "IdentifierVerified",
-      sub,
-      channel: "email",
-    });
+    expect(revoke).not.toHaveBeenCalled();
+    expect(establish).not.toHaveBeenCalled();
+    await expect(store.get(sid)).resolves.toEqual(before);
+    expect((await idp.passwordLogin(email, oldPassword)).outcome).toBe(
+      "authenticated",
+    );
+    expect((await idp.passwordLogin(email, newPassword)).outcome).toBe(
+      "rejected",
+    );
+    expect(audit.events.slice(auditStart)).toEqual([
+      { type: "PasswordResetFailed", identifier: email, reason: "invalid" },
+    ]);
+    expect(JSON.stringify(audit.events.slice(auditStart))).not.toContain(code);
   });
 });
 

@@ -309,13 +309,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # apps/api/src/auth/idp/zitadel.idp.spec.ts EARS-35 wire-shape tests.
     # EARS-41 also verifies on code login; the pre-login profile read isolates reset.
 
-  @EARS-35 @EARS-16 @failure
+  @EARS-35 @EARS-16 @failure @password-reset-complete
   Scenario: A failed reset mutates nothing, including verification state
-    Given a doctor_guest account whose email was never verified
-    When the user submits a bad or expired reset code
-    Then the response is the generic enumeration-safe outcome
-    And the email verification state is unchanged
-    And no audit_ledger row is written
+    Given a uniquely registered Academy account remains on verification with its confirmation code unconsumed
+    When that account completes the Academy reset form with its guaranteed different six-digit code and a new password
+    Then the Academy reset form rejects the code generically without a session or private profile access
+    # Internal EARS-35/16 evidence: apps/api/src/auth/auth.service.spec.ts
+    # "a bad reset code preserves credentials, sessions and verification" proves
+    # unchanged credentials, sessions and IdP/mirror verification, and permits
+    # PasswordResetFailed only: no reset-completed, login-success or terminal
+    # account-verification audit effects. The browser cannot read this state.
+    # Mirror persistence: apps/api/test/auth/password-reset.e2e-spec.ts EARS-35/16.
+    # This case proves a bad code, not expiry or a browser timing bound.
 
   @EARS-13 @happy
   Scenario: A successful login forgives the per-user rate-limit window

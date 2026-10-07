@@ -238,8 +238,8 @@ Given(
 );
 
 When(
-  "that account completes the Academy reset form with its fresh delivered code and a new password",
-  async ({ page, browser, world }) => {
+  /^that account completes the Academy reset form with its (fresh delivered|guaranteed different six-digit) code and a new password$/,
+  async ({ page, browser, world }, codeKind: string) => {
     const state = recovery(page);
     const reset = await privatePage(browser, state);
     state.recovered = reset;
@@ -256,7 +256,19 @@ When(
       requestedAt,
       "reset",
     );
-    await input(reset.locator('input[autocomplete="one-time-code"]'), code);
+    const submittedCode =
+      codeKind === "fresh delivered"
+        ? code
+        : `${(Number(code[0]) + 1) % 10}${code.slice(1)}`;
+    expect(/^\d{6}$/.test(submittedCode), "six-digit reset code").toBe(true);
+    expect(
+      submittedCode === code,
+      "submitted code matches the selected valid or invalid case",
+    ).toBe(codeKind === "fresh delivered");
+    await input(
+      reset.locator('input[autocomplete="one-time-code"]'),
+      submittedCode,
+    );
     await input(
       reset.locator('input[autocomplete="new-password"]'),
       state.newPassword,
@@ -264,6 +276,43 @@ When(
     const completed = post(reset, "/v1/auth/password/reset/complete");
     await reset.locator('form button[type="submit"]').click();
     state.completion = await completed;
+  },
+);
+
+Then(
+  "the Academy reset form rejects the code generically without a session or private profile access",
+  async ({ page }) => {
+    const state = recovery(page);
+    const reset = state.recovered!;
+    const response = state.completion!;
+    expect(response.status(), "bad reset code rejected").toBe(400);
+    const body = await response.json();
+    expect(
+      body.message === "the request could not be completed",
+      "generic reset rejection",
+    ).toBe(true);
+    await expect(reset.getByTestId("reset-error")).toHaveText(
+      "Код не подошёл или пароль отклонён.",
+    );
+    expect(new URL(reset.url()).pathname).toBe("/reset");
+    await expect(
+      reset.locator('input[autocomplete="one-time-code"]'),
+    ).toBeVisible();
+    const header = (await response.headerValue("set-cookie")) ?? "";
+    expect(header.includes(`${SESSION}=`), "no session minted by reset").toBe(
+      false,
+    );
+    expect(
+      (await reset.context().cookies()).some((cookie) => cookie.name === SESSION),
+      "rejected reset holds no private session",
+    ).toBe(false);
+    expect(
+      await reset.evaluate(
+        async () =>
+          (await fetch("/v1/me/profile", { credentials: "include" })).status,
+      ),
+      "rejected reset cannot read private profile",
+    ).toBe(401);
   },
 );
 

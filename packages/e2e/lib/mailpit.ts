@@ -97,20 +97,83 @@ interface AddressedMail extends MailSummary {
   To: { Address: string }[];
 }
 
+interface MailResponse {
+  ok(): boolean;
+  status(): number;
+  json(): Promise<unknown>;
+}
+interface MailRequest {
+  get(url: string): Promise<MailResponse>;
+}
+
+/** Avoid Playwright's HTML child-step diagnostics retaining Basic credentials. */
+export function nativeRecoveryMail(
+  credentials = {
+    username: process.env.E2E_HTTP_USER ?? "",
+    password: process.env.E2E_HTTP_PASS ?? "",
+  },
+): MailRequest {
+  return {
+    async get(url) {
+      try {
+        const response = await fetch(url, {
+          headers:
+            credentials.username && credentials.password
+              ? {
+                  authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`,
+                }
+              : {},
+          redirect: "error",
+          signal: AbortSignal.timeout(10_000),
+        });
+        return {
+          ok: () => response.ok,
+          status: () => response.status,
+          json: () => response.json(),
+        };
+      } catch {
+        throw new Error("Mailpit request failed");
+      }
+    },
+  };
+}
+
+async function requestMail(
+  request: MailRequest,
+  url: string,
+): Promise<MailResponse> {
+  try {
+    return await request.get(url);
+  } catch {
+    // Transport diagnostics may include the stage Basic-auth header.
+    throw new Error("Mailpit request failed");
+  }
+}
+
+async function readMailJson(response: MailResponse): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    // JSON.parse errors can quote code-bearing response bytes; discard the cause.
+    throw new Error("Malformed Mailpit JSON payload");
+  }
+}
+
 async function freshAddressedMail(
-  request: APIRequestContext,
+  request: MailRequest,
   baseUrl: string,
   email: string,
   afterIso: string,
 ): Promise<AddressedMail[]> {
   const after = Date.parse(afterIso);
   if (!Number.isFinite(after)) throw new Error("Invalid mail request time");
-  const search = await request.get(
+  const search = await requestMail(
+    request,
     `${baseUrl.replace(/\/$/, "")}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1000`,
   );
   if (!search.ok())
     throw new Error(`Mailpit search failed with HTTP ${search.status()}`);
-  const list = (await search.json()) as {
+  const list = (await readMailJson(search)) as {
     messages?: AddressedMail[];
     messages_count?: number;
     start?: number;
@@ -199,6 +262,64 @@ export async function assertNoAddressedMail(
       throw new Error("Unexpected addressed mail after unknown reset request");
     }
     if (Date.now() >= deadline) return;
+    await wait(Math.min(500, deadline - Date.now()));
+  }
+}
+
+/** 003 EARS-12: codes stay in memory and must belong to the exact fresh delivery. */
+export async function fetchRecoveryCode(
+  request: MailRequest,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+  purpose: "register" | "reset",
+): Promise<string> {
+  const suffix =
+    purpose === "reset" ? RESET_SUBJECT : " — код подтверждения Doctor.School";
+  const deadline = Date.now() + DELIVERY_WINDOW_MS;
+  while (true) {
+    const hit = (
+      await freshAddressedMail(request, baseUrl, email, afterIso)
+    ).find(
+      (message) =>
+        typeof message.Subject === "string" && message.Subject.endsWith(suffix),
+    );
+    if (hit) {
+      const detail = await requestMail(
+        request,
+        `${baseUrl.replace(/\/$/, "")}/api/v1/message/${encodeURIComponent(hit.ID!)}`,
+      );
+      if (!detail.ok())
+        throw new Error(
+          `Mailpit message read failed with HTTP ${detail.status()}`,
+        );
+      // Detail exposes Date (sender header), not Created (inbox arrival);
+      // freshness is established by the search result bound here by ID.
+      const message = (await readMailJson(detail)) as AddressedMail | null;
+      if (
+        !message ||
+        message.ID !== hit.ID ||
+        message.Subject !== hit.Subject ||
+        !Array.isArray(message.To) ||
+        message.To.some(
+          (recipient) => !recipient || typeof recipient.Address !== "string",
+        ) ||
+        !message.To.some(
+          (recipient) =>
+            recipient.Address.toLowerCase() === email.toLowerCase(),
+        )
+      ) {
+        throw new Error(
+          "Mailpit code detail did not match its fresh addressed search result",
+        );
+      }
+      const code = message.Subject!.slice(0, -suffix.length);
+      if (!/^\S+$/.test(code))
+        throw new Error("Mailpit code subject is malformed");
+      return code;
+    }
+    if (Date.now() >= deadline)
+      throw new Error("No fresh addressed recovery code appeared in Mailpit");
     await wait(Math.min(500, deadline - Date.now()));
   }
 }

@@ -42,6 +42,7 @@ const HOST = {
   path: "/account/congress",
   accountHref: "/account",
   eventHrefPrefix: "/events/",
+  fillingGuideHref: "https://orthobio.ru/participants/zapolnit-zayavku",
 } as const;
 
 beforeEach(() => {
@@ -71,6 +72,7 @@ describe("CongressSectionRoute", () => {
     expect(el.props.host).toEqual({
       accountHref: "/account",
       eventHrefPrefix: "/events/",
+      fillingGuideHref: "https://orthobio.ru/participants/zapolnit-zayavku",
       signInHref: "/login?returnTo=%2Faccount%2Fcongress",
     });
     expect(redirect).not.toHaveBeenCalled();

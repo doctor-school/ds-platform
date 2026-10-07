@@ -20,6 +20,7 @@ const HOST = {
   accountHref: "/account",
   eventHrefPrefix: "/events/",
   signInHref: "/login?returnTo=%2Faccount%2Fcongress",
+  fillingGuideHref: "https://orthobio.ru/participants/zapolnit-zayavku",
 };
 
 const EVENT_ID = "00000000-0000-4000-8000-00000000000e";
@@ -1456,5 +1457,72 @@ describe("CongressSection — abstracts (046 EARS-21…25)", () => {
     expect(await pickerTileAfterBack("abstract")).toHaveTextContent(
       "Отправлено 0 тезисов из 3",
     );
+  });
+});
+
+describe("CongressSection — the filling guide (046 EARS-36)", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/account/congress");
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const guide = () =>
+    screen.queryByRole("link", { name: "Как заполнить заявку ↗" });
+  const expectGuideInNewTab = (link: HTMLElement | null) => {
+    expect(link).toHaveAttribute("href", HOST.fillingGuideHref);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  };
+
+  it("EARS-36: the list links to the filling guide in a new tab", async () => {
+    fetchMock.mockResolvedValue(answer(section({ submissions: [sub()] })));
+    render(<CongressSection host={HOST} />);
+    await screen.findByRole("heading", { level: 1 });
+    expectGuideInNewTab(guide());
+  });
+
+  it("EARS-36: the empty list (kind picker) links to the filling guide", async () => {
+    fetchMock.mockResolvedValue(answer(section()));
+    render(<CongressSection host={HOST} />);
+    await screen.findByText("Новая заявка");
+    expectGuideInNewTab(guide());
+  });
+
+  it("EARS-36: an open draft links to the filling guide in a new tab", async () => {
+    const draft = sub({ status: "draft", submittedAt: null, title: "" });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${draft.id}`,
+    );
+    fetchMock.mockResolvedValue(answer(section({ submissions: [draft] })));
+    render(<CongressSection host={HOST} />);
+    await screen.findByRole("button", { name: "← Мои заявки" });
+    expectGuideInNewTab(guide());
+  });
+
+  it("EARS-36: a decided submission and the no-registration line carry no guide link", async () => {
+    const decided = sub({ status: "accepted" });
+    window.history.replaceState(
+      null,
+      "",
+      `/account/congress?submission=${decided.id}`,
+    );
+    fetchMock.mockResolvedValueOnce(
+      answer(section({ submissions: [decided] })),
+    );
+    const { unmount } = render(<CongressSection host={HOST} />);
+    await screen.findByRole("button", { name: "← Мои заявки" });
+    expect(guide()).toBeNull();
+    unmount();
+
+    window.history.replaceState(null, "", "/account/congress");
+    fetchMock.mockResolvedValueOnce(answer(section({ registered: false })));
+    render(<CongressSection host={HOST} />);
+    await screen.findByText("Сначала зарегистрируйтесь участником Конгресса");
+    expect(guide()).toBeNull();
   });
 });

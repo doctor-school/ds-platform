@@ -62,6 +62,11 @@ export interface CongressSectionHost {
   eventHrefPrefix: string;
   /** The sign-in door carrying this section as its return target. */
   signInHref: string;
+  /**
+   * The congress site's «Как заполнить заявку» page (046 EARS-36), opened in a
+   * new tab from the list and from an editable submission.
+   */
+  fillingGuideHref: string;
 }
 
 type Load =
@@ -178,6 +183,9 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
       eventHref={
         section ? `${host.eventHrefPrefix}${section.event.slug}` : null
       }
+      // 046 EARS-36 — only a registered participant has a submission to fill;
+      // the no-registration line carries its own registration link instead.
+      guideHref={section?.registered ? host.fillingGuideHref : null}
     />
   );
 
@@ -306,6 +314,7 @@ export function CongressSection({ host }: { host: CongressSectionHost }) {
         submission={opened}
         intake={intakeOf(opened.kind)}
         eventTitle={section.event.title}
+        guideHref={host.fillingGuideHref}
         consentRequired={section.consentRequired}
         justSent={!!sentNow[opened.id]}
         now={now}

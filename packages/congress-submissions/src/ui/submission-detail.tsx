@@ -84,6 +84,8 @@ export interface SubmissionDetailProps {
   submission: CongressSubmission;
   intake: CongressSubmissionKindIntake;
   eventTitle: string;
+  /** The congress site's filling guide (046 EARS-36), shown while the author can work on the submission. */
+  guideHref: string;
   consentRequired: boolean;
   /** The submission was sent in this visit — the sent notice shows. */
   justSent: boolean;
@@ -138,6 +140,7 @@ export function SubmissionDetail({
   submission: s,
   intake,
   eventTitle,
+  guideHref,
   consentRequired,
   justSent,
   now,
@@ -432,6 +435,7 @@ export function SubmissionDetail({
         topic={topic}
         status={s.status}
         dateLine={dateLine(s)}
+        guideHref={showBar ? guideHref : null}
         onBack={onClose}
       />
       <div className="pb-24 pt-9 layout:pt-13">

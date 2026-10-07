@@ -96,16 +96,12 @@ never touches it.
 
 Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
 
-**Mail link origin (api).** The code mails (sign-in, verification,
-re-registration, reset) carry no link. `MAILER_DOCTOR_BASE_URL` is
-**required** — the api refuses to boot without it, like `DATABASE_URL` — and is
-the doctor storefront origin every congress letter links to
-(`{origin}/account/congress`: the 046 submission letters and the 044
-confirmation's «Подать материалы в кабинете»). Production:
-`MAILER_DOCTOR_BASE_URL=https://new.doctor.school` in `/etc/ds-platform/api.env`,
-set **before** the release that first requires it restarts the api; it flips to
-`https://doctor.school` at the #1430 root-domain cut-over. Stage slots render it
-from the slot's doctor host (`tools/staging/slot.mjs`).
+**Mail links (api).** No mail the api sends carries a link: the code mails
+(sign-in, verification, re-registration, reset) and the congress letters alike
+(046 «Letters», #2634 — the congress letters name the congress site's domain as
+plain text). The api therefore reads no mail-link origin; a leftover
+`MAILER_DOCTOR_BASE_URL` line in `/etc/ds-platform/api.env` is ignored and may be
+deleted.
 
 Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine at
 0 users (pre-pilot); tune per ADR-0003 §6 as a tracked follow-up, not an on-box edit.
@@ -1137,9 +1133,8 @@ Order:
    pnpm smoke:prod                                  # doctor / + TLS probes included
    ```
 
-   **Mail links:** the code mails carry no link, so nothing in them needs
-   re-pointing. The congress letters use their own key, `MAILER_DOCTOR_BASE_URL`
-   (runtime contract above), which already points at `new.doctor.school`.
+   **Mail links:** no api mail carries a link (runtime contract above), so
+   nothing in them needs re-pointing.
 
 5. **Release-gate sequencing.** Both `apps/doctor` routes are still `deferred` in
    `tools/lint/prod-surface-manifest.yaml` and #1440's "no public placeholder on

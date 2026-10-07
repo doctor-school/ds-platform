@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  congressCabinetUrl,
   congressConfirmationMessage,
   congressSubmissionReceiptMessage,
   formatCongressEventDate,
@@ -21,7 +20,25 @@ import {
  * account paragraph or the «Войти» button fails here.
  */
 
-const CABINET_URL = "https://new.doctor.school/account/congress";
+/**
+ * 046 «Letters» (owner 2026-10-06, #2634) — congress letters carry no link:
+ * the way into the cabinet is told in text, naming the congress site's own
+ * domain as plain text, never as an `<a href>` or a URL.
+ */
+const CONGRESS_SITE_DOMAIN = "orthobio.ru";
+
+function expectNoLinkOnlyTheDomainAsText(message: {
+  text: string;
+  html: string;
+}): void {
+  expect(htmlLinks(message.html)).toEqual([]);
+  expect(message.html).not.toMatch(/href=/);
+  for (const part of [message.text, message.html]) {
+    expect(part).not.toMatch(/https?:\/\//);
+    expect(part).not.toContain("/account/congress");
+    expect(part).toContain(CONGRESS_SITE_DOMAIN);
+  }
+}
 
 const CONTENT = {
   eventTitle: "Конгресс-2027",
@@ -29,7 +46,10 @@ const CONTENT = {
   eventVenue: "Москва, Крокус Экспо",
 } as const;
 
-const REMOVED = ["аккаунт", "Пароль не нужен", "Войти", "/login"] as const;
+// «Войти» alone is not listed: the cabinet line names the congress site's
+// «Войти в кабинет» button in text (#2634); the absence of any sign-in ACTION is
+// proven by the no-link test below (046 EARS-15).
+const REMOVED = ["аккаунт", "Пароль не нужен", "/login"] as const;
 
 /** Every `<a href>` in the HTML part — the letter's actions. */
 function htmlLinks(html: string): Array<{ url: string; label: string }> {
@@ -66,28 +86,18 @@ describe("044 EARS-13: the congress confirmation email", () => {
 
   it("044 EARS-13.3: the event instant shall render as Moscow wall-clock regardless of the server zone", () => {
     // 2027-03-12T07:00Z is 10:00 in Moscow (UTC+3, no DST since 2014).
-    expect(
-      formatCongressEventDate(new Date("2027-03-12T07:00:00.000Z")),
-    ).toBe("12 марта 2027 г. в 10:00");
+    expect(formatCongressEventDate(new Date("2027-03-12T07:00:00.000Z"))).toBe(
+      "12 марта 2027 г. в 10:00",
+    );
   });
 
-  it("046 EARS-15: the confirmation shall carry no link, no button and no URL in either part", () => {
+  it("046 EARS-15: the confirmation shall carry no link, no button and no URL in either part, naming the congress site only as text", () => {
     const message = congressConfirmationMessage(CONTENT);
 
-    expect(htmlLinks(message.html)).toEqual([]);
-    expect(message.html).not.toMatch(/href=/);
+    expectNoLinkOnlyTheDomainAsText(message);
     for (const part of [message.text, message.html]) {
-      expect(part).not.toMatch(/https?:\/\//);
-      expect(part).not.toContain("/account/congress");
       expect(part).not.toContain("Подать материалы в кабинете");
     }
-  });
-});
-
-describe("046 «Letters»: the cabinet link", () => {
-  it("EARS-14: the cabinet URL is /account/congress on the doctor storefront origin, trailing slashes dropped", () => {
-    expect(congressCabinetUrl("https://new.doctor.school")).toBe(CABINET_URL);
-    expect(congressCabinetUrl("https://new.doctor.school/")).toBe(CABINET_URL);
   });
 });
 
@@ -96,10 +106,9 @@ describe("046 EARS-14: the submission receipt", () => {
     title: "Ранняя реабилитация после артроскопии",
     kindLabel: "Устный доклад",
     eventTitle: "Конгресс-2027",
-    cabinetUrl: CABINET_URL,
   } as const;
 
-  it("EARS-14: the receipt carries the approved subject, text, action and footer verbatim", () => {
+  it("EARS-14: the receipt carries the approved subject, text and footer verbatim", () => {
     const message = congressSubmissionReceiptMessage(RECEIPT);
 
     expect(message.subject).toBe("Doctor.School — заявка получена");
@@ -108,13 +117,14 @@ describe("046 EARS-14: the submission receipt", () => {
         "получена и передана программному комитету Конгресс-2027. " +
         "Статус можно посмотреть в кабинете.",
     );
-    expect(message.text).toContain(`Мои заявки на Конгресс: ${CABINET_URL}`);
-    expect(message.text.trimEnd().endsWith("Команда Doctor.School")).toBe(
-      true,
-    );
-    expect(htmlLinks(message.html)).toEqual([
-      { url: CABINET_URL, label: "Мои заявки на Конгресс" },
-    ]);
+    expect(message.text.trimEnd().endsWith("Команда Doctor.School")).toBe(true);
+  });
+
+  it("EARS-14: the receipt carries no link, no button and no URL in either part, naming the congress site only as text", () => {
+    const message = congressSubmissionReceiptMessage(RECEIPT);
+
+    expectNoLinkOnlyTheDomainAsText(message);
+    expect(message.text).not.toContain("Мои заявки на Конгресс:");
   });
 
   it("EARS-14: each kind is named in running text as the section names it", () => {

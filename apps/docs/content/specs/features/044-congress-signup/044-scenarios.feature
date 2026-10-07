@@ -27,6 +27,7 @@ Feature: 044 — Congress sign-up
     # Production amendment 2026-09-24 (#2369, 044-requirements «Production amendment — confirmation email copy»): the line below is the running-production baseline; the amended email names the event, its date and venue
     # as ONE copy for every participant, with no account paragraph and no sign-in action (EARS-13.1 / EARS-13.2).
     # Production amendment 2026-10-02 (#2553): the 2026-09-29 link «Подать материалы в кабинете» is removed; the letter carries no action (046 EARS-15 amended).
+    # Production amendment 2026-10-06 (#2634): one line tells in text where the cabinet entry is on the congress site, orthobio.ru as plain text, never a link.
     And a confirmation email is dispatched naming the event, the created Doctor.School account and code-based sign-in
     And the registration's confirmation-mail outcome is recorded as sent with its timestamp
 

@@ -49,8 +49,7 @@ import {
  * green; a half-exported env fails loudly by variable name
  * (`support/live-stand-env.ts`), whose stand preconditions apply (raised
  * rate-limit ceilings; bot protection in its stand bypass mode, the doctor host
- * built with an empty `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`), and the api booted
- * with `MAILER_DOCTOR_BASE_URL` (a required api variable, 046 EARS-15). The
+ * built with an empty `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`). The
  * submission consent version needs no setting: the api stamps it from the
  * `@ds/legal-content` consent document (046 EARS-16).
  *

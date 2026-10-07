@@ -31,7 +31,8 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
   Scenario: A guest enters the section from the congress site by an emailed code
     Given a participant registered on the congress site and received the 044 confirmation letter
     Then the letter carries no link, button or URL
-    When the participant opens "/login?method=code&returnTo=/account/congress" on the doctor storefront origin set in MAILER_DOCTOR_BASE_URL
+    And it tells in text that the cabinet entry is the «Войти в кабинет» button on the congress site, naming "orthobio.ru" as plain text
+    When the participant opens "/login?method=code&returnTo=/account/congress" on the doctor storefront origin
     Then the email-code method is shown directly
     When they request a code for their email and enter the six-digit code from the mail
     Then the shell lands on "/account/congress" showing "Мои заявки на Конгресс"
@@ -62,7 +63,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     When the participant accepts it and sends
     Then the submission status becomes "Отправлена" with the send instant
     And one consent record is written under the purpose "congress-submission-personal-data" with the version of that document
-    And a receipt letter naming the talk is sent after commit and its outcome is recorded on the submission
+    And a receipt letter naming the talk, with no link and naming "orthobio.ru" only as text, is sent after commit and its outcome is recorded on the submission
     When the participant sends a second oral talk
     Then the consent is not asked again
 

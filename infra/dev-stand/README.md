@@ -46,8 +46,7 @@ outside git (`.env.local`, `compose.override.yml`). Setup order:
    ```
 
    An existing `.env.local` needs the keys added to the template since it was
-   copied: `MAILER_DOCTOR_BASE_URL` is REQUIRED — the api refuses to boot
-   without it — and `CONGRESS_SIGNUP_CONSENT_VERSION` is required for the
+   copied: `CONGRESS_SIGNUP_CONSENT_VERSION` is required for the
    congress sign-up and for sending a congress submission (the api boots
    without it).
 

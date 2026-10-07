@@ -190,11 +190,6 @@ export const ApiEnvSchema = z.looseObject({
   MAILER_SMTP_USER: z.string().optional(),
   MAILER_SMTP_PASSWORD: z.string().optional(),
   MAILER_SMTP_FROM: z.string().optional(),
-  // 046 «Letters» — the doctor storefront origin the 046 submission letters
-  // link to (`{origin}/account/congress`, EARS-14; the 044 confirmation carries
-  // no link, EARS-15). REQUIRED with no default, like DATABASE_URL: an
-  // api without it refuses to boot rather than mail a link to the wrong site.
-  MAILER_DOCTOR_BASE_URL: z.url(),
 
   // Shared BFF/native SMTP configuration. Validated by real-smtp.ts on selection:
   // explicit postbox or mail.ru, matching canonical host:465, complete credentials.

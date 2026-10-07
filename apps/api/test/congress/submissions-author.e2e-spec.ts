@@ -656,7 +656,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     const receiptsTo = (email: string) =>
       mailer.congressSubmissionReceipts.filter((r) => r.to === email);
 
-    it("EARS-14: after the send commits the author gets the receipt naming the kind, title and event with the absolute cabinet link, and the outcome is recorded", async () => {
+    it("EARS-14: after the send commits the author gets the receipt naming the kind, title and event with no link, and the outcome is recorded", async () => {
       const d = await doctor("sub-receipt");
       const eventId = await congress(openWindow());
       await register(d, eventId);
@@ -670,8 +670,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(outcome).toMatchObject({ kind: "receipt", status: "sent" });
       expect(outcome.at!.getTime()).toBeGreaterThanOrEqual(before - 1000);
 
-      const cabinetUrl = `${process.env.MAILER_DOCTOR_BASE_URL!.replace(/\/+$/, "")}/account/congress`;
-      expect(cabinetUrl).toMatch(/^https?:\/\//);
       const [receipt] = receiptsTo(d.email.toLowerCase());
       expect(receipt).toEqual({
         email: d.email,
@@ -679,14 +677,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         title: completeOral.title,
         kindLabel: "Устный доклад",
         eventTitle: "Конгресс",
-        cabinetUrl,
       });
       const message = congressSubmissionReceiptMessage(receipt!);
       expect(message.text).toContain(
         `Ваша заявка «${completeOral.title}» (устный доклад) получена и ` +
           "передана программному комитету Конгресс.",
       );
-      expect(message.text).toContain(`Мои заявки на Конгресс: ${cabinetUrl}`);
+      // 046 «Letters» (#2634): no link, button or URL; the congress site's
+      // domain appears only as text.
+      expect(message.html).not.toMatch(/href=/);
+      for (const part of [message.text, message.html]) {
+        expect(part).not.toMatch(/https?:\/\//);
+        expect(part).toContain("orthobio.ru");
+      }
     });
 
     it("EARS-14: a mail failure keeps the submission submitted and records the outcome failed", async () => {

@@ -152,7 +152,11 @@ export async function signInInPage(
   expect(outcome.status, `in-page sign-in — ${outcome.body}`).toBe(200);
 }
 
-/** A congress event with its intake settings; the oral window open for a month. */
+/**
+ * A congress event with its intake settings; the oral window open for a month.
+ * The event is of the dictionary kind «Конгресс» and for the doctor audience —
+ * both required since 012 EARS-26/EARS-29 (#2509).
+ */
 export async function createCongressEvent(): Promise<string> {
   const id = randomUUID();
   const now = Date.now();
@@ -160,10 +164,12 @@ export async function createCongressEvent(): Promise<string> {
     await db.query(
       `INSERT INTO events
          (id, slug, title, school, starts_at, duration_min, description,
-          specialties, partner_ref, program_pdf_ref, state, participation_format)
+          specialties, partner_ref, program_pdf_ref, state, participation_format,
+          kind_id, audience)
        VALUES ($1, $2, 'Конгресс ортобиологии', 'Конгресс', $3, 480,
                'Ежегодный конгресс.', $4, 'sponsor:congress', NULL, 'published',
-               'offline')`,
+               'offline',
+               (SELECT id FROM event_kinds WHERE slug = 'kongress'), 'doctors')`,
       [
         id,
         `congress-2433-${id.slice(0, 8)}`,

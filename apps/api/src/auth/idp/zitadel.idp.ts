@@ -1063,14 +1063,12 @@ export class ZitadelIdpClient implements IdpClient {
 
   /**
    * Resolve an identifier (email or phone) to a Zitadel `userId`, or `null` if no
-   * user matches. Uses the User v2 search with an EQUALS query on the matching
-   * channel. Fails closed — any non-2xx or empty result is `null` — so the reset
+   * user matches. Uses the User v2 search on the matching channel
+   * ({@link identifierQuery} — email matched case-insensitively). Fails closed — any non-2xx or empty result is `null` — so the reset
    * paths below stay enumeration-safe (an unknown identifier looks like a hiccup).
    */
   private async resolveUserId(identifier: string): Promise<string | null> {
-    const query = identifier.startsWith("+")
-      ? { phoneQuery: { number: identifier } }
-      : { emailQuery: { emailAddress: identifier } };
+    const query = identifierQuery(identifier);
     const res = await this.fetchImpl(this.url("/v2/users"), {
       method: "POST",
       headers: this.headers(),
@@ -1101,9 +1099,7 @@ export class ZitadelIdpClient implements IdpClient {
     emailVerified: boolean;
     email: string | undefined;
   } | null> {
-    const query = identifier.startsWith("+")
-      ? { phoneQuery: { number: identifier } }
-      : { emailQuery: { emailAddress: identifier } };
+    const query = identifierQuery(identifier);
     const res = await this.fetchImpl(this.url("/v2/users"), {
       method: "POST",
       headers: this.headers(),
@@ -2573,4 +2569,32 @@ export class ZitadelIdpClient implements IdpClient {
       return null;
     }
   }
+}
+
+/**
+ * The User v2 search (`POST /v2/users`) query for an identifier: a phone
+ * (`+`-prefixed) matches its number exactly; an email matches the stored
+ * address case-insensitively. Zitadel's `EmailQuery` defaults to a
+ * case-SENSITIVE `EQUALS`, while an email address is case-insensitive in
+ * practice — without the explicit method a different-case address misses the
+ * existing account (#2642: Congress sign-up 503'd, sign-in-by-code and reset
+ * silently found nobody), breaking the enumeration-safe "existing account"
+ * branch (003 EARS-16, 044 EARS-7).
+ */
+function identifierQuery(identifier: string):
+  | { phoneQuery: { number: string } }
+  | {
+      emailQuery: {
+        emailAddress: string;
+        method: "TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE";
+      };
+    } {
+  return identifier.startsWith("+")
+    ? { phoneQuery: { number: identifier } }
+    : {
+        emailQuery: {
+          emailAddress: identifier,
+          method: "TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE",
+        },
+      };
 }

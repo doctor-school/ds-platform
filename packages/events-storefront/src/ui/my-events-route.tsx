@@ -70,32 +70,20 @@ export async function MyEventsRoute({
     <main className="bg-background text-foreground">
       <header className="bg-header text-header-foreground">
         <Container className="py-10 layout:py-16">
-          <div className="flex items-end justify-between gap-8">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
-                {COPY.title}
-              </h1>
-              <p
-                className="mt-4 text-caption font-semibold opacity-90"
-                data-testid="poster-decor"
-              >
-                {recordings
-                  ? COPY.recordingsSubtitle(counts.recordings)
-                  : COPY.subtitle(counts.upcoming)}
-              </p>
-            </div>
-            {/* The whole block renders at `opacity-80` (the inner `opacity-100`
-                cannot lift a parent opacity group), so it is decorative-poster
-                contrast debt. */}
-            <div
-              className="hidden shrink-0 text-right text-2xs font-extrabold uppercase tracking-micro leading-loose opacity-80 layout:block"
-              data-testid="poster-decor"
-            >
-              {COPY.tzEyebrow}
-              <br />
-              <span className="opacity-100">{COPY.tzValue}</span>
-            </div>
-          </div>
+          {/* No page-level time zone line: each time carries its own zone label
+              (online/hybrid in the viewer zone, offline in МСК) — owner
+              2026-10-07, gate §2.3 row 26. */}
+          <h1 className="text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
+            {COPY.title}
+          </h1>
+          <p
+            className="mt-4 text-caption font-semibold opacity-90"
+            data-testid="poster-decor"
+          >
+            {recordings
+              ? COPY.recordingsSubtitle(counts.recordings)
+              : COPY.subtitle(counts.upcoming)}
+          </p>
         </Container>
       </header>
 

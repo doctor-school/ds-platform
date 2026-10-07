@@ -37,8 +37,6 @@ export const MY_EVENTS_COPY = {
     count === 0 ? "Нет предстоящих событий" : countOf(count, UPCOMING_FORMS),
   recordingsSubtitle: (count: number) =>
     count === 0 ? "Пока нет прошедших событий" : countOf(count, PAST_FORMS),
-  tzEyebrow: "Часовой пояс",
-  tzValue: "Москва · UTC+3",
   cardDate: (date: string, weekday: string) => `${date} · ${weekday}`,
   live: "В эфире",
   tabs: { upcoming: "Предстоящие", recordings: "Записи" },

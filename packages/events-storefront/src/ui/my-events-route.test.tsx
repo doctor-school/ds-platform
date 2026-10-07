@@ -24,6 +24,9 @@ const redirect = vi.fn((to: string) => {
 });
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => redirect(to),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/account/events",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next/headers", () => ({
@@ -99,5 +102,23 @@ describe("014 EARS-6: /account/events sends a guest to the door WITH its return 
       expect.anything(),
       "recordings",
     );
+  });
+});
+
+describe("004 EARS-12 «Мои события» times (gate row 26)", () => {
+  it("004 EARS-12: the page header carries no page-level time zone line — each time carries its own zone", async () => {
+    fetchMyEvents.mockResolvedValue({
+      authenticated: true,
+      events: { data: [], counts: { upcoming: 0, recordings: 0 } },
+    });
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(
+      await MyEventsPage({ searchParams: Promise.resolve({}) }),
+    );
+    const header = html.slice(
+      html.indexOf("<header"),
+      html.indexOf("</header>"),
+    );
+    expect(header).not.toMatch(/UTC|часовой пояс/i);
   });
 });

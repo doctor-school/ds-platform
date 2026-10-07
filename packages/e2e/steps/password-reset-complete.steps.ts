@@ -11,6 +11,7 @@ import {
   inputSecret as input,
   registerOwnedCredentials,
 } from "../lib/owned-registration.js";
+import { assertSecureSession } from "../lib/secure-session.js";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
 import {
   fetchRecoveryCode,
@@ -120,51 +121,11 @@ async function secureSession(
   email: string,
   priorCookies: string[],
 ): Promise<void> {
-  const header = (await response.headerValue("set-cookie")) ?? "";
-  expect(
-    header.includes(`${SESSION}=`),
-    "authentication minted session cookie",
-  ).toBe(true);
-  expect(/(?:^|;)\s*Domain=/i.test(header), "no Domain attribute").toBe(false);
   await reset.waitForURL(
     (url) => url.origin === new URL(base).origin && url.pathname === "/account",
   );
   await ownProfile(reset, email);
-  const session = (await reset.context().cookies()).find(
-    (cookie) => cookie.name === SESSION,
-  );
-  expect(Boolean(session), "fresh session exists").toBe(true);
-  expect({
-    domain: session!.domain,
-    path: session!.path,
-    httpOnly: session!.httpOnly,
-    secure: session!.secure,
-    sameSite: session!.sameSite,
-  }).toEqual({
-    domain: new URL(base).hostname,
-    path: "/",
-    httpOnly: true,
-    secure: true,
-    sameSite: "Lax",
-  });
-  expect(
-    priorCookies.includes(session!.value),
-    "fresh session differs from prior sessions",
-  ).toBe(false);
-  const exposed = await reset.evaluate(() => {
-    const readable = JSON.stringify({
-      cookie: document.cookie,
-      local: Object.entries(localStorage),
-      session: Object.entries(sessionStorage),
-    });
-    return /__Host-ds_session|access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
-      readable,
-    );
-  });
-  expect(
-    exposed,
-    "no tokens or private session in JavaScript-readable stores",
-  ).toBe(false);
+  await assertSecureSession(reset, response, base, priorCookies);
 }
 
 Given(

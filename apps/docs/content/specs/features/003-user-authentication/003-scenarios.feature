@@ -138,13 +138,21 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the response is not a 500 server error
     And no account is created
 
-  @EARS-3 @happy
+  @EARS-3 @EARS-41 @happy @email-confirmation
   Scenario: Verify email with the OTP code
-    Given a registrant who received an email verification code
-    When the registrant submits the correct code
-    Then Zitadel otp_email verifies it
-    And the UserMirror email_verified flag becomes true
-    And an EmailVerified entry is appended to audit_ledger
+    Given an Academy visitor with a unique never-registered email
+    When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
+    Then the Academy code step has a fresh delivered confirmation code that remains unconsumed
+    When the registrant enters the delivered confirmation code once in the original Academy tab
+    Then Academy automatically submits that code once and acknowledges verified without exposing credentials
+    And confirmation opens webinars and the same email-verified account with a secure host-only session
+    # Accepted EARS-41 selects the unverified-account Zitadel verification check.
+    # Internal mirror proof: apps/api/test/auth/verify.e2e-spec.ts EARS-3.
+    # Exactly one auth.account.verified row, same subject, channel=email, masked:
+    # apps/api/test/auth/audit-ledger.e2e-spec.ts EARS-18. No browser ledger reads.
+    # Old browser mapping: apps/portal/e2e/auth-journeys.e2e.spec.ts
+    # "003 EARS-1/41/10" code/auto-session assertions -> registration.steps.ts.
+    # Keep that broader registration/confirmation/logout test intact.
 
   @EARS-3 @failure
   Scenario: Expired email verification code is rejected

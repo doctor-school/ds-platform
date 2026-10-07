@@ -71,6 +71,29 @@ export function registrationEvidence(
   };
 }
 
+/** Project secrets to booleans before assertions can include response diagnostics. */
+export function verificationEvidence(
+  requestText: string,
+  responseText: string,
+  account: OwnedCredentials,
+  code: string,
+) {
+  const request = parsedObject(requestText);
+  const response = parsedObject(responseText);
+  const registration = request.registration;
+  return {
+    credentialsMatch:
+      request.email === account.email &&
+      registration !== null &&
+      typeof registration === "object" &&
+      "password" in registration &&
+      registration.password === account.password &&
+      request.code === code,
+    acknowledgementMatches:
+      Object.keys(response).length === 1 && response.status === "verified",
+  };
+}
+
 /** Shared by registration acceptance and the owned password-reset prerequisites. */
 export async function registerOwnedCredentials(
   page: Page,

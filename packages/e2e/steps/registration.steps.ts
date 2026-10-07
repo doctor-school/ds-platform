@@ -9,8 +9,11 @@ import { installCaptchaStub } from "../lib/captcha-stub.js";
 import {
   registerOwnedCredentials,
   registrationEvidence,
+  verificationEvidence,
+  inputSecret,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
+import { assertSecureSession } from "../lib/secure-session.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 interface Registration extends OwnedCredentials {
@@ -18,6 +21,8 @@ interface Registration extends OwnedCredentials {
   page: Page;
   response?: Response;
   code?: string;
+  verification?: Response;
+  verificationRequests?: number;
 }
 const registrations = new WeakMap<Page, Registration>();
 function registration(key: Page): Registration {
@@ -148,14 +153,152 @@ Then(
   },
 );
 
-After("@registration-before-confirmation", async ({ page }) => {
-  const state = registrations.get(page);
-  if (!state) return;
-  try {
-    // Close pages first so failure-context snapshots cannot retain credentials.
-    await Promise.all(state.context.pages().map((owned) => owned.close()));
-    await state.context.close();
-  } finally {
-    registrations.delete(page);
-  }
-});
+When(
+  "the registrant enters the delivered confirmation code once in the original Academy tab",
+  async ({ page }) => {
+    const state = registration(page);
+    state.verificationRequests = 0;
+    state.page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname === "/v1/auth/verify" &&
+        request.method() === "POST"
+      ) {
+        state.verificationRequests! += 1;
+      }
+    });
+    const verified = state.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/v1/auth/verify" &&
+        response.request().method() === "POST",
+    );
+    await inputSecret(
+      state.page.locator('input[autocomplete="one-time-code"]'),
+      state.code!,
+    );
+    state.verification = await verified;
+  },
+);
+
+Then(
+  "Academy automatically submits that code once and acknowledges verified without exposing credentials",
+  async ({ page }) => {
+    const state = registration(page);
+    const response = state.verification!;
+    expect(response.status(), "confirmation accepted").toBe(200);
+    expect(
+      verificationEvidence(
+        response.request().postData() ?? "",
+        await response.text(),
+        state,
+        state.code!,
+      ),
+    ).toEqual({
+      credentialsMatch: true,
+      acknowledgementMatches: true,
+    });
+    expect(
+      state.verificationRequests,
+      "one automatic confirmation request",
+    ).toBe(1);
+  },
+);
+
+Then(
+  "confirmation opens webinars and the same email-verified account with a secure host-only session",
+  async ({ page, world }) => {
+    const state = registration(page);
+    await state.page.waitForURL(
+      (url) =>
+        url.origin === new URL(world.hostBaseUrl).origin &&
+        url.pathname === "/webinars",
+    );
+    const exposed = await state.page.evaluate((password) => {
+      const readable = JSON.stringify({
+        url: location.href,
+        cookie: document.cookie,
+        local: Object.entries(localStorage),
+        session: Object.entries(sessionStorage),
+      });
+      return (
+        readable.includes(password) ||
+        readable.includes(encodeURIComponent(password))
+      );
+    }, state.password);
+    expect(exposed, "no held password in URL or browser-readable stores").toBe(
+      false,
+    );
+    expect(
+      (await state.context.cookies()).some((cookie) =>
+        cookie.value.includes(state.password),
+      ),
+      "no held password in cookies",
+    ).toBe(false);
+    await assertSecureSession(
+      state.page,
+      state.verification!,
+      world.hostBaseUrl,
+    );
+    await state.page.goto(`${world.hostBaseUrl}/account`, {
+      waitUntil: "load",
+    });
+    expect(
+      new URL(state.page.url()).pathname === "/account",
+      "authenticated account route",
+    ).toBe(true);
+    const profile = await state.page.evaluate(async (email) => {
+      const response = await fetch("/v1/me/profile", {
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({}));
+      return {
+        status: response.status,
+        sameAccount: body.email === email,
+        emailVerified: body.emailVerified === true,
+      };
+    }, state.email);
+    expect(profile).toEqual({
+      status: 200,
+      sameAccount: true,
+      emailVerified: true,
+    });
+    expect(
+      state.verificationRequests,
+      "one confirmation request through authenticated arrival",
+    ).toBe(1);
+  },
+);
+
+After(
+  "@registration-before-confirmation or @email-confirmation",
+  async ({ page }) => {
+    const state = registrations.get(page);
+    if (!state) return;
+    try {
+      if (
+        (await state.context.cookies()).some(
+          (cookie) => cookie.name === "__Host-ds_session",
+        )
+      ) {
+        const result = await state.page.evaluate(async () => {
+          const response = await fetch("/v1/auth/logout", {
+            method: "POST",
+            credentials: "include",
+          });
+          const profile = await fetch("/v1/me/profile", {
+            credentials: "include",
+          });
+          return { logout: response.status, profile: profile.status };
+        });
+        expect(result, "owned confirmation session revoked").toEqual({
+          logout: 200,
+          profile: 401,
+        });
+      }
+    } finally {
+      // Close pages first so failure-context snapshots cannot retain credentials.
+      await Promise.all(state.context.pages().map((owned) => owned.close()));
+      await state.context.close();
+      registrations.delete(page);
+    }
+  },
+);

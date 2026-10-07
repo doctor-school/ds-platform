@@ -845,6 +845,33 @@ describe("003 EARS-11/29 password-reset send wire shape (#910)", () => {
     return { fetchImpl, calls };
   }
 
+  it("003 EARS-16 (#2642): the reset's account lookup matches the email case-insensitively; the phone lookup is unchanged", async () => {
+    const { fetchImpl, calls } = resetFetch();
+    const client = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
+    await client.requestPasswordReset("USER@DS.test");
+    await client.requestPasswordReset("+79001234567");
+    const searches = calls
+      .filter((c) => c.url.endsWith("/v2/users"))
+      .map((c) => JSON.parse(c.body ?? "{}"));
+    expect(searches).toEqual([
+      {
+        queries: [
+          {
+            emailQuery: {
+              emailAddress: "USER@DS.test",
+              method: "TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE",
+            },
+          },
+        ],
+      },
+      { queries: [{ phoneQuery: { number: "+79001234567" } }] },
+    ]);
+  });
+
   it("003 EARS-29: the reset send POSTs /password_reset with the returnCode oneof — no sendLink, even with a portal origin configured", async () => {
     const { fetchImpl, calls } = resetFetch();
     const mailer = new FakeMailer();
@@ -1141,7 +1168,36 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
       "exactly one User v2 search, keyed on the email",
     ).toHaveLength(1);
     expect(JSON.parse(searches[0]!.body ?? "{}")).toEqual({
-      queries: [{ emailQuery: { emailAddress: INPUT.email } }],
+      queries: [
+        {
+          emailQuery: {
+            emailAddress: INPUT.email,
+            method: "TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE",
+          },
+        },
+      ],
+    });
+  });
+
+  it("003 EARS-16 (#2642): the 409 duplicate lookup matches the stored email case-insensitively — a different-case address resolves the owning subject", async () => {
+    const { fetchImpl, calls } = createFetch(
+      { status: 409, body: { code: 6 } },
+      { status: 200, body: { result: [{ userId: "u-mixed-case" }] } },
+    );
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(
+      client.createUser({ ...INPUT, email: "Case.User@X.TEST" }),
+    ).resolves.toEqual({ sub: "u-mixed-case", alreadyExisted: true });
+    const search = calls.find((c) => c.url.endsWith("/v2/users"));
+    expect(JSON.parse(search!.body ?? "{}")).toEqual({
+      queries: [
+        {
+          emailQuery: {
+            emailAddress: "Case.User@X.TEST",
+            method: "TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE",
+          },
+        },
+      ],
     });
   });
 

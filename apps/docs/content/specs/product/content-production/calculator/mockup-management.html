@@ -1,0 +1,1589 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Управленческий слой — макет калькулятора</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect x=%272%27 y=%271%27 width=%2712%27 height=%2714%27 rx=%271.5%27 fill=%27none%27 stroke=%27%231d1d1f%27 stroke-width=%271.5%27/%3E%3Cpath d=%27M5 5h6M5 9h2M9 9h2M5 12h2M9 12h2%27 stroke=%27%231d1d1f%27 stroke-width=%271.5%27/%3E%3C/svg%3E"
+    />
+    <!--
+      Stage A mockup (#2661) of the management screen of the unit-cost calculator. Same pinned stack
+      as index.html; numbers come from compute.mjs through mockup-management.mjs on the current YAML.
+      Serve the content-production folder over HTTP and open /calculator/mockup-management.html.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm",
+          "react-dom/client": "https://cdn.jsdelivr.net/npm/react-dom@19.3.0/client/+esm",
+          "htm": "https://cdn.jsdelivr.net/npm/htm@3.1.1/+esm",
+          "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.9.1/+esm",
+          "https://cdn.jsdelivr.net/npm/react@%5E19.3.0/+esm": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm",
+          "https://cdn.jsdelivr.net/npm/react@19.1.0/+esm": "https://cdn.jsdelivr.net/npm/react@19.3.0/+esm"
+        }
+      }
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f7f5;
+        --panel: #ffffff;
+        --ink: #1d1d1f;
+        --muted: #5f6368;
+        --frame: #9aa0a6;
+        --rule: #e3e3e0;
+        --accent: #0b57d0;
+        --hl: #d93025;
+        --warn: #b06000;
+        --ok: #188038;
+        --chip: #eef1f5;
+        --est: #eef4ff;
+        --est-ink: #3c5a99;
+        --edited: #fff4d6;
+        --edited-border: #e0a800;
+        --mid: #f3f6fb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          14px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        overflow-x: hidden;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 16px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--frame);
+        background: var(--panel);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      header h1 {
+        font-size: 16px;
+        margin: 0;
+      }
+      .badge {
+        font-size: 12px;
+        border-radius: 999px;
+        padding: 2px 10px;
+        background: var(--edited);
+        border: 1px solid var(--edited-border);
+      }
+      .wrap {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 16px;
+        display: grid;
+        gap: 16px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 14px 16px;
+        min-width: 0;
+      }
+      .card > h2 {
+        font-size: 15px;
+        margin: 0 0 4px;
+      }
+      .lead {
+        color: var(--muted);
+        margin: 0 0 10px;
+        max-width: 980px;
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 12px;
+      }
+      .scroll {
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 4px 6px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: middle;
+      }
+      th {
+        font-weight: 600;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      td.num,
+      th.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      th.mid,
+      td.mid {
+        background: var(--mid);
+      }
+      tr.sum td {
+        font-weight: 650;
+        border-top: 2px solid var(--ink);
+      }
+      tr.sub td {
+        color: var(--muted);
+      }
+      tr.price td {
+        border-top: 2px solid var(--rule);
+      }
+      tr.margin td {
+        font-weight: 650;
+      }
+      .neg {
+        color: var(--hl);
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+      }
+      input.num {
+        width: 118px;
+        text-align: right;
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        padding: 3px 6px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--est);
+        color: var(--est-ink);
+      }
+      input.num.set {
+        background: var(--edited);
+        border-color: var(--edited-border);
+        color: var(--ink);
+      }
+      input.num.unset {
+        background: #fff;
+        color: var(--muted);
+      }
+      .chip {
+        font-size: 11px;
+        border-radius: 999px;
+        padding: 0 7px;
+        white-space: nowrap;
+        background: var(--est);
+        color: var(--est-ink);
+      }
+      .chip.set {
+        background: var(--edited);
+        color: var(--ink);
+      }
+      .chip.unset {
+        background: var(--chip);
+        color: var(--muted);
+      }
+      .term {
+        border-bottom: 1px dotted var(--muted);
+        cursor: help;
+      }
+      .id {
+        font:
+          12px ui-monospace,
+          Consolas,
+          monospace;
+        background: var(--chip);
+        border-radius: 4px;
+        padding: 1px 5px;
+        white-space: nowrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr));
+        gap: 16px;
+      }
+      .pcard {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 10px 12px;
+        min-width: 0;
+      }
+      .pcard.key {
+        border-color: var(--accent);
+      }
+      .pcard table {
+        font-size: 13px;
+      }
+      .pcard td.num,
+      .pcard th.num {
+        padding-left: 4px;
+        padding-right: 4px;
+      }
+      .pcard h3 {
+        font-size: 14px;
+        margin: 0 0 6px;
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      button.link {
+        border: 0;
+        background: none;
+        color: var(--accent);
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        padding: 0;
+      }
+      .tabs {
+        display: inline-flex;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .tabs button {
+        border: 0;
+        background: #fff;
+        padding: 3px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .tabs button.on {
+        background: var(--accent);
+        color: #fff;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      select {
+        font: inherit;
+        padding: 3px 6px;
+      }
+      details {
+        border-top: 1px solid var(--rule);
+        padding: 4px 0;
+      }
+      details > summary {
+        cursor: pointer;
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        list-style: none;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      details > summary::before {
+        content: "▸";
+        color: var(--accent);
+        width: 10px;
+        flex: none;
+      }
+      details[open] > summary::before {
+        content: "▾";
+      }
+      summary .name {
+        flex: 1;
+        min-width: 0;
+      }
+      summary .amount,
+      .leafrow .amount {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      summary .amount b {
+        font-weight: 650;
+      }
+      details .body {
+        padding: 2px 0 2px 18px;
+      }
+      .leafrow {
+        display: flex;
+        gap: 8px;
+        padding: 3px 0 3px 18px;
+        border-top: 1px dashed var(--rule);
+      }
+      .leafrow .name {
+        flex: 1;
+        min-width: 0;
+      }
+      .bar {
+        display: flex;
+        height: 10px;
+        border-radius: 3px;
+        overflow: hidden;
+        margin: 4px 0 8px;
+        background: var(--chip);
+      }
+      .loadbar {
+        position: relative;
+        height: 8px;
+        width: 90px;
+        background: var(--chip);
+        border-radius: 3px;
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+        margin-left: 6px;
+      }
+      .loadbar > span {
+        position: absolute;
+        inset: 0 auto 0 0;
+        background: var(--accent);
+      }
+      .loadbar.full > span {
+        background: var(--hl);
+      }
+      ul.plain {
+        margin: 4px 0 0;
+        padding-left: 18px;
+      }
+      #tip {
+        position: fixed;
+        z-index: 50;
+        max-width: 340px;
+        background: #202124;
+        color: #fff;
+        font-size: 12.5px;
+        line-height: 1.45;
+        padding: 8px 10px;
+        border-radius: 6px;
+        box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.12s;
+      }
+      #tip.on {
+        opacity: 1;
+      }
+      #tip b {
+        color: #aecbfa;
+      }
+      .err {
+        color: var(--hl);
+      }
+      @media (max-width: 640px) {
+        input.num {
+          width: 92px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"><p style="padding: 16px">Загрузка модели…</p></div>
+    <div id="tip" role="tooltip"></div>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import htm from "htm";
+      import { parse as parseYaml } from "yaml";
+      import {
+        loadInputs,
+        buildModel,
+        unitCost,
+        SCENARIOS,
+      } from "./compute.mjs";
+      import {
+        POOLS,
+        scenarioModel,
+        manage,
+        roleGroup,
+        functionNames,
+        functionChain,
+      } from "./mockup-management.mjs";
+
+      const html = htm.bind(React.createElement);
+      const { useState, useMemo } = React;
+
+      // Every term and abbreviation on the page explains itself on hover (custom tooltip below).
+      const TIPS = {
+        scen: "<b>min / mid / max</b> — три сценария. min — все диапазоны модели на нижней границе (часы, круги, ставки, FTE), max — на верхней. <b>mid — рабочая оценка</b>; min и max — края, которых на практике не бывает одновременно.",
+        est: "<b>Оценка по модели</b> — фактических цифр пока нет: значение посчитано из текущей модели операций и рыночных ставок (rates.yaml) для плана этого сценария. Впишите своё число — поле станет жёлтым и перестанет следовать модели; очистите поле — вернётся оценка.",
+        fot: "<b>ФОТ</b> — фонд оплаты труда: месячные зарплаты штата команды направления gross + страховые взносы работодателя (30,2 % в пределах базы, 15,1 % + 0,2 % сверх неё). Платится целиком, сколько бы продуктов ни вышло.",
+        teams:
+          "<b>Команда направления</b> — штат: аккаунт, продюсер, методолог, медредактор-сценарист, менеджер мероприятий, менеджер эксперта и медиа-ведущий на ротации. Две команды — вдвое больше ФОТ и мощности.",
+        media:
+          "<b>Медиа-круг</b> — общий для команд круг: раскадровка, схемы, медвизуализация, анимация, голос, монтаж, запись подкаста, анонсы. <b>Обязательство мощности</b> — часы, которые круг закрепляет за командой на месяц под её план; оплачиваются по фактически загруженным часам.",
+        experts:
+          "<b>Пул экспертов</b> — врачи-эксперты и спикеры на гонораре за единицу. Ставка известна только по нижней границе рынка (от 900 ₽/ч), поэтому оценка, вероятно, занижена.",
+        reviewers:
+          "<b>Пул медрецензентов</b> — независимые медицинские рецензенты (гонорар) и их координатор. Ставка рецензента — по нижней границе рынка.",
+        overhead:
+          "<b>Накладные</b> — затраты периода, которые не относятся к одной единице: ядро (руководство, стандарты, калькулятор), сервисный круг (юрист, бухгалтер, оператор платформы, поддержка, режиссёр трансляций), коуч. Плюс непроизводственное время штата (встречи, найм, управление) — оно уже внутри ФОТ.",
+        overheadRate:
+          "<b>Ставка накладных на прямой час</b> = (накладные месяца + непроизводственное время штата) ÷ прямые часы плана месяца. Каждая единица получает накладные пропорционально своим прямым часам.",
+        direct:
+          "<b>Прямые затраты</b> — часы операций, выполненных ради этой единицы, × стоимость часа роли. Здесь стоимость часа берётся из управленческих сумм: ставка модели × коэффициент пула.",
+        reserve:
+          "<b>Резерв актуализации</b> — работа будущих периодов договора: принять сигнал о новых данных (A44), дать заключение по затронутой единице (A45), решить и пересобрать часть линии (A46). Часы — из модели, рубли — по ставкам пулов.",
+        ext: "<b>Внешние затраты</b> — то, что покупается не часами: ИИ-генерация, голоса и лицензии, студия, гонорары спикеров, площадка и трансляция. Значений нет, поэтому «<b>не задано</b>»: в итог не входит и не считается нулём — итог несёт предупреждение.",
+        byLoad:
+          "<b>Себестоимость по загрузке</b> = прямые + накладные + резерв актуализации + заданные внешние. Свободное оплаченное время штата сюда не входит.",
+        full: "<b>Себестоимость с полным ФОТ</b> = по загрузке + неиспользованная мощность штата, разложенная на единицы плана пропорционально прямым часам. Так весь ФОТ месяца ложится на выпуск.",
+        idle: "<b>Неиспользованная мощность (простой)</b> — оплаченные часы штата, которые план месяца не загрузил: FTE × оплачиваемые часы − непроизводственные часы − часы плана. На полной мощности работает только узкое место.",
+        bottleneck:
+          "<b>Узкое место</b> — роль, которая первой упирается в свои часы; она задаёт мощность команды (сколько курсов в месяц). Сейчас это медредактор-сценарист: сценарий × круги согласования — самая длинная прямая работа урока.",
+        fte: "<b>FTE</b> — full-time equivalent, ставка в долях полной занятости: 1 FTE = один человек на полный день (≈ 168 оплачиваемых часов в месяц), 0,5 FTE — половина.",
+        plan: "<b>План выпуска в месяц</b> — сколько продуктов команда делает за месяц. По умолчанию — курс на полной мощности одной команды (из модели). План не меняет состав продукта: он задаёт, чем занята команда, а значит ставку накладных и простой.",
+        units:
+          "<b>Единицы месяца</b> — во что раскладывается план: курс = проектирование + 18 уроков + 18 эпизодов + 3 клуба + сделки. Только для чтения.",
+        price:
+          "<b>Цена продажи</b> — ваша цена за единицу. В модели её нет, поэтому поле пустое; впишите — появятся маржа ₽ и %.",
+        margin:
+          "<b>Маржа</b> = цена − себестоимость (выбранная база: по загрузке или с полным ФОТ). <b>Маржа %</b> = маржа ÷ цена.",
+        k: "<b>Коэффициент к модели</b> = ваша сумма ÷ оценка по модели. Все ставки ролей этого пула умножаются на него — структура (кто сколько часов) остаётся из модели, уровень денег — ваш.",
+        abc: "<b>Ключ распределения</b> (ABC, activity-based costing): месячная сумма каждого пула раскладывается на продукты пропорционально часам ролей этого пула × ставке роли по модели. Модель операций становится ключом — её не нужно калибровать ежедневно.",
+        recon:
+          "<b>Сверка</b>: Σ по плану месяца (прямые + накладные + простой) должна точно равняться сумме управленческих вводов месяца. Резерв актуализации и внешние затраты — сверх сверки: резерв — работа будущих периодов, внешние — не часы.",
+        idef0:
+          "<b>IDEF0</b> — схема функций производства: A0 делится на A1–A6, A3 «Произвести продукты» — на A31 урок, A32 подкаст, A33 мероприятие и так далее. Код показывает место функции в схеме.",
+        op: "<b>Операция</b> — самая мелкая работа схемы: одна роль, часы за проход, круги согласования. Из операций складываются прямые часы продукта.",
+        role: "<b>Роль</b> — кто выполняет операцию; у роли — стоимость часа (штат: зарплата + взносы ÷ оплачиваемые часы; пул: гонорар в час).",
+        load: "<b>Загрузка</b> = (часы плана + непроизводственные часы) ÷ оплаченные часы роли за месяц. 100 % — роль занята целиком; больше 100 % — перегрузка, плану не хватает людей.",
+        today:
+          "<b>Текущий калькулятор</b> — index.html на тех же YAML. При всех вводах «оценка по модели» этот экран даёт те же цифры до рубля.",
+      };
+      const A_TIP = (id, name) =>
+        `<b>${id}</b> — ${name}. Код функции в схеме IDEF0: каждая следующая цифра — шаг детализации (A3 → A31 → A313).`;
+
+      const Term = ({ tip, children }) =>
+        html`<span class="term" data-tip=${tip} tabindex="0"
+          >${children}</span
+        >`;
+
+      const rub = (v) =>
+        v == null || Number.isNaN(v)
+          ? "—"
+          : `${Math.round(v).toLocaleString("ru-RU")} ₽`;
+      const num = (v, d = 2) =>
+        v == null
+          ? "—"
+          : v.toLocaleString("ru-RU", { maximumFractionDigits: d });
+      const pct = (v) =>
+        v == null || !Number.isFinite(v)
+          ? "—"
+          : `${(v * 100).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} %`;
+      const parseNum = (text) => {
+        const t = String(text).replace(/\s|₽/g, "").replace(",", ".");
+        if (t === "") return null;
+        const v = Number(t);
+        return Number.isFinite(v) ? v : undefined;
+      };
+
+      const PRODUCTS = [
+        "урок",
+        "курс",
+        "сделка",
+        "эпизод подкаста",
+        "модуль",
+        "клуб",
+        "вебинар",
+        "практическая школа",
+        "конгресс",
+        "проектирование курса",
+        "специальность",
+      ];
+      const KEY = new Set(["урок", "курс", "сделка"]);
+      const GROUP_LABEL = {
+        staff: "ФОТ команды",
+        media: "медиа-круг",
+        experts: "пул экспертов",
+        reviewers: "пул медрецензентов",
+        overhead: "накладные",
+      };
+      const GROUP_COLOR = {
+        staff: "#0b57d0",
+        media: "#7b61c4",
+        experts: "#188038",
+        reviewers: "#12828c",
+        overhead: "#b06000",
+        reserve: "#9aa0a6",
+      };
+      const blank = () => [null, null, null];
+
+      /** Number cell: blue = model estimate (shown, follows the model), yellow = owner value. */
+      function NumCell({ value, estimate, onChange, unsetLabel, step }) {
+        const [draft, setDraft] = useState(null);
+        const set = value != null;
+        const shown =
+          draft ??
+          (set
+            ? num(value)
+            : estimate != null
+              ? num(Math.round(estimate * (step ?? 1)) / (step ?? 1))
+              : "");
+        const cls = set ? "set" : estimate != null ? "" : "unset";
+        const commit = () => {
+          if (draft == null) return;
+          const v = parseNum(draft);
+          setDraft(null);
+          if (v !== undefined) onChange(v);
+        };
+        return html`<div class="cell">
+          <input
+            class=${`num ${cls}`}
+            inputmode="decimal"
+            value=${shown}
+            placeholder=${unsetLabel ?? "не задано"}
+            onChange=${(e) => setDraft(e.target.value)}
+            onBlur=${commit}
+            onKeyDown=${(e) => e.key === "Enter" && e.target.blur()}
+          />
+          ${
+            set || estimate != null
+              ? html`<span
+                  class=${`chip ${cls}`}
+                  data-tip=${set ? null : TIPS.est}
+                  >${set ? "ваше значение" : "оценка по модели"}</span
+                >`
+              : null
+          }
+        </div>`;
+      }
+
+      const ScenHead = ({ first, extra = [] }) =>
+        html`<tr>
+          <th>${first}</th>
+          ${SCENARIOS.map(
+            (s) =>
+              html`<th class=${`num ${s === "mid" ? "mid" : ""}`} key=${s}>
+                <${Term} tip=${TIPS.scen}>${s}<//>
+              </th>`,
+          )}
+          ${extra.map((x, i) => html`<th key=${i}>${x}</th>`)}
+        </tr>`;
+
+      function App({ inputs }) {
+        const [st, setSt] = useState({
+          teams: blank(),
+          money: Object.fromEntries(POOLS.map((p) => [p.id, blank()])),
+          plan: Object.fromEntries(PRODUCTS.map((p) => [p, blank()])),
+          ext: Object.fromEntries(
+            Object.keys(inputs.products.externals).map((id) => [id, blank()]),
+          ),
+          price: Object.fromEntries(PRODUCTS.map((p) => [p, blank()])),
+        });
+        const [basis, setBasis] = useState("byLoad");
+        const [drill, setDrill] = useState({ product: "урок", s: "mid" });
+        const setCell = (group, key, i) => (v) =>
+          setSt((old) => {
+            const next = structuredClone(old);
+            if (key == null) next[group][i] = v;
+            else next[group][key][i] = v;
+            return next;
+          });
+
+        const names = useMemo(() => functionNames(inputs), [inputs]);
+        const today = useMemo(() => {
+          const m = buildModel(inputs);
+          return Object.fromEntries(
+            SCENARIOS.map((s) => [s, unitCost(m, "урок", s).total.byLoad]),
+          );
+        }, [inputs]);
+
+        const R = useMemo(() => {
+          const out = {};
+          SCENARIOS.forEach((s, i) => {
+            const teams = st.teams[i];
+            const auto = scenarioModel(inputs, s, { teams });
+            const typed = PRODUCTS.some((p) => st.plan[p][i] != null);
+            let plan = null;
+            let autoSold = null;
+            {
+              const r0 = manage(auto, s, { money: {} });
+              autoSold = r0.plan.sold;
+            }
+            if (typed) {
+              plan = {};
+              for (const p of PRODUCTS) {
+                const v = st.plan[p][i] ?? autoSold[p] ?? 0;
+                if (v > 0) plan[p] = v;
+              }
+            }
+            const model =
+              plan && Object.keys(plan).length
+                ? scenarioModel(inputs, s, { teams, plan })
+                : auto;
+            const money = {};
+            for (const p of POOLS)
+              if (st.money[p.id][i] != null) money[p.id] = st.money[p.id][i];
+            const externals = {};
+            for (const id of Object.keys(st.ext))
+              if (st.ext[id][i] != null) externals[id] = st.ext[id][i];
+            const prices = {};
+            for (const p of PRODUCTS)
+              if (st.price[p][i] != null) prices[p] = st.price[p][i];
+            const r = manage(model, s, { money, externals, prices });
+            const products = Object.fromEntries(
+              PRODUCTS.map((p) => [p, r.product(p)]),
+            );
+            out[s] = {
+              ...r,
+              model,
+              autoSold,
+              teams: model.vars.teams,
+              products,
+              money: Object.fromEntries(
+                POOLS.map((p) => [p.id, money[p.id] ?? r.estimate[p.id]]),
+              ),
+            };
+          });
+          return out;
+        }, [inputs, st]);
+
+        const anySet = (v) =>
+          Array.isArray(v)
+            ? v.some((x) => x != null)
+            : Object.values(v).some(anySet);
+        const edited = anySet(st);
+        const lessonMid = R.mid.products["урок"].byLoad;
+        const card = (p) =>
+          html`<${ProductCard}
+            key=${p}
+            name=${p}
+            R=${R}
+            basis=${basis}
+            isKey=${KEY.has(p)}
+            onDrill=${() => {
+              setDrill({ ...drill, product: p });
+              document
+                .getElementById("drill")
+                .scrollIntoView({ behavior: "smooth" });
+            }}
+          />`;
+
+        return html`
+          <header>
+            <h1>Себестоимость и маржа — управленческий слой</h1>
+            <span class="badge">Макет для согласования (Stage A, #2661)</span>
+            <span class="small muted"
+              >Все цифры живые: считаются из модели операций и ставок на текущих
+              YAML. Наведите на подчёркнутый термин — появится пояснение.</span
+            >
+          </header>
+          <main class="wrap">
+            <section class="card">
+              <h2>Как читать этот экран</h2>
+              <p class="lead">
+                Сверху — около дюжины управленческих вводов месяца: сколько
+                стоит команда, пулы и накладные, сколько продуктов выпускаем и
+                почём продаём. Каждый ввод — на трёх сценариях ${" "}<${Term}
+                  tip=${TIPS.scen}
+                  >min / mid / max<//
+                >. Модель операций (63 операции, круги согласования, 33 ставки
+                ролей) больше не настраивается здесь — она стала ${" "}<${Term}
+                  tip=${TIPS.abc}
+                  >ключом распределения<//
+                >
+                и разбором «из чего складывается» внизу.
+              </p>
+              <p class="small" style=${{ margin: 0 }}>
+                <b>Непрерывность.</b> Пока все вводы — ${" "}<${Term}
+                  tip=${TIPS.est}
+                  >оценка по модели<//
+                >, цифры экрана равны
+                <${Term} tip=${TIPS.today}>текущему калькулятору<//>: урок, mid,
+                по загрузке — сейчас ${" "}<b>${rub(today.mid)}</b>, здесь
+                <b>${rub(lessonMid)}</b>
+                ${
+                  Math.abs(today.mid - lessonMid) < 1
+                    ? html` <span class="ok">— совпадает до рубля.</span>`
+                    : html` <span class="warn"
+                        >— разница из-за ваших вводов:
+                        ${rub(lessonMid - today.mid)}.</span
+                      >`
+                }
+                ${
+                  edited
+                    ? html` <button
+                        class="link"
+                        onClick=${() => window.location.reload()}
+                      >
+                        сбросить вводы
+                      </button>`
+                    : null
+                }
+              </p>
+            </section>
+
+            <section class="card">
+              <h2>1. Вводы месяца — деньги</h2>
+              <p class="lead">
+                Месячные суммы, как в управленческом учёте. Каждая сумма
+                раскладывается на продукты по часам своих ролей из модели;
+                ${" "}<${Term} tip=${TIPS.k}>коэффициент к модели<//>
+                показывает, насколько ваша сумма отличается от оценки.
+              </p>
+              <div class="scroll">
+                <table>
+                  <thead>
+                    <${ScenHead}
+                      first="Ввод, ₽ в месяц"
+                      extra=${["Что внутри и как оценено"]}
+                    />
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <${Term} tip=${TIPS.teams}>Команд направления<//>
+                      </td>
+                      ${SCENARIOS.map(
+                        (s, i) =>
+                          html`<td
+                            class=${`num ${s === "mid" ? "mid" : ""}`}
+                            key=${s}
+                          >
+                            <${NumCell}
+                              value=${st.teams[i]}
+                              estimate=${1}
+                              onChange=${setCell("teams", null, i)}
+                            />
+                          </td>`,
+                      )}
+                      <td class="small muted">
+                        teams.yaml: одна команда; ФОТ и мощность растут вместе с
+                        числом команд
+                      </td>
+                    </tr>
+                    ${POOLS.map(
+                      (p) =>
+                        html`<tr key=${p.id}>
+                          <td>
+                            <${Term}
+                              tip=${TIPS[p.id === "staff" ? "fot" : p.id]}
+                              >${p.name}<//
+                            >
+                          </td>
+                          ${SCENARIOS.map(
+                            (s, i) =>
+                              html`<td
+                                class=${`num ${s === "mid" ? "mid" : ""}`}
+                                key=${s}
+                              >
+                                <${NumCell}
+                                  value=${st.money[p.id][i]}
+                                  estimate=${R[s].estimate[p.id]}
+                                  onChange=${setCell("money", p.id, i)}
+                                />
+                                <div class="small muted">
+                                  <${Term} tip=${TIPS.k}
+                                    >×${num(R[s].k[p.id], 2)}<//
+                                  >
+                                </div>
+                              </td>`,
+                          )}
+                          <td class="small muted">${POOL_NOTE[p.id]}</td>
+                        </tr>`,
+                    )}
+                    <tr class="sum">
+                      <td>
+                        Итого вводы месяца
+                        <span class="small muted">(= сумма для сверки)</span>
+                      </td>
+                      ${SCENARIOS.map(
+                        (s) =>
+                          html`<td
+                            class=${`num ${s === "mid" ? "mid" : ""}`}
+                            key=${s}
+                          >
+                            ${rub(R[s].reconciliation.inputs)}
+                          </td>`,
+                      )}
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card">
+              <h2>2. Вводы по продуктам — план, цена, внешние затраты</h2>
+              <p class="lead">
+                <${Term} tip=${TIPS.plan}>План выпуска<//> — продукты, которые
+                продаём в месяц (курс содержит уроки, эпизоды, клубы и сделку —
+                их отдельно вписывать не нужно). ${" "}<${Term}
+                  tip=${TIPS.price}
+                  >Цена продажи<//
+                >
+                — за единицу; в модели цен нет.
+              </p>
+              <div class="scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th rowspan="2">Продукт</th>
+                      <th colspan="3" class="num">
+                        <${Term} tip=${TIPS.plan}>План, шт. в месяц<//>
+                      </th>
+                      <th colspan="3" class="num">
+                        <${Term} tip=${TIPS.price}>Цена продажи, ₽<//>
+                      </th>
+                    </tr>
+                    <tr>
+                      ${[0, 1].map((g) =>
+                        SCENARIOS.map(
+                          (s) =>
+                            html`<th
+                              class=${`num ${s === "mid" ? "mid" : ""}`}
+                              key=${`${g}${s}`}
+                            >
+                              <${Term} tip=${TIPS.scen}>${s}<//>
+                            </th>`,
+                        ),
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${PRODUCTS.map(
+                      (p) =>
+                        html`<tr key=${p}>
+                          <td>${KEY.has(p) ? html`<b>${p}</b>` : p}</td>
+                          ${SCENARIOS.map(
+                            (s, i) =>
+                              html`<td
+                                class=${`num ${s === "mid" ? "mid" : ""}`}
+                                key=${s}
+                              >
+                                <${NumCell}
+                                  value=${st.plan[p][i]}
+                                  estimate=${R[s].autoSold[p] ?? 0}
+                                  step=${100}
+                                  onChange=${setCell("plan", p, i)}
+                                />
+                              </td>`,
+                          )}
+                          ${SCENARIOS.map(
+                            (s, i) =>
+                              html`<td
+                                class=${`num ${s === "mid" ? "mid" : ""}`}
+                                key=${`p${s}`}
+                              >
+                                <${NumCell}
+                                  value=${st.price[p][i]}
+                                  onChange=${setCell("price", p, i)}
+                                  unsetLabel="цена не задана"
+                                />
+                              </td>`,
+                          )}
+                        </tr>`,
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p class="small muted">
+                <${Term} tip=${TIPS.units}>Единицы месяца<//>:${" "}
+                ${SCENARIOS.map(
+                  (s) =>
+                    html`<span key=${s}
+                      ><b>${s}</b> —
+                      ${Object.entries(R[s].plan.units)
+                        .map(([u, n]) => `${u} ${num(n, 2)}`)
+                        .join(", ")}${s !== "max" ? "; " : ""}</span
+                    >`,
+                )}
+              </p>
+              <h3 style=${{ fontSize: 14, margin: "14px 0 4px" }}>
+                <${Term} tip=${TIPS.ext}>Внешние затраты<//>, ₽ на единицу
+              </h3>
+              <div class="scroll">
+                <table>
+                  <thead>
+                    <${ScenHead}
+                      first="Затрата"
+                      extra=${["На что", "Где в модели"]}
+                    />
+                  </thead>
+                  <tbody>
+                    ${Object.entries(inputs.products.externals).map(
+                      ([id, e]) =>
+                        html`<tr key=${id}>
+                          <td>${e.name}</td>
+                          ${SCENARIOS.map(
+                            (s, i) =>
+                              html`<td
+                                class=${`num ${s === "mid" ? "mid" : ""}`}
+                                key=${s}
+                              >
+                                <${NumCell}
+                                  value=${st.ext[id][i]}
+                                  onChange=${setCell("ext", id, i)}
+                                />
+                              </td>`,
+                          )}
+                          <td>${e.per}</td>
+                          <td class="small muted">${e.basis}</td>
+                        </tr>`,
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card">
+              <h2>3. Себестоимость, цена и маржа по продуктам</h2>
+              <div class="row">
+                <span class="small"
+                  >Маржа считается от ${" "}<${Term} tip=${TIPS.margin}
+                    >себестоимости<//
+                  >:</span
+                >
+                <span class="tabs">
+                  <button
+                    class=${basis === "byLoad" ? "on" : ""}
+                    onClick=${() => setBasis("byLoad")}
+                  >
+                    по загрузке
+                  </button>
+                  <button
+                    class=${basis === "full" ? "on" : ""}
+                    onClick=${() => setBasis("full")}
+                  >
+                    с полным ФОТ
+                  </button>
+                </span>
+                <span class="small muted"
+                  >Обе себестоимости видны всегда; выбор базы делается при
+                  расчёте КП (решение владельца 2026-10-05).</span
+                >
+              </div>
+              <div class="grid">
+                ${PRODUCTS.filter((p) => KEY.has(p)).map(card)}
+              </div>
+              <details style=${{ marginTop: 12 }}>
+                <summary>
+                  <span class="name"
+                    >Остальные продукты (${PRODUCTS.length - KEY.size}): эпизод,
+                    модуль, клуб, вебинар, школа, конгресс, проектирование,
+                    специальность</span
+                  >
+                </summary>
+                <div class="grid" style=${{ marginTop: 8 }}>
+                  ${PRODUCTS.filter((p) => !KEY.has(p)).map(card)}
+                </div>
+              </details>
+            </section>
+
+            <${LoadCard} R=${R} />
+            <${ReconCard} R=${R} />
+            <${DrillCard}
+              R=${R}
+              drill=${drill}
+              setDrill=${setDrill}
+              names=${names}
+            />
+            <${ReadOnlyCard} />
+          </main>
+        `;
+      }
+
+      const POOL_NOTE = {
+        staff:
+          "Σ по ролям: FTE × зарплата gross (min / медиана / max Москвы) × (1 + взносы). Раскладывается по часам ролей в плане; не загруженное — простой.",
+        media:
+          "Часы подролей медиа-круга в плане месяца × ставка часа. Следует за планом, пока вы не вписали своё.",
+        experts:
+          "Часы экспертов в плане × гонорар в час (нижняя граница рынка — оценка, вероятно, занижена).",
+        reviewers:
+          "Часы рецензентов и координатора в плане × ставка (рецензент — нижняя граница рынка).",
+        overhead:
+          "Юрист, бухгалтер, платформа, поддержка, трансляции, ядро, коуч — операции периода и накладные операции единиц плана. Время штата на встречи и найм — уже в ФОТ.",
+      };
+
+      function ProductCard({ name, R, basis, isKey, onDrill }) {
+        const P = Object.fromEntries(
+          SCENARIOS.map((s) => [s, R[s].products[name]]),
+        );
+        const groups = ["staff", "media", "experts", "reviewers"].filter((g) =>
+          SCENARIOS.some((s) => (P[s].directByGroup[g] ?? 0) > 0),
+        );
+        const cost = (s) => (basis === "full" ? P[s].fullPayroll : P[s].byLoad);
+        const margin = (s) =>
+          P[s].price == null ? null : P[s].price - cost(s);
+        const mid = P.mid;
+        const parts = [
+          ...groups.map((g) => [g, mid.directByGroup[g] ?? 0]),
+          ["overhead", mid.overhead],
+          ["reserve", mid.reserve],
+        ];
+        const tot = parts.reduce((a, [, v]) => a + v, 0) || 1;
+        const row = (label, get, cls = "", tip) =>
+          html`<tr class=${cls}>
+            <td>${tip ? html`<${Term} tip=${tip}>${label}<//>` : label}</td>
+            ${SCENARIOS.map(
+              (s) =>
+                html`<td class=${`num ${s === "mid" ? "mid" : ""}`} key=${s}>
+                  ${get(s)}
+                </td>`,
+            )}
+          </tr>`;
+        const unset = mid.externalUnset;
+        return html`<article class=${`pcard ${isKey ? "key" : ""}`}>
+          <h3>
+            <span>${name}</span>
+            <button class="link" onClick=${onDrill}>
+              разбор: из чего складывается ↓
+            </button>
+          </h3>
+          <div class="bar">
+            ${parts.map(
+              ([g, v]) =>
+                html`<span
+                  key=${g}
+                  data-tip=${`<b>${g === "reserve" ? "резерв актуализации" : GROUP_LABEL[g]}</b>: ${rub(v)} на mid — ${pct(v / tot)} себестоимости по загрузке без внешних`}
+                  style=${{
+                    width: `${(v / tot) * 100}%`,
+                    background: GROUP_COLOR[g],
+                  }}
+                ></span>`,
+            )}
+          </div>
+          <div class="scroll">
+            <table>
+              <thead>
+                <${ScenHead} first=${`${num(mid.hours, 1)} прямых ч на mid`} />
+              </thead>
+              <tbody>
+                ${groups.map((g) =>
+                  row(
+                    `Прямые — ${GROUP_LABEL[g]}`,
+                    (s) => rub(P[s].directByGroup[g] ?? 0),
+                    "sub",
+                    TIPS.direct,
+                  ),
+                )}
+                ${row(
+                  "Накладные",
+                  (s) => rub(P[s].overhead),
+                  "sub",
+                  TIPS.overheadRate,
+                )}
+                ${row(
+                  "Резерв актуализации",
+                  (s) => rub(P[s].reserve),
+                  "sub",
+                  TIPS.reserve,
+                )}
+                ${
+                  P.mid.externals.length
+                    ? row(
+                        "Внешние затраты",
+                        (s) =>
+                          P[s].externalUnset.length
+                            ? html`<span class="warn"
+                                >${
+                                  P[s].externals.some((e) => e.rub != null)
+                                    ? `${rub(P[s].externals.reduce((a, e) => a + (e.cost ?? 0), 0))} + `
+                                    : ""
+                                }не
+                                задано</span
+                              >`
+                            : rub(
+                                P[s].externals.reduce(
+                                  (a, e) => a + (e.cost ?? 0),
+                                  0,
+                                ),
+                              ),
+                        "sub",
+                        TIPS.ext,
+                      )
+                    : null
+                }
+                ${row(
+                  "Себестоимость по загрузке",
+                  (s) => html`<b>${rub(P[s].byLoad)}</b>`,
+                  "sum",
+                  TIPS.byLoad,
+                )}
+                ${row(
+                  "+ неиспользованная мощность",
+                  (s) => rub(P[s].idle),
+                  "sub",
+                  TIPS.idle,
+                )}
+                ${row(
+                  "Себестоимость с полным ФОТ",
+                  (s) => html`<b>${rub(P[s].fullPayroll)}</b>`,
+                  "",
+                  TIPS.full,
+                )}
+                ${row(
+                  "Цена продажи",
+                  (s) =>
+                    P[s].price == null
+                      ? html`<span class="muted">не задана</span>`
+                      : rub(P[s].price),
+                  "price",
+                  TIPS.price,
+                )}
+                ${row(
+                  "Маржа, ₽",
+                  (s) => {
+                    const m = margin(s);
+                    return m == null
+                      ? "—"
+                      : html`<span class=${m < 0 ? "neg" : ""}
+                          >${rub(m)}</span
+                        >`;
+                  },
+                  "margin",
+                  TIPS.margin,
+                )}
+                ${row(
+                  "Маржа, %",
+                  (s) => {
+                    const m = margin(s);
+                    return m == null
+                      ? "—"
+                      : html`<span class=${m < 0 ? "neg" : ""}
+                          >${pct(m / P[s].price)}</span
+                        >`;
+                  },
+                  "margin",
+                  TIPS.margin,
+                )}
+              </tbody>
+            </table>
+          </div>
+          ${
+            unset.length
+              ? html`<p class="small warn" style=${{ margin: "6px 0 0" }}>
+                  Внешние не заданы и в итог не входят: ${unset.join(", ")}.
+                </p>`
+              : null
+          }
+        </article>`;
+      }
+
+      function LoadCard({ R }) {
+        const roles = R.mid.plan.idle.byRole.map((r) => r.role);
+        const at = (s, role) =>
+          R[s].plan.idle.byRole.find((r) => r.role === role);
+        const load = (r) =>
+          r
+            ? (r.loaded - r.contractorHours + r.nonProduction) / r.paidHours
+            : 0;
+        return html`<section class="card">
+          <h2>4. Загрузка команды и простой</h2>
+          <p class="lead">
+            Чем занята команда при плане месяца. ${" "}<${Term}
+              tip=${TIPS.bottleneck}
+              >Узкое место<//
+            >
+            ${" "}— ${" "}<b>${R.mid.plan.bottleneck ?? "задано планом"}</b>;
+            остальные роли оплачены полностью, но загружены частично — это
+            ${" "}<${Term} tip=${TIPS.idle}>неиспользованная мощность<//>
+            ${" "}(mid: ${rub(R.mid.idleCost)} в месяц из
+            ${" "}${rub(R.mid.money.staff)} ФОТ).
+          </p>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Роль штата</th>
+                  ${SCENARIOS.map(
+                    (s) =>
+                      html`<th
+                        class=${`num ${s === "mid" ? "mid" : ""}`}
+                        key=${s}
+                      >
+                        <${Term} tip=${TIPS.fte}>FTE<//> · ${" "}<${Term}
+                          tip=${TIPS.load}
+                          >загрузка<//
+                        >
+                        · ${" "}<${Term} tip=${TIPS.scen}>${s}<//>
+                      </th>`,
+                  )}
+                  <th class="num">Свободно ч, mid</th>
+                  <th class="num">Простой ₽, mid</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${roles.map((role) => {
+                  const m = at("mid", role);
+                  return html`<tr key=${role}>
+                    <td>
+                      ${role}
+                      ${
+                        role === R.mid.plan.bottleneck
+                          ? html` <span class="chip set">узкое место</span>`
+                          : null
+                      }
+                    </td>
+                    ${SCENARIOS.map((s) => {
+                      const r = at(s, role);
+                      const l = load(r);
+                      return html`<td
+                        class=${`num ${s === "mid" ? "mid" : ""}`}
+                        key=${s}
+                      >
+                        ${num(r?.fte, 2)} · ${pct(l)}
+                        <span class=${`loadbar ${l >= 0.995 ? "full" : ""}`}
+                          ><span
+                            style=${{ width: `${Math.min(1, l) * 100}%` }}
+                          ></span
+                        ></span>
+                      </td>`;
+                    })}
+                    <td class="num">${num(m.idleHours, 0)}</td>
+                    <td class="num">${rub(m.idleCost * R.mid.k.staff)}</td>
+                  </tr>`;
+                })}
+              </tbody>
+            </table>
+          </div>
+          ${
+            SCENARIOS.flatMap((s) => R[s].plan.idle.flags).length
+              ? html`<p class="warn small">
+                  ${[
+                    ...new Set(SCENARIOS.flatMap((s) => R[s].plan.idle.flags)),
+                  ].join("; ")}
+                  — плану не хватает людей: добавьте команду или уменьшите план.
+                </p>`
+              : null
+          }
+        </section>`;
+      }
+
+      function ReconCard({ R }) {
+        return html`<section class="card">
+          <h2>5. <${Term} tip=${TIPS.recon}>Сверка месяца<//></h2>
+          <div class="scroll">
+            <table>
+              <thead>
+                <${ScenHead} first="" />
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Σ вводов месяца (ФОТ + пулы + накладные)</td>
+                  ${SCENARIOS.map(
+                    (s) =>
+                      html`<td
+                        class=${`num ${s === "mid" ? "mid" : ""}`}
+                        key=${s}
+                      >
+                        ${rub(R[s].reconciliation.inputs)}
+                      </td>`,
+                  )}
+                </tr>
+                <tr>
+                  <td>Σ по плану месяца: прямые + накладные + простой</td>
+                  ${SCENARIOS.map(
+                    (s) =>
+                      html`<td
+                        class=${`num ${s === "mid" ? "mid" : ""}`}
+                        key=${s}
+                      >
+                        ${rub(R[s].reconciliation.allocated)}
+                      </td>`,
+                  )}
+                </tr>
+                <tr class="sum">
+                  <td>Расхождение</td>
+                  ${SCENARIOS.map((s) => {
+                    const d =
+                      R[s].reconciliation.allocated -
+                      R[s].reconciliation.inputs;
+                    return html`<td
+                      class=${`num ${s === "mid" ? "mid" : ""} ${Math.abs(d) < 1 ? "ok" : "neg"}`}
+                      key=${s}
+                    >
+                      ${Math.abs(d) < 1 ? "0 ₽ ✓" : rub(d)}
+                    </td>`;
+                  })}
+                </tr>
+                <tr>
+                  <td>
+                    <${Term} tip=${TIPS.overheadRate}
+                      >Ставка накладных на прямой час<//
+                    >
+                  </td>
+                  ${SCENARIOS.map(
+                    (s) =>
+                      html`<td
+                        class=${`num ${s === "mid" ? "mid" : ""}`}
+                        key=${s}
+                      >
+                        ${rub(R[s].overheadRate)}
+                      </td>`,
+                  )}
+                </tr>
+                <tr>
+                  <td>Прямых часов в плане месяца</td>
+                  ${SCENARIOS.map(
+                    (s) =>
+                      html`<td
+                        class=${`num ${s === "mid" ? "mid" : ""}`}
+                        key=${s}
+                      >
+                        ${num(R[s].plan.directHours, 0)}
+                      </td>`,
+                  )}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>`;
+      }
+
+      function DrillCard({ R, drill, setDrill, names }) {
+        const r = R[drill.s];
+        const p = r.products[drill.product];
+        const tree = useMemo(() => {
+          const root = { children: new Map(), cost: 0, hours: 0 };
+          for (const l of p.lines) {
+            const chain = functionChain(r.model, l.leaf);
+            let node = root;
+            root.cost += l.mcost;
+            root.hours += l.hours;
+            for (const id of [...chain, `op:${l.leaf}`, `role:${l.role}`]) {
+              if (!node.children.has(id))
+                node.children.set(id, {
+                  id,
+                  children: new Map(),
+                  cost: 0,
+                  hours: 0,
+                  name: id.startsWith("op:") ? l.name : null,
+                  group: l.group,
+                });
+              node = node.children.get(id);
+              node.cost += l.mcost;
+              node.hours += l.hours;
+            }
+          }
+          return root;
+        }, [r, p]);
+        const label = (n) => {
+          if (n.id.startsWith("role:"))
+            return html`<span class="name"
+              ><${Term} tip=${TIPS.role}>роль<//> ${n.id.slice(5)}
+              <span class="small muted">(${GROUP_LABEL[n.group]})</span></span
+            >`;
+          if (n.id.startsWith("op:"))
+            return html`<span class="name"
+              ><${Term} tip=${TIPS.op}>операция<//>
+              <span class="id">${n.id.slice(3)}</span> ${n.name}</span
+            >`;
+          return html`<span class="name"
+            ><span class="id term" data-tip=${A_TIP(n.id, names[n.id] ?? "")}
+              >${n.id}</span
+            >
+            ${names[n.id] ?? ""}</span
+          >`;
+        };
+        const Node = ({ n, depth }) => {
+          const kids = [...n.children.values()].sort((a, b) => b.cost - a.cost);
+          const amount = html`<span class="amount"
+            ><span class="small muted">${num(n.hours, 1)} ч · </span
+            ><b>${rub(n.cost)}</b></span
+          >`;
+          if (n.id.startsWith("role:"))
+            return html`<div class="leafrow">${label(n)} ${amount}</div>`;
+          return html`<details open=${depth < 2}>
+            <summary>${label(n)} ${amount}</summary>
+            <div class="body">
+              ${kids.map(
+                (k) => html`<${Node} key=${k.id} n=${k} depth=${depth + 1} />`,
+              )}
+            </div>
+          </details>`;
+        };
+        const top = [...tree.children.values()].sort((a, b) => b.cost - a.cost);
+        return html`<section class="card" id="drill">
+          <h2>6. Разбор: из чего складывается</h2>
+          <p class="lead">
+            Продукт → функция схемы ${" "}<${Term} tip=${TIPS.idef0}>IDEF0<//>
+            ${" "}(A3 → A31 → A313) → ${" "}<${Term} tip=${TIPS.op}>операция<//>
+            ${" "}→ ${" "}<${Term} tip=${TIPS.role}>роль<//>. Часы — из модели
+            (только чтение), рубли — по управленческим суммам. Ниже операций —
+            строки сверх них: накладные, резерв, внешние, простой.
+          </p>
+          <div class="row">
+            <select
+              value=${drill.product}
+              onChange=${(e) => setDrill({ ...drill, product: e.target.value })}
+            >
+              ${PRODUCTS.map((x) => html`<option key=${x} value=${x}>${x}</option>`)}
+            </select>
+            <span class="tabs">
+              ${SCENARIOS.map(
+                (s) =>
+                  html`<button
+                    key=${s}
+                    class=${drill.s === s ? "on" : ""}
+                    onClick=${() => setDrill({ ...drill, s })}
+                  >
+                    ${s}
+                  </button>`,
+              )}
+            </span>
+            <span class="small muted"
+              >Себестоимость по загрузке: <b>${rub(p.byLoad)}</b> · с полным
+              ФОТ: ${" "}<b>${rub(p.fullPayroll)}</b></span
+            >
+          </div>
+          <details open>
+            <summary>
+              <span class="name"><b>Прямые затраты по функциям схемы</b></span>
+              <span class="amount"
+                ><span class="small muted">${num(tree.hours, 1)} ч · </span
+                ><b>${rub(tree.cost)}</b></span
+              >
+            </summary>
+            <div class="body">
+              ${top.map((n) => html`<${Node} key=${n.id} n=${n} depth=${1} />`)}
+            </div>
+          </details>
+          ${[
+            [
+              "Накладные",
+              p.overhead,
+              TIPS.overheadRate,
+              `${num(p.hours, 1)} прямых ч × ${rub(r.overheadRate)}`,
+            ],
+            [
+              "Резерв актуализации",
+              p.reserve,
+              TIPS.reserve,
+              "A44 + доля затронутых × (A45 + A46 + пересборка линии)",
+            ],
+            [
+              "Внешние затраты",
+              p.externals.reduce((a, e) => a + (e.cost ?? 0), 0),
+              TIPS.ext,
+              p.externalUnset.length
+                ? `не задано: ${p.externalUnset.join(", ")}`
+                : "",
+            ],
+            [
+              "Неиспользованная мощность",
+              p.idle,
+              TIPS.idle,
+              `${num(p.hours, 1)} прямых ч × ${rub(r.idleRate)} — только в «с полным ФОТ»`,
+            ],
+          ].map(
+            ([l, v, tip, note]) =>
+              html`<div class="leafrow" key=${l} style=${{ paddingLeft: 0 }}>
+                <span class="name"
+                  ><${Term} tip=${tip}>${l}<//> ${" "}<span class="small muted"
+                    >${note}</span
+                  ></span
+                >
+                <span class="amount"><b>${rub(v)}</b></span>
+              </div>`,
+          )}
+        </section>`;
+      }
+
+      function ReadOnlyCard() {
+        return html`<section class="card">
+          <h2>Что уходит из вводов в модель (только чтение)</h2>
+          <ul class="plain">
+            <li>
+              Часы и сроки 63 операций, круги согласования — ключ распределения
+              и разбор; меняются редко, через PR в модель.
+            </li>
+            <li>
+              33 ставки ролей — больше не вводятся по одной: задают только
+              структуру внутри пула; уровень денег — месячная сумма пула.
+            </li>
+            <li>FTE ролей — структура ФОТ команды; сумма ФОТ — ввод выше.</li>
+            <li>
+              Переменные периода (выходы на рынок, отчётные периоды, найм, СОП…)
+              — внутри оценки накладных; сумма накладных — ввод выше.
+            </li>
+            <li>
+              Драйверы резерва актуализации (сигналы на единицу, доля
+              затронутых, доля пересборки) и параметры продуктов (сделок на
+              курс, этапов, секций, дней).
+            </li>
+          </ul>
+          <p class="small muted">
+            Формулы и происхождение оценок: ${" "}<a
+              href="mockup-management-notes-ru.md"
+              >mockup-management-notes-ru.md</a
+            >
+            ${" "}· текущий калькулятор: <a href="./">index.html</a>
+          </p>
+        </section>`;
+      }
+
+      // Custom tooltip: one floating element, driven by data-tip on hover and keyboard focus.
+      const tip = document.getElementById("tip");
+      const show = (el) => {
+        const text = el.getAttribute("data-tip");
+        if (!text) return;
+        tip.innerHTML = text;
+        tip.classList.add("on");
+        const r = el.getBoundingClientRect();
+        const w = tip.offsetWidth;
+        const h = tip.offsetHeight;
+        let x = Math.min(window.innerWidth - w - 8, Math.max(8, r.left));
+        let y = r.bottom + 6;
+        if (y + h > window.innerHeight - 8) y = r.top - h - 6;
+        tip.style.left = `${x}px`;
+        tip.style.top = `${y}px`;
+      };
+      const hide = () => tip.classList.remove("on");
+      document.addEventListener("mouseover", (e) => {
+        const el = e.target.closest?.("[data-tip]");
+        if (el) show(el);
+        else hide();
+      });
+      document.addEventListener("focusin", (e) => {
+        const el = e.target.closest?.("[data-tip]");
+        if (el) show(el);
+      });
+      document.addEventListener("focusout", hide);
+      window.addEventListener("scroll", hide, { passive: true });
+
+      const root = createRoot(document.getElementById("root"));
+      loadInputs(async (path) => {
+        const response = await fetch(new URL(`../${path}`, import.meta.url));
+        if (!response.ok)
+          throw new Error(
+            `файл ${path} не получен — сервер ответил HTTP ${response.status}`,
+          );
+        return response.text();
+      }, parseYaml)
+        .then((inputs) => root.render(html`<${App} inputs=${inputs} />`))
+        .catch((error) =>
+          root.render(
+            html`<p class="err" style=${{ padding: 16 }}>
+              Не удалось загрузить модель: ${String(error?.stack ?? error)}
+            </p>`,
+          ),
+        );
+    </script>
+  </body>
+</html>

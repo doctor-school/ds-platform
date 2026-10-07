@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MyEventItem } from "@ds/schemas";
 
-import { formatMskParts, formatMskWeekdayShort } from "./msk";
+import { formatMskParts, formatMskWeekdayShort } from "../model/msk";
 import { buildMyEventListItems, fetchMyEvents } from "./my-events";
 
 // 005 EARS-6 / EARS-11 + 014 EARS-9 — the «Мои события» row→card projection,
@@ -24,6 +24,12 @@ const COPY = {
   recordingLabel: (state: string) => `recording:${state}`,
   recordingCta: "Смотреть запись ↗",
   roomCta: "Войти в эфир",
+} as const;
+
+// The Academy's route values — the same templates its host config states.
+const ROUTES = {
+  eventPage: "/webinars/:slug",
+  room: "/webinars/:slug/room",
 } as const;
 
 // An event airing now, one the next МСК day, and one two days out — supplied in
@@ -64,7 +70,7 @@ const upcoming: MyEventItem[] = [
 
 describe("014 EARS-9 my events tab projection (unit)", () => {
   it("014 EARS-9.1: Предстоящие groups the nearest-first rows by Europe/Moscow day, preserving order across groups", () => {
-    const items = buildMyEventListItems(upcoming, "upcoming", COPY);
+    const items = buildMyEventListItems(upcoming, "upcoming", COPY, ROUTES);
     expect(items.map((i) => i.groupKey)).toEqual([
       "2026-07-16",
       "2026-07-17",
@@ -84,7 +90,7 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
         startsAt: "2026-07-16T19:30:00.000Z",
       },
     ];
-    const items = buildMyEventListItems(sameDay, "upcoming", COPY);
+    const items = buildMyEventListItems(sameDay, "upcoming", COPY, ROUTES);
     expect(new Set(items.map((i) => i.groupKey))).toEqual(
       new Set(["2026-07-16"]),
     );
@@ -92,7 +98,7 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
   });
 
   it("014 EARS-9.3: a live row on Предстоящие carries the room-entry CTA; a non-live row carries none", () => {
-    const [live, published] = buildMyEventListItems(upcoming, "upcoming", COPY);
+    const [live, published] = buildMyEventListItems(upcoming, "upcoming", COPY, ROUTES);
     expect(live!.live).toBe(true);
     expect(live!.ctaHref).toBe("/webinars/ortho-live/room");
     expect(live!.ctaLabel).toBe("Войти в эфир");
@@ -118,7 +124,7 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
         recording: { state: "preparing" } as MyEventItem["recording"],
       },
     ];
-    const items = buildMyEventListItems(ended, "recordings", COPY);
+    const items = buildMyEventListItems(ended, "recordings", COPY, ROUTES);
     expect(items.map((i) => i.groupKey)).toEqual(["2026-08", "2026-07"]);
     expect(items.map((i) => i.groupLabel)).toEqual([
       "Август 2026",
@@ -160,7 +166,7 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
         recording: null,
       },
     ];
-    const items = buildMyEventListItems(ended, "recordings", COPY);
+    const items = buildMyEventListItems(ended, "recordings", COPY, ROUTES);
     // The card renders its CTA only on `ctaHref && ctaLabel`, so suppressing the
     // label is what removes the button — the href stays, the card is still a link.
     expect(items.map((i) => i.ctaLabel)).toEqual([
@@ -181,15 +187,15 @@ describe("014 EARS-9 my events tab projection (unit)", () => {
     expect(parts.date).toBe("16 июля");
     // The card sub-label weekday is also Moscow-computed (16 July 2026 = Thursday).
     expect(formatMskWeekdayShort(upcoming[0]!.startsAt)).toBe("чт");
-    const [live] = buildMyEventListItems(upcoming, "upcoming", COPY);
+    const [live] = buildMyEventListItems(upcoming, "upcoming", COPY, ROUTES);
     expect(live!.time).toBe("19:00");
     expect(live!.tzLabel).toBe("МСК");
     expect(live!.dateLabel).toBe("16 июля · чт");
   });
 
   it("014 EARS-9.6: an empty tab yields no items (the surface renders that tab's empty-state)", () => {
-    expect(buildMyEventListItems([], "upcoming", COPY)).toEqual([]);
-    expect(buildMyEventListItems([], "recordings", COPY)).toEqual([]);
+    expect(buildMyEventListItems([], "upcoming", COPY, ROUTES)).toEqual([]);
+    expect(buildMyEventListItems([], "recordings", COPY, ROUTES)).toEqual([]);
   });
 });
 

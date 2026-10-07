@@ -1,5 +1,6 @@
 import type { MyEventItem, MyEvents, MyEventsTab } from "@ds/schemas";
 import type { EventListItem } from "@ds/design-system/blocks";
+import { buildRoomReturnHref, type RoomReturnRoutes } from "@ds/room/room-return";
 
 import {
   formatMskDayLabel,
@@ -8,14 +9,10 @@ import {
   formatMskWeekdayShort,
   mskDayKey,
   mskMonthKey,
-} from "./msk";
-import {
-  forwardedHeaders,
-  resolveRoomEntryHref,
-  type ForwardedSession,
-} from "./registration-state";
-import { toCanvasStatus } from "./event-lifecycle";
-import { isRecordingPlayable } from "./recording-cta";
+} from "../model/msk";
+import { toCanvasStatus } from "../model/event-lifecycle";
+import { isRecordingPlayable } from "../model/recording-cta";
+import { forwardedHeaders, type ForwardedSession } from "./registration-state";
 
 /**
  * 005 EARS-6 / 014 EARS-9 — the `MyEvents` read composed onto the «Мои события»
@@ -93,6 +90,17 @@ export interface MyEventListCopy {
 }
 
 /**
+ * The host's route values the projection links to — data the host states about
+ * itself, never a resolver (wave-2 entry gate §4.4 `routes`). `eventPage` is the
+ * host's event-page path template carrying one `:slug`; `room` is the same room
+ * template the host hands `@ds/room` (`/webinars/:slug/room` on the Academy).
+ */
+export interface MyEventRoutes {
+  readonly eventPage: string;
+  readonly room: Required<RoomReturnRoutes>["room"];
+}
+
+/**
  * Project the `MyEvents` rows of ONE tab onto the shared `EventList` block's item
  * shape (014 EARS-9). Pure — the single unit the «Мои события» surface renders,
  * unit-tested independent of any browser.
@@ -100,13 +108,13 @@ export interface MyEventListCopy {
  * Grouping mirrors the public listing so the two feeds share one rhythm: the
  * **Предстоящие** tab is grouped by Europe/Moscow calendar DAY (the server's
  * nearest-first order preserved, EARS-6/EARS-11), the **Записи** tab by МСК MONTH
- * over the newest-first history. Both keys come from `lib/msk`, never recomputed
+ * over the newest-first history. Both keys come from `model/msk`, never recomputed
  * here, so the grouping can never drift to the viewer's timezone.
  *
  * A `live` row is one of the caller's OWN registrations (the read returns only
- * registered events), so it admits the doctor into the room through the hardened
- * {@link resolveRoomEntryHref} — the same open-redirect defence as the event-page
- * CTA (006 EARS-6). An `ended` row's CTA leads back to its event page, where the
+ * registered events), so it admits the doctor into the room — the registered-live
+ * arm of the event-page room front door (006 EARS-6) — through the hardened
+ * `buildRoomReturnHref` of `@ds/room`, the same open-redirect defence. An `ended` row's CTA leads back to its event page, where the
  * recording lives; its badge carries the recording state (including `preparing`
  * for an ended event whose recording is not published yet).
  */
@@ -114,18 +122,26 @@ export function buildMyEventListItems(
   events: readonly MyEventItem[],
   tab: MyEventsTab,
   copy: MyEventListCopy,
+  routes: MyEventRoutes,
 ): EventListItem[] {
   const past = tab === "recordings";
   return events.map((event) => {
     const parts = formatMskParts(event.startsAt);
-    const roomEntryHref = past
-      ? null
-      : resolveRoomEntryHref(
-          { registered: true },
-          toCanvasStatus(event.state),
-          event.slug,
-        );
-    const href = `/webinars/${event.slug}`;
+    const roomEntryHref =
+      !past && toCanvasStatus(event.state) === "live"
+        ? buildRoomReturnHref(event.slug, { room: routes.room })
+        : null;
+    const href = routes.eventPage.replace(":slug", () => event.slug);
+    // The card renders its CTA on `ctaHref && ctaLabel`; an absent field is the
+    // card's "no CTA", so neither is emitted as an explicit `undefined`.
+    const ctaHref = past ? href : roomEntryHref;
+    const ctaLabel = past
+      ? isRecordingPlayable(event.recording)
+        ? copy.recordingCta
+        : null
+      : roomEntryHref
+        ? copy.roomCta
+        : null;
     return {
       id: event.eventId,
       groupKey: past ? mskMonthKey(event.startsAt) : mskDayKey(event.startsAt),
@@ -143,18 +159,12 @@ export function buildMyEventListItems(
       title: event.title,
       live: !past && event.state === "live",
       liveLabel: copy.live,
-      recordingLabel: event.recording
-        ? copy.recordingLabel(event.recording.state)
-        : undefined,
+      ...(event.recording
+        ? { recordingLabel: copy.recordingLabel(event.recording.state) }
+        : {}),
       variant: past ? ("past" as const) : ("upcoming" as const),
-      ctaHref: past ? href : (roomEntryHref ?? undefined),
-      ctaLabel: past
-        ? isRecordingPlayable(event.recording)
-          ? copy.recordingCta
-          : undefined
-        : roomEntryHref
-          ? copy.roomCta
-          : undefined,
+      ...(ctaHref ? { ctaHref } : {}),
+      ...(ctaLabel ? { ctaLabel } : {}),
     };
   });
 }

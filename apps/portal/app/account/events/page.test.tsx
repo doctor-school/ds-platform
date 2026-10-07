@@ -33,8 +33,8 @@ vi.mock("next-intl/server", () => ({
 }));
 
 const fetchMyEvents = vi.fn();
-vi.mock("../../../lib/my-events", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../lib/my-events")>()),
+vi.mock("@ds/events-storefront/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/server")>()),
   fetchMyEvents: (...args: unknown[]) => fetchMyEvents(...args),
 }));
 

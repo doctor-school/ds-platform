@@ -26,3 +26,52 @@ export {
   MOSCOW_TIME_ZONE,
   formatEventTime,
 } from "@ds/schemas";
+
+/**
+ * The storefront's pure model units (wave-2 entry gate §2.1, epic #2020): the МСК
+ * projections of the one formatter, the month grid and its paging, the lifecycle
+ * → canvas status vocabulary, the recording signal / plaque / player card, the
+ * one past-card playability rule and the one event-count plural rule.
+ */
+export {
+  type MskParts,
+  formatMskDayLabel,
+  formatMskMonth,
+  formatMskParts,
+  formatMskWeekdayShort,
+  mskDayKey,
+  mskMonthKey,
+} from "./model/msk";
+export {
+  DAY_PILL_CAP,
+  type MonthDayCell,
+  type MonthGrid,
+  buildMonthGrid,
+  capDayEntries,
+  currentMskMonth,
+  entryTime,
+  formatAgendaDayTitle,
+  formatMonthTitle,
+  isMonthFuture,
+  isMonthPast,
+  monthShortLabels,
+  mskDateParts,
+  shiftMonth,
+  weekdayShortLabels,
+} from "./model/month-grid";
+export { type CanvasStatus, toCanvasStatus } from "./model/event-lifecycle";
+export {
+  type PlayerCard,
+  type RecordingPlaque,
+  type RecordingSignal,
+  formatReadinessDay,
+  resolvePlayerCard,
+  resolveRecordingPlaque,
+  resolveRecordingSignal,
+} from "./model/recording-signal";
+export { isRecordingPlayable } from "./model/recording-cta";
+export {
+  DEFAULT_EVENT_NOUN,
+  type PluralNoun,
+  formatEventCount,
+} from "./model/event-count";

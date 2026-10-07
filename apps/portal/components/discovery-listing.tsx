@@ -4,19 +4,21 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { PastBroadcastCard } from "@ds/schemas";
 import { Link as DsLink } from "@ds/design-system/link";
-import { fetchEventListingWithCursorFallback } from "@/lib/public-events";
-import { fetchMyEvents } from "@/lib/my-events";
-import { forwardedSessionFrom } from "@/lib/registration-state";
 import {
   formatMskDayLabel,
   formatMskMonth,
   formatMskParts,
   formatMskWeekdayShort,
+  isRecordingPlayable,
   mskDayKey,
   mskMonthKey,
-} from "@/lib/msk";
+} from "@ds/events-storefront";
+import {
+  fetchEventListingWithCursorFallback,
+  fetchMyEvents,
+} from "@ds/events-storefront/server";
+import { forwardedSessionFrom } from "@/lib/registration-state";
 import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
-import { isRecordingPlayable } from "@/lib/recording-cta";
 import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";

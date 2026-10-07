@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
+    "@ds/room": "workspace:*",
     "@ds/schemas": "workspace:*"
   },
   "peerDependencies": {

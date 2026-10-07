@@ -179,7 +179,7 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     // A card must never contradict its own badge: «Запись готовится» means nothing
     // is published yet, so that card may NOT also offer «Смотреть запись» (014
     // EARS-9). Asserted structurally over whatever the tab renders — the rule is
-    // owned by the unit tier (`lib/my-events.test.ts` 014 EARS-9.8), because a
+    // owned by the unit tier (`@ds/events-storefront` `server/my-events.test.ts` 014 EARS-9.8), because a
     // browser cannot drive a registration to `ended` (005 EARS-1).
     const contradictions = await page
       .locator("[data-webinar-card]")

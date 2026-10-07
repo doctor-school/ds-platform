@@ -24,14 +24,16 @@ import {
   eventSignupCardProps,
   eventSpeakerCards,
 } from "@ds/design-system/blocks";
-import { RegisterOneTap } from "@ds/events-storefront/ui";
-import { fetchPublicEventPage } from "../../../lib/public-events";
-import { fetchParticipationCta } from "../../../lib/participation-cta";
-import { toCanvasStatus } from "../../../lib/event-lifecycle";
 import {
   resolvePlayerCard,
   resolveRecordingSignal,
-} from "../../../lib/recording-signal";
+  toCanvasStatus,
+} from "@ds/events-storefront";
+import {
+  fetchParticipationCta,
+  fetchPublicEventPage,
+} from "@ds/events-storefront/server";
+import { RegisterOneTap } from "@ds/events-storefront/ui";
 import { fetchEventPlayback } from "../../../lib/event-playback";
 import { withReturnTarget } from "../../../lib/registration-handoff";
 import {

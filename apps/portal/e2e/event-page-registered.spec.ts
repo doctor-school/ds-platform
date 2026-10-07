@@ -99,7 +99,7 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
  * will join. This binds the two registered signpost modes to the live stand:
  *   • `upcoming` → the МСК start date/time is on the page + a «вы записаны»
  *     confirmation (EARS-5 + EARS-11: no viewer-local drift — the МСК unit is
- *     unit-tested in `lib/msk-signpost.test.ts` with a `timezoneId` override here);
+ *     unit-tested in `packages/events-storefront/src/model/msk-signpost.test.ts` with a `timezoneId` override here);
  *   • `live` → the confirmation + the "broadcast is on" signpost + the 006 EARS-6
  *     ENTER-ROOM CTA. The room surface shipped (`/webinars/:slug/room`, EARS-1..7),
  *     so the onward-to-room affordance deferred to #584 now renders as a real link

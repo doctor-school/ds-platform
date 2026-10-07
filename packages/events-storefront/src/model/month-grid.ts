@@ -31,7 +31,12 @@ export function mskDateParts(instant: Date): {
   month: number;
   day: number;
 } {
-  const [y, m, d] = MSK_ISO_DAY.format(instant).split("-").map(Number);
+  // `MSK_ISO_DAY` always formats `YYYY-MM-DD`, so the split is exactly three parts.
+  const [y, m, d] = MSK_ISO_DAY.format(instant).split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
   return { year: y, month: m, day: d };
 }
 

@@ -1,7 +1,7 @@
 import type { EventRegistrationState } from "@ds/schemas";
 import { buildRoomReturnHref } from "@ds/room/room-return";
 
-import type { CanvasStatus } from "./event-lifecycle";
+import type { CanvasStatus } from "@ds/events-storefront";
 import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
@@ -11,12 +11,12 @@ import { ACADEMY_ROOM_ROUTES } from "./room-config";
  * compose the same per-user `EventRegistrationState` onto the same shared event
  * page (020 EARS-1), so the fetch, its fingerprint forwarding (ADR-0001 §6) and
  * its `null` collapse must not be able to drift between hosts. It is re-exported
- * here so this host's readers (`lib/event-playback`, `lib/my-events`,
- * `lib/participation-cta`) keep addressing the session surface by one name.
+ * here so this host's readers (`lib/event-playback`) keep addressing the session
+ * surface by one name.
  *
  * What stays HERE is the render decision this host layers on top: the join
  * signpost and the room-entry href, both of which read the Academy's own
- * lifecycle (`lib/event-lifecycle`) and room route values (`lib/room-config`).
+ * lifecycle (`toCanvasStatus`, `@ds/events-storefront`) and room route values (`lib/room-config`).
  */
 export {
   type ForwardedSession,
@@ -27,7 +27,7 @@ export {
 
 /**
  * 005 EARS-5 — the registered doctor's join-signpost render mode: HOW/WHEN they
- * will join, layered on top of the 004 lifecycle render (`lib/event-lifecycle`).
+ * will join, layered on top of the 004 lifecycle render (`toCanvasStatus`, `@ds/events-storefront`).
  * The signpost derives from the registration state + the canvas lifecycle
  * `status` — never from the primary CTA (a registered doctor has no register
  * CTA to key off). There are exactly two signpost renders plus the fall-through:

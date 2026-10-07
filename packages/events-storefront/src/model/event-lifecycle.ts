@@ -15,7 +15,7 @@ import type { PublicEventState } from "@ds/schemas";
  * The SINGLE primary participation CTA is NOT resolved here: since 020 EARS-1
  * (slice 3, #1764) it is server-resolved by
  * `apps/api/src/events/participation-cta.resolver.ts` and read by the page as a
- * `ParticipationCta` (`apps/portal/lib/participation-cta.ts`), so the label, the
+ * `ParticipationCta` (`server/participation-cta.ts`), so the label, the
  * href and the "no CTA on `ended`/`hidden`" invariant have exactly one owner.
  */
 

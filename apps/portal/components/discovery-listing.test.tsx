@@ -35,12 +35,10 @@ vi.mock("next-intl/server", () => ({
 }));
 
 const fetchEventListingWithCursorFallback = vi.fn();
-vi.mock("@/lib/public-events", () => ({
+vi.mock("@ds/events-storefront/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/server")>()),
   fetchEventListingWithCursorFallback: (input: unknown) =>
     fetchEventListingWithCursorFallback(input),
-}));
-
-vi.mock("@/lib/my-events", () => ({
   fetchMyEvents: async () => ({ authenticated: false }),
 }));
 

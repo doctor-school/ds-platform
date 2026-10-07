@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { MyEventsTab } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
-import { buildMyEventListItems, fetchMyEvents } from "../../../lib/my-events";
+import {
+  buildMyEventListItems,
+  fetchMyEvents,
+} from "@ds/events-storefront/server";
+import { ACADEMY_MY_EVENT_ROUTES } from "../../../lib/events-storefront-routes";
 import { forwardedSessionFrom } from "../../../lib/registration-state";
 import { ACADEMY_AUTH_ROUTES } from "../../../lib/auth-flow-routes";
 import { withReturnTarget } from "../../../lib/registration-handoff";
@@ -30,7 +34,7 @@ import { EventListRouter } from "../../../components/event-list-router";
  * browser's back button walks the tabs (014-design §8.3).
  *
  * `MyEvents` is a `doctor_guest`-authenticated read (EARS-10) — a SEPARATE authed
- * read (`lib/my-events`) forwarding the request's session cookie + fingerprint
+ * read (`@ds/events-storefront/server`) forwarding the request's session cookie + fingerprint
  * headers; a guest (no/expired session) is redirected to login (the surface is
  * authenticated, unlike the public 004 pages). The read returns ONLY the caller's
  * own registrations, never another doctor's.
@@ -101,7 +105,7 @@ export default async function MyEventsPage({
     recordingLabel: (state) => t(`recording.${state}`),
     recordingCta: t("recordingCta"),
     roomCta: tWebinar("registered.live.cta"),
-  });
+  }, ACADEMY_MY_EVENT_ROUTES);
 
   return (
     <main className="bg-background text-foreground">

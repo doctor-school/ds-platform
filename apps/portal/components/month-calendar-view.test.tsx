@@ -11,7 +11,8 @@ vi.mock("next-intl/server", () => ({
     values?.count === undefined ? key : `${key}:${String(values.count)}`),
 }));
 
-vi.mock("@/lib/public-events", () => ({
+vi.mock("@ds/events-storefront/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ds/events-storefront/server")>()),
   fetchMonthBroadcasts,
   fetchMonthlyCounts,
 }));

@@ -1,6 +1,6 @@
 import type { APIRequestContext } from "@playwright/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchRecoveryCode } from "./mailpit.js";
+import { fetchRecoveryCode, nativeRecoveryMail } from "./mailpit.js";
 
 const email = "owned@example.test";
 const after = "2026-10-07T00:00:00Z";
@@ -22,8 +22,50 @@ function client(detail: unknown = mail, status = 200, metadata = {}) {
     })),
   } as unknown as APIRequestContext;
 }
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 describe("owned reset account mail", () => {
+  it("EARS-12: native mail transport carries the established gate credentials without redirects and with a bounded timeout", async () => {
+    const transport = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => mail,
+    }));
+    vi.stubGlobal("fetch", transport);
+    const response = await nativeRecoveryMail({
+      username: "synthetic-user",
+      password: "synthetic-password",
+    }).get("https://mail.test/api/v1/search");
+    expect(transport).toHaveBeenCalledWith(
+      "https://mail.test/api/v1/search",
+      expect.objectContaining({
+        redirect: "error",
+        signal: expect.any(AbortSignal),
+        headers: {
+          authorization: `Basic ${Buffer.from("synthetic-user:synthetic-password").toString("base64")}`,
+        },
+      }),
+    );
+    expect(response.ok()).toBe(true);
+    expect(response.status()).toBe(200);
+    await expect(response.json()).resolves.toEqual(mail);
+  });
+  it("EARS-12: native transport rejects without exposing original request diagnostics", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("SECRET2657 transport failure");
+      }),
+    );
+    const error = await nativeRecoveryMail()
+      .get("https://mail.test/api/v1/search")
+      .catch((failure: unknown) => failure);
+    expect((error as Error).message).toBe("Mailpit request failed");
+    expect((error as Error).cause).toBeUndefined();
+    expect(String((error as Error).stack)).not.toContain("SECRET2657");
+  });
   it.each(["search", "detail"])(
     "EARS-12: failed %s transport does not expose authorization diagnostics",
     async (endpoint) => {

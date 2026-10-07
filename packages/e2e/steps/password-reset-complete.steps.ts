@@ -9,7 +9,11 @@ import {
   type Response,
 } from "@playwright/test";
 import { installCaptchaStub } from "../lib/captcha-stub.js";
-import { fetchRecoveryCode, mailpitUrlFor } from "../lib/mailpit.js";
+import {
+  fetchRecoveryCode,
+  mailpitUrlFor,
+  nativeRecoveryMail,
+} from "../lib/mailpit.js";
 import { After, Given, Then, When } from "./support/auth-fixtures.js";
 
 const SESSION = "__Host-ds_session";
@@ -123,7 +127,7 @@ Given(
     await first.waitForURL((url) => url.pathname === "/verify");
     await first.waitForLoadState("networkidle");
     const code = await fetchRecoveryCode(
-      first.context().request,
+      nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
       sentAt,
@@ -175,7 +179,7 @@ When(
     await reset.getByTestId("reset-request-submit").click();
     expect((await requested).status(), "reset request accepted").toBe(200);
     const code = await fetchRecoveryCode(
-      reset.context().request,
+      nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
       requestedAt,

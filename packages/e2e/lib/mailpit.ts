@@ -1,4 +1,4 @@
-import type { APIRequestContext, APIResponse } from "@playwright/test";
+import type { APIRequestContext } from "@playwright/test";
 
 const LOGIN_SUBJECT = "код для входа в Doctor.School";
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -97,10 +97,51 @@ interface AddressedMail extends MailSummary {
   To: { Address: string }[];
 }
 
+interface MailResponse {
+  ok(): boolean;
+  status(): number;
+  json(): Promise<unknown>;
+}
+interface MailRequest {
+  get(url: string): Promise<MailResponse>;
+}
+
+/** Avoid Playwright's HTML child-step diagnostics retaining Basic credentials. */
+export function nativeRecoveryMail(
+  credentials = {
+    username: process.env.E2E_HTTP_USER ?? "",
+    password: process.env.E2E_HTTP_PASS ?? "",
+  },
+): MailRequest {
+  return {
+    async get(url) {
+      try {
+        const response = await fetch(url, {
+          headers:
+            credentials.username && credentials.password
+              ? {
+                  authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`,
+                }
+              : {},
+          redirect: "error",
+          signal: AbortSignal.timeout(10_000),
+        });
+        return {
+          ok: () => response.ok,
+          status: () => response.status,
+          json: () => response.json(),
+        };
+      } catch {
+        throw new Error("Mailpit request failed");
+      }
+    },
+  };
+}
+
 async function requestMail(
-  request: APIRequestContext,
+  request: MailRequest,
   url: string,
-): Promise<APIResponse> {
+): Promise<MailResponse> {
   try {
     return await request.get(url);
   } catch {
@@ -109,7 +150,7 @@ async function requestMail(
   }
 }
 
-async function readMailJson(response: APIResponse): Promise<unknown> {
+async function readMailJson(response: MailResponse): Promise<unknown> {
   try {
     return await response.json();
   } catch {
@@ -119,7 +160,7 @@ async function readMailJson(response: APIResponse): Promise<unknown> {
 }
 
 async function freshAddressedMail(
-  request: APIRequestContext,
+  request: MailRequest,
   baseUrl: string,
   email: string,
   afterIso: string,
@@ -227,7 +268,7 @@ export async function assertNoAddressedMail(
 
 /** 003 EARS-12: codes stay in memory and must belong to the exact fresh delivery. */
 export async function fetchRecoveryCode(
-  request: APIRequestContext,
+  request: MailRequest,
   baseUrl: string,
   email: string,
   afterIso: string,

@@ -297,17 +297,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # PasswordResetCompleted evidence: apps/api/src/auth/auth.service.spec.ts EARS-12.
     # API session proof: apps/api/test/auth/password-reset.e2e-spec.ts EARS-12.
 
-  @EARS-35 @EARS-12 @happy
+  @EARS-35 @EARS-12 @happy @password-reset-complete
   Scenario: A proven password reset marks the email verified and unblocks login-by-code
-    # A returned reset code proves the subject controls the mailbox, so completing the
-    # reset also verifies the email — closing the stuck-unverified state through the
-    # existing recovery path. State changes only after a valid token (OWASP).
-    Given a doctor_guest account whose email was never verified
-    And the user holds a valid reset code delivered to that email
-    When the user completes the reset with the code and a policy-conforming new password
-    Then the account email is marked verified at the IdP and mirrored onto the users row
-    And a terminal auth.account.verified (channel email) row is appended to audit_ledger
-    And a subsequent email login-code request for that identifier arms the otp_email challenge
+    Given a uniquely registered Academy account remains on verification with its confirmation code unconsumed
+    When that account completes the Academy reset form with its fresh delivered code and a new password
+    Then the same account profile is email-verified immediately after reset before any login-code request
+    When the recovered account logs out and submits its fresh delivered Academy email login code
+    Then the delivered login code opens that same account with a new secure host-only session
+    # Internal IdP/mirror/terminal auth.account.verified evidence:
+    # apps/api/test/auth/password-reset.e2e-spec.ts EARS-35 and
+    # apps/api/src/auth/idp/zitadel.idp.spec.ts EARS-35 wire-shape tests.
+    # EARS-41 also verifies on code login; the pre-login profile read isolates reset.
 
   @EARS-35 @EARS-16 @failure
   Scenario: A failed reset mutates nothing, including verification state

@@ -705,9 +705,9 @@ export class ZitadelIdpClient implements IdpClient {
     // and immediately verify it BFF-side (`/email/verify`). The code lives in a
     // local for the in-flight verify only, never logged or persisted (EARS-30).
     //
-    // Fails SOFT: any non-2xx / network fault resolves `false` (nothing flipped)
-    // so a proven reset is never 500'd by this tail — the EARS-19 webhook + EARS-26
-    // read-path self-heal backstop the mirror if the direct flip missed.
+    // 003 EARS-35: preserve the adapter's boolean, no-throw contract by resolving
+    // `false` when verification cannot be completed, including non-2xx responses,
+    // missing response data, and network faults.
     try {
       const user = await this.getUser(sub);
       if (!user?.email || user.emailVerified) return false;

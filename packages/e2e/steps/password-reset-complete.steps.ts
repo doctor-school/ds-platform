@@ -97,41 +97,112 @@ async function cookieValue(page: Page): Promise<string> {
   return cookie!.value;
 }
 
+async function registerOwnedAccount(
+  key: Page,
+  browser: Browser,
+  httpCredentials: BrowserContextOptions["httpCredentials"],
+  base: string,
+  issue: number,
+): Promise<{ state: Recovery; first: Page; code: string }> {
+  const state: Recovery = {
+    email: `reset-${issue}-${randomUUID()}@example.test`,
+    oldPassword: `Old-${randomUUID()}-aA1!`,
+    newPassword: `New-${randomUUID()}-aA1!`,
+    contexts: [],
+    prior: [],
+    priorCookies: [],
+    httpCredentials,
+  };
+  recoveries.set(key, state);
+  const first = await privatePage(browser, state);
+  await open(first, `${base}/register`);
+  await input(first.locator('input[autocomplete="email"]'), state.email);
+  await input(
+    first.locator('input[autocomplete="new-password"]'),
+    state.oldPassword,
+  );
+  const sentAt = new Date().toISOString();
+  const registered = post(first, "/v1/auth/register");
+  await first.getByTestId("register-submit").click();
+  expect((await registered).ok(), "owned account registration accepted").toBe(
+    true,
+  );
+  await first.waitForURL((url) => url.pathname === "/verify");
+  await first.waitForLoadState("networkidle");
+  const code = await fetchRecoveryCode(
+    nativeRecoveryMail(),
+    process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(base),
+    state.email,
+    sentAt,
+    "register",
+  );
+  return { state, first, code };
+}
+
+async function secureSession(
+  reset: Page,
+  response: Response,
+  base: string,
+  email: string,
+  priorCookies: string[],
+): Promise<void> {
+  const header = (await response.headerValue("set-cookie")) ?? "";
+  expect(
+    header.includes(`${SESSION}=`),
+    "authentication minted session cookie",
+  ).toBe(true);
+  expect(/(?:^|;)\s*Domain=/i.test(header), "no Domain attribute").toBe(false);
+  await reset.waitForURL(
+    (url) => url.origin === new URL(base).origin && url.pathname === "/account",
+  );
+  await ownProfile(reset, email);
+  const session = (await reset.context().cookies()).find(
+    (cookie) => cookie.name === SESSION,
+  );
+  expect(Boolean(session), "fresh session exists").toBe(true);
+  expect({
+    domain: session!.domain,
+    path: session!.path,
+    httpOnly: session!.httpOnly,
+    secure: session!.secure,
+    sameSite: session!.sameSite,
+  }).toEqual({
+    domain: new URL(base).hostname,
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+  });
+  expect(
+    priorCookies.includes(session!.value),
+    "fresh session differs from prior sessions",
+  ).toBe(false);
+  const exposed = await reset.evaluate(() => {
+    const readable = JSON.stringify({
+      cookie: document.cookie,
+      local: Object.entries(localStorage),
+      session: Object.entries(sessionStorage),
+    });
+    return /__Host-ds_session|access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
+      readable,
+    );
+  });
+  expect(
+    exposed,
+    "no tokens or private session in JavaScript-readable stores",
+  ).toBe(false);
+}
+
 Given(
   "a uniquely registered Academy account has two independently authenticated sessions",
   async ({ page, browser, httpCredentials, world }) => {
     expect(world.host.id).toBe("academy");
-    const state: Recovery = {
-      email: `reset-2657-${randomUUID()}@example.test`,
-      oldPassword: `Old-${randomUUID()}-aA1!`,
-      newPassword: `New-${randomUUID()}-aA1!`,
-      contexts: [],
-      prior: [],
-      priorCookies: [],
+    const { state, first, code } = await registerOwnedAccount(
+      page,
+      browser,
       httpCredentials,
-    };
-    recoveries.set(page, state);
-    const first = await privatePage(browser, state);
-    await open(first, `${world.hostBaseUrl}/register`);
-    await input(first.locator('input[autocomplete="email"]'), state.email);
-    await input(
-      first.locator('input[autocomplete="new-password"]'),
-      state.oldPassword,
-    );
-    const sentAt = new Date().toISOString();
-    const registered = post(first, "/v1/auth/register");
-    await first.getByTestId("register-submit").click();
-    expect((await registered).ok(), "owned account registration accepted").toBe(
-      true,
-    );
-    await first.waitForURL((url) => url.pathname === "/verify");
-    await first.waitForLoadState("networkidle");
-    const code = await fetchRecoveryCode(
-      nativeRecoveryMail(),
-      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
-      state.email,
-      sentAt,
-      "register",
+      world.hostBaseUrl,
+      2657,
     );
     const verified = post(first, "/v1/auth/verify");
     await input(first.locator('input[autocomplete="one-time-code"]'), code);
@@ -208,54 +279,13 @@ Then(
       body === JSON.stringify({ status: "reset_completed" }),
       "token-free reset acknowledgement",
     ).toBe(true);
-    const header = (await response.headerValue("set-cookie")) ?? "";
-    expect(header.includes(`${SESSION}=`), "reset minted session cookie").toBe(
-      true,
+    await secureSession(
+      reset,
+      response,
+      world.hostBaseUrl,
+      state.email,
+      state.priorCookies,
     );
-    expect(/(?:^|;)\s*Domain=/i.test(header), "no Domain attribute").toBe(
-      false,
-    );
-    await reset.waitForURL(
-      (url) =>
-        url.origin === new URL(world.hostBaseUrl).origin &&
-        url.pathname === "/account",
-    );
-    await ownProfile(reset, state.email);
-    const session = (await reset.context().cookies()).find(
-      (cookie) => cookie.name === SESSION,
-    );
-    expect(Boolean(session), "fresh session exists").toBe(true);
-    expect({
-      domain: session!.domain,
-      path: session!.path,
-      httpOnly: session!.httpOnly,
-      secure: session!.secure,
-      sameSite: session!.sameSite,
-    }).toEqual({
-      domain: new URL(world.hostBaseUrl).hostname,
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    });
-    expect(
-      state.priorCookies.includes(session!.value),
-      "fresh session differs from both prior sessions",
-    ).toBe(false);
-    const exposed = await reset.evaluate(() => {
-      const readable = JSON.stringify({
-        cookie: document.cookie,
-        local: Object.entries(localStorage),
-        session: Object.entries(sessionStorage),
-      });
-      return /__Host-ds_session|access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
-        readable,
-      );
-    });
-    expect(
-      exposed,
-      "no tokens or private session in JavaScript-readable stores",
-    ).toBe(false);
   },
 );
 
@@ -312,6 +342,126 @@ Then(
       ),
       "refused sign-in cannot read profile",
     ).toBe(401);
+  },
+);
+
+Given(
+  "a uniquely registered Academy account remains on verification with its confirmation code unconsumed",
+  async ({ page, browser, httpCredentials, world }) => {
+    expect(world.host.id).toBe("academy");
+    const { first } = await registerOwnedAccount(
+      page,
+      browser,
+      httpCredentials,
+      world.hostBaseUrl,
+      2660,
+    );
+    expect(new URL(first.url()).pathname).toBe("/verify");
+    await expect(
+      first.locator('input[autocomplete="one-time-code"]'),
+    ).toHaveValue("");
+    expect(
+      (await first.context().cookies()).some(
+        (cookie) => cookie.name === SESSION,
+      ),
+      "registration has no private session before its code is consumed",
+    ).toBe(false);
+    expect(
+      await first.evaluate(
+        async () =>
+          (await fetch("/v1/me/profile", { credentials: "include" })).status,
+      ),
+    ).toBe(401);
+  },
+);
+
+Then(
+  "the same account profile is email-verified immediately after reset before any login-code request",
+  async ({ page, world }) => {
+    const state = recovery(page);
+    expect(state.completion!.status(), "reset completed").toBe(200);
+    const reset = state.recovered!;
+    await reset.waitForURL(
+      (url) =>
+        url.origin === new URL(world.hostBaseUrl).origin &&
+        url.pathname === "/account",
+    );
+    const profile = await reset.evaluate(async (email) => {
+      const response = await fetch("/v1/me/profile", {
+        credentials: "include",
+      });
+      const body = await response.json();
+      return {
+        status: response.status,
+        sameAccount: body.email === email,
+        emailVerified: body.emailVerified === true,
+      };
+    }, state.email);
+    expect(profile).toEqual({
+      status: 200,
+      sameAccount: true,
+      emailVerified: true,
+    });
+    state.priorCookies = [await cookieValue(reset)];
+  },
+);
+
+When(
+  "the recovered account logs out and submits its fresh delivered Academy email login code",
+  async ({ page, world }) => {
+    const state = recovery(page);
+    const reset = state.recovered!;
+    const loggedOut = post(reset, "/v1/auth/logout");
+    await reset.getByTestId("logout").click();
+    expect((await loggedOut).status()).toBe(200);
+    await reset.waitForURL((url) => url.pathname === "/");
+    expect(
+      (await reset.context().cookies()).some(
+        (cookie) => cookie.name === SESSION,
+      ),
+    ).toBe(false);
+    await open(
+      reset,
+      `${world.hostBaseUrl}/login?method=code&returnTo=%2Faccount`,
+    );
+    await input(reset.getByTestId("otp-identifier"), state.email);
+    const requestedAt = new Date().toISOString();
+    const requested = post(reset, "/v1/auth/login/otp/request");
+    await reset.getByTestId("otp-send").click();
+    expect((await requested).status(), "login code requested").toBe(200);
+    const code = await fetchRecoveryCode(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+      requestedAt,
+      "login",
+    );
+    const completed = post(reset, "/v1/auth/login/otp");
+    await input(reset.locator('input[autocomplete="one-time-code"]'), code);
+    state.completion = await completed;
+  },
+);
+
+Then(
+  "the delivered login code opens that same account with a new secure host-only session",
+  async ({ page, world }) => {
+    const state = recovery(page);
+    const response = state.completion!;
+    expect(response.status(), "login code accepted").toBe(200);
+    const body = await response.text();
+    expect(
+      /access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
+        body,
+      ),
+      "token-free login acknowledgement",
+    ).toBe(false);
+    await secureSession(
+      state.recovered!,
+      response,
+      world.hostBaseUrl,
+      state.email,
+      state.priorCookies,
+    );
   },
 );
 

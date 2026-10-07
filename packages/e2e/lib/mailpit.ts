@@ -271,10 +271,13 @@ export async function fetchRecoveryCode(
   baseUrl: string,
   email: string,
   afterIso: string,
-  purpose: "register" | "reset",
+  purpose: "register" | "reset" | "login",
 ): Promise<string> {
-  const suffix =
-    purpose === "reset" ? RESET_SUBJECT : " — код подтверждения Doctor.School";
+  const suffix = {
+    reset: RESET_SUBJECT,
+    register: " — код подтверждения Doctor.School",
+    login: ` — ${LOGIN_SUBJECT}`,
+  }[purpose];
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
     const hit = (
@@ -313,7 +316,10 @@ export async function fetchRecoveryCode(
         );
       }
       const code = message.Subject!.slice(0, -suffix.length);
-      if (!/^\S+$/.test(code))
+      if (
+        !/^\S+$/.test(code) ||
+        (purpose === "login" && !extractLoginCode(message.Subject!))
+      )
         throw new Error("Mailpit code subject is malformed");
       return code;
     }

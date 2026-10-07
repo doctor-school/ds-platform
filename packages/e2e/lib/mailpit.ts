@@ -202,3 +202,60 @@ export async function assertNoAddressedMail(
     await wait(Math.min(500, deadline - Date.now()));
   }
 }
+
+/** 003 EARS-12: codes stay in memory and must belong to the exact fresh delivery. */
+export async function fetchRecoveryCode(
+  request: APIRequestContext,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+  purpose: "register" | "reset",
+): Promise<string> {
+  const suffix =
+    purpose === "reset" ? RESET_SUBJECT : " — код подтверждения Doctor.School";
+  const deadline = Date.now() + DELIVERY_WINDOW_MS;
+  while (true) {
+    const hit = (
+      await freshAddressedMail(request, baseUrl, email, afterIso)
+    ).find(
+      (message) =>
+        typeof message.Subject === "string" && message.Subject.endsWith(suffix),
+    );
+    if (hit) {
+      const detail = await request.get(
+        `${baseUrl.replace(/\/$/, "")}/api/v1/message/${encodeURIComponent(hit.ID!)}`,
+      );
+      if (!detail.ok())
+        throw new Error(
+          `Mailpit message read failed with HTTP ${detail.status()}`,
+        );
+      // Detail exposes Date (sender header), not Created (inbox arrival);
+      // freshness is established by the search result bound here by ID.
+      const message = (await detail.json()) as AddressedMail | null;
+      if (
+        !message ||
+        message.ID !== hit.ID ||
+        message.Subject !== hit.Subject ||
+        !Array.isArray(message.To) ||
+        message.To.some(
+          (recipient) => !recipient || typeof recipient.Address !== "string",
+        ) ||
+        !message.To.some(
+          (recipient) =>
+            recipient.Address.toLowerCase() === email.toLowerCase(),
+        )
+      ) {
+        throw new Error(
+          "Mailpit code detail did not match its fresh addressed search result",
+        );
+      }
+      const code = message.Subject!.slice(0, -suffix.length);
+      if (!/^\S+$/.test(code))
+        throw new Error("Mailpit code subject is malformed");
+      return code;
+    }
+    if (Date.now() >= deadline)
+      throw new Error("No fresh addressed recovery code appeared in Mailpit");
+    await wait(Math.min(500, deadline - Date.now()));
+  }
+}

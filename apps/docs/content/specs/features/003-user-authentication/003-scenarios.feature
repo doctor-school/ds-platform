@@ -288,16 +288,14 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then both reset requests have identical acknowledgements and complete-step controls without a private session
     And fresh reset mail reaches only the seeded email while the unregistered email receives no mail for 15 seconds
 
-  @EARS-12 @happy
+  @EARS-12 @happy @password-reset-complete
   Scenario: Completing a password reset revokes existing sessions and auto-logs-in
-    Given a user with a valid reset code
-    When the user submits the code and a policy-conforming new password
-    Then Zitadel sets the new password
-    And all prior sessions for that user are revoked
-    And a PasswordResetCompleted event is recorded
-    And a fresh authenticated session is established for the subject
-    And the __Host- session cookie is set with no token in the response body
-    And the portal routes to /account rather than /login
+    Given a uniquely registered Academy account has two independently authenticated sessions
+    When that account completes the Academy reset form with its fresh delivered code and a new password
+    Then reset completion opens the same account directly with a fresh secure host-only session and no exposed tokens
+    And both original sessions lose profile access while the new password signs in and the old password is refused
+    # PasswordResetCompleted evidence: apps/api/src/auth/auth.service.spec.ts EARS-12.
+    # API session proof: apps/api/test/auth/password-reset.e2e-spec.ts EARS-12.
 
   @EARS-35 @EARS-12 @happy
   Scenario: A proven password reset marks the email verified and unblocks login-by-code

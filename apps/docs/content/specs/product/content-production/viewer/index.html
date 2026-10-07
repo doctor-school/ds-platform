@@ -132,20 +132,6 @@
         margin: 0;
         padding-left: 18px;
       }
-      .ids {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
-      .id {
-        font:
-          12px ui-monospace,
-          Consolas,
-          monospace;
-        background: var(--chip);
-        border-radius: 4px;
-        padding: 1px 5px;
-      }
       .muted {
         color: var(--muted);
       }
@@ -251,6 +237,114 @@
       .react-flow__edge.active path.react-flow__edge-path {
         stroke: var(--hl) !important;
         stroke-width: 1.8px !important;
+      }
+      /* A focused box lights its own arrows and dims the rest. */
+      .react-flow__edge.lit path.react-flow__edge-path {
+        stroke-width: 2.2px !important;
+      }
+      .react-flow__edge.dim {
+        opacity: 0.18;
+      }
+      .arrow-label.lit {
+        outline: 2px solid;
+      }
+      .arrow-label.dim {
+        opacity: 0.3;
+      }
+      /* A box's arrows in the panel: hovering a row traces its branch on the canvas. */
+      .icom-list {
+        list-style: none;
+        margin: 0;
+        padding-left: 0;
+      }
+      .icom-list li {
+        padding: 2px 6px;
+        border-left: 3px solid;
+        margin: 2px 0;
+        cursor: default;
+      }
+      .icom-list li:hover {
+        background: var(--chip);
+      }
+      /* Boxes not reached by the focused paths dim like the dimmed arrows. */
+      .react-flow__node.dim {
+        opacity: 0.18;
+      }
+      /* Flow animation: dashes run from source to target (the path is drawn in arrow
+         direction); the arrowhead is a marker outside the dashed path and stays solid. */
+      .canvas.animate .react-flow__edge path.react-flow__edge-path {
+        stroke-dasharray: 8 4;
+        animation: idef-flow 0.9s linear infinite;
+      }
+      @keyframes idef-flow {
+        from {
+          stroke-dashoffset: 12;
+        }
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      .switches {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      /* Hover card: never takes the pointer, so the hovered element keeps its hover. */
+      .hover-card {
+        position: absolute;
+        z-index: 20;
+        max-width: calc(100% - 16px);
+        overflow: hidden;
+        pointer-events: none;
+        background: var(--panel);
+        border: 1px solid var(--frame);
+        border-radius: 8px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+        padding: 8px 12px 10px;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      .hover-card h2 {
+        font-size: 14px;
+        margin: 2px 0 4px;
+      }
+      .hover-card p {
+        margin: 2px 0;
+      }
+      .xp-list {
+        list-style: none;
+        padding-left: 0 !important;
+        margin: 0;
+      }
+      .xp {
+        padding: 4px 0;
+        border-top: 1px solid var(--chip);
+      }
+      .xp-name {
+        font-weight: 600;
+      }
+      .xp-def,
+      .xp-fate {
+        font-size: 12px;
+      }
+      .xp-fate {
+        color: var(--c);
+      }
+      .xp-id {
+        font:
+          11px ui-monospace,
+          Consolas,
+          monospace;
+        color: var(--muted);
       }
       .legend {
         display: flex;

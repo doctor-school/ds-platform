@@ -44,7 +44,7 @@ describe("resolveRateLimitThresholds (EARS-13 env overrides, #1076)", () => {
     expect(seen).toEqual([]);
   });
 
-  it("EARS-13 (#1076, #2684): RATE_LIMIT_PER_IP_15MIN overrides both auth per-IP windows (verification + sending doors) and nothing else", () => {
+  it("EARS-13 (#2684): RATE_LIMIT_PER_IP_15MIN overrides both auth per-IP windows (verification + sending doors) and nothing else", () => {
     const { result } = rejections({ RATE_LIMIT_PER_IP_15MIN: "200" });
     expect(result).toEqual({
       ...DEFAULT_RATE_LIMIT_THRESHOLDS,

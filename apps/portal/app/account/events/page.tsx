@@ -3,11 +3,8 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { MyEventsTab } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
-import {
-  buildMyEventListItems,
-  fetchMyEvents,
-} from "@ds/events-storefront/server";
-import { ACADEMY_MY_EVENT_ROUTES } from "../../../lib/events-storefront-routes";
+import { fetchMyEvents } from "@ds/events-storefront/server";
+import { buildMyEventListItems } from "../../../lib/my-events";
 import { forwardedSessionFrom } from "../../../lib/registration-state";
 import { ACADEMY_AUTH_ROUTES } from "../../../lib/auth-flow-routes";
 import { withReturnTarget } from "../../../lib/registration-handoff";
@@ -105,7 +102,7 @@ export default async function MyEventsPage({
     recordingLabel: (state) => t(`recording.${state}`),
     recordingCta: t("recordingCta"),
     roomCta: tWebinar("registered.live.cta"),
-  }, ACADEMY_MY_EVENT_ROUTES);
+  });
 
   return (
     <main className="bg-background text-foreground">

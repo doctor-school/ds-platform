@@ -97,6 +97,18 @@ interface AddressedMail extends MailSummary {
   To: { Address: string }[];
 }
 
+async function requestMail(
+  request: APIRequestContext,
+  url: string,
+): Promise<APIResponse> {
+  try {
+    return await request.get(url);
+  } catch {
+    // Transport diagnostics may include the stage Basic-auth header.
+    throw new Error("Mailpit request failed");
+  }
+}
+
 async function readMailJson(response: APIResponse): Promise<unknown> {
   try {
     return await response.json();
@@ -114,7 +126,8 @@ async function freshAddressedMail(
 ): Promise<AddressedMail[]> {
   const after = Date.parse(afterIso);
   if (!Number.isFinite(after)) throw new Error("Invalid mail request time");
-  const search = await request.get(
+  const search = await requestMail(
+    request,
     `${baseUrl.replace(/\/$/, "")}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1000`,
   );
   if (!search.ok())
@@ -231,7 +244,8 @@ export async function fetchRecoveryCode(
         typeof message.Subject === "string" && message.Subject.endsWith(suffix),
     );
     if (hit) {
-      const detail = await request.get(
+      const detail = await requestMail(
+        request,
         `${baseUrl.replace(/\/$/, "")}/api/v1/message/${encodeURIComponent(hit.ID!)}`,
       );
       if (!detail.ok())

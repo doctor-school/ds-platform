@@ -25,6 +25,39 @@ function client(detail: unknown = mail, status = 200, metadata = {}) {
 afterEach(() => vi.useRealTimers());
 describe("owned reset account mail", () => {
   it.each(["search", "detail"])(
+    "EARS-12: failed %s transport does not expose authorization diagnostics",
+    async (endpoint) => {
+      const request = {
+        get: async (url: string) => {
+          const search = url.includes("/search?");
+          if (search === (endpoint === "search"))
+            throw new Error(
+              "apiRequestContext.get: socket hang up; Authorization: Basic SECRET2657",
+            );
+          return {
+            ok: () => true,
+            json: async () => ({
+              messages: [mail],
+              messages_count: 1,
+              start: 0,
+            }),
+          };
+        },
+      } as unknown as APIRequestContext;
+      const error = await fetchRecoveryCode(
+        request,
+        "https://mail.test",
+        email,
+        after,
+        "reset",
+      ).catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("Mailpit request failed");
+      expect((error as Error).cause).toBeUndefined();
+      expect(String((error as Error).stack)).not.toContain("SECRET2657");
+    },
+  );
+  it.each(["search", "detail"])(
     "EARS-12: malformed %s JSON fails closed without persisting the code in its error",
     async (endpoint) => {
       const request = {

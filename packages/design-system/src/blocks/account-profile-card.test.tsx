@@ -222,3 +222,10 @@ describe("AccountProfileCard", () => {
     expect(screen.getByTestId("logout")).toBeInTheDocument();
   });
 });
+
+describe("#2664 one main landmark per page", () => {
+  it("#2664: <AccountProfileCard> renders no main landmark — the host shell owns it", () => {
+    renderCard();
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+});

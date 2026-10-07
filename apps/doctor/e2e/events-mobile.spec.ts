@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
@@ -85,6 +86,7 @@ async function accessiblePage(page: Page) {
     "page must not overflow horizontally",
   ).toBeLessThanOrEqual(1);
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     // #2189 / #2180 — the shared shell's two leaf-scoped decorations: the BBM
     // topbar (owner-accepted canvas contrast) and the footer's aria-hidden giant

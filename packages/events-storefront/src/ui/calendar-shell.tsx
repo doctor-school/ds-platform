@@ -35,7 +35,7 @@ export function CalendarShell({
   children: ReactNode;
 }) {
   return (
-    <main className="bg-background text-foreground">
+    <div className="bg-background text-foreground">
       {/* Poster hero — the shared navy band (blue.500 light / blue.700 dark), NO
           kicker, h1 + subtitle left, the uppercase tagline bottom-right; deep
           bottom padding so the pulled-up toolbar sits ON the band. */}
@@ -73,6 +73,6 @@ export function CalendarShell({
         {toolbar}
         {children}
       </Container>
-    </main>
+    </div>
   );
 }

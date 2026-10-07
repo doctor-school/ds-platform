@@ -77,6 +77,10 @@ it projects rather than the whole unit.
 Both hosts list the package in `transpilePackages` (`next.config.ts`) and depend
 on it as `workspace:*`.
 
+The page compositions (`CalendarShell`, `MyEventsRoute`, the listing) render no
+`<main>` landmark: the route group's shell on each host owns the page's one
+`<main>` (#2664) — the doctor `(storefront)` layout, the Academy root layout.
+
 ### Wiring the completion-on-return rule
 
 A host declares its `ReturnHost` once and hands `completeReturnTarget` the target

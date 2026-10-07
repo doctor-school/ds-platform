@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -8,7 +9,9 @@ import { test, expect, type Page } from "@playwright/test";
  * The showcase `playwright-axe` CI gate scans the DS primitives in isolation;
  * THIS spec scans the COMPOSED product pages — /login, /register, /reset — for
  * what only a real page can violate: page-shell landmark structure
- * (`landmark-one-main`), heading hierarchy (`page-has-heading-one` in the WCAG tag set below;
+ * (`landmark-one-main`, `landmark-no-duplicate-main`, `landmark-main-is-top-level` —
+ * best-practice rules, enabled explicitly beside the tag set via
+ * `MAIN_LANDMARK_RULES`, #2664), heading hierarchy (`page-has-heading-one` in the WCAG tag set below;
  * `heading-order` is best-practice and is enabled explicitly for 028), plus the full WCAG 2.0/2.1
  * A+AA rule set (color-contrast, form labels, name-role-value, …). An explicit
  * exactly-one-`h1` assertion per route is the composed-page check the Issue
@@ -158,9 +161,9 @@ async function scan(
   // tag filter inside axe, so `heading-order` runs BESIDE the WCAG set.
   const builder = options.legal
     ? new AxeBuilder({ page }).options({
-        rules: { "heading-order": { enabled: true } },
+        rules: { ...MAIN_LANDMARK_RULES, "heading-order": { enabled: true } },
       })
-    : new AxeBuilder({ page });
+    : new AxeBuilder({ page }).options({ rules: MAIN_LANDMARK_RULES });
   const results = await builder
     .withTags(WCAG_TAGS)
     // #2189 — the shared shell's BBM topbar (#2180) keeps the contrast its
@@ -331,6 +334,7 @@ for (const stage of ["request", "complete"] as const) {
         ).toBeLessThanOrEqual(measured.innerWidth);
 
         const results = await new AxeBuilder({ page })
+          .options({ rules: MAIN_LANDMARK_RULES })
           .withTags(WCAG_TAGS)
           .analyze();
         const summary = results.violations.map((v) => ({

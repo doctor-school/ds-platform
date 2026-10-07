@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -228,7 +229,10 @@ async function expectFocusable(
 }
 
 async function expectAxeClean(page: Page, label: string) {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
+    .withTags(WCAG_TAGS)
+    .analyze();
   const summary = results.violations.map((violation) => ({
     id: violation.id,
     impact: violation.impact,

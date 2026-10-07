@@ -8,13 +8,7 @@ import { LegalDocument } from "@ds/design-system/legal-document";
  * renders for the `notFound()` the route throws.
  */
 export default function DocumentNotFound() {
-  // EARS-15: this segment's pages own their content landmark — the Academy root
-  // layout renders `{children}` straight into `<body>` and the shared block owns
-  // only its own container, so the served 404 shell would otherwise expose no
-  // `main` at all.
-  return (
-    <main>
-      <LegalDocument state="not-found" backHref="/documents" />
-    </main>
-  );
+  // EARS-15 / #2664: the content landmark is the Academy root layout's one
+  // `<main>`; this segment renders only the shared block inside it.
+  return <LegalDocument state="not-found" backHref="/documents" />;
 }

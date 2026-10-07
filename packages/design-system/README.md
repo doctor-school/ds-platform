@@ -85,6 +85,11 @@ composition, the field-level schemas from `./fields`, and state presentation
 (pending / error / stage); the host app owns copy, the validation resolver,
 transport, routing and env.
 
+Blocks render no `<main>` landmark (#2664): the route group's shell — the host
+layout — owns the page's one `<main>`, so a block renders a `<div>` or
+`<section>` with the same classes and test ids (`EventPageShell`'s grid keeps
+`data-testid="event-page-main"` on a `<div>`).
+
 ### Surface-safe primary-surface contracts
 
 Controls on the invariant `bg-primary-surface` blue request the semantic

@@ -67,6 +67,15 @@ export type ShellConfigKey =
 export type ShellTranslator = (key: ShellConfigKey) => string;
 
 /**
+ * The webinar room: `RoomShell` (`@ds/room`) is the room's whole shell — its own
+ * header bar, its own viewport-bounded frame and the page's one `<main>`
+ * landmark (#2664). The doctor storefront seats it in a pass-through `(room)`
+ * route group; here every route shares the root layout, so the root layout
+ * reads this list to step aside: no chrome and no second `<main>` around it.
+ */
+export const ROOM_SHELL_PATHS = ["/webinars/*/room"] as const;
+
+/**
  * The routes that carry their OWN chrome: the four auth surfaces mount
  * `AuthShell`, and the webinar room mounts `room-header`. Named once so the
  * header's list and the footer's (which adds `/` — see below) cannot drift.
@@ -76,7 +85,7 @@ const HIDDEN_ON_PATHS = [
   "/register",
   "/verify",
   "/reset",
-  "/webinars/*/room",
+  ...ROOM_SHELL_PATHS,
 ] as const;
 
 /**
@@ -133,8 +142,9 @@ export function academyShellConfig(t: ShellTranslator): StorefrontShellConfig {
 
       /**
        * The chrome-wide list PLUS the academy home. `/` mounts the shared
-       * header like every other route (#1877), but the home view still paints
-       * its own `<footer>` — a page-local section index (`#events`,
+       * header like every other route (#1877), but the home still has its own
+       * `<footer>` (mounted by the root layout's `@footer` slot, #2664) — a
+       * page-local section index (`#events`,
        * `#projects`, `#experts`, `#partner-form`), the «Врачи учат врачей ·
        * 2026» tagline and its own `Doctor.School` wordmark — none of which the
        * shared footer carries. Mounting both gives `/` two `contentinfo`

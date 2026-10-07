@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Page } from "@playwright/test";
 import { requireLiveStandEnv } from "../support/live-stand-env";
 import {
@@ -52,6 +53,7 @@ async function scan(page: Page, what: string) {
     );
     await page.waitForTimeout(400);
     const results = await new AxeBuilder({ page })
+      .options({ rules: MAIN_LANDMARK_RULES })
       .withTags(WCAG_TAGS)
       .exclude('[data-testid="shell-topbar"]')
       // #2180 — the footer's giant wordmark: aria-hidden decoration at the

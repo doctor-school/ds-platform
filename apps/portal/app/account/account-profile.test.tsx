@@ -232,3 +232,11 @@ describe("008 EARS-14 (#2228): the cabinet does not push the shared footer below
     expect(container.innerHTML).not.toContain("min-h-screen");
   });
 });
+
+describe("#2664 one main landmark per page", () => {
+  it("#2664: <AccountProfile> renders no main landmark — the host shell owns it", async () => {
+    render(<AccountProfile />);
+    await screen.findByTestId("profile-email");
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+});

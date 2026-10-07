@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { loginAsDoctor, DOCTOR_BASE } from "../support/doctor-session";
 import { requireLiveStandEnv } from "../support/live-stand-env";
 
@@ -59,6 +60,7 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   );
   await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
+    .options({ rules: MAIN_LANDMARK_RULES })
     .withTags(WCAG_TAGS)
     // The provider embed subtree is outside the EARS-9 frame boundary — see the
     // scope note above. `room-player-unavailable` (ours) stays in scope.

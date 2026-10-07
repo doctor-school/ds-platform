@@ -307,3 +307,16 @@ describe("017 EARS-1 (#2228): the cabinet does not push the shared footer below 
     expect(html).not.toContain("min-h-screen");
   });
 });
+
+describe("#2664 one main landmark per page", () => {
+  it("#2664: <AccountScreen> loading state renders no main landmark — the host shell owns it", () => {
+    expect(renderToStaticMarkup(<AccountScreen />)).not.toMatch(/<main[\s>]/);
+  });
+
+  it("#2664: <AccountScreen> error state renders no main landmark — the host shell owns it", async () => {
+    h.getMyProfile.mockRejectedValue(new AuthError(503, "down"));
+    render(<AccountScreen />);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+});

@@ -96,26 +96,22 @@ describe("028 Academy document route", () => {
       }),
     );
 
-    // The root layout renders `{children}` straight into `<body>` and the shared
-    // block owns only its own container, so without a page-owned landmark the
-    // served document page exposes banner, navigation and the ToC navigation and
-    // nothing a screen reader can jump into. Academy convention: the PAGE opens
-    // `<main>` (`app/account/page.tsx`, `academy-home-view.tsx`).
-    const main = screen.getByRole("main");
-    expect(within(main).getByTestId("legal-document")).toBeInTheDocument();
-    expect(screen.getAllByRole("main")).toHaveLength(1);
+    // #2664: the content landmark is the Academy root layout's one `<main>`
+    // (`app/layout.test.tsx`); a page-level `<main>` would nest a second one
+    // inside it, so the page renders the shared block and no landmark.
+    expect(screen.getByTestId("legal-document")).toBeInTheDocument();
+    expect(screen.queryByRole("main")).toBeNull();
   });
 
-  it("028 EARS-15: the not-found shell exposes exactly one main landmark", () => {
+  it("#2664: the not-found shell renders no main landmark — the host shell owns it", () => {
     render(<DocumentNotFound />);
 
-    // The unresolved-slug shell is a served page of this segment, so it owns its
-    // landmark on the same terms as the document page itself.
-    const main = screen.getByRole("main");
-    expect(within(main).getByTestId("legal-document")).toHaveAttribute(
+    // The unresolved-slug shell is a served page of this segment, so it sits in
+    // the root layout's one `<main>` on the same terms as the document page.
+    expect(screen.getByTestId("legal-document")).toHaveAttribute(
       "data-state",
       "not-found",
     );
-    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.queryByRole("main")).toBeNull();
   });
 });

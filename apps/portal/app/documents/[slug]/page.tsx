@@ -83,22 +83,19 @@ export default async function DocumentPage({
       updated: false,
     }));
 
-  // EARS-15: the root layout renders `{children}` straight into `<body>` and the
-  // shared block owns only its own container, so the content landmark is
-  // page-owned on the Academy host (`app/account/page.tsx`, `academy-home-view`).
+  // EARS-15 / #2664: the content landmark is the Academy root layout's one
+  // `<main>`; the page renders only the shared block inside it.
   return (
-    <main>
-      <LegalDocument
-        document={{
-          title: document.frontmatter.title,
-          edition: document.frontmatter.edition,
-          body: document.body,
-        }}
-        backHref="/documents"
-        others={others}
-        // EARS-11: nothing has been re-published in slice 1.
-        updated={false}
-      />
-    </main>
+    <LegalDocument
+      document={{
+        title: document.frontmatter.title,
+        edition: document.frontmatter.edition,
+        body: document.body,
+      }}
+      backHref="/documents"
+      others={others}
+      // EARS-11: nothing has been re-published in slice 1.
+      updated={false}
+    />
   );
 }

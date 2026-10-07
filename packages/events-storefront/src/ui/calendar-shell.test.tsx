@@ -60,3 +60,20 @@ describe("<CalendarShell>", () => {
     expect(container.querySelector('[class*="max-w-content"]')).toBeNull();
   });
 });
+
+describe("#2664 one main landmark per page", () => {
+  it("#2664: <CalendarShell> renders no main landmark — the host shell owns it", () => {
+    render(
+      <CalendarShell
+        title="t"
+        subtitle="s"
+        taglineTop="a"
+        taglineBottom="b"
+        toolbar={null}
+      >
+        pane
+      </CalendarShell>,
+    );
+    expect(screen.queryByRole("main")).toBeNull();
+  });
+});

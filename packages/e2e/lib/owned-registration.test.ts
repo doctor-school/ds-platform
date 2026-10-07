@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { registrationEvidence } from "./owned-registration.js";
+import {
+  registrationEvidence,
+  verificationEvidence,
+} from "./owned-registration.js";
 
 const account = { email: "owned@example.test", password: "synthetic-password" };
 const request = {
@@ -7,6 +10,73 @@ const request = {
   consent: [{ purpose: "tos", version: "2026-01" }],
 };
 const ack = { status: "pending_verification" };
+
+describe("verification evidence without secret diagnostics", () => {
+  const code = "123456";
+  const submitted = {
+    email: account.email,
+    code,
+    registration: { password: account.password },
+  };
+  it("EARS-3: accepts the owned code and held password with the exact verified acknowledgement", () => {
+    expect(
+      verificationEvidence(
+        JSON.stringify(submitted),
+        '{"status":"verified"}',
+        account,
+        code,
+      ),
+    ).toEqual({ credentialsMatch: true, acknowledgementMatches: true });
+  });
+  it.each([
+    { ...submitted, email: "other@example.test" },
+    { ...submitted, code: "654321" },
+    { ...submitted, registration: undefined },
+    { ...submitted, registration: { password: "other" } },
+  ])(
+    "EARS-41: rejects a different identity, code or missing held password %#",
+    (request) => {
+      expect(
+        verificationEvidence(
+          JSON.stringify(request),
+          '{"status":"verified"}',
+          account,
+          code,
+        ).credentialsMatch,
+      ).toBe(false);
+    },
+  );
+  it.each([
+    null,
+    {},
+    { status: "pending_verification" },
+    { status: "verified", access_token: "synthetic-secret" },
+  ])(
+    "EARS-3: rejects an inexact verification acknowledgement without exposing its fields %#",
+    (response) => {
+      const evidence = verificationEvidence(
+        JSON.stringify(submitted),
+        JSON.stringify(response),
+        account,
+        code,
+      );
+      expect(evidence.acknowledgementMatches).toBe(false);
+      expect(
+        Object.values(evidence).every((value) => typeof value === "boolean"),
+      ).toBe(true);
+    },
+  );
+  it("EARS-3: malformed credential-bearing JSON yields only false booleans", () => {
+    expect(
+      verificationEvidence(
+        "synthetic-secret",
+        "synthetic-secret",
+        account,
+        code,
+      ),
+    ).toEqual({ credentialsMatch: false, acknowledgementMatches: false });
+  });
+});
 
 describe("registration evidence without secret diagnostics", () => {
   it("EARS-1: accepts the exact acknowledgement and the submitted owned credentials and consent", () => {

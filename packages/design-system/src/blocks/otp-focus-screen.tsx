@@ -89,7 +89,10 @@ export function OtpFocusScreen<T extends FieldValues>({
   isSubmitting?: boolean;
   /** An in-flight resend (e.g. its challenge) — the resend control's busy state. */
   resendPending?: boolean;
-  /** Server-confirmed acceptance (canvas 73-75) — never set optimistically. */
+  /**
+   * Server-confirmed acceptance (canvas 73-75) — never set optimistically. The
+   * code is spent then, so the primary stays busy and inert (#2469).
+   */
   succeeded?: boolean;
   /** The «Код принят — входим…» row copy, drawn while `succeeded`. */
   succeededLabel?: React.ReactNode;
@@ -142,10 +145,12 @@ export function OtpFocusScreen<T extends FieldValues>({
 
         {captchaSlot}
 
+        {/* #2469 — an accepted code is spent: the primary stays busy (and so
+            inert) while the app navigates on, so it cannot send the code again. */}
         <Button
           type="submit"
           className="w-full"
-          loading={isSubmitting}
+          loading={isSubmitting || succeeded}
           data-testid={testIds.submit}
         >
           {submitLabel}

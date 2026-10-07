@@ -325,6 +325,15 @@ describe("OtpFocusScreen", () => {
     render(<Harness isSubmitting />);
     expect(screen.getByTestId("otp-submit")).toBeDisabled();
   });
+
+  // #2469 — the accepted code is spent: while the app navigates on, the primary
+  // stays busy and inert, so no second submit can reach the server.
+  it("003 EARS-3 (#2469): once the code is accepted the primary stays busy and disabled", () => {
+    render(<Harness succeeded />);
+    const submit = screen.getByTestId("otp-submit");
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAttribute("aria-busy", "true");
+  });
 });
 
 /**

@@ -12,15 +12,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
   # origin; rate-limit, captcha, and sms-budget guards are active. Individual
   # executable scenarios assert their own concrete prerequisites and outcomes.
 
-  @EARS-1 @EARS-20 @EARS-19 @happy
+  @EARS-1 @EARS-20 @EARS-19 @happy @registration-before-confirmation
   Scenario: Register with email and password
-    Given a visitor with a never-registered email
-    When the visitor submits the registration form with email, a policy-conforming password, and accepted consent versions
-    Then a Zitadel user is created
-    And a doctor_guest UserMirror row is upserted with that zitadel_sub
-    And the accepted per-purpose consent versions are recorded
-    And an email verification code is sent
-    And the response does not reveal whether the email pre-existed
+    Given an Academy visitor with a unique never-registered email
+    When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
+    Then registration acknowledges pending verification with the configured per-purpose consent versions
+    And the Academy code step has a fresh delivered confirmation code that remains unconsumed
+    And registration exposes no password or tokens and grants no private session or profile access
+    # Internal identity/default doctor_guest mirror/persisted consent evidence:
+    # apps/api/test/auth/register.e2e-spec.ts EARS-1; consent refusal: EARS-20.
+    # That API suite also retains EARS-16 duplicate-response/no-duplicate proof.
+    # Old browser mapping: apps/portal/e2e/auth-journeys.e2e.spec.ts
+    # "003 EARS-1/41/10" registration/verify arrival/mail -> registration.steps.ts.
+    # Keep that full test: its confirmation/session/logout assertions are distinct.
 
   @EARS-20 @failure
   Scenario: Registration is refused without consent

@@ -256,3 +256,12 @@ Feature: 044 — Congress sign-up
     Then both responses are HTTP 200 with status "accepted" and a handoff reference
     And the two references have the same shape, are random and carry no email or account data
     And the congress site shows «Войти в кабинет» linking to the doctor storefront login with that reference
+
+  @EARS-39
+  Scenario: «Войти в кабинет» on a browser already signed in to another account signs in the registrant
+    Given a colleague's account is signed in on the doctor storefront in this browser
+    And a new participant's sign-up was accepted and returned a handoff reference
+    When the participant presses «Войти в кабинет»
+    Then the sign-in code goes to the participant's address, not the colleague's
+    And after the code the browser holds only the participant's session on "/account/congress"
+    And the same link opened in a browser already signed in as the participant goes straight to "/account/congress" with no code

@@ -319,11 +319,21 @@ export type LoginHandoffRequest = z.infer<typeof LoginHandoffRequestSchema>;
  * exhausted) gets the ONE `handoff_refused` body, identical in status and
  * timing, with no mail. An EARS-13 limit refusal is not this response — it is
  * the generic throttled error every code request gets.
+ *
+ * #2659 — a live reference redeemed by a request that already carries a session
+ * for the very account it names answers `already_signed_in`: no code is sent
+ * and no redemption is counted, and `/login` goes straight to the carried
+ * target. Only the reference's holder can reach this branch, so it discloses
+ * nothing a requester without the reference could learn; a session for any
+ * other account changes nothing (`otp_sent`, and the code's sign-in replaces it).
  */
 export const LoginHandoffResponseSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("otp_sent"),
     identifier: z.string().min(1),
+  }),
+  z.strictObject({
+    status: z.literal("already_signed_in"),
   }),
   z.strictObject({
     status: z.literal("handoff_refused"),

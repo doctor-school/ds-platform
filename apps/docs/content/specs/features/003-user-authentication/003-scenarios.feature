@@ -702,6 +702,24 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the visitor enters the code from the mail
     Then a BFF session is established and the visitor is returned to "/account/congress"
 
+  @EARS-44 @happy
+  Scenario: A hand-off link opened while signed in as its own account goes straight to the target
+    Given a congress sign-up was accepted for an account and returned a hand-off reference
+    And the browser already holds that account's session
+    When the visitor opens /login?method=code&handoff=<ref>&returnTo=/account/congress
+    Then no code is sent and no redemption of the reference is counted
+    And the visitor is taken to "/account/congress" without seeing a sign-in form
+
+  @EARS-44 @happy
+  Scenario: A hand-off link opened while signed in as another account signs in the reference's account
+    Given a congress sign-up was accepted for account Y and returned a hand-off reference
+    And the browser already holds account X's session
+    When the visitor opens /login?method=code&handoff=<ref of Y>&returnTo=/account/congress
+    Then the login code is issued to Y's address and the code step opens for that address
+    When the visitor enters the code from Y's mail
+    Then X's session is revoked, the browser holds only Y's session
+    And the visitor is returned to "/account/congress" as Y
+
   @EARS-44 @EARS-16 @failure
   Scenario: An expired, unknown or exhausted reference falls back to the plain code entry
     Given an expired reference, an unknown reference and a reference already redeemed three times

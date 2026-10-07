@@ -213,6 +213,12 @@ export class AuthController {
    * `handoff_refused` body with no mail, and `@TimingEqualized` floors every
    * branch, so nothing but a live reference discloses an address. The
    * reference is never logged.
+   *
+   * #2659 — the request's own session (the auth hook resolves it on every
+   * route, public ones included) is handed to the service: a live reference
+   * for that very account answers `already_signed_in` with no mail and no
+   * redemption counted, so `/login` goes straight to the carried target; any
+   * other session changes nothing here, and the code's sign-in replaces it.
    */
   @Post("login/otp/handoff")
   @Public()
@@ -229,9 +235,17 @@ export class AuthController {
     @Body() dto: LoginHandoffRequestDto,
     @Ip() ip: string,
     @Headers("x-asn") asn: string | undefined,
+    @Req() req: { user?: SessionClaims },
   ): Promise<LoginHandoffResponse> {
-    const email = await this.auth.resolveLoginHandoff(dto.ref);
-    if (email === null) return { status: "handoff_refused" };
+    const resolution = await this.auth.resolveLoginHandoff(
+      dto.ref,
+      req.user?.sub,
+    );
+    if (resolution === null) return { status: "handoff_refused" };
+    if (resolution.kind === "already_signed_in") {
+      return { status: "already_signed_in" };
+    }
+    const email = resolution.identifier;
     if (!this.rateLimit.tryConsumeUser(email)) {
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
     }
@@ -265,12 +279,20 @@ export class AuthController {
     @Body() dto: OtpVerifyDto,
     @Headers("user-agent") userAgent: string | undefined,
     @Headers("accept-language") acceptLanguage: string | undefined,
+    @Headers("cookie") cookieHeader: string | undefined,
     @Ip() ip: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
     const result = await this.auth.loginWithOtp(dto, fingerprint);
     if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
+
+    // #2659 — a code sign-in over a session the browser already held (another
+    // account's, reached through a hand-off link) REPLACES it: the new cookie
+    // overwrites the old one in the browser, and the old session is revoked
+    // server-side so it is signed out, not orphaned (EARS-10 revocation).
+    const priorSid = parseCookies(cookieHeader)[SESSION_COOKIE_NAME];
+    if (priorSid) await this.auth.logout(priorSid);
 
     // A code sign-in is a successful login (EARS-13, #2614): forgive the per-user
     // window for this identifier exactly as the password login does.

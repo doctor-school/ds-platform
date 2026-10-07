@@ -48,6 +48,14 @@ export type AuthRouteGuardInput = {
    * back to `routes.account`, which is the #675 destination.
    */
   readonly landing?: string | null;
+  /**
+   * 003 EARS-44 (#2659) — the request is `/login` carrying a well-formed
+   * Congress hand-off reference. Such a link is addressed to ONE account, which
+   * may not be the one this browser is signed in as, so the door must mount and
+   * let the api decide (same account ⇒ straight to the target; another ⇒ the
+   * code step, whose sign-in replaces the session). Opens `routes.login` only.
+   */
+  readonly carriesHandoff?: boolean;
 };
 
 /**
@@ -82,6 +90,9 @@ export function resolveAuthRouteGuard(
     samePath(allowed, input.pathname),
   );
   if (exempt) return { action: "render" };
+  if (input.carriesHandoff && samePath(input.routes.login, input.pathname)) {
+    return { action: "render" };
+  }
   return { action: "redirect", to: input.landing ?? input.routes.account };
 }
 

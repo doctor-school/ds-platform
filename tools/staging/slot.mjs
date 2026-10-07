@@ -564,11 +564,11 @@ export function cloneDatabaseStatements(slot, { bootstrap = false } = {}) {
   const template = GOLDEN_DB_BASE;
   const statements = [];
   if (!bootstrap) {
-    statements.push(
-      terminateBackendsStatement(database),
-      `DROP DATABASE IF EXISTS "${database}"`,
-    );
+    statements.push(dropDatabaseStatement(database));
   }
+  // The template, unlike the dropped database, still needs an explicit terminate:
+  // `CREATE DATABASE … TEMPLATE` fails while any session is on the template, and
+  // `WITH (FORCE)` exists only for `DROP DATABASE`.
   statements.push(
     terminateBackendsStatement(template),
     `CREATE DATABASE "${database}" TEMPLATE "${template}"`,
@@ -592,11 +592,18 @@ export function dropDatabaseStatements(slot, { allowMain = false } = {}) {
       "refusing to drop `ds_main`: the main slot's database is persistent (spec §4).",
     );
   }
-  const database = slotDatabaseName(slot);
-  return [
-    terminateBackendsStatement(database),
-    `DROP DATABASE IF EXISTS "${database}"`,
-  ];
+  return [dropDatabaseStatement(slotDatabaseName(slot))];
+}
+
+/**
+ * One forced drop (Postgres >= 13; the stage cluster runs 17). A separate
+ * `pg_terminate_backend` followed by a plain `DROP` leaves a gap: the slot's api
+ * container is still running and its pool reconnects inside it, so the drop fails
+ * with «database is being accessed by other users» (#2649). `WITH (FORCE)`
+ * terminates and drops atomically, so there is no gap to reconnect into.
+ */
+function dropDatabaseStatement(database) {
+  return `DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`;
 }
 
 /**

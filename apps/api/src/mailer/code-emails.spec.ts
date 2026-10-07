@@ -10,7 +10,7 @@ import {
 // link-free (the owner-picked Notion/Slack style). These pins are the SSOT-side
 // half of the contract the live Mailpit e2e re-proves on the rendered mail.
 
-const CODE = "GX5AVU";
+const CODE = "482916";
 
 describe("003 EARS-29 code-only email artifacts (§13.3/§13.4)", () => {
   const artifacts = [

@@ -60,20 +60,11 @@ export const PROMO_CODE_MAX_LENGTH = 64;
 export const VERIFY_CODE_LENGTH = 6;
 
 /**
- * The confirmation-code shape: fixed length, letters AND digits, matched
- * case-INSENSITIVELY.
- *
- * Case-insensitive is the whole point of LD-9: the code the doctor receives is
- * alphanumeric, the OTP widget already normalises the value to upper case, and
- * the 003 engine uppercases again server-side — so a lowercase-typed code is a
- * VALID code, and rejecting it (or transforming it with CSS, which LD-9
- * forbids outright) would be the client inventing a vocabulary the contract
- * does not have.
+ * The confirmation-code shape: fixed length, digits only (003 design → code
+ * format, #2636). Every code the system mails or texts is six digits, so a
+ * value carrying anything else is never a code the system issued.
  */
-export const VERIFY_CODE_PATTERN = new RegExp(
-  `^[a-z0-9]{${VERIFY_CODE_LENGTH}}$`,
-  "i",
-);
+export const VERIFY_CODE_PATTERN = new RegExp(`^[0-9]{${VERIFY_CODE_LENGTH}}$`);
 
 /**
  * 021 EARS-11 / design §7 — the four fields of the registration flow.
@@ -125,11 +116,9 @@ export const DOCTOR_REGISTER_FIELD_SPECS = {
     errorSlot: "field",
   },
   /**
-   * Fixed length, alphanumeric, case-insensitive (see
-   * {@link VERIFY_CODE_PATTERN}). No mask: the slotted OTP widget already
-   * supplies the fixed-length affordance structurally, and a CSS uppercase
-   * transform is forbidden by LD-9 — the value is normalised, never the
-   * glyphs.
+   * Fixed length, digits only (see {@link VERIFY_CODE_PATTERN}). No mask:
+   * the slotted OTP widget already supplies the fixed-length affordance
+   * structurally.
    */
   code: {
     name: "code",

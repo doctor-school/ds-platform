@@ -499,21 +499,31 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     expect((err as BadRequestException).getStatus()).toBe(400);
   });
 
-  it("EARS-12: normalizes a lowercase, whitespace-padded reset code to trimmed-uppercase before the IdP call (#1109)", async () => {
-    // The Zitadel reset code is UPPERCASE alphanumeric and its `!=` compare is
-    // case-sensitive with no trim (#1109). A doctor who types the code lowercased
-    // — or whose keyboard/autofill pads it — must still succeed: the BFF trims and
-    // uppercases before the IdP hop. The generic-400 outcome here is irrelevant
-    // (the fake's only valid code is FAKE_VALID_CODE); we assert the NORMALIZED
-    // argument the IdP port receives, which the pre-fix pass-through cannot produce.
+  it("EARS-12: trims a whitespace-padded six-digit reset code before the IdP call (#1109, #2636)", async () => {
+    // Zitadel's compare has no trim (#1109): a keyboard/autofill-padded entry
+    // must still complete, so the BFF trims before the IdP hop. Codes are six
+    // digits (003 design → code format), so there is no case to normalise.
     const { service, idp } = await buildResetService();
     const spy = vi.spyOn(idp, "completePasswordReset");
 
     await service
-      .completePasswordReset(email, "  pvdc3r  ", newPassword, fingerprint)
+      .completePasswordReset(email, "  482916  ", newPassword, fingerprint)
       .catch(() => undefined);
 
-    expect(spy).toHaveBeenCalledWith(email, "PVDC3R", newPassword);
+    expect(spy).toHaveBeenCalledWith(email, "482916", newPassword);
+  });
+
+  it("EARS-12: a reset code that is not six digits is the generic 400 and never reaches the IdP (#2636)", async () => {
+    const { service, idp } = await buildResetService();
+    const spy = vi.spyOn(idp, "completePasswordReset");
+
+    for (const code of ["GX5AVU", "pvdc3r", "48291", "4829160"]) {
+      const err = await service
+        .completePasswordReset(email, code, newPassword, fingerprint)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+    }
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 
@@ -816,14 +826,13 @@ describe("AuthService — reason-coded auth-failure observability (#1112)", () =
   });
 });
 
-// #1109 (EARS-3): the registration email-verify code Zitadel emits is UPPERCASE
-// alphanumeric, and Zitadel's compare is case-sensitive with no trim. A doctor who
-// types the code lowercased — or whose keyboard/paste pads it with whitespace —
-// was rejected end-to-end. The BFF now normalizes `code.trim().toUpperCase()`
-// before the IdP `verifyEmail` hop, so the same human input succeeds. Uppercasing
-// a digit login OTP is a no-op, so this is safe for the shared field. Exercised at
-// the service altitude over the fake IdP + a minimal mirror stub (no DB, no HTTP).
-describe("AuthService.verify — code normalization (#1109, EARS-3)", () => {
+// #1109 (EARS-3): Zitadel's code compare has no trim, so a keyboard/paste-padded
+// code was rejected end-to-end; the BFF trims before the IdP hop. Every emailed
+// or texted code is six digits (003 design → code format, #2636), so a value
+// that is not six digits after the trim is refused without an IdP hop — the same
+// generic failure as a wrong code (EARS-16). Exercised at the service altitude
+// over the fake IdP + a minimal mirror stub (no DB, no HTTP).
+describe("AuthService code submission — six-digit codes (#1109, #2636, EARS-3/7/41)", () => {
   function buildVerifyService(idp: IdpClient, mirror: unknown): AuthService {
     return new AuthService(
       idp,
@@ -839,18 +848,50 @@ describe("AuthService.verify — code normalization (#1109, EARS-3)", () => {
     );
   }
 
-  it("EARS-3: normalizes a lowercase, whitespace-padded code to trimmed-uppercase before the IdP submission (#1109)", async () => {
+  it("EARS-41: trims a whitespace-padded six-digit code before the IdP submission (#1109)", async () => {
     const idp = new FakeIdpClient();
     const spy = vi.spyOn(idp as unknown as IdpClient, "submitEmailCode");
     const service = buildVerifyService(idp as unknown as IdpClient, {});
 
-    // Outcome is a generic 400 (unknown address); we assert the NORMALIZED
+    // Outcome is a generic 400 (unknown address); we assert the TRIMMED
     // argument the IdP port receives.
     await service
-      .verify({ email: "u@ds.test", code: "  pvdc3r  " }, "fp")
+      .verify({ email: "u@ds.test", code: "  482916  " }, "fp")
       .catch(() => undefined);
 
-    expect(spy).toHaveBeenCalledWith("u@ds.test", "PVDC3R", undefined);
+    expect(spy).toHaveBeenCalledWith("u@ds.test", "482916", undefined);
+  });
+
+  it("EARS-41: a code with letters is refused before the IdP on /verify and /login/otp email (#2636)", async () => {
+    const idp = new FakeIdpClient();
+    const spy = vi.spyOn(idp as unknown as IdpClient, "submitEmailCode");
+    const service = buildVerifyService(idp as unknown as IdpClient, {});
+
+    const err = await service
+      .verify({ email: "u@ds.test", code: "GX5AVU" }, "fp")
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(
+      await service.loginWithOtp(
+        { identifier: "u@ds.test", code: "gx5avu", channel: "email" },
+        "fp",
+      ),
+    ).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("EARS-7: an SMS login code that is not six digits is refused before the IdP (#2636)", async () => {
+    const idp = new FakeIdpClient();
+    const spy = vi.spyOn(idp as unknown as IdpClient, "loginWithSmsOtp");
+    const service = buildVerifyService(idp as unknown as IdpClient, {});
+
+    expect(
+      await service.loginWithOtp(
+        { identifier: "+79990000000", code: "GX5AVU", channel: "sms" },
+        "fp",
+      ),
+    ).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 

@@ -59,19 +59,21 @@ describe("021 EARS-11: the per-field validation contract", () => {
     expect(spec.hint).toBeNull();
   });
 
-  it("021 EARS-11.4: code is a fixed-length alphanumeric rule that accepts lowercase", () => {
+  it("021 EARS-11.4: code is exactly six digits — letters are refused (#2636)", () => {
     const spec = DOCTOR_REGISTER_FIELD_SPECS.code;
 
     expect(spec.name).toBe("code");
     expect(VERIFY_CODE_LENGTH).toBe(6);
-    expect(accepts(spec, "ABC123")).toBe(true);
-    // LD-9 / LD-1 — the engine uppercases server-side, so the CLIENT guard is
-    // case-insensitive: a lowercase-typed code is a valid code.
-    expect(accepts(spec, "abc123")).toBe(true);
-    expect(accepts(spec, "  abc123  ")).toBe(true);
-    expect(accepts(spec, "abc12")).toBe(false);
-    expect(accepts(spec, "abc1234")).toBe(false);
-    expect(accepts(spec, "abc-12")).toBe(false);
+    expect(accepts(spec, "482916")).toBe(true);
+    expect(accepts(spec, "  482916  ")).toBe(true);
+    // 003 design → code format: every emailed/SMS code is six digits, so a
+    // letter in the value is never a code the system issued.
+    expect(accepts(spec, "GX5AVU")).toBe(false);
+    expect(accepts(spec, "abc123")).toBe(false);
+    expect(accepts(spec, "48291")).toBe(false);
+    expect(accepts(spec, "4829160")).toBe(false);
+    expect(accepts(spec, "482-91")).toBe(false);
+    expect(accepts(spec, "４８２９１６")).toBe(false);
     expect(spec.mask).toBe("none");
     expect(spec.hint).toBeNull();
   });

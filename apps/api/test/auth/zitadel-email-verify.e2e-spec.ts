@@ -15,7 +15,7 @@ import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
  * hands the returned code to the BFF mailer, which composes the §13.3 branded,
  * Russian, code-only, **fully link-free** artifact and dispatches it over SMTP
  * (→ Mailpit here). The verify stays `POST /v2/users/{id}/email/verify`
- * (Zitadel-native, #148). The subject leads with the code (`GX5AVU — код
+ * (Zitadel-native, #148). The subject leads with the code (`482916 — код
  * подтверждения Doctor.School`, < 50 chars), the body shows the code as ONE
  * unbroken token with an explicit 1-hour expiry line and an ignore-if-not-you
  * line, and the mail carries **zero links of any kind** — no hosted-login-v2
@@ -223,9 +223,9 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
       ).toBeTruthy();
 
       // ── #869 rendered-artifact facts (owner Stage-A verdict + Issue AC) ────
-      // Subject: leads with the 6-char code, branded tail, < 50 chars.
+      // Subject: leads with the six-digit code, branded tail, < 50 chars.
       expect(mail!.Subject).toMatch(
-        /^[A-Z0-9]{6} — код подтверждения Doctor\.School$/,
+        /^[0-9]{6} — код подтверждения Doctor\.School$/,
       );
       expect(mail!.Subject.length).toBeLessThan(50);
       const code = mail!.Subject.slice(0, 6);

@@ -33,7 +33,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the letter carries no link, button or URL
     When the participant opens "/login?method=code&returnTo=/account/congress" on the doctor storefront origin set in MAILER_DOCTOR_BASE_URL
     Then the email-code method is shown directly
-    When they request a code for their email and enter the six-character code from the mail
+    When they request a code for their email and enter the six-digit code from the mail
     Then the shell lands on "/account/congress" showing "Мои заявки на Конгресс"
 
   @EARS-5

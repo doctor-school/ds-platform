@@ -27,12 +27,12 @@ const VALID_EMAIL = "owner@ds.test";
 
 describe("transactional HTML/plain-text content parity", () => {
   for (const [name, message] of [
-    ["verification", verificationCodeEmail("GX5AVU")],
-    ["reset", passwordResetCodeEmail("GX5AVU")],
-    ["sign-in (verification code)", loginCodeEmail("GX5AVU", "1h")],
+    ["verification", verificationCodeEmail("482916")],
+    ["reset", passwordResetCodeEmail("482916")],
+    ["sign-in (verification code)", loginCodeEmail("482916", "1h")],
     [
       "re-registration",
-      reRegistrationCodeEmail("GX5AVU", { lifetime: "5m", passwordKept: true }),
+      reRegistrationCodeEmail("482916", { lifetime: "5m", passwordKept: true }),
     ],
     ["admin-lockout", adminLockoutMessage()],
     [
@@ -87,11 +87,11 @@ describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {
     const smtp = buildSmtp();
     for (const bad of INVALID_EMAILS) {
       await expect(
-        fake.sendReRegistrationCodeEmail(bad, "GX5AVU", COPY),
+        fake.sendReRegistrationCodeEmail(bad, "482916", COPY),
         `FakeMailer should reject ${JSON.stringify(bad)}`,
       ).rejects.toThrow();
       await expect(
-        smtp.sendReRegistrationCodeEmail(bad, "GX5AVU", COPY),
+        smtp.sendReRegistrationCodeEmail(bad, "482916", COPY),
         `SmtpMailer should reject ${JSON.stringify(bad)}`,
       ).rejects.toThrow();
     }
@@ -101,13 +101,13 @@ describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {
     const fake = new FakeMailer();
     const smtp = buildSmtp();
     await expect(
-      fake.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", COPY),
+      fake.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", COPY),
     ).resolves.toBeUndefined();
     await expect(
-      smtp.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", COPY),
+      smtp.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", COPY),
     ).resolves.toBeUndefined();
     expect(fake.reRegistrationCodeEmails).toEqual([
-      { to: VALID_EMAIL, code: "GX5AVU", ...COPY },
+      { to: VALID_EMAIL, code: "482916", ...COPY },
     ]);
   });
 });
@@ -118,7 +118,7 @@ describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {
 // fake accepting a bad input fails here, not only live.
 describe("003 EARS-29: code-email FakeMailer ↔ SmtpMailer contract parity", () => {
   const INVALID_CODES = ["", "   ", "GX5 AVU", "GX5\nAVU"];
-  const CODE = "GX5AVU";
+  const CODE = "482916";
 
   it("EARS-29: when the recipient is invalid, both adapters shall reject the code sends", async () => {
     const fake = new FakeMailer();

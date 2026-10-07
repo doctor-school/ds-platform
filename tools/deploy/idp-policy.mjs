@@ -183,31 +183,54 @@ export function formatPasswordPolicy({ minLength, flags }) {
   return `minLength=${minLength} ${flagText} — length-only creation policy (003 EARS-36)`;
 }
 
-// --- login OTP secret generators (#2555, epic #2552) ----------------------
+// --- emailed/SMS code generators (#2636 six digits; #2555 epic #2552) -------
 //
-// provision.sh step 8.septies converges the login OTP generators to the
-// verify-email code shape and reads them back itself; the deploy re-reads them
-// on the box for the same reason it re-reads the password policy — a green
-// provision exit code is not evidence of the instance state.
+// provision.sh step 8.septies converges every generator whose code reaches a
+// user — verify-email, password-reset, login OTP email + SMS — to one format
+// (six digits) and reads them back itself; the deploy re-reads them on the box
+// for the same reason it re-reads the password policy — a green provision exit
+// code is not evidence of the instance state.
 
-/** The two generators step 8.septies owns, in the order the deploy reads them. */
-export const LOGIN_OTP_GENERATOR_TYPES = [
+/** The four generators step 8.septies owns (#2636), in read-back order. */
+export const EMAILED_CODE_GENERATOR_TYPES = [
+  "SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE",
+  "SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE",
   "SECRET_GENERATOR_TYPE_OTP_EMAIL",
   "SECRET_GENERATOR_TYPE_OTP_SMS",
 ];
 
-/** Alphabet flags of the converged generator and the value each must hold. */
-const LOGIN_OTP_ALPHABET = [
-  ["includeUpperLetters", true],
-  ["includeDigits", true],
-  ["includeLowerLetters", false],
-  ["includeSymbols", false],
+/** The pair a pre-#2636 (#2555) target converges — upper letters + digits. */
+export const LEGACY_LOGIN_OTP_GENERATOR_TYPES = [
+  "SECRET_GENERATOR_TYPE_OTP_EMAIL",
+  "SECRET_GENERATOR_TYPE_OTP_SMS",
 ];
+
+/** Alphabet flags per converged code alphabet, and the value each must hold. */
+const CODE_ALPHABETS = {
+  digits: {
+    label: "digits only",
+    flags: [
+      ["includeDigits", true],
+      ["includeUpperLetters", false],
+      ["includeLowerLetters", false],
+      ["includeSymbols", false],
+    ],
+  },
+  "upper-alnum": {
+    label: "upper letters + digits",
+    flags: [
+      ["includeUpperLetters", true],
+      ["includeDigits", true],
+      ["includeLowerLetters", false],
+      ["includeSymbols", false],
+    ],
+  },
+};
 
 /**
  * Read `VERIFY_CODE_LENGTH` out of `packages/schemas/src/storefront/register-fields.ts`
  * at the deployed SHA — the code length the shipped app accepts, which the
- * login generators must produce (epic #2552: one code format). Fail-closed.
+ * generators must produce (epic #2552: one code format). Fail-closed.
  *
  * @param {string} sourceText contents of `register-fields.ts` at the target SHA
  * @returns {number}
@@ -228,75 +251,97 @@ export function parseVerifyCodeLength(sourceText) {
   return value;
 }
 
-/**
- * Read `LOGIN_OTP_CODE_LENGTH` out of `infra/dev-stand/idp/provision.sh` at the
- * deployed SHA. provision.sh runs from the TARGET commit, so only that commit's
- * step 8.septies decides whether the login OTP generators converge at all.
- *
- * @param {string} provisionText contents of provision.sh at the target SHA
- * @returns {number | null} the length, or `null` when the target has no step
- *   8.septies (a pre-#2555 commit: the generators are left as they are)
- * @throws {IdpPolicyError} when the constant is present but not a positive
- *   numeric literal — the deploy refuses to guess
- */
-export function parseLoginOtpCodeLength(provisionText) {
-  if (typeof provisionText !== "string") {
-    throw new IdpPolicyError(
-      "cannot read infra/dev-stand/idp/provision.sh at the target SHA — not a text body",
-    );
-  }
-  const line = /^LOGIN_OTP_CODE_LENGTH=(.*)$/m.exec(provisionText);
+function parseLengthConstant(provisionText, name) {
+  const line = new RegExp(`^${name}=(.*)$`, "m").exec(provisionText);
   if (!line) return null;
   const m = /^(\d+)\s*$/.exec(line[1]);
   const value = m ? Number(m[1]) : NaN;
   if (!Number.isInteger(value) || value <= 0) {
     throw new IdpPolicyError(
-      `provision.sh defines LOGIN_OTP_CODE_LENGTH=${line[1]} — not a positive numeric` +
-        " literal; the deploy refuses to guess the login OTP code length.",
+      `provision.sh defines ${name}=${line[1]} — not a positive numeric` +
+        " literal; the deploy refuses to guess the code length.",
     );
   }
   return value;
 }
 
 /**
- * Decide what the deploy's login OTP read-back checks, from the TARGET commit's
- * own sources. A target whose provision.sh has no step 8.septies never converges
- * the generators, so the gate is skipped (a `--ref` hotfix to a pre-#2555 commit
- * ships an app and an IdP that agree on the inherited format). A target WITH the
- * step must also ship an app whose `VERIFY_CODE_LENGTH` matches it — otherwise
- * the converge would succeed and every sign-in code would be rejected.
+ * Read the code shape `infra/dev-stand/idp/provision.sh` converges at the
+ * deployed SHA. provision.sh runs from the TARGET commit, so only that commit's
+ * step 8.septies decides which generators converge and to what alphabet:
+ * - `EMAILED_CODE_LENGTH` (#2636+): all four generators, digits only;
+ * - `LOGIN_OTP_CODE_LENGTH` (#2555): the login OTP pair, upper letters + digits;
+ * - neither (pre-#2555): nothing converges.
  *
- * @param {{provisionText: string, verifyCodeSchemaText: string}} sources
- * @returns {{check: true, length: number} | {check: false, reason: string}}
- * @throws {IdpPolicyError}
+ * @param {string} provisionText contents of provision.sh at the target SHA
+ * @returns {{length: number, alphabet: "digits" | "upper-alnum", generators: string[]} | null}
+ * @throws {IdpPolicyError} when a length constant is present but not a
+ *   positive numeric literal — the deploy refuses to guess
  */
-export function resolveLoginOtpExpectation({
-  provisionText,
-  verifyCodeSchemaText,
-}) {
-  const length = parseLoginOtpCodeLength(provisionText);
-  if (length === null) {
-    return {
-      check: false,
-      reason:
-        "skipped: target provision.sh does not converge login OTP generators" +
-        " (no LOGIN_OTP_CODE_LENGTH / step 8.septies) — the instance keeps its" +
-        " current generators",
-    };
-  }
-  const appLength = parseVerifyCodeLength(verifyCodeSchemaText);
-  if (appLength !== length) {
+export function parseEmailedCodeShape(provisionText) {
+  if (typeof provisionText !== "string") {
     throw new IdpPolicyError(
-      `target provision.sh converges LOGIN_OTP_CODE_LENGTH=${length} but the shipped` +
-        ` app accepts VERIFY_CODE_LENGTH=${appLength} — sign-in codes would not match` +
-        " the code input.",
+      "cannot read infra/dev-stand/idp/provision.sh at the target SHA — not a text body",
     );
   }
-  return { check: true, length };
+  const digitsLength = parseLengthConstant(provisionText, "EMAILED_CODE_LENGTH");
+  if (digitsLength !== null) {
+    return {
+      length: digitsLength,
+      alphabet: "digits",
+      generators: EMAILED_CODE_GENERATOR_TYPES,
+    };
+  }
+  const legacyLength = parseLengthConstant(provisionText, "LOGIN_OTP_CODE_LENGTH");
+  if (legacyLength !== null) {
+    return {
+      length: legacyLength,
+      alphabet: "upper-alnum",
+      generators: LEGACY_LOGIN_OTP_GENERATOR_TYPES,
+    };
+  }
+  return null;
 }
 
 /**
- * Verdict on one LIVE login OTP generator, read back from
+ * Decide what the deploy's code-generator read-back checks, from the TARGET
+ * commit's own sources. A target whose provision.sh converges nothing is
+ * skipped (a `--ref` hotfix to a pre-#2555 commit ships an app and an IdP that
+ * agree on the inherited format). A target that converges must also ship an app
+ * whose `VERIFY_CODE_LENGTH` matches — otherwise the converge would succeed and
+ * every code would be rejected by the code input.
+ *
+ * @param {{provisionText: string, verifyCodeSchemaText: string}} sources
+ * @returns {{check: true, length: number, alphabet: string, generators: string[]} | {check: false, reason: string}}
+ * @throws {IdpPolicyError}
+ */
+export function resolveEmailedCodeExpectation({
+  provisionText,
+  verifyCodeSchemaText,
+}) {
+  const shape = parseEmailedCodeShape(provisionText);
+  if (shape === null) {
+    return {
+      check: false,
+      reason:
+        "skipped: target provision.sh does not converge the code generators" +
+        " (no EMAILED_CODE_LENGTH / LOGIN_OTP_CODE_LENGTH in step 8.septies) —" +
+        " the instance keeps its current generators",
+    };
+  }
+  const appLength = parseVerifyCodeLength(verifyCodeSchemaText);
+  if (appLength !== shape.length) {
+    throw new IdpPolicyError(
+      `target provision.sh converges code length ${shape.length} but the shipped` +
+        ` app accepts VERIFY_CODE_LENGTH=${appLength} — emailed codes would not match` +
+        " the code input.",
+    );
+  }
+  return { check: true, ...shape };
+}
+
+/**
+ * Verdict on one LIVE code generator, read back from
  * `GET /admin/v1/secretgenerators/{type}`. Absent alphabet flags read as
  * `false` (proto3 defaults are dropped from the body — see
  * {@link assertPasswordPolicyConverged}); a present non-boolean is an error.
@@ -304,17 +349,20 @@ export function resolveLoginOtpExpectation({
  * deploy's to pin.
  *
  * @param {unknown} generatorJson the body, or its `.secretGenerator` object
- * @param {number} expectedLength from {@link resolveLoginOtpExpectation}
- * @returns {{length: number, expiry: string}}
+ * @param {{length: number, alphabet: string}} expected from {@link resolveEmailedCodeExpectation}
+ * @returns {{length: number, alphabet: string, expiry: string}}
  * @throws {IdpPolicyError}
  */
-export function assertLoginOtpGeneratorConverged(
-  generatorJson,
-  expectedLength,
-) {
+export function assertCodeGeneratorConverged(generatorJson, expected) {
+  const alphabet = CODE_ALPHABETS[expected?.alphabet];
+  if (!alphabet) {
+    throw new IdpPolicyError(
+      `unknown expected code alphabet ${JSON.stringify(expected?.alphabet)} — the deploy refuses to guess`,
+    );
+  }
   if (generatorJson === null || typeof generatorJson !== "object") {
     throw new IdpPolicyError(
-      "IdP login OTP generator read-back is not an object — the generator could not be read",
+      "IdP code generator read-back is not an object — the generator could not be read",
     );
   }
   const gen =
@@ -325,20 +373,20 @@ export function assertLoginOtpGeneratorConverged(
 
   const problems = [];
   const length = Number(gen.length ?? 0);
-  if (length !== expectedLength) {
+  if (length !== expected.length) {
     problems.push(
-      `length=${JSON.stringify(gen.length ?? null)}, expected ${expectedLength} (target provision.sh LOGIN_OTP_CODE_LENGTH)`,
+      `length=${JSON.stringify(gen.length ?? null)}, expected ${expected.length} (target provision.sh step 8.septies)`,
     );
   }
-  for (const [flag, expected] of LOGIN_OTP_ALPHABET) {
+  for (const [flag, want] of alphabet.flags) {
     const raw = gen[flag];
     const value = raw === undefined || raw === null ? false : raw;
     if (typeof value !== "boolean") {
       problems.push(
         `${flag} is present but not a boolean in the read-back: ${JSON.stringify(raw)}`,
       );
-    } else if (value !== expected) {
-      problems.push(`${flag}=${value}, expected ${expected}`);
+    } else if (value !== want) {
+      problems.push(`${flag}=${value}, expected ${want}`);
     }
   }
   const expiry = gen.expiry;
@@ -350,14 +398,14 @@ export function assertLoginOtpGeneratorConverged(
 
   if (problems.length > 0) {
     throw new IdpPolicyError(
-      "prod IdP login OTP generator did NOT converge:\n" +
+      "prod IdP code generator did NOT converge:\n" +
         problems.map((p) => `    - ${p}`).join("\n"),
     );
   }
-  return { length, expiry };
+  return { length, alphabet: expected.alphabet, expiry };
 }
 
-/** One-line operator summary of a converged login OTP generator. */
-export function formatLoginOtpGenerator(type, { length, expiry }) {
-  return `${type}: length=${length} upper letters + digits, expiry ${expiry} (epic #2552 one code format)`;
+/** One-line operator summary of a converged code generator. */
+export function formatCodeGenerator(type, { length, alphabet, expiry }) {
+  return `${type}: length=${length} ${CODE_ALPHABETS[alphabet].label}, expiry ${expiry} (#2636 one code format)`;
 }

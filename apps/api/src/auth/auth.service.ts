@@ -27,6 +27,7 @@ import type {
   ZitadelWebhook,
   ZitadelWebhookResponse,
 } from "@ds/schemas";
+import { VERIFY_CODE_PATTERN } from "@ds/schemas";
 import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
@@ -142,6 +143,19 @@ function isUniqueViolation(err: unknown): boolean {
     e = (e as { cause?: unknown }).cause;
   }
   return false;
+}
+
+/**
+ * The submitted code as the IdP must see it, or `null` when it cannot be a code
+ * the system issued. Zitadel's compare has no trim (#1109), so padding from a
+ * keyboard or paste is removed here; every emailed or texted code is six digits
+ * (003 design → code format), so anything else is the generic failure (EARS-16)
+ * without an IdP hop. The refusal does not depend on the identifier, so it
+ * leaks no account state.
+ */
+function issuedCode(code: string): string | null {
+  const trimmed = code.trim();
+  return VERIFY_CODE_PATTERN.test(trimmed) ? trimmed : null;
 }
 
 /**
@@ -362,7 +376,11 @@ export class AuthService {
       }
       return accepted;
     }
-    const session = await this.idp.loginWithSmsOtp(req.identifier, req.code);
+    const smsCode = issuedCode(req.code);
+    const session =
+      smsCode === null
+        ? null
+        : await this.idp.loginWithSmsOtp(req.identifier, smsCode);
     if (!session) {
       // EARS-18: a wrong/expired code (or unknown identifier) is one generic
       // `auth.login.failure`; the controller still answers the same 401 (EARS-16).
@@ -397,10 +415,11 @@ export class AuthService {
     registration: VerifyRegistration | undefined,
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims } | null> {
-    // #1109: Zitadel codes are upper-case and compared case-sensitively.
+    const issued = issuedCode(code);
+    if (issued === null) return null;
     const result = await this.idp.submitEmailCode(
       identifier,
-      code.trim().toUpperCase(),
+      issued,
       registration ? { password: registration.password } : undefined,
     );
     if (!result) return null;
@@ -528,14 +547,15 @@ export class AuthService {
     newPassword: string,
     fingerprint: string,
   ): Promise<{ cookie: string; body: PasswordResetCompleteResponse }> {
-    // #1109: normalize the reset code (trim + uppercase) before the IdP hop —
-    // Zitadel's code is UPPERCASE alphanumeric and its compare is case-sensitive
-    // with no trim, so a lowercased / whitespace-padded entry must still complete.
-    const session = await this.idp.completePasswordReset(
-      identifier,
-      code.trim().toUpperCase(),
-      newPassword,
-    );
+    const resetCode = issuedCode(code);
+    const session =
+      resetCode === null
+        ? null
+        : await this.idp.completePasswordReset(
+            identifier,
+            resetCode,
+            newPassword,
+          );
     if (!session) {
       // #1112: record the rejected reset-complete (reason `invalid` — the
       // boolean-null port collapses a bad/expired code and an unknown identifier

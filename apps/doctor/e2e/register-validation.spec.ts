@@ -210,7 +210,7 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
 
     // The proof the field is typed for the REAL code: letters never land in a
     // cell, and the six digits go to the engine exactly as typed.
-    await code.fill("abc123");
+    await code.fill("abc");
     await expect(code).toHaveValue("");
     const [request] = await Promise.all([
       page.waitForRequest(CONFIRM_ROUTE),

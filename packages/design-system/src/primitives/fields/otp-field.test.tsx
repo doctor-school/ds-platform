@@ -208,7 +208,7 @@ describe("OtpField variant=slotted", () => {
     expect(latest).toBe("1234");
   });
 
-  it("003 EARS-22: charset=numeric refuses a pasted value carrying letters (#2636)", async () => {
+  it("003 EARS-22: charset=numeric keeps only the digits of a paste and fills from the current cell (auth.dc.html, #2636)", async () => {
     const user = userEvent.setup();
     let latest = "";
     render(
@@ -222,18 +222,22 @@ describe("OtpField variant=slotted", () => {
     const input = screen.getByRole("textbox");
     await user.click(input);
     await user.paste("PVDC3R");
-    expect(latest).toBe("");
+    expect(latest).toBe("3");
 
-    await user.paste("482913");
-    expect(latest).toBe("482913");
+    await user.paste("48 29-13");
+    expect(latest).toBe("348291");
   });
 
-  it("003 EARS-22: charset=numeric asks for one-time-code autofill and the digit keypad (#2636)", () => {
+  it("003 EARS-22: charset=numeric carries the canvas code-cell attributes (auth.dc.html, #2636)", () => {
     render(<SlottedHarness length={6} charset="numeric" />);
 
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("autocomplete", "one-time-code");
     expect(input).toHaveAttribute("inputmode", "numeric");
+    expect(input).toHaveAttribute("pattern", "[0-9]*");
+    expect(input).toHaveAttribute("autocapitalize", "off");
+    expect(input).toHaveAttribute("autocorrect", "off");
+    expect(input).toHaveAttribute("spellcheck", "false");
   });
 
   it("does not schedule input-otp's window-polling PWM timer (#366, jsdom teardown flake)", () => {

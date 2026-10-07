@@ -1,6 +1,5 @@
 "use client";
 
-import { REGEXP_ONLY_DIGITS } from "input-otp";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
 import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
@@ -19,9 +18,9 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * fixed, so each auto-submits the moment the last character lands.
  *
  * Char set per surface: `charset="numeric"` (every mailed/texted code and the
- * admin TOTP) passes input-otp's `REGEXP_ONLY_DIGITS` `pattern`, so a typed or
- * pasted letter never reaches a cell. `"alphanumeric"` passes NO `pattern`
- * (input-otp only restricts input when one is given) and upper-cases the value.
+ * admin TOTP) carries the code-cell attributes of `design-source/auth.dc.html`
+ * and keeps only the digits of every keystroke, paste and autofill, so a letter
+ * never reaches a cell. `"alphanumeric"` keeps every character and upper-cases it.
  *
  * #212 fix — the field must spread the FULL RHF `field` (name + ref + onBlur),
  * not just `value`/`onChange`. input-otp's controlled hidden input needs a real
@@ -36,6 +35,23 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * holds the RHF form), so a double network call cannot fire if completion races a
  * manual click / Enter — identical to the pre-#197 inline logic.
  */
+const digitsOnly = (raw: string) => raw.replace(/\D/g, "");
+
+/**
+ * The numeric code cell of `design-source/auth.dc.html` (#2636). WHY `pattern`
+ * is the iOS keypad hint `[0-9]*` and not a digits regex: input-otp refuses a
+ * whole keystroke or paste that fails its `pattern`, while the canvas keeps the
+ * digits of a mixed paste — so `digitsOnly` is the filter, and the
+ * `pasteTransformer` makes a paste fill from the current cell onward.
+ */
+const NUMERIC_CELL_PROPS = {
+  pattern: "[0-9]*",
+  autoCapitalize: "off",
+  autoCorrect: "off",
+  spellCheck: false,
+  pasteTransformer: digitsOnly,
+} as const;
+
 export function OtpField<T extends FieldValues>({
   field,
   length,
@@ -53,7 +69,7 @@ export function OtpField<T extends FieldValues>({
    * (#1110) and the characters it accepts. REQUIRED so no surface can silently
    * inherit the wrong one:
    *   • `"numeric"` (every mailed/texted code and the admin TOTP) → `inputMode="numeric"`
-   *     — the digit keypad — plus the digits-only `pattern` (#2636).
+   *     — the digit keypad — plus the canvas attributes and the digits-only filter (#2636).
    *   • `"alphanumeric"` → `inputMode="text"` + `autoCapitalize="characters"` — the
    *     full keyboard with uppercase key hints matching the upper-cased value.
    */
@@ -78,14 +94,16 @@ export function OtpField<T extends FieldValues>({
           inputMode={charset === "alphanumeric" ? "text" : "numeric"}
           {...(charset === "alphanumeric"
             ? { autoCapitalize: "characters" as const }
-            : // #2636: digits only — input-otp drops a non-matching keystroke and
-              // refuses a non-matching paste, so no letter ever fills a cell.
-              { pattern: REGEXP_ONLY_DIGITS })}
+            : NUMERIC_CELL_PROPS)}
           value={field.value ?? ""}
-          // #1109: an alphanumeric value is upper-cased so a lowercase keystroke
-          // lands the case the code was issued in; a no-op for digits. input-otp
-          // calls onChange with a raw string (not a DOM event).
-          onChange={(v: string) => field.onChange(v.toUpperCase())}
+          // input-otp calls onChange with a raw string (not a DOM event). #1109:
+          // an alphanumeric value is upper-cased so a lowercase keystroke lands
+          // the case the code was issued in.
+          onChange={(v: string) =>
+            field.onChange(
+              charset === "alphanumeric" ? v.toUpperCase() : digitsOnly(v),
+            )
+          }
           {...(onComplete ? { onComplete } : {})}
         >
           <InputOTPGroup>

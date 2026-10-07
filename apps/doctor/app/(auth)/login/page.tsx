@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { LoginRoute } from "@ds/auth-flow/login/route";
 
 import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
 
 export const metadata: Metadata = {
-  title: "Вход — Doctor.School",
+  title: AUTH_FLOW_PAGE_TITLES.login,
   description:
     "Вход для врача на Doctor.School: по паролю или по одноразовому коду на почту или в СМС.",
 };

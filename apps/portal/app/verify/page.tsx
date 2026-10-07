@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { VerifyRoute } from "@ds/auth-flow/verify/route";
 
 import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
@@ -17,6 +20,10 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * STATES about itself: `ACADEMY_AUTH_FLOW` (its `/verify` route and its parked
  * return target). The guard runs inside the mount.
  */
+export const metadata: Metadata = {
+  title: AUTH_FLOW_PAGE_TITLES.verify,
+};
+
 export default async function VerifyPage({
   searchParams,
 }: {

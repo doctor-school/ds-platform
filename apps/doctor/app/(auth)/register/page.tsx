@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { RegisterRoute } from "@ds/auth-flow/register/route";
 
 import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
@@ -24,7 +25,7 @@ import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
  * it, the door being a single-CTA surface.
  */
 export const metadata: Metadata = {
-  title: "Регистрация — Doctor.School",
+  title: AUTH_FLOW_PAGE_TITLES.register,
   description:
     "Регистрация врача на Doctor.School: рабочая почта, пароль и промокод, если он есть. Документы на входе не нужны.",
 };

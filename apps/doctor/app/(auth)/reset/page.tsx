@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { ResetRoute } from "@ds/auth-flow/reset/route";
 
 import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
@@ -23,7 +24,7 @@ import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
  * doctor storefront front door as a whole opens with the #1430 epic.
  */
 export const metadata: Metadata = {
-  title: "Восстановление пароля — Doctor.School",
+  title: AUTH_FLOW_PAGE_TITLES.reset,
   description:
     "Восстановление пароля для врача на Doctor.School: пришлём код на почту и поможем задать новый пароль.",
 };

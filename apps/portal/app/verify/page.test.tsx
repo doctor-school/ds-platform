@@ -11,9 +11,11 @@ import { describe, expect, it, vi } from "vitest";
 const route = vi.hoisted(() => vi.fn(() => null));
 vi.mock("@ds/auth-flow/verify/route", () => ({ VerifyRoute: route }));
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
+
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 
-import VerifyPage from "./page";
+import VerifyPage, { metadata } from "./page";
 
 describe("/verify mounts the shared confirmation step", () => {
   it("003 EARS-24: the Academy config and the request's params reach the package mount", async () => {
@@ -28,5 +30,9 @@ describe("/verify mounts the shared confirmation step", () => {
     expect(element.props.config).toBe(ACADEMY_AUTH_FLOW);
     expect(element.props.searchParams).toBe(searchParams);
     expect(ACADEMY_AUTH_FLOW.routes.verify).toBe("/verify");
+  });
+
+  it("#2470: the tab names the screen with the title the doctor storefront uses", () => {
+    expect(metadata.title).toBe(AUTH_FLOW_PAGE_TITLES.verify);
   });
 });

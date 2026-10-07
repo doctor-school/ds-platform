@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { RegisterRoute } from "@ds/auth-flow/register/route";
 
 import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
@@ -25,7 +26,7 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * `app/register/layout.tsx` is gone — the same retirement `/login` had in PR 1.5.
  */
 export const metadata: Metadata = {
-  title: "Регистрация — Doctor.School",
+  title: AUTH_FLOW_PAGE_TITLES.register,
   description:
     "Регистрация врача в Академии Doctor.School: нужны только рабочая почта и пароль.",
 };

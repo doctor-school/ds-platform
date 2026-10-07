@@ -12,9 +12,11 @@ import { authenticatedAllowedRoutes } from "@ds/auth-flow/host-config";
 const route = vi.hoisted(() => vi.fn(() => null));
 vi.mock("@ds/auth-flow/reset/route", () => ({ ResetRoute: route }));
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
+
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 
-import ResetPage from "./page";
+import ResetPage, { metadata } from "./page";
 
 describe("/reset mounts the shared recovery flow", () => {
   it("003 EARS-11: the Academy config and the request's params reach the package mount", async () => {
@@ -35,5 +37,9 @@ describe("/reset mounts the shared recovery flow", () => {
       "/reset",
     ]);
     expect(ACADEMY_AUTH_FLOW.routes.account).toBe("/account");
+  });
+
+  it("#2470: the tab names the screen with the title the doctor storefront uses", () => {
+    expect(metadata.title).toBe(AUTH_FLOW_PAGE_TITLES.reset);
   });
 });

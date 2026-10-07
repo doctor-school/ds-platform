@@ -24,6 +24,34 @@ function client(detail: unknown = mail, status = 200, metadata = {}) {
 }
 afterEach(() => vi.useRealTimers());
 describe("owned reset account mail", () => {
+  it.each(["search", "detail"])(
+    "EARS-12: malformed %s JSON fails closed without persisting the code in its error",
+    async (endpoint) => {
+      const request = {
+        get: async (url: string) => ({
+          ok: () => true,
+          json: async () => {
+            const search = url.includes("/search?");
+            if (search === (endpoint === "search")) {
+              return JSON.parse("SECRET2657-invalid-json");
+            }
+            return { messages: [mail], messages_count: 1, start: 0 };
+          },
+        }),
+      } as unknown as APIRequestContext;
+      const error = await fetchRecoveryCode(
+        request,
+        "https://mail.test",
+        email,
+        after,
+        "reset",
+      ).catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("Malformed Mailpit JSON payload");
+      expect((error as Error).cause).toBeUndefined();
+      expect(String((error as Error).stack)).not.toContain("SECRET2657");
+    },
+  );
   it("EARS-12: uses search arrival time when live Mailpit detail exposes Date only", async () => {
     const detail = { ID: mail.ID, Subject: mail.Subject, To: mail.To };
     await expect(

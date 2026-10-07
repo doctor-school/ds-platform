@@ -1,4 +1,4 @@
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, APIResponse } from "@playwright/test";
 
 const LOGIN_SUBJECT = "код для входа в Doctor.School";
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -97,6 +97,15 @@ interface AddressedMail extends MailSummary {
   To: { Address: string }[];
 }
 
+async function readMailJson(response: APIResponse): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    // JSON.parse errors can quote code-bearing response bytes; discard the cause.
+    throw new Error("Malformed Mailpit JSON payload");
+  }
+}
+
 async function freshAddressedMail(
   request: APIRequestContext,
   baseUrl: string,
@@ -110,7 +119,7 @@ async function freshAddressedMail(
   );
   if (!search.ok())
     throw new Error(`Mailpit search failed with HTTP ${search.status()}`);
-  const list = (await search.json()) as {
+  const list = (await readMailJson(search)) as {
     messages?: AddressedMail[];
     messages_count?: number;
     start?: number;
@@ -231,7 +240,7 @@ export async function fetchRecoveryCode(
         );
       // Detail exposes Date (sender header), not Created (inbox arrival);
       // freshness is established by the search result bound here by ID.
-      const message = (await detail.json()) as AddressedMail | null;
+      const message = (await readMailJson(detail)) as AddressedMail | null;
       if (
         !message ||
         message.ID !== hit.ID ||

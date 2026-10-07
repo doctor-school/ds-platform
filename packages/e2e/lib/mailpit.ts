@@ -48,8 +48,9 @@ export function selectLoginMail(
 
 export function extractLoginCode(subject: string): string | null {
   return (
-    subject.match(/^([A-Z0-9]{6})\s+—\s+код для входа в Doctor\.School$/)?.[1] ??
-    null
+    subject.match(
+      /^([A-Z0-9]{6})\s+—\s+код для входа в Doctor\.School$/,
+    )?.[1] ?? null
   );
 }
 
@@ -88,4 +89,116 @@ export async function fetchLoginCode(
   throw new Error(
     "No delivered six-character login email code appeared in Mailpit",
   );
+}
+
+const RESET_SUBJECT = " — код сброса пароля Doctor.School";
+const DELIVERY_WINDOW_MS = 15_000;
+interface AddressedMail extends MailSummary {
+  To: { Address: string }[];
+}
+
+async function freshAddressedMail(
+  request: APIRequestContext,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+): Promise<AddressedMail[]> {
+  const after = Date.parse(afterIso);
+  if (!Number.isFinite(after)) throw new Error("Invalid mail request time");
+  const search = await request.get(
+    `${baseUrl.replace(/\/$/, "")}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1000`,
+  );
+  if (!search.ok())
+    throw new Error(`Mailpit search failed with HTTP ${search.status()}`);
+  const list = (await search.json()) as {
+    messages?: AddressedMail[];
+    messages_count?: number;
+    start?: number;
+  };
+  // Mailpit's total counts the whole inbox; messages_count counts query matches.
+  if (
+    !list ||
+    !Array.isArray(list.messages) ||
+    !Number.isSafeInteger(list.messages_count) ||
+    list.messages_count !== list.messages.length ||
+    list.start !== 0
+  ) {
+    throw new Error("Invalid or incomplete Mailpit search payload");
+  }
+  for (const message of list.messages) {
+    if (
+      !message.ID ||
+      !message.Created ||
+      !Number.isFinite(Date.parse(message.Created)) ||
+      !Array.isArray(message.To) ||
+      message.To.some((recipient) => typeof recipient.Address !== "string")
+    ) {
+      throw new Error("Invalid Mailpit search payload");
+    }
+  }
+  return list.messages.filter(
+    (message) =>
+      Date.parse(message.Created!) >= after &&
+      message.To.some(
+        (recipient) => recipient.Address.toLowerCase() === email.toLowerCase(),
+      ),
+  );
+}
+
+/** 003 EARS-11: prove fresh delivery without reading or logging the code. */
+export async function waitForResetMail(
+  request: APIRequestContext,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+): Promise<void> {
+  const deadline = Date.now() + DELIVERY_WINDOW_MS;
+  while (true) {
+    const hit = (
+      await freshAddressedMail(request, baseUrl, email, afterIso)
+    ).find((message) => message.Subject?.endsWith(RESET_SUBJECT));
+    if (hit) {
+      const detail = await request.get(
+        `${baseUrl.replace(/\/$/, "")}/api/v1/message/${encodeURIComponent(hit.ID!)}`,
+      );
+      if (!detail.ok())
+        throw new Error(
+          `Mailpit message read failed with HTTP ${detail.status()}`,
+        );
+      const message = (await detail.json()) as AddressedMail;
+      if (
+        !message.Subject?.endsWith(RESET_SUBJECT) ||
+        !Array.isArray(message.To) ||
+        !message.To.some(
+          (recipient) =>
+            recipient.Address.toLowerCase() === email.toLowerCase(),
+        )
+      ) {
+        throw new Error(
+          "Mailpit reset message did not match its addressed search result",
+        );
+      }
+      return;
+    }
+    if (Date.now() >= deadline)
+      throw new Error("No fresh addressed reset mail appeared in Mailpit");
+    await wait(Math.min(500, deadline - Date.now()));
+  }
+}
+
+/** 003 EARS-16: any addressed mail is a failure, over the full delivery horizon. */
+export async function assertNoAddressedMail(
+  request: APIRequestContext,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+): Promise<void> {
+  const deadline = Date.now() + DELIVERY_WINDOW_MS;
+  while (true) {
+    if ((await freshAddressedMail(request, baseUrl, email, afterIso)).length) {
+      throw new Error("Unexpected addressed mail after unknown reset request");
+    }
+    if (Date.now() >= deadline) return;
+    await wait(Math.min(500, deadline - Date.now()));
+  }
 }

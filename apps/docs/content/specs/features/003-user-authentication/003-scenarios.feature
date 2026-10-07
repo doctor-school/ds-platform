@@ -284,9 +284,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-11 @EARS-16 @happy
   Scenario: Password reset request is enumeration-resistant
-    When a user requests a password reset for any identifier
-    Then the response is identical whether or not the identifier exists
-    And a reset code is sent only if the identifier exists
+    When a guest requests password resets through Academy for a seeded and a unique unregistered email
+    Then both reset requests have identical acknowledgements and complete-step controls without a private session
+    And fresh reset mail reaches only the seeded email while the unregistered email receives no mail for 15 seconds
 
   @EARS-12 @happy
   Scenario: Completing a password reset revokes existing sessions and auto-logs-in

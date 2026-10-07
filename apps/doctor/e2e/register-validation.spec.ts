@@ -166,7 +166,7 @@ const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } =
 test.describe("021 EARS-11: the confirmation code on a phone", () => {
   test.use({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch });
 
-  test("021 EARS-11.4: a lowercase-typed alphanumeric code is reachable, untransformed and verifies", async ({
+  test("021 EARS-11.4: the six-digit code takes the digit keypad, refuses letters, renders untransformed and verifies", async ({
     page,
   }) => {
     await page.route(REGISTER_ROUTE, (route) =>
@@ -193,10 +193,10 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
 
     await expect(page.getByTestId("verify-submit")).toBeVisible();
 
-    // #1110 — the emitted code carries LETTERS, so a digits-only keypad would
-    // make it untypable on the device this test emulates.
+    // #2636 — the emitted code is six digits: the device this test emulates
+    // pops the digit keypad.
     const code = page.locator('input[autocomplete="one-time-code"]');
-    await expect(code).toHaveAttribute("inputmode", "text");
+    await expect(code).toHaveAttribute("inputmode", "numeric");
 
     // LD-9 — no CSS uppercase transform anywhere in the slot row: the value is
     // normalised, the glyphs are never restyled, so what the doctor sees is
@@ -208,15 +208,17 @@ test.describe("021 EARS-11: the confirmation code on a phone", () => {
     );
     expect(transforms).toEqual(Array.from({ length: 6 }, () => "none"));
 
-    // The proof the field is typed for the REAL code: a lowercase code passes
-    // the client guard and leaves the browser in the case the engine expects.
+    // The proof the field is typed for the REAL code: letters never land in a
+    // cell, and the six digits go to the engine exactly as typed.
+    await code.fill("abc");
+    await expect(code).toHaveValue("");
     const [request] = await Promise.all([
       page.waitForRequest(CONFIRM_ROUTE),
-      code.fill("abc123"),
+      code.fill("482913"),
     ]);
     expect(body(request)).toEqual({
       email: EMAIL,
-      code: "ABC123",
+      code: "482913",
       registration: expect.objectContaining({ password: PASSWORD }),
     });
 

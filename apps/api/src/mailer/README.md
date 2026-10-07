@@ -18,7 +18,7 @@ All five BFF kinds reuse `email-layout.ts`, extracted from the existing
 8px radius, spacing or typography (§13.5, #2171). Content data drives HTML and
 plain text. Verification covers registration/resend and unverified-account
 login with neutral ignore guidance; verification/reset direct code entry to
-the already-open requesting tab. Both remain six uppercase/digit characters
+the already-open requesting tab. Both carry six digits (#2636)
 with 3600-second Zitadel expiry, with no links or URLs. The re-registration
 code mail (EARS-23, a registration attempt on an already-registered address)
 says the address is already registered, states the code's lifetime and whether
@@ -28,7 +28,7 @@ Intercept, real and fallback transports use the `Doctor.School` display name
 and retain their own configured sender address.
 
 Verified-account login email-OTP uses the same layout and existing SmtpMailer
-route. Zitadel returns its six-character (upper-case letters and digits), 300-second code through `returnCode`
+route. Zitadel returns its six-digit, 300-second code through `returnCode`
 and sends no duplicate; the mail contains no action or URL. Session verification
 and token exchange remain IdP-owned. SMS keeps its IdP template. Broader provider
 acceptance in #2144/#2145 remains separate from this template migration.

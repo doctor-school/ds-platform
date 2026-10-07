@@ -92,7 +92,7 @@ import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3rSecret!";
-const CODE = "PVDC3R";
+const CODE = "482913";
 /** The doctor-host projection of the arrival's confirm INTENT (021 #1945). */
 const RETURN_TARGET = "/events/kardio";
 /** Rule S3 — what the ROUTE carries onward, in the canonical vocabulary. */

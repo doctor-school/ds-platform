@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Form, FormField, OtpField } from '@ds/design-system';
 
 export const Slotted = () => {
-  const form = useForm({ defaultValues: { code: 'PV3' } });
+  const form = useForm({ defaultValues: { code: '482' } });
   return (
     <div style={{ width: 400 }}>
       <Form {...form}>
@@ -11,7 +11,7 @@ export const Slotted = () => {
           name="code"
           control={form.control}
           render={({ field }) => (
-            <OtpField field={field} length={6} variant="slotted" charset="alphanumeric" label="Код из письма" />
+            <OtpField field={field} length={6} variant="slotted" charset="numeric" label="Код из письма" />
           )}
         />
       </Form>
@@ -20,7 +20,7 @@ export const Slotted = () => {
 };
 
 export const SlottedInvalid = () => {
-  const form = useForm({ defaultValues: { code: 'PVDC3R' } });
+  const form = useForm({ defaultValues: { code: '482913' } });
   useEffect(() => {
     form.setError('code', { type: 'manual', message: 'Неверный код. Проверьте письмо и попробуйте ещё раз.' });
   }, [form]);
@@ -31,7 +31,7 @@ export const SlottedInvalid = () => {
           name="code"
           control={form.control}
           render={({ field }) => (
-            <OtpField field={field} length={6} variant="slotted" charset="alphanumeric" label="Код из письма" />
+            <OtpField field={field} length={6} variant="slotted" charset="numeric" label="Код из письма" />
           )}
         />
       </Form>

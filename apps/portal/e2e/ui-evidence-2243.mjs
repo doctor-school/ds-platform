@@ -65,9 +65,9 @@ async function fetchOtpCode(email) {
         await fetch(`${MAILPIT}/api/v1/message/${messages[0].ID}`)
       ).json();
       const code =
-        (detail.Subject ?? "").match(/^([A-Z0-9]{4,12})\s+—/)?.[1] ??
+        (detail.Subject ?? "").match(/^(\d{6})\s+—/)?.[1] ??
         `${detail.Text ?? ""}\n${detail.HTML ?? ""}`.match(
-          /\b([A-Z0-9]{6,8})\b/,
+          /\b(\d{6})\b/,
         )?.[1];
       if (code) return code;
     }

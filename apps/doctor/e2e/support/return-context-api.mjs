@@ -117,7 +117,7 @@ const SPECIALTY = {
  * spec importing from this module would pull the whole server into the
  * Playwright type graph.
  */
-const REFUSED_CODE = "NOPE42";
+const REFUSED_CODE = "000000";
 
 /**
  * The register policy the api's `participation-cta.resolver` builds for a

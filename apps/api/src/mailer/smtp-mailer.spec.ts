@@ -80,14 +80,14 @@ const REREG = { lifetime: "5m", passwordKept: true } as const;
 describe("SmtpMailer dual-transport flag gate (#209)", () => {
   it("EARS-23: when email-delivery-real is ON, system shall dispatch the re-registration mail via the real transport", async () => {
     const { mailer, rec } = buildMailer(() => true);
-    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG);
     expect(rec.sends).toHaveLength(1);
     expect(rec.sends[0]?.host).toBe(realCfg.host);
   });
 
   it("EARS-23: when email-delivery-real is OFF (env default mailpit), system shall dispatch the re-registration mail via the Mailpit intercept transport", async () => {
     const { mailer, rec } = buildMailer(() => false);
-    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG);
     expect(rec.sends).toHaveLength(1);
     expect(rec.sends[0]?.host).toBe(interceptCfg.host);
   });
@@ -95,9 +95,9 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
   it("EARS-23: when the flag is read LIVE, a mid-session flip switches transport with no rebuild", async () => {
     let live = false;
     const { mailer, rec } = buildMailer(() => live);
-    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG);
     live = true;
-    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG);
     expect(rec.sends.map((s) => s.host)).toEqual([
       interceptCfg.host,
       realCfg.host,
@@ -108,14 +108,14 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
     const warn = vi.fn();
     const { mailer, rec } = buildMailer(() => true, { real: undefined, warn });
     await expect(
-      mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG),
+      mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG),
     ).rejects.toThrow(/configuration/);
     expect(rec.sends).toHaveLength(0);
   });
 
   it("EARS-23: derives secure=true for the real transport on port 465", async () => {
     const { mailer, rec } = buildMailer(() => true);
-    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG);
+    await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG);
     const realTransport = rec.created.find((c) => c.host === realCfg.host);
     expect(realTransport?.secure).toBe(true);
   });
@@ -123,7 +123,7 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
   it("EARS-23: rejects an invalid email before any transport decision (parity)", async () => {
     const { mailer, rec } = buildMailer(() => true);
     await expect(
-      mailer.sendReRegistrationCodeEmail("no-at-sign", "GX5AVU", REREG),
+      mailer.sendReRegistrationCodeEmail("no-at-sign", "482916", REREG),
     ).rejects.toThrow();
     expect(rec.sends).toHaveLength(0);
   });
@@ -139,7 +139,7 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
       transportFactory: rec.factory,
     });
     await expect(
-      mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", REREG),
+      mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", REREG),
     ).rejects.toThrow(/configuration/);
     expect(rec.sends).toHaveLength(0);
   });
@@ -151,7 +151,7 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
 // transiting code is a SECRET: it must never leak into a log line, a thrown
 // error, or a provider-response echo (EARS-30 — testable across every outcome).
 describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
-  const CODE = "GX5AVU";
+  const CODE = "482916";
 
   /** A factory whose transport records full messages and can be made to fail. */
   function messageFactory(fail?: (msg: { to: string }) => Error): {
@@ -313,9 +313,9 @@ describe("shared existing transactional layout (#2171)", () => {
           },
         }),
       });
-      for (const method of methods) await mailer[method](VALID_EMAIL, "GX5AVU");
+      for (const method of methods) await mailer[method](VALID_EMAIL, "482916");
       // 003 EARS-23: the re-registration code mail rides the same layout.
-      await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "GX5AVU", {
+      await mailer.sendReRegistrationCodeEmail(VALID_EMAIL, "482916", {
         lifetime: "5m",
         passwordKept: true,
       });
@@ -342,7 +342,7 @@ describe("shared existing transactional layout (#2171)", () => {
       // carries a link of any kind.
       for (const code of [messages[1]!, messages[4]!]) {
         for (const body of [code.html, code.text]) {
-          expect(body).toContain("GX5AVU");
+          expect(body).toContain("482916");
           expect(body).not.toMatch(/<a[\s>]|https?:\/\//);
           expect(body).not.toContain("/reset");
         }
@@ -358,7 +358,7 @@ describe("shared existing transactional layout (#2171)", () => {
         expect(body).toContain(
           "Если это были не вы, сообщите об этом техническому руководителю.",
         );
-        expect(body).not.toMatch(/<a[\s>]|https?:\/\/|GX5AVU|Код действует/);
+        expect(body).not.toMatch(/<a[\s>]|https?:\/\/|482916|Код действует/);
         expect(body.replace(/<[^>]*>/g, "")).not.toMatch(/\d|минут/);
       }
     });
@@ -386,7 +386,7 @@ describe("shared existing transactional layout (#2171)", () => {
         },
       },
     });
-    for (const method of methods) await mailer[method](VALID_EMAIL, "GX5AVU");
+    for (const method of methods) await mailer[method](VALID_EMAIL, "482916");
     expect(fallback).toHaveLength(4);
     fallback.forEach((message, i) => {
       expect(message.from).toBe("Doctor.School <fallback@doctor.school>");

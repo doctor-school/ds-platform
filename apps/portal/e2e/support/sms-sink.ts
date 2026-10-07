@@ -33,8 +33,8 @@ interface SinkMessage {
 
 /**
  * Extract the OTP code from a stored SMS webhook body. The login OTP
- * (`session.otp.sms.challenged`) renders the 6-char upper-alnum code (#2555) in
- * the branded SMS text (`… код для входа - K7Q2M9, …`, provision.sh step 8.bis)
+ * (`session.otp.sms.challenged`) renders the six-digit code (#2636) in
+ * the branded SMS text (`… код для входа - 550271, …`, provision.sh step 8.bis)
  * and in `args.oTP`; the phone-verify code
  * (`user.human.phone.code.added`) is a 6-char alphanumeric in `args.code` and the
  * rendered `… code to verify it VBX53M.` text (proven live on the dev-stand,
@@ -48,8 +48,8 @@ function extractCode(msg: SinkMessage): string | null {
   return (
     s.match(/code to verify it ([A-Z0-9]{4,12})/)?.[1] ??
     s.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
-    s.match(/код для входа - ([A-Z0-9]{6})\b/)?.[1] ??
-    s.match(/sign-in code is ([A-Z0-9]{6})\b/)?.[1] ??
+    s.match(/код для входа - (\d{6})\b/)?.[1] ??
+    s.match(/sign-in code is (\d{6})\b/)?.[1] ??
     null
   );
 }
@@ -61,8 +61,8 @@ function extractCode(msg: SinkMessage): string | null {
  * cutoff skips an earlier message, and `event` restricts to a
  * `contextInfo.eventType` — the SMS analogue of Mailpit's subject filter. This
  * matters: the phone-verify SMS (`user.human.phone.code.added`, a 6-char
- * alphanumeric) and the login OTP (`session.otp.sms.challenged`, the SAME 6-char
- * shape since #2555, so the shape cannot tell them apart) can
+ * alphanumeric) and the login OTP (`session.otp.sms.challenged`, six digits since
+ * #2636 — the verify code may share that shape, so the shape cannot tell them apart) can
  * land within one poll window and Zitadel re-renders the verify code around the
  * login send, so without the event filter the login step can read the stale
  * verify code and never verify (proven live, #170 — the SMS twin of the email

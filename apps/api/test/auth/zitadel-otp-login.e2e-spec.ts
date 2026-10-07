@@ -131,23 +131,23 @@ async function untilProjected<T>(
  * Extract a 6-ish-char OTP code from a Mailpit message.
  *
  * The branded verify-email (#869, provision.sh step 8.ter) is CODE-ONLY: the
- * code leads the SUBJECT (`GX5AVU — код подтверждения Doctor.School`) and the
+ * code leads the SUBJECT (`482916 — код подтверждения Doctor.School`) and the
  * body renders it as ONE unbroken token — there is no `code=` link to scrape
  * any more. Subject-first, then the legacy body patterns (the login email-OTP
- * mail leads its subject with the code too; both codes are 6-char upper-alnum
- * since #2555).
+ * mail leads its subject with the code too; both codes are six digits
+ * since #2636).
  */
 function extractCode(msg: {
   Subject?: string;
   Text?: string;
   HTML?: string;
 }): string | null {
-  const fromSubject = (msg.Subject ?? "").match(/^([A-Z0-9]{4,12})\s+—/)?.[1];
+  const fromSubject = (msg.Subject ?? "").match(/^([0-9]{6})\s+—/)?.[1];
   if (fromSubject) return fromSubject;
   const haystack = `${msg.Text ?? ""}\n${msg.HTML ?? ""}`;
   return (
-    haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
-    haystack.match(/[?&]code=([A-Z0-9]{4,12})\b/)?.[1] ??
+    haystack.match(/\bCode\s+([0-9]{6})\b/)?.[1] ??
+    haystack.match(/[?&]code=([0-9]{6})\b/)?.[1] ??
     null
   );
 }
@@ -159,8 +159,8 @@ function extractCode(msg: {
  * mail so we only read the login-OTP code.
  *
  * `subject` disambiguates the TWO mails a single address receives here — the
- * registration verify-email (a 6-char alphanumeric, e.g. `JS5CIC`) and the
- * login email-OTP (the SAME 6-char upper-alnum shape since #2555) — exactly as the portal `support/mailpit`
+ * registration verify-email (six digits, e.g. `482916`) and the
+ * login email-OTP (the SAME six-digit shape since #2636) — exactly as the portal `support/mailpit`
  * helper does (#131). The subjects are `ru`-locked since #177 and centralized in
  * `support/notification-subjects` (`NOTIFICATION_SUBJECTS`), the single SoT-traced
  * home — a hardcoded English literal would match nothing live (#305). The
@@ -229,7 +229,7 @@ async function fetchOtpCode(
                 expected.text.trim(),
               "shared login plain text",
             ).toBe(true);
-            expect(code).toMatch(/^[A-Z0-9]{6}$/);
+            expect(code).toMatch(/^[0-9]{6}$/);
           }
           record.codeExtracted = !!code;
           if (code) return code;
@@ -243,8 +243,8 @@ async function fetchOtpCode(
 
 /**
  * Extract the OTP code from a stored SMS-sink webhook body. The login OTP
- * (`session.otp.sms.challenged`) renders a 6-char upper-alnum code (#2555) in
- * the branded SMS text (`… код для входа - K7Q2M9, …`, step 8.bis) and in
+ * (`session.otp.sms.challenged`) renders a six-digit code (#2636) in
+ * the branded SMS text (`… код для входа - 482916, …`, step 8.bis) and in
  * `args.oTP`; the phone-verify code (`user.human.phone.code.added`) is a 6-char
  * alphanumeric in `args.code` and the rendered `… code to verify it VBX53M.` text
  * (proven live, #170). Prefer the structured args field, then scan the text —
@@ -260,8 +260,8 @@ function extractSmsCode(msg: {
   return (
     s.match(/code to verify it ([A-Z0-9]{4,12})/)?.[1] ??
     s.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
-    s.match(/код для входа - ([A-Z0-9]{6})\b/)?.[1] ??
-    s.match(/sign-in code is ([A-Z0-9]{6})\b/)?.[1] ??
+    s.match(/код для входа - ([0-9]{6})\b/)?.[1] ??
+    s.match(/sign-in code is ([0-9]{6})\b/)?.[1] ??
     null
   );
 }
@@ -274,8 +274,9 @@ function extractSmsCode(msg: {
  * message and `event` restricts to a `contextInfo.eventType` (the SMS analogue of
  * Mailpit's subject filter). This matters: the phone-verify SMS
  * (`user.human.phone.code.added`, a 6-char alphanumeric) and the login OTP
- * (`session.otp.sms.challenged`, the SAME 6-char shape since #2555, so the shape
- * cannot tell them apart) can land within the same poll window,
+ * (`session.otp.sms.challenged`, six digits since #2636 — a value the
+ * alphanumeric verify code can also take, so the shape cannot tell them apart)
+ * can land within the same poll window,
  * and Zitadel re-renders the verify code AROUND the login send — without the
  * event filter the login step can read the stale verify code and never verify
  * (proven live, #170, the SMS twin of the email `Verify OTP` subject fix).

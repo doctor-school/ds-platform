@@ -95,8 +95,8 @@ async function fetchMail(
 /** The code of a code mail: the branded subject leads with it (#869). */
 function codeOf(mail: MailpitMessage): string | null {
   return (
-    mail.Subject.match(/^([A-Z0-9]{4,12})\s+—/)?.[1] ??
-    `${mail.Text}\n${mail.HTML}`.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
+    mail.Subject.match(/^(\d{6})\s+—/)?.[1] ??
+    `${mail.Text}\n${mail.HTML}`.match(/\bCode\s+(\d{6})\b/)?.[1] ??
     null
   );
 }
@@ -161,7 +161,7 @@ test.describe("021 EARS-13 / 003 EARS-23: a duplicate registration on the doctor
     const verifyMail = await fetchMail(email, resentAt, VERIFY_SUBJECT);
     expect(verifyMail, "the resent verify-email should reach Mailpit").toBeTruthy();
     const code = codeOf(verifyMail!);
-    expect(code).toMatch(/^[A-Z0-9]{6}$/);
+    expect(code).toMatch(/^\d{6}$/);
     await page.locator('input[autocomplete="one-time-code"]').fill(code!);
     await expect(page).not.toHaveURL(/\/verify/);
     await expectSignedIn(page);
@@ -183,7 +183,7 @@ test.describe("021 EARS-13 / 003 EARS-23: a duplicate registration on the doctor
     const body = `${reRegistration!.Text}\n${reRegistration!.HTML}`;
     expect(body).toMatch(/уже зарегистрирован/);
     expect(body).toMatch(/Ваш пароль не изменился/);
-    expect(codeOf(reRegistration!)).toMatch(/^[A-Z0-9]{6}$/);
+    expect(codeOf(reRegistration!)).toMatch(/^\d{6}$/);
     expect(body).not.toMatch(/\/login|\/reset|\/verify/);
 
     // #326 / 003 EARS-16: the EXISTING owner's acknowledgement is the pending

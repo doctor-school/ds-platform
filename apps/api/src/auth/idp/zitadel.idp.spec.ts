@@ -407,7 +407,7 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     // verification email is BFF-composed and fully link-free, so the send hop
     // requests the code back (`returnCode`) instead of a Zitadel-side send.
     const { fetchImpl, calls } = returnCodeFetch({
-      verificationCode: "GX5AVU",
+      verificationCode: "482916",
     });
     const mailer = new FakeMailer();
     const client = new ZitadelIdpClient({
@@ -425,12 +425,12 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
   });
 
   it("003 EARS-29: the returned code is handed to the BFF mailer as ONE §13.3 verification email to the registrant", async () => {
-    const { fetchImpl } = returnCodeFetch({ verificationCode: "GX5AVU" });
+    const { fetchImpl } = returnCodeFetch({ verificationCode: "482916" });
     const mailer = new FakeMailer();
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
     await client.requestEmailVerification("user-1", "doc@example.com");
     expect(mailer.verificationCodeEmails).toEqual([
-      { to: "doc@example.com", code: "GX5AVU" },
+      { to: "doc@example.com", code: "482916" },
     ]);
     expect(mailer.passwordResetCodeEmails).toEqual([]);
   });
@@ -491,7 +491,7 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     // GlitchTip'd with both provider codes, EARS-32). The cascade hop must NOT
     // surface it: recovery is the EARS-25 resend, and a thrown mailer outage
     // would 500 the register endpoint (EARS-16 forbids that).
-    const { fetchImpl } = returnCodeFetch({ verificationCode: "GX5AVU" });
+    const { fetchImpl } = returnCodeFetch({ verificationCode: "482916" });
     const failingMailer = {
       sendReRegistrationCodeEmail: () => Promise.resolve(),
       sendVerificationCodeEmail: () =>

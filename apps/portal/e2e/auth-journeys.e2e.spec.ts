@@ -114,7 +114,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     // ── Verify (EARS-3) — read the real code from Mailpit ────────────────
     // #175: entering the final character AUTO-SUBMITS (InputOTP `onComplete`).
-    // We fill the 6-character code and do NOT click the button — the journey
+    // We fill the 6-digit code and do NOT click the button — the journey
     // must advance on its own. 003 EARS-41: the accepted code's answer IS the
     // session (no password replay, no manual /login round-trip).
     const verifyCode = await fetchOtpCode(
@@ -180,7 +180,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await expect(page.getByTestId("reset-request-submit")).toBeVisible();
   });
 
-  test("003 EARS-6/42: email-OTP — register+verify → request code → a 6-character code signs in → session", async ({
+  test("003 EARS-6/42: email-OTP — register+verify → request code → a 6-digit code signs in → session", async ({
     page,
   }) => {
     const email = newEmail();
@@ -237,11 +237,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       NOTIFICATION_SUBJECTS.verifyEmailOtp,
     );
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
-    // #175: the login-OTP input AUTO-SUBMITS once the final (6th) character
-    // lands — the same six cells as registration (003 EARS-42, #2555) — we fill
+    // #175: the login-OTP input AUTO-SUBMITS once the final (6th) digit
+    // lands — the same six cells as registration (003 EARS-42, #2636) — we fill
     // the code and do NOT click `otp-verify`; the flow must advance on its own
     // (the explicit button stays for a11y but is not exercised here).
-    expect(otpCode).toMatch(/^[A-Z0-9]{6}$/);
+    expect(otpCode).toMatch(/^\d{6}$/);
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
     await waitForAuthenticatedLanding(page);
@@ -384,7 +384,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   // (that would make the EARS-8/16 ack a code oracle, or need a banned backdoor).
   // SMS-Aero is the PRODUCTION sender (recorded in the specs); the dev-stand never
   // reaches it. NOT faked green — proven against REAL Zitadel.
-  test("003 EARS-7/42: sms-OTP — provisioned phone → request code → a 6-character code signs in → session", async ({
+  test("003 EARS-7/42: sms-OTP — provisioned phone → request code → a 6-digit code signs in → session", async ({
     page,
   }) => {
     const email = newEmail();
@@ -434,9 +434,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       );
       expect(otpCode, "login OTP should reach the sink").toBeTruthy();
       // #175: auto-submit on completion (no `otp-verify` click) — same as the
-      // email-OTP journey above; the SMS code is the same six upper-alphanumeric
-      // characters (003 EARS-7 amended, #2555).
-      expect(otpCode).toMatch(/^[A-Z0-9]{6}$/);
+      // email-OTP journey above; the SMS code is the same six digits
+      // (003 EARS-7 amended, #2636).
+      expect(otpCode).toMatch(/^\d{6}$/);
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
@@ -586,7 +586,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     expect(body).toMatch(/уже зарегистрирован/);
     expect(body).toMatch(/Ваш пароль не изменился/);
     expect(body).not.toMatch(/\/login|\/reset|\/verify/);
-    const code = reRegistration!.Subject.match(/^([A-Z0-9]{6})\s+—/)?.[1];
+    const code = reRegistration!.Subject.match(/^(\d{6})\s+—/)?.[1];
     expect(code, "the code leads the subject").toBeTruthy();
 
     // EARS-41: that code, typed on the same step, signs the owner in.

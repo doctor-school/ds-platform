@@ -92,16 +92,20 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `git show <sha>:packages/schemas/src/auth/auth.schema.ts`, never a literal) with
    every character-class flag `false` — and because Zitadel's grpc-gateway/protojson
    surface omits proto3 defaults, an ABSENT flag reads as `false`, the same
-   defaulting `provision.sh` step 8.sexies uses. It then reads back both login OTP
-   secret generators (`GET /admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_OTP_EMAIL`
-   / `…_OTP_SMS`, step 8.septies, #2555) against the shape the TARGET commit's
-   own `provision.sh` converges — `git show <sha>:infra/dev-stand/idp/provision.sh`
-   → `LOGIN_OTP_CODE_LENGTH`, which must equal `@ds/schemas` `VERIFY_CODE_LENGTH`
-   at the same SHA — and asserts that length, upper letters + digits only and an
-   expiry present. A target whose `provision.sh` has no `LOGIN_OTP_CODE_LENGTH`
-   (a `--ref` hotfix to a commit before step 8.septies) never converges the
-   generators, so the deploy prints the line
-   `skipped: target provision.sh does not converge login OTP generators` and
+   defaulting `provision.sh` step 8.sexies uses. It then reads back the code
+   secret generators (`GET /admin/v1/secretgenerators/<type>`, step 8.septies,
+   #2555/#2636) against the shape the TARGET commit's own `provision.sh`
+   converges — `git show <sha>:infra/dev-stand/idp/provision.sh`. A target with
+   `EMAILED_CODE_LENGTH` converges all four generators whose codes reach a user
+   (`SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE`, `…_PASSWORD_RESET_CODE`,
+   `…_OTP_EMAIL`, `…_OTP_SMS`) to digits only; a pre-#2636 target with only
+   `LOGIN_OTP_CODE_LENGTH` converges the `…_OTP_EMAIL` / `…_OTP_SMS` pair to upper
+   letters + digits. The length must equal `@ds/schemas` `VERIFY_CODE_LENGTH` at
+   the same SHA; the deploy asserts that length, the target's alphabet and an
+   expiry present on every generator. A target whose `provision.sh` has neither
+   constant (a `--ref` hotfix to a commit before step 8.septies) never converges
+   the generators, so the deploy prints the line
+   `skipped: target provision.sh does not converge the code generators` and
    checks nothing there. The provisioner also compares SMTP
    public metadata (stable ID, description, host, TLS, sender and username) and
    reads back the active identity. HTTP success does not prove projection convergence.

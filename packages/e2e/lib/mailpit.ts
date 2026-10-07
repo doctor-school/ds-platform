@@ -48,9 +48,8 @@ export function selectLoginMail(
 
 export function extractLoginCode(subject: string): string | null {
   return (
-    subject.match(
-      /^([A-Z0-9]{6})\s+—\s+код для входа в Doctor\.School$/,
-    )?.[1] ?? null
+    subject.match(/^(\d{6})\s+—\s+код для входа в Doctor\.School$/)?.[1] ??
+    null
   );
 }
 

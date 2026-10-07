@@ -411,7 +411,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the BFF sends the verification code in the sign-in code mail on the existing shared mailer layout
     And HTML and plain text show the code, its lifetime and the instruction to use the already-open requesting tab
     And no link, button or navigation URL appears in any email block
-    And the code is six upper-case letters and digits, its lifetime owned by Zitadel
+    And the code is six digits, its lifetime owned by Zitadel
 
   @EARS-23 @EARS-29 @happy
   Scenario: The re-registration mail is a code mail on the shared layout
@@ -501,7 +501,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: Login OTP uses the existing BFF mailer and shared code-only layout
     Given a verified account and the existing mailer delivery configuration
     When a verified user requests an email login OTP
-    Then the BFF obtains the six-character code through otpEmail returnCode
+    Then the BFF obtains the six-digit code through otpEmail returnCode
     And Zitadel sends no native email
     And the existing BFF mailer sends the code using the shared layout and unchanged delivery route
     And HTML and plain text state a five-minute lifetime and entry in the already-open requesting tab
@@ -657,7 +657,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
   @EARS-41 @EARS-16 @failure
   Scenario: A wrong code fails identically for every identifier
     Given a verified account, an unverified account and an unknown identifier
-    When a wrong six-character code is submitted for each
+    When a wrong six-digit code is submitted for each
     Then each response is the same generic failure in status, body, and timing within 50 ms
     And no account state changes
 

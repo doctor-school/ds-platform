@@ -130,12 +130,12 @@ describe("003 EARS-44: /login redeems the Congress hand-off into the code step",
     await screen.findByTestId("otp-verify");
 
     await user.click(screen.getByRole("textbox"));
-    await user.keyboard("PVDC3R");
+    await user.keyboard("482913");
 
     await waitFor(() =>
       expect(loginWithOtp).toHaveBeenCalledWith({
         identifier: EMAIL,
-        code: "PVDC3R",
+        code: "482913",
         channel: "email",
       }),
     );

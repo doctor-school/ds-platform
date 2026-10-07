@@ -1407,7 +1407,7 @@ const PASSWORD_RECOVERY_PROPS: PropRow[] = [
     name: "otpLength",
     type: "number",
     required: false,
-    description: "Fixed code length; defaults to the 6-character reset code.",
+    description: "Fixed code length; defaults to the 6-digit reset code.",
   },
   {
     name: "resendCooldownSeconds",
@@ -1932,7 +1932,7 @@ function OtpFocusScreenSection() {
         The ONE code step (003 EARS-42): sign-in by code and the
         post-registration confirmation both draw it inside their card, whose
         heading and «sent to {"<address>"}» line name the channel. It renders
-        only six letter-or-digit cells, the accepted-code row, the primary, the
+        only six digit cells, the accepted-code row, the primary, the
         back + resend(cooldown) row and the after-resend notice — no channel
         switch, no secondary links. Every visible string is an app-supplied
         prop.

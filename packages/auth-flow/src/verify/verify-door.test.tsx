@@ -101,7 +101,7 @@ import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
-const CODE = "PVDC3R";
+const CODE = "482913";
 const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).verify;
 
 beforeEach(() => {
@@ -163,7 +163,7 @@ async function flushMount() {
   });
 }
 
-/** The 6-char code submits itself once the last character lands (003 EARS-24). */
+/** The 6-digit code submits itself once the last digit lands (003 EARS-24). */
 async function enterCode(arrival?: Arrival) {
   const user = userEvent.setup();
   await mountSettled(arrival);

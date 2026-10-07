@@ -27,7 +27,7 @@ import { useResendCountdown } from "./use-resend-countdown";
  *   • the `<AuthCard>` frame whose title/description track the stage (the #1033
  *     `<h1>` a11y landmark; the destination exactly as typed, #2607),
  *   • the EARS-11 request form (union identifier box, #196) and the EARS-12
- *     complete form (slotted 6-char alphanumeric code + new password, submitted
+ *     complete form (slotted 6-digit code + new password, submitted
  *     together — which is why this surface never adopted `<OtpFocusScreen>`),
  *   • the #267 resend footer: the shared `useResendCountdown` timer restarted by a
  *     `resendNonce` bump, the «start over» control, and the #326 neutral resend
@@ -47,9 +47,9 @@ import { useResendCountdown } from "./use-resend-countdown";
  * does for the login OTP stage.
  */
 
-/** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
- * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
- * uses its slotted variant, which accepts letters (it carries no digit-only filter). */
+/** The reset code is a FIXED 6 digits, like every mailed/texted code (003 EARS-29
+ * amended, #2636). `<OtpField charset="numeric">` pins the digit keypad and
+ * refuses letters. */
 export const PASSWORD_RECOVERY_OTP_LENGTH = 6;
 
 /**
@@ -172,7 +172,7 @@ export interface PasswordRecoveryCardProps {
   icon?: React.ReactNode | undefined;
   request: PasswordRecoveryRequestProps;
   complete: PasswordRecoveryCompleteProps;
-  /** Fixed code length; defaults to the 6-char reset code. */
+  /** Fixed code length; defaults to the 6-digit reset code. */
   otpLength?: number;
   /** Resend cooldown in seconds; defaults to 30. */
   resendCooldownSeconds?: number;
@@ -399,7 +399,7 @@ function RecoveryCompleteForm({
         className="space-y-4"
         noValidate
       >
-        {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step
+        {/* Slotted 6-digit code (no auto-submit here — the complete step
             pairs the code with a new password, so the user submits both
             together; `onComplete` is intentionally omitted). */}
         <FormField
@@ -409,7 +409,7 @@ function RecoveryCompleteForm({
             <OtpField
               field={field}
               length={otpLength}
-              charset="alphanumeric"
+              charset="numeric"
               label={copy.codeLabel}
             />
           )}

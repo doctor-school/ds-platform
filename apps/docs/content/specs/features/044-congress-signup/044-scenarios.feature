@@ -34,7 +34,7 @@ Feature: 044 — Congress sign-up
   Scenario: First platform entry by one email code proves the address and signs in
     Given a congress-origin account exists for "new@example.org" with email_verified false
     When its holder opens "/login?method=code&returnTo=/account/congress" and requests a code for "new@example.org"
-    Then the sign-in code mail arrives carrying a six-character code
+    Then the sign-in code mail arrives carrying a six-digit code
     When they enter that code on the six-cell code step
     Then email_verified becomes true and they are signed in on "/account/congress"
     And a later email one-time-code sign-in also succeeds

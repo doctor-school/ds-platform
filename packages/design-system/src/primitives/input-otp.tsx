@@ -60,11 +60,11 @@ const InputOTPSlot = React.forwardRef<
         // 42×52px slots with a 7px gap + flex-wrap; #512 shipped a contiguous
         // shared-border 40px row instead) with a hard 2px border and tabular
         // figures. NO `uppercase` text-transform (021 LD-9, #1547): the slot
-        // renders the value it is given and never restyles it. An alphanumeric
-        // code is normalised to upper case in the VALUE by `<OtpField>` (#1109)
-        // and again by the server, so a CSS transform would add nothing while
-        // showing the doctor glyphs that differ from what they typed — the exact
-        // thing LD-9 forbids. `aspect-square min-w-0` (#544) lets the cell SHRINK below its
+        // renders the value it is given and never restyles it. Every mailed or
+        // texted code is digits (#2636); an alphanumeric value is normalised to
+        // upper case in the VALUE by `<OtpField>` (#1109), so a CSS transform
+        // would add nothing while showing glyphs that differ from what was
+        // typed — the exact thing LD-9 forbids. `aspect-square min-w-0` (#544) lets the cell SHRINK below its
         // preferred 40px — staying square — only when the row would otherwise
         // overflow a narrow card (a long row at 390px); on wide layouts every
         // slot keeps its 40px preferred width, so the 6-slot code rows and

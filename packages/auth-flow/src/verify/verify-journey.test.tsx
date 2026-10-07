@@ -169,7 +169,7 @@ async function enterCode(config: AuthFlowHostConfig) {
   const user = userEvent.setup({ delay: null });
   await user.type(
     await screen.findByLabelText(resolveAuthFlowCopy(config).verify.codeLabel),
-    "PVDC3R",
+    "482913",
   );
 }
 

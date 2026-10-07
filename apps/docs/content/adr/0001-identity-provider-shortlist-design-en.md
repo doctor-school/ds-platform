@@ -256,6 +256,10 @@ Minimum set of protections for production launch. Implementation — partly IdP,
 | Session fixation protection        | IdP               | Regenerate session-id on login and on MFA elevation                                                                                                                                                                                                                                                                                                                                                     |
 | PD in logs                         | Backend           | Email/phone masked in logs (`a***@example.com`, `+7***1234`); full values only in encrypted audit log with RF-resident KMS                                                                                                                                                                                                                                                                              |
 
+#### SD1 — Per-IP rate limit split by door (2026-10-07, #2684, ADR A2)
+
+The per-IP row above is running in production as one window shared by every auth door. It is refined: **verification doors** (login, code login, verify, password-reset-complete) refund their own per-IP unit on success, so 20 / 15 min / IP counts failed verifications; **sending doors** (code request, register, resend, password-reset request, sign-in hand-off) consume their own per-IP window of **60 / 15 min / IP**. Per-user, per-ASN (shared by both doors), CAPTCHA and the SMS budget are unchanged. Mechanism: `apps/api/src/auth/README.md` (rate-limit section).
+
 > **Zitadel enumeration bypasses — operational note.** Zitadel's own "ignore unknown usernames" protection has been bypassed repeatedly (CVE-2024-41952 — flag not consistently honoured; CVE-2025-57770 — "select account" page; CVE-2026-23511 — password-reset endpoints + Login UI V2). The idempotent-response + rate-limit rows above are our backstop; in addition, **pin a Zitadel release patched against all three (≥ 4.9.1 / ≥ 3.4.6)** as part of the Definition of Done (ADR-0001 §7–§8).
 
 ---

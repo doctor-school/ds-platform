@@ -39,7 +39,8 @@ interface GuardRequest {
  * When the marker carries a scope tag (`@RateLimited("<tag>")`, #1646) the
  * source-address windows are partitioned under it, so that handler's traffic
  * cannot exhaust the auth surface's shared budget. The argument-less form is
- * unchanged: no tag, no partition.
+ * unchanged: no tag, no partition. A `{ door: "sending" }` marker (#2684) keys
+ * only the per-IP window under the sending doors' bucket.
  */
 @Injectable()
 export class RateLimitGuard implements CanActivate {
@@ -63,6 +64,8 @@ export class RateLimitGuard implements CanActivate {
       // keyed on the address alone — the shared auth budget, unchanged. A string
       // marker is the handler's own bucket tag (#1646).
       scope: typeof marked === "string" ? marked : undefined,
+      // `{ door }` (#2684): a sending door counts in its own per-IP window.
+      door: typeof marked === "object" ? marked.door : undefined,
     });
     if (!allowed) {
       throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);

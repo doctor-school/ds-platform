@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   DEFAULT_RATE_LIMIT_THRESHOLDS,
   resolveRateLimitThresholds,
   type RateLimitEnv,
@@ -43,11 +44,15 @@ describe("resolveRateLimitThresholds (EARS-13 env overrides, #1076)", () => {
     expect(seen).toEqual([]);
   });
 
-  it("EARS-13 (#1076): RATE_LIMIT_PER_IP_15MIN overrides only the per-IP ceiling", () => {
+  it("EARS-13 (#1076, #2684): RATE_LIMIT_PER_IP_15MIN overrides both auth per-IP windows (verification + sending doors) and nothing else", () => {
     const { result } = rejections({ RATE_LIMIT_PER_IP_15MIN: "200" });
     expect(result).toEqual({
       ...DEFAULT_RATE_LIMIT_THRESHOLDS,
       perIpPer15Min: 200,
+      scopedPerIpPer15Min: {
+        ...DEFAULT_RATE_LIMIT_THRESHOLDS.scopedPerIpPer15Min,
+        [AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET]: 200,
+      },
     });
   });
 
@@ -70,6 +75,10 @@ describe("resolveRateLimitThresholds (EARS-13 env overrides, #1076)", () => {
       perUserPer15Min: 1,
       perIpPer15Min: 2,
       perAsnPerHour: 3,
+      scopedPerIpPer15Min: {
+        ...DEFAULT_RATE_LIMIT_THRESHOLDS.scopedPerIpPer15Min,
+        [AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET]: 2,
+      },
     });
     expect(seen).toEqual([]);
   });

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { RateLimitService } from "./rate-limit.service.js";
 import {
+  AUTH_SENDING_DOOR_PER_IP_15MIN,
+  AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   DEFAULT_RATE_LIMIT_THRESHOLDS,
   type RateLimitThresholds,
 } from "./rate-limit.types.js";
@@ -302,6 +304,102 @@ describe("RateLimitService (EARS-13)", () => {
       );
       expect(svc.tryConsume({ ip, scope: undefined })).toBe(true);
       expect(svc.tryConsume({ ip })).toBe(false); // same unscoped key
+    });
+  });
+
+  // #2684: one shared public address (a hospital, a congress hall, carrier
+  // CGNAT) signs in many doctors by code. The source-address window splits by
+  // door: a VERIFICATION door (password / code login, verify, reset-complete)
+  // gives back its own per-IP unit on success, so the 20/15 min window counts
+  // failed verifications; a SENDING door (code request, register, resend,
+  // reset request, hand-off) keeps consuming in its own 60/15 min window.
+  describe("#2684 door-split per-IP window", () => {
+    const withSending: RateLimitThresholds = {
+      ...thresholds,
+      scopedPerIpPer15Min: {
+        ...thresholds.scopedPerIpPer15Min,
+        [AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET]: 60,
+      },
+    };
+    let split: RateLimitService;
+    beforeEach(() => {
+      split = new RateLimitService(withSending, () => now);
+    });
+
+    it("EARS-13: the default sending-door per-IP ceiling is 60 / 15 min, the verification ceiling stays 20", () => {
+      expect(AUTH_SENDING_DOOR_PER_IP_15MIN).toBe(60);
+      expect(
+        DEFAULT_RATE_LIMIT_THRESHOLDS.scopedPerIpPer15Min[
+          AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET
+        ],
+      ).toBe(60);
+      expect(DEFAULT_RATE_LIMIT_THRESHOLDS.perIpPer15Min).toBe(20);
+    });
+
+    it("EARS-13: a sending door admits 60 requests from one address and refuses the 61st", () => {
+      for (let i = 0; i < 60; i++) {
+        expect(split.tryConsume({ ip, door: "sending" })).toBe(true);
+      }
+      expect(split.tryConsume({ ip, door: "sending" })).toBe(false);
+    });
+
+    it("EARS-13: sending-door traffic does not consume the verification window of the same address", () => {
+      for (let i = 0; i < 60; i++) split.tryConsume({ ip, door: "sending" });
+      for (let i = 0; i < thresholds.perIpPer15Min; i++) {
+        expect(split.tryConsume({ ip })).toBe(true);
+      }
+      expect(split.tryConsume({ ip })).toBe(false);
+    });
+
+    it("EARS-13: the per-ASN window is shared by both doors (unchanged)", () => {
+      const tight = new RateLimitService(
+        { ...withSending, perAsnPerHour: 2 },
+        () => now,
+      );
+      expect(tight.tryConsume({ ip, asn, door: "sending" })).toBe(true);
+      expect(tight.tryConsume({ ip, asn })).toBe(true);
+      expect(tight.tryConsume({ ip, asn, door: "sending" })).toBe(false);
+      expect(tight.tryConsume({ ip, asn })).toBe(false);
+    });
+
+    it("EARS-13: when a verification succeeds, the system shall give back that request's own per-IP unit", () => {
+      // Many successes from one address: each consumes then refunds its unit.
+      for (let i = 0; i < 100; i++) {
+        expect(split.tryConsume({ ip })).toBe(true);
+        split.refundIpUnit(ip);
+      }
+      // The window is empty again — the full failure budget is still there.
+      for (let i = 0; i < thresholds.perIpPer15Min; i++) {
+        expect(split.tryConsume({ ip })).toBe(true);
+      }
+      expect(split.tryConsume({ ip })).toBe(false);
+    });
+
+    it("EARS-13: an interleaved success refunds only its own unit — it never clears the failed verifications", () => {
+      for (let i = 0; i < thresholds.perIpPer15Min - 1; i++) {
+        expect(split.tryConsume({ ip })).toBe(true); // failures
+      }
+      expect(split.tryConsume({ ip })).toBe(true); // the 20th: a success
+      split.refundIpUnit(ip);
+      expect(split.tryConsume({ ip })).toBe(true); // 20th failure
+      expect(split.tryConsume({ ip })).toBe(false); // 21st → refused
+    });
+
+    it("EARS-13: a refund on an empty or rolled-over window grants no credit", () => {
+      split.refundIpUnit(ip); // nothing consumed yet
+      split.tryConsume({ ip });
+      now += 15 * 60 * 1000; // the window rolls over
+      split.refundIpUnit(ip);
+      for (let i = 0; i < thresholds.perIpPer15Min; i++) {
+        expect(split.tryConsume({ ip })).toBe(true);
+      }
+      expect(split.tryConsume({ ip })).toBe(false);
+    });
+
+    it("EARS-13: a refund leaves the sending-door window untouched", () => {
+      for (let i = 0; i < 60; i++) split.tryConsume({ ip, door: "sending" });
+      split.refundIpUnit(ip);
+      expect(split.tryConsume({ ip, door: "sending" })).toBe(false);
     });
   });
 });

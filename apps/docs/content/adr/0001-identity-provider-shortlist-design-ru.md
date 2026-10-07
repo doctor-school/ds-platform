@@ -257,6 +257,10 @@ WebAuthn / Passkeys — **out of scope v1**, добавляется в v2 как
 | Session fixation protection        | IdP               | Regenerate session-id при login и при MFA-elevation                                                                                                                                                                                                                                                                                                                               |
 | PII в логах                        | Backend           | Email/phone маскируются в логах (`a***@example.com`, `+7***1234`); полные значения только в шифрованном audit log с RF-resident KMS                                                                                                                                                                                                                                               |
 
+#### SD1 — Per-IP rate limit разделён по виду двери (2026-10-07, #2684, ADR A2)
+
+Строка per-IP выше работает в production как одно окно на все auth-двери. Уточнение: **двери проверки** (login, вход по коду, verify, password-reset-complete) при успехе возвращают свою per-IP-единицу, так что 20 / 15 мин / IP считают неудачные проверки; **двери отправки** (запрос кода, register, повторная отправка, запрос password-reset, ссылка-передача) тратят собственное per-IP-окно **60 / 15 мин / IP**. Per-user, per-ASN (общее для обоих видов дверей), CAPTCHA и SMS-бюджет не меняются. Механизм: `apps/api/src/auth/README.md` (раздел rate-limit).
+
 > **Обходы enumeration в Zitadel — operational note.** Собственная защита Zitadel «ignore unknown usernames» неоднократно обходилась (CVE-2024-41952 — флаг соблюдался непоследовательно; CVE-2025-57770 — страница «select account»; CVE-2026-23511 — endpoints password-reset + Login UI V2). Idempotent-response + rate-limit строки выше — наш backstop; дополнительно **пин на релиз Zitadel, пропатченный против всех трёх (≥ 4.9.1 / ≥ 3.4.6)** как часть Definition of Done (ADR-0001 §7–§8).
 
 ---

@@ -98,7 +98,7 @@ export class AuthController {
    */
   @Post("register")
   @Public()
-  @RateLimited()
+  @RateLimited({ door: "sending" })
   @TimingEqualized()
   @BotProtected("register")
   @HttpCode(200)
@@ -159,9 +159,11 @@ export class AuthController {
     // A successful login clears the origin's failure window (no lingering challenge)
     // and forgives the EARS-13 per-user rate-limit window for this identifier
     // (#222) — only the per-user window, keyed identically to how the guard keyed
-    // it; the per-IP / per-ASN windows are deliberately left intact.
+    // it. The per-IP window gets back only this request's own unit (#2684), so
+    // it counts failed verifications; the per-ASN window is left intact.
     this.loginChallenge.reset(ip);
     this.rateLimit.reset({ ip, identifier: dto.identifier });
+    this.rateLimit.refundIpUnit(ip);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -179,7 +181,7 @@ export class AuthController {
    */
   @Post("login/otp/request")
   @Public()
-  @RateLimited()
+  @RateLimited({ door: "sending" })
   @TimingEqualized()
   @BotProtected("otp-request")
   @HttpCode(200)
@@ -222,7 +224,7 @@ export class AuthController {
    */
   @Post("login/otp/handoff")
   @Public()
-  @RateLimited()
+  @RateLimited({ door: "sending" })
   @TimingEqualized()
   @HttpCode(200)
   @Authz({
@@ -297,6 +299,8 @@ export class AuthController {
     // A code sign-in is a successful login (EARS-13, #2614): forgive the per-user
     // window for this identifier exactly as the password login does.
     this.rateLimit.reset({ ip, identifier: dto.identifier });
+    // #2684: a successful verification gives back its own per-IP unit.
+    this.rateLimit.refundIpUnit(ip);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -421,6 +425,8 @@ export class AuthController {
     // the per-user window keyed on `email`, as the guard keyed it (EARS-13, #2614).
     const { cookie, body } = await this.auth.verify(dto, fingerprint);
     this.rateLimit.reset({ ip, identifier: dto.email });
+    // #2684: a successful verification gives back its own per-IP unit.
+    this.rateLimit.refundIpUnit(ip);
     reply.header("set-cookie", cookie);
     return body;
   }
@@ -440,7 +446,7 @@ export class AuthController {
    */
   @Post("verify/resend")
   @Public()
-  @RateLimited()
+  @RateLimited({ door: "sending" })
   @TimingEqualized()
   @BotProtected("verify-resend")
   @HttpCode(200)
@@ -465,7 +471,7 @@ export class AuthController {
    */
   @Post("password/reset")
   @Public()
-  @RateLimited()
+  @RateLimited({ door: "sending" })
   @TimingEqualized()
   @BotProtected("password-reset")
   @HttpCode(200)
@@ -521,6 +527,8 @@ export class AuthController {
     // Forgive the EARS-13 per-user window on success (#222), keyed identically to
     // the guard; mint the fresh session by setting its __Host- cookie.
     this.rateLimit.reset({ ip, identifier: dto.identifier });
+    // #2684: a successful verification gives back its own per-IP unit.
+    this.rateLimit.refundIpUnit(ip);
     reply.header("set-cookie", cookie);
     return body;
   }

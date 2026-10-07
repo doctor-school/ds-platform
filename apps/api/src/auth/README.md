@@ -381,6 +381,18 @@ gate touches no other call site:
   over `RateLimitService` (per-user 10/15 min, per-IP 20/15 min, per-ASN 100/h;
   the per-user window is forgiven on a successful login or reset-complete),
   on register/login/otp/verify/reset; a refusal is a generic `429`.
+  **The per-IP window splits by door** (#2684, EARS-13 amended): the
+  VERIFICATION doors (`login`, `login/otp`, `verify` on both storefronts,
+  `password/reset/complete`) keep `@RateLimited()` and the bare-address key, and
+  on success the handler calls `RateLimitService.refundIpUnit(ip)` beside
+  `reset(...)` — one unit back, never a clear, never credit on an empty window —
+  so 20/15 min counts FAILED verifications. The SENDING doors (`register` on
+  both storefronts, `login/otp/request`, `login/otp/handoff`, `verify/resend`,
+  `password/reset`) are `@RateLimited({ door: "sending" })` and consume their
+  own per-IP window under the `auth:sending` bucket, 60/15 min
+  (`AUTH_SENDING_DOOR_PER_IP_15MIN`, the congress-intake sizing). The per-ASN
+  key is not split (one window for both doors). `RATE_LIMIT_PER_IP_15MIN` sets
+  both per-IP ceilings.
   **What the windows do in the deployed system** (#1655) — the per-IP window is
   keyed on `request.ip`, which resolves to the REAL client: the Fastify adapter is
   constructed with `trustProxy` set to the trusted proxy addresses

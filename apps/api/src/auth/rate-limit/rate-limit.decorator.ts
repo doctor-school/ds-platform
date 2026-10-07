@@ -1,6 +1,7 @@
 import { SetMetadata } from "@nestjs/common";
 import {
   RATE_LIMITED_KEY,
+  type RateLimitDoor,
   type RateLimitedMarker,
 } from "./rate-limit.types.js";
 
@@ -16,14 +17,22 @@ import {
  *
  * `scope` (#1646) is optional and changes nothing for the argument-less form:
  * omitted, the source-address windows key on the address alone, so every 003
- * auth call site keeps consuming the ONE shared budget EARS-13 intends (an
- * attacker spraying identifiers across register / login / reset from a single
- * origin meets a single ceiling). A consumer OUTSIDE that surface passes its own
+ * verification door (login, code login, verify, reset-complete) consumes the ONE
+ * shared budget EARS-13 intends (an attacker spraying identifiers across those
+ * doors from a single origin meets a single ceiling of failed attempts). A consumer OUTSIDE that surface passes its own
  * tag and gets its own per-address bucket, so its traffic can neither exhaust
  * the auth budget nor be exhausted by it. A tag is a stable literal, not a
  * per-request value: it names the endpoint family, not the caller.
+ *
+ * `{ door: "sending" }` (#2684) marks a 003 auth door that SENDS (a code
+ * request, register, resend, reset request, hand-off redemption): its per-IP
+ * unit is counted in the sending doors' own window (60 / 15 min) instead of the
+ * verification window, which the argument-less form keeps and whose successes
+ * the handler refunds (`RateLimitService.refundIpUnit`).
  */
-export function RateLimited(scope?: string): MethodDecorator & ClassDecorator {
-  const marker: RateLimitedMarker = scope ?? true;
+export function RateLimited(
+  scopeOrDoor?: string | { door: RateLimitDoor },
+): MethodDecorator & ClassDecorator {
+  const marker: RateLimitedMarker = scopeOrDoor ?? true;
   return SetMetadata(RATE_LIMITED_KEY, marker);
 }

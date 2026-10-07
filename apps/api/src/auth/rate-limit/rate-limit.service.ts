@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET,
   RATE_LIMIT_CLOCK,
   RATE_LIMIT_THRESHOLDS,
   type Clock,
@@ -48,6 +49,12 @@ function scoped(scope: string | undefined, address: string): string {
  * **every applicable window has room**; a refused request consumes **nothing**
  * (so a single over-limit dimension cannot spuriously burn the others).
  *
+ * The per-IP window splits by auth door (#2684): a verification door keys it on
+ * the bare address and, on success, gives its own unit back
+ * ({@link refundIpUnit}), so that window counts failed verifications; a sending
+ * door keys it under its own bucket with its own ceiling. The per-ASN window is
+ * shared by both doors.
+ *
  * The source-address counters are keyed inside the caller's optional
  * {@link RateLimitContext.scope} bucket (#1646): unscoped — every 003 auth
  * endpoint — they share one budget per address exactly as before; a scoped
@@ -83,12 +90,19 @@ export class RateLimitService {
    */
   tryConsume(ctx: RateLimitContext): boolean {
     const t = this.now();
+    // #2684: an unscoped SENDING door keys its per-IP window under its own
+    // bucket (60 / 15 min); every other attempt keeps the caller's scope.
+    const ipBucket =
+      ctx.scope ??
+      (ctx.door === "sending"
+        ? AUTH_SENDING_DOOR_RATE_LIMIT_BUCKET
+        : undefined);
     const dims: Dimension[] = [
       {
         map: this.byIp,
-        key: scoped(ctx.scope, ctx.ip),
+        key: scoped(ipBucket, ctx.ip),
         windowMs: FIFTEEN_MIN_MS,
-        limit: this.perIpLimit(ctx.scope),
+        limit: this.perIpLimit(ipBucket),
       },
     ];
     if (ctx.identifier !== undefined) {
@@ -156,13 +170,30 @@ export class RateLimitService {
    * — clear the counter so a recovering user who just succeeded starts fresh. Only
    * the per-user dimension is cleared (keyed identically to {@link tryConsume}'s
    * lower-cased identifier); the per-IP and per-ASN windows are deliberately left
-   * intact, so a success cannot be used to refund an origin's / network's broader
-   * budget (an attacker spraying identifiers from one IP still hits the per-IP
-   * ceiling). An identifier-less context (no per-user key) is a no-op.
+   * intact here: a success gives back at most its OWN per-IP unit
+   * ({@link refundIpUnit}, #2684), never an origin's / network's broader budget
+   * (an attacker spraying identifiers from one IP still hits the per-IP ceiling
+   * of failed verifications). An identifier-less context (no per-user key) is a
+   * no-op.
    */
   reset(ctx: RateLimitContext): void {
     if (ctx.identifier === undefined) return;
     this.byUser.delete(ctx.identifier.toLowerCase());
+  }
+
+  /**
+   * EARS-13 (#2684): a VERIFICATION door that succeeded gives back the one
+   * per-IP unit its own request consumed, so the bare-address window counts
+   * failed verifications only. It is a refund of one unit, never a clear: the
+   * failures already in the window stay, so interleaving one valid account's
+   * successes cannot buy an origin extra failed guesses. The sending doors'
+   * window, the per-user window (see {@link reset}) and the per-ASN window are
+   * untouched; an empty or rolled-over window is left as it is (no credit).
+   */
+  refundIpUnit(ip: string): void {
+    const w = this.byIp.get(scoped(undefined, ip));
+    if (w === undefined || this.now() >= w.resetAtMs || w.count === 0) return;
+    w.count--;
   }
 
   /**

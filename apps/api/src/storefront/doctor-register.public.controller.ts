@@ -38,7 +38,8 @@ import { DoctorRegisterService } from "./doctor-register.service.js";
  *   to supply the token. Marking the handler now — rather than after #1558 —
  *   is what keeps the storefront door from being the one registration surface
  *   the gate does not cover.
- * - `@RateLimited()` + `@TimingEqualized()` — 003 EARS-16 is a TIMING property as
+ * - `@RateLimited({ door: "sending" })` + `@TimingEqualized()` — a sending door
+ *   (#2684, 60 / 15 min per address); 003 EARS-16 is a TIMING property as
  *   much as a body property: a faster refusal for an unknown email would be an
  *   existence oracle however identical the response body is.
  *
@@ -60,7 +61,7 @@ export class DoctorRegisterPublicController {
   /** `POST /v1/storefront/doctor/register` — the 021 `RegisterDoctor` command. */
   @Post("register")
   @Public()
-  @RateLimited()
+  @RateLimited({ door: "sending" })
   @TimingEqualized()
   @BotProtected("register")
   // 200, not 201: the response is deliberately identical for a created and an
@@ -111,6 +112,8 @@ export class DoctorRegisterPublicController {
     // `email` (003 EARS-13, #2614).
     const { cookie, body } = await this.doctorRegister.verify(dto, fingerprint);
     this.rateLimit.reset({ ip, identifier: dto.email });
+    // #2684: a successful verification gives back its own per-IP unit.
+    this.rateLimit.refundIpUnit(ip);
     reply.header("set-cookie", cookie);
     return body;
   }

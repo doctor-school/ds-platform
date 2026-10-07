@@ -1,5 +1,6 @@
 "use client";
 
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
 import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
@@ -13,14 +14,14 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
  * any of them.
  *
  * WHY length is a prop, not a constant: every mailed or texted code is six
- * upper-case letters and digits (003 EARS-29 amended — the one code step,
- * `CODE_STEP_LENGTH`), but the admin TOTP challenge is a digit code of its own.
- * Each is fixed, so each auto-submits the moment the last character lands.
+ * digits (003 EARS-29 amended, #2636 — the one code step, `CODE_STEP_LENGTH`),
+ * but the admin TOTP challenge is a digit code of its own length. Each is
+ * fixed, so each auto-submits the moment the last character lands.
  *
- * Char set per surface: every code Zitadel mails or texts is ALPHANUMERIC (e.g.
- * `PVDC3R`), so the widget must accept letters — it does, because we pass NO
- * `pattern` to `InputOTP` (input-otp only restricts input when a `pattern` is
- * given).
+ * Char set per surface: `charset="numeric"` (every mailed/texted code and the
+ * admin TOTP) passes input-otp's `REGEXP_ONLY_DIGITS` `pattern`, so a typed or
+ * pasted letter never reaches a cell. `"alphanumeric"` passes NO `pattern`
+ * (input-otp only restricts input when one is given) and upper-cases the value.
  *
  * #212 fix — the field must spread the FULL RHF `field` (name + ref + onBlur),
  * not just `value`/`onChange`. input-otp's controlled hidden input needs a real
@@ -49,14 +50,12 @@ export function OtpField<T extends FieldValues>({
   label: string;
   /**
    * Character set of the code — drives the MOBILE KEYBOARD the field requests
-   * (#1110). REQUIRED so no surface can silently inherit the wrong keypad:
-   *   • `"alphanumeric"` (every mailed/texted code, e.g. `PVDC3R`) → `inputMode="text"`
-   *     + `autoCapitalize="characters"` — a phone shows the FULL keyboard so the
-   *     letters are reachable, with uppercase key hints matching the UPPERCASE code.
-   *   • `"numeric"` (the admin TOTP, digits) → `inputMode="numeric"` — the digits-only keypad.
-   * WHY required, not defaulted: input-otp's `OTPInput` defaults `inputMode="numeric"`,
-   * so an omitted charset would silently pop the digit keypad on an alphanumeric code —
-   * exactly the prod bug #1110.
+   * (#1110) and the characters it accepts. REQUIRED so no surface can silently
+   * inherit the wrong one:
+   *   • `"numeric"` (every mailed/texted code and the admin TOTP) → `inputMode="numeric"`
+   *     — the digit keypad — plus the digits-only `pattern` (#2636).
+   *   • `"alphanumeric"` → `inputMode="text"` + `autoCapitalize="characters"` — the
+   *     full keyboard with uppercase key hints matching the upper-cased value.
    */
   charset: "alphanumeric" | "numeric";
   /**
@@ -74,21 +73,18 @@ export function OtpField<T extends FieldValues>({
           {...field}
           maxLength={length}
           autoComplete="one-time-code"
-          // #1110: the mobile keyboard the widget requests. input-otp's OTPInput
-          // defaults inputMode="numeric" (digits-only keypad); an alphanumeric
-          // code (PVDC3R) then has its letters unreachable on a phone.
-          // charset="alphanumeric" ⇒ text keyboard + uppercase key hints (matching
-          // the UPPERCASE code we normalize to below); "numeric" pins the digit keypad.
+          // #1110: the mobile keyboard the widget requests — the digit keypad for
+          // a numeric code, the full keyboard (uppercase hints) for alphanumeric.
           inputMode={charset === "alphanumeric" ? "text" : "numeric"}
           {...(charset === "alphanumeric"
             ? { autoCapitalize: "characters" as const }
-            : {})}
+            : // #2636: digits only — input-otp drops a non-matching keystroke and
+              // refuses a non-matching paste, so no letter ever fills a cell.
+              { pattern: REGEXP_ONLY_DIGITS })}
           value={field.value ?? ""}
-          // #1109: the reg / reset code Zitadel emits is UPPERCASE alphanumeric and
-          // its compare is case-sensitive — uppercase every keystroke so a doctor
-          // typing it lowercased still lands the correct value. A no-op for the
-          // digit TOTP, so it is safe to apply unconditionally. input-otp calls
-          // onChange with a raw string (not a DOM event).
+          // #1109: an alphanumeric value is upper-cased so a lowercase keystroke
+          // lands the case the code was issued in; a no-op for digits. input-otp
+          // calls onChange with a raw string (not a DOM event).
           onChange={(v: string) => field.onChange(v.toUpperCase())}
           {...(onComplete ? { onComplete } : {})}
         >

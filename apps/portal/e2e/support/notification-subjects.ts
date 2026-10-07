@@ -13,7 +13,7 @@
  *   8.quinquies, #878) stays IdP-sent. #177 locked the dev-stand IdP to
  *   Russian, so it renders with its Russian subject.
  *
- * Every branded subject LEADS with the dynamic code (`GX5AVU — код
+ * Every branded subject LEADS with the dynamic code (`482913 — код
  * подтверждения Doctor.School`), so the constants below are the STABLE
  * SUBSTRING after the code and callers match by `includes`, never equality.
  * Mirrors the api-side `apps/api/test/support/notification-subjects.ts`.

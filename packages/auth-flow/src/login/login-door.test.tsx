@@ -248,7 +248,7 @@ describe("021 EARS-3 (#2333): the post-sign-in landing is re-decided for the new
     await user.click(screen.getByTestId("otp-send"));
     await screen.findByTestId("otp-verify");
     await user.click(screen.getByRole("textbox"));
-    await user.keyboard("PVDC3R");
+    await user.keyboard("482913");
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/events"));
     expect(loginWithOtp).toHaveBeenCalledTimes(1);

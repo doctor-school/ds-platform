@@ -252,11 +252,11 @@ test.describe("021 EARS-19: bot protection on the registration and resend forms"
       page.waitForRequest(CONFIRM_ROUTE),
       // The slotted OTP field auto-submits on completion (#175), so filling
       // it IS the submit — the same way the portal drives its code fields.
-      page.locator('input[autocomplete="one-time-code"]').fill("ABC123"),
+      page.locator('input[autocomplete="one-time-code"]').fill("482913"),
     ]);
     expect(body(request)).toEqual({
       email: EMAIL,
-      code: "ABC123",
+      code: "482913",
       registration: expect.objectContaining({
         password: PASSWORD,
         medicalWorkerDeclaration: true,

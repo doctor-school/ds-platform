@@ -155,16 +155,16 @@ describe("OtpFocusScreen", () => {
     expect(screen.queryByTestId("challenge")).toBeNull();
   });
 
-  it("003 EARS-42: six alphanumeric cells — a text keyboard, upper-cased, one-time-code autofill", async () => {
+  it("003 EARS-42: six digit cells — the digit keypad, one-time-code autofill, letters refused (#2636)", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("maxlength", "6");
     expect(input).toHaveAttribute("autocomplete", "one-time-code");
-    expect(input).not.toHaveAttribute("inputmode", "numeric");
+    expect(input).toHaveAttribute("inputmode", "numeric");
     await user.click(input);
     await user.keyboard("ab12cd");
-    expect(input).toHaveValue("AB12CD");
+    expect(input).toHaveValue("12");
   });
 
   it("003 EARS-42: the heading is the card's — the step itself draws no title or sent-to line", () => {
@@ -309,13 +309,13 @@ describe("OtpFocusScreen", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("003 EARS-42: auto-submits (fires onComplete) once the sixth character lands", async () => {
+  it("003 EARS-42: auto-submits (fires onComplete) once the sixth digit lands", async () => {
     const onComplete = vi.fn();
     const user = userEvent.setup();
     render(<Harness onComplete={onComplete} />); // cooldown defaults to 0 (no interval)
     const input = screen.getByRole("textbox");
     await user.click(input);
-    await user.keyboard("A1B2C");
+    await user.keyboard("48291");
     expect(onComplete).not.toHaveBeenCalled();
     await user.keyboard("3");
     expect(onComplete).toHaveBeenCalledTimes(1);

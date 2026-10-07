@@ -237,11 +237,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       NOTIFICATION_SUBJECTS.verifyEmailOtp,
     );
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
-    // #175: the login-OTP input AUTO-SUBMITS once the final (6th) character
-    // lands — the same six cells as registration (003 EARS-42, #2555) — we fill
+    // #175: the login-OTP input AUTO-SUBMITS once the final (6th) digit
+    // lands — the same six cells as registration (003 EARS-42, #2636) — we fill
     // the code and do NOT click `otp-verify`; the flow must advance on its own
     // (the explicit button stays for a11y but is not exercised here).
-    expect(otpCode).toMatch(/^[A-Z0-9]{6}$/);
+    expect(otpCode).toMatch(/^\d{6}$/);
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
     await waitForAuthenticatedLanding(page);
@@ -434,9 +434,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       );
       expect(otpCode, "login OTP should reach the sink").toBeTruthy();
       // #175: auto-submit on completion (no `otp-verify` click) — same as the
-      // email-OTP journey above; the SMS code is the same six upper-alphanumeric
-      // characters (003 EARS-7 amended, #2555).
-      expect(otpCode).toMatch(/^[A-Z0-9]{6}$/);
+      // email-OTP journey above; the SMS code is the same six digits
+      // (003 EARS-7 amended, #2636).
+      expect(otpCode).toMatch(/^\d{6}$/);
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
@@ -586,7 +586,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     expect(body).toMatch(/уже зарегистрирован/);
     expect(body).toMatch(/Ваш пароль не изменился/);
     expect(body).not.toMatch(/\/login|\/reset|\/verify/);
-    const code = reRegistration!.Subject.match(/^([A-Z0-9]{6})\s+—/)?.[1];
+    const code = reRegistration!.Subject.match(/^(\d{6})\s+—/)?.[1];
     expect(code, "the code leads the subject").toBeTruthy();
 
     // EARS-41: that code, typed on the same step, signs the owner in.

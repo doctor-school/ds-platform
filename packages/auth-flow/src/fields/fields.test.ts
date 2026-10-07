@@ -60,10 +60,10 @@ describe("021 EARS-11: the registration form rules derive from the FieldSpec SSO
     );
   });
 
-  it("021 EARS-11.4: the confirmation code accepts a lowercase alphanumeric code", () => {
-    expect(resolveVerificationCode(DOCTOR_FIXTURE, "abc123")).toBeNull();
-    expect(resolveVerificationCode(DOCTOR_FIXTURE, "ABC123")).toBeNull();
-    for (const bad of ["abc12", "abc-12", undefined]) {
+  it("021 EARS-11.4: the confirmation code is exactly six digits (#2636)", () => {
+    expect(resolveVerificationCode(DOCTOR_FIXTURE, "482913")).toBeNull();
+    expect(resolveVerificationCode(DOCTOR_FIXTURE, " 482913 ")).toBeNull();
+    for (const bad of ["abc123", "ABC123", "48291", "4829134", "482-91", undefined]) {
       expect(resolveVerificationCode(DOCTOR_FIXTURE, bad)).toBe(
         COPY.code.invalid,
       );

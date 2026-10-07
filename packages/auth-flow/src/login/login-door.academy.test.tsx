@@ -215,7 +215,7 @@ describe("003 EARS-17 on-demand login protection", () => {
     act(() => captchaProps?.onToken("fresh-otp-token"));
     await screen.findByTestId("otp-verify");
 
-    await user.type(screen.getByRole("textbox"), "PVDC3R");
+    await user.type(screen.getByRole("textbox"), "482913");
     await waitFor(() => expect(loginWithOtp).toHaveBeenCalledTimes(1));
     expect(captchaProps?.requestKey).toBeNull();
   });
@@ -428,7 +428,7 @@ describe("005 EARS-2 guest-through-auth completion on the sign-in door", () => {
     await screen.findByTestId("otp-verify");
     const codeInput = screen.getByRole("textbox");
     await user.click(codeInput);
-    await user.keyboard("PVDC3R");
+    await user.keyboard("482913");
 
     await waitFor(() => {
       expect(loginWithOtp).toHaveBeenCalledTimes(1);
@@ -509,7 +509,7 @@ describe("008 EARS-5 sign-in drops the client Router Cache (#2281)", () => {
 
     await screen.findByTestId("otp-verify");
     await user.click(screen.getByRole("textbox"));
-    await user.keyboard("PVDC3R");
+    await user.keyboard("482913");
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(loginWithOtp).toHaveBeenCalledTimes(1);

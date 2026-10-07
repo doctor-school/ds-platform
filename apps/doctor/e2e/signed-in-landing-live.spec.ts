@@ -97,7 +97,7 @@ async function confirmationCode(
           (m.Subject ?? "").includes(VERIFY_SUBJECT),
       );
       // The branded subject leads with the code (#869).
-      const code = hit?.Subject?.match(/^([A-Z0-9]{4,12})\s+—/)?.[1];
+      const code = hit?.Subject?.match(/^(\d{6})\s+—/)?.[1];
       if (code) return code;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));

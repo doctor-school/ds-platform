@@ -397,11 +397,11 @@ describe("<LoginCard>", () => {
     ).toBeInTheDocument();
   });
 
-  it("003 EARS-42: one six-cell alphanumeric code — no eight-cell digits-only step", () => {
+  it("003 EARS-42: one six-cell digit code — no eight-cell step (#2636)", () => {
     setup({ sentIdentifier: "doc@example.com" });
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("maxlength", "6");
-    expect(input).not.toHaveAttribute("inputmode", "numeric");
+    expect(input).toHaveAttribute("inputmode", "numeric");
   });
 
   it("003 EARS-42: the SMS code step says «phone» and its code label", async () => {

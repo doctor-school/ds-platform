@@ -15,12 +15,12 @@ afterEach(cleanup);
  * feeding the `field` — and asserts the controlled-value contract the #212 fix
  * restored: typed input must land in the RHF value, the field must wire RHF's `ref`
  * to the underlying input (the missing wiring that left the slotted field
- * half-bound), the code may be ALPHANUMERIC, and a full-length code fires
+ * half-bound), the charset governs what reaches the value, and a full-length code fires
  * `onComplete` (the auto-submit path #211 must preserve for the now-slotted login).
  *
  * NOTE: jsdom has no layout engine, so it cannot reproduce the *browser-only*
  * rendering desync this bug surfaced as; these tests pin the JS contract (value
- * ingestion, ref wiring, alphanumeric, onComplete) that the fix makes robust. The
+ * ingestion, ref wiring, charset, onComplete) that the fix makes robust. The
  * live-browser proof on the dev-stand is the lead agent's verification step.
  */
 function SlottedHarness({
@@ -71,12 +71,17 @@ describe("OtpField variant=slotted", () => {
   });
 
   it("uppercases lowercase keystrokes so the RHF value matches the UPPERCASE Zitadel code (#1109)", async () => {
-    // The reg/reset code Zitadel emits is UPPERCASE alphanumeric and its compare is
-    // case-sensitive (#1109). A doctor typing the code in lowercase must still land
-    // an UPPERCASE value in the RHF field — the slotted variant normalizes on change.
+    // charset="alphanumeric" (#1109): a lowercase keystroke lands an UPPERCASE
+    // value in the RHF field — the field normalizes on change.
     const user = userEvent.setup();
     let latest = "";
-    render(<SlottedHarness length={6} onValue={(v) => (latest = v)} />);
+    render(
+      <SlottedHarness
+        length={6}
+        charset="alphanumeric"
+        onValue={(v) => (latest = v)}
+      />,
+    );
 
     const input = screen.getByRole("textbox");
     await user.click(input);
@@ -85,10 +90,16 @@ describe("OtpField variant=slotted", () => {
     expect(latest).toBe("PVDC3R");
   });
 
-  it("accepts the ALPHANUMERIC Zitadel reset / email-verify code", async () => {
+  it("accepts letters under charset=alphanumeric", async () => {
     const user = userEvent.setup();
     let latest = "";
-    render(<SlottedHarness length={6} onValue={(v) => (latest = v)} />);
+    render(
+      <SlottedHarness
+        length={6}
+        charset="alphanumeric"
+        onValue={(v) => (latest = v)}
+      />,
+    );
 
     const input = screen.getByRole("textbox");
     await user.click(input);
@@ -175,6 +186,54 @@ describe("OtpField variant=slotted", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("inputmode", "numeric");
     expect(input).not.toHaveAttribute("autocapitalize", "characters");
+  });
+
+  it("003 EARS-22: charset=numeric drops typed letters — only digits reach the value (#2636)", async () => {
+    // Every mailed/texted code is six digits (003 EARS-29 amended, #2636): the
+    // field must refuse a letter keystroke instead of filling a cell with it.
+    const user = userEvent.setup();
+    let latest = "";
+    render(
+      <SlottedHarness
+        length={6}
+        charset="numeric"
+        onValue={(v) => (latest = v)}
+      />,
+    );
+
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("12ab34");
+
+    expect(latest).toBe("1234");
+  });
+
+  it("003 EARS-22: charset=numeric refuses a pasted value carrying letters (#2636)", async () => {
+    const user = userEvent.setup();
+    let latest = "";
+    render(
+      <SlottedHarness
+        length={6}
+        charset="numeric"
+        onValue={(v) => (latest = v)}
+      />,
+    );
+
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.paste("PVDC3R");
+    expect(latest).toBe("");
+
+    await user.paste("482913");
+    expect(latest).toBe("482913");
+  });
+
+  it("003 EARS-22: charset=numeric asks for one-time-code autofill and the digit keypad (#2636)", () => {
+    render(<SlottedHarness length={6} charset="numeric" />);
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("autocomplete", "one-time-code");
+    expect(input).toHaveAttribute("inputmode", "numeric");
   });
 
   it("does not schedule input-otp's window-polling PWM timer (#366, jsdom teardown flake)", () => {

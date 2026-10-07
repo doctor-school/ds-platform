@@ -148,7 +148,7 @@ async function registerAndConfirm(page) {
   await tick(page, "register-partner-data");
   await page.getByTestId("register-submit").click();
   await page.getByTestId("verify-submit").waitFor();
-  await page.locator('input[autocomplete="one-time-code"]').fill("ABC123");
+  await page.locator('input[autocomplete="one-time-code"]').fill("482913");
   // 021 EARS-10 (amended 2026-09-17) — the accepted code navigates straight to
   // the эфир; there is no outcome card in between any more.
   await page.waitForURL(new RegExp(`/events/${LIVE}$`));

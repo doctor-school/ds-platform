@@ -10,7 +10,7 @@ import { useResendCountdown } from "./use-resend-countdown";
 
 /**
  * The one code every flow mails or texts (003 EARS-29 amended, #2555): six
- * characters, upper-case letters and digits. The step has no other length —
+ * digits (#2636). The step has no other length —
  * no eight-cell, digits-only step exists on any host (003 EARS-42).
  */
 export const CODE_STEP_LENGTH = 6;
@@ -39,9 +39,9 @@ export interface OtpFocusScreenTestIds {
  * props do not exist, so no surface can re-introduce the #227 papercut here.
  *
  * Copy-as-props (#235): every visible string is a prop; no copy lives in the
- * package. The code is entered into `<OtpField>`'s slotted alphanumeric
- * variant (text keyboard, upper-cased), and the app's guarded `onComplete`
- * auto-submits on the sixth character (003 EARS-22 amended).
+ * package. The code is entered into `<OtpField>`'s numeric charset (digit
+ * keypad, one-time-code autofill, letters refused — #2636), and the app's
+ * guarded `onComplete` auto-submits on the sixth digit (003 EARS-22 amended).
  *
  * Resend cooldown: the step owns a live countdown that (re)starts whenever the
  * `cooldownSeconds` VALUE changes or the `resendNonce` counter is bumped, so a
@@ -128,7 +128,7 @@ export function OtpFocusScreen<T extends FieldValues>({
         <OtpField
           field={field}
           length={CODE_STEP_LENGTH}
-          charset="alphanumeric"
+          charset="numeric"
           label={codeLabel}
           onComplete={onComplete}
         />

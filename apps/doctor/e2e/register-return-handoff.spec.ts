@@ -83,7 +83,7 @@ async function completeRegistrationFromHere(page: Page) {
   await expect(page.getByTestId("verify-submit")).toBeVisible();
   // The slotted OTP field auto-submits on completion (#175), so filling it IS
   // the submit; the code itself is never checked here.
-  await page.locator("input[autocomplete=\"one-time-code\"]").fill("ABC123");
+  await page.locator("input[autocomplete=\"one-time-code\"]").fill("482913");
   // 021 EARS-10 (amended 2026-09-17) — the accepted code NAVIGATES; there is no
   // outcome card to wait for, so the confirmation surface leaving the DOM is
   // what says the journey completed.

@@ -101,7 +101,7 @@ import { VerifyEntry } from "./verify-entry";
 
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
-const CODE = "PVDC3R";
+const CODE = "482913";
 const COPY = resolveAuthFlowCopy(ACADEMY_FIXTURE).verify;
 
 beforeEach(() => {

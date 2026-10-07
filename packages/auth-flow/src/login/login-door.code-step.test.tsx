@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * `<OtpFocusScreen>` the registration confirmation draws. Once a code was sent
  * the card heading and description name the channel and the address exactly
  * as typed (#2607 — the visitor's own input, never masked),
- * the method tabs are gone, the field takes six letters-or-digits, and
+ * the method tabs are gone, the field takes six digits (#2636), and
  * «← Изменить способ» returns to the request form. Run over BOTH hosts: the
  * step is package behaviour, never a host branch.
  *
@@ -95,29 +95,32 @@ describe("003 EARS-42: sign-in by code shows the one code step", () => {
   );
 
   it.each(HOSTS)(
-    "003 EARS-42: on %s the code field takes six letters-or-digits, typed as text, never a numeric pad",
+    "003 EARS-42: on %s the code field takes six digits on the digit keypad and refuses letters",
     async (_host, config) => {
-      await sendEmailCode(config);
+      const user = await sendEmailCode(config);
 
       const field = screen.getByRole("textbox");
       expect(field).toHaveAttribute("maxlength", "6");
-      expect(field).toHaveAttribute("inputmode", "text");
+      expect(field).toHaveAttribute("inputmode", "numeric");
       expect(field).toHaveAttribute("autocomplete", "one-time-code");
+      await user.click(field);
+      await user.keyboard("ab");
+      expect(field).toHaveValue("");
     },
   );
 
   it.each(HOSTS)(
-    "003 EARS-42: on %s the sixth character submits the alphanumeric code on the channel it was sent by",
+    "003 EARS-42: on %s the sixth digit submits the code on the channel it was sent by",
     async (_host, config) => {
       const user = await sendEmailCode(config);
 
       await user.click(screen.getByRole("textbox"));
-      await user.keyboard("PVDC3R");
+      await user.keyboard("482913");
 
       await waitFor(() => expect(loginWithOtp).toHaveBeenCalledTimes(1));
       expect(loginWithOtp).toHaveBeenCalledWith({
         identifier: EMAIL,
-        code: "PVDC3R",
+        code: "482913",
         channel: "email",
       });
     },

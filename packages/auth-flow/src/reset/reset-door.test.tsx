@@ -100,7 +100,7 @@ import {
 import { ResetDoor } from "./reset-door";
 
 const IDENTIFIER = "doctor@clinic.ru";
-const RESET_CODE = "PVDC3R";
+const RESET_CODE = "482913";
 const NEW_PASSWORD = "Sup3r$ecretPw!9";
 
 beforeEach(() => {

@@ -188,9 +188,8 @@ export function registerFieldHint(name: AuthFlowFieldName): string | null {
  * Validates a typed confirmation code against the `code` FieldSpec, returning
  * this host's RU message or `null` when it passes.
  *
- * Case-insensitive by contract (LD-9/LD-1): the widget normalises the value to
- * upper case and the 003 engine normalises again server-side, so a
- * lowercase-typed code is a valid code and must not be refused here.
+ * Six digits by contract (021 EARS-11, #2636): the same `VERIFY_CODE_PATTERN`
+ * the BFF enforces, so a value the server would refuse is refused here first.
  */
 export function resolveVerificationCode(
   config: AuthFlowHostConfig,

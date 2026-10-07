@@ -38,13 +38,13 @@ const GONE = "udalennyy-efir";
 const EMAIL = "doctor@clinic.ru";
 const PASSWORD = "correct horse battery";
 /** A code the double accepts — any code but {@link REFUSED_CODE}. */
-const CODE = "ABC123";
+const CODE = "482913";
 /**
  * The code `e2e/support/return-context-api.mjs` answers with the generic 400
  * of a wrong, expired or used code (003 EARS-16/41). Byte-identical to
  * `REFUSED_CODE` in that module; it is sent from here and only from here.
  */
-const REFUSED_CODE = "NOPE42";
+const REFUSED_CODE = "000000";
 
 /**
  * The canonical gate hand-off URL, built the way the producer builds it

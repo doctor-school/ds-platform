@@ -122,10 +122,10 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "auth.dc.html": {
-      "sha256": "77e9afc0d4dab8203e0d04c9b58e6c03958ea060a4348d95328cb3dc0960e25c",
-      "pulledAt": "2026-10-06T06:19:50.839Z",
+      "sha256": "57f9a97c606c8898f0ed890d0499a785e5ffbce2fa0353f96f737a334fe16691",
+      "pulledAt": "2026-10-07T03:07:30.934Z",
       "remotePath": "auth.dc.html",
-      "note": "2026-10-06 owner redraw via Claude Design, #2615: sign-in tabs «Пароль» ↔ «По коду» carry the typed email/phone both ways, a phone value preselects the SMS channel, password and errors are not carried; earlier 2026-10-06: reset «Новый пароль» resend note is enumeration-safe (#2408, #2607); 2026-10-05: every code step shows the typed email/phone in full, long addresses wrap (#2607); ghost text buttons keep their highlight inside the content column (#2554)"
+      "note": "2026-10-07 owner redraw via Claude Design: every code step takes six digits — cells inputmode numeric, pattern [0-9]*, no auto-capitals, letters dropped, a pasted code fills the cells, validation ^[0-9]{6}$ (six-digit codes, owner decision 2026-10-06); earlier: 2026-10-06 owner redraw via Claude Design, #2615: sign-in tabs «Пароль» ↔ «По коду» carry the typed email/phone both ways, a phone value preselects the SMS channel, password and errors are not carried; earlier 2026-10-06: reset «Новый пароль» resend note is enumeration-safe (#2408, #2607); 2026-10-05: every code step shows the typed email/phone in full, long addresses wrap (#2607); ghost text buttons keep their highlight inside the content column (#2554)"
     },
     "doctor-cabinet.dc.html": {
       "sha256": "767892897620823bbf623c3a7b9e63a790e1a422725646997003eee47b7bb915",

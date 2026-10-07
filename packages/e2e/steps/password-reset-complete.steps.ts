@@ -291,9 +291,9 @@ Then(
       body.message === "the request could not be completed",
       "generic reset rejection",
     ).toBe(true);
-    await expect(reset.getByTestId("reset-error")).toHaveText(
-      "Код не подошёл или пароль отклонён.",
-    );
+    await expect
+      .poll(() => reset.getByTestId("reset-error").ariaSnapshot())
+      .toBe("- alert: Код не подошёл или пароль отклонён.");
     expect(new URL(reset.url()).pathname).toBe("/reset");
     await expect(
       reset.locator('input[autocomplete="one-time-code"]'),

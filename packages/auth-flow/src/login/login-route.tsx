@@ -97,9 +97,13 @@ export async function LoginRoute({
   // the upstream эфир read, because a NON-gate arrival's landing is decided by
   // the arrival rule alone and that round-trip would answer a question nobody
   // asks. A gate arrival genuinely needs both facts and pays for both.
+  // 003 EARS-44 (#2659) — a well-formed hand-off reference is the exception: the
+  // link names ONE account, maybe not this session's, so the door mounts and
+  // the api decides (same account ⇒ the carried target, another ⇒ the code).
   const auth = await resolveServerAuth(requestHeaders);
   const authenticated = auth.status === "doctor";
-  if (authenticated && !landingTarget) {
+  const carriesHandoff = handoffRef !== null;
+  if (authenticated && !landingTarget && !carriesHandoff) {
     guardAuthRoute({
       authenticated,
       pathname: config.routes.login,
@@ -157,6 +161,7 @@ export async function LoginRoute({
     pathname: config.routes.login,
     routes: config.routes,
     landing,
+    carriesHandoff,
   });
 
   const { panel, plate } = returnContextSlots({
@@ -182,6 +187,9 @@ export async function LoginRoute({
         returnContextPlate={plate}
         defaultMethod={defaultMethod}
         handoffRef={handoffRef}
+        // #2659 — only a hand-off link reaches a signed-in visitor here; the
+        // door leaves /login for the landing unless the code step is needed.
+        signedIn={authenticated}
       />
     </AuthShell>
   );

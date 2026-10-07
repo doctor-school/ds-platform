@@ -76,6 +76,7 @@ afterEach(cleanup);
 function renderDoor(
   config: typeof DOCTOR_FIXTURE | typeof ACADEMY_FIXTURE,
   handoffRef: string | null = REF,
+  signedIn = false,
 ) {
   return render(
     <StrictMode>
@@ -85,6 +86,7 @@ function renderDoor(
         returnTo="/account"
         defaultMethod="otp"
         handoffRef={handoffRef}
+        signedIn={signedIn}
       />
     </StrictMode>,
   );
@@ -215,5 +217,58 @@ describe("003 EARS-44: /login redeems the Congress hand-off into the code step",
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * #2659 — the link reaches a browser that already holds a session. The api
+ * compares the reference's account with that session: the same account answers
+ * `already_signed_in` (no code) and the door leaves for the carried landing;
+ * another account answers `otp_sent` and the ordinary code step renders, whose
+ * sign-in replaces the session. A refused reference sends a signed-in visitor
+ * to the landing too — the door is never left standing for them (#1955).
+ */
+describe("003 EARS-44 (#2659): a hand-off link opened while signed in", () => {
+  it.each(HOSTS)(
+    "003 EARS-44: on %s the SAME account goes straight to the carried landing, with no code step",
+    async (_host, config) => {
+      redeemLoginHandoff.mockResolvedValue({ status: "already_signed_in" });
+
+      renderDoor(config, REF, true);
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalled();
+      expect(redeemLoginHandoff).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("otp-verify")).toBeNull();
+      expect(requestOtp).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(HOSTS)(
+    "003 EARS-44: on %s ANOTHER account gets the ordinary code step for the reference's address",
+    async (_host, config) => {
+      redeemLoginHandoff.mockResolvedValue({
+        status: "otp_sent",
+        identifier: EMAIL,
+      });
+
+      renderDoor(config, REF, true);
+
+      await screen.findByTestId("otp-verify");
+      expect(screen.getByText(EMAIL).parentElement).toHaveTextContent(
+        `Мы отправили код на ${EMAIL}.`,
+      );
+      expect(push).not.toHaveBeenCalled();
+    },
+  );
+
+  it("003 EARS-44: a refused reference sends a signed-in visitor to the landing instead of the form", async () => {
+    redeemLoginHandoff.mockResolvedValue({ status: "handoff_refused" });
+
+    renderDoor(DOCTOR_FIXTURE, REF, true);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
+    expect(screen.queryByTestId("otp-verify")).toBeNull();
   });
 });

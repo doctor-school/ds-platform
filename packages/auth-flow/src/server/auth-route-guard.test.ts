@@ -42,6 +42,31 @@ describe("003 EARS-28 shared signed-in auth-route guard", () => {
     }
   });
 
+  it("003 EARS-44 (#2659): a /login request carrying a hand-off reference is rendered to an authenticated visitor, so the door can redeem it", () => {
+    expect(
+      resolveAuthRouteGuard({
+        authenticated: true,
+        pathname: "/login",
+        routes,
+        landing: "/account/congress",
+        carriesHandoff: true,
+      }),
+    ).toEqual({ action: "render" });
+  });
+
+  it("003 EARS-44 (#2659): the hand-off exemption opens /login only — every other guarded route still redirects", () => {
+    for (const pathname of ["/register", "/verify"]) {
+      expect(
+        resolveAuthRouteGuard({
+          authenticated: true,
+          pathname,
+          routes,
+          carriesHandoff: true,
+        }),
+      ).toEqual({ action: "redirect", to: "/account" });
+    }
+  });
+
   it("003 EARS-28.3: /reset stays open to an authenticated visitor — the exemption is the reset route", () => {
     expect(
       resolveAuthRouteGuard({

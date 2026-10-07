@@ -66,6 +66,14 @@ import {
 
 type Db = DrizzleHandle["db"];
 
+/**
+ * 003 EARS-44 — what a hand-off reference resolves to: the address its code
+ * goes to, the requester's own account already signed in (#2659), or `null`
+ * for every refused reference alike.
+ */
+export type LoginHandoffResolution =
+  { kind: "send"; identifier: string } | { kind: "already_signed_in" } | null;
+
 // One generic message for every register/verify failure. The specific reason
 // (duplicate, bad code, missing consent) never reaches the client — it would be
 // an enumeration / oracle channel (EARS-16); reasons live in the audit ledger
@@ -263,9 +271,29 @@ export class AuthService {
    * refused reference — missing, malformed, unknown, expired, exhausted — and
    * for an account that no longer exists, indistinguishably; the caller answers
    * all of them with the one fallback. The reference is never logged.
+   *
+   * #2659 — `sessionSub` is the subject of the session the request already
+   * carries, if any. When a LIVE reference names that very account the answer
+   * is `already_signed_in`: nothing is sent, so no redemption is counted (the
+   * store is only peeked). Any other session — or none — takes the ordinary
+   * redemption above, so the code goes to the reference's own account.
    */
-  async resolveLoginHandoff(ref: string | undefined): Promise<string | null> {
+  async resolveLoginHandoff(
+    ref: string | undefined,
+    sessionSub?: string,
+  ): Promise<LoginHandoffResolution> {
     if (ref === undefined) return null;
+    if (sessionSub !== undefined) {
+      const live = await this.handoffs.peek(ref);
+      if (live !== null) {
+        const [owner] = await this.db
+          .select({ sub: users.zitadelSub })
+          .from(users)
+          .where(eq(users.id, live.accountId))
+          .limit(1);
+        if (owner?.sub === sessionSub) return { kind: "already_signed_in" };
+      }
+    }
     const entry = await this.handoffs.redeem(ref);
     if (entry === null) return null;
     const [row] = await this.db
@@ -273,7 +301,7 @@ export class AuthService {
       .from(users)
       .where(eq(users.id, entry.accountId))
       .limit(1);
-    return row ? entry.identifier : null;
+    return row ? { kind: "send", identifier: entry.identifier } : null;
   }
 
   /**

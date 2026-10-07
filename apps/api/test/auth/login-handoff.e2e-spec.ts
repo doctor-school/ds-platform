@@ -156,18 +156,53 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     async function redeem(
       ref: unknown,
+      cookie?: string,
     ): Promise<{ status: number; body: unknown; ms: number }> {
       const t0 = performance.now();
       const res = await h.app.inject({
         method: "POST",
         url: "/v1/auth/login/otp/handoff",
         payload: ref === undefined ? {} : { ref },
+        ...(cookie ? { headers: { cookie } } : {}),
       });
       return {
         status: res.statusCode,
         body: res.json(),
         ms: performance.now() - t0,
       };
+    }
+
+    /** Sign `email` in with its code; returns the session cookie pair (`name=value`). */
+    async function signIn(email: string, cookie?: string): Promise<string> {
+      const request = await h.app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/request",
+        headers: CAPTCHA,
+        payload: { identifier: email, channel: "email" },
+      });
+      expect(request.statusCode).toBe(200);
+      const res = await h.app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp",
+        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
+        ...(cookie ? { headers: { cookie } } : {}),
+      });
+      expect(res.statusCode).toBe(200);
+      const setCookie = res.headers["set-cookie"];
+      const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+      return String(raw).split(";")[0]!;
+    }
+
+    /** The session subject `cookie` resolves to, or the status when it does not. */
+    async function sessionSub(cookie: string): Promise<string | number> {
+      const res = await h.app.inject({
+        method: "GET",
+        url: "/v1/auth/session",
+        headers: { cookie },
+      });
+      return res.statusCode === 200
+        ? (res.json() as { sub: string }).sub
+        : res.statusCode;
     }
 
     beforeAll(async () => {
@@ -318,6 +353,70 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const { ref } = await accountWithReference("opaque", true);
       expect(ref).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(h.store.storedKeys().join()).not.toContain(ref);
+    });
+
+    it("003 EARS-44: signed in as the account the reference names, the answer is already_signed_in, no code is sent and no redemption is counted (#2659)", async () => {
+      const { email, ref } = await accountWithReference("same-account", true);
+      const cookie = await signIn(email);
+      clearMail();
+
+      for (let i = 0; i < 4; i++) {
+        expect(await redeem(ref, cookie)).toMatchObject({
+          status: 200,
+          body: { status: "already_signed_in" },
+        });
+      }
+      expect(h.mailer.loginCodeEmails).toEqual([]);
+      expect(h.mailer.verificationCodeEmails).toEqual([]);
+
+      // None of the four counted: all three redemptions are still there.
+      for (let i = 1; i <= 3; i++) {
+        expect((await redeem(ref)).body).toEqual({
+          status: "otp_sent",
+          identifier: email,
+        });
+      }
+    });
+
+    it("003 EARS-44: signed in as ANOTHER account, the code goes to the reference's account and its sign-in replaces the other session (#2659)", async () => {
+      const other = await accountWithReference("other-x", true);
+      const owner = await accountWithReference("owner-y", true);
+      const otherCookie = await signIn(other.email);
+      const otherSub = await sessionSub(otherCookie);
+      clearMail();
+
+      expect(await redeem(owner.ref, otherCookie)).toMatchObject({
+        status: 200,
+        body: { status: "otp_sent", identifier: owner.email },
+      });
+      expect(h.mailer.loginCodeEmails.map((m) => m.to)).toEqual([owner.email]);
+
+      const ownerCookie = await signIn(owner.email, otherCookie);
+      const ownerSub = await sessionSub(ownerCookie);
+      expect(typeof ownerSub).toBe("string");
+      expect(ownerSub).not.toBe(otherSub);
+      // The session the browser held before the code is gone, not orphaned.
+      expect(await sessionSub(otherCookie)).toBe(401);
+    });
+
+    it("003 EARS-44: a refused reference answers the one fallback whether or not a session is present (#2659)", async () => {
+      const { email, ref } = await accountWithReference(
+        "refused-signed-in",
+        true,
+      );
+      for (let i = 0; i < 3; i++) await redeem(ref);
+      const cookie = await signIn(email);
+      clearMail();
+
+      expect(await redeem(ref, cookie)).toMatchObject({
+        status: 200,
+        body: FALLBACK,
+      });
+      expect(await redeem("Y".repeat(43), cookie)).toMatchObject({
+        status: 200,
+        body: FALLBACK,
+      });
+      expect(h.mailer.loginCodeEmails).toEqual([]);
     });
   },
 );

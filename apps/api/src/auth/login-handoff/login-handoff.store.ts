@@ -32,6 +32,14 @@ export interface LoginHandoffStore {
    * exhausted one — indistinguishably.
    */
   redeem(ref: string): Promise<LoginHandoffEntry | null>;
+  /**
+   * Read `ref` WITHOUT counting a redemption (#2659): the same entry
+   * {@link redeem} would name while it is still live (known hash, within the
+   * TTL, a redemption left), `null` otherwise — indistinguishably. Used only to
+   * tell whether the requester is already signed in as the account it names,
+   * which sends nothing and so spends nothing.
+   */
+  peek(ref: string): Promise<LoginHandoffEntry | null>;
 }
 
 /** What a live reference names: the account and the address as typed at sign-up. */
@@ -103,6 +111,26 @@ if n > tonumber(ARGV[1]) then return false end
 return redis.call('HMGET', KEYS[1], 'accountId', 'identifier')
 `;
 
+/**
+ * Peek: the entry while the key exists and a redemption is left; never creates,
+ * bumps or extends anything.
+ */
+const PEEK_SCRIPT = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return false end
+local n = tonumber(redis.call('HGET', KEYS[1], 'redemptions'))
+if n >= tonumber(ARGV[1]) then return false end
+return redis.call('HMGET', KEYS[1], 'accountId', 'identifier')
+`;
+
+/** Map a script's `HMGET` reply to an entry; anything else is `null`. */
+function entryFromReply(reply: unknown): LoginHandoffEntry | null {
+  if (!Array.isArray(reply)) return null;
+  const [accountId, identifier] = reply as unknown[];
+  return typeof accountId === "string" && typeof identifier === "string"
+    ? { accountId, identifier }
+    : null;
+}
+
 /** Redis-backed {@link LoginHandoffStore} — the production binding. */
 export class RedisLoginHandoffStore implements LoginHandoffStore {
   constructor(private readonly redis: HandoffRedisLike) {}
@@ -128,11 +156,19 @@ export class RedisLoginHandoffStore implements LoginHandoffStore {
       handoffKey(ref),
       LOGIN_HANDOFF_MAX_REDEMPTIONS,
     );
-    if (!Array.isArray(reply)) return null;
-    const [accountId, identifier] = reply as unknown[];
-    return typeof accountId === "string" && typeof identifier === "string"
-      ? { accountId, identifier }
-      : null;
+    return entryFromReply(reply);
+  }
+
+  async peek(ref: string): Promise<LoginHandoffEntry | null> {
+    if (!isWellFormedHandoffReference(ref)) return null;
+    return entryFromReply(
+      await this.redis.eval(
+        PEEK_SCRIPT,
+        1,
+        handoffKey(ref),
+        LOGIN_HANDOFF_MAX_REDEMPTIONS,
+      ),
+    );
   }
 }
 
@@ -177,6 +213,22 @@ export class InMemoryLoginHandoffStore implements LoginHandoffStore {
     entry.redemptions += 1;
     return Promise.resolve(
       entry.redemptions > LOGIN_HANDOFF_MAX_REDEMPTIONS
+        ? null
+        : { accountId: entry.accountId, identifier: entry.identifier },
+    );
+  }
+
+  peek(ref: string): Promise<LoginHandoffEntry | null> {
+    if (!isWellFormedHandoffReference(ref)) return Promise.resolve(null);
+    const key = handoffKey(ref);
+    const entry = this.entries.get(key);
+    if (!entry) return Promise.resolve(null);
+    if (this.now() >= entry.expiresAtMs) {
+      this.entries.delete(key);
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(
+      entry.redemptions >= LOGIN_HANDOFF_MAX_REDEMPTIONS
         ? null
         : { accountId: entry.accountId, identifier: entry.identifier },
     );

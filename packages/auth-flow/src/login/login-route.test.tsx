@@ -797,4 +797,40 @@ describe("003 EARS-44: /login hands a well-formed hand-off reference to the door
 
     expect(await handoffOf(DOCTOR_FIXTURE, { handoff: REF })).toBeNull();
   });
+
+  for (const [host, config] of [
+    ["doctor", DOCTOR_FIXTURE],
+    ["Academy", ACADEMY_FIXTURE],
+  ] as const) {
+    it(`003 EARS-44 (#2659): on the ${host} host, a SIGNED-IN visitor with a hand-off link gets the door (no redirect), handed the reference, the carried landing and the signed-in flag`, async () => {
+      resolveServerAuth.mockResolvedValue(DOCTOR);
+
+      const door = (await doorOf(config, {
+        method: "code",
+        handoff: REF,
+        returnTo: "/account/congress",
+      })) as unknown as ReactElement<{
+        handoffRef?: string | null;
+        landing: string;
+        signedIn?: boolean;
+      }>;
+
+      expect(redirect).not.toHaveBeenCalled();
+      expect(door.props.handoffRef).toBe(REF);
+      expect(door.props.landing).toBe("/account/congress");
+      expect(door.props.signedIn).toBe(true);
+    });
+  }
+
+  it("003 EARS-44 (#2659): a signed-in visitor with a MALFORMED reference is still sent off /login (#1955)", async () => {
+    resolveServerAuth.mockResolvedValue(DOCTOR);
+
+    expect(
+      await landingOf(DOCTOR_FIXTURE, {
+        method: "code",
+        handoff: "not-a-reference",
+        returnTo: "/account/congress",
+      }),
+    ).toBe("/account/congress");
+  });
 });

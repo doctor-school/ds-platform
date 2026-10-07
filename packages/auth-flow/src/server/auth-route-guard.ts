@@ -10,12 +10,15 @@ import {
  * 26-28, Q3; #2027 PR 1.4).
  *
  * The RULE is #675: a visitor who already holds a session must not be able to
- * re-walk the register/verify/login flow, and must never be shown an auth form.
- * `/reset` is the deliberate exemption 003 EARS-28 pins - the `/account`
+ * re-walk the register/verify/login flow, and is not shown an auth form, with
+ * two deliberate exemptions. `/reset` is the first, pinned by 003 EARS-28 - the `/account`
  * change-password action is a handoff to the existing reset flow, so a signed-in
  * doctor has to be able to complete it there (completing a reset revokes all
  * sessions and auto-logs-in with the new password, EARS-12, so the authenticated
  * pass through `/reset` ends in a coherent state and nothing is re-walked).
+ * The second is `/login` carrying a well-formed `handoff` reference (003
+ * EARS-44): the hand-off link must reach its door even when another account is
+ * signed in, and the door itself decides same-account vs other-account.
  *
  * What #2027 changes is WHERE the decision is taken. The Academy decided it in a
  * client `useEffect` that read `GET /v1/auth/session` after mount, which means
@@ -48,6 +51,14 @@ export type AuthRouteGuardInput = {
    * back to `routes.account`, which is the #675 destination.
    */
   readonly landing?: string | null;
+  /**
+   * 003 EARS-44 (#2659) — the request is `/login` carrying a well-formed
+   * Congress hand-off reference. Such a link is addressed to ONE account, which
+   * may not be the one this browser is signed in as, so the door must mount and
+   * let the api decide (same account ⇒ straight to the target; another ⇒ the
+   * code step, whose sign-in replaces the session). Opens `routes.login` only.
+   */
+  readonly carriesHandoff?: boolean;
 };
 
 /**
@@ -67,8 +78,9 @@ function samePath(a: string, b: string): boolean {
  * A guest is always rendered: the guard withholds nothing from the people the
  * auth surfaces exist for. An authenticated visitor is rendered only the routes
  * `authenticatedAllowedRoutes` derives - the host's reset route, for the
- * EARS-28 reason above; everything else sends them to the resolved landing, and
- * to `routes.account` when there is none.
+ * EARS-28 reason above - plus the login route when `carriesHandoff` (003
+ * EARS-44, the caller has validated the reference); everything else sends them
+ * to the resolved landing, and to `routes.account` when there is none.
  *
  * The exemption is package MECHANICS derived from the route table (#2443), not a
  * host list: a host that serves its reset flow elsewhere carries the exemption
@@ -82,6 +94,9 @@ export function resolveAuthRouteGuard(
     samePath(allowed, input.pathname),
   );
   if (exempt) return { action: "render" };
+  if (input.carriesHandoff && samePath(input.routes.login, input.pathname)) {
+    return { action: "render" };
+  }
   return { action: "redirect", to: input.landing ?? input.routes.account };
 }
 

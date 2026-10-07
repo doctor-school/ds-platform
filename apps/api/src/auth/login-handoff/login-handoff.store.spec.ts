@@ -100,4 +100,42 @@ describe("login hand-off store (003 EARS-44)", () => {
     expect(await store.redeem("B".repeat(43))).toBeNull();
     expect(round).toBe(1);
   });
+
+  it("003 EARS-44: peeking a live reference names its account without counting a redemption (#2659)", async () => {
+    const store = new InMemoryLoginHandoffStore();
+    const ref = await store.mint(ACCOUNT, TYPED);
+    for (let i = 0; i < 5; i++) expect(await store.peek(ref)).toEqual(ENTRY);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
+    expect(await store.redeem(ref)).toEqual(ENTRY);
+    // Exhausted: a peek refuses it exactly as the fourth redemption does.
+    expect(await store.peek(ref)).toBeNull();
+  });
+
+  it("003 EARS-44: peeking an expired, unknown or malformed reference answers null and leaves no state (#2659)", async () => {
+    let t = 1_000_000;
+    const store = new InMemoryLoginHandoffStore(() => t);
+    const ref = await store.mint(ACCOUNT, TYPED);
+    t += LOGIN_HANDOFF_TTL_SECONDS * 1000;
+    expect(await store.peek(ref)).toBeNull();
+    expect(await store.peek("A".repeat(43))).toBeNull();
+    expect(await store.peek("short")).toBeNull();
+    expect(store.storedKeys()).toEqual([]);
+  });
+
+  it("003 EARS-44: the Redis adapter peeks on the hash with the ceiling and never the reference (#2659)", async () => {
+    const calls: { numKeys: number; args: (string | number)[] }[] = [];
+    const redis: HandoffRedisLike = {
+      eval: (_script, numKeys, ...args) => {
+        calls.push({ numKeys, args });
+        return Promise.resolve([ACCOUNT, TYPED]);
+      },
+    };
+    const store = new RedisLoginHandoffStore(redis);
+    const ref = "C".repeat(43);
+    expect(await store.peek(ref)).toEqual(ENTRY);
+    expect(calls).toEqual([{ numKeys: 1, args: [handoffKey(ref), 3] }]);
+    expect(await store.peek("short")).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
 });

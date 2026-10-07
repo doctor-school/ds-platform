@@ -120,6 +120,12 @@ export type LoginDoorProps = {
    * for the returned address, a refused one leaves the EARS-43 state.
    */
   handoffRef?: string | null;
+  /**
+   * #2659 — the visitor already holds a session. Only a hand-off link mounts
+   * the door for them; once the reference is answered they leave for the
+   * landing unless it needs the code step (a link for another account).
+   */
+  signedIn?: boolean;
 };
 
 /** EARS-5 — the identifier box this host serves, plus the length-only password rule. */
@@ -256,6 +262,7 @@ export function LoginDoor({
   returnContextPlate,
   defaultMethod = "password",
   handoffRef = null,
+  signedIn = false,
 }: LoginDoorProps) {
   const router = useRouter();
   const { errors, login } = resolveAuthFlowCopy(config);
@@ -448,10 +455,21 @@ export function LoginDoor({
     setHandoffPending(true);
     authClient
       .redeemLoginHandoff({ ref: handoffRef })
-      .then((answer) => {
-        if (answer.status !== "otp_sent") return;
-        setSentIdentifier(answer.identifier);
-        setResendNonce(0);
+      .then(async (answer) => {
+        if (answer.status === "otp_sent") {
+          setSentIdentifier(answer.identifier);
+          setResendNonce(0);
+          return;
+        }
+        // #2659 — signed in already: the reference's own account answers
+        // `already_signed_in`, and a refused reference has nothing to sign in
+        // to, so either way the door is not for this visitor (#1955) — they
+        // go where a sign-in would have taken them. A guest keeps the EARS-43
+        // state on a refusal.
+        if (answer.status === "already_signed_in" || signedIn) {
+          router.push(await completeAfterSignIn());
+          router.refresh();
+        }
       })
       .catch((err: unknown) =>
         setOtpRequestError(authErrorMessage(err, errors, failed.otpRequest)),

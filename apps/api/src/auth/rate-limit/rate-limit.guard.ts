@@ -63,8 +63,8 @@ export class RateLimitGuard implements CanActivate {
       ip: request.ip ?? "",
       identifier: this.extractIdentifier(request),
       asn: this.extractAsn(request),
-      // `true` (the argument-less 003 form) leaves the source-address windows
-      // keyed on the address alone — the shared auth budget, unchanged. A string
+      // `true` (the argument-less 003 form, a verification door) leaves the
+      // source-address windows keyed on the address alone (003 EARS-13). A string
       // marker is the handler's own bucket tag (#1646).
       scope: typeof marked === "string" ? marked : undefined,
       // `{ door }` (#2684): a sending door counts in its own per-IP window.

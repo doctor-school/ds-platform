@@ -29,8 +29,9 @@ interface Dimension {
 /**
  * Key a SOURCE-ADDRESS dimension (per-IP, per-ASN) inside its bucket (#1646).
  *
- * No scope => the bare address, byte-for-byte the key every 003 auth call site
- * has always used, so the shared auth budget is untouched. A scope => the
+ * No bucket => the bare address: the 003 verification doors' per-IP window and
+ * the per-ASN window both auth doors share (003 EARS-13). A bucket (a scope, or
+ * the sending doors' bucket) => the
  * address namespaced under the tag, joined by a separator that occurs in
  * neither an IP nor an `x-asn` value, so a scoped key can never collide with an
  * unscoped one, nor one scope with another, whatever tag a future call site picks.

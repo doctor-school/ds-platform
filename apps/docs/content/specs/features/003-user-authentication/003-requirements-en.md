@@ -139,10 +139,10 @@ This amendment overrides the per-IP clause of EARS-13 (below); the per-user (10 
 
 **Verification (amended).**
 
-| EARS | Test type   | File (indicative)                                                                                                 | Notes                                                                                                                                                                                                        |
-| ---- | ----------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 13   | Vitest e2e  | `apps/api/test/auth/abuse-limits.e2e-spec.ts`                                                                     | `it('EARS-13: ...')` 25 successful code sign-ins from one address all succeed and the 61st sending request is 429; 20 failed verifications → the 21st is 429, a success interleaved does not reset the count |
-| 13   | Vitest unit | `apps/api/src/auth/rate-limit/rate-limit.service.spec.ts` + `apps/api/src/auth/rate-limit/rate-limit.env.spec.ts` | `it('EARS-13: ...')` door-split windows, own-unit refund (no credit on an empty window), shared per-ASN window, the per-IP override moves both windows                                                       |
+| EARS | Test type   | File (indicative)                                                                                                 | Notes                                                                                                                                                                                                             |
+| ---- | ----------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 13   | Vitest e2e  | `apps/api/test/auth/abuse-limits.e2e-spec.ts`                                                                     | `it('EARS-13: ...')` 25 successful code sign-ins from one address all succeed and the 61st sending request is 429; 20 failed verifications → the 21st is 429, a success interleaved does not reset the count      |
+| 13   | Vitest unit | `apps/api/src/auth/rate-limit/rate-limit.service.spec.ts` + `apps/api/src/auth/rate-limit/rate-limit.env.spec.ts` | `it('EARS-13: ...')` door-split windows, own-unit refund (no credit on an empty window; a refund after the consumed window rolled over is a no-op), shared per-ASN window, the per-IP override moves both windows |
 
 ## Outcomes
 

@@ -99,8 +99,9 @@ export type MyEventState = z.infer<typeof MyEventStateSchema>;
  * from the registration list, not the public listing projection.
  *
  * `startsAt` is the canonical UTC instant (ISO-8601); the «Мои события» surface
- * renders it in `Europe/Moscow` labeled МСК (EARS-11), never the viewer's local
- * timezone.
+ * renders it through `formatEventTime` (004 EARS-12 as amended 2026-10-02): МСК
+ * on the server and the first client render, then the viewer's zone with an
+ * explicit zone label for an online or hybrid row; an offline row stays МСК.
  *
  * `recording` is the SAME source-free {@link RecordingProjectionSchema} the public
  * archive page and the `/webinars` past tab consume (014 EARS-3, #1340) — one

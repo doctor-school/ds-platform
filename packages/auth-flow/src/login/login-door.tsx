@@ -37,7 +37,7 @@ import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
 import { makeResolver } from "../form-resolver";
 import { AUTH_FLOW_CHANNELS, type AuthFlowHostConfig } from "../host-config";
-import { withReturnTarget } from "../return-target-href";
+import { withReturnTarget } from "@ds/schemas";
 import { LoginGlyph } from "./login-glyph";
 import { stripHandoffFromAddressBar } from "./login-handoff";
 import type { ReactNode } from "react";

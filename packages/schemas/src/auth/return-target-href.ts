@@ -1,4 +1,4 @@
-import { parseSameOriginReturnTarget } from "@ds/schemas";
+import { parseSameOriginReturnTarget } from "./return-target.js";
 
 /**
  * Rule S3 (#2027) — decorate a footer link with the arrival context.
@@ -10,7 +10,10 @@ import { parseSameOriginReturnTarget } from "@ds/schemas";
  * Shared by BOTH doors (#2331): the sign-in door carries the context onto
  * «Создать аккаунт» / «Забыли пароль», the registration door onto «Уже есть
  * аккаунт? Войти» and onto the confirmation step of a host that serves one as a
- * route of its own. One rule, one place.
+ * route of its own. The «Мои события» page of `@ds/events-storefront` carries
+ * its own path onto the door with it (#1972) — a package `@ds/auth-flow` itself
+ * depends on — which is why the helper lives here beside the guard. One rule,
+ * one place.
  */
 export function withReturnTarget(
   path: string,

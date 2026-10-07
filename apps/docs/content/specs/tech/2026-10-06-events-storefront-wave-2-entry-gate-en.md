@@ -345,6 +345,7 @@ export type EventsStorefrontHostConfig = {
     countsPath?: string; // row 14 — per-month counts; unset = no counts read (doctor until PR 2.5, row 54)
     livePath: string; // row 43 — the live block read (D5)
     relayCookie?: string; // row 13 — the one cookie name the read forwards; unset = no cookie header
+    myEventsPath: string; // rows 15, 24 — the viewer's «Мои события» read: `/v1/me/events` (Academy), `/v1/storefront/doctor/me/events` (doctor), D8
     adapt: EventsStorefrontAdapter; // row 8 — the one adapter of §4.5
   };
   /** The facet set the panel renders, as the design-system `EventsFilter` `host` value (row 58, #2578). */
@@ -363,7 +364,9 @@ export type EventsStorefrontHostConfig = {
 };
 ```
 
-**Copy in PR 2.2.** The package renders no `next-intl` catalogue (the doctor host has none) and a route mount may not read one, so PR 2.2 moves the Academy's `webinars` sentences verbatim into a package default-copy module (`src/copy/listing-copy.ts`); the Academy states only `headerCopy` and `copy.eventNoun` («эфир»). Copy that the type above does not list — the hero taglines, the archive subline, the tab, empty-state, card and month-view labels — stays a package default, not a host field, until PR 2.4 converges it on the canvas for both hosts. Until then those defaults are the Academy's wording, which is correct because the Academy is the only consumer. 004 EARS-13 names the 003 typed message catalogue as the copy source of the portal webinar surfaces; for the shared unit that catalogue is the package's typed copy module, as `@ds/auth-flow` keeps its sentences in `packages/auth-flow/src/copy/`, and no user-facing string is hardcoded in a component. The type in `@ds/es` carries only the fields whose consumers are in the package; `contentSet`, `filterSet`, `routes.login` and `routes.accountEvents` land with the PR that mounts their consumer.
+**The «Мои события» guard in PR 2.3.** The package owns the guest decision of rows 24–27: its route component `MyEventsRoute` (`@ds/es/my-events`) reads the forwarded session, calls `fetchMyEvents(contentSet.myEventsPath, …)` and sends a guest to `withReturnTarget(routes.login, routes.accountEvents)`, so both host route files are pure mounts (`mounted` in the route-file registry). The carry `withReturnTarget` lives in `@ds/schemas` beside `parseSameOriginReturnTarget`, its one guard: `@ds/auth-flow` depends on `@ds/es`, so the reverse import is a cycle, and a copy in `@ds/es` would fork the carry. The doctor door accepts the plain `returnTo` carry because `/account/events` is in the account family `parseAccountReturnTarget` lands. A host that mounts only this page states only `contentSet.myEventsPath` and `routes` (`MyEventsHostConfig`, a `Pick` of the type above); the doctor's page head and copy overrides land with its listing mount in PR 2.4. The page copy is a package default-copy module (`src/copy/my-events-copy.ts`, the Academy's `myEvents` sentences verbatim), the same on both hosts.
+
+**Copy in PR 2.2.** The package renders no `next-intl` catalogue (the doctor host has none) and a route mount may not read one, so PR 2.2 moves the Academy's `webinars` sentences verbatim into a package default-copy module (`src/copy/listing-copy.ts`); the Academy states only `headerCopy` and `copy.eventNoun` («эфир»). Copy that the type above does not list — the hero taglines, the archive subline, the tab, empty-state, card and month-view labels — stays a package default, not a host field, until PR 2.4 converges it on the canvas for both hosts. Until then those defaults are the Academy's wording, which is correct because the Academy is the only consumer. 004 EARS-13 names the 003 typed message catalogue as the copy source of the portal webinar surfaces; for the shared unit that catalogue is the package's typed copy module, as `@ds/auth-flow` keeps its sentences in `packages/auth-flow/src/copy/`, and no user-facing string is hardcoded in a component. The type in `@ds/es` carries only the fields whose consumers are in the package; `routes.login`, `routes.accountEvents` and `contentSet.myEventsPath` land in PR 2.3 with the «Мои события» page, the listing reads of `contentSet` and `filterSet` with the PR that mounts their consumer.
 
 ### 4.5 Closed adapter list
 
@@ -374,6 +377,8 @@ Plan §2 allows a host to contribute a route file and a host-config object and n
 | `contentSet.adapt: (dto) => EventCardModel` | 8   | a pure mapping of the host's read DTO onto the one card / page model and status vocabulary — the «endpoint / adapter» of plan §2 L30; it takes data and returns data, decides no lifecycle, resolves no route and gates nothing |
 
 If an implementation PR finds a second case, it STOPS and returns the question rather than adding an adapter — the plan's §3 rule 5 brief rule applies to this wave's PRs verbatim.
+
+PR 2.3 (rows 15, 24–27) adds no adapter: the «Мои события» room href is api-resolved data on `MyEventItem` (D8), the endpoint is the data field `contentSet.myEventsPath`, and the guest decision runs in the package route over `routes.login` / `routes.accountEvents` with the shared `withReturnTarget` (§4.4) — no host callback.
 
 ## 5. Wave-exit criteria
 

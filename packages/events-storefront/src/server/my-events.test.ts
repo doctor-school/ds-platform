@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fetchMyEvents } from "./my-events";
 
-// 005 EARS-6 / EARS-10 — the authenticated «Мои события» read. Its row→card
-// projection stays on the Academy host (`apps/portal/lib/my-events.ts`) until
-// wave-2 PR 2.3 (entry gate §2.1 row 15).
+// 005 EARS-6 / EARS-10 — the authenticated «Мои события» read; its row→card
+// projection is `model/my-events-items.ts` (entry gate §2.1 row 15).
 
 /**
  * #2054 — the «Мои события» read is the surface the bug was reported on: an
@@ -26,12 +25,16 @@ describe("#2054 the authenticated /v1/me/events read forwards the client chain",
         return {
           ok: true,
           status: 200,
-          json: async () => ({ tab: "upcoming", data: [], counts: { upcoming: 0, past: 0 } }),
+          json: async () => ({
+            tab: "upcoming",
+            data: [],
+            counts: { upcoming: 0, past: 0 },
+          }),
         } as unknown as Response;
       }),
     );
 
-    await fetchMyEvents({
+    await fetchMyEvents("/v1/me/events", {
       cookie: "__Host-ds_session=abc",
       userAgent: "Mozilla/5.0 (probe)",
       acceptLanguage: "ru-RU",
@@ -41,5 +44,45 @@ describe("#2054 the authenticated /v1/me/events read forwards the client chain",
     const sent = calls[0]!.headers as Record<string, string>;
     expect(sent["x-forwarded-for"]).toBe("203.0.113.7, 172.18.0.4");
     expect(sent.cookie).toBe("__Host-ds_session=abc");
+  });
+});
+
+describe("014 EARS-9 the read calls the host's configured endpoint", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("014 EARS-9: the doctor storefront's path and the tab reach the api URL", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            tab: "recordings",
+            data: [],
+            counts: { upcoming: 0, recordings: 0 },
+          }),
+        } as unknown as Response;
+      }),
+    );
+
+    await fetchMyEvents(
+      "/v1/storefront/doctor/me/events",
+      {
+        cookie: "__Host-ds_session=abc",
+        userAgent: "ua",
+        acceptLanguage: "ru",
+        forwardedFor: "",
+      },
+      "recordings",
+    );
+
+    expect(urls[0]).toMatch(
+      /\/v1\/storefront\/doctor\/me\/events\?tab=recordings$/,
+    );
   });
 });

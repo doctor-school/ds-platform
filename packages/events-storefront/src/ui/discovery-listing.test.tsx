@@ -46,7 +46,13 @@ import type { EventsStorefrontHostConfig } from "../host-config";
 
 const CONFIG: EventsStorefrontHostConfig = {
   headerCopy: { title: "Расписание эфиров", subline: "Ближайшие эфиры" },
-  routes: { listing: "/webinars", eventPage: "/webinars" },
+  contentSet: { myEventsPath: "/v1/me/events" },
+  routes: {
+    listing: "/webinars",
+    eventPage: "/webinars",
+    login: "/login",
+    accountEvents: "/account/events",
+  },
 };
 
 const EMPTY_LISTING = {

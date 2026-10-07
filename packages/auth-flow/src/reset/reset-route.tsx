@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 
 import type { AuthFlowHostConfig } from "../host-config";
-import { withReturnTarget } from "../return-target-href";
+import { withReturnTarget } from "@ds/schemas";
 import {
   RETURN_CONTEXT_PARAM,
   guardAuthRoute,

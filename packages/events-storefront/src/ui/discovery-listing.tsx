@@ -27,10 +27,12 @@ import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";
 
-async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
+async function fetchRegisteredSlugs(
+  myEventsPath: string,
+): Promise<ReadonlySet<string>> {
   const h = await headers();
   try {
-    const result = await fetchMyEvents(forwardedSessionFrom(h));
+    const result = await fetchMyEvents(myEventsPath, forwardedSessionFrom(h));
     // `MyEvents` is an envelope per tab (014 EARS-9); the public listing's
     // «вы записаны» marker is about the caller's UPCOMING registrations, which
     // is the read's default tab — the rows live under `.data`.
@@ -68,7 +70,7 @@ export async function DiscoveryListing({
   const t = LISTING_COPY;
   const [{ listing, cursorRejected }, registeredSlugs] = await Promise.all([
     fetchEventListingWithCursorFallback({ timeframe, cursor }),
-    fetchRegisteredSlugs(),
+    fetchRegisteredSlugs(config.contentSet.myEventsPath),
   ]);
   // #1640: a `?cursor=` the api could not decode (shared, truncated or stale
   // link) degrades to the first page rather than a 500. Pagination state is

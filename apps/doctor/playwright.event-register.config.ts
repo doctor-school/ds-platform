@@ -32,7 +32,12 @@ export default defineConfig({
   testDir: "./e2e",
   // Playwright normalises the tested path to POSIX separators before matching,
   // so `/` here is correct on Windows and Linux alike (no drive letters).
-  testMatch: [/(^|\/)event-register-one-tap\.spec\.ts$/],
+  // 014 EARS-9 (#1972): «Мои события» rides here — the same signed-in doctor
+  // account and stand, reading what one-tap registration writes.
+  testMatch: [
+    /(^|\/)event-register-one-tap\.spec\.ts$/,
+    /(^|\/)my-events\.spec\.ts$/,
+  ],
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -59,7 +59,13 @@ describe("<MonthCalendarView>", () => {
         config: {
           headerCopy: { title: "t", subline: "s" },
           copy: { eventNoun: { one: "эфир", few: "эфира", many: "эфиров" } },
-          routes: { listing: "/webinars", eventPage: "/webinars" },
+          contentSet: { myEventsPath: "/v1/me/events" },
+          routes: {
+            listing: "/webinars",
+            eventPage: "/webinars",
+            login: "/login",
+            accountEvents: "/account/events",
+          },
         },
         month: "2026-07",
       }),

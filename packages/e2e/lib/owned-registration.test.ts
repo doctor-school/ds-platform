@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   registrationEvidence,
   verificationEvidence,
+  differentVerificationCode,
+  verificationRefusalEvidence,
 } from "./owned-registration.js";
 
 const account = { email: "owned@example.test", password: "synthetic-password" };
@@ -10,6 +12,99 @@ const request = {
   consent: [{ purpose: "tos", version: "2026-01" }],
 };
 const ack = { status: "pending_verification" };
+
+describe("wrong confirmation code evidence", () => {
+  const code = "923456";
+  const submittedCode = "023456";
+  const submitted = JSON.stringify({
+    email: account.email,
+    code: submittedCode,
+    registration: { password: account.password },
+  });
+  const refusal = {
+    statusCode: 400,
+    message: "the request could not be completed",
+    error: "Bad Request",
+  };
+  it.each(["000000", "123456", "999999"])(
+    "EARS-39: constructs a different syntactically valid code %#",
+    (actual) => {
+      const wrong = differentVerificationCode(actual);
+      expect(/^\d{6}$/.test(wrong)).toBe(true);
+      expect(wrong === actual).toBe(false);
+    },
+  );
+  it("EARS-39: malformed delivered code fails without printing it", () => {
+    expect(() => differentVerificationCode("synthetic-secret")).toThrow(
+      "Expected a delivered six-digit confirmation code",
+    );
+  });
+  it("EARS-39: proves the owned wrong-code submission and generic refusal with booleans", () => {
+    expect(
+      verificationRefusalEvidence(
+        submitted,
+        JSON.stringify(refusal),
+        account,
+        code,
+        submittedCode,
+      ),
+    ).toEqual({
+      credentialsMatch: true,
+      wrongCode: true,
+      refusalMatches: true,
+    });
+  });
+  it.each([
+    { ...refusal, message: account.password },
+    { ...refusal, code },
+    { ...refusal, access_token: "synthetic-token" },
+    { status: "verified" },
+    null,
+  ])("EARS-41: refuses non-generic or secret-bearing responses %#", (body) => {
+    const evidence = verificationRefusalEvidence(
+      submitted,
+      JSON.stringify(body),
+      account,
+      code,
+      submittedCode,
+    );
+    expect(evidence.refusalMatches).toBe(false);
+    expect(
+      Object.values(evidence).every((value) => typeof value === "boolean"),
+    ).toBe(true);
+  });
+  it("EARS-39: cannot credit the delivered code as a refusal probe", () => {
+    expect(
+      verificationRefusalEvidence(
+        submitted,
+        JSON.stringify(refusal),
+        account,
+        code,
+        code,
+      ).wrongCode,
+    ).toBe(false);
+  });
+  it("EARS-41: mismatched or malformed request never proves the owned submission", () => {
+    expect(
+      verificationRefusalEvidence(
+        "synthetic-secret",
+        JSON.stringify(refusal),
+        account,
+        code,
+        submittedCode,
+      ).credentialsMatch,
+    ).toBe(false);
+    expect(
+      verificationRefusalEvidence(
+        submitted,
+        "synthetic-secret",
+        account,
+        code,
+        submittedCode,
+      ).refusalMatches,
+    ).toBe(false);
+  });
+});
 
 describe("verification evidence without secret diagnostics", () => {
   const code = "123456";

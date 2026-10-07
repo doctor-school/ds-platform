@@ -32,7 +32,11 @@ import {
   completeResolvedReturnTarget,
   completeReturnTarget,
 } from "../client/return-completion";
-import { landingAfterSignIn } from "../client/signed-in-landing";
+import {
+  completionTargetAfterSignIn,
+  landingAfterSignIn,
+  type CompletionTarget,
+} from "../client/signed-in-landing";
 import { authErrorMessage } from "../errors";
 import { identifierFieldSchema, otpIdentifierFormSchema } from "../fields";
 import { makeResolver } from "../form-resolver";
@@ -82,6 +86,14 @@ export type LoginDoorProps = {
    * a failed call keeps `landing`.
    */
   resolveSignedInLanding?: () => Promise<string>;
+  /**
+   * 021 EARS-10 (#2477) — the mount's server action that judges the carried
+   * эфир AGAIN once the sign-in succeeds (`completionTargetAction`, the one the
+   * registration journey's `/verify` step calls). Present only while the
+   * arrival carries a standing эфир target; a failed call keeps the
+   * render-time decision.
+   */
+  resolveCompletionTarget?: () => Promise<CompletionTarget>;
   /**
    * The RAW carried `returnTo` param, for the footer LINKS only. Guarded here by
    * the same-origin rule before it decorates anything, so a hostile value is
@@ -256,6 +268,7 @@ export function LoginDoor({
   config,
   landing,
   resolveSignedInLanding,
+  resolveCompletionTarget,
   returnTo = null,
   returnTarget = null,
   returnTargetGone = false,
@@ -299,15 +312,28 @@ export function LoginDoor({
   // guest-render one could not see a profile specialty), then the carried
   // target, if any, is completed over it exactly as before. 021 EARS-10 — when
   // the mount found the эфир gone, the parked copy is consumed, never used: the
-  // same completion the confirmation step takes.
+  // same completion the confirmation step takes. #2477 — a standing эфир is
+  // judged again now, not when /login rendered, exactly as /verify judges it.
   async function completeAfterSignIn(): Promise<string> {
     const signedInLanding = await landingAfterSignIn(
       landing,
       resolveSignedInLanding,
     );
-    return returnTargetGone
-      ? completeResolvedReturnTarget(config, null, signedInLanding)
-      : completeReturnTarget(config, returnTarget, signedInLanding);
+    if (returnTargetGone) {
+      return completeResolvedReturnTarget(config, null, signedInLanding);
+    }
+    if (resolveCompletionTarget) {
+      const target = await completionTargetAfterSignIn(
+        { returnTarget, landing: signedInLanding },
+        resolveCompletionTarget,
+      );
+      return completeResolvedReturnTarget(
+        config,
+        target.returnTarget,
+        target.landing,
+      );
+    }
+    return completeReturnTarget(config, returnTarget, signedInLanding);
   }
 
   async function finishLogin(values: LoginRequest, captchaToken?: string) {

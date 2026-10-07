@@ -82,6 +82,25 @@ vi.mock("../server", async (importOriginal) => {
   };
 });
 
+// #2477 — the sign-in door's completion action (`completionTargetAction`) asks
+// the same two reads from their own modules, not through the barrel: the same
+// doubles answer it, so the render-time read and the completion-time read are
+// one scripted sequence.
+vi.mock("../server/return-context", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server/return-context")>()),
+  readReturnEvent,
+}));
+vi.mock("../server/landing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/landing")>();
+  return {
+    ...actual,
+    resolveArrivalLanding: (
+      host: Parameters<typeof actual.resolveArrivalLanding>[0],
+      requestHeaders: Headers,
+    ) => actual.resolveArrivalLanding(host, requestHeaders, specialtyFetch),
+  };
+});
+
 import { resolveAuthFlowCopy } from "../copy";
 import { RETURN_TARGET_PARKING, type AuthFlowHostConfig } from "../host-config";
 import {
@@ -592,6 +611,109 @@ describe("021 EARS-10 (#2455): where a sign-in on the Академия lands", (
     await signInThrough({ returnTo: "/webinars/prp-pri-gonartroze/room" });
 
     expect(push).toHaveBeenCalledWith("/webinars/prp-pri-gonartroze/room");
+  });
+});
+
+/**
+ * #2477 — the эфир is judged when the sign-in SUCCEEDS, not when /login
+ * rendered: the same completion action the registration journey's `/verify`
+ * step calls (`completionTargetAction`). An эфир unpublished or removed while
+ * the page stood open lands the visitor where registration sends them in that
+ * case — the LD-4 landing decided for the signed-in doctor — never on a 404.
+ */
+describe("021 EARS-10 (#2477): /login re-judges the carried эфир at sign-in, on both hosts", () => {
+  const HOSTS = [
+    ["the Academy", ACADEMY_FIXTURE, "/webinars/prp-pri-gonartroze"],
+    ["the doctor storefront", DOCTOR_FIXTURE, "/events/prp-pri-gonartroze"],
+  ] as const;
+  const RETURN_TO = "/webinars/prp-pri-gonartroze";
+
+  async function signInByPassword(config: AuthFlowHostConfig): Promise<void> {
+    const copy = resolveAuthFlowCopy(config).login;
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    render(await doorOf(config, { returnTo: RETURN_TO }));
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText(copy.password.identifierLabel),
+      "doc@example.com",
+    );
+    await user.type(
+      screen.getByLabelText(copy.password.passwordLabel, { selector: "input" }),
+      "Sup3r$ecretPw!9",
+    );
+    await user.click(screen.getByTestId("password-login-submit"));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+  }
+
+  async function signInByCode(config: AuthFlowHostConfig): Promise<void> {
+    const copy = resolveAuthFlowCopy(config).login;
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    document.elementFromPoint = () => document.body;
+    render(await doorOf(config, { returnTo: RETURN_TO, method: "code" }));
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText(copy.otp.emailLabel),
+      "doc@clinic.ru",
+    );
+    await user.click(screen.getByTestId("otp-send"));
+    await screen.findByTestId("otp-verify");
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("482913");
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+  }
+
+  const SIGN_INS = [
+    ["password", signInByPassword],
+    ["code", signInByCode],
+  ] as const;
+
+  for (const [method, signIn] of SIGN_INS) {
+    it.each(HOSTS)(
+      `021 EARS-10: on %s an эфир gone since /login rendered lands a ${method} sign-in on the default landing, never the dead page`,
+      async (_host, config) => {
+        // Default landing as the mount decides it for an arrival with no эфир.
+        resolveServerAuth.mockResolvedValue({ status: "guest" });
+        const fallback = await guestLandingOf(config, {});
+        cleanup();
+        vi.clearAllMocks();
+        forgetsSpecialty();
+        // Render: the эфир answers. Completion: it is gone.
+        readReturnEvent.mockResolvedValueOnce(FOUND).mockResolvedValue(GONE);
+
+        await signIn(config);
+
+        expect(readReturnEvent).toHaveBeenCalledTimes(2);
+        expect(push).toHaveBeenCalledWith(fallback);
+        expect(registerForEvent).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(HOSTS)(
+      `021 EARS-10: on %s an эфир still standing at a ${method} sign-in completes and lands on its page`,
+      async (_host, config, eventPage) => {
+        readReturnEvent.mockResolvedValue(FOUND);
+
+        await signIn(config);
+
+        expect(readReturnEvent).toHaveBeenCalledTimes(2);
+        expect(push).toHaveBeenCalledWith(eventPage);
+      },
+    );
+  }
+
+  it("021 EARS-10: an arrival that carries no эфир gets no completion action — nothing to re-judge", async () => {
+    resolveServerAuth.mockResolvedValue({ status: "guest" });
+    type DoorProps = { resolveCompletionTarget?: unknown };
+    const direct = (await doorOf(
+      DOCTOR_FIXTURE,
+      {},
+    )) as unknown as ReactElement<DoorProps>;
+    const account = (await doorOf(DOCTOR_FIXTURE, {
+      returnTo: "/account",
+    })) as unknown as ReactElement<DoorProps>;
+
+    expect(direct.props.resolveCompletionTarget).toBeUndefined();
+    expect(account.props.resolveCompletionTarget).toBeUndefined();
   });
 });
 

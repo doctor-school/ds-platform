@@ -57,13 +57,14 @@ export interface RegistrationUpsert {
 
 /**
  * One «Мои события» row as it leaves SQL: every `MyEventItem` field EXCEPT
- * `recording`. The recording projection is feature 014's own canonical resolver
+ * `recording` and `roomHref` (the calling host's room path, which the service
+ * resolves from the route table the controller passes in). The recording projection is feature 014's own canonical resolver
  * (`RecordingsProjectionService`, #1340) — 005's repository does not re-derive it
  * from `event_recordings`, because a second derivation is exactly how the badge on
  * a doctor's own row starts disagreeing with the badge on the public card. The
  * service composes the two.
  */
-export type MyEventRow = Omit<MyEventItem, "recording">;
+export type MyEventRow = Omit<MyEventItem, "recording" | "roomHref">;
 
 /**
  * The SQL membership predicate of one «Мои события» tab (014 EARS-9,
@@ -307,6 +308,7 @@ export class RegistrationRepository {
         school: events.school,
         startsAt: events.startsAt,
         state: events.state,
+        participationFormat: events.participationFormat,
       })
       .from(registrations)
       .innerJoin(events, eq(events.id, registrations.eventId))
@@ -325,6 +327,7 @@ export class RegistrationRepository {
       startsAt: r.startsAt.toISOString(),
       // Narrowed to the tab's membership set by the SQL state filter above.
       state: r.state as MyEventRow["state"],
+      participationFormat: r.participationFormat,
     }));
   }
 

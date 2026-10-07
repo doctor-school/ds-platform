@@ -11,8 +11,41 @@ import {
   type MyEventsTab,
 } from "@ds/schemas";
 import { AIR_WINDOW_MS } from "../events/events.service.js";
+import {
+  type ParticipationRoutes,
+  resolveParticipationCta,
+} from "../events/participation-cta.resolver.js";
 import { RecordingsProjectionService } from "../recordings/index.js";
-import { RegistrationRepository } from "./registration.repository.js";
+import {
+  type MyEventRow,
+  RegistrationRepository,
+} from "./registration.repository.js";
+
+/**
+ * The calling host's room href for one «Мои события» row (wave-2 entry gate
+ * §4.3 D8). Every row of this read is the caller's own registration, so the
+ * decision is the ONE participation policy's `enter-room` branch (a registered
+ * viewer on a `live` event) evaluated over the host's route table — the same
+ * rule the event page's CTA and the Academy client's `resolveRoomEntryHref`
+ * apply. Any other action means the room is not open to the caller: `null`.
+ * `seatsLeft` cannot change the `enter-room` decision, so none is read.
+ */
+function myEventRoomHref(
+  row: MyEventRow,
+  routes: ParticipationRoutes,
+): string | null {
+  const cta = resolveParticipationCta(
+    {
+      slug: row.slug,
+      state: row.state,
+      format: row.participationFormat,
+      seatsLeft: null,
+      registered: true,
+    },
+    routes,
+  );
+  return cta.action === "enter-room" ? cta.href : null;
+}
 
 /**
  * The register affordance is offered only while the event is `published`
@@ -134,10 +167,15 @@ export class RegistrationService {
    * doctor's own row and the public card cannot disagree. It runs for the
    * `recordings` tab only: an upcoming event has no recording state to speak of,
    * and asking for one would be a pointless query on every Предстоящие read.
+   *
+   * `routes` is the CALLING host's route table — the host is the controller
+   * serving the read, as D5 resolves the live-block href — and each row's
+   * `roomHref` is resolved over it ({@link myEventRoomHref}).
    */
   async myEvents(
     sub: string,
-    tab: MyEventsTab = "upcoming",
+    tab: MyEventsTab,
+    routes: ParticipationRoutes,
     now: Date = new Date(),
   ): Promise<MyEvents> {
     const userId = await this.resolveUser(sub);
@@ -147,7 +185,15 @@ export class RegistrationService {
       this.repo.countMyEvents(userId, cutoff),
     ]);
     if (tab === "upcoming") {
-      return { tab, counts, data: rows.map((row) => ({ ...row, recording: null })) };
+      return {
+        tab,
+        counts,
+        data: rows.map((row) => ({
+          ...row,
+          recording: null,
+          roomHref: myEventRoomHref(row, routes),
+        })),
+      };
     }
     const projections = await this.recordings.resolveRecordingProjections(
       rows.map((row) => row.eventId),
@@ -161,6 +207,7 @@ export class RegistrationService {
         // (`preparing` when nothing is published), which is precisely why an
         // ended event with no recording is still LISTED and still badged.
         recording: projections.get(row.eventId) ?? null,
+        roomHref: myEventRoomHref(row, routes),
       })),
     };
   }

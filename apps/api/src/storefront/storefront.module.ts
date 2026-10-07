@@ -8,10 +8,12 @@ import {
 import { AuthModule } from "../auth/auth.module.js";
 import { isRouteScan } from "../authz/route-scan.js";
 import { EventsModule } from "../events/events.module.js";
+import { RegistrationModule } from "../registration/registration.module.js";
 import { RoomModule } from "../room/room.module.js";
 import { DoctorEventsPublicController } from "./doctor-events.public.controller.js";
 import { DoctorEventsRepository } from "./doctor-events.repository.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
+import { DoctorMyEventsMeController } from "./doctor-my-events.me.controller.js";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { DoctorRegisterPublicController } from "./doctor-register.public.controller.js";
 import { DoctorRegisterService } from "./doctor-register.service.js";
@@ -64,7 +66,16 @@ import { TargetingService } from "./targeting.service.js";
   // and the configured heartbeat cadence it is derived over, so the «Идёт
   // сейчас» strip counts «N в комнате» with the same query the room grant and
   // the 020 participation CTA use — never a storefront-local head count.
-  imports: [TaxonomyModule, AuthModule, EventsModule, RoomModule],
+  // #1972 (wave-2 entry gate §4.3 D8): `RegistrationModule` exports the ONE
+  // «Мои события» read (`RegistrationService.myEvents`) the doctor host's
+  // `me/events` route serves over its own route table — never a second read.
+  imports: [
+    TaxonomyModule,
+    AuthModule,
+    EventsModule,
+    RoomModule,
+    RegistrationModule,
+  ],
   controllers: [
     DoctorRegisterPublicController,
     SpecialtiesPublicController,
@@ -72,6 +83,7 @@ import { TargetingService } from "./targeting.service.js";
     SpecialtyChoiceMeController,
     StatisticsPublicController,
     DoctorEventsPublicController,
+    DoctorMyEventsMeController,
   ],
   providers: [
     DoctorRegisterService,

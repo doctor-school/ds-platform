@@ -1,19 +1,11 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Query,
-  Req,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { Controller, Get, Query, Req } from "@nestjs/common";
 import { ApiQuery } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
-import { MY_EVENTS_TABS, type MyEvents, MyEventsQuerySchema } from "@ds/schemas";
+import { MY_EVENTS_TABS, type MyEvents } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
-import {
-  RegistrationService,
-  UnknownSubjectError,
-} from "./registration.service.js";
+import { ACADEMY_ROUTES } from "../events/host-routes.js";
+import { serveMyEvents } from "./my-events.read.js";
+import { RegistrationService } from "./registration.service.js";
 
 /**
  * 005 «мои события» read surface (design §4/§5) — the `MyEvents` per-user list.
@@ -36,6 +28,11 @@ import {
  * any non-`doctor_guest` role (403) before the handler runs — never a silent
  * success — and the read returns ONLY the caller's own registrations, never
  * another doctor's (EARS-10). Per-user ⇒ private, never shared-cacheable.
+ *
+ * This route is the ACADEMY host's read: each row's `roomHref` resolves over
+ * {@link ACADEMY_ROUTES} (`/webinars/<slug>/room`). The doctor storefront's
+ * twin, `GET /v1/storefront/doctor/me/events`, is the same read over its own
+ * route table (wave-2 entry gate §4.3 D8 — the calling host is the controller).
  */
 @Controller({ path: "me", version: "1" })
 export class MyEventsController {
@@ -61,28 +58,6 @@ export class MyEventsController {
     @Req() req: FastifyRequest,
     @Query("tab") tab?: string,
   ): Promise<MyEvents> {
-    const sub = (req as { user?: { sub?: string } }).user?.sub;
-    // The guard guarantees an authenticated subject; a null sub is defence in
-    // depth, never a silent success (EARS-10).
-    if (!sub) throw new UnauthorizedException("authentication required");
-    // The closed two-tab set is the schema's (014 EARS-9). An absent `?tab=`
-    // defaults to `upcoming`, so the bare `/v1/me/events` 005 shipped keeps
-    // working; anything else is refused rather than coerced.
-    const query = MyEventsQuerySchema.safeParse(
-      tab === undefined ? {} : { tab },
-    );
-    if (!query.success) {
-      throw new BadRequestException("tab must be upcoming or recordings");
-    }
-    try {
-      return await this.registration.myEvents(sub, query.data.tab);
-    } catch (err) {
-      // An authenticated subject with no 003 mirror row cannot own registrations
-      // — a 401, never a silent empty list (EARS-10).
-      if (err instanceof UnknownSubjectError) {
-        throw new UnauthorizedException("authentication required");
-      }
-      throw err;
-    }
+    return serveMyEvents(this.registration, req, tab, ACADEMY_ROUTES);
   }
 }

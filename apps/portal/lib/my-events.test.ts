@@ -40,6 +40,8 @@ const upcoming: MyEventItem[] = [
     startsAt: "2026-07-16T16:00:00.000Z",
     state: "live",
     recording: null,
+    participationFormat: "online",
+    roomHref: "/webinars/ortho-live/room",
   },
   {
     eventId: "22222222-2222-4222-8222-222222222222",
@@ -50,6 +52,8 @@ const upcoming: MyEventItem[] = [
     startsAt: "2026-07-17T15:00:00.000Z",
     state: "published",
     recording: null,
+    participationFormat: "online",
+    roomHref: null,
   },
   {
     eventId: "33333333-3333-4333-8333-333333333333",
@@ -60,6 +64,8 @@ const upcoming: MyEventItem[] = [
     startsAt: "2026-07-18T15:00:00.000Z",
     state: "published",
     recording: null,
+    participationFormat: "online",
+    roomHref: null,
   },
 ];
 

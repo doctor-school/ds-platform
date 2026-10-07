@@ -10,6 +10,18 @@ describe("stage login mail selection", () => {
     expect(() => mailpitUrlFor("http://localhost:3000")).toThrow();
   });
 
+  it("#2670: the stage slot main derives mailpit.<suffix> from academy-main", () => {
+    expect(mailpitUrlFor("https://academy-main.stage.doctor.school")).toBe(
+      "https://mailpit.stage.doctor.school",
+    );
+    expect(() =>
+      mailpitUrlFor("https://academy-foo.stage.doctor.school"),
+    ).toThrow();
+    expect(() =>
+      mailpitUrlFor("https://academy-pr-0.stage.doctor.school"),
+    ).toThrow();
+  });
+
   it("EARS-6: selects the newest login message after the request", () => {
     const messages = [
       {

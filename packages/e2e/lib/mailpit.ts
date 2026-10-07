@@ -13,7 +13,11 @@ interface MailSummary {
 export function mailpitUrlFor(hostBaseUrl: string): string {
   const url = new URL(hostBaseUrl);
   const [label, ...suffix] = url.hostname.split(".");
-  if (!/^academy(?:-pr-\d+)?$/.test(label ?? "") || suffix.length < 2) {
+  // Slot names mirror SLOT_NAME_RE in tools/staging/slot.mjs (main | pr-<N>).
+  if (
+    !/^academy(?:-(?:main|pr-[1-9][0-9]{0,9}))?$/.test(label ?? "") ||
+    suffix.length < 2
+  ) {
     throw new Error(
       "Mailpit host cannot be derived from this Academy slot URL",
     );
@@ -48,8 +52,7 @@ export function selectLoginMail(
 
 export function extractLoginCode(subject: string): string | null {
   return (
-    subject.match(/^(\d{6})\s+—\s+код для входа в Doctor\.School$/)?.[1] ??
-    null
+    subject.match(/^(\d{6})\s+—\s+код для входа в Doctor\.School$/)?.[1] ?? null
   );
 }
 

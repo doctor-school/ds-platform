@@ -211,11 +211,13 @@ Then(
       wrongCode: true,
       refusalMatches: true,
     });
+    const error = state.page.getByTestId("verify-error");
+    await expect(error).toBeVisible();
     await expect
       .poll(
         async () =>
-          (await state.page.getByTestId("verify-error").textContent()) ===
-          "Код не подошёл. Проверьте его или запросите новый.",
+          (await error.ariaSnapshot()) ===
+          "- alert: Код не подошёл. Проверьте его или запросите новый.",
       )
       .toBe(true);
     await expect(

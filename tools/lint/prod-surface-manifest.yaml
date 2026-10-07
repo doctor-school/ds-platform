@@ -34,6 +34,14 @@ routes:
     file: apps/portal/app/@chrome/[...catchAll]/page.tsx
     status: product-ready
   - app: portal
+    route: /@footer
+    file: apps/portal/app/@footer/page.tsx
+    status: product-ready
+  - app: portal
+    route: /@footer/[...catchAll]
+    file: apps/portal/app/@footer/[...catchAll]/page.tsx
+    status: product-ready
+  - app: portal
     route: /login
     file: apps/portal/app/login/page.tsx
     status: product-ready

@@ -67,7 +67,7 @@
               <div>
                 <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">{{ codeLabel }}</label>
                 <div style="display:flex">
-                  <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
+                  <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" style="{{ c.style }}"></sc-for>
                 </div>
               </div>
               <sc-if value="{{ verified }}" hint-placeholder-val="{{ false }}">
@@ -231,7 +231,7 @@
                 <div>
                   <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из сообщения</label>
                   <div style="display:flex">
-                    <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" style="{{ c.style }}"></sc-for>
+                    <sc-for list="{{ codeSlots }}" as="c" hint-placeholder-count="6"><input id="{{ c.id }}" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="one-time-code" value="{{ c.value }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" style="{{ c.style }}"></sc-for>
                   </div>
                 </div>
                 <div>
@@ -358,7 +358,7 @@ class Component extends DCLogic {
     const vPhone = v => phoneOk(v) ? '' : 'Введите телефон в формате +79991234567.';
     const vIdent = v => (emailOk(v) || phoneOk(v)) ? '' : 'Укажите электронную почту или телефон.';
     const vPw = v => v.length < 8 ? 'Не менее 8 символов.' : (v.length > 256 ? 'Не более 256 символов.' : '');
-    const vCode = v => /^[0-9A-Za-z]{4,12}$/.test(v) ? '' : 'Проверьте введённое значение.';
+    const vCode = v => /^[0-9]{6}$/.test(v) ? '' : 'Проверьте введённое значение.';
 
     const mkField = (name, label, placeholder, validate, required) => {
       const val = s.values[name] || '';
@@ -455,17 +455,33 @@ class Component extends DCLogic {
     // Слоты кода — по одному квадрату на символ
     const codeLen = 6;
     const cellPx = 40;
-    const slotInput = (i, e) => {
-      const ch = (e.target.value || '').replace(/\s/g, '').slice(-1);
-      const otp = s.otp.slice(); otp[i] = ch;
+    const fillFrom = (i, digits) => {
+      const otp = s.otp.slice();
+      digits.slice(0, codeLen - i).split('').forEach((d, k) => { otp[i + k] = d; });
       this.setState({ otp });
-      if (ch && i < codeLen - 1) { const n = document.getElementById('code-' + (i + 1)); if (n) n.focus(); }
+      const next = Math.min(i + digits.length, codeLen - 1);
+      const n = document.getElementById('code-' + next); if (n) n.focus();
+    };
+    const slotInput = (i, e) => {
+      const raw = e.target.value || '';
+      const digits = raw.replace(/\D/g, '');
+      if (!raw) { const otp = s.otp.slice(); otp[i] = ''; this.setState({ otp }); return; }
+      if (!digits) return;
+      if (digits.length > 1) { fillFrom(i, digits); return; }
+      const otp = s.otp.slice(); otp[i] = digits;
+      this.setState({ otp });
+      if (i < codeLen - 1) { const n = document.getElementById('code-' + (i + 1)); if (n) n.focus(); }
+    };
+    const slotPaste = (i, e) => {
+      e.preventDefault();
+      const digits = ((e.clipboardData && e.clipboardData.getData('text')) || '').replace(/\D/g, '');
+      if (digits) fillFrom(i, digits);
     };
     const slotKey = (i, e) => { if (e.key === 'Backspace' && !s.otp[i] && i > 0) { const p = document.getElementById('code-' + (i - 1)); if (p) p.focus(); } };
     const codeSlots = Array.from({ length: codeLen }, (_, i) => ({
       id: 'code-' + i, value: s.otp[i] || '',
-      onChange: (e) => slotInput(i, e), onKeyDown: (e) => slotKey(i, e),
-      style: 'width:' + cellPx + 'px;height:' + cellPx + 'px;box-sizing:border-box;text-align:center;font:inherit;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;text-transform:uppercase;border:2px solid ' + (s.otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none' + (i > 0 ? ';margin-left:-2px' : '') + (s.otp[i] ? ';position:relative;z-index:1' : '')
+      onChange: (e) => slotInput(i, e), onKeyDown: (e) => slotKey(i, e), onPaste: (e) => slotPaste(i, e),
+      style: 'width:' + cellPx + 'px;height:' + cellPx + 'px;box-sizing:border-box;text-align:center;font:inherit;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;border:2px solid ' + (s.otp[i] ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none' + (i > 0 ? ';margin-left:-2px' : '') + (s.otp[i] ? ';position:relative;z-index:1' : '')
     }));
 
     return {

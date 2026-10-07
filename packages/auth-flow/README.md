@@ -155,9 +155,9 @@ calls the guard and the data decides.
 post-registration code step's «← Изменить почту» back link, and every
 `router.push` between these surfaces go through the host's carry helper
 (`withReturnTarget` for the Academy shapes, `withReturnContext` for the doctor
-ones — both package modules since PR 1.6:
-`packages/auth-flow/src/return-target-href.ts` and `src/return-context-href.ts`,
-the latter re-exported by `src/server/return-context.ts`),
+ones — `packages/schemas/src/auth/return-target-href.ts` and
+`packages/auth-flow/src/return-context-href.ts`, the latter re-exported by
+`src/server/return-context.ts`),
 never a bare `"/login"` literal. Recovery and sign-up are INTERRUPTIONS of wherever
 the visitor was going, not journeys of their own: a visitor who loses the target by
 choosing the right-hand button instead of the left one has been dropped by the app,

@@ -40,7 +40,7 @@ import type {
   AuthFlowConsentsCopy,
   AuthFlowHostConfig,
 } from "../host-config";
-import { withReturnTarget } from "../return-target-href";
+import { withReturnTarget } from "@ds/schemas";
 import { consentUnmetMessage } from "./consent-refusal";
 import { RegisterGlyph } from "./register-glyph";
 

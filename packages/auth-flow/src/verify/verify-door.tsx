@@ -36,7 +36,7 @@ import {
   type CompletionTarget,
 } from "../client/signed-in-landing";
 import { consentRefusalMessage } from "../register/consent-refusal";
-import { withReturnTarget } from "../return-target-href";
+import { withReturnTarget } from "@ds/schemas";
 import { VerifyGlyph } from "./verify-glyph";
 
 /**

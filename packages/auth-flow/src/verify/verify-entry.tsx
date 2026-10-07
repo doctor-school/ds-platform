@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import type { AuthFlowHostConfig } from "../host-config";
 import type { CompletionTarget } from "../client/signed-in-landing";
-import { withReturnTarget } from "../return-target-href";
+import { withReturnTarget } from "@ds/schemas";
 import { VerifyDoor } from "./verify-door";
 
 /** The resolved address, handed from the gate to the step inside the shell. */

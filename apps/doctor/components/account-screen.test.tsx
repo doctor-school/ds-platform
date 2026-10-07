@@ -69,6 +69,7 @@ vi.mock("@ds/congress-submissions/client", () => ({
 }));
 
 import { AccountScreen } from "@/components/account-screen";
+import { DOCTOR_EVENTS_STOREFRONT } from "@/lib/events-storefront.host-config";
 
 const PROFILE: MyProfile = {
   email: "doctor@ds.test",
@@ -130,13 +131,17 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
     expect(link?.getAttribute("href")).toBe("/reset?returnTo=%2Faccount");
   });
 
-  it("017 EARS-1.2: «Мои события» is ABSENT on this host — the row is hidden, not linked at a 404", async () => {
+  it("014 EARS-9: doctor account hub — the «Мои события» row links to /account/events and the page renders", async () => {
     await renderReady();
 
-    expect(screen.queryByText("Мои события")).toBeNull();
-    expect(screen.queryByText("Эфиры, записи и сертификаты")).toBeNull();
-    // The rest of the composition is untouched by that omission.
-    expect(screen.getByText("Безопасность")).toBeTruthy();
+    const row = await screen.findByText("Мои события");
+    expect(row.closest("a")?.getAttribute("href")).toBe("/account/events");
+    expect(screen.getByText("Эфиры, записи и сертификаты")).toBeTruthy();
+    // The row resolves to the mounted page: the same route the package page
+    // serves on this host (gate row 27), not a literal that could drift from it.
+    expect(DOCTOR_EVENTS_STOREFRONT.routes.accountEvents).toBe(
+      "/account/events",
+    );
   });
 
   it("046 EARS-4: an account registered for the congress gets the «Мои заявки на Конгресс» row linking at /account/congress", async () => {

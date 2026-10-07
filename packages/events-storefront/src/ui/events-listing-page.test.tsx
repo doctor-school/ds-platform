@@ -16,7 +16,13 @@ import { EventsListingPage } from "./events-listing-page";
 
 const CONFIG: EventsStorefrontHostConfig = {
   headerCopy: { title: "Расписание эфиров", subline: "Ближайшие эфиры" },
-  routes: { listing: "/webinars", eventPage: "/webinars" },
+  contentSet: { myEventsPath: "/v1/me/events" },
+  routes: {
+    listing: "/webinars",
+    eventPage: "/webinars",
+    login: "/login",
+    accountEvents: "/account/events",
+  },
 };
 
 /** The props the page hands to the pane it renders. */

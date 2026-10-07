@@ -72,6 +72,9 @@ export default defineConfig({
     // so it is dev-stand-gated in the same strong sense as the room tier and
     // rides `playwright.event-register.config.ts`.
     "event-register-one-tap.spec.ts",
+    // 014 EARS-9 (#1972): «Мои события» reads the doctor's own registrations
+    // over a REAL signed-in session, so it rides the same live config.
+    "my-events.spec.ts",
     // #2180: the signed-in auth cluster is a SERVER read of the session cookie
     // and the header search must narrow a REAL feed, so both ride the live
     // `playwright.shell.config.ts`. The guest half of the shared chrome stays

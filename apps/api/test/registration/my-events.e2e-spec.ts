@@ -295,6 +295,88 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await myEvents(cookie)).toEqual([]);
     });
 
+    // Wave-2 entry gate §4.2 `MyEventItem`, §4.3 D8 (#1972): each host's route
+    // serves the same read over its own route table — the calling host is the
+    // controller — so a live row carries THAT host's room, every other row null.
+    it("EARS-6: a registered live MyEventItem carries the host's room href; any other row carries null", async () => {
+      const live = await seedEvent(
+        "live",
+        iso(-20 * 60 * 1000),
+        "Идёт сейчас",
+        "Школа A",
+      );
+      const soon = await seedEvent(
+        "published",
+        iso(1 * DAY),
+        "Скоро",
+        "Школа B",
+      );
+      const cookie = await doctorSession(uniqueEmail("doc"));
+      await register(cookie, live.slug);
+      await register(cookie, soon.slug);
+
+      const hrefs = async (url: string) => {
+        const res = await app.inject({
+          method: "GET",
+          url,
+          headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
+        });
+        expect(res.statusCode).toBe(200);
+        return (res.json() as MyEvents).data.map((e) => [e.slug, e.roomHref]);
+      };
+      expect(await hrefs("/v1/me/events")).toEqual([
+        [live.slug, `/webinars/${live.slug}/room`],
+        [soon.slug, null],
+      ]);
+      expect(await hrefs("/v1/storefront/doctor/me/events")).toEqual([
+        [live.slug, `/events/${live.slug}/room`],
+        [soon.slug, null],
+      ]);
+    });
+
+    it("EARS-6: each MyEventItem carries its event's participation format", async () => {
+      const online = await seedEvent(
+        "published",
+        iso(1 * DAY),
+        "Онлайн",
+        "Школа A",
+      );
+      const offline = await seedEvent(
+        "published",
+        iso(2 * DAY),
+        "Очно",
+        "Школа B",
+      );
+      await pool.query(
+        "UPDATE events SET participation_format = 'offline' WHERE id = $1",
+        [offline.id],
+      );
+      const cookie = await doctorSession(uniqueEmail("doc"));
+      await register(cookie, online.slug);
+      await register(cookie, offline.slug);
+
+      for (const url of ["/v1/me/events", "/v1/storefront/doctor/me/events"]) {
+        const res = await app.inject({
+          method: "GET",
+          url,
+          headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
+        });
+        expect(res.statusCode).toBe(200);
+        expect(
+          (res.json() as MyEvents).data.map((e) => e.participationFormat),
+        ).toEqual(["online", "offline"]);
+      }
+    });
+
+    it("EARS-10: an unauthenticated doctor-storefront MyEvents read is refused (401)", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/storefront/doctor/me/events",
+        headers: device,
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
     it("EARS-10: an unauthenticated MyEvents read is refused (401) — not silently satisfied", async () => {
       const res = await app.inject({
         method: "GET",

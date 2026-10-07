@@ -37,23 +37,8 @@ import {
 } from "./events.dto.js";
 import type { AroundEventRoutes } from "./around-event.resolver.js";
 import { resolveAroundEvent } from "./around-event.resolver.js";
-import type { ParticipationRoutes } from "./participation-cta.resolver.js";
+import { ACADEMY_ROUTES } from "./host-routes.js";
 import { ParticipationService } from "./participation.service.js";
-
-/**
- * 020 EARS-1 / LD-1 (#1764) — the ACADEMY host's route table, the only thing
- * this host contributes to the shared participation policy. These are the paths
- * `academy.doctor.school` actually serves today: the event page under
- * `/webinars/<slug>` (004), the shipped 003 registration entry `/register` the
- * guest «Участвовать" handoff already routes through, and the 006 room at
- * `/webinars/<slug>/room`. The policy itself lives in
- * `participation-cta.resolver.ts` and is identical for both hosts.
- */
-const ACADEMY_ROUTES: ParticipationRoutes = {
-  eventPath: (slug) => `/webinars/${encodeURIComponent(slug)}`,
-  registrationEntry: "/register",
-  roomPath: (slug) => `/webinars/${encodeURIComponent(slug)}/room`,
-};
 
 /**
  * 020 EARS-2 (#1765) — the ACADEMY host's «вокруг события» table. Every entry

@@ -19,6 +19,7 @@ import { authClient } from "@/lib/auth-flow-client";
 import { DOCTOR_AUTH_FLOW } from "@/lib/auth-flow.host-config";
 import { DOCTOR_AUTH_ROUTES } from "@/lib/auth-flow-routes";
 import { DOCTOR_CONGRESS_SECTION } from "@/lib/congress-submissions.host-config";
+import { DOCTOR_EVENTS_STOREFRONT } from "@/lib/events-storefront.host-config";
 
 /**
  * #1958 — the doctor storefront's `/account` projection.
@@ -43,10 +44,9 @@ import { DOCTOR_CONGRESS_SECTION } from "@/lib/congress-submissions.host-config"
  *     storefront, and the server-rendered 017 header flips back to the guest
  *     cluster on the `router.refresh()` that follows.
  *
- * «Мои события» IS ABSENT, and absent rather than dead: this host has no
- * `/account/events` route, so the row would link into a 404. The block hides a
- * row whose href is `null` (017 EARS-3 honest-empty), and that route is the
- * tracked follow-on slice of #1958 — not a stub standing in for it here.
+ * «Мои события» links the page this host mounts from `@ds/events-storefront`
+ * at `/account/events` (#1972, gate row 27), read from the host config the
+ * route file mounts it with.
  * «Сменить пароль», by contrast, is NOT absent and no longer crosses hosts: since
  * #1989 this storefront serves password recovery itself at `/reset`, so the row
  * links host-relative — the same decision the `/login` card on this host carries.
@@ -252,7 +252,7 @@ export function AccountScreen() {
         DOCTOR_AUTH_ROUTES.reset,
         DOCTOR_AUTH_ROUTES.account,
       )}
-      eventsHref={null}
+      eventsHref={DOCTOR_EVENTS_STOREFRONT.routes.accountEvents}
       congressHref={congressRegistered ? DOCTOR_CONGRESS_SECTION.path : null}
       renderLink={({ href, children }) => (
         <NextLink href={href}>{children}</NextLink>

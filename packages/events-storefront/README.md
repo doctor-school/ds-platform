@@ -18,21 +18,23 @@ storefront's pure model units and public reads: the МСК projections of the on
 event-time formatter, the month grid and its paging, the lifecycle → canvas
 status vocabulary, the recording signal / plaque / player card, the one
 past-card playability rule, the one event-count plural rule (`PluralNoun`), the
-public listing / month / event-page / participation reads and the «Мои события»
-read (its row→card projection follows in PR 2.3). The Academy imports them from here; the doctor host still
-runs its own `lib/events-*` units until wave 2 mounts the package there.
+public listing / month / event-page / participation reads, and the «Мои события»
+page whole — read, row→card projection, viewer-zone times and guest door (#1972,
+wave-2 PR 2.3), mounted by both storefronts. The Academy imports the rest from
+here; the doctor host still runs its own `lib/events-*` feed units until wave 2
+mounts the listing there.
 
 ## Layering
 
 One direction of dependency, `ui → client → model`; nothing points back.
 
-| Stratum         | Holds                                                       | May import                            |
-| --------------- | ----------------------------------------------------------- | ------------------------------------- |
-| `src/model/**`  | pure model units — no I/O, no framework                     | `@ds/schemas`                         |
-| `src/client/**` | `"use client"` browser transport + the resume decision rule | `@ds/schemas`                         |
-| `src/server/**` | the reads and the `"use server"` action, JSX-free           | `@ds/schemas`, `next`, `src/model/**` |
-| `src/copy/**`   | the listing's default copy (no `next-intl`)                 | `src/model/**`                        |
-| `src/ui/**`     | composition over `@ds/design-system` primitives             | everything above                      |
+| Stratum         | Holds                                                         | May import                            |
+| --------------- | ------------------------------------------------------------- | ------------------------------------- |
+| `src/model/**`  | pure model units — no I/O, no framework                       | `@ds/schemas`                         |
+| `src/client/**` | `"use client"` browser transport + the resume decision rule   | `@ds/schemas`                         |
+| `src/server/**` | the reads and the `"use server"` action, JSX-free             | `@ds/schemas`, `next`, `src/model/**` |
+| `src/copy/**`   | the listing's and «Мои события» default copy (no `next-intl`) | `src/model/**`, `@ds/schemas` types   |
+| `src/ui/**`     | composition over `@ds/design-system` primitives               | everything above                      |
 
 ## Host-free by construction
 
@@ -61,7 +63,8 @@ it projects rather than the whole unit.
 | `./client`      | `registerForEvent`, `RegistrationError` — the browser transport of the command                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `./ui`          | `RegisterOneTap` — the progressive-enhancement one-tap control; `EventListRouter` — the URL-driven router over the design-system `EventList` (public listing and «Мои события»)                                                                                                                                                                                                                                                                                                                                                                                         |
 | `./listing`     | `EventsListingPage` — the events listing route mount (week pane `DiscoveryListing`, `?view=month` pane `MonthCalendarView`, the shared `CalendarShell` and `ViewSwitcher`); a host route file renders it with its host config and `searchParams` and nothing else (#2028 PR 2.2)                                                                                                                                                                                                                                                                                        |
-| `./host-config` | `EventsStorefrontHostConfig` (`headerCopy`, `copy.eventNoun`, `routes.listing`, `routes.eventPage` — data only) and `eventPageHref`                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `./my-events`   | `MyEventsRoute` — the «Мои события» route mount: reads the host's `contentSet.myEventsPath` with the forwarded session, sends a guest to `withReturnTarget(routes.login, routes.accountEvents)` (`@ds/schemas`), renders the tabs with viewer-zone times (004 EARS-12); a host route file renders it with its host config and `searchParams` and nothing else (#1972)                                                                                                                                                                                                   |
+| `./host-config` | `EventsStorefrontHostConfig` (`contentSet.myEventsPath`, `headerCopy`, `copy.eventNoun`, `routes.listing`, `routes.eventPage`, `routes.login`, `routes.accountEvents` — data only), `MyEventsHostConfig` (the `contentSet` + `routes` a «Мои события»-only host states) and `eventPageHref`                                                                                                                                                                                                                                                                             |
 | `./server`      | `ForwardedSession`, `forwardedSessionFrom`, `forwardedHeaders`, `hasSessionCookie`, `SESSION_COOKIE_NAME`, `fetchEventRegistrationState`, `registerForEventAction` — the canonical BFF hop (session + `x-forwarded-for` relay, #2054; `@ds/auth-flow/server` re-exports the session half so auth consumers read one address) and the registration reads; the public reads (`fetchEventListing*`, `fetchMonthBroadcasts`, `fetchMonthlyCounts`, `fetchPublicEventPage`, `fetchUpcomingBroadcasts`, `fetchParticipationCta`) and the «Мои события» read (`fetchMyEvents`) |
 
 ## Hosts

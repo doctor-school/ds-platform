@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
 import { EventLifecycleStateSchema } from "./events.schema.js";
+import { EventParticipationFormatSchema } from "./participation.schema.js";
 
 // 005 — Event-registration contracts (API SSOT, ADR-0002 §3, ADR-0006 §6.2).
 // Framework-agnostic; `apps/api` wraps these at the I/O boundary and the portal
@@ -89,7 +90,8 @@ export type MyEventState = z.infer<typeof MyEventStateSchema>;
  * `MyEventItem` — one row of the authenticated doctor's «Мои события» list
  * (005 design §4/§5 EARS-6; 014 EARS-9, 014-design §8.3). The thin per-event
  * projection the `MyEvents` read model returns for each of the caller's
- * registrations: `{ eventId, slug, title, school, startsAt, state, recording }` —
+ * registrations: `{ eventId, slug, title, school, startsAt, state, recording,
+ * participationFormat, roomHref }` —
  * exactly the choose-set the shared `EventList` row needs to render a grouped card
  * that links back to `/webinars/:slug`, and NOTHING more (no roster, no registrant
  * PII, no other doctor's data — EARS-10). It is a THINNER allow-list than the 004
@@ -97,8 +99,9 @@ export type MyEventState = z.infer<typeof MyEventStateSchema>;
  * from the registration list, not the public listing projection.
  *
  * `startsAt` is the canonical UTC instant (ISO-8601); the «Мои события» surface
- * renders it in `Europe/Moscow` labeled МСК (EARS-11), never the viewer's local
- * timezone.
+ * renders it through `formatEventTime` (004 EARS-12 as amended 2026-10-02): МСК
+ * on the server and the first client render, then the viewer's zone with an
+ * explicit zone label for an online or hybrid row; an offline row stays МСК.
  *
  * `recording` is the SAME source-free {@link RecordingProjectionSchema} the public
  * archive page and the `/webinars` past tab consume (014 EARS-3, #1340) — one
@@ -117,6 +120,21 @@ export const MyEventItemSchema = z.object({
   startsAt: z.iso.datetime({ offset: true }),
   state: MyEventStateSchema,
   recording: RecordingProjectionSchema.nullable(),
+  /**
+   * The event's attendance mode (020 EARS-1) — the input the viewer-zone time
+   * rule reads (004 «Amendment — 2026-10-02», `formatEventTime`): an online or
+   * hybrid row renders in the viewer's zone, an offline row stays МСК.
+   */
+  participationFormat: EventParticipationFormatSchema,
+  /**
+   * The CALLING host's room path when the caller may enter the room now — a
+   * registered row (every row here is one) on a `live` event, the participation
+   * policy's `enter-room` rule — otherwise `null`. The api resolves it from
+   * the route table of the controller that serves the read (`/v1/me/events` the
+   * Academy, `/v1/storefront/doctor/me/events` the doctor storefront), so a
+   * host never builds a room href itself (wave-2 entry gate §4.3 D8).
+   */
+  roomHref: z.string().nullable(),
 });
 export type MyEventItem = z.infer<typeof MyEventItemSchema>;
 

@@ -1,8 +1,6 @@
 import type { EventRegistrationState } from "@ds/schemas";
-import { buildRoomReturnHref } from "@ds/room/room-return";
 
 import type { CanvasStatus } from "@ds/events-storefront";
-import { ACADEMY_ROOM_ROUTES } from "./room-config";
 
 /**
  * 005 EARS-4/EARS-5 — the Academy's per-user layer over the 004 event page.
@@ -15,8 +13,9 @@ import { ACADEMY_ROOM_ROUTES } from "./room-config";
  * surface by one name.
  *
  * What stays HERE is the render decision this host layers on top: the join
- * signpost and the room-entry href, both of which read the Academy's own
- * lifecycle (`toCanvasStatus`, `@ds/events-storefront`) and room route values (`lib/room-config`).
+ * signpost, read off the Academy's lifecycle (`toCanvasStatus`,
+ * `@ds/events-storefront`). The «Мои события» room href is resolved by the api
+ * per host since #1972 (gate §4.3 D8).
  */
 export {
   type ForwardedSession,
@@ -70,28 +69,4 @@ export function resolveJoinSignpost(
     default:
       return { kind: "none" };
   }
-}
-
-/**
- * 006 EARS-6 — the registered-live room front door on the event page. The room
- * surface (`/webinars/:slug/room`) shipped in EARS-1..7, so the entry CTA that was
- * deliberately deferred to #584 (rendering a `/room` link before the room existed
- * would have dead-ended in a 404 — the #673 Stage-B finding) is now restored.
- *
- * The pure state→href decision: exactly when the caller is registered AND the event
- * is `live` (the `live` arm of {@link resolveJoinSignpost} — the same condition the
- * room gate admits them under server-side), return the canonical same-origin room
- * path; every other case (registered on a non-live event, unregistered, or a guest)
- * returns `null` and no room link renders. The href is built through the hardened
- * {@link buildRoomReturnHref} so a hostile slug can never front a cross-origin or
- * protocol-relative target.
- */
-export function resolveRoomEntryHref(
-  state: EventRegistrationState | null,
-  status: CanvasStatus,
-  slug: string,
-): string | null {
-  return resolveJoinSignpost(state, status).kind === "live"
-    ? buildRoomReturnHref(slug, ACADEMY_ROOM_ROUTES)
-    : null;
 }

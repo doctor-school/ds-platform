@@ -33,7 +33,7 @@ import { EventsService } from "../events/events.service.js";
 import { EventPageViewDto, ParticipationCtaDto } from "../events/events.dto.js";
 import type { AroundEventRoutes } from "../events/around-event.resolver.js";
 import { resolveAroundEvent } from "../events/around-event.resolver.js";
-import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
+import { DOCTOR_ROUTES } from "../events/host-routes.js";
 import { ParticipationService } from "../events/participation.service.js";
 import {
   DoctorEventsFeedDto,
@@ -78,27 +78,6 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * The response varies with that cookie, so the cache is `private` — a shared
  * cache must never hand one doctor's targeted feed to another visitor.
  */
-/**
- * 020 EARS-1 / LD-1 (#1764) — the DOCTOR host's route table, the only thing this
- * host contributes to the shared participation policy (the policy itself is
- * `apps/api/src/events/participation-cta.resolver.ts`, one implementation for
- * both storefronts).
- *
- * `roomPath` resolves to this host's own room route, `/events/:slug/room`
- * (#1722, 020 §6.1): the doctor storefront now MOUNTS the shared `@ds/room` unit
- * there, the same unit the Academy runs at `/webinars/:slug/room`. A registered
- * doctor on a live event resolves to `enter-room` on either host — the ACTION is
- * a fact of the event and the registration, not of the front-end — and the two
- * differ only in the target, which is exactly what this table is for. It stayed
- * `null` while that route did not exist, because EARS-4 requires an impossible
- * affordance to be ABSENT rather than dead.
- */
-const DOCTOR_ROUTES: ParticipationRoutes = {
-  eventPath: (slug) => `/events/${encodeURIComponent(slug)}`,
-  registrationEntry: "/register",
-  roomPath: (slug) => `/events/${encodeURIComponent(slug)}/room`,
-};
-
 /**
  * 020 EARS-2 (#1765) — the DOCTOR host's «вокруг события» table, the twin of
  * the Academy one. Every entry is `null` for the same reason: doctor.school

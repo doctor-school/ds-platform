@@ -2148,6 +2148,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/me/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DoctorMyEventsMeController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/register": {
         parameters: {
             query?: never;
@@ -6246,6 +6262,25 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DoctorEventsMonthGridDto"];
                 };
+            };
+        };
+    };
+    DoctorMyEventsMeController_list: {
+        parameters: {
+            query?: {
+                tab?: "upcoming" | "recordings";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

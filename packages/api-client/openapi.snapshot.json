@@ -7608,6 +7608,28 @@
         "tags": ["DoctorEventsPublic"]
       }
     },
+    "/v1/storefront/doctor/me/events": {
+      "get": {
+        "operationId": "DoctorMyEventsMeController_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tab",
+            "required": false,
+            "schema": {
+              "enum": ["upcoming", "recordings"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DoctorMyEventsMe"]
+      }
+    },
     "/v1/storefront/doctor/register": {
       "post": {
         "operationId": "DoctorRegisterPublicController_register",

@@ -32,7 +32,13 @@ the surface's two canvas tabs (014-design §8.3):
 - `MyEvents` (`GET /v1/me/events?tab=upcoming|recordings`) — ONE tab of the
   authenticated doctor's «Мои события» plus BOTH tabs' counts:
   `{ tab, data, counts }`, each row `{ eventId, slug, title, school, startsAt,
-state, recording }`. `?tab=` is optional and defaults to `upcoming`, so the bare
+state, recording, participationFormat, roomHref }`. `roomHref` is the CALLING
+  host's room path for a `live` row (the participation policy's `enter-room`
+  rule), else `null`: the host is the controller — this route passes the
+  Academy route table, the doctor storefront's twin
+  `GET /v1/storefront/doctor/me/events` (`DoctorMyEventsMeController`, same
+  posture, one shared handler `serveMyEvents`) passes the doctor table
+  (`apps/api/src/events/host-routes.ts`). `?tab=` is optional and defaults to `upcoming`, so the bare
   call 005 shipped keeps returning the Предстоящие side; anything outside the
   closed two-value set is a 400, never coerced to the default.
   - **`upcoming`** — `published`/`live` inside the 004 upcoming window

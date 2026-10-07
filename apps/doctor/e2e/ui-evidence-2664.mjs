@@ -7,8 +7,8 @@
  * The change swaps `<main>` for `<div>` (same classes) in the compositions and
  * moves the landmark onto the route-group shell, so the claim to prove is that
  * nothing PAINTS differently. It shoots the doctor `/account/events` and the
- * Academy `/webinars` at desktop + mobile, light theme, signed in as one doctor
- * registered for two seeded events, once on the base build (`before`) and once
+ * Academy `/webinars` and `/` at desktop + mobile, light theme, signed in as
+ * one doctor registered for two seeded events, once on the base build (`before`) and once
  * on the branch build (`after`), then compares the two sets pixel by pixel.
  *
  *   capture: E2E_DOCTOR_URL=… E2E_PORTAL_URL=… MAILPIT_URL=… DATABASE_URL=<branch db> \
@@ -34,13 +34,16 @@ const [mode, dirA, dirB] = process.argv.slice(2);
 const SHOTS = [
   ["doctor", "/account/events"],
   ["portal", "/webinars"],
+  // The Academy home: its own footer moved to the root layout's `@footer`
+  // slot (after the layout's `<main>`), so `/` is shot too.
+  ["portal", "/"],
 ];
 const VIEWPORTS = {
   desktop: { width: 1440, height: 1024 },
   mobile: { width: 390, height: 844 },
 };
 const name = (host, path, vp) =>
-  `${host}${path.replaceAll("/", "-")}-${vp}-light.png`;
+  `${host}${path === "/" ? "-home" : path.replaceAll("/", "-")}-${vp}-light.png`;
 
 /** The newest Mailpit code for `email` sent after `after` whose subject names `kind`. */
 async function mailCode(mailpit, email, after, kind) {

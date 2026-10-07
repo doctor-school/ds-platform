@@ -487,7 +487,17 @@ function LeadDemoSection() {
   );
 }
 
-function AcademyFooter() {
+/**
+ * The Academy home's own footer (feature 013): the page-local section index,
+ * the brand line and the giant wordmark.
+ *
+ * #2664 — the page does NOT render it: the root layout's `@footer`
+ * parallel-route slot mounts it on `/` only, AFTER the layout's `<main>`, so it
+ * is the page's top-level `contentinfo` landmark (inside `<main>` a `<footer>`
+ * is no landmark). Every other route's slot renders nothing; the shared
+ * storefront footer stands down on `/` (`academyShellConfig`).
+ */
+export function AcademyHomeFooter() {
   return (
     <footer>
       <Container className="flex flex-wrap items-center justify-between gap-5 border-t-2 border-border py-8">
@@ -534,7 +544,7 @@ function AcademyFooter() {
 export function AcademyHomeView() {
   return (
     <div lang="ru" className="min-h-screen bg-background text-foreground">
-      <div>
+      <div data-testid="academy-home-sections">
         <AcademyHero />
         <WhatSection />
         <ExpertsSection />
@@ -545,7 +555,6 @@ export function AcademyHomeView() {
         <FormatsSection />
         <LeadDemoSection />
       </div>
-      <AcademyFooter />
     </div>
   );
 }

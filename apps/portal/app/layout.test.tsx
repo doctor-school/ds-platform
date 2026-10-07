@@ -45,6 +45,7 @@ async function renderLayout(): Promise<Document> {
   const tree = await RootLayout({
     children: <p data-testid="route-content">short page</p>,
     chrome: <header data-testid="chrome" />,
+    footer: <footer data-testid="page-footer" />,
   });
   return new DOMParser().parseFromString(
     renderToStaticMarkup(tree),
@@ -72,7 +73,8 @@ describe("008 EARS-14 (#2228): the root layout pins the footer to the viewport b
     expect(footer).not.toBeNull();
     expect(growing?.contains(footer!)).toBe(false);
     expect(
-      growing!.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      growing!.compareDocumentPosition(footer!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
       "footer comes after the growing area",
     ).toBeTruthy();
   });
@@ -84,12 +86,16 @@ describe("#2664: the root layout owns the page's one main landmark", () => {
     const doc = await renderLayout();
     const mains = doc.querySelectorAll("main");
     expect(mains).toHaveLength(1);
-    expect(mains[0]!.querySelector('[data-testid="route-content"]')).not.toBeNull();
+    expect(
+      mains[0]!.querySelector('[data-testid="route-content"]'),
+    ).not.toBeNull();
     // The landmark carries the sticky-footer fill (EARS-14.2) and leaves the
     // chrome header and the footer outside it.
     expect(mains[0]!.classList.contains("flex-1")).toBe(true);
     expect(mains[0]!.querySelector('[data-testid="chrome"]')).toBeNull();
-    expect(mains[0]!.querySelector('[data-testid="storefront-footer"]')).toBeNull();
+    expect(
+      mains[0]!.querySelector('[data-testid="storefront-footer"]'),
+    ).toBeNull();
   });
 
   it("#2664: on the webinar room the layout opens no main — RoomShell owns the room's landmark", async () => {
@@ -99,5 +105,19 @@ describe("#2664: the root layout owns the page's one main landmark", () => {
     expect(
       doc.querySelector('[data-testid="route-content"]')?.closest(".flex-1"),
     ).not.toBeNull();
+  });
+
+  it("#2664: the @footer slot renders after the main, outside it — a top-level contentinfo", async () => {
+    nav.pathname = "/";
+    const doc = await renderLayout();
+    const main = doc.querySelector("main")!;
+    const pageFooter = doc.querySelector('[data-testid="page-footer"]');
+    expect(pageFooter).not.toBeNull();
+    expect(pageFooter!.closest("main")).toBeNull();
+    expect(
+      main.compareDocumentPosition(pageFooter!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      "the page footer comes after the main",
+    ).toBeTruthy();
   });
 });

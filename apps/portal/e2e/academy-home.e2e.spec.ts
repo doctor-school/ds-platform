@@ -166,8 +166,11 @@ test.describe("Feature 013 — static public Academy home", () => {
     );
     await expect
       .poll(() =>
+        // #2664 — `main` is the root layout's frame now; the sections are the
+        // direct children of the home's own sections container inside it.
         page
           .getByRole("main")
+          .getByTestId("academy-home-sections")
           .locator(":scope > [data-academy-section]")
           .evaluateAll((sections) =>
             sections.map((section) =>
@@ -180,7 +183,15 @@ test.describe("Feature 013 — static public Academy home", () => {
     // every other portal route; the page body itself owns no header any more.
     await expect(page.locator("header")).toHaveCount(1);
     await expect(page.getByTestId("storefront-logo")).toHaveCount(1);
+    // #2664 — the home footer is the page's ONE top-level `contentinfo`: the
+    // root layout's `@footer` slot mounts it AFTER the layout's `<main>`, never
+    // inside it (a `<footer>` inside `<main>` is no landmark at all).
+    await expect(page.getByRole("contentinfo")).toHaveCount(1);
     await expect(page.getByRole("contentinfo")).toBeVisible();
+    await expect(
+      page.getByRole("contentinfo").getByTestId("academy-footer-wordmark"),
+    ).toHaveCount(1);
+    await expect(page.getByRole("main").locator("footer")).toHaveCount(0);
     // The static page still fetches nothing OF ITS OWN. The only dynamic
     // traffic on `/` belongs to the mounted 008 shell header (#1877): its
     // one-shot self-profile read (`useHeaderAuth`) and Next's RSC prefetch of
@@ -682,5 +693,25 @@ test.describe("Feature 013 — static public Academy home", () => {
 
     await expect(page.getByTestId("storefront-logo")).toBeVisible();
     await expect(page.locator("header")).toHaveCount(1);
+  });
+  test("#2664: the @footer slot mounts the home footer on / only — a soft navigation away drops it", async ({
+    page,
+  }) => {
+    await page.route("**/v1/auth/session", (route) =>
+      route.fulfill({ status: 401, body: "" }),
+    );
+    await page.route("**/v1/me/profile", (route) =>
+      route.fulfill({ status: 401, body: "" }),
+    );
+
+    await page.goto("/");
+    await expect(page.getByTestId("academy-footer-wordmark")).toHaveCount(1);
+
+    // A client-side navigation keeps the root layout mounted; an unmatched
+    // parallel slot would keep its previous content, so the slot's catch-all
+    // must replace the home footer with nothing.
+    await page.getByTestId("shell-login").click();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByTestId("academy-footer-wordmark")).toHaveCount(0);
   });
 });

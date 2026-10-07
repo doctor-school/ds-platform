@@ -52,9 +52,11 @@ const inter = Inter({
 export default async function RootLayout({
   children,
   chrome,
+  footer,
 }: {
   children: ReactNode;
   chrome: ReactNode;
+  footer: ReactNode;
 }) {
   const locale = await getLocale();
   const messages = await getMessages();
@@ -103,6 +105,12 @@ export default async function RootLayout({
           <RouteMain roomShellPaths={ROOM_SHELL_PATHS} className="flex-1">
             {children}
           </RouteMain>
+          {/* #2664 — the route-owned `@footer` slot: a page's OWN footer,
+              mounted after the frame's `<main>` so it is a top-level
+              `contentinfo` landmark rather than a `<footer>` buried in `main`.
+              Only `/` fills it (the Academy home footer); every other route's
+              slot is empty. */}
+          {footer}
           {/* 008 EARS-14 — the storefront footer, mounted from the ROOT layout
               rather than from the `@chrome` slot: the slot owns the header only,
               and the footer must close every route's document. It carries the

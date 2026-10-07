@@ -66,6 +66,9 @@ sequenceDiagram
 Consequences that are part of the contract rather than side effects:
 
 - **The guest round-trip has a real target.** The card action carries `eventId` + the current feed URL into 021; 021 returns to that URL (LD-7). No "last page" heuristic exists to drift.
+
+  > **Read under 019 «Amendment — 2026-10-06»** ([requirements](./019-requirements-en.md)): the card carries no action and LD-7 retires — an upcoming card links to feature 020's event page, where a guest signs up and returns; no guest band renders under the feed.
+
 - **The horizon is a URL range, not a scroll position** (LD-2), so «показать ещё» is reproducible and there is no infinite scroll whose position cannot be linked.
 - **Nothing is restored from a previous visit.** The screen has no per-viewer memory; the only viewer-dependent parts are the live block's action target, the card `state` and the presence of the «Мои события» cut.
 
@@ -196,6 +199,6 @@ Response shape is the read-model set of the requirements' Event Model. Errors ar
 5. **Dedicated calendar page (EARS-5)** over the same projection.
 6. **Live block (EARS-6)** adapts `RoomService` + `RegistrationService`, extracts only the cross-front `live-event-strip` presentation block, and links a registered doctor into the room on the doctor storefront host at `/events/[slug]/room` (`apps/doctor/app/(room)/events/[slug]/room/`, outside the 017 shell) over the shared 006 room-UI unit `packages/room` (`@ds/room`, extraction #1722); it never creates a second room, room UI fork or lifecycle resolver.
 7. **Past tense (EARS-10)** consumes Feature 014's `RecordingsProjectionService`, portable recording schemas and the #1346 archive state; 019 owns no recording projection or archive unit.
-8. **Guest path (EARS-12)** — depends on EARS-8's addressable state and 021's return.
+8. **Guest path (EARS-12)** — depends on EARS-8's addressable state and 021's return. Read under 019 «Amendment — 2026-10-06»: the guest path is full reading only; the sign-up and its return live on feature 020's event page.
 9. **«Мои события» (EARS-11)** — last, behind 021 (data) and 022 (destination) per LD-8.
 10. **Mobile + axe (EARS-13)** and **purity scan (EARS-14)** across the finished surfaces; **EARS-15** is the process gate that wraps the whole sequence.

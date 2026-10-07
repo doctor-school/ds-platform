@@ -56,7 +56,7 @@ another visitor.
   plus the per-event lookups `toCards` already batches.
 - **Every day is emitted, `count: 0` included**, so a host renders the grid
   straight from the response — Academy's client-side month assembly
-  (`apps/portal/components/month-calendar-view.tsx`) is deliberately NOT the
+  (`packages/events-storefront/src/ui/month-calendar-view.tsx`) is deliberately NOT the
   Doctor shape (019-design §1.1, §3).
 - **«Будущие» only in release 1** (LD-10, #1525): a day already past carries
   `count: 0` rather than a historical figure the feed beside the grid would not

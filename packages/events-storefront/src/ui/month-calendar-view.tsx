@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { getTranslations } from "next-intl/server";
 import {
   MonthCalendarGrid,
   MonthPicker,
@@ -10,6 +9,12 @@ import {
 } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
+import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
+import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
+import {
+  buildListingHref,
+  type ListingQueryInput,
+} from "../model/listing-href";
 import {
   buildMonthGrid,
   capDayEntries,
@@ -22,15 +27,11 @@ import {
   monthShortLabels,
   shiftMonth,
   weekdayShortLabels,
-} from "@ds/events-storefront";
-import {
-  fetchMonthBroadcasts,
-  fetchMonthlyCounts,
-} from "@ds/events-storefront/server";
+} from "../model/month-grid";
+import { fetchMonthBroadcasts, fetchMonthlyCounts } from "../server";
 import { CalendarShell } from "./calendar-shell";
 import { MonthCalendarMobile, type AgendaDay } from "./month-calendar-mobile";
 import { ViewSwitcher } from "./view-switcher";
-import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
 
 /**
  * The picker's in-place year-paging window (004 owner verdicts #4/#6 on #1052):
@@ -47,7 +48,7 @@ import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
 const PICKER_YEAR_RADIUS = 3;
 
 /**
- * 004 EARS-19 — the «Месяц» pane of `/webinars` (`?view=month`, design §5.4). A
+ * 004 EARS-19 — the «Месяц» pane of the events listing (`?view=month`, design §5.4). A
  * server component: it reads the current МСК month projection (`GET
  * /v1/public/events?month=`, uncached — a lifecycle transition surfaces on the
  * next request), folds every instant into `Europe/Moscow` via the pure
@@ -73,23 +74,31 @@ const PICKER_YEAR_RADIUS = 3;
  * relative to МСК now, so a past/future month renders with no today marker.
  *
  * Copy: date/month/weekday PARTS are Intl-formatted МСК (the `msk.ts` EARS-12
- * precedent), every fixed LABEL comes from the typed catalog (`webinars.month`,
- * EARS-13) — no hardcoded RU in this component.
+ * precedent), every fixed LABEL comes from the package copy (`LISTING_COPY.month`,
+ * EARS-13) and every count noun from the host's `copy.eventNoun` — no hardcoded
+ * RU in this component.
  */
 export async function MonthCalendarView({
+  config,
   month,
   queryParams = {},
 }: {
-  month?: string;
-  queryParams?: WebinarsQueryInput;
+  config: EventsStorefrontHostConfig;
+  month?: string | undefined;
+  queryParams?: ListingQueryInput;
 }) {
-  const t = await getTranslations("webinars.month");
+  const t = LISTING_COPY.month;
+  const noun = eventNounOf(config.copy);
+  const listingPath = config.routes.listing;
 
   const displayedMonth = month ?? currentMskMonth();
   const monthViewHref = (targetMonth: string) =>
-    buildWebinarsHref(queryParams, { view: "month", month: targetMonth });
+    buildListingHref(listingPath, queryParams, {
+      view: "month",
+      month: targetMonth,
+    });
   const weekViewHref = (targetMonth: string, hash?: string) =>
-    buildWebinarsHref(queryParams, {
+    buildListingHref(listingPath, queryParams, {
       view: "week",
       month: targetMonth,
       hash,
@@ -133,11 +142,11 @@ export async function MonthCalendarView({
       return {
         label,
         note: past
-          ? t("pickerPast")
-          : t("pickerCount", { count: countByMonth.get(m) ?? 0 }),
+          ? t.pickerPast
+          : t.pickerCount(countByMonth.get(m) ?? 0, noun),
         current,
         muted: past,
-        href: current ? undefined : monthViewHref(monthStr),
+        ...(current ? {} : { href: monthViewHref(monthStr) }),
       };
     });
     return { year: y, months };
@@ -146,15 +155,15 @@ export async function MonthCalendarView({
   const prevMonth = shiftMonth(displayedMonth, -1);
   const nextMonth = shiftMonth(displayedMonth, 1);
   const schools = new Set(entries.map((e) => e.school)).size;
-  const liveLabel = t("legendLive");
-  const liveBadge = t("liveBadge");
+  const liveLabel = t.legendLive;
+  const liveBadge = t.liveBadge;
 
   // ── Legend accent link (canvas line 155): always the NEXT month
   // (displayed + 1, year boundary via shiftMonth) — always-on regardless of
   // event data (owner rule on #1052 verdict #2). ──
   const nextMonthLink = {
     href: monthViewHref(nextMonth),
-    label: t("nextMonthLink", { month: formatMonthTitle(nextMonth) }),
+    label: t.nextMonthLink(formatMonthTitle(nextMonth)),
   };
 
   // ── Return-from-future link (owner verdict #5): the «← <prev month>» back link
@@ -163,7 +172,7 @@ export async function MonthCalendarView({
   const prevMonthLink = isMonthFuture(displayedMonth)
     ? {
         href: monthViewHref(prevMonth),
-        label: t("prevMonthLink", { month: formatMonthTitle(prevMonth) }),
+        label: t.prevMonthLink(formatMonthTitle(prevMonth)),
       }
     : undefined;
 
@@ -179,25 +188,27 @@ export async function MonthCalendarView({
           dateLabel: String(cell.day),
           muted: cell.isWeekend,
           mutedDate: true,
-          pills: hasEvents
-            ? cell.entries.map((e) => ({
-                href: `/webinars/${e.slug}`,
-                time: entryTime(e),
-                title: e.title,
-                past: true,
-              }))
-            : undefined,
+          ...(hasEvents
+            ? {
+                pills: cell.entries.map((e) => ({
+                  href: eventPageHref(config, e.slug),
+                  time: entryTime(e),
+                  title: e.title,
+                  past: true,
+                })),
+              }
+            : {}),
         };
       }
       const empty = !hasEvents;
       // Scope item 10 (canvas update 2026-07-17): ≤3 pills live-first; the
       // remainder folds into «+N ещё», anchored at the day's group in the week
-      // listing (owner decision on #1065 — `/webinars?month=…#day-YYYY-MM-DD`,
+      // listing (owner decision on #1065 — `<routes.listing>?month=…#day-YYYY-MM-DD`,
       // the loss-free switcher round-trip param preserved).
       const { visible, overflow } = capDayEntries(cell.entries);
       return {
         dateLabel: cell.isToday
-          ? `${cell.day}${t("todaySuffix")}`
+          ? `${cell.day}${t.todaySuffix}`
           : String(cell.day),
         today: cell.isToday,
         // Owner rule (#1052 verdict #2): the muted BACKGROUND marks weekends
@@ -205,21 +216,24 @@ export async function MonthCalendarView({
         // card surface. The date INK keeps the canvas rule (past/weekend/empty).
         muted: cell.isWeekend,
         mutedDate: !cell.isToday && (cell.isWeekend || empty),
-        pills: hasEvents
-          ? visible.map((e) => ({
-              href: `/webinars/${e.slug}`,
-              time: entryTime(e),
-              title: e.title,
-              live: e.state === "live",
-            }))
-          : undefined,
-        more:
-          overflow > 0 && cell.isoDay
-            ? {
+        ...(hasEvents
+          ? {
+              pills: visible.map((e) => ({
+                href: eventPageHref(config, e.slug),
+                time: entryTime(e),
+                title: e.title,
+                live: e.state === "live",
+              })),
+            }
+          : {}),
+        ...(overflow > 0 && cell.isoDay
+          ? {
+              more: {
                 href: weekViewHref(displayedMonth, `day-${cell.isoDay}`),
-                label: t("moreLink", { count: overflow }),
-              }
-            : undefined,
+                label: t.moreLink(overflow),
+              },
+            }
+          : {}),
       };
     }),
   );
@@ -242,10 +256,8 @@ export async function MonthCalendarView({
         cell.inMonth && cell.isoDay
           ? [
               formatAgendaDayTitle(cell.isoDay),
-              hasEvents
-                ? t("dayEventsLabel", { count: cell.entries.length })
-                : null,
-              hasLive ? t("dayLiveLabel") : null,
+              hasEvents ? t.dayEventsLabel(cell.entries.length, noun) : null,
+              hasLive ? t.dayLiveLabel : null,
             ]
               .filter(Boolean)
               .join(", ")
@@ -264,10 +276,10 @@ export async function MonthCalendarView({
   for (const cell of grid.weeks.flat()) {
     if (!cell.inMonth || !cell.isoDay) continue;
     agendaDays[cell.day] = {
-      title: `${formatAgendaDayTitle(cell.isoDay)}${cell.isToday ? t("todaySuffix") : ""}`,
-      emptyText: cell.isPast ? t("agendaEmptyPast") : t("agendaEmptyFuture"),
+      title: `${formatAgendaDayTitle(cell.isoDay)}${cell.isToday ? t.todaySuffix : ""}`,
+      emptyText: cell.isPast ? t.agendaEmptyPast : t.agendaEmptyFuture,
       rows: cell.entries.map((e) => ({
-        href: `/webinars/${e.slug}`,
+        href: eventPageHref(config, e.slug),
         time: entryTime(e),
         school: e.school,
         title: e.title,
@@ -279,8 +291,6 @@ export async function MonthCalendarView({
 
   const defaultDay =
     grid.todayDom ?? grid.weeks.flat().find((c) => c.inMonth)?.day ?? 1;
-
-  const tw = await getTranslations("webinars");
 
   // ── Toolbar (EARS-16/17/18): picker + ‹ › pager + «Сегодня» + switcher. The
   // picker holds the year-paging client state; the pager/«Сегодня» are Button
@@ -296,7 +306,7 @@ export async function MonthCalendarView({
         <MonthPicker
           className="min-w-0 flex-1 layout:flex-none"
           triggerLabel={monthTitle}
-          pickerLabel={t("pickerLabel")}
+          pickerLabel={t.pickerLabel}
           initialYear={year}
           years={pickerYears}
           // Edge fallback: a step past the window edge re-centres on the year
@@ -310,8 +320,8 @@ export async function MonthCalendarView({
           nextYearHref={monthViewHref(
             shiftMonth(displayedMonth, 12 * (PICKER_YEAR_RADIUS + 1)),
           )}
-          prevYearLabel={t("prevYear")}
-          nextYearLabel={t("nextYear")}
+          prevYearLabel={t.prevYear}
+          nextYearLabel={t.nextYear}
         />
 
         <Button
@@ -319,7 +329,7 @@ export async function MonthCalendarView({
           variant="outline"
           className="px-4 text-base font-extrabold"
         >
-          <Link href={monthViewHref(prevMonth)} aria-label={t("prevMonth")}>
+          <Link href={monthViewHref(prevMonth)} aria-label={t.prevMonth}>
             <span aria-hidden="true">‹</span>
           </Link>
         </Button>
@@ -328,7 +338,7 @@ export async function MonthCalendarView({
           variant="outline"
           className="px-4 text-base font-extrabold"
         >
-          <Link href={monthViewHref(nextMonth)} aria-label={t("nextMonth")}>
+          <Link href={monthViewHref(nextMonth)} aria-label={t.nextMonth}>
             <span aria-hidden="true">›</span>
           </Link>
         </Button>
@@ -339,12 +349,12 @@ export async function MonthCalendarView({
           className="hidden px-5 text-caption text-tint-foreground layout:inline-flex"
         >
           <Link
-            href={buildWebinarsHref(queryParams, {
+            href={buildListingHref(listingPath, queryParams, {
               view: "month",
               month: null,
             })}
           >
-            {t("todayButton")}
+            {t.todayButton}
           </Link>
         </Button>
 
@@ -355,8 +365,8 @@ export async function MonthCalendarView({
             active="month"
             weekHref={weekViewHref(displayedMonth)}
             monthHref={monthViewHref(displayedMonth)}
-            weekLabel={t("viewWeek")}
-            monthLabel={t("viewMonth")}
+            weekLabel={t.viewWeek}
+            monthLabel={t.viewMonth}
           />
         </div>
       </div>
@@ -371,14 +381,14 @@ export async function MonthCalendarView({
         >
           <Link href={weekViewHref(displayedMonth)}>
             <span aria-hidden="true">← </span>
-            {t("viewWeek")}
+            {t.viewWeek}
           </Link>
         </DsLink>
         <span
           aria-current="page"
           className="text-caption font-extrabold text-tint-foreground"
         >
-          {t("viewMonth")}
+          {t.viewMonth}
         </span>
       </div>
     </>
@@ -387,9 +397,9 @@ export async function MonthCalendarView({
   return (
     <CalendarShell
       title={monthTitle}
-      subtitle={t("subtitle", { count: entries.length, schools })}
-      taglineTop={tw("taglineTop")}
-      taglineBottom={tw("taglineBottom")}
+      subtitle={t.subtitle(entries.length, schools, noun)}
+      taglineTop={LISTING_COPY.taglineTop}
+      taglineBottom={LISTING_COPY.taglineBottom}
       toolbar={toolbar}
     >
       {/* Desktop pane (≥901px). */}
@@ -400,12 +410,12 @@ export async function MonthCalendarView({
         weeks={desktopWeeks}
         liveLabel={liveLabel}
         legend={{
-          live: t("legendLive"),
-          planned: t("legendPlanned"),
-          past: t("legendPast"),
+          live: t.legendLive,
+          planned: t.legendPlanned,
+          past: t.legendPast,
         }}
         nextMonthLink={nextMonthLink}
-        prevMonthLink={prevMonthLink}
+        {...(prevMonthLink ? { prevMonthLink } : {})}
       />
 
       {/* Mobile pane (≤900px). */}

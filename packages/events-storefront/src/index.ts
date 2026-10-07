@@ -71,6 +71,11 @@ export {
 } from "./model/recording-signal";
 export { isRecordingPlayable } from "./model/recording-cta";
 export {
+  type ListingHrefChange,
+  type ListingQueryInput,
+  buildListingHref,
+} from "./model/listing-href";
+export {
   DEFAULT_EVENT_NOUN,
   type PluralNoun,
   formatEventCount,

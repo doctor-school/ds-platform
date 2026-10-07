@@ -1,24 +1,28 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
 import type { PastBroadcastCard } from "@ds/schemas";
 import { Link as DsLink } from "@ds/design-system/link";
+import { LISTING_COPY } from "../copy/listing-copy";
+import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
+import {
+  buildListingHref,
+  type ListingQueryInput,
+} from "../model/listing-href";
 import {
   formatMskDayLabel,
   formatMskMonth,
   formatMskParts,
   formatMskWeekdayShort,
-  isRecordingPlayable,
   mskDayKey,
   mskMonthKey,
-} from "@ds/events-storefront";
+} from "../model/msk";
+import { isRecordingPlayable } from "../model/recording-cta";
 import {
   fetchEventListingWithCursorFallback,
   fetchMyEvents,
-} from "@ds/events-storefront/server";
-import { forwardedSessionFrom } from "@/lib/registration-state";
-import { buildWebinarsHref, type WebinarsQueryInput } from "@/lib/webinars-url";
+  forwardedSessionFrom,
+} from "../server";
 import { CalendarShell } from "./calendar-shell";
 import { EventListRouter } from "./event-list-router";
 import { ViewSwitcher } from "./view-switcher";
@@ -38,24 +42,30 @@ async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
   }
 }
 
-/** Academy host projection around the shared, controlled and fetch-free EventList. */
-export default async function DiscoveryListing({
+/**
+ * The «Неделя» pane of the events listing — the day-grouped projection around
+ * the shared, controlled and fetch-free design-system `EventList`. The host
+ * states its routes and page head in `config`.
+ */
+export async function DiscoveryListing({
+  config,
   monthViewHref,
-  weekViewHref = "/webinars",
+  weekViewHref,
   timeframe = "upcoming",
   cursor,
   page = 1,
   queryParams,
 }: {
+  config: EventsStorefrontHostConfig;
   monthViewHref: string;
-  weekViewHref?: string;
+  weekViewHref: string;
   timeframe?: "upcoming" | "past";
-  cursor?: string;
+  cursor?: string | undefined;
   page?: number;
   /** The route's raw query, so a rejected cursor can be stripped from the URL itself. */
-  queryParams?: WebinarsQueryInput;
+  queryParams?: ListingQueryInput;
 }) {
-  const t = await getTranslations("webinars");
+  const t = LISTING_COPY;
   const [{ listing, cursorRejected }, registeredSlugs] = await Promise.all([
     fetchEventListingWithCursorFallback({ timeframe, cursor }),
     fetchRegisteredSlugs(),
@@ -71,7 +81,10 @@ export default async function DiscoveryListing({
   // shareable link, and no reload re-issues the doomed upstream request.
   if (cursorRejected && queryParams) {
     redirect(
-      buildWebinarsHref(queryParams, { view: "week", resetFeedPage: true }),
+      buildListingHref(config.routes.listing, queryParams, {
+        view: "week",
+        resetFeedPage: true,
+      }),
     );
   }
   const effectiveCursor = cursorRejected ? undefined : cursor;
@@ -90,28 +103,26 @@ export default async function DiscoveryListing({
         timeframe === "past"
           ? formatMskMonth(card.startsAt)
           : formatMskDayLabel(card.startsAt),
-      href: `/webinars/${card.slug}`,
+      href: eventPageHref(config, card.slug),
       time: parts.time,
-      tzLabel: t("cardTz"),
-      dateLabel: t("cardDate", {
-        date: parts.date,
-        weekday: formatMskWeekdayShort(card.startsAt),
-      }),
+      tzLabel: t.cardTz,
+      dateLabel: t.cardDate(parts.date, formatMskWeekdayShort(card.startsAt)),
       school: card.school,
       title: card.title,
       specialties: card.specialties,
       speakers: card.speakers,
       live: card.state === "live",
-      liveLabel: t("live"),
-      recordingLabel: recording ? t(`recording.${recording.state}`) : undefined,
+      liveLabel: t.live,
+      ...(recording ? { recordingLabel: t.recording[recording.state] } : {}),
       variant: timeframe === "past" ? ("past" as const) : ("upcoming" as const),
-      ctaHref: timeframe === "past" ? `/webinars/${card.slug}` : undefined,
-      ctaLabel:
-        timeframe === "past" && isRecordingPlayable(recording)
-          ? t("recordingCta")
-          : undefined,
+      ...(timeframe === "past"
+        ? { ctaHref: eventPageHref(config, card.slug) }
+        : {}),
+      ...(timeframe === "past" && isRecordingPlayable(recording)
+        ? { ctaLabel: t.recordingCta }
+        : {}),
       registered: registeredSlugs.has(card.slug),
-      registeredLabel: t("registered"),
+      registeredLabel: t.registered,
     };
   });
 
@@ -127,8 +138,8 @@ export default async function DiscoveryListing({
             active="week"
             weekHref={weekViewHref}
             monthHref={monthViewHref}
-            weekLabel={t("month.viewWeek")}
-            monthLabel={t("month.viewMonth")}
+            weekLabel={t.month.viewWeek}
+            monthLabel={t.month.viewMonth}
           />
         </div>
       </div>
@@ -137,7 +148,7 @@ export default async function DiscoveryListing({
           aria-current="page"
           className="text-caption font-extrabold text-tint-foreground"
         >
-          {t("month.viewWeek")}
+          {t.month.viewWeek}
         </span>
         <DsLink
           asChild
@@ -145,7 +156,7 @@ export default async function DiscoveryListing({
           className="text-caption font-bold text-tint-foreground"
         >
           <Link href={monthViewHref}>
-            {t("month.viewMonth")}
+            {t.month.viewMonth}
             <span aria-hidden="true"> →</span>
           </Link>
         </DsLink>
@@ -155,36 +166,37 @@ export default async function DiscoveryListing({
 
   return (
     <CalendarShell
-      title={t("title")}
+      title={config.headerCopy.title}
       subtitle={
         timeframe === "past"
-          ? t("archiveSubtitle", { count: listing.counts.past })
-          : t("subtitle")
+          ? t.archiveSubtitle(listing.counts.past)
+          : config.headerCopy.subline
       }
-      taglineTop={t("taglineTop")}
-      taglineBottom={t("taglineBottom")}
+      taglineTop={t.taglineTop}
+      taglineBottom={t.taglineBottom}
       toolbar={null}
     >
       <div className="-mt-16 layout:mt-0" data-testid="week-listbody">
         <EventListRouter
+          basePath={config.routes.listing}
           items={items}
           selectedTab={timeframe}
           counts={listing.counts}
           labels={{
-            upcoming: t("tabs.upcoming"),
-            past: t("tabs.past"),
-            emptyTitle: t(
-              timeframe === "past" ? "pastEmpty.title" : "empty.title",
-            ),
-            emptyDescription: t(
-              timeframe === "past" ? "pastEmpty.body" : "empty.body",
-            ),
-            pagination: t("pagination.label"),
-            previous: t("pagination.previous"),
-            next: t("pagination.next"),
-            pagePrefix: t("pagination.page"),
+            upcoming: t.tabs.upcoming,
+            past: t.tabs.past,
+            emptyTitle:
+              timeframe === "past" ? t.pastEmpty.title : t.empty.title,
+            emptyDescription:
+              timeframe === "past" ? t.pastEmpty.body : t.empty.body,
+            pagination: t.pagination.label,
+            previous: t.pagination.previous,
+            next: t.pagination.next,
+            pagePrefix: t.pagination.page,
           }}
-          cursor={effectiveCursor}
+          {...(effectiveCursor === undefined
+            ? {}
+            : { cursor: effectiveCursor })}
           nextCursor={listing.pagination.nextCursor}
           hasMore={listing.pagination.hasMore}
           page={effectivePage}

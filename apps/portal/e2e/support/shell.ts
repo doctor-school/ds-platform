@@ -20,7 +20,7 @@ import { expect, type Page, type Locator } from "@playwright/test";
  *  the shared control announces WHICH theme activating it turns on. */
 export const THEME_TOGGLE_TO_DARK = "Включить тёмную тему";
 export const THEME_TOGGLE_TO_LIGHT = "Включить светлую тему";
-/** The discovery front-door poster heading (feature-004 `webinars.title`). */
+/** The discovery front-door poster heading (feature-004, `headerCopy.title` of `lib/events-storefront.host-config.ts`). */
 export const DISCOVERY_HEADING = "Расписание эфиров";
 /** The retired scaffold card copy (EARS-9) — must be unreachable in the portal. */
 export const SCAFFOLD_COPY = "Каркас приложения";
@@ -68,10 +68,7 @@ export function isDark(page: Page): Promise<boolean> {
 
 /** The persisted explicit theme choice, if any. */
 export function storedTheme(page: Page): Promise<string | null> {
-  return page.evaluate(
-    (key) => window.localStorage.getItem(key),
-    THEME_KEY,
-  );
+  return page.evaluate((key) => window.localStorage.getItem(key), THEME_KEY);
 }
 
 /**
@@ -96,11 +93,17 @@ export function mainWebinarHrefs(page: Page): Promise<string[]> {
  * the `refreshHeaderAuth()` signal from the auth flows (#1004) — a raw fetch fires
  * no signal, so a hard reload afterwards makes the header re-read the profile.
  */
-export async function setMyDisplayName(page: Page, name: string): Promise<void> {
+export async function setMyDisplayName(
+  page: Page,
+  name: string,
+): Promise<void> {
   const status = await page.evaluate(async (displayName) => {
     const res = await fetch("/v1/me/display-name", {
       method: "PUT",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+      },
       credentials: "include",
       body: JSON.stringify({ displayName }),
     });

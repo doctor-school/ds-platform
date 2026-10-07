@@ -6,24 +6,22 @@ const { fetchMonthBroadcasts, fetchMonthlyCounts } = vi.hoisted(() => ({
   fetchMonthlyCounts: vi.fn(),
 }));
 
-vi.mock("next-intl/server", () => ({
-  getTranslations: vi.fn(async () => (key: string, values?: Record<string, unknown>) =>
-    values?.count === undefined ? key : `${key}:${String(values.count)}`),
-}));
-
-vi.mock("@ds/events-storefront/server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@ds/events-storefront/server")>()),
+vi.mock("../server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../server")>()),
   fetchMonthBroadcasts,
   fetchMonthlyCounts,
 }));
 
 vi.mock("@ds/design-system/blocks", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@ds/design-system/blocks")>();
+  const original =
+    await importOriginal<typeof import("@ds/design-system/blocks")>();
   return { ...original, MonthPicker: () => null };
 });
 
 vi.mock("./calendar-shell", () => ({
-  CalendarShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  CalendarShell: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("./month-calendar-mobile", () => ({
@@ -56,7 +54,16 @@ describe("<MonthCalendarView>", () => {
   afterEach(() => vi.useRealTimers());
 
   it("EARS-11: desktop month keeps every past event titled and linked instead of collapsing it to an aggregate note", async () => {
-    render(await MonthCalendarView({ month: "2026-07" }));
+    render(
+      await MonthCalendarView({
+        config: {
+          headerCopy: { title: "t", subline: "s" },
+          copy: { eventNoun: { one: "эфир", few: "эфира", many: "эфиров" } },
+          routes: { listing: "/webinars", eventPage: "/webinars" },
+        },
+        month: "2026-07",
+      }),
+    );
 
     const desktop = screen.getByTestId("month-grid-desktop");
     const event = within(desktop).getByRole("link", {
@@ -64,6 +71,7 @@ describe("<MonthCalendarView>", () => {
     });
 
     expect(event).toHaveAttribute("href", "/webinars/diabet-i-komorbidnost");
-    expect(within(desktop).queryByText("pastNote:1")).not.toBeInTheDocument();
+    // The retired aggregate note («1 эфир · прошёл») never renders.
+    expect(within(desktop).queryByText(/· прош/)).not.toBeInTheDocument();
   });
 });

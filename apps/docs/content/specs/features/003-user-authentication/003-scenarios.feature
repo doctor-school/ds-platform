@@ -650,12 +650,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the registrant is returned to the return target signed in, never routed to /login
     And the password typed at registration is invalidated, leaving a code-only account until a reset
 
-  @EARS-39 @EARS-41 @failure
+  @EARS-39 @EARS-41 @failure @email-confirmation
   Scenario: A refused code keeps the registrant on the verification step
-    Given a registrant on the verification step
-    When the registrant submits a wrong or expired code
-    Then the registrant stays on the verification step with the generic error
-    And the registrant is not routed anywhere
+    Given an Academy visitor with a unique never-registered email
+    When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
+    Then the Academy code step has a fresh delivered confirmation code that remains unconsumed
+    When the registrant enters a guaranteed different six-digit confirmation code once in the original Academy tab
+    Then Academy rejects that confirmation generically on the same verification step without navigation or private access
+    # Wrong code only; expiry remains in "Expired email verification code is rejected".
+    # Old component mapping: packages/auth-flow/src/verify/verify-door.test.tsx
+    # "003 EARS-16 / EARS-41: a refused code keeps the visitor on the step..."
+    # -> EARS-39/41 registration.steps.ts live refusal; retain component coverage.
+    # Internal mirror proof: apps/api/test/auth/verify.e2e-spec.ts EARS-3.
+    # Its EARS-41 test owns the identifier-triad timing proof, not this browser case.
 
   @EARS-39 @failure
   Scenario: The held registration password is never persisted anywhere

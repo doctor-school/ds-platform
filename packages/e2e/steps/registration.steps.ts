@@ -10,6 +10,8 @@ import {
   registerOwnedCredentials,
   registrationEvidence,
   verificationEvidence,
+  differentVerificationCode,
+  verificationRefusalEvidence,
   inputSecret,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
@@ -23,6 +25,9 @@ interface Registration extends OwnedCredentials {
   code?: string;
   verification?: Response;
   verificationRequests?: number;
+  refusal?: ReturnType<typeof verificationRefusalEvidence>;
+  submittedCode?: string;
+  verificationNavigations?: number;
 }
 const registrations = new WeakMap<Page, Registration>();
 function registration(key: Page): Registration {
@@ -150,6 +155,134 @@ Then(
       ),
       "unconfirmed registration cannot read a private profile",
     ).toBe(401);
+  },
+);
+
+When(
+  "the registrant enters a guaranteed different six-digit confirmation code once in the original Academy tab",
+  async ({ page }) => {
+    const state = registration(page);
+    state.submittedCode = differentVerificationCode(state.code!);
+    state.verificationNavigations = 0;
+    state.verificationRequests = 0;
+    state.page.on("framenavigated", (frame) => {
+      if (frame === state.page.mainFrame()) state.verificationNavigations! += 1;
+    });
+    state.page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname === "/v1/auth/verify" &&
+        request.method() === "POST"
+      )
+        state.verificationRequests! += 1;
+    });
+    const refused = state.page
+      .waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/v1/auth/verify" &&
+          response.request().method() === "POST",
+      )
+      .then(async (response) => {
+        // Consume and project the body before any later navigation can evict it.
+        state.refusal = verificationRefusalEvidence(
+          response.request().postData() ?? "",
+          await response.text(),
+          state,
+          state.code!,
+          state.submittedCode!,
+        );
+        return response;
+      });
+    await inputSecret(
+      state.page.locator('input[autocomplete="one-time-code"]'),
+      state.submittedCode,
+    );
+    state.verification = await refused;
+  },
+);
+
+Then(
+  "Academy rejects that confirmation generically on the same verification step without navigation or private access",
+  async ({ page, world }) => {
+    const state = registration(page);
+    const response = state.verification!;
+    expect(response.status(), "wrong confirmation code refused").toBe(400);
+    expect(state.refusal).toEqual({
+      credentialsMatch: true,
+      wrongCode: true,
+      refusalMatches: true,
+    });
+    await expect
+      .poll(
+        async () =>
+          (await state.page.getByTestId("verify-error").textContent()) ===
+          "Код не подошёл. Проверьте его или запросите новый.",
+      )
+      .toBe(true);
+    await expect(
+      state.page.locator('input[autocomplete="one-time-code"]'),
+    ).toBeVisible();
+    const url = new URL(state.page.url());
+    expect(url.origin).toBe(new URL(world.hostBaseUrl).origin);
+    expect(url.pathname).toBe("/verify");
+    expect(
+      url.searchParams.get("email") === state.email,
+      "same submitted address",
+    ).toBe(true);
+    const sessionName = "__Host-ds_session";
+    expect(
+      ((await response.headerValue("set-cookie")) ?? "").includes(
+        `${sessionName}=`,
+      ),
+      "refusal minted no session",
+    ).toBe(false);
+    const cookies = await state.context.cookies();
+    expect(
+      cookies.some((cookie) => cookie.name === sessionName),
+      "no private browser session",
+    ).toBe(false);
+    const secrets = [state.password, state.code!, state.submittedCode!];
+    expect(
+      cookies.some((cookie) =>
+        secrets.some((secret) => cookie.value.includes(secret)),
+      ),
+      "no password or code in cookies",
+    ).toBe(false);
+    const exposed = await state.page.evaluate((secrets) => {
+      const readable = JSON.stringify({
+        url: location.href,
+        cookie: document.cookie,
+        local: Object.entries(localStorage),
+        session: Object.entries(sessionStorage),
+      });
+      return (
+        secrets.some(
+          (secret) =>
+            readable.includes(secret) ||
+            readable.includes(encodeURIComponent(secret)),
+        ) ||
+        /__Host-ds_session|access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
+          readable,
+        )
+      );
+    }, secrets);
+    expect(exposed, "no password, code or token in readable stores").toBe(
+      false,
+    );
+    expect(
+      await state.page.evaluate(
+        async () =>
+          (await fetch("/v1/me/profile", { credentials: "include" })).status,
+      ),
+      "same browser cannot read private profile",
+    ).toBe(401);
+    expect(
+      state.verificationRequests,
+      "one automatic confirmation request",
+    ).toBe(1);
+    expect(
+      state.verificationNavigations,
+      "no navigation after wrong code",
+    ).toBe(0);
   },
 );
 

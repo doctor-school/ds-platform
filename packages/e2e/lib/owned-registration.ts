@@ -94,6 +94,41 @@ export function verificationEvidence(
   };
 }
 
+export function differentVerificationCode(delivered: string): string {
+  if (!/^\d{6}$/.test(delivered)) {
+    throw new Error("Expected a delivered six-digit confirmation code");
+  }
+  return `${(Number(delivered[0]) + 1) % 10}${delivered.slice(1)}`;
+}
+
+/** Keep refusal diagnostics safe even if the server echoes submitted secrets. */
+export function verificationRefusalEvidence(
+  requestText: string,
+  responseText: string,
+  account: OwnedCredentials,
+  delivered: string,
+  submitted: string,
+) {
+  const response = parsedObject(responseText);
+  return {
+    credentialsMatch: verificationEvidence(
+      requestText,
+      responseText,
+      account,
+      submitted,
+    ).credentialsMatch,
+    wrongCode:
+      /^\d{6}$/.test(delivered) &&
+      /^\d{6}$/.test(submitted) &&
+      submitted !== delivered,
+    refusalMatches:
+      Object.keys(response).length === 3 &&
+      response.statusCode === 400 &&
+      response.message === "the request could not be completed" &&
+      response.error === "Bad Request",
+  };
+}
+
 /** Shared by registration acceptance and the owned password-reset prerequisites. */
 export async function registerOwnedCredentials(
   page: Page,

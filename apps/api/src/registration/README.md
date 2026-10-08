@@ -245,6 +245,11 @@ read from the table on every request rather than baked into the session.
 Deleting or re-pointing the row takes effect on the next request the same way:
 every desk route then answers `403 EVENT_BINDING_REQUIRED`.
 
+The programme committee (046 EARS-26) is bound the same way, with role
+`congress-program-committee` and one row per event — a member may sit on
+several congresses; its runbook is in
+[`../congress/README.md`](../congress/README.md) («Programme committee»).
+
 ## Exported symbols
 
 - `RegistrationModule` — the Nest module (both controllers + service +

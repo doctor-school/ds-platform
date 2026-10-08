@@ -306,6 +306,67 @@ describe("AdminAuthorityGuard (#1304)", () => {
       );
     });
 
+    // 046 EARS-28 (#2437, ADR-0001 A3): the committee status change
+    // admits `platform_admin` OR `congress-program-committee` and is revalidated
+    // against the grant the principal acts under.
+    const COMMITTEE_ROLES: AuthzMeta["roles"] = [
+      "platform_admin",
+      "congress-program-committee",
+    ];
+
+    it("046 EARS-28: a committee-only principal on the status row is revalidated against congress-program-committee", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: COMMITTEE_ROLES }),
+        principal: { sid: SID, roles: ["congress-program-committee"] },
+        verdict: {
+          outcome: "active",
+          sub: SUB,
+          roles: ["congress-program-committee"],
+        },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith({
+        zitadelSessionId: ZITADEL_SESSION_ID,
+        sub: SUB,
+        requiredRole: "congress-program-committee",
+      });
+    });
+
+    it("046 EARS-28: 403 PROGRAM_COMMITTEE_REQUIRED — the committee grant was revoked at the IdP", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: COMMITTEE_ROLES }),
+        principal: { sid: SID, roles: ["congress-program-committee"] },
+        verdict: { outcome: "role_revoked", roles: [] },
+      });
+      await expectRefusal(h, "PROGRAM_COMMITTEE_REQUIRED", 403);
+    });
+
+    it("046 EARS-28: a platform_admin on the status row is revalidated against platform_admin", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: COMMITTEE_ROLES }),
+        principal: {
+          sid: SID,
+          roles: ["platform_admin", "congress-program-committee"],
+        },
+      });
+      await expect(h.guard.canActivate(h.context)).resolves.toBe(true);
+      expect(h.revalidate).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredRole: "platform_admin" }),
+      );
+    });
+
+    it("046 EARS-35: a committee-only principal on an admin-only live row (the extension) is asked about platform_admin", async () => {
+      const h = harness({
+        meta: metaOf({ revalidate: "live", roles: ["platform_admin"] }),
+        principal: { sid: SID, roles: ["congress-program-committee"] },
+        verdict: {
+          outcome: "role_revoked",
+          roles: ["congress-program-committee"],
+        },
+      });
+      await expectRefusal(h, "PLATFORM_ADMIN_REQUIRED", 403);
+    });
+
     it("#1304: 503 IDP_REVALIDATION_UNAVAILABLE — a provider fault is never a credential denial", async () => {
       const h = harness({
         meta: metaOf({ revalidate: "live" }),

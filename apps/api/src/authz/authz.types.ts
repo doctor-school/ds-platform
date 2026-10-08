@@ -27,6 +27,9 @@ export const ROLES = [
   // its authority is the Zitadel project-roles claim (ADR-0001 §1, §8), and
   // `users.role` only MIRRORS it, exactly as `platform_admin` works today.
   "event-registrar",
+  // 046 EARS-26 — the congress programme committee: a coarse role from the
+  // project-roles claim, bound to one or more events by `event_role_grants`.
+  "congress-program-committee",
 ] as const;
 export type Role = (typeof ROLES)[number];
 

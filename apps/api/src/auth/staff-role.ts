@@ -26,6 +26,7 @@ import { DOCTOR_GUEST_ROLE } from "./idp/idp.types.js";
 export const STAFF_ROLES = [
   "platform_admin",
   "event-registrar",
+  "congress-program-committee",
   "legacy_admin",
   "pd_officer",
 ] as const;

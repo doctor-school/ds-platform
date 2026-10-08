@@ -2,6 +2,7 @@ import {
   assertSendableCode,
   assertSendableEmail,
   type CongressConfirmationRequest,
+  type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
@@ -51,6 +52,12 @@ export class FakeMailer implements Mailer {
   > = [];
   /** When set, the NEXT submission receipt rejects with it (046 EARS-14). */
   private nextSubmissionReceiptFailure: Error | undefined;
+  /** Every accepted 046 EARS-29 / EARS-35 decision or extension letter, in order. */
+  readonly congressSubmissionDecisions: Array<
+    CongressSubmissionDecisionRequest & { to: string }
+  > = [];
+  /** When set, the NEXT decision or extension letter rejects with it. */
+  private nextSubmissionDecisionFailure: Error | undefined;
   /** When set, the NEXT code send rejects with it (models a transport outage). */
   private nextCodeSendFailure: Error | undefined;
   /** When set, the NEXT congress confirmation rejects with it (044 EARS-12). */
@@ -174,6 +181,29 @@ export class FakeMailer implements Mailer {
       throw failure;
     }
     this.congressSubmissionReceipts.push({
+      ...input,
+      to: input.email.trim().toLowerCase(),
+    });
+  }
+
+  /**
+   * Test control for 046 EARS-29 / EARS-35: make the NEXT decision or
+   * extension letter reject with `error`, then clear itself (one-shot).
+   */
+  failNextSubmissionDecision(error: Error): void {
+    this.nextSubmissionDecisionFailure = error;
+  }
+
+  async sendCongressSubmissionDecision(
+    input: CongressSubmissionDecisionRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    if (this.nextSubmissionDecisionFailure) {
+      const failure = this.nextSubmissionDecisionFailure;
+      this.nextSubmissionDecisionFailure = undefined;
+      throw failure;
+    }
+    this.congressSubmissionDecisions.push({
       ...input,
       to: input.email.trim().toLowerCase(),
     });

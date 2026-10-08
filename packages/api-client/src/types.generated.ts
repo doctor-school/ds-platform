@@ -884,6 +884,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/events/{idOrSlug}/congress-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CongressSubmissionsAdminController_registry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/events/{idOrSlug}/congress-submissions/{submissionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CongressSubmissionsAdminController_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/events/{idOrSlug}/congress-submissions/{submissionId}/revision-deadline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CongressSubmissionsAdminController_extendRevisionDeadline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/events/{idOrSlug}/congress-submissions/{submissionId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CongressSubmissionsAdminController_changeStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/events/{idOrSlug}/registrations": {
         parameters: {
             query?: never;
@@ -2375,6 +2439,10 @@ export interface components {
             surname: string | null;
             workplace: string | null;
         };
+        CongressRevisionDeadlineRequestDto: {
+            /** Format: date */
+            lastDay: string;
+        };
         CongressRosterListDto: {
             congressDays: string[];
             event: {
@@ -2423,6 +2491,75 @@ export interface components {
             specialtyId: string;
             surname: string;
             workplace: string;
+        };
+        CongressSubmissionCardDto: {
+            authors: {
+                firstName?: string;
+                patronymic?: string;
+                presenting?: boolean;
+                surname?: string;
+                workplace?: string;
+            }[];
+            body: {
+                [key: string]: string;
+            };
+            committeeComment: string | null;
+            derivedFrom: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                kind: "oral" | "poster" | "abstract";
+                /** @enum {string} */
+                status: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+                title: string;
+            } | null;
+            event: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                /** Format: date-time */
+                startsAt: string;
+                title: string;
+            };
+            history: {
+                actor: string | null;
+                /** Format: date-time */
+                at: string;
+                from: ("draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn") | null;
+                source: string;
+                /** @enum {string} */
+                to: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+            }[];
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "oral" | "poster" | "abstract";
+            lastLetter: {
+                /** Format: date-time */
+                at: string;
+                kind: string;
+                /** @enum {string} */
+                status: "sent" | "failed";
+            } | null;
+            revisionDueAt: string | null;
+            revisionLastDay: string | null;
+            statements: {
+                [key: string]: string;
+            } | null;
+            /** @enum {string} */
+            status: "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+            /** Format: date-time */
+            statusChangedAt: string;
+            submittedAt: string | null;
+            submitter: {
+                ageOnEventStart: number | null;
+                email: string | null;
+                fullName: string;
+                phone: string | null;
+            };
+            title: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         CongressSubmissionCreateRequestDto: {
             /** Format: uuid */
@@ -2488,6 +2625,36 @@ export interface components {
                     [key: string]: string | number | null;
                 };
             }[];
+        };
+        CongressSubmissionRegistryDto: {
+            event: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                /** Format: date-time */
+                startsAt: string;
+                title: string;
+            };
+            page: number;
+            pageSize: number;
+            rows: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                kind: "oral" | "poster" | "abstract";
+                position: number;
+                /** @enum {string} */
+                status: "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+                submittedAt: string | null;
+                submitter: {
+                    email: string | null;
+                    fullName: string;
+                };
+                title: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+            total: number;
         };
         CongressSubmissionSectionDto: {
             birthDate: string | null;
@@ -2557,6 +2724,13 @@ export interface components {
             acceptedConsents: "congress-submission-personal-data"[];
             /** @default [] */
             statements: ("plag" | "trade")[];
+        };
+        CongressSubmissionStatusChangeRequestDto: {
+            comment?: string;
+            /** @enum {string} */
+            expectedStatus: "draft" | "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+            /** @enum {string} */
+            status: "in_review" | "accepted" | "rejected" | "needs_revision";
         };
         CongressSubmissionWithdrawRequestDto: {
             /** @enum {string} */
@@ -4371,6 +4545,112 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    CongressSubmissionsAdminController_registry: {
+        parameters: {
+            query?: {
+                kind?: "oral" | "poster" | "abstract";
+                order?: "asc" | "desc";
+                page?: number;
+                pageSize?: number;
+                q?: string;
+                sentFrom?: string;
+                sentTo?: string;
+                sort?: "kind" | "title" | "submitter" | "status" | "submittedAt" | "updatedAt";
+                status?: "submitted" | "in_review" | "accepted" | "rejected" | "needs_revision" | "withdrawn";
+                submitter?: string;
+            };
+            header?: never;
+            path: {
+                idOrSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressSubmissionRegistryDto"];
+                };
+            };
+        };
+    };
+    CongressSubmissionsAdminController_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+                submissionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressSubmissionCardDto"];
+                };
+            };
+        };
+    };
+    CongressSubmissionsAdminController_extendRevisionDeadline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+                submissionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CongressRevisionDeadlineRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressSubmissionCardDto"];
+                };
+            };
+        };
+    };
+    CongressSubmissionsAdminController_changeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idOrSlug: string;
+                submissionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CongressSubmissionStatusChangeRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CongressSubmissionCardDto"];
+                };
             };
         };
     };

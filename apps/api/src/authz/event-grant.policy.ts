@@ -2,7 +2,9 @@ import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import {
   type DrizzleHandle,
   type EventGrantBinding,
+  type EventScopedRole,
   findEventGrant,
+  findEventGrantForEvent,
   listEventGrantsBySub,
   users,
 } from "@ds/db";
@@ -39,6 +41,12 @@ export interface EventGrantSubject {
  *   the page loaded is a credential refusal the console shows as no-access,
  *   never as a retryable error.
  *
+ * 046 EARS-26 (#2437): the same step serves the programme committee —
+ * `role: "congress-program-committee"` — whose member may be bound to ONE OR
+ * MORE events; the path's event must be one of them, matched by id or slug.
+ * Each route names the one event-scoped role it admits, so a registrar never
+ * reaches a committee route on the strength of its desk binding, and back.
+ *
  * The binding is platform data read in the request (ADR-0001 §1 hybrid RBAC):
  * the role comes from the IdP claim on the session, the event from the table.
  */
@@ -55,11 +63,20 @@ export class EventGrantPolicy {
   async assertEventAccess(
     subject: EventGrantSubject | undefined,
     idOrSlug: string,
+    role: EventScopedRole = "event-registrar",
   ): Promise<string> {
     const roles = subject?.roles ?? [];
     if (roles.includes("platform_admin")) return idOrSlug;
-    if (!subject || !roles.includes("event-registrar")) {
+    if (!subject || !roles.includes(role)) {
       throw new ForbiddenException("insufficient role");
+    }
+    if (role !== "event-registrar") {
+      const userId = await this.userIdOf(subject.sub);
+      const bound = userId
+        ? await findEventGrantForEvent(this.db, userId, role, idOrSlug)
+        : null;
+      if (!bound) throw new AdminAuthorityException("EVENT_BINDING_REQUIRED");
+      return bound.eventId;
     }
     const grant = await this.registrarGrant(subject.sub);
     if (!grant) {
@@ -77,12 +94,17 @@ export class EventGrantPolicy {
   }
 
   private async registrarGrant(sub: string): Promise<EventGrantBinding | null> {
+    const userId = await this.userIdOf(sub);
+    if (!userId) return null;
+    return findEventGrant(this.db, userId, "event-registrar");
+  }
+
+  private async userIdOf(sub: string): Promise<string | null> {
     const [user] = await this.db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.zitadelSub, sub))
       .limit(1);
-    if (!user) return null;
-    return findEventGrant(this.db, user.id, "event-registrar");
+    return user?.id ?? null;
   }
 }

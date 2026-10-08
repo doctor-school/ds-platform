@@ -25,6 +25,7 @@ export type AdminAuthorityErrorCode =
   | "PLATFORM_ADMIN_REQUIRED"
   | "PD_OFFICER_REQUIRED"
   | "EVENT_REGISTRAR_REQUIRED"
+  | "PROGRAM_COMMITTEE_REQUIRED"
   | "EVENT_BINDING_REQUIRED"
   | "STEP_UP_REQUIRED"
   | "IDP_REVALIDATION_UNAVAILABLE";
@@ -37,6 +38,7 @@ export const ADMIN_AUTHORITY_STATUS: Readonly<
   PLATFORM_ADMIN_REQUIRED: 403,
   PD_OFFICER_REQUIRED: 403,
   EVENT_REGISTRAR_REQUIRED: 403,
+  PROGRAM_COMMITTEE_REQUIRED: 403,
   EVENT_BINDING_REQUIRED: 403,
   STEP_UP_REQUIRED: 401,
   IDP_REVALIDATION_UNAVAILABLE: 503,
@@ -49,6 +51,7 @@ const ADMIN_AUTHORITY_TITLE: Readonly<Record<AdminAuthorityErrorCode, string>> =
     PLATFORM_ADMIN_REQUIRED: "platform_admin required",
     PD_OFFICER_REQUIRED: "pd_officer required",
     EVENT_REGISTRAR_REQUIRED: "event-registrar required",
+    PROGRAM_COMMITTEE_REQUIRED: "congress-program-committee required",
     EVENT_BINDING_REQUIRED: "Event binding required",
     STEP_UP_REQUIRED: "Fresh step-up verification required",
     IDP_REVALIDATION_UNAVAILABLE: "Identity provider unavailable",

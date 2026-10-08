@@ -13,13 +13,16 @@ import { events } from "./events.js";
 import { users } from "./users.js";
 
 /**
- * The event-scoped roles a grant row may bind. One member today — the 044
- * congress desk registrar (EARS-38). The future partner role (#2379) widens this
- * list and the CHECK below in one reviewed migration; a free-text role that no
- * authorization read ever matches would otherwise be a grant that silently
+ * The event-scoped roles a grant row may bind: the 044 congress desk registrar
+ * (EARS-38) and the 046 programme committee (EARS-26, #2437). A new role widens
+ * this list and the CHECK below in one reviewed migration; a free-text role that
+ * no authorization read ever matches would otherwise be a grant that silently
  * grants nothing.
  */
-export const EVENT_SCOPED_ROLES = ["event-registrar"] as const;
+export const EVENT_SCOPED_ROLES = [
+  "event-registrar",
+  "congress-program-committee",
+] as const;
 export type EventScopedRole = (typeof EVENT_SCOPED_ROLES)[number];
 
 /**
@@ -33,8 +36,9 @@ export type EventScopedRole = (typeof EVENT_SCOPED_ROLES)[number];
  * step reads it in the request, with no IdP round trip and no custom token claim.
  *
  * One `event-registrar` grant per user (the partial unique index): a desk
- * registrar works exactly one congress. The partner role (#2379) writes the same
- * table and decides its own cardinality when it lands.
+ * registrar works exactly one congress. A `congress-program-committee` member is
+ * bound to ONE OR MORE events (046 EARS-26) — one row per event, never the same
+ * event twice (the `(user_id, role, event_id)` unique index).
  *
  * Audited by the 010 `audit_row_change()` trigger like every domain table, so
  * «who bound whom to which event, and when» is answered by `audit_ledger`. Until
@@ -63,10 +67,15 @@ export const eventRoleGrants = pgTable(
     uniqueIndex("event_role_grants_registrar_user_uniq")
       .on(t.userId, t.role)
       .where(sql`${t.role} = 'event-registrar'`),
+    uniqueIndex("event_role_grants_user_role_event_uniq").on(
+      t.userId,
+      t.role,
+      t.eventId,
+    ),
     index("event_role_grants_event_idx").on(t.eventId),
     check(
       "event_role_grants_role_known",
-      sql`${t.role} IN ('event-registrar')`,
+      sql`${t.role} IN ('event-registrar', 'congress-program-committee')`,
     ),
   ],
 );

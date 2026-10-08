@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 
 import type { DrizzleHandle } from "./client.js";
 import {
@@ -44,6 +44,43 @@ export async function findEventGrant(
     .innerJoin(events, eq(events.id, eventRoleGrants.eventId))
     .where(
       and(eq(eventRoleGrants.userId, userId), eq(eventRoleGrants.role, role)),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * 046 EARS-26 (#2437) — the grant a user holds for one event-scoped role on ONE
+ * event, matched by the event's id or slug — `null` when no such binding exists.
+ * The programme committee may be bound to several events, so the authorization
+ * step asks about the path's event rather than about «the» grant.
+ */
+export async function findEventGrantForEvent(
+  db: DrizzleHandle["db"],
+  userId: string,
+  role: EventScopedRole,
+  idOrSlug: string,
+): Promise<EventGrantBinding | null> {
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      idOrSlug,
+    );
+  const rows = await db
+    .select({
+      role: eventRoleGrants.role,
+      eventId: eventRoleGrants.eventId,
+      eventSlug: events.slug,
+    })
+    .from(eventRoleGrants)
+    .innerJoin(events, eq(events.id, eventRoleGrants.eventId))
+    .where(
+      and(
+        eq(eventRoleGrants.userId, userId),
+        eq(eventRoleGrants.role, role),
+        isUuid
+          ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
+          : eq(events.slug, idOrSlug),
+      ),
     )
     .limit(1);
   return rows[0] ?? null;

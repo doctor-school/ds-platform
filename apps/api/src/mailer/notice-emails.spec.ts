@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   congressConfirmationMessage,
+  congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
   formatCongressEventDate,
+  formatRevisionLastDay,
 } from "./notice-emails.js";
 
 /**
@@ -144,5 +146,105 @@ describe("046 EARS-14: the submission receipt", () => {
       expect(message.text).not.toContain(internal);
       expect(message.html).not.toContain(internal);
     }
+  });
+});
+
+describe("046 EARS-29, EARS-35: the committee decision and extension letters", () => {
+  const SUBMISSION = {
+    title: "Ранняя реабилитация после артроскопии",
+    kindLabel: "Устный доклад",
+  } as const;
+  const CABINET_ENTRY =
+    "Чтобы открыть заявку, зайдите на сайт Конгресса orthobio.ru. В разделе " +
+    "«Участникам» найдите «Как подать материалы» и нажмите «Войти в кабинет». " +
+    "Войти можно по коду из письма, пароль не нужен.";
+
+  const LETTERS = [
+    {
+      content: { ...SUBMISSION, letter: "accepted" as const },
+      subject: "Doctor.School — заявка принята",
+      text:
+        "Программный комитет принял вашу заявку «Ранняя реабилитация после " +
+        "артроскопии» (устный доклад).",
+    },
+    {
+      content: {
+        ...SUBMISSION,
+        letter: "rejected" as const,
+        comment: "Тема вне программы конгресса",
+      },
+      subject: "Doctor.School — заявка отклонена",
+      text:
+        "Программный комитет отклонил заявку «Ранняя реабилитация после " +
+        "артроскопии» (устный доклад). Комментарий комитета: Тема вне " +
+        "программы конгресса",
+    },
+    {
+      content: {
+        ...SUBMISSION,
+        letter: "needs_revision" as const,
+        comment: "Сократите аннотацию",
+        lastDay: "19.02.2027",
+      },
+      subject: "Doctor.School — заявку нужно доработать",
+      text:
+        "Программный комитет просит доработать заявку «Ранняя реабилитация " +
+        "после артроскопии» (устный доклад): Сократите аннотацию. Исправить и " +
+        "отправить заявку можно в кабинете до 19.02.2027, 23:59 МСК.",
+    },
+    {
+      content: {
+        ...SUBMISSION,
+        letter: "revision_extended" as const,
+        lastDay: "03.03.2027",
+      },
+      subject: "Doctor.School — срок доработки продлён",
+      text:
+        "Срок доработки заявки «Ранняя реабилитация после артроскопии» " +
+        "(устный доклад) продлён. Исправить и отправить заявку можно в " +
+        "кабинете до 03.03.2027, 23:59 МСК.",
+    },
+  ];
+
+  for (const { content, subject, text } of LETTERS) {
+    it(`046 EARS-29: the ${content.letter} letter carries the approved subject and text verbatim, ending with the cabinet-entry paragraph`, () => {
+      const message = congressSubmissionDecisionMessage(content);
+      expect(message.subject).toBe(subject);
+      expect(message.text).toContain(text);
+      expect(message.text).toContain(CABINET_ENTRY);
+      expect(message.text.indexOf(CABINET_ENTRY)).toBeGreaterThan(
+        message.text.indexOf(text),
+      );
+      expect(message.text.trimEnd().endsWith("Команда Doctor.School")).toBe(
+        true,
+      );
+    });
+
+    it(`046 EARS-29: the ${content.letter} letter carries no link, no button and no URL`, () => {
+      expectNoLinkOnlyTheDomainAsText(
+        congressSubmissionDecisionMessage(content),
+      );
+    });
+  }
+
+  it("046 EARS-29: the committee comment reaches the letter verbatim, never as markup", () => {
+    const message = congressSubmissionDecisionMessage({
+      ...SUBMISSION,
+      letter: "rejected",
+      comment: "<b>Нет</b> & нет",
+    });
+    expect(message.text).toContain("Комментарий комитета: <b>Нет</b> & нет");
+    expect(message.html).not.toContain("<b>Нет</b>");
+  });
+
+  it("046 EARS-29, EARS-35: «{дата}» is the last day — the day before the stored instant — in Moscow", () => {
+    // Stored 2027-03-04T00:00+03:00 → last day 03.03.2027 (V-12).
+    expect(formatRevisionLastDay(new Date("2027-03-03T21:00:00.000Z"))).toBe(
+      "03.03.2027",
+    );
+    // Stored 2027-02-20T00:00+03:00 → last day 19.02.2027 (V-12).
+    expect(formatRevisionLastDay(new Date("2027-02-19T21:00:00.000Z"))).toBe(
+      "19.02.2027",
+    );
   });
 });

@@ -221,6 +221,26 @@ The `unavailable` row is load-bearing, not defensive boilerplate. Every provider
 
 **Affects.** 003 EARS-13 (production amendment 2026-10-07); `apps/api/src/auth/rate-limit/`; `apps/api/src/auth/README.md` (rate-limit section); design §5.5 SD1.
 
+### A3 — The programme committee is revalidated under its own grant; `403 PROGRAM_COMMITTEE_REQUIRED` (2026-10-08, #2437)
+
+**Context.** A1 is running in production: a live row that admits `event-registrar` asks the IdP about the registrar grant for a registrar-only session. Feature 046 adds a second event-scoped staff role, `congress-program-committee` (046 EARS-26), bound to one or more events by `event_role_grants` rows. Its status change on a congress submission (046 EARS-28) is a `revalidate: "live"` write, and a committee-only session holds no `platform_admin`, so the A1 rule as written would refuse every committee member.
+
+**Decision.**
+
+- **Which grant is revalidated.** On a row that admits `congress-program-committee`, a session holding `platform_admin` is asked about `platform_admin`; a session without it that holds `congress-program-committee` is asked about `congress-program-committee`. The A1 registrar and `pd_officer` rules stand unchanged.
+- **New verdict-table row.** Grant revoked, `congress-program-committee` case → `403` `errorCode: PROGRAM_COMMITTEE_REQUIRED`, beside `PLATFORM_ADMIN_REQUIRED`, `PD_OFFICER_REQUIRED` and `EVENT_REGISTRAR_REQUIRED`.
+- **Revalidation never widens reach.** As in A1: the route `roles` check and the event binding (`EventGrantPolicy.assertEventAccess` over `event_role_grants` for the committee role) decide admission. A committee-only session on a row that does not admit the committee is asked about `platform_admin` and refused.
+- **Second-factor floor.** `congress-program-committee` requires TOTP like `event-registrar` (`MFA_REQUIRED_BY_ROLE`).
+- **Unchanged.** `401 ADMIN_SESSION_REQUIRED`, `503 IDP_REVALIDATION_UNAVAILABLE`, and the authority-before-presence order.
+
+**Consequences.** Committee members get live revalidation on their decision write at no widening of access. The admin console MUST treat `403 PROGRAM_COMMITTEE_REQUIRED` as a credential refusal (no-access), never as a retry.
+
+**Why now.** #2437 ships the committee status route with `revalidate: "live"`, the first committee-reachable live write.
+
+**Open follow-up.** The admin decision UI (the next layer of #2437) maps `403 PROGRAM_COMMITTEE_REQUIRED` to no-access and `503 IDP_REVALIDATION_UNAVAILABLE` to retry.
+
+**Affects.** 046 EARS-26 / EARS-28 / EARS-31; `apps/api/src/auth/admin-session/admin-authority.guard.ts`; `apps/api/src/auth/README.md`; `apps/api/docs/endpoint-authz-matrix.md` (`revalidate` column); `infra/dev-stand/idp/provision.sh` (project role seed).
+
 ## Consequences
 
 ### Positive

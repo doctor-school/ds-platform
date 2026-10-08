@@ -11,6 +11,9 @@ import {
   CongressSubmissionsMeController,
 } from "./congress-submissions.me.controller.js";
 import { CongressSubmissionsService } from "./congress-submissions.service.js";
+import { CongressSubmissionsAdminController } from "./congress-submissions.admin.controller.js";
+import { CongressSubmissionsAdminService } from "./congress-submissions.admin.service.js";
+import { EventGrantPolicy } from "../authz/event-grant.policy.js";
 import {
   CONGRESS_SIGN_UP_CLOCK,
   CONGRESS_SIGN_UP_ENV,
@@ -39,11 +42,16 @@ import {
     // 046 EARS-4…17: the author's submissions cabinet.
     CongressSubmissionsMeController,
     CongressBirthDateMeController,
+    // 046 EARS-26…29, 34, 35: the programme committee's registry, card,
+    // status change and the administrator's deadline extension.
+    CongressSubmissionsAdminController,
   ],
   providers: [
     CongressSignUpService,
     CongressIntakeSettingsService,
     CongressSubmissionsService,
+    CongressSubmissionsAdminService,
+    EventGrantPolicy,
     {
       provide: CONGRESS_SIGN_UP_CLOCK,
       useValue: (() => new Date()) satisfies CongressSignUpClock,

@@ -10,6 +10,7 @@ import {
 import {
   adminLockoutMessage,
   congressConfirmationMessage,
+  congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
 } from "./notice-emails.js";
 
@@ -49,6 +50,16 @@ describe("transactional HTML/plain-text content parity", () => {
         title: "Ранняя реабилитация",
         kindLabel: "Устный доклад",
         eventTitle: "Конгресс-2027",
+      }),
+    ],
+    [
+      "congress-submission-needs-revision",
+      congressSubmissionDecisionMessage({
+        title: "Ранняя реабилитация",
+        kindLabel: "Устный доклад",
+        letter: "needs_revision",
+        comment: "Сократите аннотацию",
+        lastDay: "19.02.2027",
       }),
     ],
   ] as const) {
@@ -266,6 +277,45 @@ describe("046 EARS-14: submission-receipt FakeMailer ↔ SmtpMailer contract par
     ).resolves.toBeUndefined();
     expect(fake.congressSubmissionReceipts).toEqual([
       { ...RECEIPT, email: VALID_EMAIL, to: VALID_EMAIL },
+    ]);
+  });
+});
+
+// 046 EARS-29 / EARS-35: the decision and extension letters join the same
+// parity contract.
+describe("046 EARS-29: submission-decision FakeMailer ↔ SmtpMailer contract parity", () => {
+  const DECISION = {
+    title: "Ранняя реабилитация",
+    kindLabel: "Устный доклад",
+    letter: "needs_revision" as const,
+    comment: "Сократите аннотацию",
+    revisionDueAt: new Date("2027-02-19T21:00:00.000Z"),
+  };
+
+  it("046 EARS-29: when the recipient is invalid, both adapters shall reject", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    for (const bad of INVALID_EMAILS) {
+      await expect(
+        fake.sendCongressSubmissionDecision({ ...DECISION, email: bad }),
+      ).rejects.toThrow();
+      await expect(
+        smtp.sendCongressSubmissionDecision({ ...DECISION, email: bad }),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("046 EARS-29: when the recipient is valid, both adapters shall accept; the fake records the send", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    await expect(
+      fake.sendCongressSubmissionDecision({ ...DECISION, email: VALID_EMAIL }),
+    ).resolves.toBeUndefined();
+    await expect(
+      smtp.sendCongressSubmissionDecision({ ...DECISION, email: VALID_EMAIL }),
+    ).resolves.toBeUndefined();
+    expect(fake.congressSubmissionDecisions).toEqual([
+      { ...DECISION, email: VALID_EMAIL, to: VALID_EMAIL },
     ]);
   });
 });

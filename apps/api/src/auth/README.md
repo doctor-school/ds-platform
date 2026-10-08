@@ -100,10 +100,11 @@ the journey closes.
 
 The tier has **two** tenants, and they are two different questions.
 
-- **Admission** is `MFA_REQUIRED_BY_ROLE` (`mfa-policy.ts`). `platform_admin` and
-  `event-registrar` are its entries, and `startLogin` refuses a principal the map
-  does not cover — so the map, not a route list, is what decides who may reach the
-  admin origin at all. `event-registrar`'s factor is TOTP, like `platform_admin`'s:
+- **Admission** is `MFA_REQUIRED_BY_ROLE` (`mfa-policy.ts`). `platform_admin`,
+  `event-registrar` and `congress-program-committee` (046 EARS-26) are its
+  entries, and `startLogin` refuses a principal the map does not cover — so the
+  map, not a route list, is what decides who may reach the admin origin at all.
+  The registrar's and the programme committee's factor is TOTP, like `platform_admin`'s:
   it enrols on first login and is challenged afterwards, on the same flow, with no
   branch.
 - **Reach** is the per-route `@Authz({ roles })` classification, and holding a

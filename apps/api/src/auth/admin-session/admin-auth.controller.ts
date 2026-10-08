@@ -207,7 +207,7 @@ export class AdminAuthController {
     // 044 EARS-19: the row records the role the pending principal was admitted
     // under, and `event-registrar` joined that set with the `role → mfa_required`
     // policy — the registrar enrols and is challenged on exactly this flow.
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
     check: "none",
     audit: "high-stakes",
     tests: ["EARS-4", "EARS-5"],
@@ -252,7 +252,7 @@ export class AdminAuthController {
     // 044 EARS-19: the row records the role the pending principal was admitted
     // under, and `event-registrar` joined that set with the `role → mfa_required`
     // policy — the registrar enrols and is challenged on exactly this flow.
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
     check: "none",
     audit: "high-stakes",
     tests: ["EARS-4", "EARS-5"],
@@ -305,7 +305,7 @@ export class AdminAuthController {
     // 044 EARS-19: the row records the role the pending principal was admitted
     // under, and `event-registrar` joined that set with the `role → mfa_required`
     // policy — the registrar enrols and is challenged on exactly this flow.
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
     check: "none",
     audit: "high-stakes",
     tests: ["EARS-6", "EARS-7"],
@@ -408,7 +408,7 @@ export class AdminAuthController {
   // reflects back a principal the hook already resolved.
   @Authz({
     access: "authenticated",
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
     check: "fast-path",
     audit: "low-stakes",
     revalidate: "none",
@@ -505,7 +505,7 @@ export class AdminAuthController {
     // 044 EARS-19: ending one's own session is part of «the session endpoints
     // needed to hold a session» — a registrar who could sign in but not sign out
     // would be a boundary that leaks in the wrong direction.
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
     check: "fast-path",
     audit: "high-stakes",
     tests: ["EARS-2", "EARS-19"],

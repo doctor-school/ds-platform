@@ -5,6 +5,7 @@ import {
   DoctorEventCardSchema,
   DoctorEventFormatSchema,
 } from "./doctor-event-card.schema.js";
+import { PublicEventFacetOptionSchema } from "./event-facet-option.schema.js";
 import { MOSCOW_TIME_ZONE, formatEventTime } from "./event-time.js";
 import {
   createEventListingQueryCodec,
@@ -116,6 +117,27 @@ export type DoctorEventsFeedTargeting = z.infer<
   typeof DoctorEventsFeedTargetingSchema
 >;
 
+/**
+ * The doctor facet panel's options beside a feed page (wave-2 gate §4.3 D9) —
+ * the Academy's option block mirrored: the same item shape, counted under the
+ * OTHER facets' current selection over the tense's reachable range, ordered
+ * by title then slug, a zero-yield option kept. `kind` is the 012 kind
+ * dictionary (slug + title); `city` the value a card's `city` carries (a city
+ * name, hence not slug grammar). `format` and `specialty` need no block — the
+ * format set is fixed and specialties come from `/v1/public/specialties`.
+ */
+export const DoctorEventFacetOptionsSchema = z
+  .object({
+    city: z.array(
+      PublicEventFacetOptionSchema.extend({ slug: z.string().min(1) }),
+    ),
+    kind: z.array(PublicEventFacetOptionSchema),
+  })
+  .strict();
+export type DoctorEventFacetOptions = z.infer<
+  typeof DoctorEventFacetOptionsSchema
+>;
+
 export const DoctorEventsFeedSchema = z
   .object({
     tense: DoctorEventsFeedTenseSchema,
@@ -150,6 +172,8 @@ export const DoctorEventsFeedSchema = z
      */
     nextBatch: z.number().int().nonnegative(),
     targeting: DoctorEventsFeedTargetingSchema,
+    /** The facet panel's options (D9); additive — an older reader ignores it. */
+    facets: DoctorEventFacetOptionsSchema.optional(),
   })
   .strict();
 export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;

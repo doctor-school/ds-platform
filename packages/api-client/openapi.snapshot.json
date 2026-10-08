@@ -2655,6 +2655,61 @@
             },
             "type": "array"
           },
+          "facets": {
+            "additionalProperties": false,
+            "properties": {
+              "city": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "slug": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["slug", "title", "count"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "slug": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["slug", "title", "count"],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["city", "kind"],
+            "type": "object"
+          },
           "from": {
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"

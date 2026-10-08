@@ -184,6 +184,31 @@ export function eventHorizonInstants(horizon: EventHorizon): {
 }
 
 /**
+ * The whole range a tense can reach from a horizon — the requested window plus
+ * everything «Показать ещё» could add: «Будущие» `[from, ceiling)` (the widest
+ * horizon), «Прошедшие» every event before `to`. The base a facet panel's
+ * option counts read over (wave-2 gate §4.3 D9), so an option never names an
+ * event no widening of this page would show.
+ */
+export function eventHorizonTenseReach(
+  horizon: EventHorizon,
+  tense: "upcoming" | "past",
+  today: string,
+): EventHorizonReach {
+  const window = eventHorizonInstants(horizon);
+  if (tense === "past") {
+    return { fromInstant: null, toInstant: window.toInstant };
+  }
+  return {
+    fromInstant: window.fromInstant,
+    toInstant: eventHorizonInstants({
+      from: horizon.from,
+      to: upcomingEventHorizonCeiling(horizon.from, today),
+    }).toInstant,
+  };
+}
+
+/**
  * The range «what lies beyond» is asked of: half-open `[fromInstant,
  * toInstant)`; `fromInstant: null` = no older bound — the whole archive before
  * `toInstant` («Прошедшие» has no age floor).

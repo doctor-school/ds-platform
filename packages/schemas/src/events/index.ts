@@ -2,6 +2,7 @@ export * from "./doctor-event-card.schema.js";
 export * from "./doctor-events-feed.schema.js";
 export * from "./events-live.schema.js";
 export * from "./doctor-events-month.schema.js";
+export * from "./event-facet-option.schema.js";
 export * from "./event-listing-query.schema.js";
 export * from "./participation.schema.js";
 export * from "./event-time.js";

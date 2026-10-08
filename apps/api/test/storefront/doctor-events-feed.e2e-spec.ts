@@ -319,8 +319,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       // Beyond «Будущие» [today, +14): two in the next 14-day step, one far.
       upcomingStepIds = [
-        await makeEvent({ title: "Через 20 дней", startsAt: at(20, 12), directionId: tenseDirection }),
-        await makeEvent({ title: "Через 22 дня", startsAt: at(22, 12), directionId: tenseDirection }),
+        await makeEvent({
+          title: "Через 20 дней",
+          startsAt: at(20, 12),
+          directionId: tenseDirection,
+        }),
+        await makeEvent({
+          title: "Через 22 дня",
+          startsAt: at(22, 12),
+          directionId: tenseDirection,
+        }),
       ];
       upcomingFarId = await makeEvent({
         title: "Через 50 дней",
@@ -489,6 +497,39 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       expect(rejected.statusCode).toBeGreaterThanOrEqual(400);
       expect(rejected.statusCode).toBeLessThan(500);
+    });
+
+    it("NEW: the feed carries the doctor facet options — every kind of the tense with its count under the other facets, a zero-yield option kept (row 58, D9)", async () => {
+      const feed = await readFeed({ specialtyCode: adjacentCarryingCode });
+      const kinds = feed.facets?.kind ?? [];
+      const card = feed.days.flatMap((day) => day.items).at(0)!;
+      const option = kinds.find((entry) => entry.slug === card.kind.slug);
+      expect(option?.title).toBe(card.kind.title);
+      expect(option!.count).toBeGreaterThanOrEqual(1);
+      // Ordered by title, then slug — the Academy options' order.
+      const order = kinds.map((entry) => `${entry.title}\u0000${entry.slug}`);
+      expect(order).toEqual([...order].sort());
+      // A kind's own selection never narrows its own options …
+      const picked = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: `?kind=${card.kind.slug}`,
+      });
+      expect(picked.facets?.kind.map((entry) => entry.slug)).toEqual(
+        kinds.map((entry) => entry.slug),
+      );
+      // … while another facet that selects nothing keeps every option at 0.
+      const narrowed = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: "?city=Нигдеград",
+      });
+      expect(narrowed.facets?.kind.map((entry) => entry.slug)).toEqual(
+        kinds.map((entry) => entry.slug),
+      );
+      expect(narrowed.facets?.kind.every((entry) => entry.count === 0)).toBe(
+        true,
+      );
+      // No card carries a city today (007 authors none) — so no city option.
+      expect(feed.facets?.city).toEqual([]);
     });
 
     it("EARS-3.6: a stale specialty cookie degrades to the untargeted feed instead of refusing it (EARS-12)", async () => {
@@ -675,25 +716,37 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).toContain(todayLiveId);
       expect(ids).not.toContain(todayEndedId);
       // Soonest first.
-      expect(ids.indexOf(todayLiveId)).toBeLessThan(ids.indexOf(todayNotStartedId));
+      expect(ids.indexOf(todayLiveId)).toBeLessThan(
+        ids.indexOf(todayNotStartedId),
+      );
       expect(
-        feed.days.flatMap((day) => day.items).every((item) => item.state !== "recorded"),
+        feed.days
+          .flatMap((day) => day.items)
+          .every((item) => item.state !== "recorded"),
       ).toBe(true);
     });
 
     it("NEW: «Прошедшие» lists today's ended эфир and never today's not-started or live one (row 30)", async () => {
-      const feed = await readFeed({ specialtyCode: tenseCode, query: "?tense=past" });
+      const feed = await readFeed({
+        specialtyCode: tenseCode,
+        query: "?tense=past",
+      });
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
       expect(ids).toContain(todayEndedId);
       expect(ids).not.toContain(todayNotStartedId);
       expect(ids).not.toContain(todayLiveId);
       expect(
-        feed.days.flatMap((day) => day.items).every((item) => item.state === "recorded"),
+        feed.days
+          .flatMap((day) => day.items)
+          .every((item) => item.state === "recorded"),
       ).toBe(true);
     });
 
     it("NEW: «Прошедшие» reads newest first — days and the events within them (row 30, LD-13)", async () => {
-      const feed = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
       const days = feed.days.map((day) => day.day);
       expect(days).toEqual([...days].sort().reverse());
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
@@ -724,21 +777,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(widened.nextBatch).toBe(1);
       expect(widened.remaining).toBe(1);
 
-      const past = await readFeed({ specialtyCode: tenseCode, query: "?tense=past" });
+      const past = await readFeed({
+        specialtyCode: tenseCode,
+        query: "?tense=past",
+      });
       expect(past.remaining).toBe(2);
       expect(past.nextBatch).toBe(1);
       const older = await readFeed({
         specialtyCode: tenseCode,
         query: `?tense=past&from=${past.nextFrom!}&to=${past.to}`,
       });
-      const olderIds = older.days.flatMap((day) => day.items.map((item) => item.id));
+      const olderIds = older.days.flatMap((day) =>
+        day.items.map((item) => item.id),
+      );
       expect(olderIds).toContain(pastStepId);
       expect(olderIds).not.toContain(pastFarId);
       expect(older.totalCount - past.totalCount).toBe(past.nextBatch);
     });
 
     it("NEW: a published recording carries its duration for the card's «Запись · N мин» line (rows 10, 31)", async () => {
-      const feed = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
       const card = (id: string) =>
         feed.days.flatMap((day) => day.items).find((item) => item.id === id);
       expect(card(pastMontageEventId)?.recording?.durationSec).toBe(54 * 60);
@@ -766,7 +827,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
                   $1::timestamptz + $3::int * g * interval '12 hours', 60, $5, ${eventClassificationSql("doctors")}
            FROM generate_series(0, $2::int - 1) AS g
            RETURNING id`,
-          [anchor.toISOString(), CAP_WALK_COUNT, sign, randomUUID().slice(0, 8), state],
+          [
+            anchor.toISOString(),
+            CAP_WALK_COUNT,
+            sign,
+            randomUUID().slice(0, 8),
+            state,
+          ],
         );
         const ids = inserted.rows.map((row) => row.id);
         const links = await pool.query<{ id: string }>(
@@ -804,7 +871,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         feed.days.flatMap((day) => day.items.map((item) => item.id));
 
       it("NEW: «Прошедшие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the oldest event and ends", async () => {
-        let feed = await readFeed({ specialtyCode: capCode, query: "?tense=past" });
+        let feed = await readFeed({
+          specialtyCode: capCode,
+          query: "?tense=past",
+        });
         let steps = 0;
         let crossed = false;
         while (feed.nextFrom !== null) {

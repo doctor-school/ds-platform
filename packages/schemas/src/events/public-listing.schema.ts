@@ -2,6 +2,7 @@ import { z } from "zod";
 import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
 import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventsFeedDaySchema } from "./doctor-events-feed.schema.js";
+import { PublicEventFacetOptionSchema } from "./event-facet-option.schema.js";
 import {
   createEventListingQueryCodec,
   type RawQueryRecord,
@@ -58,23 +59,6 @@ export function hasAcademyEventFacets(facets: AcademyEventFacets): boolean {
     facets.topic.length > 0
   );
 }
-
-/**
- * One option the facet panel lists: the taxonomy record's slug (the value
- * written into the URL) and its title, with `count` — the events of the read's
- * tense carrying it under the OTHER facets' current selections (014-design
- * §9). A zero-yield option stays listed with `count: 0` (014 EARS-12).
- */
-export const PublicEventFacetOptionSchema = z
-  .object({
-    slug: SlugSchema,
-    title: z.string().min(1),
-    count: z.number().int().nonnegative(),
-  })
-  .strict();
-export type PublicEventFacetOption = z.infer<
-  typeof PublicEventFacetOptionSchema
->;
 
 export const PublicEventFacetOptionsSchema = z
   .object({

@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   type DoctorEventCard,
   type DoctorEventDayGroup,
+  type DoctorEventFacetOptions,
   type DoctorEventsFeed,
   type DoctorEventsFeedQuery,
   type DoctorEventsFeedTargeting,
@@ -27,15 +28,19 @@ import {
   clampRequestedPastFrom,
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
+  type EventHorizonReach,
   eventHorizonInstants,
+  eventHorizonTenseReach,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
 } from "../events/event-horizon.js";
 import { EventsLiveService } from "../events/events-live.service.js";
+import { facetOptionsOver } from "../events/facet-options.js";
 import { denseMonthlyCounts, tallyMonths } from "../events/monthly-counts.js";
 import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import {
+  type DoctorFeedFilters,
   type DoctorFeedRow,
   DoctorEventsRepository,
 } from "./doctor-events.repository.js";
@@ -169,8 +174,18 @@ export class DoctorEventsService {
       },
     );
 
+    // Wave-2 gate §4.3 D9 — the facet panel's options over the tense's whole
+    // reach (the window plus every widening), under the feed's targeting and
+    // `q`; each option counted under the OTHER facets' selection.
+    const facets = await this.facetOptions(
+      query,
+      { ...tenseRead, directionIds },
+      eventHorizonTenseReach(requested, query.tense, today),
+    );
+
     return {
       tense: query.tense,
+      facets,
       ...clampRequestedPastFrom(
         bounded.horizon,
         query.tense,
@@ -467,6 +482,53 @@ export class DoctorEventsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * The doctor facet options (wave-2 gate §4.3 D9): `kind` (012 dictionary)
+   * and `city` (the card's city), counted by the one in-memory option rule
+   * ({@link facetOptionsOver}) under every other doctor facet the read applies.
+   */
+  private async facetOptions(
+    query: DoctorEventsFeedQuery,
+    base: Pick<DoctorFeedFilters, "states" | "order" | "directionIds">,
+    reach: EventHorizonReach,
+  ): Promise<DoctorEventFacetOptions> {
+    const rows = await this.repository.findFeedRows({
+      ...base,
+      ...reach,
+      kindSlugs: [],
+      q: query.q,
+    });
+    const yes = [{ slug: "true", title: "true" }];
+    const options = facetOptionsOver(
+      rows.map((row) => ({ kind: row.kind, ...cardFacetsOf(row) })),
+      {
+        kind: {
+          selected: query.kind,
+          valuesOf: (row) => [{ slug: row.kind.slug, title: row.kind.title }],
+        },
+        city: {
+          selected: query.city,
+          valuesOf: (row) =>
+            row.city === undefined ? [] : [{ slug: row.city, title: row.city }],
+        },
+        format: {
+          selected: query.format,
+          valuesOf: (row) => [{ slug: row.format, title: row.format }],
+        },
+        nmo: {
+          selected: query.nmo === true ? ["true"] : [],
+          valuesOf: (row) => (row.nmo ? yes : []),
+        },
+        free: {
+          selected: query.free === true ? ["true"] : [],
+          valuesOf: (row) => (row.pulCost === 0 ? yes : []),
+        },
+      },
+      ["kind", "city"],
+    );
+    return { kind: options.kind, city: options.city };
   }
 
   private async toCards(rows: DoctorFeedRow[]): Promise<DoctorEventCard[]> {

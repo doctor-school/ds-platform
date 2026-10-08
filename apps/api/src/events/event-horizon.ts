@@ -25,10 +25,12 @@ export interface EventHorizon {
 /**
  * «Будущие» anchors on `from` (default today) and widens `to`; «Прошедшие»
  * anchors on `to` (default tomorrow, so today's ended эфиры read) and widens
- * `from` BACKWARD (default one horizon width before today). A hand-edited bound
- * past the widest horizon is CLAMPED at the far end rather than rejected — a
- * hand-edited URL degrades to the widest honest read, never to a 400, and the
- * clamp never cuts the anchored (recent) end of a past read.
+ * `from` BACKWARD (default one horizon width before today).
+ *
+ * Only «Будущие» has a widest horizon: a hand-edited `to` past it is CLAMPED
+ * rather than rejected — a hand-edited URL degrades to the widest honest read,
+ * never to a 400. «Прошедшие» is the archive and has NO age floor (014 reaches
+ * every past event): any older `from` is honoured as written.
  */
 export function resolveEventHorizon(
   query: {
@@ -43,13 +45,8 @@ export function resolveEventHorizon(
     const from =
       query.from ??
       addDoctorEventsFeedDays(today, -DOCTOR_EVENTS_FEED_HORIZON_DAYS);
-    const width = doctorEventsFeedHorizonWidth(from, to);
-    if (width <= 0) return { from: addDoctorEventsFeedDays(to, -1), to };
-    if (width > DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) {
-      return {
-        from: addDoctorEventsFeedDays(to, -DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-        to,
-      };
+    if (doctorEventsFeedHorizonWidth(from, to) <= 0) {
+      return { from: addDoctorEventsFeedDays(to, -1), to };
     }
     return { from, to };
   }
@@ -80,6 +77,16 @@ export function eventHorizonInstants(horizon: EventHorizon): {
 }
 
 /**
+ * The range «what lies beyond» is asked of: half-open `[fromInstant,
+ * toInstant)`; `fromInstant: null` = no older bound — the whole archive before
+ * `toInstant` («Прошедшие» has no age floor).
+ */
+export interface EventHorizonReach {
+  fromInstant: Date | null;
+  toInstant: Date;
+}
+
+/**
  * What lies beyond a rendered extent: the next bound «Показать ещё» writes into
  * the URL and the remainder M of «Показать ещё N из M» (wave-2 entry gate rows
  * 30, 32; 019 LD-1, LD-2, LD-13). ONE answer for both storefront reads, carried
@@ -90,7 +97,10 @@ export interface EventHorizonBeyond {
   nextTo: string | null;
   /** «Прошедшие»: the next (older) `from`; `null` on «Будущие» and when nothing lies beyond. */
   nextFrom: string | null;
-  /** Matching events the widest horizon still reaches beyond the extent; `0` ⇔ both bounds `null`. */
+  /**
+   * Matching events still reachable beyond the extent — «Будущие»: up to the
+   * widest horizon; «Прошедшие»: every older event. `0` ⇔ both bounds `null`.
+   */
   remaining: number;
   /**
    * Matching events the NEXT step adds — inside `[nextFrom, from)` /
@@ -106,24 +116,21 @@ export interface EventHorizonBeyond {
  * that walked into an empty widening.
  *
  * The question is asked of the reachable range — `[to, from + MAX)` for
- * «Будущие», `[to − MAX, from)` for «Прошедшие» — under the SAME predicate the
+ * «Будущие», everything before `from` for «Прошедшие» — under the SAME predicate the
  * read itself selects with: the caller's `listStartsIn` returns the start
  * instant of every eligible event in that range, after every facet the read
  * applies, so the remainder and the bound can never count an event the
  * widened read would then not show.
  *
  * The step is walked WHOLE rather than once: the next bound is the nearest
- * `to + k·STEP` (upcoming) / `from − k·STEP` (past), k ≥ 1, clamped to the
- * widest horizon, that still covers the nearest event beyond — so the widening
- * handed to the viewer always contains at least that event.
+ * `to + k·STEP` (upcoming, clamped to the widest horizon) / `from − k·STEP`
+ * (past, unclamped), k ≥ 1, that still covers the nearest event beyond — so
+ * the widening handed to the viewer always contains at least that event.
  */
 export async function resolveEventHorizonBeyond(
   horizon: EventHorizon,
   tense: "upcoming" | "past",
-  listStartsIn: (range: {
-    fromInstant: Date;
-    toInstant: Date;
-  }) => Promise<readonly Date[]>,
+  listStartsIn: (range: EventHorizonReach) => Promise<readonly Date[]>,
 ): Promise<EventHorizonBeyond> {
   const none: EventHorizonBeyond = {
     nextTo: null,
@@ -132,39 +139,21 @@ export async function resolveEventHorizonBeyond(
     nextBatch: 0,
   };
   const width = doctorEventsFeedHorizonWidth(horizon.from, horizon.to);
-  if (width >= DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) return none;
-
-  const past = tense === "past";
-  const reach = past
-    ? {
-        from: addDoctorEventsFeedDays(
-          horizon.to,
-          -DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
-        ),
-        to: horizon.from,
-      }
-    : {
-        from: horizon.to,
-        to: addDoctorEventsFeedDays(
-          horizon.from,
-          DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
-        ),
-      };
-  const starts = await listStartsIn(eventHorizonInstants(reach));
-  if (starts.length === 0) return none;
-
-  const times = starts.map((start) => start.getTime());
   const STEP = DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS;
-  if (past) {
+
+  if (tense === "past") {
+    const starts = await listStartsIn({
+      fromInstant: null,
+      toInstant: eventHorizonInstants(horizon).fromInstant,
+    });
+    if (starts.length === 0) return none;
+    const times = starts.map((start) => start.getTime());
     // The newest event older than `from`: `from − k·STEP` must fall on or
     // before its day, and the gap is at least one day (it starts before `from`).
     const nearestDay = doctorEventsFeedDayOf(new Date(Math.max(...times)));
     const gap = doctorEventsFeedHorizonWidth(nearestDay, horizon.from);
     const steps = Math.ceil(gap / STEP);
-    const nextFrom = addDoctorEventsFeedDays(
-      horizon.to,
-      -Math.min(width + steps * STEP, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-    );
+    const nextFrom = addDoctorEventsFeedDays(horizon.from, -steps * STEP);
     // The same half-open instants the widened read selects with.
     const { fromInstant } = eventHorizonInstants({
       from: nextFrom,
@@ -177,6 +166,19 @@ export async function resolveEventHorizonBeyond(
       nextBatch: times.filter((time) => time >= fromInstant.getTime()).length,
     };
   }
+
+  if (width >= DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) return none;
+  const starts = await listStartsIn(
+    eventHorizonInstants({
+      from: horizon.to,
+      to: addDoctorEventsFeedDays(
+        horizon.from,
+        DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
+      ),
+    }),
+  );
+  if (starts.length === 0) return none;
+  const times = starts.map((start) => start.getTime());
 
   // The earliest event at or after `to`: `to + k·STEP` must fall strictly past its day.
   const nearestDay = doctorEventsFeedDayOf(new Date(Math.min(...times)));

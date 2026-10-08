@@ -9,7 +9,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import {
   addDoctorEventsFeedDays,
-  DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
   DoctorEventsFeedSchema,
   doctorEventsFeedDayOf,
 } from "@ds/schemas";
@@ -61,6 +60,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let pastPreparingEventId = "";
     let pastAbsentEventId = "";
     let pastOldEventId = "";
+    let pastAncientEventId = "";
     /** Tense fixtures (row 30): today's three lifecycle answers + steps beyond both extents. */
     let todayNotStartedId = "";
     let todayLiveId = "";
@@ -283,6 +283,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       pastOldEventId = await makeEvent({
         title: "Прошедший месяц назад",
         startsAt: at(-30, 12),
+        directionId: lonelyDirection,
+        state: "ended",
+      });
+      // Older than a year: «Прошедшие» has no age floor, so the archive must
+      // still reach it by repeated «Показать ещё».
+      pastAncientEventId = await makeEvent({
+        title: "Прошедший больше года назад",
+        startsAt: at(-400, 12),
         directionId: lonelyDirection,
         state: "ended",
       });
@@ -563,7 +571,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // The −30 event lies 16 days before `from`: one step (−28) falls short,
       // so the bound walks whole steps until it covers it.
       expect(feed.nextFrom).toBe(addDoctorEventsFeedDays(today, -42));
-      expect(feed.remaining).toBe(1);
+      // The −30 event and the −400 one lie beyond; the next step adds one.
+      expect(feed.remaining).toBe(2);
+      expect(feed.nextBatch).toBe(1);
 
       const extended = await readFeed({
         specialtyCode: lonelyCode,
@@ -573,22 +583,39 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(
         extended.days.flatMap((day) => day.items.map((item) => item.id)),
       ).toContain(pastOldEventId);
-      expect(extended.nextFrom).toBeNull();
-      expect(extended.remaining).toBe(0);
+      expect(extended.remaining).toBe(1);
     });
 
-    it("NEW: a hand-edited past `from` beyond the widest horizon is clamped at the old end, never cutting the recent days", async () => {
+    it("NEW: «Прошедшие» has no age floor — an event 400 days back is reached by repeated «Показать ещё» (row 32, 014 archive)", async () => {
+      const first = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
+      const idsOf = (feed: typeof first) =>
+        feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(idsOf(first)).not.toContain(pastAncientEventId);
+      let extent = first;
+      while (extent.nextFrom) {
+        extent = await readFeed({
+          specialtyCode: lonelyCode,
+          query: `?tense=past&from=${extent.nextFrom}&to=${first.to}`,
+        });
+      }
+      expect(idsOf(extent)).toContain(pastAncientEventId);
+      expect(extent.remaining).toBe(0);
+      expect(extent.nextBatch).toBe(0);
+    });
+
+    it("NEW: a hand-edited ancient past `from` is honoured, never clamped to a year, and the recent days stay", async () => {
       const feed = await readFeed({
         specialtyCode: lonelyCode,
         query: `?tense=past&from=${addDoctorEventsFeedDays(today, -5000)}`,
       });
       expect(feed.to).toBe(addDoctorEventsFeedDays(today, 1));
-      expect(feed.from).toBe(
-        addDoctorEventsFeedDays(today, 1 - DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-      );
-      expect(
-        feed.days.flatMap((day) => day.items.map((item) => item.id)),
-      ).toContain(pastMontageEventId);
+      expect(feed.from).toBe(addDoctorEventsFeedDays(today, -5000));
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(pastMontageEventId);
+      expect(ids).toContain(pastAncientEventId);
       expect(feed.nextFrom).toBeNull();
       expect(feed.remaining).toBe(0);
     });

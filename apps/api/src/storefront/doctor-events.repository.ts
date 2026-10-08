@@ -99,8 +99,8 @@ export interface DoctorFeedFilters {
   order: "asc" | "desc";
   /** `null` = targeting off (`specialty=all`); `[]` = a targeted read with no reachable direction. */
   directionIds: string[] | null;
-  /** Half-open horizon `[fromInstant, toInstant)` in UTC. */
-  fromInstant: Date;
+  /** Half-open horizon `[fromInstant, toInstant)` in UTC; `fromInstant: null` = no older bound (the «Прошедшие» archive). */
+  fromInstant: Date | null;
   toInstant: Date;
   /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
   kindSlugs: string[];
@@ -129,9 +129,11 @@ export class DoctorEventsRepository {
       eq(events.recordStatus, "active"),
       DOCTOR_AUDIENCE,
       inArray(events.state, [...filters.states]),
-      gte(events.startsAt, filters.fromInstant),
       lt(events.startsAt, filters.toInstant),
     ];
+    if (filters.fromInstant !== null) {
+      where.push(gte(events.startsAt, filters.fromInstant));
+    }
 
     // `specialty=all` drops the targeting subquery entirely rather than passing
     // "every direction id", so an event with no managed direction row is still

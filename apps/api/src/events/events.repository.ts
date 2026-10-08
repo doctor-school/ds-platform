@@ -99,9 +99,13 @@ const ACTIVE_EVENT = eq(events.recordStatus, "active");
  */
 const ACADEMY_AUDIENCE = eq(events.audience, "experts");
 
-/** Half-open МСК-day horizon `[fromInstant, toInstant)` of a listing read (wave-2 gate §4.3 D2). */
+/**
+ * Half-open МСК-day horizon `[fromInstant, toInstant)` of a listing read
+ * (wave-2 gate §4.3 D2); `fromInstant: null` = no older bound (the «Прошедшие»
+ * archive has no age floor).
+ */
 export interface EventListingWindow {
-  fromInstant: Date;
+  fromInstant: Date | null;
   toInstant: Date;
 }
 
@@ -127,7 +131,9 @@ function listingWhere(
   ];
   if (cutoff !== null) where.push(gte(events.startsAt, cutoff));
   if (window !== undefined) {
-    where.push(gte(events.startsAt, window.fromInstant));
+    if (window.fromInstant !== null) {
+      where.push(gte(events.startsAt, window.fromInstant));
+    }
     where.push(lt(events.startsAt, window.toInstant));
   }
   return where;
@@ -528,7 +534,12 @@ export class EventsRepository {
     cutoff: Date | null,
     range: EventListingWindow,
   ): Promise<Date[]> {
-    if (range.fromInstant.getTime() >= range.toInstant.getTime()) return [];
+    if (
+      range.fromInstant !== null &&
+      range.fromInstant.getTime() >= range.toInstant.getTime()
+    ) {
+      return [];
+    }
     const rows = await this.db
       .select({ startsAt: events.startsAt })
       .from(events)

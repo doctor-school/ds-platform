@@ -67,6 +67,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let far = { id: "", slug: "" };
     let pastNear = { id: "", slug: "" };
     let pastOld = { id: "", slug: "" };
+    let pastAncient = { id: "", slug: "" };
     let hybrid = { id: "", slug: "" };
 
     const makeEvent = async (input: {
@@ -168,6 +169,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // Thirty days back: past the 14-day default, so only a BACKWARD widening
       // of «Прошедшие» reaches it.
       pastOld = await makeEvent({ offsetMs: -30 * DAY, state: "ended" });
+      // Four hundred days back: older than the widest single «Будущие» horizon
+      // — the archive must still reach it (no age floor on «Прошедшие»).
+      pastAncient = await makeEvent({ offsetMs: -400 * DAY, state: "ended" });
 
       await register(near.slug);
       await register(near.slug);
@@ -316,6 +320,27 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(extent.pagination.hasMore).toBe(false);
     });
 
+    it("NEW: «Прошедшие» has no age floor — an event 400 days back is reached by repeated «Показать ещё» (row 32, 014 archive)", async () => {
+      const first = await page("timeframe=past");
+      expect(first.data.map((card) => card.id)).not.toContain(pastAncient.id);
+      let extent = first;
+      while (extent.horizon?.nextFrom) {
+        extent = await page(
+          `timeframe=past&from=${extent.horizon.nextFrom}&to=${first.horizon!.to}`,
+        );
+        if (extent.data.some((card) => card.id === pastAncient.id)) break;
+      }
+      expect(extent.data.map((card) => card.id)).toContain(pastAncient.id);
+      // A hand-edited ancient `from` is honoured, never clamped to a year.
+      const all = await page(
+        `timeframe=past&from=2000-01-01&to=${first.horizon!.to}`,
+      );
+      expect(all.horizon?.from).toBe("2000-01-01");
+      expect(all.data.map((card) => card.id)).toContain(pastAncient.id);
+      expect(all.horizon?.nextFrom).toBeNull();
+      expect(all.horizon?.remaining).toBe(0);
+    });
+
     it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` is the events the widest horizon would add", async () => {
       const upcoming = await page(
         `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
@@ -335,9 +360,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const past = await page(
         `timeframe=past&from=${addDoctorEventsFeedDays(today, -14)}&to=${pastTo}`,
       );
-      const pastAll = await page(
-        `timeframe=past&from=${addDoctorEventsFeedDays(pastTo, -DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS)}&to=${pastTo}`,
-      );
+      // «Прошедшие» has no age floor: the whole archive is the reach.
+      const pastAll = await page(`timeframe=past&from=2000-01-01&to=${pastTo}`);
       expect(past.horizon?.remaining).toBeGreaterThanOrEqual(1);
       expect(past.horizon?.remaining).toBe(
         pastAll.data.length - past.data.length,

@@ -445,30 +445,93 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And neither body contains a link, button or navigation URL
 
   @EARS-31 @EARS-32 @happy
-  Scenario: Postbox is the explicit primary for every recipient domain
-    Given real mode explicitly selects a complete Postbox SMTP configuration
-    And Resend failover is disabled even if its credential exists
+  Scenario: Postbox acceptance stops the chain
+    Given real mode explicitly selects a complete Postbox SMTP primary
+    And the mail.ru reserve and Resend are enabled and configured
     When the BFF sends a verification or reset email to any recipient domain
     Then only Postbox is called
-    And final SMTP 2xx is recorded as provider acceptance, not delivery or Inbox placement
-    And the actual provider label is Postbox
+    And its final SMTP 2xx to the end-of-data sequence is recorded as provider acceptance, not delivery or Inbox placement
+    And the terminal outcome is accepted-by-postbox with the actual provider label
 
-  @EARS-31 @EARS-32 @happy
-  Scenario: A definite Postbox rejection switches once to an enabled Resend fallback
-    Given Postbox returns a definite pre-acceptance "451 Ratelimit exceeded" rejection
-    And Resend failover is explicitly enabled with valid credentials
+  @EARS-31 @EARS-45 @EARS-32 @happy
+  Scenario: A definitive Postbox failure is delivered through mail.ru
+    Given the mail.ru reserve is enabled with its own complete credentials
+    And Postbox returns a definitive pre-acceptance "451 Ratelimit exceeded" rejection
     When the BFF mailer dispatches a verification or reset email
-    Then the send switches once to Resend without retrying Postbox
-    And a Resend 2xx is recorded only as fallback provider acceptance
-    And sanitized provider-code failover metrics and logs are emitted
+    Then mail.ru is called once with the same code and identical UTF-8 content
+    And a mail.ru final 2xx is recorded as accepted-by-mail.ru
+    And Resend is not called
 
-  @EARS-31 @EARS-16 @failure
-  Scenario: Exhausting eligible channels never leaks into the API response
-    Given every explicitly enabled channel rejects the send
+  @EARS-31 @EARS-45 @EARS-32 @happy
+  Scenario: Postbox and mail.ru provider failures are delivered through Resend
+    Given the mail.ru reserve and Resend are enabled and configured
+    And Postbox and mail.ru both end in provider-failure
+    When the BFF mailer dispatches a verification or reset email
+    Then Resend is called once with the same code and identical content and click and open tracking off
+    And a Resend 2xx is recorded as accepted-by-resend
+    And one redacted event per attempt names the actual provider and its outcome class
+
+  @EARS-31 @EARS-45 @EARS-16 @failure
+  Scenario: Every channel failing is recorded and never leaks into the API response
+    Given every enabled channel ends in provider-failure
     When a registration triggers the verification email
-    Then the send fails closed with sanitized provider-code diagnostics
+    Then the chain terminal outcome is exhausted with sanitized provider-code diagnostics
     And the API response stays enumeration-safe in status, body and timing
     And the visitor can recover via the verify resend affordance
+
+  @EARS-45 @EARS-16 @failure
+  Scenario Outline: A permanently refused recipient stops at the first channel
+    Given Postbox refuses the recipient address with <refusal>
+    And the mail.ru reserve and Resend are enabled and configured
+    When the BFF mailer dispatches a verification or reset email
+    Then neither mail.ru nor Resend is called
+    And the terminal outcome is stopped-recipient-permanent
+    And the API response stays enumeration-safe in status, body and timing
+
+    Examples:
+      | refusal                                  |
+      | an SMTP 5xx reply at RCPT TO             |
+      | an enhanced status 5.1.1 on a reply      |
+
+  @EARS-45 @failure
+  Scenario: A lost acknowledgement after the end-of-data sequence stops the chain
+    Given Postbox received the complete end-of-data sequence
+    And no final reply arrives before the attempt ends by timeout or connection loss
+    And the mail.ru reserve and Resend are enabled and configured
+    When the BFF mailer dispatches a verification or reset email
+    Then no further channel is called and nothing is resent
+    And the terminal outcome is stopped-ambiguous
+
+  @EARS-45 @happy
+  Scenario Outline: A failure before the message body was committed is definitive
+    Given the mail.ru reserve is enabled with its own complete credentials
+    And Postbox ends with <failure> before the end-of-data sequence was written
+    When the BFF mailer dispatches a verification or reset email
+    Then the attempt is a provider-failure and mail.ru is called next
+
+    Examples:
+      | failure                                  |
+      | connection refused                       |
+      | a TLS failure                            |
+      | an AUTH 535 rejection                    |
+      | a 4xx reply                              |
+      | a timeout or connection loss before data |
+
+  @EARS-31 @EARS-46 @happy
+  Scenario: A disabled mail.ru reserve is skipped and not counted as reserve
+    Given the mail.ru enable switch is off even though its credentials exist
+    When Postbox ends in provider-failure
+    Then mail.ru is not called and the chain continues to Resend if enabled and configured
+    And the terminal event counts the skipped channel
+    And the readiness statement for mail.ru is disabled and it is not reported as operational reserve
+
+  @EARS-31 @failure
+  Scenario: An enabled mail.ru reserve with incomplete credentials is a startup error
+    Given the mail.ru enable switch is on
+    And one of its credentials or its sender is missing
+    When the application validates the mailer configuration at startup
+    Then it raises a sanitized configuration failure instead of silently skipping the channel
+    And neither Mailpit nor any real provider receives a send
 
   @EARS-31 @failure
   Scenario Outline: Invalid real configuration cannot fall through to another sender
@@ -479,28 +542,40 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And neither Mailpit nor any real provider receives the send
 
     Examples:
-      | invalid                                  |
-      | missing the primary discriminator        |
-      | an unknown provider                      |
-      | a provider and host mismatch             |
-      | missing primary credentials or sender    |
-      | enabled Resend without valid credentials |
+      | invalid                                       |
+      | missing the primary discriminator             |
+      | an unknown provider                           |
+      | a provider and host mismatch                  |
+      | missing primary credentials or sender         |
+      | enabled Resend without valid credentials      |
+      | a mail.ru reserve identical to the primary    |
+
+  @EARS-31 @EARS-46 @happy
+  Scenario: Channels have independent credentials and only verified channels are reserve
+    Given the primary uses IDP_SMTP_REAL_* and the mail.ru reserve uses its own MAILER_FALLBACK_SMTP_* set
+    When readiness is evaluated without sending any message
+    Then each channel reports disabled, absent, configured-unverified or verified
+    And only a channel whose authenticated handshake or key check succeeded counts as operational reserve
+    And the statement contains no secret, credential or recipient address
 
   @EARS-31 @happy
-  Scenario: Pre-activation mail.ru support and explicit intercept remain deliberate
-    Given a complete explicit legacy mail.ru configuration is selected in real mode
-    When the BFF dispatches an email
-    Then it uses that primary without promoting Postbox or Resend from credentials
+  Scenario: Rollback is configuration only and explicit intercept remains deliberate
+    Given the chain is Postbox, mail.ru and Resend
+    When the mail.ru enable switch is turned off
+    Then the chain is Postbox then Resend
+    When both reserve switches are off
+    Then only Postbox is used
     When intercept mode is explicitly selected instead
     Then only the configured Mailpit intercept receives the next email
 
-  @EARS-31 @EARS-30 @EARS-32 @failure
+  @EARS-31 @EARS-45 @EARS-30 @EARS-32 @failure
   Scenario Outline: A stalled transport terminates and cannot report late success
     Given a local transport stalls at <phase>
     When the configured phase or whole-attempt deadline expires
     Then the owned socket or HTTP operation is cancelled and timers are cleared
     And a late connection handoff is destroyed and cannot transmit the message
     And a late success callback cannot overwrite the terminal local outcome
+    And the chain continues only if the end-of-data sequence or HTTP request had not been sent
     And no automatic failover occurs when remote acceptance is uncertain
     And diagnostics contain no recipient, subject, body, credential or one-time code
 
@@ -512,11 +587,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
       | HTTP connection or response headers |
       | HTTP response-body consumption      |
 
+  @EARS-31 @EARS-16 @failure
+  Scenario: Total chain budget expiry cancels the in-flight attempt
+    Given Postbox and mail.ru end in provider-failure after consuming their deadlines
+    And the Resend attempt is still in flight when the 40 s total budget expires
+    When the budget expires
+    Then the Resend fetch is aborted and its timers are cleared
+    And a late Resend 2xx cannot report success
+    And the API response timing is unchanged because the send is detached
+
   @EARS-31 @EARS-32 @failure
   Scenario: Provider acceptance does not trigger resend when mailbox placement is poor
     Given Postbox accepted a message with a final SMTP 2xx
     When a received artifact reports DKIM timeout or Junk placement
-    Then the mailer does not automatically resend or call Resend
+    Then the mailer does not automatically resend or call any other channel
     And the received-header investigation remains separate from synchronous acceptance
     And TrustedSenderList-assisted Inbox placement is not counted as an unassisted pass
 

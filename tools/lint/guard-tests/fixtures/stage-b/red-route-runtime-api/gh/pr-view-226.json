@@ -1,0 +1,17 @@
+{
+  "number": 226,
+  "body": "## Summary\nRoom header card + the events service.\n\nChange-tier: ask — the events service is an api path\n\nStage-B: GO — owner confirmed the captures\n\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-source: owner-relay:session-123#message-4\nStage-B-owner-quote: Looks right, go\nStage-B-evidence: https://github.com/acme/repo/pull/226#issuecomment-7\n",
+  "files": [
+    {
+      "path": "apps/portal/app/room/header.tsx"
+    },
+    {
+      "path": "apps/api/src/events/events.service.ts"
+    },
+    {
+      "path": "apps/portal/app/room/header.test.tsx"
+    }
+  ],
+  "labels": [],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

@@ -1,6 +1,9 @@
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import {
   assertOpenPr,
@@ -14,6 +17,8 @@ import {
   isWorktreeCwd,
   latestRunsByName,
   parseModeAExempt,
+  prOwnDelta,
+  splitDiffByFile,
   verifyChangeTierShip,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
@@ -798,5 +803,164 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
     expect(
       verifyChangeTierShip([copyFile], meta(shipBody, 1), head, "").ok,
     ).toBe(false);
+  });
+});
+
+describe("#2699: splitDiffByFile — a PR's own per-file patches, comparable across a rebase", () => {
+  const diff = (indexLine: string, hunk: string) =>
+    [
+      "diff --git a/apps/portal/src/x.tsx b/apps/portal/src/x.tsx",
+      indexLine,
+      "--- a/apps/portal/src/x.tsx",
+      "+++ b/apps/portal/src/x.tsx",
+      `${hunk} export function X() {`,
+      "-  return 1;",
+      "+  return 2;",
+      "diff --git a/.changeset/gone.md b/.changeset/gone.md",
+      "deleted file mode 100644",
+      "index 1111111..0000000",
+      "--- a/.changeset/gone.md",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-x",
+      "",
+    ].join("\n");
+  it("keys each file, a deletion by its pre-image path", () => {
+    expect([
+      ...splitDiffByFile(
+        diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@"),
+      ).keys(),
+    ]).toEqual(["apps/portal/src/x.tsx", ".changeset/gone.md"]);
+  });
+  it("a rebase that only moved blob ids and hunk line numbers yields identical patches", () => {
+    const before = splitDiffByFile(
+      diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@"),
+    );
+    const after = splitDiffByFile(
+      diff("index 9999999..8888888 100644", "@@ -40,1 +41,1 @@"),
+    );
+    expect(after.get("apps/portal/src/x.tsx")).toBe(
+      before.get("apps/portal/src/x.tsx"),
+    );
+  });
+  it("a changed line in the patch differs", () => {
+    const before = splitDiffByFile(
+      diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@"),
+    );
+    const after = splitDiffByFile(
+      diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@").replace(
+        "return 2",
+        "return 3",
+      ),
+    );
+    expect(after.get("apps/portal/src/x.tsx")).not.toBe(
+      before.get("apps/portal/src/x.tsx"),
+    );
+  });
+});
+
+describe("#2699: splitDiffByFile fails closed on a header it cannot parse", () => {
+  it("a C-quoted (non-ASCII) path throws instead of vanishing from the delta", () => {
+    const quoted = [
+      'diff --git "a/apps/portal/lib/\\321\\204.ts" "b/apps/portal/lib/\\321\\204.ts"',
+      "index abc1234..def5678 100644",
+      "@@ -1 +1 @@",
+      "-a",
+      "+b",
+      "",
+    ].join("\n");
+    expect(() => splitDiffByFile(quoted)).toThrow(/cannot parse/);
+  });
+  it("a chunk whose two header paths differ (a rename) throws", () => {
+    const renamed = [
+      "diff --git a/apps/portal/lib/x.ts b/apps/docs/content/x.md",
+      "similarity index 100%",
+      "rename from apps/portal/lib/x.ts",
+      "rename to apps/docs/content/x.md",
+      "",
+    ].join("\n");
+    expect(() => splitDiffByFile(renamed)).toThrow(/cannot parse/);
+  });
+});
+
+describe("#2699: prOwnDelta on a real git repository", () => {
+  const root = mkdtempSync(join(tmpdir(), "pr-own-delta-"));
+  const origin = join(root, "origin.git");
+  const work = join(root, "work");
+  const git = (...args: string[]) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: work, encoding: "utf8" },
+    ).trim();
+  const write = (path: string, body: string) => {
+    mkdirSync(dirname(join(work, path)), { recursive: true });
+    writeFileSync(join(work, path), body);
+  };
+  const commit = (message: string) => {
+    git("add", "-A");
+    git("commit", "-q", "-m", message);
+    return git("rev-parse", "HEAD");
+  };
+  const delta = (recorded: string, head: string) =>
+    prOwnDelta(recorded, head, { cwd: work });
+
+  execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+  execFileSync("git", ["init", "-q", "-b", "main", work]);
+  git("remote", "add", "origin", origin);
+  write("apps/portal/lib/x.ts", "export const x = 1;\n");
+  write("apps/portal/lib/a.ts", "export const a = 1;\n");
+  write("README.md", "base\n");
+  commit("base");
+  git("push", "-q", "origin", "main");
+  git("checkout", "-q", "-b", "pr");
+  write("apps/portal/app/room/header.tsx", "export const H = 1;\n");
+  const recorded = commit("pr: header");
+
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it("a runtime file renamed into docs puts BOTH paths in the delta", () => {
+    git("checkout", "-q", "-B", "rename-docs", recorded);
+    mkdirSync(join(work, "apps/docs/content"), { recursive: true });
+    git("mv", "apps/portal/lib/x.ts", "apps/docs/content/x.md");
+    const head = commit("move x to docs");
+    expect(delta(recorded, head)).toEqual({
+      ok: true,
+      files: ["apps/docs/content/x.md", "apps/portal/lib/x.ts"],
+    });
+  });
+
+  it("a runtime file renamed into a test file puts the runtime path in the delta", () => {
+    git("checkout", "-q", "-B", "rename-test", recorded);
+    git("mv", "apps/portal/lib/a.ts", "apps/portal/lib/a.test.ts");
+    const head = commit("move a to a test");
+    expect(delta(recorded, head)).toEqual({
+      ok: true,
+      files: ["apps/portal/lib/a.test.ts", "apps/portal/lib/a.ts"],
+    });
+  });
+
+  it("a rebase over a moved main plus a test-only commit yields only the test file", () => {
+    git("checkout", "-q", "main");
+    write("README.md", "main moved\n");
+    write("apps/portal/lib/other.ts", "export const o = 1;\n");
+    commit("main: someone else's change");
+    git("push", "-q", "origin", "main");
+    git("checkout", "-q", "-B", "rebased", recorded);
+    git("rebase", "-q", "main");
+    write("apps/portal/app/room/header.test.tsx", "it('x', () => {});\n");
+    const head = commit("pr: test only");
+    expect(delta(recorded, head)).toEqual({
+      ok: true,
+      files: ["apps/portal/app/room/header.test.tsx"],
+    });
   });
 });

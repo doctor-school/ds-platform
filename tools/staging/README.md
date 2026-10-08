@@ -185,10 +185,11 @@ slot on a timer — `gc` is an operator subcommand and reclaims disk, not live s
 ## Regression run: `pnpm e2e:stage <slot>`
 
 The C6 regression contract (`packages/e2e`) driven against a slot's **public** hostnames
-— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7: the verdict is
-pasted into the PR body or the release record **by hand**; there is deliberately no CI
-check-run, because staging is operated by hand like production (#2202) and a runner would
-have to hold the stand's credentials to reach the slot at all.
+— the edge a reviewer uses, basic auth included. Tech spec C4 / §8 step 7: a preview
+verdict is pasted into the PR body **by hand**, and the `main` run is the release check
+`pnpm deploy:prod` performs itself (below); there is deliberately no CI check-run and no
+GitHub status, because staging is operated by hand like production (#2202) and a runner
+would have to hold the stand's credentials to reach the slot at all.
 
 ```bash
 export STAGE_BASIC_AUTH_PASS="…"          # same variable the converge needs, see above
@@ -205,6 +206,18 @@ worktree needs no hand-built `packages/db/dist` or `packages/legal-content/dist`
 `/v1/health` read of `api-<slot>.<base domain>` and **exits 2** naming that URL when it
 does not answer — a suite pointed at a half-raised slot reports topology as product
 regressions. Raise the slot with `pnpm stage:slot up <slot> --ref <sha>` first.
+
+### The release check: `--expect-sha`, run by `pnpm deploy:prod`
+
+`pnpm e2e:stage main --expect-sha <40-char sha>` is the release check (tech spec C7,
+#2701). It is the full run and nothing less: it refuses any slot but `main`, any
+`--project` / `--grep` / `--no-axe`, an `E2E_GREP` in the env (the config would compile
+it into a filter) and a missing `CI` (without it Playwright's `forbidOnly` is off). It
+then asserts the slot's `/v1/health` serves exactly that SHA before a scenario runs, and
+exits **2** on any of these refusals. You do not normally run it by hand: `pnpm
+deploy:prod` runs it as its last pre-flight step, from a clean detached checkout of the
+target SHA, right after `stage:slot up main --ref <sha>` converged the slot
+(`tools/deploy/README.md` → «Stage `main` check»). Nothing is written to GitHub.
 
 Every slot (incl. `main`) runs the api with the CI test-runner auth ceilings (`RATE_LIMIT_*`
 in `infra/deploy/compose/slot/compose.yml`): the suite signs in hundreds of times from one

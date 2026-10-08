@@ -1,4 +1,5 @@
 import { test, expect, type BrowserContext } from "@playwright/test";
+import { DEFAULT_AUTH_FLOW_COPY } from "@ds/auth-flow/copy";
 
 /**
  * #1955 — the two `/login` behaviours that are decided on the SERVER, against a
@@ -20,9 +21,9 @@ const GATE_ARRIVAL = "/login?returnTo=%2Fwebinars%2Fprp-pri-gonartroze";
 const EVENT_TITLE = "PRP при гонартрозе";
 
 /** The login door's own assurance line — sign-in returns the doctor on the spot. */
-const LOGIN_ASSURANCE = "После входа вы вернётесь сюда же — место за вами.";
+const LOGIN_ASSURANCE = DEFAULT_AUTH_FLOW_COPY.returnContext.login;
 /** The registration door's line — it must NOT appear on the sign-in door. */
-const REGISTER_ASSURANCE = "После подтверждения почты вы вернётесь сюда же";
+const REGISTER_ASSURANCE = DEFAULT_AUTH_FLOW_COPY.returnContext.register;
 
 /**
  * Put the double's live session on the doctor origin. `__Host-` requires

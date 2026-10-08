@@ -231,3 +231,14 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the participant receives exactly one reminder listing both drafts and the last day 29 January 2027
     When the administrator moves the last abstract day to 2027-01-31 and the sweep runs inside the new 72 hours
     Then the participant receives one new reminder
+
+  @EARS-36
+  Scenario: The filling guide opens beside the draft
+    Given a registered participant with an oral draft
+    When the participant opens the section
+    Then the list shows "Как заполнить заявку ↗" to https://orthobio.ru/participants/zapolnit-zayavku, opening in a new tab
+    When the participant opens the draft
+    Then the draft shows the same link, opening in a new tab, and the draft stays open
+    Given an account without a registration for the event
+    When it opens the section
+    Then only the no-registration line and its registration link show, without the guide link

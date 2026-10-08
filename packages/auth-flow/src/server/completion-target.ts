@@ -14,6 +14,10 @@ export type { CompletionTarget };
  * asked (`readReturnEvent`). Only a «gone» answer drops the target; the LD-4
  * landing is then decided for the signed-in doctor (#2333).
  *
+ * #2477 — the sign-in door (`/login`, password and code) completes through
+ * the SAME action when its sign-in succeeds, so an эфир unpublished or removed
+ * while either page stood open lands the visitor in one place on both doors.
+ *
  * WHY A CLOSURE: as `signedInLandingAction` — Next encrypts and signs the
  * closed-over values, so the browser invokes the action but cannot re-point
  * the эфир it reads. The browser supplies no argument at all.

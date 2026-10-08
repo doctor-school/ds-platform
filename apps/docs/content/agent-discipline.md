@@ -20,7 +20,7 @@ For repository work run `pnpm bootstrap` unless supplied and inspect the named t
 
 Keep authorization, readiness and execution separate. Reuse the owner's evidenced quote/source, action and conditions; a handoff claim or review verdict is not owner approval, and preparation is not cutover approval. Ask only for a decision outside existing authorization; routine diagnosis and fixes need no new go. Earlier approval does not cover a CI bypass or a destructive action outside its scope.
 
-Status and clarification questions steer ongoing work: answer briefly, then continue unless the task is canceled or replaced. A blocker holds only dependent actions; continue authorized diagnosis, preparation and independent work. Before asking for approval, prepare the decision and its evidence. When authorized work is exhausted or an owner gate is reached inside a live session, post the request with evidence, state what remains and wait for the owner or the external event — time is not consent.
+Status and clarification questions steer ongoing work: answer briefly, then continue unless the task is canceled or replaced. A blocker holds only dependent actions; continue authorized diagnosis, preparation and independent work. Before asking for approval, prepare the decision and its evidence, and name what the owner must check that the agent could not; what the agent can verify itself is never asked. When authorized work is exhausted or an owner gate is reached inside a live session, post the request with evidence, state what remains and wait for the owner or the external event — time is not consent.
 
 ## Capability mappings
 
@@ -51,7 +51,7 @@ Codex tiers: current observed input / reported `model_context_window` — at 70%
 
 On ROTATE or exhausted budget: finish the atomic step, commit safe WIP, checkpoint done/remaining/files/branch+SHA/next command/questions, return `ROTATE: <path>`. Re-dispatch a fresh agent, not the exhausted child.
 
-Delegate large interactive browser payloads. The lead owns the Stage-B stand. Stand briefs carry dev-stand.md's reset/destructive-SQL prohibition and command log; audit it on return. Probe progress with `pnpm dispatch:probe <N>` and returned artifacts.
+Delegate large interactive browser payloads. The lead owns any Stage-B stand the change tier requires (`.claude/rules/change-tiers.md` → Stage-B and stands); a change with no render surface raises none. Stand briefs carry dev-stand.md's reset/destructive-SQL prohibition and command log; audit it on return. Probe progress with `pnpm dispatch:probe <N>` and returned artifacts.
 
 ## Shell, verification and evidence
 

@@ -3,7 +3,7 @@ title: "046 — Congress submissions: oral talks, posters and abstracts"
 description: "Requirements for congress submissions in a «Мои заявки на Конгресс» section of the doctor storefront account: three kinds (oral talk, poster, abstracts) as properties of the submission, many per account, autosaved drafts checked at submit, per-event and per-kind intake settings edited in apps/admin, a poster age rule from the birth date, abstract attestations, one submission personal-data consent that also covers abstracts publication, statuses with letters, an event-bound program committee reviewing in the admin registry and card, a read-only congress-partner view, a deadline reminder, and a cabinet link in the 044 confirmation letter."
 slug: 046-congress-submissions
 status: In dev
-issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2438, 2439, 2557]
+issues: [2379, 2385, 2432, 2433, 2434, 2435, 2437, 2438, 2439, 2557, 2675]
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/issues/2379
 prior_decisions:
@@ -37,6 +37,16 @@ This amendment overrides EARS-15, the link of the EARS-14 receipt, the letter-li
 | V-4 (amended letter) | Vitest — `apps/api`                  | The receipt carries no link, button or URL in either part and names `orthobio.ru` only as text (EARS-14 amended, #2634).                                                                                   |
 | V-14 (amended)       | Vitest e2e — `apps/api`              | The 044 confirmation letter from the site form and from the desk carries no link, button or URL and names `orthobio.ru` only as text (EARS-15, #2557, #2634).                                              |
 | V-15 (amended entry) | Playwright / E2E — doctor storefront | A guest opens `/login?method=code&returnTo=/account/congress`, signs in by the emailed six-digit code — a congress-origin unverified account included — and lands on the section (EARS-4, EARS-15, #2556). |
+
+## Production amendment — the filling-guide link in the section (2026-10-07, #2675)
+
+This amendment adds EARS-36 and verification row V-19 to the running section. Every path to filling a submission ends in this section — straight after the congress-site sign-up through its «Войти в кабинет» button, later through the congress site's participant pages, or with a still-open session — so the help on how to fill a submission belongs where the author fills it. The product owner delegated the placement to the lead on 2026-10-07 (Issue #2675). The guide page itself lives on the congress site (`doctor-school/orthobio-site`); this spec owns only the link to it.
+
+- **EARS-36** (`realizes: US-7`) — WHILE a registered participant views the section's list, or a submission the author can still work on (a draft, or a submission open for revision), THE SYSTEM SHALL show the link «Как заполнить заявку ↗» to the congress site's filling guide `https://orthobio.ru/participants/zapolnit-zayavku`, held in the host configuration, opening in a new tab so an open draft is never left; the link SHALL NOT show on the no-registration line (EARS-5), on a submission the author can no longer change, or while the section is loading or failed.
+
+| ID   | Test type                                     | Proves                                                                                                                                                                                                                                                                                                                      |
+| ---- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V-19 | Vitest unit — `packages/congress-submissions` | The list (with submissions and the empty kind picker) an open draft and a submission on revision before its deadline carry the guide link with its address, `target="_blank"` and `rel="noopener noreferrer"`; a decided submission, a revision past its deadline and the no-registration line carry none (EARS-36, #2675). |
 
 ## Production amendment — the list row's date (2026-10-02, #2551)
 

@@ -34,8 +34,9 @@ A host supplies two DATA objects and a route file that renders
 
 - its `@ds/auth-flow` host config — the login route the guest door is built from;
 - a `CongressSectionRouteHost`: `path` (where the section is mounted — the return
-  target), `accountHref` (the back link) and `eventHrefPrefix` (joined to the event
-  slug for the congress page link).
+  target), `accountHref` (the back link), `eventHrefPrefix` (joined to the event
+  slug for the congress page link) and `fillingGuideHref` (the congress site's
+  filling guide «Как заполнить заявку ↗», opened in a new tab — 046 EARS-36).
 
 Doctor storefront: `apps/doctor/app/(storefront)/account/congress/page.tsx` with
 `apps/doctor/lib/congress-submissions.host-config.ts`. The account page links the

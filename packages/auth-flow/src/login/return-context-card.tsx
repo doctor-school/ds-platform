@@ -94,19 +94,27 @@ function PanelBody({
 function PlateBody({
   copy,
   event,
+  variant,
 }: {
   copy: AuthFlowReturnContextCopy;
   event: ReturnContextEvent;
+  variant: ReturnContextVariant;
 }) {
   return (
     <div
       data-testid="return-context-plate"
-      className="-mx-gutter-sm bg-muted px-gutter-sm pt-4 pb-1 layout:hidden"
+      className="-mx-gutter-sm bg-section px-gutter-sm pt-4 pb-1 layout:hidden"
     >
-      <p className="mb-1.5 text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
+      {/* 021 EARS-2 — the canvas mobile strip; the muted ink instead of the
+          canvas inkFaint is an AA contrast deviation tracked by #2710. */}
+      <p className="mb-1.5 text-eyebrow font-extrabold uppercase tracking-eyebrow text-muted-foreground">
         {copy.eyebrow}
       </p>
       <ReturnEventCard event={event} />
+      {/* 021 EARS-2 (#2465) — the door's assurance line, as the wide panel carries it. */}
+      <p className="mt-2.5 mb-3 text-caption leading-prose text-muted-foreground">
+        {copy[variant]}
+      </p>
     </div>
   );
 }
@@ -129,16 +137,20 @@ export function ReturnContextPanel({
   ) : null;
 }
 
-/** The mobile composition: the card as the plate above the form, full-bleed across the column. */
+/** The mobile composition: the card as the plate above the form, full-bleed across the column, with the door's assurance line. */
 export function ReturnContextPlate({
   config,
   event,
+  variant,
 }: {
   config: CardConfig;
   event: ReturnContextEvent;
+  variant: ReturnContextVariant;
 }) {
   const copy = resolveAuthFlowCopy(config).returnContext;
-  return copy ? <PlateBody copy={copy} event={event} /> : null;
+  return copy ? (
+    <PlateBody copy={copy} event={event} variant={variant} />
+  ) : null;
 }
 
 /**
@@ -161,6 +173,6 @@ export function returnContextSlots({
   }
   return {
     panel: <PanelBody copy={copy} event={event} variant={variant} />,
-    plate: <PlateBody copy={copy} event={event} />,
+    plate: <PlateBody copy={copy} event={event} variant={variant} />,
   };
 }

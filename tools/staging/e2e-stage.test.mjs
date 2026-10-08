@@ -31,6 +31,7 @@ describe("parseE2eArgs", () => {
       grep: undefined,
       axe: true,
       reportDir: undefined,
+      expectSha: undefined,
     });
   });
 
@@ -52,6 +53,7 @@ describe("parseE2eArgs", () => {
         grep: "вход",
         axe: false,
         reportDir: "out",
+        expectSha: undefined,
       },
     );
   });
@@ -565,5 +567,78 @@ describe("runE2eStage", () => {
     });
     assert.equal(code, 0);
     assert.ok(lines.some((l) => l.includes("verdict:     PASS")));
+  });
+});
+
+// --- the release check (#2701): `--expect-sha` is the full suite on a known SHA ---
+
+describe("release check (--expect-sha)", () => {
+  const RELEASE_ENV = { STAGE_BASIC_AUTH_PASS: "s3cret", CI: "1" };
+
+  it("parses a full 40-char SHA and refuses anything else", () => {
+    assert.equal(parseE2eArgs(["main", "--expect-sha", SHA]).expectSha, SHA);
+    assert.throws(() => parseE2eArgs(["main", "--expect-sha", "c0ffee"]), /40/);
+  });
+
+  it("refuses a narrowed release check — --project, --grep, --no-axe or another slot", () => {
+    for (const extra of [
+      ["--project", "doctor"],
+      ["--grep", "вход"],
+      ["--no-axe"],
+    ]) {
+      assert.throws(
+        () => parseE2eArgs(["main", "--expect-sha", SHA, ...extra]),
+        /full suite/,
+      );
+    }
+    assert.throws(() => parseE2eArgs(["pr-1", "--expect-sha", SHA]), /main/);
+  });
+
+  it("refuses with exit 2 when E2E_GREP would filter the suite or forbid-only is off", async () => {
+    for (const env of [
+      { ...RELEASE_ENV, E2E_GREP: "вход" },
+      { STAGE_BASIC_AUTH_PASS: "s3cret" },
+    ]) {
+      const { calls, lines, effects } = harness();
+      const code = await runE2eStage(["main", "--expect-sha", SHA], {
+        env,
+        effects,
+      });
+      assert.equal(code, 2);
+      assert.equal(calls.length, 0);
+      assert.match(lines.join("\n"), /E2E_GREP|CI=1/);
+    }
+  });
+
+  it("refuses with exit 2 when the slot serves another SHA, before any suite runs", async () => {
+    const { calls, lines, effects } = harness({
+      fetchHealth: async () => ({
+        status: 200,
+        body: JSON.stringify({ version: "d".repeat(40) }),
+      }),
+    });
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: RELEASE_ENV,
+      effects,
+    });
+    assert.equal(code, 2);
+    assert.equal(calls.length, 0);
+    assert.match(lines.join("\n"), /serving ddddddd.*expected ccccccc/);
+  });
+
+  it("runs the full suite and passes when the slot serves the expected SHA", async () => {
+    const { calls, effects } = harness();
+    const code = await runE2eStage(["main", "--expect-sha", SHA], {
+      env: RELEASE_ENV,
+      effects,
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(calls[0].argv, [
+      "pnpm",
+      "--filter",
+      "@ds/e2e",
+      "test:e2e",
+    ]);
+    assert.equal(calls[0].env.E2E_GREP, undefined);
   });
 });

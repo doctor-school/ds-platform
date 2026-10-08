@@ -25,7 +25,7 @@ mode: inline
 2. **Fix** — minimum code change that turns the failing test green.
 3. **UI verification gate (if the fix touches any rendered surface).** If the change touches a user-facing UI surface (`apps/portal/**`, `apps/promo/**`, `apps/admin/**`, `packages/design-system/**`) — even a "one-line" tweak like a radius, color, label, or copy string — you MUST, before the review step:
    1. Verify the pre-implementation **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — reuse the existing valid adoption decision/source; research the approved toolbox only for an uncovered element class, and **record the adoption decision** (`adopted <block> from <registry>` or `bespoke — <why the search came up empty>`) as a `registry-research:` line in the PR body. This is enforced by the `registry-research` CI gate (#251) and by AGENTS.md §6.
-   2. **Live-verify** the fix in the actual running UI — bring up the dev-stand and drive the journey in a browser (Playwright) per [`.claude/rules/dev-stand.md`](../../../../../.claude/rules/dev-stand.md) and AGENTS.md §6 ("Verify UI live before done"). `run-iteration-end-checklist` + Mode-a are necessary but **not** sufficient — they never prove the rendered result.
+   2. **Live-verify** the fix in the actual running UI (a visible fix; an invisible UI fix is proven by green CI e2e + before/after captures, environment-sensitive logic on the PR slot by the agent — `.claude/rules/change-tiers.md` → Stage-B and stands) — bring up the dev-stand and drive the journey in a browser (Playwright) per [`.claude/rules/dev-stand.md`](../../../../../.claude/rules/dev-stand.md) and AGENTS.md §6 ("Verify UI live before done"). `run-iteration-end-checklist` + Mode-a are necessary but **not** sufficient — they never prove the rendered result.
    3. Do **not** ship a user-facing dev placeholder (e.g. a "set this env var" note) — render the real thing or nothing. Enforced by the `no-stub` CI gate (#251).
 
    These steps are the §6 Hard rules _invoked at the point of UI work_, not merely co-resident in the constitution. Skip this gate only when the diff touches no rendered surface (pure backend / CI / tooling fix).
@@ -63,7 +63,7 @@ Skipped vs `do-feature-iteration`:
 
 - Fixing the symptom without a failing test that demonstrates the bug — TDD violation, hotfix without reproducer.
 - Skipping a discipline gate — same as `do-feature-iteration`.
-- **Shipping a UI fix without the pre-flight gate (step 3)** — tokenizing a value but never running registry-research or live-verify. This is the exact gap #251 closes: a "one-line" radius fix is still a UI change.
+- **Shipping a UI fix without the pre-flight gate (step 3)** — tokenizing a value but never running registry-research or live-verify (or, for an invisible change, green CI e2e + before/after captures). This is the exact gap #251 closes: a "one-line" radius fix is still a UI change.
 
 ## Related skills
 

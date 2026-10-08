@@ -19,6 +19,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).                                                |
 | `idp-policy.mjs`           | —                      | Pure seams for the pipeline-owned IdP provision converge (#1997): the password-complexity read-back verdict and the `@ds/schemas` `PASSWORD_MIN_LENGTH` extraction consumed by `prod.mjs` (see step 5b). |
 | `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                                                                 |
+| `stage-main-check.mjs`     | —                      | Stage `main` check (#2701): the last pre-flight step — converge the stage `main` slot to the target and run the full stage suite from a clean checkout of it (see below).                                |
 
 ## `pnpm deploy:prod`
 
@@ -28,7 +29,7 @@ pnpm deploy:prod --ref <sha>        # HOTFIX: ship exactly <sha>, not all of mai
 pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged image
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
 pnpm deploy:prod --allow-live-broadcast  # эфир-hold escape hatch (owner-approved urgent ship only)
-pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate escape hatch (reason mandatory, printed)
+pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate + stage-main-check escape hatch (reason mandatory, printed)
 ```
 
 Pipeline, fail-closed, stops at the first red step and prints a rollback pointer:
@@ -41,7 +42,8 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    provenance still blocks — see `ci-gate.mjs`, #2077) · **no live broadcast**
    (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
    `--rollback` path skips this hold) · **release gate** (`release-gate.mjs`,
-   #1662 — below). Refuses otherwise. Fixes the deployed commit to
+   #1662 — below) · **stage `main` check** (`stage-main-check.mjs`, #2701 —
+   below). Refuses otherwise. Fixes the deployed commit to
    `origin/main`'s SHA — or, under `--ref <sha>`, to that commit (below).
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
    no deploy key). Streams are piped in-process → Windows-safe.
@@ -444,6 +446,34 @@ line IS the audit record.
 
 Unit cover: `tools/lint/guard-tests/release-gate.spec.ts` (pure flag parser,
 marker parser, evaluator and formatters over fabricated probes — no subprocess).
+
+## Stage `main` check (`stage-main-check.mjs`, #2701)
+
+Environment-level risk — the production build, the real IdP, real-shaped data —
+is covered once per release on the shared stage `main` slot (staging tech spec
+C7, release-cycle spec §10.4 item 9). The deploy runs that check **itself**, as
+the last pre-flight step, instead of trusting a record someone wrote:
+
+1. `git worktree add --detach <tmp>/tree <target>` under the OS temp dir — a
+   clean checkout of exactly the target SHA, so the scenarios executed are the
+   ones the target carries, never the operator's working tree — then
+   `pnpm install --frozen-lockfile` in it.
+2. `node tools/staging/slot.mjs up main --ref <target>` from that checkout — the
+   ordinary converge (`tools/staging/README.md`), which itself asserts the slot's
+   public `/v1/health` serves the target.
+3. `node tools/staging/e2e-stage.mjs main --expect-sha <target>` — the full
+   suite. `--expect-sha` re-asserts the served SHA before any scenario runs and
+   refuses `--project` / `--grep` / `--no-axe`, an inherited `E2E_GREP` and a
+   missing `CI` (Playwright `forbidOnly`); the deploy's child env clears
+   `E2E_GREP` and sets `CI=1`.
+4. `git worktree remove --force` the checkout, pass or fail.
+
+Any failure refuses the deploy, fail-closed; nothing is written to GitHub — the
+stand is operated by hand (#2202) and the deploy log is the record. The operator
+needs what the slot tool needs (ssh to the box, `STAGE_BASIC_AUTH_PASS`). The
+only bypass is the owner-approved `--release-gate-exempt "<reason>"`, printed as
+the audit record. Unit cover: `tools/deploy/stage-main-check.test.mjs` (every
+spawn injected) and the release-check cases in `tools/staging/e2e-stage.test.mjs`.
 
 ## `pnpm deploy:smoke`
 

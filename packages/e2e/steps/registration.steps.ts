@@ -13,6 +13,7 @@ import {
   differentVerificationCode,
   verificationRefusalEvidence,
   inputSecret,
+  assertNoPrivateRegistrationAccess,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
@@ -114,47 +115,11 @@ Then(
   "registration exposes no password or tokens and grants no private session or profile access",
   async ({ page }) => {
     const state = registration(page);
-    const sessionName = "__Host-ds_session";
-    const header = (await state.response!.headerValue("set-cookie")) ?? "";
-    expect(
-      header.includes(`${sessionName}=`),
-      "registration minted no private session",
-    ).toBe(false);
-    const cookies = await state.context.cookies();
-    expect(
-      cookies.some((cookie) => cookie.name === sessionName),
-      "browser has no private session",
-    ).toBe(false);
-    expect(
-      cookies.some((cookie) => cookie.value.includes(state.password)),
-      "cookies contain no registration password",
-    ).toBe(false);
-    const exposed = await state.page.evaluate((password) => {
-      const readable = JSON.stringify({
-        url: location.href,
-        cookie: document.cookie,
-        local: Object.entries(localStorage),
-        session: Object.entries(sessionStorage),
-      });
-      return (
-        readable.includes(password) ||
-        readable.includes(encodeURIComponent(password)) ||
-        /__Host-ds_session|access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
-          readable,
-        )
-      );
-    }, state.password);
-    expect(
-      exposed,
-      "URL and JavaScript-readable stores expose no password or tokens",
-    ).toBe(false);
-    expect(
-      await state.page.evaluate(
-        async () =>
-          (await fetch("/v1/me/profile", { credentials: "include" })).status,
-      ),
-      "unconfirmed registration cannot read a private profile",
-    ).toBe(401);
+    await assertNoPrivateRegistrationAccess(
+      state.page,
+      (await state.response!.headerValue("set-cookie")) ?? "",
+      state,
+    );
   },
 );
 

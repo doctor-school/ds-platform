@@ -70,7 +70,7 @@ const ReturnContext = () => (
       />
     </div>
     <p className="max-w-panel-assurance text-sm leading-assurance text-primary-surface-soft">
-      После входа вы вернётесь сюда же — место за вами.
+      После входа вы вернётесь сюда же.
     </p>
   </div>
 );

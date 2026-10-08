@@ -15,13 +15,13 @@ const PRE_SESSION_CODES = new Set([
   "EDNS",
   "EHOSTUNREACH",
   "ENETUNREACH",
-  "ETLS",
   "EAUTH",
   "EENVELOPE",
 ]);
 /** Errno labels safe to publish; anything else becomes `connection-failure`. */
 const PUBLISHABLE_CODES = new Set([
   ...PRE_SESSION_CODES,
+  "ETLS",
   "ETIMEDOUT",
   "ECONNRESET",
   "ECONNECTION",
@@ -36,6 +36,18 @@ interface SmtpErrorShape {
   code?: unknown;
 }
 
+/**
+ * Certificate verification codes Node raises while the TLS handshake is still
+ * in progress, i.e. before any application byte (003 EARS-45). A generic
+ * TLS-layer failure (`ERR_SSL_*`, bad record MAC) can happen mid-session and
+ * is not one of these.
+ */
+export function isCertificateHandshakeCode(code: string): boolean {
+  return /^(CERT_|UNABLE_TO_(VERIFY|GET_ISSUER|DECRYPT_CERT)|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$|ERR_TLS_CERT_ALTNAME_INVALID$|HOSTNAME_MISMATCH$)/.test(
+    code,
+  );
+}
+
 /** Enhanced status (RFC 3463) from a reply line, e.g. `550 5.1.1 …` → `5.1.1`. */
 export function enhancedStatus(response: unknown): string | undefined {
   if (typeof response !== "string") return undefined;
@@ -45,9 +57,10 @@ export function enhancedStatus(response: unknown): string | undefined {
 /**
  * 003 EARS-45 SMTP classification. A server reply is definitive in any phase;
  * only an enhanced `5.1.x` (not `5.1.7`/`5.1.8`) to `RCPT TO` is
- * recipient-permanent. A non-reply failure is provider-failure when it is
- * pre-session by nature or the phase is proven before end-of-data, otherwise
- * ambiguous.
+ * recipient-permanent. A non-reply failure follows the measured phase: before
+ * end-of-data → provider-failure, after it → ambiguous whatever the errno. With
+ * an unknown phase it is provider-failure only when pre-session by nature
+ * (refusal, DNS, certificate handshake, EAUTH, EENVELOPE), otherwise ambiguous.
  */
 export function classifySmtpError(
   err: unknown,
@@ -85,7 +98,9 @@ export function classifySmtpError(
       ? errno
       : "connection-failure";
   const definite =
-    tls || PRE_SESSION_CODES.has(errno) || phase === "before-end-of-data";
+    phase === "before-end-of-data" ||
+    (phase === "unknown" &&
+      (PRE_SESSION_CODES.has(errno) || isCertificateHandshakeCode(errno)));
   return new ChannelRejection(
     code,
     "SMTP attempt failed",

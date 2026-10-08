@@ -177,6 +177,7 @@ describe("003 EARS-46 per-channel readiness (design §14.3a)", () => {
         flagListener = l;
         return () => undefined;
       },
+      onSynchronized: () => () => undefined,
     });
     await vi.waitFor(() => expect(seen).toHaveLength(1));
     flagListener!();
@@ -205,5 +206,32 @@ describe("003 EARS-46 per-channel readiness (design §14.3a)", () => {
       /key-secret|app-password|re_key|@doctor\.school/,
     );
     monitor.stop();
+  });
+
+  it("EARS-46: the monitor re-probes on the first flag-service sync and unsubscribes both signals on stop", async () => {
+    register.clear();
+    const f = probeFixture();
+    const monitor = new MailerReadinessMonitor(
+      () => f.mailer.probeReadiness(),
+      f.mailer.readinessStatement(),
+      { log: () => undefined },
+    );
+    let syncListener: (() => void) | undefined;
+    const unsubscribed: string[] = [];
+    const seen: ChannelReadiness[][] = [];
+    monitor.onChange((s) => seen.push(s));
+    monitor.start({
+      onChange: () => () => unsubscribed.push("change"),
+      onSynchronized: (l) => {
+        syncListener = l;
+        return () => unsubscribed.push("sync");
+      },
+    });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(syncListener).toBeTypeOf("function");
+    syncListener!();
+    await vi.waitFor(() => expect(seen).toHaveLength(2));
+    monitor.stop();
+    expect(unsubscribed.sort()).toEqual(["change", "sync"]);
   });
 });

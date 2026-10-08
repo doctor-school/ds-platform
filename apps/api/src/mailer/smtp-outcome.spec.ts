@@ -56,17 +56,56 @@ describe("003 EARS-45 SMTP outcome classes (design §14.3)", () => {
     }
   });
 
-  it("EARS-45: connection refusal, DNS and TLS failures are provider-failure in any phase", () => {
+  it("EARS-45: with an unknown phase, connection refusal, DNS and certificate-handshake failures are provider-failure", () => {
     for (const code of [
       "ECONNREFUSED",
       "ENOTFOUND",
       "EDNS",
-      "ETLS",
       "CERT_HAS_EXPIRED",
+      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
     ]) {
       expect(classifySmtpError(errno(code), "unknown")).toMatchObject({
         outcome: "provider-failure",
       });
+    }
+  });
+
+  it("EARS-45: with an unknown phase, a generic TLS-layer failure is ambiguous", () => {
+    for (const code of [
+      "ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC",
+      "ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC",
+      "ETLS",
+    ]) {
+      expect(classifySmtpError(errno(code), "unknown")).toMatchObject({
+        code: "ETLS",
+        outcome: "ambiguous",
+      });
+    }
+  });
+
+  it("EARS-45: after end-of-data any failure without a final reply is ambiguous, whatever its errno", () => {
+    for (const code of [
+      "ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC",
+      "ETLS",
+      "CERT_HAS_EXPIRED",
+      "ECONNRESET",
+      "ECONNREFUSED",
+      "EAUTH",
+    ]) {
+      expect(classifySmtpError(errno(code), "after-end-of-data").outcome).toBe(
+        "ambiguous",
+      );
+    }
+  });
+
+  it("EARS-45: before end-of-data any failure without a reply is provider-failure", () => {
+    for (const code of [
+      "ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC",
+      "ETLS",
+    ]) {
+      expect(classifySmtpError(errno(code), "before-end-of-data").outcome).toBe(
+        "provider-failure",
+      );
     }
   });
 

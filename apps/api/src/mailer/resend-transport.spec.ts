@@ -79,20 +79,29 @@ describe("Resend cancellation", () => {
 });
 
 describe("003 EARS-45 Resend outcome classes", () => {
-  it("EARS-45: a pre-send network failure (DNS, refused, TLS) is provider-failure; a failure after the request may have been sent is ambiguous", async () => {
-    for (const code of ["ENOTFOUND", "ECONNREFUSED", "CERT_HAS_EXPIRED"]) {
+  it("EARS-45: a pre-send network failure (DNS, refused, certificate handshake) is provider-failure; a failure after the request may have been sent is ambiguous", async () => {
+    for (const code of [
+      "ENOTFOUND",
+      "ECONNREFUSED",
+      "CERT_HAS_EXPIRED",
+      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+    ]) {
       await expect(
         new ResendChannel({ apiKey: "k", fetchFn: networkError(code) }).send(
           mail,
         ),
       ).rejects.toMatchObject({ outcome: "provider-failure" });
     }
-    await expect(
-      new ResendChannel({
-        apiKey: "k",
-        fetchFn: networkError("ECONNRESET"),
-      }).send(mail),
-    ).rejects.toMatchObject({ outcome: "ambiguous" });
+    for (const code of [
+      "ECONNRESET",
+      "ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC",
+    ]) {
+      await expect(
+        new ResendChannel({ apiKey: "k", fetchFn: networkError(code) }).send(
+          mail,
+        ),
+      ).rejects.toMatchObject({ outcome: "ambiguous" });
+    }
   });
   it("EARS-45: 2xx accepts, 5xx is ambiguous, 4xx/429 are provider-failure and a recipient validation error is recipient-permanent", async () => {
     await expect(

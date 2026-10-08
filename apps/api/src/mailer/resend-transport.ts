@@ -1,4 +1,5 @@
 import { emailSender } from "./email-layout.js";
+import { isCertificateHandshakeCode } from "./smtp-outcome.js";
 import {
   ChannelRejection,
   type OutboundEmail,
@@ -32,7 +33,7 @@ function preSendFailure(err: unknown): string | undefined {
     (err as { cause?: { code?: unknown } } | undefined)?.cause?.code ?? "",
   );
   if (PRE_SEND_CODES.has(code)) return code;
-  if (/CERT|TLS|SSL/i.test(code)) return "ETLS";
+  if (isCertificateHandshakeCode(code)) return "ETLS";
   return undefined;
 }
 

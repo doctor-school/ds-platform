@@ -94,12 +94,21 @@ export class MailerReadinessMonitor implements MailerReadinessSource {
     return run;
   }
 
-  /** Startup probe plus one per real-email flag change. */
-  start(flags: Pick<FeatureFlags, "onChange">): void {
-    this.unsubscribe = flags.onChange(() => {
+  /**
+   * Startup probe plus one per flag change and one on the first flag-service
+   * sync, which `onChange` does not report (003 EARS-46).
+   */
+  start(flags: Pick<FeatureFlags, "onChange" | "onSynchronized">): void {
+    const reprobe = (): void => {
       void this.refresh().catch(() => undefined);
-    });
-    void this.refresh().catch(() => undefined);
+    };
+    const offChange = flags.onChange(reprobe);
+    const offSync = flags.onSynchronized(reprobe);
+    this.unsubscribe = () => {
+      offChange();
+      offSync();
+    };
+    reprobe();
   }
 
   stop(): void {

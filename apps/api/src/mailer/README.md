@@ -66,7 +66,8 @@ class (`smtp-outcome.ts`, `resend-transport.ts`):
   to `RCPT TO`, or a Resend `validation_error` on the `to` field: stop.
 - `provider-failure` — any server reply that is not the above (MAIL FROM, AUTH
   535, 4xx, bare 5xx, `5.7.x`, the end-of-data reply), connection refusal,
-  DNS/TLS failure, a timeout or connection loss proven before end-of-data;
+  DNS/certificate-handshake failure, any failure without a reply proven
+  before end-of-data;
   Resend pre-send network failure, non-recipient 4xx, 429: next channel.
 - `ambiguous` — timeout/connection loss after end-of-data, or whenever the
   phase cannot be proven; Resend 5xx or a failure after the request may have
@@ -75,9 +76,13 @@ class (`smtp-outcome.ts`, `resend-transport.ts`):
 **Phase.** The owned socket (`smtp-transport.ts`) observes every byte
 Nodemailer writes: after the `DATA` command, the stream tail reveals the
 `CRLF.CRLF` end-of-data sequence (dot stuffing keeps it out of the body). Only
-that transport can claim "before end-of-data"; any other error source is
-classified with an unknown phase, so a non-reply failure is `ambiguous` unless
-it is pre-session by nature (refused, DNS, TLS, EAUTH, EENVELOPE).
+that transport can claim "before end-of-data". A measured phase always decides
+a failure without a reply: before end-of-data it is `provider-failure`, after
+it `ambiguous` whatever the errno (a TLS alert after `CRLF.CRLF` included). Any
+other error source is classified with an unknown phase, so a non-reply failure
+is `ambiguous` unless it is pre-session by nature (refused, DNS, a
+certificate-handshake code such as `CERT_*` / `UNABLE_TO_VERIFY_*`, EAUTH,
+EENVELOPE); a generic `ERR_SSL_*` with an unknown phase is `ambiguous`.
 
 SMTP limits are 5 seconds for connection/TLS, 5 seconds greeting, 10 seconds
 socket inactivity, and 15 seconds absolute; Resend has a 10-second deadline

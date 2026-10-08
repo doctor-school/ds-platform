@@ -43,6 +43,9 @@ import {
 } from "./events.repository.js";
 import { eventEconomyFacts } from "./event-economy-facts.js";
 import {
+  boundEventHorizonRows,
+  clampRequestedPastFrom,
+  EVENT_HORIZON_ROW_CAP,
   eventHorizonInstants,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
@@ -1248,19 +1251,31 @@ export class EventsService {
       query.to !== undefined ||
       (query.cursor === undefined && query.limit === undefined);
     if (horizonRead) {
-      const horizon = resolveEventHorizon(
+      const requested = resolveEventHorizon(
         { tense: query.timeframe, from: query.from, to: query.to },
         doctorEventsFeedDayOf(now),
       );
-      const window = eventHorizonInstants(horizon);
-      const rows =
+      const window = eventHorizonInstants(requested);
+      const read =
         query.timeframe === "past"
-          ? await this.repo.listPast(undefined, null, window)
-          : await this.repo.listUpcoming(cutoff, undefined, null, window);
+          ? await this.repo.listPast(EVENT_HORIZON_ROW_CAP + 1, null, window)
+          : await this.repo.listUpcoming(
+              cutoff,
+              EVENT_HORIZON_ROW_CAP + 1,
+              null,
+              window,
+            );
+      // One response stays bounded; the extent it echoes is the one it holds.
+      const bounded = boundEventHorizonRows(
+        requested,
+        query.timeframe,
+        read.map((row) => ({ row, startsAt: row.event.startsAt })),
+      );
+      const rows = bounded.rows.map(({ row }) => row);
       // «Будущие» widens `to`, «Прошедшие» widens `from` backward (rows 30,
       // 32); the remainder rides along — the one resolution both hosts share.
       const beyond = await resolveEventHorizonBeyond(
-        horizon,
+        bounded.horizon,
         query.timeframe,
         (range) =>
           this.repo.listListingStartsIn(
@@ -1273,7 +1288,16 @@ export class EventsService {
         data: await this.toListingCards(query.timeframe, rows),
         counts,
         pagination: { hasMore: beyond.remaining > 0, nextCursor: null },
-        horizon: { ...horizon, ...beyond },
+        horizon: {
+          ...clampRequestedPastFrom(
+            bounded.horizon,
+            query.timeframe,
+            bounded.rows,
+            query.from,
+            beyond,
+          ),
+          ...beyond,
+        },
       };
     }
 

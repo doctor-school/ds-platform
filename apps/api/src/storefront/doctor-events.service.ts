@@ -21,6 +21,9 @@ import {
 } from "@ds/schemas";
 import { eventEconomyFacts } from "../events/event-economy-facts.js";
 import {
+  boundEventHorizonRows,
+  clampRequestedPastFrom,
+  EVENT_HORIZON_ROW_CAP,
   eventHorizonInstants,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
@@ -97,7 +100,7 @@ export class DoctorEventsService {
     const today = doctorEventsFeedDayOf(now);
     const { query } = input;
 
-    const horizon = resolveEventHorizon(query, today);
+    const requested = resolveEventHorizon(query, today);
     const targeting = await this.resolveTargeting(
       query,
       input.specialtyReference,
@@ -117,13 +120,17 @@ export class DoctorEventsService {
           : UPCOMING_BROADCAST_STATES,
       order: query.tense === "past" ? "desc" : "asc",
     } as const;
-    const rows = await this.repository.findFeedRows({
+    const read = await this.repository.findFeedRows({
       ...tenseRead,
       directionIds,
-      ...eventHorizonInstants(horizon),
+      ...eventHorizonInstants(requested),
       kindSlugs: query.kind,
       q: query.q,
+      limit: EVENT_HORIZON_ROW_CAP + 1,
     });
+    // One response stays bounded; the extent it echoes is the one it holds.
+    const bounded = boundEventHorizonRows(requested, query.tense, read);
+    const rows = bounded.rows;
 
     const cards = await this.toCards(rows);
     const filtered = applyCardFacets(cards, query);
@@ -134,7 +141,7 @@ export class DoctorEventsService {
     // the same card facets the window obeys — the one resolution both
     // storefronts share.
     const beyond = await resolveEventHorizonBeyond(
-      horizon,
+      bounded.horizon,
       query.tense,
       async (range) => {
         const beyondRows = await this.repository.findFeedRows({
@@ -156,8 +163,13 @@ export class DoctorEventsService {
 
     return {
       tense: query.tense,
-      from: horizon.from,
-      to: horizon.to,
+      ...clampRequestedPastFrom(
+        bounded.horizon,
+        query.tense,
+        rows,
+        query.from,
+        beyond,
+      ),
       days,
       totalCount: filtered.length,
       // «показать ещё» is a URL edit, not a client paging state (LD-2/EARS-8):

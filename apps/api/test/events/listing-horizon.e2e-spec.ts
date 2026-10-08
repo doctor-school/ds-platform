@@ -16,6 +16,7 @@ import {
   type UpcomingBroadcastCard,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { EVENT_HORIZON_ROW_CAP } from "../../src/events/event-horizon.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -331,14 +332,26 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         if (extent.data.some((card) => card.id === pastAncient.id)) break;
       }
       expect(extent.data.map((card) => card.id)).toContain(pastAncient.id);
-      // A hand-edited ancient `from` is honoured, never clamped to a year.
+      // A hand-edited ancient `from` is never clamped to a year — only to the
+      // earliest matching event's day, which loses nothing.
       const all = await page(
         `timeframe=past&from=2000-01-01&to=${first.horizon!.to}`,
       );
-      expect(all.horizon?.from).toBe("2000-01-01");
       expect(all.data.map((card) => card.id)).toContain(pastAncient.id);
       expect(all.horizon?.nextFrom).toBeNull();
       expect(all.horizon?.remaining).toBe(0);
+    });
+
+    it("NEW: a hostile `from=1900-01-01` is answered with at most the row cap and a `from` clamped to the earliest matching event's day", async () => {
+      const hostile = await page("timeframe=past&from=1900-01-01");
+      expect(hostile.data.length).toBeGreaterThan(0);
+      expect(hostile.data.length).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
+      const earliest = hostile.data
+        .map((card) => doctorEventsFeedDayOf(new Date(card.startsAt)))
+        .sort()[0]!;
+      expect(hostile.horizon?.from).toBe(earliest);
+      expect(hostile.horizon!.from <= doctorEventsFeedDayOf(new Date(Date.now() - 400 * DAY))).toBe(true);
+      expect(hostile.data.map((card) => card.id)).toContain(pastAncient.id);
     });
 
     it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` is the events the widest horizon would add", async () => {
@@ -362,6 +375,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       // «Прошедшие» has no age floor: the whole archive is the reach.
       const pastAll = await page(`timeframe=past&from=2000-01-01&to=${pastTo}`);
+      expect(pastAll.data.length).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
       expect(past.horizon?.remaining).toBeGreaterThanOrEqual(1);
       expect(past.horizon?.remaining).toBe(
         pastAll.data.length - past.data.length,

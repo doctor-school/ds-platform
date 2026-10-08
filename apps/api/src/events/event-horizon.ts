@@ -65,6 +65,84 @@ export function resolveEventHorizon(
   return { from, to: requested };
 }
 
+/**
+ * The most rows ONE horizon response carries, on both reads and both tenses.
+ * «Прошедшие» has no age floor, so without it a hand-edited `from=1900-01-01`
+ * would answer the whole archive in one response. Generous against the real
+ * volume (~45 events a month per host): the default 14-day extent and every
+ * honest «Показать ещё» walk stay far below it.
+ */
+export const EVENT_HORIZON_ROW_CAP = 500;
+
+/**
+ * Bounds ONE horizon response (wave-2 gate row 32, both reads). `rows` are the
+ * window's rows in read order — «Прошедшие» newest first, «Будущие» soonest
+ * first — fetched with `limit: EVENT_HORIZON_ROW_CAP + 1`.
+ *
+ * An extent holding more than the cap keeps the cap's newest («Прошедшие»)
+ *   / soonest («Будущие») rows in WHOLE days: the day the cap splits is
+ *   dropped and the moving bound (`from` / `to`) shrinks past it, so the
+ *   «Показать ещё» resolution asked of the returned extent stays truthful and
+ *   the dropped day is the next step. Only a single day holding more than the
+ *   cap is cut inside the day (the response stays bounded regardless).
+ */
+export function boundEventHorizonRows<T extends { startsAt: Date }>(
+  horizon: EventHorizon,
+  tense: "upcoming" | "past",
+  rows: readonly T[],
+): { horizon: EventHorizon; rows: T[] } {
+  if (rows.length > EVENT_HORIZON_ROW_CAP) {
+    const cutDay = doctorEventsFeedDayOf(rows[EVENT_HORIZON_ROW_CAP]!.startsAt);
+    const whole = rows
+      .slice(0, EVENT_HORIZON_ROW_CAP)
+      .filter((row) => doctorEventsFeedDayOf(row.startsAt) !== cutDay);
+    if (whole.length === 0) {
+      return {
+        horizon:
+          tense === "past"
+            ? { from: cutDay, to: horizon.to }
+            : { from: horizon.from, to: addDoctorEventsFeedDays(cutDay, 1) },
+        rows: rows.slice(0, EVENT_HORIZON_ROW_CAP),
+      };
+    }
+    return {
+      horizon:
+        tense === "past"
+          ? { from: addDoctorEventsFeedDays(cutDay, 1), to: horizon.to }
+          : { from: horizon.from, to: cutDay },
+      rows: whole,
+    };
+  }
+  return { horizon, rows: [...rows] };
+}
+
+/**
+ * A REQUESTED «Прошедшие» `from` older than EVERY matching event (nothing lies
+ * beyond the extent) is echoed clamped up to the earliest matching event's day
+ * — the same rows, nothing lost, and a hand-edited `from=1900-01-01` never
+ * comes back as the extent. A `from` with older events beyond it is a real
+ * «Показать ещё» bound and is echoed as written. `rows` are the window's rows
+ * newest first.
+ */
+export function clampRequestedPastFrom(
+  horizon: EventHorizon,
+  tense: "upcoming" | "past",
+  rows: readonly { startsAt: Date }[],
+  requestedFrom: string | undefined,
+  beyond: EventHorizonBeyond,
+): EventHorizon {
+  if (
+    tense !== "past" ||
+    requestedFrom === undefined ||
+    rows.length === 0 ||
+    beyond.remaining > 0
+  ) {
+    return horizon;
+  }
+  const earliest = doctorEventsFeedDayOf(rows[rows.length - 1]!.startsAt);
+  return earliest > horizon.from ? { from: earliest, to: horizon.to } : horizon;
+}
+
 /** The half-open UTC instant range `[from 00:00 МСК, to 00:00 МСК)` of a horizon. */
 export function eventHorizonInstants(horizon: EventHorizon): {
   fromInstant: Date;

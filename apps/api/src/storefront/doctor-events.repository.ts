@@ -105,6 +105,8 @@ export interface DoctorFeedFilters {
   /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
   kindSlugs: string[];
   q?: string | undefined;
+  /** At most this many rows, in `order` — the horizon row cap; omitted = every matching row. */
+  limit?: number;
 }
 
 @Injectable()
@@ -179,7 +181,7 @@ export class DoctorEventsRepository {
 
     const where = this.feedWhere(filters);
 
-    const rows = await this.db
+    const query = this.db
       .select(FEED_ROW_COLUMNS)
       .from(events)
       .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
@@ -189,6 +191,10 @@ export class DoctorEventsRepository {
           ? [desc(events.startsAt), desc(events.id)]
           : [asc(events.startsAt), asc(events.id)]),
       );
+    const rows =
+      filters.limit === undefined
+        ? await query
+        : await query.limit(filters.limit);
 
     return rows as DoctorFeedRow[];
   }

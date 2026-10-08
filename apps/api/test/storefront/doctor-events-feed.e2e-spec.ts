@@ -13,6 +13,7 @@ import {
   doctorEventsFeedDayOf,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
+import { EVENT_HORIZON_ROW_CAP } from "../../src/events/event-horizon.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { SPECIALTY_CHOICE_COOKIE_NAME } from "../../src/storefront/specialty-choice.cookie.js";
 import { eventClassificationSql } from "../setup/event-classification.js";
@@ -606,13 +607,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(extent.nextBatch).toBe(0);
     });
 
-    it("NEW: a hand-edited ancient past `from` is honoured, never clamped to a year, and the recent days stay", async () => {
+    it("NEW: a hostile ancient past `from` is clamped to the earliest matching event's day — never to a year — and the recent days stay", async () => {
       const feed = await readFeed({
         specialtyCode: lonelyCode,
         query: `?tense=past&from=${addDoctorEventsFeedDays(today, -5000)}`,
       });
       expect(feed.to).toBe(addDoctorEventsFeedDays(today, 1));
-      expect(feed.from).toBe(addDoctorEventsFeedDays(today, -5000));
+      expect(feed.from).toBe(addDoctorEventsFeedDays(today, -400));
+      expect(feed.totalCount).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
       expect(ids).toContain(pastMontageEventId);
       expect(ids).toContain(pastAncientEventId);

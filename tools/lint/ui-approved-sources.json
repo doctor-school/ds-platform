@@ -127,6 +127,24 @@
         "https://github.com/doctor-school/ds-platform/issues/2432#issuecomment-5887310830"
       ]
     },
+    "feature-046-committee-submissions-v1": {
+      "evidenceProfiles": ["responsive-web"],
+      "surfacePaths": [
+        "apps/admin/app/events/[id]/submissions/page.tsx",
+        "apps/admin/components/submission-card-panel.tsx",
+        "apps/admin/messages/ru.json",
+        "apps/admin/app/events/[id]/page.tsx"
+      ],
+      "states": [
+        "committee-nav",
+        "registry",
+        "card-decision",
+        "card-extension"
+      ],
+      "approvalProvenance": [
+        "https://github.com/doctor-school/ds-platform/issues/2437#issuecomment-6055235674"
+      ]
+    },
     "feature-012-event-kinds-admin-v1": {
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [

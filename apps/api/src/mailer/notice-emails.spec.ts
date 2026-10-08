@@ -3,6 +3,7 @@ import {
   congressConfirmationMessage,
   congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
+  endSentence,
   formatCongressEventDate,
   formatRevisionLastDay,
 } from "./notice-emails.js";
@@ -235,6 +236,49 @@ describe("046 EARS-29, EARS-35: the committee decision and extension letters", (
     });
     expect(message.text).toContain("Комментарий комитета: <b>Нет</b> & нет");
     expect(message.html).not.toContain("<b>Нет</b>");
+  });
+
+  for (const comment of [
+    "Добавьте иллюстрацию.",
+    "Добавьте иллюстрацию!",
+    "Добавьте иллюстрацию?",
+    "Добавьте иллюстрацию…",
+    "Добавьте иллюстрацию...",
+    "Добавьте иллюстрацию. ",
+  ]) {
+    it(`046 EARS-29: the committee comment ${JSON.stringify(comment)} keeps its own terminal mark — no second full stop`, () => {
+      const message = congressSubmissionDecisionMessage({
+        ...SUBMISSION,
+        letter: "needs_revision",
+        comment,
+        lastDay: "19.02.2027",
+      });
+      const joined = `${comment.trimEnd()} Исправить и отправить заявку`;
+      expect(message.text).toContain(joined);
+      expect(message.html).toContain(joined);
+    });
+  }
+
+  it("046 EARS-29: a committee comment with no terminal mark gets one full stop before the deadline sentence", () => {
+    const message = congressSubmissionDecisionMessage({
+      ...SUBMISSION,
+      letter: "needs_revision",
+      comment: "Сократите аннотацию ",
+      lastDay: "19.02.2027",
+    });
+    const joined = "Сократите аннотацию. Исправить и отправить заявку";
+    expect(message.text).toContain(joined);
+    expect(message.html).toContain(joined);
+  });
+
+  it("046 EARS-29: endSentence closes a sentence once — a terminal mark kept, a full stop added otherwise", () => {
+    expect(endSentence("Готово.")).toBe("Готово.");
+    expect(endSentence("Готово!")).toBe("Готово!");
+    expect(endSentence("Готово?")).toBe("Готово?");
+    expect(endSentence("Готово…")).toBe("Готово…");
+    expect(endSentence("Готово...")).toBe("Готово...");
+    expect(endSentence("Готово.  ")).toBe("Готово.");
+    expect(endSentence("Готово")).toBe("Готово.");
   });
 
   it("046 EARS-29, EARS-35: «{дата}» is the last day — the day before the stored instant — in Moscow", () => {

@@ -829,9 +829,10 @@ test("046 EARS-11: a talk returned for revision shows its deadline with the coun
   const open = row(page, "Доклад на доработке");
   await expect(open).toContainText("На доработке");
   await expect(open).toContainText("Уточните выборку.");
-  // The date as the canvas writes it («2 октября»), the countdown beside it.
+  // The date with its year («2 октября 2026», owner 2026-10-08, #2734), the
+  // countdown beside it.
   await expect(open).toContainText(
-    /Исправить и отправить до \d{1,2} [а-я]+, 23:59 МСК/,
+    /Исправить и отправить до \d{1,2} [а-я]+ \d{4}, 23:59 МСК/,
   );
   await expect(open).toContainText(
     /осталось \d+ (день|дня|дней) \d+ (час|часа|часов)/,
@@ -840,6 +841,6 @@ test("046 EARS-11: a talk returned for revision shows its deadline with the coun
 
   const expired = row(page, "Доклад с истёкшим сроком");
   await expect(expired).toContainText(
-    /Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(1 час назад\) — отправить заявку нельзя/,
+    /Срок доработки истёк \d{1,2} [а-я]+ \d{4}, 23:59 МСК \(1 час назад\) — отправить заявку нельзя/,
   );
 });

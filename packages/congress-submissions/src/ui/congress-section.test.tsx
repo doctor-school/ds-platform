@@ -471,7 +471,7 @@ describe("CongressSection", () => {
     const banner = await screen.findByRole("alert");
     expect(
       within(banner).getByText(
-        /^Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(5 часов назад\) — отправить заявку нельзя$/,
+        /^Срок доработки истёк \d{1,2} [а-я]+ \d{4}, 23:59 МСК \(5 часов назад\) — отправить заявку нельзя$/,
       ),
     ).toBeInTheDocument();
     // A refusal tied to no field is still a failed send: the author is told
@@ -499,7 +499,7 @@ describe("CongressSection", () => {
     // The canvas draws the line twice: in the committee box and as the
     // separate ⚠ warn notice of the detail.
     const line =
-      /^Срок доработки истёк \d{1,2} [а-я]+, 23:59 МСК \(3 дня назад\) — отправить заявку нельзя$/;
+      /^Срок доработки истёк \d{1,2} [а-я]+ \d{4}, 23:59 МСК \(3 дня назад\) — отправить заявку нельзя$/;
     const lines = await screen.findAllByText(line);
     expect(lines).toHaveLength(2);
     expect(

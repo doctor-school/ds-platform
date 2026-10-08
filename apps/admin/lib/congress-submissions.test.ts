@@ -16,8 +16,10 @@ import {
   mayExtendRevision,
   revisionDeadlineView,
   revisionExtensionError,
+  submissionAuthorLines,
   submissionBodySections,
   submissionCardHref,
+  submissionDecisionSummary,
   submissionRegistryCells,
   submissionRegistryQuery,
   submissionSentRangeChips,
@@ -329,6 +331,82 @@ describe("046 EARS-28 the card's decision", () => {
       { key: "abstract.relevance", text: "А" },
       { key: "abstract.conclusions", text: "В" },
     ]);
+  });
+
+  it("046 EARS-28: an author reads as one line — the full name, the workplace apart, the presenter marked", () => {
+    expect(
+      submissionAuthorLines([
+        {
+          surname: "Иванова",
+          firstName: "Анна",
+          patronymic: "Сергеевна",
+          workplace: " НМИЦ ",
+          presenting: true,
+        },
+        { surname: "Петров", firstName: " ", workplace: "" },
+      ]),
+    ).toEqual([
+      {
+        name: "Иванова Анна Сергеевна",
+        workplace: "НМИЦ",
+        presenting: true,
+      },
+      { name: "Петров", workplace: null, presenting: false },
+    ]);
+  });
+
+  it("046 EARS-28: the decision summary gathers the deadline, the comment and the last letter, and is absent without any", () => {
+    const now = new Date("2026-11-20T09:00:00.000Z");
+    const undecided = {
+      status: "submitted",
+      revisionDueAt: null,
+      revisionLastDay: null,
+      committeeComment: null,
+      lastLetter: null,
+    } as Pick<
+      CongressSubmissionCard,
+      | "status"
+      | "revisionDueAt"
+      | "revisionLastDay"
+      | "committeeComment"
+      | "lastLetter"
+    >;
+    expect(submissionDecisionSummary(undecided, now)).toBeNull();
+
+    const letter = {
+      status: "sent",
+      at: "2026-11-18T10:00:00.000Z",
+    } as NonNullable<CongressSubmissionCard["lastLetter"]>;
+    expect(
+      submissionDecisionSummary(
+        {
+          ...undecided,
+          status: "needs_revision",
+          revisionDueAt: "2026-11-25T21:00:00.000Z",
+          revisionLastDay: "2026-11-25",
+          committeeComment: "Уточните выборку.",
+          lastLetter: letter,
+        },
+        now,
+      ),
+    ).toEqual({
+      deadline: { day: "25.11.2026", expired: false },
+      comment: "Уточните выборку.",
+      lastLetter: letter,
+    });
+
+    // A deadline left from an earlier needs_revision is not the summary's.
+    expect(
+      submissionDecisionSummary(
+        {
+          ...undecided,
+          status: "accepted",
+          revisionDueAt: "2026-11-25T21:00:00.000Z",
+          revisionLastDay: "2026-11-25",
+        },
+        now,
+      ),
+    ).toBeNull();
   });
 });
 

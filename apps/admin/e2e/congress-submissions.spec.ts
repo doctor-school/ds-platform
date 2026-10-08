@@ -293,10 +293,6 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     await expect(member.getByTestId("submission-card-revision")).toHaveText(
       /^до \d{2}\.\d{2}\.\d{4}, 23:59 МСК$/,
     );
-    // The history names who and when.
-    await expect(
-      member.getByTestId("submission-card-history-entry").last(),
-    ).toContainText("Отправлена → На доработке");
     // The registry row follows the card.
     await expect(
       member.locator("table tbody tr", { hasText: alpha }),
@@ -313,6 +309,28 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     await expect(member.getByTestId("submission-card-revision")).toHaveText(
       `до ${dueDay}, 23:59 МСК`,
     );
+    // The decided card from its top: what the committee reads first.
+    await evidenceShot(member, "card-overview", {
+      prepare: () =>
+        member
+          .getByTestId("submission-card")
+          .evaluate((card) => card.parentElement?.scrollTo(0, 0)),
+      fullPage: false,
+    });
+    // The history is secondary: collapsed until asked for (keyboard-operable,
+    // the native disclosure), then it names who and when.
+    const history = member.getByTestId("submission-card-history");
+    await expect(
+      history.getByTestId("submission-card-history-entry").last(),
+    ).toBeHidden();
+    await history.locator("summary").focus();
+    await member.keyboard.press("Enter");
+    await expect(
+      history.getByTestId("submission-card-history-entry").last(),
+    ).toContainText("Отправлена → На доработке");
+    await expect(
+      history.getByTestId("submission-card-history-entry").last(),
+    ).toBeVisible();
 
     // A withdrawn card offers no control at all.
     await member.keyboard.press("Escape");

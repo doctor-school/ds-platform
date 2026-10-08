@@ -325,6 +325,63 @@ export function submissionBodySections(
     .map((section) => ({ key: `${kind}.${section}`, text: body[section]! }));
 }
 
+/** One author of the card's «Содержание»: the name, the workplace apart, the presenter flag. */
+export interface SubmissionAuthorLine {
+  name: string;
+  workplace: string | null;
+  presenting: boolean;
+}
+
+/**
+ * The card's author list: one line per author — the full name in the
+ * form's order (фамилия, имя, отчество), the workplace as its own secondary
+ * part, the presenter marked. Blank parts are left out.
+ */
+export function submissionAuthorLines(
+  authors: CongressSubmissionCard["authors"],
+): SubmissionAuthorLine[] {
+  return authors.map((author) => ({
+    name: [author.surname, author.firstName, author.patronymic]
+      .map((part) => part?.trim() ?? "")
+      .filter(Boolean)
+      .join(" "),
+    workplace: author.workplace?.trim() || null,
+    presenting: author.presenting === true,
+  }));
+}
+
+/** What the committee reads first under the card's header. */
+export interface SubmissionDecisionSummary {
+  /** The revision deadline — a `needs_revision` card's only. */
+  deadline: { day: string; expired: boolean } | null;
+  comment: string | null;
+  lastLetter: CongressSubmissionCard["lastLetter"];
+}
+
+/**
+ * The card's decision summary: the revision deadline (only while the card is
+ * `needs_revision`), the committee's comment and the last letter to the
+ * author. `null` when the card carries none of them — the block is then left
+ * out rather than shown empty.
+ */
+export function submissionDecisionSummary(
+  card: Pick<
+    CongressSubmissionCard,
+    | "status"
+    | "revisionDueAt"
+    | "revisionLastDay"
+    | "committeeComment"
+    | "lastLetter"
+  >,
+  now: Date,
+): SubmissionDecisionSummary | null {
+  const deadline =
+    card.status === "needs_revision" ? revisionDeadlineView(card, now) : null;
+  const comment = card.committeeComment || null;
+  if (!deadline && !comment && !card.lastLetter) return null;
+  return { deadline, comment, lastLetter: card.lastLetter };
+}
+
 // ---------------------------------------------------------------------------
 // The revision deadline (EARS-34, EARS-35)
 // ---------------------------------------------------------------------------

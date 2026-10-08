@@ -805,10 +805,17 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
   }) => {
     test.setTimeout(180_000);
     await loginAsAdmin(page);
-    const id = await createPublishedEvent(page, `Axe-скан заявки ${Date.now()}`);
+    const id = await createPublishedEvent(
+      page,
+      `Axe-скан заявки ${Date.now()}`,
+    );
     await openOralIntake(page, id);
     const slug = await eventSlugFromRoster(page, id);
-    const author = await congressAuthor(browser, slug, "Аксенова Мария Петровна");
+    const author = await congressAuthor(
+      browser,
+      slug,
+      "Аксенова Мария Петровна",
+    );
     const title = `Axe-тема ${Date.now()}`;
     try {
       await sendOralSubmission(author, id, title);
@@ -817,7 +824,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     }
 
     await page.goto(`/events/${id}/submissions`);
-    await expect(page.getByTestId("submissions-total")).toHaveText("Найдено: 1");
+    await expect(page.getByTestId("submissions-total")).toHaveText(
+      "Найдено: 1",
+    );
     for (const theme of THEMES) await scan(page, theme);
 
     await page
@@ -836,6 +845,16 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       .fill("Добавьте данные о наблюдении.");
     await page.getByTestId("submission-decision-submit").click();
     await expect(page.getByTestId("submission-extension")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The collapsed status history, opened: its timeline is scanned too.
+    await page
+      .getByTestId("submission-card-history")
+      .locator("summary")
+      .click();
+    await expect(
+      page.getByTestId("submission-card-history-entry").first(),
+    ).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
   });
 });

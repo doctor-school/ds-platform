@@ -8,6 +8,9 @@ import {
   Alert,
   Badge,
   Button,
+  Card,
+  ContactChip,
+  cn,
   Input,
   Label,
   NativeSelect,
@@ -40,9 +43,10 @@ import {
   committeeWriteFailure,
   extensionRefusalOutsideForm,
   mayExtendRevision,
-  revisionDeadlineView,
   revisionExtensionError,
+  submissionAuthorLines,
   submissionBodySections,
+  submissionDecisionSummary,
   type CommitteeDecisionRefusal,
 } from "@/lib/congress-submissions";
 import { congressSubmissionsUrl } from "@/providers/data-provider";
@@ -172,8 +176,19 @@ export function SubmissionCardPanel({
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <SheetHeader>
-          <SheetTitle>{t("title")}</SheetTitle>
-          <SheetDescription>{t("description")}</SheetDescription>
+          {/* The submission's тема IS the panel's title; the generic name
+              stands in only while the card loads. */}
+          <SheetTitle data-testid="submission-card-title">
+            {card ? (
+              <span className="wrap-anywhere">{card.title || t("title")}</span>
+            ) : (
+              t("title")
+            )}
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            {t("description")}
+          </SheetDescription>
+          {card ? <CardMeta card={card} /> : null}
         </SheetHeader>
         <SheetBody>{body()}</SheetBody>
       </SheetContent>
@@ -181,124 +196,215 @@ export function SubmissionCardPanel({
   );
 }
 
+/**
+ * The card's three type levels (Stage-B #2724): section headings, field
+ * labels (small, muted) and values (body). Secondary data — the history, the
+ * letter's outcome, the sent / changed times — sits on the small muted level.
+ */
+const SECTION_HEADING = "text-base font-extrabold text-foreground";
+const SECONDARY = "text-xs text-muted-foreground";
+
+/** Under the title: вид and статус (the registry's badge), the send time. */
+function CardMeta({ card }: { card: CongressSubmissionCard }) {
+  const t = useTranslations("congressSubmissions.card");
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge variant="label" data-testid="submission-card-kind">
+        {KIND_COPY[card.kind].label}
+      </Badge>
+      <Badge variant="label" data-testid="submission-card-status">
+        {STATUS_LABEL[card.status]}
+      </Badge>
+      {card.submittedAt ? (
+        <span className={SECONDARY} data-testid="submission-card-submitted-at">
+          {t("submittedLine", { at: formatMskDateTime(card.submittedAt) })}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function CardFacts({ card }: { card: CongressSubmissionCard }) {
   const t = useTranslations("congressSubmissions");
   const c = (key: string, values?: Record<string, string | number>) =>
     t(`card.${key}`, values);
-  const deadline =
-    card.status === "needs_revision"
-      ? revisionDeadlineView(card, new Date())
-      : null;
+  const summary = submissionDecisionSummary(card, new Date());
+  const authors = submissionAuthorLines(card.authors);
   const none = c("none");
+  const phone = card.submitter.phone;
 
   return (
-    <dl className="grid grid-cols-1 gap-3">
-      <Fact label={c("fields.title")} testId="title">
-        {card.title || none}
-      </Fact>
-      <Fact label={c("fields.kind")} testId="kind">
-        {KIND_COPY[card.kind].label}
-      </Fact>
-      <Fact label={c("fields.status")} testId="status">
-        <Badge variant="label">{STATUS_LABEL[card.status]}</Badge>
-      </Fact>
-      {deadline ? (
-        <Fact label={c("fields.revision")} testId="revision">
-          {deadline.expired
-            ? c("revisionExpired", { day: deadline.day })
-            : c("revisionUntil", { day: deadline.day })}
-        </Fact>
+    <>
+      {summary ? (
+        // What the committee reads first: the decision already taken.
+        <Card data-testid="submission-card-summary">
+          <dl className="flex flex-col gap-4 p-4">
+            {summary.deadline ? (
+              <Fact label={c("fields.revision")} testId="revision">
+                {summary.deadline.expired ? (
+                  <Alert variant="warn" role="status">
+                    {c("revisionExpired", { day: summary.deadline.day })}
+                  </Alert>
+                ) : (
+                  c("revisionUntil", { day: summary.deadline.day })
+                )}
+              </Fact>
+            ) : null}
+            {summary.comment ? (
+              <Fact label={c("fields.committeeComment")} testId="comment" prose>
+                {summary.comment}
+              </Fact>
+            ) : null}
+            {summary.lastLetter ? (
+              <Fact label={c("fields.lastLetter")} testId="last-letter">
+                <span className={SECONDARY}>
+                  {c(`lastLetter.${summary.lastLetter.status}`, {
+                    at: formatMskDateTime(summary.lastLetter.at),
+                  })}
+                </span>
+              </Fact>
+            ) : null}
+          </dl>
+        </Card>
       ) : null}
-      {card.committeeComment ? (
-        <Fact label={c("fields.committeeComment")} testId="comment">
-          <span className="whitespace-pre-wrap">{card.committeeComment}</span>
-        </Fact>
-      ) : null}
-      <Fact label={c("fields.authors")} testId="authors">
-        {card.authors.length === 0 ? (
-          none
-        ) : (
-          <ol className="flex flex-col gap-1">
-            {card.authors.map((author, index) => (
-              <li key={index}>
-                {[author.surname, author.firstName, author.patronymic]
-                  .filter(Boolean)
-                  .join(" ")}
-                {author.workplace ? `, ${author.workplace}` : ""}
-                {author.presenting ? ` — ${c("presenting")}` : ""}
-              </li>
-            ))}
-          </ol>
-        )}
-      </Fact>
-      {submissionBodySections(card.kind, card.body).map((section) => (
-        <Fact
-          key={section.key}
-          label={c(`sections.${section.key}`)}
-          testId={`section-${section.key.replace(".", "-")}`}
-        >
-          <span className="whitespace-pre-wrap">{section.text}</span>
-        </Fact>
-      ))}
-      <Fact label={c("fields.submitter")} testId="submitter">
-        {card.submitter.fullName}
-      </Fact>
-      <Fact label={c("fields.email")} testId="email">
-        {card.submitter.email ?? none}
-      </Fact>
-      <Fact label={c("fields.phone")} testId="phone">
-        {card.submitter.phone ?? none}
-      </Fact>
-      {card.kind === "poster" ? (
-        <Fact label={c("fields.age")} testId="age">
-          {card.submitter.ageOnEventStart === null
-            ? none
-            : c("ageYears", { years: card.submitter.ageOnEventStart })}
-        </Fact>
-      ) : null}
-      {card.derivedFrom ? (
-        <Fact label={c("fields.derivedFrom")} testId="derived-from">
-          {c("derivedFromLine", {
-            kind: KIND_COPY[card.derivedFrom.kind].label,
-            title: card.derivedFrom.title,
-            status: STATUS_LABEL[card.derivedFrom.status],
-          })}
-        </Fact>
-      ) : null}
-      <Fact label={c("fields.submittedAt")} testId="submitted-at">
-        {card.submittedAt
-          ? c("atMsk", { at: formatMskDateTime(card.submittedAt) })
-          : none}
-      </Fact>
-      <Fact label={c("fields.updatedAt")} testId="updated-at">
-        {c("atMsk", { at: formatMskDateTime(card.updatedAt) })}
-      </Fact>
-      <Fact label={c("fields.lastLetter")} testId="last-letter">
-        {card.lastLetter
-          ? c(`lastLetter.${card.lastLetter.status}`, {
-              at: formatMskDateTime(card.lastLetter.at),
-            })
-          : none}
-      </Fact>
-      <Fact label={c("historyTitle")} testId="history">
-        <ul className="flex flex-col gap-1">
+
+      <section
+        className="flex flex-col gap-4"
+        aria-labelledby="submission-card-content-title"
+      >
+        <h3 id="submission-card-content-title" className={SECTION_HEADING}>
+          {c("contentTitle")}
+        </h3>
+        <dl className="flex flex-col gap-4">
+          <Fact label={c("fields.authors")} testId="authors">
+            {authors.length === 0 ? (
+              none
+            ) : (
+              <ol className="flex flex-col gap-2">
+                {authors.map((author, index) => (
+                  <li key={index} className="flex flex-col">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span>{author.name || none}</span>
+                      {author.presenting ? (
+                        <Badge variant="speaker">{c("presenting")}</Badge>
+                      ) : null}
+                    </span>
+                    {author.workplace ? (
+                      <span className={SECONDARY}>{author.workplace}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Fact>
+          {submissionBodySections(card.kind, card.body).map((section) => (
+            <Fact
+              key={section.key}
+              label={c(`sections.${section.key}`)}
+              testId={`section-${section.key.replace(".", "-")}`}
+              prose
+            >
+              {section.text}
+            </Fact>
+          ))}
+          {card.derivedFrom ? (
+            <Fact label={c("fields.derivedFrom")} testId="derived-from">
+              {c("derivedFromLine", {
+                kind: KIND_COPY[card.derivedFrom.kind].label,
+                title: card.derivedFrom.title,
+                status: STATUS_LABEL[card.derivedFrom.status],
+              })}
+            </Fact>
+          ) : null}
+        </dl>
+      </section>
+
+      <section
+        className="flex flex-col gap-4 border-t-2 border-border pt-4"
+        aria-labelledby="submission-card-submitter-title"
+      >
+        <h3 id="submission-card-submitter-title" className={SECTION_HEADING}>
+          {c("submitterTitle")}
+        </h3>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+          <Fact label={c("fields.submitter")} testId="submitter">
+            {card.submitter.fullName}
+          </Fact>
+          <Fact label={c("fields.phone")} testId="phone">
+            {phone ? (
+              <ContactChip
+                href={`tel:${phone.replace(/[^\d+]/g, "")}`}
+                label={phone}
+              />
+            ) : (
+              none
+            )}
+          </Fact>
+          <Fact
+            label={c("fields.email")}
+            testId="email"
+            className="sm:col-span-2"
+          >
+            {card.submitter.email ? (
+              <ContactChip
+                href={`mailto:${card.submitter.email}`}
+                label={card.submitter.email}
+              />
+            ) : (
+              none
+            )}
+          </Fact>
+          {card.kind === "poster" ? (
+            <Fact label={c("fields.age")} testId="age">
+              {card.submitter.ageOnEventStart === null
+                ? none
+                : c("ageYears", { years: card.submitter.ageOnEventStart })}
+            </Fact>
+          ) : null}
+        </dl>
+      </section>
+
+      {/* Secondary: collapsed until asked for. The native disclosure owns
+          the keyboard operation and the expanded state; the design system's
+          `DisclosureSummary` is the 44px icon chip, not a text row. */}
+      <details
+        className="border-t-2 border-border pt-4"
+        data-testid="submission-card-history"
+      >
+        <summary>
+          <span className="text-sm font-bold text-foreground">
+            {c("historySummary", { count: card.history.length })}
+          </span>
+        </summary>
+        <ol className="mt-3 flex flex-col gap-3">
           {card.history.map((entry, index) => (
             <li
               key={`${entry.at}:${index}`}
+              className="flex flex-col gap-0.5"
               data-testid="submission-card-history-entry"
             >
-              {c("historyEntry", {
-                at: formatMskDateTime(entry.at),
-                actor: entry.actor ?? c("historyNoActor"),
-                change: entry.from
+              <span className={SECONDARY}>
+                {c("historyMeta", {
+                  at: formatMskDateTime(entry.at),
+                  actor: entry.actor ?? c("historyNoActor"),
+                })}
+              </span>
+              <span className="text-sm text-foreground">
+                {entry.from
                   ? `${STATUS_LABEL[entry.from]} → ${STATUS_LABEL[entry.to]}`
-                  : STATUS_LABEL[entry.to],
-              })}
+                  : STATUS_LABEL[entry.to]}
+              </span>
             </li>
           ))}
-        </ul>
-      </Fact>
-    </dl>
+        </ol>
+        <p
+          className={`mt-3 ${SECONDARY}`}
+          data-testid="submission-card-updated-at"
+        >
+          {c("updatedLine", { at: formatMskDateTime(card.updatedAt) })}
+        </p>
+      </details>
+    </>
   );
 }
 
@@ -448,14 +554,11 @@ function Decision({
 
   return (
     <section
-      className="flex flex-col gap-4 border-t border-border pt-4"
+      className="flex flex-col gap-4 border-t-2 border-border pt-4"
       aria-labelledby="submission-decision-title"
       data-testid="submission-decision"
     >
-      <h3
-        id="submission-decision-title"
-        className="text-sm font-bold text-foreground"
-      >
+      <h3 id="submission-decision-title" className={SECTION_HEADING}>
         {t("decision.title")}
       </h3>
       {notice ? (
@@ -612,21 +715,32 @@ function Field({
   );
 }
 
-/** One read-only fact — the participant card's `<dl>` row. */
+/**
+ * One read-only fact: a small muted label over the value in body text. A
+ * `prose` value (the submission's own text) keeps its paragraph breaks at a
+ * readable measure.
+ */
 function Fact({
   label,
   testId,
+  prose = false,
+  className,
   children,
 }: {
   label: string;
   testId: string;
+  prose?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+    <div className={cn("flex flex-col gap-1", className)}>
+      <dt className={SECONDARY}>{label}</dt>
       <dd
-        className="text-sm text-foreground wrap-anywhere"
+        className={cn(
+          "text-sm leading-relaxed text-foreground wrap-anywhere",
+          prose && "max-w-prose whitespace-pre-wrap",
+        )}
         data-testid={`submission-card-${testId}`}
       >
         {children}

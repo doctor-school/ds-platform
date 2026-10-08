@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   expiryBudget,
   expiredVerificationEvidence,
   expiryAuditPlan,
   parseExpiryAudit,
   readExpiryAudit,
+  readExpiryBudget,
 } from "./expired-verification.js";
 
 describe("real expired confirmation evidence", () => {
@@ -142,6 +143,16 @@ describe("real expired confirmation evidence", () => {
 });
 
 describe("owned expired-attempt audit read", () => {
+  it("EARS-3: unfiltered staging main uses its canonical read-only API container", () => {
+    expect(
+      expiryAuditPlan(
+        "https://academy-main.stage.doctor.school",
+        "owned@example.test",
+        "slot-main",
+        "main-api",
+      ),
+    ).toContain("sudo -n docker exec -i main-api node");
+  });
   it("EARS-3: runs the exact read-only plan through an injected executor and validates its output", async () => {
     let ran = "";
     const snapshot = await readExpiryAudit(
@@ -157,7 +168,14 @@ describe("owned expired-attempt audit read", () => {
         "https://academy-pr-2696.stage.doctor.school",
         "owned@example.test",
         "slot-pr-2696",
+        "pr-2696-api",
       ),
+    );
+    const slots = await import(
+      new URL("../../../tools/staging/slot.mjs", import.meta.url).href
+    );
+    expect(ran).toContain(
+      `sudo -n docker exec -i ${slots.containerAliases("pr-2696").api} node`,
     );
     expect(snapshot.failed).toBe(0);
   });
@@ -166,8 +184,9 @@ describe("owned expired-attempt audit read", () => {
       "https://academy-pr-2696.stage.doctor.school",
       "owned@example.test",
       "slot-pr-2696",
+      "pr-2696-api",
     );
-    expect(plan).toContain("slot-pr-2696-api-1");
+    expect(plan).toContain("sudo -n docker exec -i pr-2696-api node");
     expect(plan).toContain("BEGIN READ ONLY");
     expect(plan).toContain("identifier_hash");
     expect(plan).toContain("AUDIT_IDENTIFIER_PEPPER");
@@ -177,14 +196,31 @@ describe("owned expired-attempt audit read", () => {
   });
   it.each([
     "https://academy.doctor.school",
-    "https://academy-main.stage.doctor.school",
     "https://doctor-pr-2696.stage.doctor.school",
     "http://academy-pr-2696.stage.doctor.school",
-  ])("EARS-3: refuses any host outside a per-PR Academy slot %#", (base) => {
+  ])("EARS-3: refuses any host outside an Academy staging slot %#", (base) => {
     expect(() =>
-      expiryAuditPlan(base, "owned@example.test", "slot-pr-2696"),
-    ).toThrow("Expiry audit requires a per-PR Academy HTTPS slot");
+      expiryAuditPlan(
+        base,
+        "owned@example.test",
+        "slot-pr-2696",
+        "pr-2696-api",
+      ),
+    ).toThrow("Expiry audit requires an Academy staging HTTPS slot");
   });
+  it.each(["pr-7-api", "slot-pr-2696-api-1", "pr-2696-api; false"])(
+    "EARS-3: refuses a container outside the owned canonical slot %#",
+    (apiContainer) => {
+      expect(() =>
+        expiryAuditPlan(
+          "https://academy-pr-2696.stage.doctor.school",
+          "owned@example.test",
+          "slot-pr-2696",
+          apiContainer,
+        ),
+      ).toThrow("Expiry audit requires an Academy staging HTTPS slot");
+    },
+  );
   it("EARS-3: accepts only the minimal safe count projection", () => {
     expect(
       parseExpiryAudit('{"failed":1,"safe":true,"unverified":true}'),
@@ -200,5 +236,126 @@ describe("owned expired-attempt audit read", () => {
     expect(() => parseExpiryAudit(value)).toThrow(
       "Invalid owned verification-attempt audit projection",
     );
+  });
+});
+
+describe("fresh verification-generator readback", () => {
+  const generator = {
+    secretGenerator: {
+      expiry: "3600s",
+      length: 6,
+      includeDigits: true,
+    },
+  };
+  function effects(
+    value: unknown = generator,
+    baseDomain = "stage.doctor.school",
+    idpDomain = `id.${baseDomain}`,
+  ) {
+    return {
+      capture: vi.fn(async (script: string) => {
+        if (script.includes("/etc/ds-platform/stage.env"))
+          return `STAGE_BASE_DOMAIN=${baseDomain}\nIDP_EXTERNAL_DOMAIN=${idpDomain}\nIDP_EXTERNAL_SECURE=true\nIDP_EXTERNAL_PORT=443`;
+        if (script.includes("/etc/ds-platform/idp-bootstrap-pat.txt"))
+          return "synthetic-pat";
+        throw new Error("Unexpected read");
+      }),
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(JSON.stringify(value), { status: 200 }),
+        ),
+    };
+  }
+  it.each(["main", "pr-2696"])(
+    "EARS-3: unfiltered staging reads fresh TTL without an operator value on %s",
+    async (slot) => {
+      const io = effects();
+      expect(
+        await readExpiryBudget(
+          `https://academy-${slot}.stage.doctor.school`,
+          undefined,
+          io,
+        ),
+      ).toEqual({ ttlMs: 3600000, waitMs: 3602000, timeoutMs: 3782000 });
+      expect(io.capture).toHaveBeenCalledTimes(2);
+      expect(io.fetch).toHaveBeenCalledWith(
+        "https://id.stage.doctor.school/admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE",
+        expect.objectContaining({ method: "GET" }),
+      );
+    },
+  );
+  it("EARS-3: a supplied TTL only corroborates the fresh generator readback", async () => {
+    const io = effects();
+    expect(
+      (
+        await readExpiryBudget(
+          "https://academy-main.stage.doctor.school",
+          "3600000",
+          io,
+        )
+      ).ttlMs,
+    ).toBe(3600000);
+    expect(io.fetch).toHaveBeenCalledOnce();
+  });
+  it.each(["3599999", "3600001"])(
+    "EARS-3: a supplied lifetime cannot shorten or replace the actual TTL %#",
+    async (ttl) => {
+      await expect(
+        readExpiryBudget(
+          "https://academy-main.stage.doctor.school",
+          ttl,
+          effects(),
+        ),
+      ).rejects.toThrow("Supplied verification TTL differs from live readback");
+    },
+  );
+  it("EARS-3: a foreign stage hostname fails before credentials or IdP access", async () => {
+    const io = effects();
+    await expect(
+      readExpiryBudget("https://academy-main.other.test", undefined, io),
+    ).rejects.toThrow("Live verification-generator read failed");
+    expect(io.capture).toHaveBeenCalledOnce();
+    expect(io.fetch).not.toHaveBeenCalled();
+  });
+  it("EARS-3: a non-staging IdP origin cannot receive the operator credential", async () => {
+    const io = effects(generator, "stage.doctor.school", "id.doctor.school");
+    await expect(
+      readExpiryBudget(
+        "https://academy-main.stage.doctor.school",
+        undefined,
+        io,
+      ),
+    ).rejects.toThrow("Live verification-generator read failed");
+    expect(io.capture).toHaveBeenCalledOnce();
+    expect(io.fetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    { expiry: "synthetic-secret", length: 6, includeDigits: true },
+    { expiry: "3600s", length: 8, includeDigits: true },
+    { expiry: "3600s", length: 6, includeDigits: true, includeSymbols: true },
+  ])(
+    "EARS-3: rejects an unusable or nonnumeric generator without echoing it %#",
+    async (value) => {
+      await expect(
+        readExpiryBudget(
+          "https://academy-main.stage.doctor.school",
+          undefined,
+          effects({ secretGenerator: value }),
+        ),
+      ).rejects.toThrow("Invalid live verification-generator readback");
+    },
+  );
+  it("EARS-3: secret-bearing transport errors never escape the readback", async () => {
+    const io = effects();
+    io.capture.mockRejectedValue(new Error("synthetic-secret"));
+    await expect(
+      readExpiryBudget(
+        "https://academy-main.stage.doctor.school",
+        undefined,
+        io,
+      ),
+    ).rejects.toThrow("Live verification-generator read failed");
+    expect(io.fetch).not.toHaveBeenCalled();
   });
 });

@@ -228,19 +228,24 @@ suite drives a captcha-gated step yet; the first one calls the helper.
 
 ## Running this suite against a staging slot
 
-The 003 **Expired email verification code is rejected** scenario requires
-`E2E_EMAIL_VERIFICATION_TTL_MS`, supplied from a fresh readback of the live
-Zitadel `SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE` generator's `expiry` (seconds
-converted to milliseconds). Missing or out-of-bounds values fail the scenario;
-mail copy is not configuration evidence. With the live `3600s` lifetime, this
+The 003 **Expired email verification code is rejected** scenario automatically
+reads the live Zitadel `SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE` generator's
+`expiry` and six-digit configuration for every run. It validates the Academy
+host and IdP origin against the real staging configuration before reading the
+operator PAT, which remains in memory. `E2E_EMAIL_VERIFICATION_TTL_MS` is optional;
+when supplied, it must exactly match the live readback. Invalid or out-of-bounds
+readbacks fail the scenario; mail copy is not configuration evidence.
+With the live `3600s` lifetime, this
 case naturally waits one hour plus two seconds after retrieving the fresh mail.
 Only its own timeout grows, with UTC progress every minute. It changes no clock,
 generator, database value or shared rate-limit setting.
 
-Run it on a per-PR Academy HTTPS slot using `pnpm e2e:stage <slot> --project
+The same scenario runs on the validated `main` Academy HTTPS slot in the
+unfiltered release suite and on per-PR slots using `pnpm e2e:stage <slot> --project
 academy --grep 'Expired email verification code is rejected'`. SSH operator access
 (`DS_STAGE_SSH`, default from the slot tool) is required: the existing SSH and
-slot naming helpers execute a bounded read-only query inside that slot's API
+slot naming helpers address the canonical API container (`main-api` or
+`pr-<N>-api`) and execute a bounded read-only query inside that slot's API
 container before the wait and after refusal. The query returns only a count and
 booleans, never the email, code, password, database credentials or HMAC pepper.
 Commands are recorded in `.scratch/stand-ops-2696.log`.

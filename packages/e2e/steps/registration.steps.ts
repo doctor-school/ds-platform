@@ -19,6 +19,7 @@ import {
 import { assertSecureSession } from "../lib/secure-session.js";
 import {
   expiryBudget,
+  readExpiryBudget,
   expiredVerificationEvidence,
   readExpiryAudit,
   type ExpiryAudit,
@@ -51,9 +52,15 @@ function registration(key: Page): Registration {
 
 Given(
   "the live email-verification generator lifetime has been read back for this run",
-  async ({ page }) => {
-    const budget = expiryBudget(process.env.E2E_EMAIL_VERIFICATION_TTL_MS);
+  async ({ page, world }) => {
+    const budget = await readExpiryBudget(
+      world.hostBaseUrl,
+      process.env.E2E_EMAIL_VERIFICATION_TTL_MS,
+    );
     test.setTimeout(budget.timeoutMs);
+    console.log(
+      `Email verification generator read ${new Date().toISOString()}: ${budget.ttlMs} milliseconds`,
+    );
     // The next shared Given owns registration; keep only this scenario's budget.
     expiryBudgets.set(page, budget);
   },

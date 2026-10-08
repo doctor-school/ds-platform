@@ -6,6 +6,121 @@ import {
 
 const EXPIRY_MARGIN_MS = 2000;
 
+function expirySlot(base: string): string {
+  try {
+    const url = new URL(base);
+    const match = /^academy-(main|pr-[1-9][0-9]{0,9})\.[a-z0-9.-]+$/.exec(
+      url.hostname,
+    );
+    if (
+      !match ||
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.port
+    )
+      throw new Error();
+    return match[1]!;
+  } catch {
+    throw new Error("Expiry audit requires an Academy staging HTTPS slot");
+  }
+}
+
+async function expiryCapture(script: string): Promise<string> {
+  const slots = await import(
+    new URL("../../../tools/staging/slot.mjs", import.meta.url).href
+  );
+  const remote = await import(
+    new URL("../../../tools/deploy/lib/remote.mjs", import.meta.url).href
+  );
+  const scratch = new URL("../../../.scratch/", import.meta.url);
+  await mkdir(scratch, { recursive: true });
+  await appendFile(
+    new URL("stand-ops-2696.log", scratch),
+    JSON.stringify({ command: "sshCapture", host: slots.STAGE_1, script }) +
+      "\n",
+  );
+  return remote.sshCapture(slots.STAGE_1, script, {
+    sshOptions: ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"],
+    signal: AbortSignal.timeout(20000),
+    stderr: "pipe",
+  });
+}
+
+interface ExpiryReadEffects {
+  capture: (script: string) => Promise<string>;
+  fetch: typeof fetch;
+}
+
+export async function readExpiryBudget(
+  base: string,
+  suppliedTtl: string | undefined,
+  effects?: ExpiryReadEffects,
+) {
+  const slot = expirySlot(base);
+  const slots = await import(
+    new URL("../../../tools/staging/slot.mjs", import.meta.url).href
+  );
+  const idp = await import(
+    new URL("../../../tools/staging/idp.mjs", import.meta.url).href
+  );
+  const capture = effects?.capture ?? expiryCapture;
+  let generator;
+  try {
+    slots.assertSlotName(slot);
+    const env = slots.parseEnvFile(
+      await capture(slots.quoteCommand(["sudo", "cat", slots.STAGE_ENV_FILE])),
+    );
+    const domain = slots.requiredBaseDomain(env);
+    if (
+      new URL(base).hostname !== slots.slotHostnames(slot, domain).academy ||
+      new URL(slots.resolveIdpBaseUrl(env)).origin !==
+        `https://${slots.idpHostname(domain)}`
+    )
+      throw new Error();
+    const pat = (
+      await capture(slots.quoteCommand(["sudo", "cat", idp.IDP_PAT_FILE]))
+    ).trim();
+    const client = idp.createIdpClient({
+      fetch:
+        effects?.fetch ??
+        ((
+          input: Parameters<typeof fetch>[0],
+          init: Parameters<typeof fetch>[1],
+        ) => fetch(input, { ...init, signal: AbortSignal.timeout(15000) })),
+      baseUrl: slots.resolveIdpBaseUrl(env),
+      pat,
+    });
+    generator = await client.request(
+      "GET",
+      "/admin/v1/secretgenerators/SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE",
+    );
+  } catch {
+    throw new Error("Live verification-generator read failed");
+  }
+  const value = generator?.secretGenerator;
+  const seconds =
+    typeof value?.expiry === "string"
+      ? /^([0-9]+(?:\.[0-9]{1,9})?)s$/.exec(value.expiry)?.[1]
+      : undefined;
+  if (
+    !seconds ||
+    value.length !== 6 ||
+    value.includeDigits !== true ||
+    value.includeLowerLetters === true ||
+    value.includeUpperLetters === true ||
+    value.includeSymbols === true
+  )
+    throw new Error("Invalid live verification-generator readback");
+  const budget = expiryBudget(String(Number(seconds) * 1000));
+  if (
+    suppliedTtl !== undefined &&
+    expiryBudget(suppliedTtl).ttlMs !== budget.ttlMs
+  )
+    throw new Error("Supplied verification TTL differs from live readback");
+  return budget;
+}
+
 export function expiryBudget(raw: string | undefined) {
   const ttlMs = Number(raw);
   if (!raw || !Number.isSafeInteger(ttlMs) || ttlMs < 1 || ttlMs > 7200000) {
@@ -64,21 +179,15 @@ export function expiryAuditPlan(
   base: string,
   email: string,
   project: string,
+  apiContainer: string,
 ): string {
-  const url = new URL(base);
-  const match = /^academy-(pr-[1-9][0-9]{0,9})\./.exec(url.hostname);
-  if (
-    !match ||
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    project !== `slot-${match[1]}`
-  ) {
-    throw new Error("Expiry audit requires a per-PR Academy HTTPS slot");
+  const slot = expirySlot(base);
+  if (project !== `slot-${slot}` || apiContainer !== `${slot}-api`) {
+    throw new Error("Expiry audit requires an Academy staging HTTPS slot");
   }
   const identifier = Buffer.from(email, "utf8").toString("base64");
   return `set -eu
-sudo -n docker exec -i ${project}-api-1 node --input-type=module <<'EXPIRY_AUDIT'
+sudo -n docker exec -i ${apiContainer} node --input-type=module <<'EXPIRY_AUDIT'
 import pg from 'pg';
 import { createHmac } from 'node:crypto';
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000, query_timeout: 5000 });
@@ -136,31 +245,26 @@ export async function readExpiryAudit(
   const slots = await import(
     new URL("../../../tools/staging/slot.mjs", import.meta.url).href
   );
-  const slot = /^academy-(pr-[1-9][0-9]{0,9})\./.exec(
-    new URL(base).hostname,
-  )?.[1];
-  if (!slot)
-    throw new Error("Expiry audit requires a per-PR Academy HTTPS slot");
-  const script = expiryAuditPlan(base, email, slots.composeProjectName(slot));
+  const slot = expirySlot(base);
+  const script = expiryAuditPlan(
+    base,
+    email,
+    slots.composeProjectName(slot),
+    slots.containerAliases(slot).api,
+  );
   if (execute) return parseExpiryAudit(await execute(script));
-  const remote = await import(
-    new URL("../../../tools/deploy/lib/remote.mjs", import.meta.url).href
-  );
-  const scratch = new URL("../../../.scratch/", import.meta.url);
-  await mkdir(scratch, { recursive: true });
-  await appendFile(
-    new URL("stand-ops-2696.log", scratch),
-    JSON.stringify({ command: "sshCapture", host: slots.STAGE_1, script }) +
-      "\n",
-  );
   try {
-    return parseExpiryAudit(
-      await remote.sshCapture(slots.STAGE_1, script, {
-        sshOptions: ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"],
-        signal: AbortSignal.timeout(20000),
-        stderr: "pipe",
-      }),
+    const env = slots.parseEnvFile(
+      await expiryCapture(
+        slots.quoteCommand(["sudo", "cat", slots.STAGE_ENV_FILE]),
+      ),
     );
+    if (
+      new URL(base).hostname !==
+      slots.slotHostnames(slot, slots.requiredBaseDomain(env)).academy
+    )
+      throw new Error();
+    return parseExpiryAudit(await expiryCapture(script));
   } catch {
     throw new Error(
       "Owned expiry audit read failed; inspect the stand command log",

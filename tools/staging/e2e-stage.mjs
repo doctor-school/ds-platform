@@ -5,9 +5,17 @@
  * Staging/previews/regression-contour tech spec, C4 and §8 step 7: the C6 suite and
  * the a11y suites are driven from the OPERATOR's machine against the slot's PUBLIC
  * hostnames — the same edge a reviewer uses, basic auth included — and the verdict is
- * pasted into the PR body or the release record by hand. There is deliberately no CI
- * check-run: staging is operated by hand like production (#2202), and a check-run
- * would need the LLM-free runner to hold the stand's credentials.
+ * pasted into the PR body by hand. There is deliberately no CI check-run: staging is
+ * operated by hand like production (#2202), and a check-run would need the LLM-free
+ * runner to hold the stand's credentials.
+ *
+ * ── The release record (#2701) ───────────────────────────────────────────────
+ * A FULL run on the `main` slot (no `--project`, `--grep` or `--no-axe`) is the
+ * release-readiness run: the operator's `gh` posts its verdict as a GitHub commit
+ * status (`STAGE_E2E_STATUS_CONTEXT`, success OR failure) on the SHA the slot served
+ * per `/v1/health`, and `pnpm deploy:prod`'s release gate (tools/deploy/release-gate.mjs)
+ * refuses a target SHA whose latest record is not `success`. A record that cannot be
+ * written exits 3 — the verdict never silently fails to reach the gate.
  *
  * ── What this command is NOT ─────────────────────────────────────────────────
  * It never raises, syncs or tears down a slot. «A converged slot» is its
@@ -47,6 +55,10 @@ import {
   slotHostnames,
 } from "./slot.mjs";
 import { GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
+import {
+  STAGE_E2E_STATUS_CONTEXT,
+  buildStageE2eStatus,
+} from "../deploy/release-gate.mjs";
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -377,9 +389,50 @@ export const realEffects = {
       return undefined;
     }
   },
+  // No shell: the body travels on stdin and `gh` is a real executable (the
+  // deploy tools spawn it the same way), so the `{owner}/{repo}` placeholder and
+  // the free-text description never meet a command-line parser.
+  recordStatus: (sha, status) => {
+    const out = spawnSync(
+      "gh",
+      [
+        "api",
+        "-X",
+        "POST",
+        `repos/{owner}/{repo}/statuses/${sha}`,
+        "--input",
+        "-",
+      ],
+      { cwd: REPO_ROOT, encoding: "utf8", input: JSON.stringify(status) },
+    );
+    if (out.error) return { ok: false, error: out.error.message };
+    if (out.status !== 0) {
+      return {
+        ok: false,
+        error: (out.stderr || out.stdout || `gh exited ${out.status}`)
+          .trim()
+          .split("\n")[0],
+      };
+    }
+    return { ok: true };
+  },
   log: (line) => console.log(line),
   now: () => new Date(),
 };
+
+/**
+ * Whether this run is the release-readiness run (#2701): the `main` slot, the whole
+ * suite, every leg the gate Issue allows. A narrowed run proves only its slice and
+ * never writes the record the deploy gate reads.
+ */
+export function isReleaseRecordRun(options) {
+  return (
+    options.slot === "main" &&
+    options.project === undefined &&
+    options.grep === undefined &&
+    options.axe === true
+  );
+}
 
 // --- the command --------------------------------------------------------------
 
@@ -498,7 +551,26 @@ export async function runE2eStage(
       reportDir,
     }),
   );
-  return exitCodeFor({ preflightOk: true, legs });
+  const code = exitCodeFor({ preflightOk: true, legs });
+  if (!isReleaseRecordRun(options)) return code;
+
+  const status = buildStageE2eStatus({
+    pass: code === 0,
+    summary,
+    nowIso: effects.now().toISOString(),
+  });
+  const written = effects.recordStatus(preflight.sha, status);
+  if (!written.ok) {
+    effects.log(
+      `release record NOT written on ${shortSha(preflight.sha)} (${STAGE_E2E_STATUS_CONTEXT}): ${written.error} — ` +
+        "re-run after fixing `gh` access; `pnpm deploy:prod` holds this SHA until a record exists.",
+    );
+    return 3;
+  }
+  effects.log(
+    `release record: ${STAGE_E2E_STATUS_CONTEXT}=${status.state} on ${shortSha(preflight.sha)} — ${status.description}`,
+  );
+  return code;
 }
 
 const invokedDirectly =

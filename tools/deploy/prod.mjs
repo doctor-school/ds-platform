@@ -407,9 +407,10 @@ async function preflight(hotfixRef = null) {
     assertNoLiveBroadcast();
   }
 
-  // 5. release gate (#1662, spec §10): an OPEN `release-blocker` Issue, or a
-  //    merged-but-not-yet-deployed PR whose `Stage-B: batched at #<gate>` gate
-  //    Issue is still open, HOLDS the deploy. Fail-closed on an UNKNOWN, like
+  // 5. release gate (#1662, #2701, spec §10): an OPEN `release-blocker` Issue,
+  //    a merged-but-not-yet-deployed PR whose `Stage-B: batched at #<gate>` gate
+  //    Issue is still open, or a target SHA without a passing `stage-e2e/main`
+  //    record (`pnpm e2e:stage main` on that SHA) HOLDS the deploy. Fail-closed on an UNKNOWN, like
   //    the эфир probe above; the only bypass is the explicit, printed flag.
   //    In `--ref` mode the gate's range is already `<live deployed>..<target>`
   //    (the basis is the LIVE prod SHA, not main) — i.e. exactly the hotfix
@@ -500,7 +501,7 @@ async function assertHotfixInvariants(target) {
   );
 }
 
-// Release-blocker + open-batched-Stage-B hold (#1662). The evidence probe and
+// Release-blocker + open-batched-Stage-B + stage-e2e hold (#1662, #2701). The evidence probe and
 // the pure verdict live in tools/deploy/release-gate.mjs (unit-tested there);
 // this is the deploy-side wiring: print the exemption loudly, else hold.
 async function assertReleaseGate(sha) {
@@ -508,7 +509,7 @@ async function assertReleaseGate(sha) {
   if (exempt.error) die(exempt.error); // already caught at start-up; belt-and-braces
   if (exempt.exempt) {
     console.log(
-      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the release-blocker / batched-Stage-B gate` +
+      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the release-blocker / batched-Stage-B / stage-e2e gate` +
         ` — ${exempt.reason} (this line is the audit record).`,
     );
     return;

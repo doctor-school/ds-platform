@@ -18,7 +18,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                                                               |
 | `rollback-floor.mjs`       | —                      | Rollback compatibility-floor guard (012 EARS-24, #1607): refuses a `--rollback` target that predates migration 0036 once prod has applied it (see below).                                                |
 | `idp-policy.mjs`           | —                      | Pure seams for the pipeline-owned IdP provision converge (#1997): the password-complexity read-back verdict and the `@ds/schemas` `PASSWORD_MIN_LENGTH` extraction consumed by `prod.mjs` (see step 5b). |
-| `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B pre-flight hold (#1662): probe + pure verdict consumed by `prod.mjs` (see below).                                                                                 |
+| `release-gate.mjs`         | —                      | Release-blocker + open-batched-Stage-B + stage-e2e pre-flight hold (#1662, #2701): probe + pure verdict consumed by `prod.mjs` (see below).                                                              |
 
 ## `pnpm deploy:prod`
 
@@ -415,6 +415,12 @@ signal stands:
    `Release-requires: none` when none exist; template HTML comments are ignored.
    Invalid declarations, unreadable PRs/Issues and unknown Issue states hold
    closed. The failure names **PR → prerequisite** pairs.
+4. **Stage `main` e2e on the target SHA** (#2701) — the target SHA's latest
+   `stage-e2e/main` commit status must be `success`. A full `pnpm e2e:stage main`
+   run (no `--project`/`--grep`/`--no-axe`) writes it, success or failure, on the
+   SHA the slot served (`tools/staging/README.md` → «Release record»). Absent,
+   red or an unreadable `commits/<sha>/status` read all hold; the failure names
+   the SHA and `pnpm stage:slot up main --ref <sha> && pnpm e2e:stage main`.
 
 Every deferred production action still needs a linked Issue with affected change,
 timing, execution/check plan and completion evidence. Use `Release-requires`

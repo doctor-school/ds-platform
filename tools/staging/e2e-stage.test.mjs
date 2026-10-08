@@ -14,6 +14,7 @@ import {
   slotE2eEnv,
   summarizeReport,
 } from "./e2e-stage.mjs";
+import { STAGE_E2E_STATUS_CONTEXT } from "../deploy/release-gate.mjs";
 
 /**
  * `pnpm e2e:stage <slot>` — the C4 / §8-step-7 regression run over a CONVERGED slot.
@@ -281,6 +282,7 @@ const SHA = "c".repeat(40);
 
 function harness(overrides = {}) {
   const calls = [];
+  const records = [];
   const lines = [];
   const effects = {
     readBoxEnv: async () => BOX_ENV,
@@ -294,11 +296,15 @@ function harness(overrides = {}) {
     },
     readReport: () => REPORT,
     issueState: () => "OPEN",
+    recordStatus: (sha, status) => {
+      records.push({ sha, status });
+      return { ok: true };
+    },
     log: (line) => lines.push(line),
     now: () => new Date("2026-09-14T10:11:12Z"),
     ...overrides,
   };
-  return { calls, lines, effects };
+  return { calls, lines, records, effects };
 }
 
 describe("assertShellInert", () => {
@@ -565,5 +571,53 @@ describe("runE2eStage", () => {
     });
     assert.equal(code, 0);
     assert.ok(lines.some((l) => l.includes("verdict:     PASS")));
+  });
+});
+
+// #2701 — the release-readiness record: a full `e2e:stage main` run writes its
+// verdict as a GitHub commit status on the SHA the slot SERVED (its `/v1/health`
+// version), which `pnpm deploy:prod`'s release gate reads for the target SHA.
+describe("runE2eStage — the stage main release record (#2701)", () => {
+  const env = { STAGE_BASIC_AUTH_PASS: "s3cret" };
+
+  it("records a passing full main run as success on the served SHA", async () => {
+    const { records, lines, effects } = harness();
+    const code = await runE2eStage(["main"], { env, effects });
+    assert.equal(code, 0);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].sha, SHA);
+    assert.equal(records[0].status.state, "success");
+    assert.equal(records[0].status.context, STAGE_E2E_STATUS_CONTEXT);
+    assert.ok(lines.some((l) => l.includes("release record")));
+  });
+
+  it("records a failing full main run as failure, so a stale pass cannot survive", async () => {
+    const { records, effects } = harness({ run: () => ({ status: 1 }) });
+    const code = await runE2eStage(["main"], { env, effects });
+    assert.equal(code, 1);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].status.state, "failure");
+  });
+
+  it("writes no record for a partial run (--project / --grep / --no-axe) or another slot", async () => {
+    for (const argv of [
+      ["main", "--project", "academy"],
+      ["main", "--grep", "вход"],
+      ["main", "--no-axe"],
+      ["pr-123"],
+    ]) {
+      const { records, effects } = harness();
+      await runE2eStage(argv, { env, effects });
+      assert.equal(records.length, 0, argv.join(" "));
+    }
+  });
+
+  it("exits 3 when the record cannot be written — the run's verdict never reaches the gate silently", async () => {
+    const { lines, effects } = harness({
+      recordStatus: () => ({ ok: false, error: "HTTP 403" }),
+    });
+    const code = await runE2eStage(["main"], { env, effects });
+    assert.equal(code, 3);
+    assert.ok(lines.some((l) => l.includes("HTTP 403")));
   });
 });

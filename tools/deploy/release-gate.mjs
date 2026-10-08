@@ -1,6 +1,7 @@
-// DS Platform — release-blocker + open-batched-Stage-B deploy gate (#1662).
+// DS Platform — release-blocker + open-batched-Stage-B + stage-e2e deploy gate
+// (#1662, #2701).
 //
-// Three fail-closed pre-flight checks `pnpm deploy:prod` runs BEFORE shipping
+// Four fail-closed pre-flight checks `pnpm deploy:prod` runs BEFORE shipping
 // the selected target to prod. They encode the invariant the release-cycle spec
 // §10 states in prose — `main` is deployable by default, and anything known to
 // be NOT shippable is recorded where a machine can read it:
@@ -24,6 +25,15 @@
 //   3. Release-requires: #N in a selected PR's body holds that deployment while
 //      its pre-deploy prerequisite is OPEN. Rollout/post-release actions stay
 //      tracked separately, never circular preconditions of their own activation.
+//   4. Stage `main` e2e on the target SHA (#2701) — environment-level risk
+//      (prod build, real IdP, real-shaped data) is covered once per release by
+//      `pnpm e2e:stage main` on the shared stage `main` slot running the release
+//      target SHA. A full `main` run records its verdict as a GitHub commit
+//      status (context `STAGE_E2E_STATUS_CONTEXT`) on the SHA the slot SERVED;
+//      the deploy holds unless that SHA's latest record under the context is
+//      `success`. The carrier is a commit status for the same reason the deploy
+//      record is a GitHub Deployment (deployment-record.mjs): the record lives in
+//      GitHub on the SHA it is about, readable by any operator, never in the repo.
 //
 // Fail-closed by design (mirrors the live-broadcast hold in `prod.mjs`): an
 // UNKNOWN — the delta basis could not be derived, a `gh` call errored — HOLDS
@@ -43,6 +53,12 @@ import { extractPrNumbers } from "./release-notes.mjs";
 
 /** Global hazard only; remove the label when its documented risk ends. */
 export const RELEASE_BLOCKER_LABEL = "release-blocker";
+
+/** The commit-status context `pnpm e2e:stage main` writes (tools/staging/e2e-stage.mjs). */
+export const STAGE_E2E_STATUS_CONTEXT = "stage-e2e/main";
+
+// GitHub caps a commit status `description` at 140 chars.
+const STATUS_DESCRIPTION_MAX = 140;
 
 /** The explicit escape flag (mirrors `--mode-a-exempt`). */
 export const RELEASE_GATE_EXEMPT_FLAG = "--release-gate-exempt";
@@ -151,6 +167,48 @@ export function extractReleaseRequires(body) {
   return [...refs];
 }
 
+// ── pure: the stage `main` e2e record (#2701) ────────────────────────────────
+
+/**
+ * The commit-status body a full `e2e:stage main` run posts on the served SHA —
+ * PURE (the caller injects `nowIso`). A failing run is recorded too, so a later
+ * red re-run on the same SHA replaces an earlier pass instead of leaving it to
+ * clear the gate.
+ *
+ * @param {{pass: boolean, summary: {total?: number, failed?: number}, nowIso: string}} args
+ * @returns {{state: "success"|"failure", context: string, description: string}}
+ */
+export function buildStageE2eStatus({ pass, summary, nowIso }) {
+  const total = Number(summary?.total ?? 0);
+  const failed = Number(summary?.failed ?? 0);
+  const at = String(nowIso ?? "").replace(/\.\d+Z$/, "Z");
+  const description = `${pass ? "PASS" : "FAIL"} · ${total - failed} passed / ${failed} failed · ${at}`;
+  return {
+    state: pass ? "success" : "failure",
+    context: STAGE_E2E_STATUS_CONTEXT,
+    description: description.slice(0, STATUS_DESCRIPTION_MAX),
+  };
+}
+
+/**
+ * The stage `main` e2e record out of a SHA's combined status
+ * (`GET repos/{owner}/{repo}/commits/<sha>/status` — GitHub returns the LATEST
+ * status per context). PURE. No status under the context ⇒ `{state: "absent"}`.
+ *
+ * @param {{statuses?: Array<{context?: string, state?: string, description?: string, updated_at?: string}>}} combined
+ * @returns {{state: string, description?: string, updatedAt?: string}}
+ */
+export function readStageE2eRecord(combined) {
+  const statuses = Array.isArray(combined?.statuses) ? combined.statuses : [];
+  const s = statuses.find((x) => x?.context === STAGE_E2E_STATUS_CONTEXT);
+  if (!s) return { state: "absent" };
+  return {
+    state: String(s.state ?? ""),
+    description: String(s.description ?? ""),
+    updatedAt: String(s.updated_at ?? ""),
+  };
+}
+
 // ── pure: evaluator + formatter ─────────────────────────────────────────────
 
 /**
@@ -171,13 +229,19 @@ export function extractReleaseRequires(body) {
  *   used instead). The recorded Deployment can be NEWER than what runs — an
  *   app-only `--rollback` records none — so the delta may be too narrow; the
  *   evaluator reads this as UNKNOWN and HOLDS.
+ * @property {string=} targetSha the release target SHA the gate was asked about.
+ * @property {{state: string, description?: string, updatedAt?: string}|null=} stageE2e
+ *   the stage `main` e2e record on the target SHA (`readStageE2eRecord`);
+ *   `null` when the status read failed (fail-closed).
+ * @property {string=} stageE2eError first line of the status-read error.
  */
 
 /**
  * Reduce a probe to a hold/clear verdict. PURE — no I/O.
  *
  * HOLD on: any open `release-blocker` Issue; any merged-undeployed PR whose
- * batched-Stage-B gate Issue is still open; OR any UNKNOWN (a `null` list —
+ * batched-Stage-B gate Issue is still open; a target SHA without a passing
+ * stage `main` e2e record; OR any UNKNOWN (a `null` list —
  * the evidence was not obtainable, so the gate cannot claim it is clear).
  *
  * @param {ReleaseGateProbe} probe
@@ -239,6 +303,30 @@ export function evaluateReleaseGate(probe) {
     );
   }
 
+  const target = p.targetSha
+    ? String(p.targetSha).slice(0, 12)
+    : "the target SHA";
+  const rerun = `      pnpm stage:slot up main --ref ${p.targetSha ?? "<sha>"} && pnpm e2e:stage main`;
+  if (!p.stageE2e || typeof p.stageE2e !== "object") {
+    reasons.push(
+      `UNKNOWN: could not read the stage \`main\` e2e record on ${target}` +
+        (p.stageE2eError ? ` (${p.stageE2eError})` : "") +
+        " — fail-closed",
+    );
+  } else if (p.stageE2e.state === "absent") {
+    reasons.push(
+      `no stage \`main\` e2e record on ${target} — run the release target on the stage \`main\` slot first:`,
+      rerun,
+    );
+  } else if (p.stageE2e.state !== "success") {
+    reasons.push(
+      `stage \`main\` e2e on ${target} is ${p.stageE2e.state}` +
+        (p.stageE2e.description ? ` (${p.stageE2e.description})` : "") +
+        " — fix and re-run:",
+      rerun,
+    );
+  }
+
   return { hold: reasons.length > 0, reasons };
 }
 
@@ -265,7 +353,7 @@ export function formatReleaseGateHold(verdict) {
 /** The clear line (single source for the `ok(...)` text). */
 export function formatReleaseGateClear(basisSha) {
   const basis = basisSha ? ` (delta basis ${basisSha.slice(0, 12)})` : "";
-  return `release gate clear — no open ${RELEASE_BLOCKER_LABEL} Issue, no open selected prerequisite, no open batched Stage-B gate${basis}`;
+  return `release gate clear — no open ${RELEASE_BLOCKER_LABEL} Issue, no open selected prerequisite, no open batched Stage-B gate, stage \`main\` e2e PASS on the target${basis}`;
 }
 
 // ── I/O probe seam (never throws) ───────────────────────────────────────────
@@ -358,6 +446,8 @@ export async function probeReleaseGate({
     openBatched: null,
     openRequires: null,
     basisSha: null,
+    targetSha,
+    stageE2e: null,
   };
 
   // 1. Open `release-blocker` Issues.
@@ -526,6 +616,17 @@ export async function probeReleaseGate({
   } catch (e) {
     probe.openBatchedError = firstLine(e);
     probe.openRequiresError = firstLine(e);
+  }
+
+  // 4. The stage `main` e2e record on the target SHA (#2701).
+  try {
+    const raw = exec("gh", [
+      "api",
+      `repos/{owner}/{repo}/commits/${targetSha}/status`,
+    ]);
+    probe.stageE2e = readStageE2eRecord(JSON.parse(raw));
+  } catch (e) {
+    probe.stageE2eError = firstLine(e);
   }
 
   return probe;

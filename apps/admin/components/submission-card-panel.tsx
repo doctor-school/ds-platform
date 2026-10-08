@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, type ReactNode, type Ref } from "react";
+import { useEffect, useReducer, type ComponentProps, type Ref } from "react";
 import { useCustom, useCustomMutation, type HttpError } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { KIND_COPY, STATUS_LABEL } from "@ds/congress-submissions";
@@ -9,10 +9,7 @@ import {
   Badge,
   Button,
   Card,
-  ContactChip,
-  cn,
   Input,
-  Label,
   NativeSelect,
   Textarea,
 } from "@ds/design-system";
@@ -32,6 +29,16 @@ import {
   type CongressCommitteeStatus,
   type CongressSubmissionCard,
 } from "@ds/schemas";
+import {
+  CardDisclosure,
+  CardMeta as CardMetaRow,
+  CardSection,
+  EmailChip,
+  Fact as CardFact,
+  Field,
+  PhoneChip,
+  SECONDARY,
+} from "@/components/admin-card-layout";
 import { formatMskDateTime } from "@/lib/msk";
 import { participantCardFailure } from "@/lib/participant-card";
 import {
@@ -196,19 +203,11 @@ export function SubmissionCardPanel({
   );
 }
 
-/**
- * The card's three type levels (Stage-B #2724): section headings, field
- * labels (small, muted) and values (body). Secondary data — the history, the
- * letter's outcome, the sent / changed times — sits on the small muted level.
- */
-const SECTION_HEADING = "text-base font-extrabold text-foreground";
-const SECONDARY = "text-xs text-muted-foreground";
-
 /** Under the title: вид and статус (the registry's badge), the send time. */
 function CardMeta({ card }: { card: CongressSubmissionCard }) {
   const t = useTranslations("congressSubmissions.card");
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <CardMetaRow>
       <Badge variant="label" data-testid="submission-card-kind">
         {KIND_COPY[card.kind].label}
       </Badge>
@@ -220,8 +219,13 @@ function CardMeta({ card }: { card: CongressSubmissionCard }) {
           {t("submittedLine", { at: formatMskDateTime(card.submittedAt) })}
         </span>
       ) : null}
-    </div>
+    </CardMetaRow>
   );
+}
+
+/** The submission card's fact: the shared layout's, under this card's ids. */
+function Fact(props: ComponentProps<typeof CardFact>) {
+  return <CardFact {...props} testId={`submission-card-${props.testId}`} />;
 }
 
 function CardFacts({ card }: { card: CongressSubmissionCard }) {
@@ -268,13 +272,10 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
         </Card>
       ) : null}
 
-      <section
-        className="flex flex-col gap-4"
-        aria-labelledby="submission-card-content-title"
+      <CardSection
+        titleId="submission-card-content-title"
+        title={c("contentTitle")}
       >
-        <h3 id="submission-card-content-title" className={SECTION_HEADING}>
-          {c("contentTitle")}
-        </h3>
         <dl className="flex flex-col gap-4">
           <Fact label={c("fields.authors")} testId="authors">
             {authors.length === 0 ? (
@@ -317,28 +318,19 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
             </Fact>
           ) : null}
         </dl>
-      </section>
+      </CardSection>
 
-      <section
-        className="flex flex-col gap-4 border-t-2 border-border pt-4"
-        aria-labelledby="submission-card-submitter-title"
+      <CardSection
+        titleId="submission-card-submitter-title"
+        title={c("submitterTitle")}
+        divided
       >
-        <h3 id="submission-card-submitter-title" className={SECTION_HEADING}>
-          {c("submitterTitle")}
-        </h3>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
           <Fact label={c("fields.submitter")} testId="submitter">
             {card.submitter.fullName}
           </Fact>
           <Fact label={c("fields.phone")} testId="phone">
-            {phone ? (
-              <ContactChip
-                href={`tel:${phone.replace(/[^\d+]/g, "")}`}
-                label={phone}
-              />
-            ) : (
-              none
-            )}
+            {phone ? <PhoneChip phone={phone} /> : none}
           </Fact>
           <Fact
             label={c("fields.email")}
@@ -346,10 +338,7 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
             className="sm:col-span-2"
           >
             {card.submitter.email ? (
-              <ContactChip
-                href={`mailto:${card.submitter.email}`}
-                label={card.submitter.email}
-              />
+              <EmailChip email={card.submitter.email} />
             ) : (
               none
             )}
@@ -362,20 +351,12 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
             </Fact>
           ) : null}
         </dl>
-      </section>
+      </CardSection>
 
-      {/* Secondary: collapsed until asked for. The native disclosure owns
-          the keyboard operation and the expanded state; the design system's
-          `DisclosureSummary` is the 44px icon chip, not a text row. */}
-      <details
-        className="border-t-2 border-border pt-4"
-        data-testid="submission-card-history"
+      <CardDisclosure
+        summary={c("historySummary", { count: card.history.length })}
+        testId="submission-card-history"
       >
-        <summary>
-          <span className="text-sm font-bold text-foreground">
-            {c("historySummary", { count: card.history.length })}
-          </span>
-        </summary>
         <ol className="mt-3 flex flex-col gap-3">
           {card.history.map((entry, index) => (
             <li
@@ -403,7 +384,7 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
         >
           {c("updatedLine", { at: formatMskDateTime(card.updatedAt) })}
         </p>
-      </details>
+      </CardDisclosure>
     </>
   );
 }
@@ -553,14 +534,12 @@ function Decision({
   const mayExtend = mayExtendRevision(platformAdmin, card.status);
 
   return (
-    <section
-      className="flex flex-col gap-4 border-t-2 border-border pt-4"
-      aria-labelledby="submission-decision-title"
-      data-testid="submission-decision"
+    <CardSection
+      titleId="submission-decision-title"
+      title={t("decision.title")}
+      divided
+      testId="submission-decision"
     >
-      <h3 id="submission-decision-title" className={SECTION_HEADING}>
-        {t("decision.title")}
-      </h3>
       {notice ? (
         <Alert
           variant="success"
@@ -687,64 +666,6 @@ function Decision({
           extensionRefusalOutsideForm(state, platformAdmin, card.status),
         )
       )}
-    </section>
-  );
-}
-
-function Field({
-  id,
-  label,
-  hint,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {hint ? (
-        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * One read-only fact: a small muted label over the value in body text. A
- * `prose` value (the submission's own text) keeps its paragraph breaks at a
- * readable measure.
- */
-function Fact({
-  label,
-  testId,
-  prose = false,
-  className,
-  children,
-}: {
-  label: string;
-  testId: string;
-  prose?: boolean;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <dt className={SECONDARY}>{label}</dt>
-      <dd
-        className={cn(
-          "text-sm leading-relaxed text-foreground wrap-anywhere",
-          prose && "max-w-prose whitespace-pre-wrap",
-        )}
-        data-testid={`submission-card-${testId}`}
-      >
-        {children}
-      </dd>
-    </div>
+    </CardSection>
   );
 }

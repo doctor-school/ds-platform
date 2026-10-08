@@ -382,7 +382,14 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
     await expect(panel.getByTestId("participant-card-fullName")).toHaveText(
       target,
     );
+    // The mark history is secondary: collapsed until the registrar opens it.
+    const disclosure = panel.getByTestId("participant-card-history");
     const history = panel.getByTestId(`participant-card-history-${DAY_1}`);
+    await expect(history).toBeHidden();
+    await disclosure.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(disclosure).toHaveAttribute("open", "");
+    await expect(history).toBeVisible();
     await expect(history).toContainText("Отметок не было.");
 
     const answered = page.waitForResponse(

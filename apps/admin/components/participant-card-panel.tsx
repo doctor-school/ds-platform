@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, type Ref } from "react";
+import { useEffect, type ComponentProps, type Ref } from "react";
 import { useCustom, type HttpError } from "@refinedev/core";
 import { useTranslations } from "next-intl";
-import { Alert, Badge, Button } from "@ds/design-system";
+import { Alert, Badge, Button, Card } from "@ds/design-system";
 import {
   Sheet,
   SheetBody,
@@ -17,11 +17,20 @@ import {
   type CongressParticipantCard,
   type CongressParticipantDay,
 } from "@ds/schemas";
+import {
+  CardDisclosure,
+  CardMeta,
+  CardSection,
+  EmailChip,
+  Fact as CardFact,
+  PhoneChip,
+  SECONDARY,
+  SECTION_HEADING,
+} from "@/components/admin-card-layout";
 import { AttendanceCell } from "@/components/attendance-cell";
 import { congressDayLongLabel } from "@/lib/congress-roster";
 import { formatMskDateTime } from "@/lib/msk";
 import {
-  PARTICIPANT_CARD_FIELDS,
   consentPurposeKey,
   participantCardFailure,
   participantCardFields,
@@ -154,8 +163,24 @@ export function ParticipantCardPanel({
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <SheetHeader>
-          <SheetTitle>{t("title")}</SheetTitle>
-          <SheetDescription>{t("description")}</SheetDescription>
+          {/* The participant's name IS the panel's title (the submission
+              card's shape); the generic name stands in while the card loads. */}
+          <SheetTitle>
+            {card ? (
+              <span
+                className="wrap-anywhere"
+                data-testid="participant-card-fullName"
+              >
+                {card.fullName}
+              </span>
+            ) : (
+              t("title")
+            )}
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            {t("description")}
+          </SheetDescription>
+          {card ? <ParticipantMeta card={card} /> : null}
         </SheetHeader>
         <SheetBody>{body()}</SheetBody>
       </SheetContent>
@@ -163,6 +188,32 @@ export function ParticipantCardPanel({
   );
 }
 
+/** The participant card's fact: the shared layout's, under this card's ids. */
+function Fact(props: ComponentProps<typeof CardFact>) {
+  return <CardFact {...props} testId={`participant-card-${props.testId}`} />;
+}
+
+/** Under the name: where the registration came from and when it was made. */
+function ParticipantMeta({ card }: { card: CongressParticipantCard }) {
+  const t = useTranslations("congressRoster.participantCard");
+  return (
+    <CardMeta>
+      <Badge variant="label" data-testid="participant-card-origin">
+        {t(`origins.${card.intakeOrigin}`)}
+      </Badge>
+      <span className={SECONDARY} data-testid="participant-card-registeredAt">
+        {t("registeredLine", { at: formatMskDateTime(card.registeredAt) })}
+      </span>
+    </CardMeta>
+  );
+}
+
+/**
+ * The card body, most-used first (Stage-B #2724 hierarchy, #2731): the
+ * duplicate marker and the day marks the registrar acts on; then the contacts,
+ * the questionnaire, the consent and the letter; the per-day mark history —
+ * secondary — collapsed at the end.
+ */
 function CardFacts({
   card,
   eventId,
@@ -177,6 +228,10 @@ function CardFacts({
   const t = useTranslations("congressRoster.participantCard");
   const fields = participantCardFields(card);
   const mail = card.confirmationMail;
+  const marks = card.attendance.reduce(
+    (count, day) => count + day.history.length,
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-6" data-testid="participant-card">
@@ -191,83 +246,137 @@ function CardFacts({
           </p>
         </div>
       ) : null}
-      <dl className="grid grid-cols-1 gap-3">
-        {PARTICIPANT_CARD_FIELDS.map((key) => (
-          <Fact key={key} label={t(`fields.${key}`)} testId={key}>
-            {key === "registeredAt"
-              ? t("atMsk", { at: fields.registeredAt })
-              : fields[key]}
-          </Fact>
-        ))}
-        <Fact label={t("fields.origin")} testId="origin">
-          {t(`origins.${card.intakeOrigin}`)}
-        </Fact>
-        <Fact label={t("fields.consent")} testId="consent">
-          {card.consents.length === 0 ? (
-            t("none")
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {card.consents.map((consent) => {
-                const purposeKey = consentPurposeKey(consent.purpose);
-                return (
-                  <li
-                    key={`${consent.purpose}:${consent.capturedAt}`}
-                    className="flex flex-wrap items-center gap-2"
-                  >
-                    <span>
-                      {t("consentLine", {
-                        purpose: purposeKey
-                          ? t(`consentPurposes.${purposeKey}`)
-                          : consent.purpose,
-                        version: consent.version,
-                        at: formatMskDateTime(consent.capturedAt),
-                      })}
-                    </span>
-                    {consent.origin === "paper" ? (
-                      <Badge variant="label">{t("consentPaper")}</Badge>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Fact>
-        <Fact label={t("fields.mail")} testId="mail">
-          {mail.status && mail.at
-            ? t(`mail.${mail.status}`, { at: formatMskDateTime(mail.at) })
-            : t("none")}
-        </Fact>
-      </dl>
+
       {card.attendance.length > 0 ? (
-        <section
-          className="flex flex-col gap-3"
-          aria-labelledby="participant-card-attendance-title"
-          data-testid="participant-card-attendance"
-        >
-          <h3
-            id="participant-card-attendance-title"
-            className="text-sm font-bold text-foreground"
+        // What the registrar acts on: the day marks, in the summary card.
+        <Card data-testid="participant-card-attendance">
+          <section
+            className="flex flex-col gap-3 p-4"
+            aria-labelledby="participant-card-attendance-title"
           >
-            {t("attendanceTitle")}
-          </h3>
-          <AttendanceCell
-            // A card of another participant starts from its own marks.
-            key={card.registrationId}
-            eventId={eventId}
-            registrationId={card.registrationId}
-            days={card.attendance.map((day) => day.day)}
-            attendance={card.attendance.flatMap((day) =>
-              day.present === null
-                ? []
-                : [{ day: day.day, present: day.present }],
+            <h3
+              id="participant-card-attendance-title"
+              className={SECTION_HEADING}
+            >
+              {t("attendanceTitle")}
+            </h3>
+            <AttendanceCell
+              // A card of another participant starts from its own marks.
+              key={card.registrationId}
+              eventId={eventId}
+              registrationId={card.registrationId}
+              days={card.attendance.map((day) => day.day)}
+              attendance={card.attendance.flatMap((day) =>
+                day.present === null
+                  ? []
+                  : [{ day: day.day, present: day.present }],
+              )}
+              onMarked={onMarked}
+              onForbidden={onForbidden}
+            />
+          </section>
+        </Card>
+      ) : null}
+
+      <CardSection
+        titleId="participant-card-contacts-title"
+        title={t("contactsTitle")}
+      >
+        {/* A field the registration does not carry (EARS-16) renders EMPTY. */}
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+          <Fact label={t("fields.phone")} testId="phone">
+            {fields.phone ? <PhoneChip phone={fields.phone} /> : null}
+          </Fact>
+          <Fact label={t("fields.email")} testId="email">
+            {fields.email ? <EmailChip email={fields.email} /> : null}
+          </Fact>
+        </dl>
+      </CardSection>
+
+      <CardSection
+        titleId="participant-card-profile-title"
+        title={t("profileTitle")}
+        divided
+      >
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+          <Fact
+            label={t("fields.specialtyName")}
+            testId="specialtyName"
+            className="sm:col-span-2"
+          >
+            {fields.specialtyName}
+          </Fact>
+          <Fact
+            label={t("fields.workplace")}
+            testId="workplace"
+            className="sm:col-span-2"
+          >
+            {fields.workplace}
+          </Fact>
+          <Fact label={t("fields.city")} testId="city">
+            {fields.city}
+          </Fact>
+          <Fact label={t("fields.region")} testId="region">
+            {fields.region}
+          </Fact>
+        </dl>
+      </CardSection>
+
+      <CardSection
+        titleId="participant-card-consent-title"
+        title={t("consentTitle")}
+        divided
+      >
+        <dl className="flex flex-col gap-4">
+          <Fact label={t("fields.consent")} testId="consent">
+            {card.consents.length === 0 ? (
+              t("none")
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {card.consents.map((consent) => {
+                  const purposeKey = consentPurposeKey(consent.purpose);
+                  return (
+                    <li
+                      key={`${consent.purpose}:${consent.capturedAt}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <span>
+                        {t("consentLine", {
+                          purpose: purposeKey
+                            ? t(`consentPurposes.${purposeKey}`)
+                            : consent.purpose,
+                          version: consent.version,
+                          at: formatMskDateTime(consent.capturedAt),
+                        })}
+                      </span>
+                      {consent.origin === "paper" ? (
+                        <Badge variant="label">{t("consentPaper")}</Badge>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-            onMarked={onMarked}
-            onForbidden={onForbidden}
-          />
-          {card.attendance.map((day) => (
-            <DayHistory key={day.day} day={day} />
-          ))}
-        </section>
+          </Fact>
+          <Fact label={t("fields.mail")} testId="mail">
+            {mail.status && mail.at
+              ? t(`mail.${mail.status}`, { at: formatMskDateTime(mail.at) })
+              : t("none")}
+          </Fact>
+        </dl>
+      </CardSection>
+
+      {card.attendance.length > 0 ? (
+        <CardDisclosure
+          summary={t("historySummary", { count: marks })}
+          testId="participant-card-history"
+        >
+          <div className="mt-3 flex flex-col gap-4">
+            {card.attendance.map((day) => (
+              <DayHistory key={day.day} day={day} />
+            ))}
+          </div>
+        </CardDisclosure>
       ) : null}
     </div>
   );
@@ -280,9 +389,7 @@ function DayHistory({ day }: { day: CongressParticipantDay }) {
       className="flex flex-col gap-1"
       data-testid={`participant-card-history-${day.day}`}
     >
-      <h4 className="text-xs text-muted-foreground">
-        {t("historyTitle", { day: congressDayLongLabel(day.day) })}
-      </h4>
+      <h4 className={SECONDARY}>{congressDayLongLabel(day.day)}</h4>
       {day.history.length === 0 ? (
         <p className="text-sm text-foreground">{t("historyEmpty")}</p>
       ) : (
@@ -304,29 +411,6 @@ function DayHistory({ day }: { day: CongressParticipantDay }) {
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-/** One read-only fact — the admin `<dl>` precedent (`event-experts-panel.tsx`). */
-function Fact({
-  label,
-  testId,
-  children,
-}: {
-  label: string;
-  testId: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd
-        className="text-sm text-foreground wrap-anywhere"
-        data-testid={`participant-card-${testId}`}
-      >
-        {children}
-      </dd>
     </div>
   );
 }

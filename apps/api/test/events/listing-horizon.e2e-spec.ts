@@ -65,16 +65,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     let near = { id: "", slug: "" };
     let far = { id: "", slug: "" };
+    let pastNear = { id: "", slug: "" };
+    let pastOld = { id: "", slug: "" };
     let hybrid = { id: "", slug: "" };
 
     const makeEvent = async (input: {
       offsetMs: number;
       format?: "online" | "offline" | "hybrid";
+      state?: "published" | "ended";
     }): Promise<{ id: string; slug: string }> => {
       const id = randomUUID();
       const slug = `horizon-${id.slice(0, 8)}`;
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, participation_format, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, 'published', $7, ${eventClassificationSql("experts")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, participation_format, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $6, $8, $7, ${eventClassificationSql("experts")})`,
         [
           id,
           slug,
@@ -83,6 +86,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           new Date(Date.now() + input.offsetMs).toISOString(),
           90,
           input.format ?? "online",
+          input.state ?? "published",
         ],
       );
       eventIds.push(id);
@@ -160,6 +164,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       near = await makeEvent({ offsetMs: 2 * DAY });
       hybrid = await makeEvent({ offsetMs: 3 * DAY, format: "hybrid" });
       far = await makeEvent({ offsetMs: 20 * DAY });
+      pastNear = await makeEvent({ offsetMs: -3 * DAY, state: "ended" });
+      // Thirty days back: past the 14-day default, so only a BACKWARD widening
+      // of «Прошедшие» reaches it.
+      pastOld = await makeEvent({ offsetMs: -30 * DAY, state: "ended" });
 
       await register(near.slug);
       await register(near.slug);
@@ -250,6 +258,67 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(bare?.signUpCount).toBe(2);
       expect(bare?.format).toBe("online");
+    });
+
+    it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` names an older bound and that widening reaches older events (rows 30, 32)", async () => {
+      const first = await page(
+        `timeframe=past&from=${addDoctorEventsFeedDays(today, -14)}`,
+      );
+      expect(first.horizon?.to).toBe(addDoctorEventsFeedDays(today, 1));
+      const ids = first.data.map((card) => card.id);
+      expect(ids).toContain(pastNear.id);
+      expect(ids).not.toContain(pastOld.id);
+      // The past extent never widens forward.
+      expect(first.horizon?.nextTo).toBeNull();
+      const nextFrom = first.horizon?.nextFrom;
+      expect(nextFrom).not.toBeNull();
+      expect(nextFrom! < first.horizon!.from).toBe(true);
+      expect(first.pagination.hasMore).toBe(true);
+
+      const widened = await page(
+        `timeframe=past&from=${nextFrom!}&to=${first.horizon!.to}`,
+      );
+      expect(widened.data.length).toBeGreaterThan(first.data.length);
+
+      // Walking `nextFrom` to its end reaches the −30 event and stops.
+      let extent = widened;
+      while (extent.horizon?.nextFrom) {
+        extent = await page(
+          `timeframe=past&from=${extent.horizon.nextFrom}&to=${first.horizon!.to}`,
+        );
+      }
+      expect(extent.data.map((card) => card.id)).toContain(pastOld.id);
+      expect(extent.horizon?.remaining).toBe(0);
+      expect(extent.pagination.hasMore).toBe(false);
+    });
+
+    it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` is the events the widest horizon would add", async () => {
+      const upcoming = await page(
+        `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, 14)}`,
+      );
+      const upcomingAll = await page(
+        `timeframe=upcoming&from=${today}&to=${addDoctorEventsFeedDays(today, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS)}`,
+      );
+      // `far` (+20) lies beyond the window, so the remainder is at least one.
+      expect(upcoming.horizon?.remaining).toBeGreaterThanOrEqual(1);
+      expect(upcoming.horizon?.remaining).toBe(
+        upcomingAll.data.length - upcoming.data.length,
+      );
+      expect(upcoming.horizon?.nextFrom).toBeNull();
+      expect(upcomingAll.horizon?.remaining).toBe(0);
+
+      const pastTo = addDoctorEventsFeedDays(today, 1);
+      const past = await page(
+        `timeframe=past&from=${addDoctorEventsFeedDays(today, -14)}&to=${pastTo}`,
+      );
+      const pastAll = await page(
+        `timeframe=past&from=${addDoctorEventsFeedDays(pastTo, -DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS)}&to=${pastTo}`,
+      );
+      expect(past.horizon?.remaining).toBeGreaterThanOrEqual(1);
+      expect(past.horizon?.remaining).toBe(
+        pastAll.data.length - past.data.length,
+      );
+      expect(pastAll.horizon?.remaining).toBe(0);
     });
   },
 );

@@ -2590,6 +2590,14 @@ export interface components {
                     };
                     nmo: boolean;
                     pulCost: number;
+                    recording?: {
+                        expectedBy: string | null;
+                        posterUrl: string | null;
+                        primaryKind: ("edited" | "raw") | null;
+                        secondaryKind: ("edited" | "raw") | null;
+                        /** @enum {string} */
+                        state: "montage" | "raw-only" | "preparing";
+                    };
                     seatsLeft?: number;
                     signUpCount: number;
                     slug: string;
@@ -2603,7 +2611,9 @@ export interface components {
                 label: string;
             }[];
             from: string;
+            nextFrom: string | null;
             nextTo: string | null;
+            remaining: number;
             targeting: {
                 adjacentDirectionIds: string[];
                 directionIds: string[];
@@ -2941,7 +2951,9 @@ export interface components {
             })[];
             horizon?: {
                 from: string;
+                nextFrom: string | null;
                 nextTo: string | null;
+                remaining: number;
                 to: string;
             };
             pagination: {

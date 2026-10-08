@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
 import { EventKindRefSchema } from "./events.schema.js";
 import { EventParticipationFormatSchema } from "./participation.schema.js";
 
@@ -70,6 +71,15 @@ export const DoctorEventCardSchema = z
     city: z.string().optional(),
     seatsLeft: z.number().int().nonnegative().optional(),
     state: DoctorEventCardStateSchema,
+    /**
+     * The 014 recording answer — the SAME `RecordingProjection` the Academy
+     * past card carries (`PastBroadcastCardSchema.recording`), from the same
+     * batched projection read, so both hosts apply one playability rule
+     * (wave-2 entry gate rows 10, 31). Present exactly on a `recorded` card
+     * (the event has ended); `preparing` covers both a recording not yet
+     * published and no recording at all.
+     */
+    recording: RecordingProjectionSchema.optional(),
   })
   .strict();
 export type DoctorEventCard = z.infer<typeof DoctorEventCardSchema>;

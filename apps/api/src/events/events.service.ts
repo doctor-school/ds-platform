@@ -45,7 +45,7 @@ import { eventEconomyFacts } from "./event-economy-facts.js";
 import {
   eventHorizonInstants,
   resolveEventHorizon,
-  resolveNextHorizonTo,
+  resolveEventHorizonBeyond,
 } from "./event-horizon.js";
 import { EVENT_CURSOR_SHAPE } from "../taxonomy/public-event-cursor.js";
 
@@ -460,10 +460,7 @@ function isEditable(event: Event): boolean {
 function kindFields(
   e: Event,
   kind: EventKindProjection | undefined,
-): Pick<
-  EventAdminDetail,
-  "kind" | "participationFormat" | "audience"
-> {
+): Pick<EventAdminDetail, "kind" | "participationFormat" | "audience"> {
   // `events.kind_id` is a NOT NULL FK with ON DELETE RESTRICT, so a missing
   // row is a broken invariant, not a state to render.
   if (!kind) throw new Error(`event ${e.id} references a missing kind`);
@@ -1226,7 +1223,7 @@ export class EventsService {
    * 014 EARS-11 public list used by the controlled `/webinars` tabs. Two paging
    * modes off one read (wave-2 entry gate §4.3 D2): the horizon (`from`, `to`)
    * of the one codec — the doctor feed's own bounded window and «Показать ещё»
-   * resolution ({@link resolveEventHorizon}, {@link resolveNextHorizonTo}) — or
+   * resolution ({@link resolveEventHorizon}, {@link resolveEventHorizonBeyond}) — or
    * the keyset cursor, which stays for other callers. The schema refuses the
    * two together.
    */
@@ -1247,18 +1244,23 @@ export class EventsService {
         query.timeframe === "past"
           ? await this.repo.listPast(undefined, null, window)
           : await this.repo.listUpcoming(cutoff, undefined, null, window);
-      const nextTo = await resolveNextHorizonTo(horizon, (range) =>
-        this.repo.findFirstListingStartIn(
-          query.timeframe,
-          query.timeframe === "past" ? null : cutoff,
-          range,
-        ),
+      // «Будущие» widens `to`, «Прошедшие» widens `from` backward (rows 30,
+      // 32); the remainder rides along — the one resolution both hosts share.
+      const beyond = await resolveEventHorizonBeyond(
+        horizon,
+        query.timeframe,
+        (range) =>
+          this.repo.listListingStartsIn(
+            query.timeframe,
+            query.timeframe === "past" ? null : cutoff,
+            range,
+          ),
       );
       return {
         data: await this.toListingCards(query.timeframe, rows),
         counts,
-        pagination: { hasMore: nextTo !== null, nextCursor: null },
-        horizon: { ...horizon, nextTo },
+        pagination: { hasMore: beyond.remaining > 0, nextCursor: null },
+        horizon: { ...horizon, ...beyond },
       };
     }
 
@@ -1297,13 +1299,11 @@ export class EventsService {
       await this.recordingsProjection.resolveRecordingProjections(
         rows.map((row) => row.event.id),
       );
-    return cards.map(
-      (card): PastBroadcastCard => ({
-        ...card,
-        state: "ended",
-        recording: recordings.get(card.id)!,
-      }),
-    );
+    return cards.map((card): PastBroadcastCard => ({
+      ...card,
+      state: "ended",
+      recording: recordings.get(card.id)!,
+    }));
   }
 
   /**
@@ -1327,7 +1327,9 @@ export class EventsService {
       // `events.kind_id` is a NOT NULL FK, so a missing kind is a broken
       // invariant, never a card to render without its label.
       if (kind === undefined) {
-        throw new Error(`event ${row.event.id} has no kind ${row.event.kindId}`);
+        throw new Error(
+          `event ${row.event.id} has no kind ${row.event.kindId}`,
+        );
       }
       return this.toUpcomingCard(
         row,

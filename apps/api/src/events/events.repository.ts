@@ -513,24 +513,23 @@ export class EventsRepository {
   }
 
   /**
-   * Wave-2 entry gate §4.3 D2 — the earliest start of a listing-eligible event
-   * inside `range`, under the SAME predicate {@link listUpcoming} /
-   * {@link listPast} select with: «is there anything at all past the rendered
-   * horizon?» (019 LD-2, #1803). `null` means «Показать ещё» is not offered.
+   * Wave-2 entry gate §4.3 D2 (rows 30, 32) — the start instant of every
+   * listing-eligible event inside `range`, under the SAME predicate
+   * {@link listUpcoming} / {@link listPast} select with: what lies beyond the
+   * rendered horizon, for the next «Показать ещё» bound and the remainder
+   * (019 LD-2, #1803). Empty means the control is not offered.
    */
-  async findFirstListingStartIn(
+  async listListingStartsIn(
     timeframe: "upcoming" | "past",
     cutoff: Date | null,
     range: EventListingWindow,
-  ): Promise<Date | null> {
-    if (range.fromInstant.getTime() >= range.toInstant.getTime()) return null;
+  ): Promise<Date[]> {
+    if (range.fromInstant.getTime() >= range.toInstant.getTime()) return [];
     const rows = await this.db
       .select({ startsAt: events.startsAt })
       .from(events)
-      .where(and(...listingWhere(timeframe, cutoff, range)))
-      .orderBy(asc(events.startsAt))
-      .limit(1);
-    return rows[0]?.startsAt ?? null;
+      .where(and(...listingWhere(timeframe, cutoff, range)));
+    return rows.map((row) => row.startsAt);
   }
 
   /**

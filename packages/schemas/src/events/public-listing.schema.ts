@@ -58,15 +58,19 @@ export const PublicEventListingPageSchema = z.object({
   }),
   /**
    * Present exactly on a horizon read (D2): the applied window, echoed so the
-   * client never re-derives it, and the `to` «Показать ещё» writes into the
-   * URL — `null` when nothing lies past the window. Same semantics as the
-   * doctor feed's `from` / `to` / `nextTo`.
+   * client never re-derives it; the next bound «Показать ещё» writes into the
+   * URL — `nextTo` on «Будущие», `nextFrom` (an older `from`) on
+   * «Прошедшие», each `null` when nothing lies beyond; and `remaining`, the
+   * matching events beyond the extent. Same names and semantics as the doctor
+   * feed's `from` / `to` / `nextTo` / `nextFrom` / `remaining`.
    */
   horizon: z
     .object({
       from: DoctorEventsFeedDaySchema,
       to: DoctorEventsFeedDaySchema,
       nextTo: DoctorEventsFeedDaySchema.nullable(),
+      nextFrom: DoctorEventsFeedDaySchema.nullable(),
+      remaining: z.number().int().nonnegative(),
     })
     .optional(),
 });

@@ -104,11 +104,11 @@ export class DoctorEventsRepository {
 
   /**
    * The ONE selection predicate of the Doctor feed — eligibility window,
-   * targeting, `kind` and `q` — shared by {@link findFeedRows} and
-   * {@link findFirstFeedStartAfter}. It is a single builder rather than two
-   * copies on purpose: «показать ещё» may only be offered for events the very
-   * same predicate would then list, so a divergence here would re-open #1803
-   * (a control leading into an empty widening).
+   * targeting, `kind` and `q` — of {@link findFeedRows}, which serves the
+   * rendered window AND the range beyond it («показать ещё» and its
+   * remainder). One builder on purpose: «показать ещё» may only be offered for
+   * events the very same predicate would then list, so a divergence here would
+   * re-open #1803 (a control leading into an empty widening).
    */
   private feedWhere(filters: DoctorFeedFilters) {
     const where = [
@@ -171,33 +171,6 @@ export class DoctorEventsRepository {
       .orderBy(asc(events.startsAt), asc(events.id));
 
     return rows as DoctorFeedRow[];
-  }
-
-  /**
-   * The earliest start of a feed-eligible event inside `[fromInstant,
-   * toInstant)` under the SAME predicate {@link findFeedRows} applies — the
-   * question «is there anything at all past the rendered horizon?» (019 LD-2,
-   * #1803). `null` means the horizon may not be widened, because widening it
-   * would reveal nothing.
-   */
-  async findFirstFeedStartAfter(
-    filters: DoctorFeedFilters,
-  ): Promise<Date | null> {
-    if (filters.directionIds !== null && filters.directionIds.length === 0) {
-      return null;
-    }
-    if (filters.fromInstant.getTime() >= filters.toInstant.getTime()) {
-      return null;
-    }
-
-    const rows = await this.db
-      .select({ startsAt: events.startsAt })
-      .from(events)
-      .where(and(...this.feedWhere(filters)))
-      .orderBy(asc(events.startsAt))
-      .limit(1);
-
-    return rows[0]?.startsAt ?? null;
   }
 
   /**

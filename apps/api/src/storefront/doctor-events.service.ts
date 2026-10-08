@@ -20,10 +20,11 @@ import { eventEconomyFacts } from "../events/event-economy-facts.js";
 import {
   eventHorizonInstants,
   resolveEventHorizon,
-  resolveNextHorizonTo,
+  resolveEventHorizonBeyond,
 } from "../events/event-horizon.js";
 import { EventsLiveService } from "../events/events-live.service.js";
 import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
+import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import {
   type DoctorFeedRow,
   DoctorEventsRepository,
@@ -76,6 +77,11 @@ export class DoctorEventsService {
     // doctor audience, the targeting and the doctor route table.
     @Inject(EventsLiveService)
     private readonly liveEvents: EventsLiveService,
+    // Wave-2 gate rows 10, 31: a recorded card carries the ONE 014 recording
+    // projection the Academy past card carries, so both hosts apply one
+    // playability rule.
+    @Inject(RecordingsProjectionService)
+    private readonly recordings: RecordingsProjectionService,
   ) {}
 
   async feed(input: {
@@ -110,15 +116,28 @@ export class DoctorEventsService {
     const filtered = applyCardFacets(cards, query);
 
     const days = groupByDay(rows, filtered);
-    // #1803: «показать ещё» is offered only when the SAME feed predicate finds
-    // an event past the window — the one resolution both storefronts share.
-    const nextTo = await resolveNextHorizonTo(horizon, (range) =>
-      this.repository.findFirstFeedStartAfter({
-        directionIds,
-        ...range,
-        kindSlugs: query.kind,
-        q: query.q,
-      }),
+    // #1803 + gate rows 30, 32: the next bound («Будущие» `to`, «Прошедшие» an
+    // older `from`) and the remainder are asked of the SAME feed predicate AND
+    // the same card facets the window obeys — the one resolution both
+    // storefronts share.
+    const beyond = await resolveEventHorizonBeyond(
+      horizon,
+      query.tense,
+      async (range) => {
+        const beyondRows = await this.repository.findFeedRows({
+          directionIds,
+          ...range,
+          kindSlugs: query.kind,
+          q: query.q,
+        });
+        return applyCardFacets(
+          beyondRows.map((row) => ({
+            ...cardFacetsOf(row),
+            startsAt: row.startsAt,
+          })),
+          query,
+        ).map((row) => row.startsAt);
+      },
     );
 
     return {
@@ -128,8 +147,10 @@ export class DoctorEventsService {
       days,
       totalCount: filtered.length,
       // «показать ещё» is a URL edit, not a client paging state (LD-2/EARS-8):
-      // the server names the next `to`, the client writes it into the address.
-      nextTo,
+      // the server names the next bound, the client writes it into the address.
+      nextTo: beyond.nextTo,
+      nextFrom: beyond.nextFrom,
+      remaining: beyond.remaining,
       targeting,
     };
   }
@@ -364,10 +385,15 @@ export class DoctorEventsService {
 
   private async toCards(rows: DoctorFeedRow[]): Promise<DoctorEventCard[]> {
     const ids = rows.map((row) => row.id);
-    const [speakers, projectTitles, signUps] = await Promise.all([
+    const endedIds = rows
+      .filter((row) => isEnded(row.state))
+      .map((row) => row.id);
+    const [speakers, projectTitles, signUps, recordings] = await Promise.all([
       this.repository.findLeadSpeakers(ids),
       this.repository.findProjectTitles(ids),
       this.repository.countSignUps(ids),
+      // The batch form — ONE statement for the whole page, never per card.
+      this.recordings.resolveRecordingProjections(endedIds),
     ]);
 
     return rows.map((row) => ({
@@ -381,15 +407,15 @@ export class DoctorEventsService {
       endsAt: new Date(
         row.startsAt.getTime() + row.durationMin * 60_000,
       ).toISOString(),
-      // 019 amendment — the event's own attendance mode and its 012 kind
-      // (`{ id, slug, title }`; the slug is the `?kind=` facet vocabulary).
-      format: row.participationFormat,
+      // 019 amendment — the event's own attendance mode (in the facet fields)
+      // and its 012 kind (`{ id, slug, title }`; the slug is the `?kind=` facet
+      // vocabulary).
+      ...cardFacetsOf(row),
       kind: row.kind,
       title: row.title,
       speaker: speakers.get(row.id) ?? "",
       // The published project the event belongs to; `school` until linked.
       source: projectTitles.get(row.id) ?? row.school,
-      ...eventEconomyFacts(),
       signUpCount: signUps.get(row.id) ?? 0,
       // 014 EARS-26 (#1741): `in_archive` is the legacy machine's «this эфир
       // happened and its recording is published» — the same fact `ended` carries
@@ -399,11 +425,29 @@ export class DoctorEventsService {
       state:
         row.state === "live"
           ? "live"
-          : row.state === "ended" || row.state === "in_archive"
+          : isEnded(row.state)
             ? "recorded"
             : "normal",
+      // Whether that recording is PLAYABLE is not this service's call: the card
+      // carries the 014 projection and the shared package applies the one rule
+      // (`isRecordingPlayable`) on both hosts (gate rows 10, 31).
+      ...(isEnded(row.state) ? { recording: recordings.get(row.id)! } : {}),
     }));
   }
+}
+
+function isEnded(state: DoctorFeedRow["state"]): boolean {
+  return state === "ended" || state === "in_archive";
+}
+
+/** The card fields the facets read — ONE projection for a card and for a row beyond the window. */
+type CardFacetFields = Pick<
+  DoctorEventCard,
+  "format" | "nmo" | "pulCost" | "city"
+>;
+
+function cardFacetsOf(row: DoctorFeedRow): CardFacetFields {
+  return { format: row.participationFormat, ...eventEconomyFacts() };
 }
 
 /**
@@ -412,10 +456,10 @@ export class DoctorEventsService {
  * and the month grid, so the grid's counts and the feed's day-group sizes cannot
  * disagree about what a facet means (019-design §3, EARS-4).
  */
-function applyCardFacets(
-  cards: DoctorEventCard[],
+function applyCardFacets<T extends CardFacetFields>(
+  cards: T[],
   facets: Pick<DoctorEventsFeedQuery, "format" | "nmo" | "free" | "city">,
-): DoctorEventCard[] {
+): T[] {
   return cards.filter((card) => {
     if (facets.format.length > 0 && !facets.format.includes(card.format)) {
       return false;

@@ -107,10 +107,44 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
       data: [card()],
       counts: { upcoming: 5, past: 0 },
       pagination: { nextCursor: null, hasMore: true },
-      horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05" },
+      horizon: {
+        from: "2026-10-08",
+        to: "2026-10-22",
+        nextTo: "2026-11-05",
+        nextFrom: null,
+        remaining: 3,
+      },
     });
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.horizon?.nextTo).toBe("2026-11-05");
+  });
+
+  it("NEW: a past horizon page names the older `from` and the remainder; a horizon without them is refused (rows 30, 32)", () => {
+    const base = {
+      data: [card()],
+      counts: { upcoming: 0, past: 9 },
+      pagination: { nextCursor: null, hasMore: true },
+    };
+    const parsed = PublicEventListingPageSchema.safeParse({
+      ...base,
+      horizon: {
+        from: "2026-09-24",
+        to: "2026-10-09",
+        nextTo: null,
+        nextFrom: "2026-08-27",
+        remaining: 4,
+      },
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.horizon?.nextFrom).toBe("2026-08-27");
+    expect(parsed.data.horizon?.remaining).toBe(4);
+    expect(
+      PublicEventListingPageSchema.safeParse({
+        ...base,
+        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null },
+      }).success,
+    ).toBe(false);
   });
 });

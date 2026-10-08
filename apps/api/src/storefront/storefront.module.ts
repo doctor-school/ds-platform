@@ -8,6 +8,7 @@ import {
 import { AuthModule } from "../auth/auth.module.js";
 import { isRouteScan } from "../authz/route-scan.js";
 import { EventsModule } from "../events/events.module.js";
+import { RecordingsModule } from "../recordings/recordings.module.js";
 import { RegistrationModule } from "../registration/registration.module.js";
 import { RoomModule } from "../room/room.module.js";
 import { DoctorEventsPublicController } from "./doctor-events.public.controller.js";
@@ -69,12 +70,16 @@ import { TargetingService } from "./targeting.service.js";
   // #1972 (wave-2 entry gate §4.3 D8): `RegistrationModule` exports the ONE
   // «Мои события» read (`RegistrationService.myEvents`) the doctor host's
   // `me/events` route serves over its own route table — never a second read.
+  // Wave-2 gate rows 10, 31: `RecordingsModule` exports the ONE 014 recording
+  // projection the Academy past card carries; the doctor's recorded card
+  // carries the same answer, never a second derivation.
   imports: [
     TaxonomyModule,
     AuthModule,
     EventsModule,
     RoomModule,
     RegistrationModule,
+    RecordingsModule,
   ],
   controllers: [
     DoctorRegisterPublicController,

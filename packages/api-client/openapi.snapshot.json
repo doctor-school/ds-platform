@@ -2010,6 +2010,67 @@
                         "minimum": 0,
                         "type": "integer"
                       },
+                      "recording": {
+                        "properties": {
+                          "expectedBy": {
+                            "anyOf": [
+                              {
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "posterUrl": {
+                            "anyOf": [
+                              {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "primaryKind": {
+                            "anyOf": [
+                              {
+                                "enum": ["edited", "raw"],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "secondaryKind": {
+                            "anyOf": [
+                              {
+                                "enum": ["edited", "raw"],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "state": {
+                            "enum": ["montage", "raw-only", "preparing"],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "state",
+                          "primaryKind",
+                          "secondaryKind",
+                          "posterUrl",
+                          "expectedBy"
+                        ],
+                        "type": "object"
+                      },
                       "seatsLeft": {
                         "maximum": 9007199254740991,
                         "minimum": 0,
@@ -2081,6 +2142,17 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
           },
+          "nextFrom": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "nextTo": {
             "anyOf": [
               {
@@ -2091,6 +2163,11 @@
                 "type": "null"
               }
             ]
+          },
+          "remaining": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "targeting": {
             "additionalProperties": false,
@@ -2151,6 +2228,8 @@
           "days",
           "totalCount",
           "nextTo",
+          "nextFrom",
+          "remaining",
           "targeting"
         ],
         "type": "object"
@@ -3606,6 +3685,17 @@
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                 "type": "string"
               },
+              "nextFrom": {
+                "anyOf": [
+                  {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "nextTo": {
                 "anyOf": [
                   {
@@ -3617,12 +3707,17 @@
                   }
                 ]
               },
+              "remaining": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "to": {
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                 "type": "string"
               }
             },
-            "required": ["from", "to", "nextTo"],
+            "required": ["from", "to", "nextTo", "nextFrom", "remaining"],
             "type": "object"
           },
           "pagination": {

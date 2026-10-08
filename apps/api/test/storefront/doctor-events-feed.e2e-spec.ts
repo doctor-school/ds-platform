@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import {
   addDoctorEventsFeedDays,
+  DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
   DoctorEventsFeedSchema,
   doctorEventsFeedDayOf,
 } from "@ds/schemas";
@@ -52,6 +53,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
     /** Far past the default horizon, on the adjacency-less direction (EARS-3.7/3.8/9.1). */
     let lonelyFarEventId = "";
     let expertsEventId = "";
+    /** «Прошедшие» fixtures on the adjacency-less direction (gate rows 10/30/31/32). */
+    let pastMontageEventId = "";
+    let pastRawEventId = "";
+    let pastPreparingEventId = "";
+    let pastAbsentEventId = "";
+    let pastOldEventId = "";
 
     const at = (dayOffset: number, hour: number) =>
       new Date(
@@ -92,16 +99,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
       directionId: string;
       /** 012 EARS-29 — the storefront selector; the doctor feed selects `doctors`. */
       audience?: "doctors" | "experts";
+      state?: "published" | "ended";
     }) => {
       const id = randomUUID();
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, 'published', ${eventClassificationSql(input.audience ?? "doctors")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, $6, ${eventClassificationSql(input.audience ?? "doctors")})`,
         [
           id,
           `feed-${randomUUID()}`,
           input.title,
           "Школа 019",
           input.startsAt.toISOString(),
+          input.state ?? "published",
         ],
       );
       eventIds.push(id);
@@ -113,6 +122,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       eventDirectionIds.push(linkId);
       return id;
+    };
+
+    const addRecording = async (
+      eventId: string,
+      kind: "edited" | "raw",
+      status: "draft" | "published",
+    ) => {
+      await pool.query(
+        `INSERT INTO event_recordings (event_id, kind, provider, embed_ref, status, first_published_at)
+         VALUES ($1, $2, 'rutube', '0123456789abcdef0123456789abcdef', $3, ${status === "published" ? "now()" : "NULL"})`,
+        [eventId, kind, status],
+      );
     };
 
     const readFeed = async (input: {
@@ -212,6 +233,43 @@ describe.skipIf(!process.env.DATABASE_URL)(
         directionId: own,
         audience: "experts",
       });
+
+      // «Прошедшие»: three recording answers inside the default past window,
+      // one with no recording row at all, and one 30 days back — two steps
+      // past the 14-day default, so only a BACKWARD widening reaches it.
+      pastMontageEventId = await makeEvent({
+        title: "Прошедший, смонтирован",
+        startsAt: at(-3, 12),
+        directionId: lonelyDirection,
+        state: "ended",
+      });
+      await addRecording(pastMontageEventId, "edited", "published");
+      pastRawEventId = await makeEvent({
+        title: "Прошедший, только исходник",
+        startsAt: at(-4, 12),
+        directionId: lonelyDirection,
+        state: "ended",
+      });
+      await addRecording(pastRawEventId, "raw", "published");
+      pastPreparingEventId = await makeEvent({
+        title: "Прошедший, запись готовится",
+        startsAt: at(-5, 12),
+        directionId: lonelyDirection,
+        state: "ended",
+      });
+      await addRecording(pastPreparingEventId, "edited", "draft");
+      pastAbsentEventId = await makeEvent({
+        title: "Прошедший, без записи",
+        startsAt: at(-6, 12),
+        directionId: lonelyDirection,
+        state: "ended",
+      });
+      pastOldEventId = await makeEvent({
+        title: "Прошедший месяц назад",
+        startsAt: at(-30, 12),
+        directionId: lonelyDirection,
+        state: "ended",
+      });
     }, 60_000);
 
     afterAll(async () => {
@@ -219,6 +277,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await pool.query("DELETE FROM event_directions WHERE id = $1", [id]);
       }
       for (const id of eventIds) {
+        await pool.query("DELETE FROM event_recordings WHERE event_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const id of edgeIds) {
@@ -307,7 +368,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
         expect(serialized.toLowerCase()).not.toContain(`"${forbidden}`);
       }
       const cardKeys = new Set(
-        feed.days.flatMap((day) => day.items.flatMap((item) => Object.keys(item))),
+        feed.days.flatMap((day) =>
+          day.items.flatMap((item) => Object.keys(item)),
+        ),
       );
       expect([...cardKeys].some((key) => /score|rank|weight/i.test(key))).toBe(
         false,
@@ -423,6 +486,97 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // reachable, so the control stays offered and its target covers it.
       expect(feed.nextTo).not.toBeNull();
       expect(feed.nextTo! > addDoctorEventsFeedDays(today, 40)).toBe(true);
+    });
+
+    it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` covers the nearest older event beyond the 14-day default (rows 30, 32)", async () => {
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
+      expect(feed.from).toBe(addDoctorEventsFeedDays(today, -14));
+      expect(feed.to).toBe(addDoctorEventsFeedDays(today, 1));
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).not.toContain(pastOldEventId);
+      // The past extent never widens forward.
+      expect(feed.nextTo).toBeNull();
+      // The −30 event lies 16 days before `from`: one step (−28) falls short,
+      // so the bound walks whole steps until it covers it.
+      expect(feed.nextFrom).toBe(addDoctorEventsFeedDays(today, -42));
+      expect(feed.remaining).toBe(1);
+
+      const extended = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?tense=past&from=${feed.nextFrom!}&to=${feed.to}`,
+      });
+      expect(extended.from).toBe(feed.nextFrom);
+      expect(
+        extended.days.flatMap((day) => day.items.map((item) => item.id)),
+      ).toContain(pastOldEventId);
+      expect(extended.nextFrom).toBeNull();
+      expect(extended.remaining).toBe(0);
+    });
+
+    it("NEW: a hand-edited past `from` beyond the widest horizon is clamped at the old end, never cutting the recent days", async () => {
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?tense=past&from=${addDoctorEventsFeedDays(today, -5000)}`,
+      });
+      expect(feed.to).toBe(addDoctorEventsFeedDays(today, 1));
+      expect(feed.from).toBe(
+        addDoctorEventsFeedDays(today, 1 - DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
+      );
+      expect(
+        feed.days.flatMap((day) => day.items.map((item) => item.id)),
+      ).toContain(pastMontageEventId);
+      expect(feed.nextFrom).toBeNull();
+      expect(feed.remaining).toBe(0);
+    });
+
+    it("NEW: «Показать ещё» states the next batch and the remainder — `remaining` counts the matching events beyond the extent", async () => {
+      const first = await readFeed({ specialtyCode: lonelyCode });
+      // Only the +40 event lies past the default upcoming window.
+      expect(first.remaining).toBe(1);
+      expect(first.nextFrom).toBeNull();
+
+      const all = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${today}&to=${addDoctorEventsFeedDays(today, 60)}`,
+      });
+      expect(all.remaining).toBe(0);
+      expect(all.nextTo).toBeNull();
+
+      // The remainder obeys the card facets the window obeys: an offline-only
+      // read matches none of the (online) events beyond it.
+      const offline = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?format=offline",
+      });
+      expect(offline.remaining).toBe(0);
+      expect(offline.nextTo).toBeNull();
+    });
+
+    it("NEW: doctor host — a past card carries the recording projection the Academy card carries: montage / raw-only playable, preparing / absent not (rows 10, 31)", async () => {
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
+      const card = (id: string) =>
+        feed.days.flatMap((day) => day.items).find((item) => item.id === id);
+
+      expect(card(pastMontageEventId)?.recording?.state).toBe("montage");
+      expect(card(pastMontageEventId)?.recording?.primaryKind).toBe("edited");
+      expect(card(pastRawEventId)?.recording?.state).toBe("raw-only");
+      expect(card(pastRawEventId)?.recording?.primaryKind).toBe("raw");
+      expect(card(pastPreparingEventId)?.recording?.state).toBe("preparing");
+      expect(card(pastPreparingEventId)?.recording?.primaryKind).toBeNull();
+      expect(card(pastAbsentEventId)?.recording?.state).toBe("preparing");
+      expect(card(pastAbsentEventId)?.recording?.primaryKind).toBeNull();
+
+      // An upcoming card carries no recording answer at all.
+      const upcoming = await readFeed({ specialtyCode: lonelyCode });
+      const next = upcoming.days.flatMap((day) => day.items).at(0);
+      expect(next).toBeDefined();
+      expect(next?.recording).toBeUndefined();
     });
   },
 );

@@ -9,7 +9,6 @@ import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import {
   type SpecialtyChoice,
-  filterLabelsOf,
   filterOptionsOf,
 } from "../model/facets";
 import type { BlockRead, EventsFeedPage } from "../model/feed";
@@ -69,7 +68,7 @@ async function panelOptions({ config, feed, specialties }: PanelInput) {
   const block = read.ok ? read.value.facetOptions : {};
   return {
     options: filterOptionsOf(config.filterSet, block, book),
-    labels: filterLabelsOf(config.filterSet, block),
+    optionBlock: block,
   };
 }
 
@@ -135,6 +134,7 @@ export async function CompactMonthSection({
   }
   return (
     <CompactMonth
+      month={month}
       title={formatMonthTitle(month)}
       weekdays={weekdayShortLabels()}
       weeks={dotWeeksOf(grid, eventNounOf(config.copy))}

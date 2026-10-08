@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   EventsFilter,
   type EventsFilterHost,
-  type EventsFilterLabels,
   type EventsFilterOptions,
   countAppliedFacets,
 } from "@ds/design-system/blocks";
@@ -28,8 +27,10 @@ import type { PluralNoun } from "../model/event-count";
 import {
   appliedFacetsOf,
   resetFacetsHref,
+  filterLabelsOf,
   withAppliedFacets,
 } from "../model/facets";
+import type { FeedFacetOptions } from "../model/feed";
 import { pageHref } from "../model/feed-url";
 
 export interface FacetPanelProps {
@@ -37,8 +38,8 @@ export interface FacetPanelProps {
   listing: string;
   raw: RawQueryRecord;
   options: EventsFilterOptions;
-  /** The host set's labels; a control the data cannot distinguish has none (`filterLabelsOf`). */
-  labels: EventsFilterLabels;
+  /** The feed read's option block: it decides which controls render (`filterLabelsOf`). */
+  optionBlock: FeedFacetOptions;
 }
 
 /**
@@ -52,7 +53,7 @@ export function FacetPanel({
   listing,
   raw,
   options,
-  labels,
+  optionBlock,
   showHeader = true,
 }: FacetPanelProps & { showHeader?: boolean }) {
   const router = useRouter();
@@ -66,7 +67,7 @@ export function FacetPanel({
       host={filterSet}
       applied={applied}
       options={options}
-      labels={labels}
+      labels={filterLabelsOf(filterSet, optionBlock)}
       showHeader={showHeader}
       resetHref={resetFacetsHref(listing, raw, filterSet)}
       onChange={(next) =>

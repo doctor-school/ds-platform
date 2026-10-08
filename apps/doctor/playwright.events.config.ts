@@ -32,7 +32,7 @@ const API = `http://127.0.0.1:${API_PORT}`;
 export default defineConfig({
   testDir: "./e2e",
   testMatch:
-    /events-(feed|url-state|month-beside-feed|guest|live|mobile)\.spec\.ts/,
+    /events-(feed|url-state|month-beside-feed|guest|live|mobile|page)\.spec\.ts/,
   fullyParallel: false,
   // Files share one mutable upstream live scenario; do not race its controls.
   workers: 1,

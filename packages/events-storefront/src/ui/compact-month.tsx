@@ -15,6 +15,7 @@ import { LISTING_COPY } from "../copy/listing-copy";
  * then `DayAnchorScroll` scrolls to the day's group.
  */
 export function CompactMonth({
+  month,
   title,
   weekdays,
   weeks,
@@ -23,6 +24,8 @@ export function CompactMonth({
   nextHref,
   dayHrefs,
 }: {
+  /** The displayed month, `YYYY-MM`. */
+  month: string;
   title: string;
   weekdays: string[];
   weeks: DotGridCell[][];
@@ -35,19 +38,34 @@ export function CompactMonth({
   const router = useRouter();
   const t = LISTING_COPY.month;
   return (
-    <div className="flex flex-col gap-4" data-testid="events-compact-month">
+    <div
+      className="flex flex-col gap-4"
+      data-testid="events-compact-month"
+      data-month={month}
+      data-selected-day={selectedDay ?? undefined}
+    >
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-extrabold uppercase tracking-micro">
           {title}
         </span>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href={prevHref} scroll={false} aria-label={t.prevMonth}>
+            <Link
+              href={prevHref}
+              scroll={false}
+              aria-label={t.prevMonth}
+              data-testid="events-compact-month-prev"
+            >
               <span aria-hidden="true">‹</span>
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href={nextHref} scroll={false} aria-label={t.nextMonth}>
+            <Link
+              href={nextHref}
+              scroll={false}
+              aria-label={t.nextMonth}
+              data-testid="events-compact-month-next"
+            >
               <span aria-hidden="true">›</span>
             </Link>
           </Button>

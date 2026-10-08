@@ -52,6 +52,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const idleProjectSlug = `fx-idle-project-${tag}`;
     const expertSlug = `fx-expert-${tag}`;
     const topicSlug = `fx-topic-${tag}`;
+    /** Carried only by events beyond both default windows (#1973). */
+    const farExpertSlug = `fx-far-expert-${tag}`;
+    let farExpertId = "";
+    let farUpcoming = "";
+    let farPast = "";
 
     let projectId = "";
     let expertId = "";
@@ -94,24 +99,30 @@ describe.skipIf(!process.env.DATABASE_URL)(
       project?: boolean;
       expert?: boolean;
       topic?: boolean;
+      /** Days from today instead of the fixture `day` (#1973). */
+      offset?: number;
+      state?: "published" | "ended";
+      farExpert?: boolean;
     }) => {
       const id = randomUUID();
       await pool.query(
         `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience)
-         VALUES ($1, $2, $3, 'Школа фасетов', $4, 60, 'published', ${eventClassificationSql(input.audience ?? "experts")})`,
+         VALUES ($1, $2, $3, 'Школа фасетов', $4, 60, $5, ${eventClassificationSql(input.audience ?? "experts")})`,
         [
           id,
           `facets-${randomUUID()}`,
           input.title,
           new Date(
-            `${day}T${String(input.hour).padStart(2, "0")}:00:00+03:00`,
+            `${input.offset === undefined ? day : addDoctorEventsFeedDays(doctorEventsFeedDayOf(new Date()), input.offset)}T${String(input.hour).padStart(2, "0")}:00:00+03:00`,
           ).toISOString(),
+          input.state ?? "published",
         ],
       );
       eventIds.push(id);
       if (input.project) await link("event_projects", id, projectId);
       if (input.expert) await link("event_experts", id, expertId);
       if (input.topic) await link("event_directions", id, topicId);
+      if (input.farExpert) await link("event_experts", id, farExpertId);
       return id;
     };
 
@@ -205,6 +216,27 @@ describe.skipIf(!process.env.DATABASE_URL)(
         hour: 12,
         expert: true,
       });
+      const farExpert = await pool.query<{ id: string }>(
+        "INSERT INTO experts (slug, family_name, given_name, status, first_published_at) VALUES ($1, 'Дальнова', $2, 'published', now()) RETURNING id",
+        [farExpertSlug, `Вера ${tag}`],
+      );
+      farExpertId = farExpert.rows[0]!.id;
+      taxonomyRows.push({ table: "experts", id: farExpertId });
+      // Beyond both default windows: +40 (two steps past [today, +14)) and
+      // −30 (past [−14, +1)) — the facet's only matches.
+      farUpcoming = await makeEvent({
+        title: "Далеко впереди",
+        hour: 12,
+        offset: 40,
+        farExpert: true,
+      });
+      farPast = await makeEvent({
+        title: "Давно прошло",
+        hour: 12,
+        offset: -30,
+        state: "ended",
+        farExpert: true,
+      });
       doctorsEvent = await makeEvent({
         title: "Событие врачей",
         hour: 13,
@@ -273,6 +305,30 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ]) {
         expect((await get(url)).statusCode).toBe(400);
       }
+    });
+
+    it("NEW: a facet whose matches all lie beyond the default window opens on the first match (both tenses, Academy host, #1973)", async () => {
+      const today = doctorEventsFeedDayOf(new Date());
+      const read = async (query: string) => {
+        const response = await get(`/v1/public/events?${query}`);
+        expect(response.statusCode).toBe(200);
+        return PublicEventListingPageSchema.parse(response.json());
+      };
+
+      const upcoming = await read(
+        `timeframe=upcoming&expert=${farExpertSlug}`,
+      );
+      expect(upcoming.data.map((c) => c.id)).toEqual([farUpcoming]);
+      expect(upcoming.horizon?.from).toBe(today);
+      expect(upcoming.horizon?.to).toBe(addDoctorEventsFeedDays(today, 42));
+      expect(upcoming.horizon?.nextTo).toBeNull();
+      expect(upcoming.horizon?.remaining).toBe(0);
+
+      const past = await read(`timeframe=past&expert=${farExpertSlug}`);
+      expect(past.data.map((c) => c.id)).toEqual([farPast]);
+      expect(past.horizon?.to).toBe(addDoctorEventsFeedDays(today, 1));
+      expect(past.horizon?.nextFrom).toBeNull();
+      expect(past.horizon?.remaining).toBe(0);
     });
 
     it("014 EARS-12: a doctors event never appears or counts on an Academy read (012 LD-12)", async () => {

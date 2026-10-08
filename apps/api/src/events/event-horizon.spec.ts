@@ -5,6 +5,7 @@ import {
   clampRequestedPastFrom,
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
+  eventHorizonReachingFirstMatch,
   eventHorizonInstants,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
@@ -238,5 +239,35 @@ describe("the capped window slides with «Показать ещё» (wave-2 gate
     }
     expect(page.to <= addDoctorEventsFeedDays(today, 365)).toBe(true);
     expect(page.ids).not.toContain(`${beyondCeiling}-0`);
+  });
+});
+
+describe("eventHorizonReachingFirstMatch — the default extent opens on the first match (#1973)", () => {
+  const beyond = (over: Partial<{ nextTo: string | null; nextFrom: string | null; remaining: number }>) => ({
+    nextTo: null,
+    nextFrom: null,
+    remaining: 0,
+    nextBatch: 0,
+    ...over,
+  });
+
+  it("upcoming: an empty DEFAULT window with matches beyond reads up to the next bound", () => {
+    expect(
+      eventHorizonReachingFirstMatch({ tense: "upcoming" }, 0, beyond({ nextTo: "2026-11-30", remaining: 8 })),
+    ).toEqual({ to: "2026-11-30" });
+  });
+
+  it("past: an empty DEFAULT window with older matches reads back to the next bound", () => {
+    expect(
+      eventHorizonReachingFirstMatch({ tense: "past" }, 0, beyond({ nextFrom: "2026-08-01", remaining: 3 })),
+    ).toEqual({ from: "2026-08-01" });
+  });
+
+  it("a window holding a match, nothing beyond, or a moving edge the URL states is left as it is", () => {
+    const some = beyond({ nextTo: "2026-11-30", nextFrom: "2026-08-01", remaining: 2 });
+    expect(eventHorizonReachingFirstMatch({ tense: "upcoming" }, 1, some)).toBeNull();
+    expect(eventHorizonReachingFirstMatch({ tense: "upcoming" }, 0, beyond({}))).toBeNull();
+    expect(eventHorizonReachingFirstMatch({ tense: "upcoming", to: "2026-10-20" }, 0, some)).toBeNull();
+    expect(eventHorizonReachingFirstMatch({ tense: "past", from: "2026-09-01" }, 0, some)).toBeNull();
   });
 });

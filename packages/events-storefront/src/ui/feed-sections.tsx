@@ -200,6 +200,7 @@ export async function FeedSection({
             : []
         }
         routes={config.routes}
+        remaining={page.remaining}
         showMore={
           more === null
             ? null

@@ -327,6 +327,19 @@ export function myEventsCut(
     });
 }
 
+/**
+ * #1973 — a reading is EMPTY only when its extent holds no card AND nothing
+ * matching lies beyond it. With matches beyond, the extent is merely short of
+ * them: the feed offers «Показать ещё» toward them, never «Нет … по фильтру»
+ * under a non-zero count.
+ */
+export function feedReadsEmpty(page: {
+  readonly cards: readonly unknown[];
+  readonly remaining: number;
+}): boolean {
+  return page.cards.length === 0 && page.remaining <= 0;
+}
+
 export interface EmptyFeedState {
   readonly title: string;
   readonly description: string;

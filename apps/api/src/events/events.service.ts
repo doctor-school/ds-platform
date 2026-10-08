@@ -51,6 +51,7 @@ import {
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   eventHorizonInstants,
+  eventHorizonReachingFirstMatch,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
 } from "./event-horizon.js";
@@ -1304,6 +1305,16 @@ export class EventsService {
             facets,
           ),
       );
+      // #1973 — an empty default window under matches beyond opens on the
+      // first match: the same read over the bound «Показать ещё» would name.
+      const reach = eventHorizonReachingFirstMatch(
+        { tense: query.timeframe, from: query.from, to: query.to },
+        rows.length,
+        beyond,
+      );
+      if (reach !== null) {
+        return this.listPublicEvents({ ...query, ...reach }, now);
+      }
       return {
         data: await this.toListingCards(query.timeframe, rows),
         counts,

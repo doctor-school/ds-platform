@@ -325,3 +325,33 @@ export async function resolveEventHorizonBeyond(
     nextBatch: times.filter((time) => time < toInstant.getTime()).length,
   };
 }
+
+/**
+ * #1973 — the DEFAULT extent opens on the first match. When the URL leaves the
+ * tense's moving edge unstated («Будущие» `to`, «Прошедшие» `from`) and the
+ * default window holds no matching event while matches lie beyond, the read
+ * is answered over the extent «Показать ещё» would name next — `beyond`'s
+ * bound, which by construction covers the nearest match — instead of an empty
+ * window under a non-zero count. ONE rule for both storefront reads; a stated
+ * edge is a real extent and is answered as written. Returns the bound to read
+ * with, or `null` to keep the window.
+ */
+export function eventHorizonReachingFirstMatch(
+  query: {
+    tense: "upcoming" | "past";
+    from?: string | undefined;
+    to?: string | undefined;
+  },
+  matched: number,
+  beyond: EventHorizonBeyond,
+): { from: string } | { to: string } | null {
+  if (matched > 0 || beyond.remaining === 0) return null;
+  if (query.tense === "past") {
+    return query.from === undefined && beyond.nextFrom !== null
+      ? { from: beyond.nextFrom }
+      : null;
+  }
+  return query.to === undefined && beyond.nextTo !== null
+    ? { to: beyond.nextTo }
+    : null;
+}

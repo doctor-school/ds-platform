@@ -255,6 +255,11 @@ test.describe("at 390 px", () => {
     const sheet = page.getByTestId("events-filter-sheet");
     await expect(sheet.getByRole("heading", { name: "Фильтры" })).toBeVisible();
     await expect(page.getByTestId("events-filter-show")).toHaveText("Показать 4 события");
+    // The canvas renders the sheet description for screen readers only
+    // (`SheetDescription` `sr-only`): announced, never painted as a subtitle.
+    const description = sheet.getByText("Фасеты ленты событий");
+    await expect(description).toHaveCount(1);
+    expect((await description.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
 
     await sheet.getByRole("group", { name: "Формат" }).getByRole("button", { name: "Офлайн" }).click();
     await expect(page).toHaveURL(/format=online&format=offline|format=offline&format=online/);

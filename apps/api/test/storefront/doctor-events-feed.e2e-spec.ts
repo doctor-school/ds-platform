@@ -564,16 +564,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
           specialtyCode: lonelyCode,
           query: "?format=offline",
         });
-        expect(offline.days).toEqual([]);
-        expect(offline.nextTo).toBe(addDoctorEventsFeedDays(today, 28));
-        expect(offline.remaining).toBe(1);
+        // The default window holds no offline event, so the extent opens on
+        // the first match (#1973): the +20 event, nothing beyond it.
+        expect(
+          offline.days.flatMap((day) => day.items.map((item) => item.id)),
+        ).toEqual([offlineId]);
+        expect(offline.to).toBe(addDoctorEventsFeedDays(today, 28));
+        expect(offline.nextTo).toBeNull();
+        expect(offline.remaining).toBe(0);
 
         const card = all.days.flatMap((day) => day.items).at(0)!;
         const kindAndOffline = await readFeed({
           specialtyCode: lonelyCode,
           query: `?format=offline&kind=${card.kind.slug}`,
         });
-        expect(kindAndOffline.remaining).toBe(1);
+        expect(kindAndOffline.totalCount + kindAndOffline.remaining).toBe(1);
         const noKind = await readFeed({
           specialtyCode: lonelyCode,
           query: "?kind=no-such-kind",
@@ -643,6 +648,33 @@ describe.skipIf(!process.env.DATABASE_URL)(
         day.items.map((item) => item.id),
       );
       expect(ids).toContain(lonelyFarEventId);
+    });
+
+    it("NEW: a facet whose matches all lie beyond the default window opens on the first match (both tenses, doctor host, #1973)", async () => {
+      const idsOf = (feed: { days: { items: { id: string }[] }[] }) =>
+        feed.days.flatMap((day) => day.items.map((item) => item.id));
+      // Only the +40 event matches: the default [today, +14) window holds none,
+      // so the default extent reaches the step that covers it.
+      const upcoming = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?q=${encodeURIComponent("Через сорок дней")}`,
+      });
+      expect(idsOf(upcoming)).toEqual([lonelyFarEventId]);
+      expect(upcoming.from).toBe(today);
+      expect(upcoming.to).toBe(addDoctorEventsFeedDays(today, 42));
+      expect(upcoming.nextTo).toBeNull();
+      expect(upcoming.remaining).toBe(0);
+
+      // Only the −30 event matches: the default [−14, +1) window holds none,
+      // so the default extent reaches back to the step that covers it.
+      const past = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?tense=past&q=${encodeURIComponent("Прошедший месяц назад")}`,
+      });
+      expect(idsOf(past)).toEqual([pastOldEventId]);
+      expect(past.to).toBe(addDoctorEventsFeedDays(today, 1));
+      expect(past.nextFrom).toBeNull();
+      expect(past.remaining).toBe(0);
     });
 
     it("EARS-9.1: an empty window whose future is non-empty still offers «показать ещё»", async () => {

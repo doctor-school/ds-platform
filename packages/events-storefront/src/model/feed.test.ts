@@ -5,6 +5,7 @@ import {
   type EventsFeedCard,
   buildFeedItems,
   emptyFeedState,
+  feedReadsEmpty,
   liveStripView,
   myEventsCut,
   pageTodayOf,
@@ -395,5 +396,19 @@ describe("the page's one today (wave-2 gate §4.3 D10)", () => {
   it("D10: only a failed feed read falls back to the МСК day of the page clock", () => {
     // 22:30 UTC on 7 Oct is 01:30 МСК on 8 Oct.
     expect(pageTodayOf({ ok: false }, new Date("2026-10-07T22:30:00.000Z"))).toBe("2026-10-08");
+  });
+});
+
+describe("feedReadsEmpty — no empty state while matches lie beyond (#1973)", () => {
+  it("an extent with no cards and nothing beyond is empty", () => {
+    expect(feedReadsEmpty({ cards: [], remaining: 0 })).toBe(true);
+  });
+
+  it("an extent with no cards but matches beyond is NOT empty — «Показать ещё» leads to them", () => {
+    expect(feedReadsEmpty({ cards: [], remaining: 8 })).toBe(false);
+  });
+
+  it("an extent holding cards is never empty", () => {
+    expect(feedReadsEmpty({ cards: [card()], remaining: 0 })).toBe(false);
   });
 });

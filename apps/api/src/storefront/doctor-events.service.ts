@@ -30,6 +30,7 @@ import {
   EVENT_HORIZON_ROW_CAP,
   type EventHorizonReach,
   eventHorizonInstants,
+  eventHorizonReachingFirstMatch,
   eventHorizonTenseReach,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
@@ -174,6 +175,17 @@ export class DoctorEventsService {
         ).map((row) => row.startsAt);
       },
     );
+
+    // #1973 — an empty default window under matches beyond opens on the
+    // first match: the same read over the bound «Показать ещё» would name.
+    const reach = eventHorizonReachingFirstMatch(
+      query,
+      filtered.length,
+      beyond,
+    );
+    if (reach !== null) {
+      return this.feed({ ...input, now, query: { ...query, ...reach } });
+    }
 
     // Wave-2 gate §4.3 D9 — the facet panel's options over the tense's whole
     // reach (the window plus every widening), under the feed's targeting and

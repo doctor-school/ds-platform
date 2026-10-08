@@ -1,5 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { bootstrapCommitteeAccount } from "./support/admin-session";
 import { createPublishedEvent } from "./support/congress-roster";
@@ -12,6 +10,7 @@ import {
   type CongressAuthor,
 } from "./support/congress-submissions";
 import { bindCommitteeToEvent } from "./support/event-grants";
+import { evidenceShot } from "./support/evidence-shot";
 import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
@@ -31,21 +30,9 @@ import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
  *     --config=playwright.flows.config.ts e2e/congress-submissions.spec.ts
  *
  * `E2E_SHOT_DIR` opts into the evidence screenshots (registry, card with
- * «Решение», card with the extension field, committee nav).
+ * «Решение», card with the extension field, committee nav) at 1440 and 390,
+ * light and dark.
  */
-const SHOT_DIR = process.env.E2E_SHOT_DIR;
-
-async function shot(page: Page, name: string): Promise<void> {
-  if (!SHOT_DIR) return;
-  await mkdir(SHOT_DIR, { recursive: true });
-  await page.waitForFunction(() =>
-    document.getAnimations().every((a) => a.playState !== "running"),
-  );
-  await page.screenshot({
-    path: path.join(SHOT_DIR, `${name}.png`),
-    fullPage: true,
-  });
-}
 
 function headerLinks(page: Page) {
   return page.locator("header a");
@@ -153,7 +140,7 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
       `/events/${eventA}/submissions`,
     );
     await expect(member.getByTestId("back-to-list")).toHaveCount(0);
-    await shot(member, "committee-nav");
+    await evidenceShot(member, "committee-nav");
 
     // EARS-27 — every sent submission, the withdrawn one included; no draft.
     await expect(member.getByTestId("submissions-total")).toHaveText(
@@ -193,7 +180,7 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     );
     await member.getByTestId("submissions-submitter").fill(author.email);
     await expect(rowTitles(member)).toHaveText([alpha, beta]);
-    await shot(member, "registry");
+    await evidenceShot(member, "registry");
 
     // The client gate is a projection: the server refuses event B.
     await member.goto(`/events/${eventB}/submissions`);
@@ -249,11 +236,20 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     );
 
     // Accept path: «На доработке» with the comment.
-    await member
-      .getByTestId("submission-decision-status")
-      .selectOption("needs_revision");
-    await member.getByTestId("submission-decision-comment").fill(comment);
-    await shot(member, "card-decision");
+    const enterDecision = async () => {
+      await member
+        .getByTestId("submission-decision-status")
+        .selectOption("needs_revision");
+      await member.getByTestId("submission-decision-comment").fill(comment);
+      await member
+        .getByTestId("submission-decision-submit")
+        .scrollIntoViewIfNeeded();
+    };
+    await enterDecision();
+    await evidenceShot(member, "card-decision", {
+      prepare: enterDecision,
+      fullPage: false,
+    });
     await member.getByTestId("submission-decision-submit").click();
     await expect(member.getByTestId("submission-card-status")).toHaveText(
       "На доработке",
@@ -320,12 +316,18 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     later.setUTCDate(later.getUTCDate() + 5);
     const next = later.toISOString().slice(0, 10);
     await page.getByTestId("submission-extension-day").fill(next);
-    await shot(page, "card-extension");
     await page.getByTestId("submission-extension-submit").click();
     const [y, m, d] = next.split("-");
     await expect(page.getByTestId("submission-card-revision")).toHaveText(
       `до ${d}.${m}.${y}, 23:59 МСК`,
     );
+    await evidenceShot(page, "card-extension", {
+      prepare: () =>
+        page
+          .getByTestId("submission-extension-submit")
+          .scrollIntoViewIfNeeded(),
+      fullPage: false,
+    });
     const seen = await authorSectionSubmission(author!, eventA, revisionId);
     expect(
       new Date(new Date(seen.revisionDueAt!).getTime() - 1).toLocaleDateString(

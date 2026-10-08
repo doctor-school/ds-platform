@@ -490,8 +490,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
     Examples:
       | refusal                                  |
-      | an SMTP 5xx reply at RCPT TO             |
-      | an enhanced status 5.1.1 on a reply      |
+      | a basic 550 reply at RCPT TO, no enhanced code |
+      | an enhanced status 5.1.1 on a reply            |
+
+  @EARS-45 @happy
+  Scenario: A policy refusal at RCPT TO is a provider failure, not a recipient refusal
+    Given Postbox answers RCPT TO with "550 5.7.1"
+    And the mail.ru reserve is enabled with its own complete credentials
+    When the BFF mailer dispatches a verification or reset email
+    Then the attempt is a provider-failure and mail.ru is called next
 
   @EARS-45 @failure
   Scenario: A lost acknowledgement after the end-of-data sequence stops the chain

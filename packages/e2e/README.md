@@ -291,6 +291,27 @@ Run on a lead-owned, converged PR slot:
 pnpm e2e:stage pr-<N> --project academy --grep "Registration is refused without consent"
 ```
 
+### Exact minimum password (003 EARS-36)
+
+`A password of eight characters with no character classes is accepted` submits
+exactly eight lowercase letters through the real Academy registration form for
+a unique owned address. It reads the actual staging IdP complexity policy first:
+minimum length eight, with all four character-class flags off. This read uses the
+canonical staging SSH/IdP helpers, validates the Academy and IdP origins before
+loading the operator PAT, and changes no policy. SSH access is required. Commands
+are appended to the absolute TEMP `E2E_STAND_COMMAND_LOG` (or the system temporary
+directory's `ds-e2e-stand-ops/password-policy.jsonl`), without response secrets.
+
+Fresh owned verification mail supplies one six-digit code. One accepted
+confirmation must establish the secure host-only session and the same
+email-verified private profile; registration acceptance alone is insufficient.
+The scenario reuses `owned-registration.ts`, `secure-session.ts` and the auth
+fixtures, keeps traces off, and revokes only its own session during cleanup.
+
+```sh
+pnpm e2e:stage pr-<N> --project academy --grep "A password of eight characters with no character classes is accepted"
+```
+
 ### Sign-in method switching (003 EARS-43)
 
 `The typed address survives a switch between the sign-in methods` drives the

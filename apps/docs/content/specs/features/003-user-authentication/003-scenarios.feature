@@ -708,13 +708,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then both sends proceed to the transport chain unchanged
     And no send is suppressed, regardless of the recipient tag
 
-  @EARS-36 @happy
+  @EARS-36 @happy @password-minimum
   Scenario: A password of eight characters with no character classes is accepted
     Given the IdP instance complexity policy is provisioned as minimum length 8 with every character-class flag off
-    And a visitor with a never-registered email
-    When the visitor submits the registration form with the password "orangetree" and accepted consent versions
-    Then the registration is accepted end to end
-    And no character-class requirement is applied by the portal, the API, or the IdP
+    And an Academy length-only registrant with a unique never-registered email
+    When the length-only registrant submits exactly eight lowercase letters "pinecone" with accepted consent versions
+    And the length-only registrant enters that fresh delivered confirmation code once
+    Then that one confirmation opens the verified length-only account with a secure session and no additional sign-in
 
   @EARS-36 @failure
   Scenario: A password shorter than the minimum length is rejected by the single rule

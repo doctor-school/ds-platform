@@ -312,6 +312,26 @@ fixtures, keeps traces off, and revokes only its own session during cleanup.
 pnpm e2e:stage pr-<N> --project academy --grep "A password of eight characters with no character classes is accepted"
 ```
 
+### Short password refusal (003 EARS-36)
+
+`A password shorter than the minimum length is rejected by the single rule`
+uses a clean owned Academy browser context, a unique never-registered email and
+the account return target. It enters seven lowercase letters, blurs and clicks
+the normal submit control, then requires only the length error and zero
+`/v1/auth/register` POSTs. Correcting the same field to exactly eight lowercase
+letters clears the rejection and leaves submission available, preserving the
+address, password and registration context without creating an account. Private
+session/profile and readable-secret checks run before and after the refusal and
+correction. `steps/password-refusal.steps.ts` reuses the secret-safe input helper,
+auth fixtures and CAPTCHA test-token harness, closes its context during cleanup,
+and retains the existing schema and portal blur-only tests. Run this selected
+case together with the existing exact-eight acceptance regression on the
+lead-owned converged slot:
+
+```sh
+pnpm e2e:stage pr-<N> --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
+```
+
 ### Sign-in method switching (003 EARS-43)
 
 `The typed address survives a switch between the sign-in methods` drives the

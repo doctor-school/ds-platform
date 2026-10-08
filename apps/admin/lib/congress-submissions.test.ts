@@ -6,7 +6,10 @@ import type {
 import {
   CONGRESS_SUBMISSIONS_COLUMNS,
   SUBMISSION_REGISTRY_FILTER_INITIAL,
+  committeeDecisionBasis,
   committeeDecisionError,
+  committeeDecisionInitial,
+  committeeDecisionReducer,
   committeeTargets,
   committeeWriteFailure,
   mayExtendRevision,
@@ -16,6 +19,7 @@ import {
   submissionCardHref,
   submissionRegistryCells,
   submissionRegistryQuery,
+  submissionSentRangeChips,
 } from "./congress-submissions";
 import { congressSubmissionsUrl } from "@/providers/data-provider";
 
@@ -33,7 +37,10 @@ const row: CongressSubmissionRegistryRow = {
   position: 21,
   kind: "oral",
   title: "Новые подходы к терапии",
-  submitter: { fullName: "Иванова Мария Петровна", email: "ivanova@example.test" },
+  submitter: {
+    fullName: "Иванова Мария Петровна",
+    email: "ivanova@example.test",
+  },
   status: "submitted",
   // 09:00 МСК == 06:00Z.
   submittedAt: "2026-11-20T06:00:00.000Z",
@@ -61,9 +68,9 @@ describe("046 EARS-27 submissions registry projection", () => {
       updatedAt: "21 ноября 2026 г., 10:30",
     });
     // A row never sent carries no send instant — the cell is EMPTY.
-    expect(submissionRegistryCells({ ...row, submittedAt: null }).submittedAt).toBe(
-      "",
-    );
+    expect(
+      submissionRegistryCells({ ...row, submittedAt: null }).submittedAt,
+    ).toBe("");
   });
 
   it("046 EARS-27: every filter, the sort and the page compose into one server query", () => {
@@ -121,6 +128,30 @@ describe("046 EARS-27 submissions registry projection", () => {
     });
   });
 
+  it("046 EARS-27: the send-date chips name only the applied bounds, as ДД.ММ.ГГГГ", () => {
+    expect(
+      submissionSentRangeChips({
+        ...SUBMISSION_REGISTRY_FILTER_INITIAL,
+        sentFrom: "2026-11-01",
+        sentTo: "2026-11-30",
+      }),
+    ).toEqual([
+      { id: "sentFrom", day: "01.11.2026" },
+      { id: "sentTo", day: "30.11.2026" },
+    ]);
+    // An inverted range holds its end back, so no chip claims it.
+    expect(
+      submissionSentRangeChips({
+        ...SUBMISSION_REGISTRY_FILTER_INITIAL,
+        sentFrom: "2026-11-30",
+        sentTo: "2026-11-01",
+      }),
+    ).toEqual([{ id: "sentFrom", day: "30.11.2026" }]);
+    expect(
+      submissionSentRangeChips(SUBMISSION_REGISTRY_FILTER_INITIAL),
+    ).toEqual([]);
+  });
+
   it("046 EARS-27: the registry, card and writes address the event's submissions", () => {
     expect(
       congressSubmissionsUrl.list(EVENT, {
@@ -154,7 +185,10 @@ describe("046 EARS-28 the card's decision", () => {
       "rejected",
       "needs_revision",
     ]);
-    expect(committeeTargets("needs_revision")).toEqual(["accepted", "rejected"]);
+    expect(committeeTargets("needs_revision")).toEqual([
+      "accepted",
+      "rejected",
+    ]);
     expect(committeeTargets("accepted")).toEqual(["in_review"]);
     // A withdrawn submission is final: nothing to offer.
     expect(committeeTargets("withdrawn")).toEqual([]);
@@ -163,11 +197,15 @@ describe("046 EARS-28 the card's decision", () => {
   it("046 EARS-28: rejected and needs_revision need a comment of 1–2000 characters", () => {
     expect(committeeDecisionError("", "")).toBe("statusRequired");
     expect(committeeDecisionError("rejected", "   ")).toBe("commentRequired");
-    expect(committeeDecisionError("needs_revision", "")).toBe("commentRequired");
+    expect(committeeDecisionError("needs_revision", "")).toBe(
+      "commentRequired",
+    );
     expect(committeeDecisionError("needs_revision", "x".repeat(2001))).toBe(
       "commentTooLong",
     );
-    expect(committeeDecisionError("needs_revision", "x".repeat(2000))).toBeNull();
+    expect(
+      committeeDecisionError("needs_revision", "x".repeat(2000)),
+    ).toBeNull();
     expect(committeeDecisionError("rejected", "Не по теме")).toBeNull();
     // Other targets carry no comment requirement.
     expect(committeeDecisionError("accepted", "")).toBeNull();
@@ -178,7 +216,9 @@ describe("046 EARS-28 the card's decision", () => {
     expect(
       committeeWriteFailure({
         statusCode: 409,
-        problems: [{ code: "status-conflict", params: { status: "withdrawn" } }],
+        problems: [
+          { code: "status-conflict", params: { status: "withdrawn" } },
+        ],
       }),
     ).toBe("status-conflict");
     expect(
@@ -193,8 +233,82 @@ describe("046 EARS-28 the card's decision", () => {
     expect(committeeWriteFailure({ statusCode: 400 })).toBe("invalid");
     expect(committeeWriteFailure({ statusCode: 500 })).toBe("failed");
     expect(
-      committeeWriteFailure({ statusCode: 409, problems: [{ code: "unknown" }] }),
+      committeeWriteFailure({
+        statusCode: 409,
+        problems: [{ code: "unknown" }],
+      }),
     ).toBe("failed");
+  });
+
+  it("046 EARS-28: the saved decision's confirmation outlives the card's re-read", () => {
+    const before = committeeDecisionBasis({
+      status: "submitted",
+      revisionDueAt: null,
+    });
+    let state = committeeDecisionInitial(before);
+    state = committeeDecisionReducer(state, {
+      type: "choose",
+      status: "needs_revision",
+    });
+    state = committeeDecisionReducer(state, { type: "type", comment: "Да" });
+    state = committeeDecisionReducer(state, { type: "decision-saved" });
+    // The write changed the status: the re-read brings a new basis.
+    state = committeeDecisionReducer(state, {
+      type: "card-read",
+      basis: committeeDecisionBasis({
+        status: "needs_revision",
+        revisionDueAt: "2026-10-22T21:00:00.000Z",
+      }),
+    });
+    expect(state.notice).toBe("saved");
+    // The next decision starts fresh from the stored status.
+    expect(state.status).toBe("");
+    expect(state.comment).toBe("");
+    expect(state.decisionRefusal).toBeNull();
+  });
+
+  it("046 EARS-28: a status conflict keeps its named refusal and the typed comment across the re-read", () => {
+    let state = committeeDecisionInitial(
+      committeeDecisionBasis({ status: "in_review", revisionDueAt: null }),
+    );
+    state = committeeDecisionReducer(state, {
+      type: "choose",
+      status: "rejected",
+    });
+    state = committeeDecisionReducer(state, {
+      type: "type",
+      comment: "Не по теме конгресса.",
+    });
+    state = committeeDecisionReducer(state, {
+      type: "decision-refused",
+      failure: "status-conflict",
+    });
+    state = committeeDecisionReducer(state, {
+      type: "card-read",
+      basis: committeeDecisionBasis({
+        status: "accepted",
+        revisionDueAt: null,
+      }),
+    });
+    expect(state.decisionRefusal).toBe("status-conflict");
+    expect(state.comment).toBe("Не по теме конгресса.");
+    // The chosen edge may not exist from the new status: the select resets.
+    expect(state.status).toBe("");
+  });
+
+  it("046 EARS-28: a re-read of the same status keeps the draft as typed", () => {
+    const basis = committeeDecisionBasis({
+      status: "submitted",
+      revisionDueAt: null,
+    });
+    let state = committeeDecisionInitial(basis);
+    state = committeeDecisionReducer(state, {
+      type: "choose",
+      status: "accepted",
+    });
+    expect(committeeDecisionReducer(state, { type: "card-read", basis })).toBe(
+      state,
+    );
   });
 
   it("046 EARS-28: the content sections follow the kind's form order and labels", () => {
@@ -242,6 +356,32 @@ describe("046 EARS-35 the revision deadline in the card", () => {
     ).toBeNull();
   });
 
+  it("046 EARS-35: the extension's confirmation outlives the card's re-read", () => {
+    let state = committeeDecisionInitial(
+      committeeDecisionBasis({
+        status: "needs_revision",
+        revisionDueAt: "2026-10-22T21:00:00.000Z",
+      }),
+    );
+    state = committeeDecisionReducer(state, { type: "day", day: "2026-10-30" });
+    state = committeeDecisionReducer(state, {
+      type: "extension-refused",
+      failure: "revision-day-not-later",
+    });
+    state = committeeDecisionReducer(state, { type: "day", day: "2026-11-05" });
+    state = committeeDecisionReducer(state, { type: "extension-saved" });
+    state = committeeDecisionReducer(state, {
+      type: "card-read",
+      basis: committeeDecisionBasis({
+        status: "needs_revision",
+        revisionDueAt: "2026-11-05T21:00:00.000Z",
+      }),
+    });
+    expect(state.notice).toBe("extensionSaved");
+    expect(state.extensionRefusal).toBeNull();
+    expect(state.extendTo).toBe("");
+  });
+
   it("046 EARS-35: only the platform administrator extends, and only a needs_revision submission", () => {
     expect(mayExtendRevision(true, "needs_revision")).toBe(true);
     expect(mayExtendRevision(false, "needs_revision")).toBe(false);
@@ -258,7 +398,9 @@ describe("046 EARS-35 the revision deadline in the card", () => {
     expect(revisionExtensionError("2026-11-23", null, today)).toBe(
       "revision-day-in-past",
     );
-    expect(revisionExtensionError("2026-11-28", "2026-11-25", today)).toBeNull();
+    expect(
+      revisionExtensionError("2026-11-28", "2026-11-25", today),
+    ).toBeNull();
   });
 });
 

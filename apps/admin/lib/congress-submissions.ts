@@ -101,22 +101,49 @@ export function submissionRegistryQuery(
 ): SubmissionRegistryQuery {
   const q = list.q.trim();
   const submitter = filter.submitter.trim();
-  const inverted =
-    filter.sentFrom !== "" &&
-    filter.sentTo !== "" &&
-    filter.sentFrom > filter.sentTo;
   return {
     ...(q ? { q } : {}),
     ...(filter.kind ? { kind: filter.kind } : {}),
     ...(filter.status ? { status: filter.status } : {}),
     ...(submitter ? { submitter } : {}),
-    ...(filter.sentFrom ? { sentFrom: filter.sentFrom } : {}),
-    ...(filter.sentTo && !inverted ? { sentTo: filter.sentTo } : {}),
+    ...appliedSentRange(filter),
     sort: filter.sort,
     order: filter.order,
     page: list.page,
     pageSize: list.pageSize,
   };
+}
+
+/**
+ * The send-date bounds the query actually carries: a range whose end is
+ * before its start is a half-typed range — the route refuses it — so its end
+ * is held back until it reads forward.
+ */
+function appliedSentRange(
+  filter: Pick<SubmissionRegistryFilter, "sentFrom" | "sentTo">,
+): { sentFrom?: string; sentTo?: string } {
+  const inverted =
+    filter.sentFrom !== "" &&
+    filter.sentTo !== "" &&
+    filter.sentFrom > filter.sentTo;
+  return {
+    ...(filter.sentFrom ? { sentFrom: filter.sentFrom } : {}),
+    ...(filter.sentTo && !inverted ? { sentTo: filter.sentTo } : {}),
+  };
+}
+
+/**
+ * The applied-filter chips of the send-date range: only the bounds the query
+ * carries, each day as ДД.ММ.ГГГГ like the rest of the admin.
+ */
+export function submissionSentRangeChips(
+  filter: Pick<SubmissionRegistryFilter, "sentFrom" | "sentTo">,
+): { id: "sentFrom" | "sentTo"; day: string }[] {
+  const applied = appliedSentRange(filter);
+  return (["sentFrom", "sentTo"] as const).flatMap((id) => {
+    const day = applied[id];
+    return day ? [{ id, day: mskDayLabel(day) }] : [];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +203,106 @@ export function committeeWriteFailure(error: unknown): CommitteeWriteFailure {
   if (statusCode === 503) return "unavailable";
   if (statusCode === 400) return "invalid";
   return "failed";
+}
+
+/** A refusal the «Решение» block names: the client's own check or the server's. */
+export type CommitteeDecisionRefusal =
+  CommitteeWriteFailure | CommitteeDecisionError | "dayRequired";
+
+/**
+ * The «Решение» block's state. It lives as long as the card of one submission
+ * is open — NOT per status — because every write and every concurrent-change
+ * refusal re-reads the card: the outcome of that write (its confirmation, or
+ * the named refusal with the comment the member typed) must survive the
+ * re-read that follows it.
+ */
+export interface CommitteeDecisionState {
+  /** The stored status and deadline the controls were built from. */
+  basis: string;
+  status: CongressCommitteeStatus | "";
+  comment: string;
+  extendTo: string;
+  notice: "saved" | "extensionSaved" | null;
+  decisionRefusal: CommitteeDecisionRefusal | null;
+  extensionRefusal: CommitteeDecisionRefusal | null;
+}
+
+export type CommitteeDecisionEvent =
+  | { type: "choose"; status: CongressCommitteeStatus | "" }
+  | { type: "type"; comment: string }
+  | { type: "day"; day: string }
+  | { type: "submit" }
+  | { type: "decision-refused"; failure: CommitteeDecisionRefusal }
+  | { type: "decision-saved" }
+  | { type: "extension-refused"; failure: CommitteeDecisionRefusal }
+  | { type: "extension-saved" }
+  | { type: "card-read"; basis: string };
+
+/** What the decision controls depend on: the stored status and deadline. */
+export function committeeDecisionBasis(
+  card: Pick<CongressSubmissionCard, "status" | "revisionDueAt">,
+): string {
+  return `${card.status}:${card.revisionDueAt ?? ""}`;
+}
+
+export function committeeDecisionInitial(
+  basis: string,
+): CommitteeDecisionState {
+  return {
+    basis,
+    status: "",
+    comment: "",
+    extendTo: "",
+    notice: null,
+    decisionRefusal: null,
+    extensionRefusal: null,
+  };
+}
+
+export function committeeDecisionReducer(
+  state: CommitteeDecisionState,
+  event: CommitteeDecisionEvent,
+): CommitteeDecisionState {
+  switch (event.type) {
+    case "choose":
+      return { ...state, status: event.status };
+    case "type":
+      return { ...state, comment: event.comment };
+    case "day":
+      return { ...state, extendTo: event.day };
+    case "submit":
+      return {
+        ...state,
+        notice: null,
+        decisionRefusal: null,
+        extensionRefusal: null,
+      };
+    case "decision-refused":
+      return { ...state, notice: null, decisionRefusal: event.failure };
+    case "extension-refused":
+      return { ...state, notice: null, extensionRefusal: event.failure };
+    case "decision-saved":
+      return {
+        ...state,
+        status: "",
+        comment: "",
+        notice: "saved",
+        decisionRefusal: null,
+      };
+    case "extension-saved":
+      return {
+        ...state,
+        extendTo: "",
+        notice: "extensionSaved",
+        extensionRefusal: null,
+      };
+    case "card-read":
+      // A new stored status may not offer the chosen edge: the select starts
+      // over. The outcome message and the typed comment stay.
+      return event.basis === state.basis
+        ? state
+        : { ...state, basis: event.basis, status: "", extendTo: "" };
+  }
 }
 
 /** The content sections of each kind, in its form's order. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useReducer, type ReactNode, type Ref } from "react";
 import { useCustom, useCustomMutation, type HttpError } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { KIND_COPY, STATUS_LABEL } from "@ds/congress-submissions";
@@ -24,6 +24,7 @@ import {
 import {
   CONGRESS_COMMITTEE_COMMENT_MAX,
   CongressSubmissionCardSchema,
+  congressStatusNeedsComment,
   instantToMskDay,
   type CongressCommitteeStatus,
   type CongressSubmissionCard,
@@ -31,15 +32,17 @@ import {
 import { formatMskDateTime } from "@/lib/msk";
 import { participantCardFailure } from "@/lib/participant-card";
 import {
+  committeeDecisionBasis,
   committeeDecisionError,
+  committeeDecisionInitial,
+  committeeDecisionReducer,
   committeeTargets,
   committeeWriteFailure,
   mayExtendRevision,
   revisionDeadlineView,
   revisionExtensionError,
   submissionBodySections,
-  type CommitteeDecisionError,
-  type CommitteeWriteFailure,
+  type CommitteeDecisionRefusal,
 } from "@/lib/congress-submissions";
 import { congressSubmissionsUrl } from "@/providers/data-provider";
 
@@ -140,8 +143,9 @@ export function SubmissionCardPanel({
       <div className="flex flex-col gap-6" data-testid="submission-card">
         <CardFacts card={card} />
         <Decision
-          // A new card, or a new status of this one, starts a fresh decision.
-          key={`${card.id}:${card.status}:${card.revisionDueAt ?? ""}`}
+          // A new card starts a fresh decision. A new status of THIS card does
+          // not remount: the write's outcome must outlive its re-read.
+          key={card.id}
           card={card}
           eventId={eventId}
           platformAdmin={platformAdmin}
@@ -298,10 +302,7 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
 }
 
 /** The catalog key of each refusal (problem codes are kebab-case on the wire). */
-const FAILURE_KEY: Record<
-  CommitteeWriteFailure | CommitteeDecisionError | "dayRequired",
-  string
-> = {
+const FAILURE_KEY: Record<CommitteeDecisionRefusal, string> = {
   "status-conflict": "statusConflict",
   "transition-not-allowed": "transitionNotAllowed",
   "not-needs-revision": "notNeedsRevision",
@@ -332,35 +333,49 @@ function Decision({
 }) {
   const t = useTranslations("congressSubmissions");
   const targets = committeeTargets(card.status);
-  const [status, setStatus] = useState<CongressCommitteeStatus | "">("");
-  const [comment, setComment] = useState("");
-  const [extendTo, setExtendTo] = useState("");
-  const [decisionRefusal, setDecisionRefusal] = useState<string | null>(null);
-  const [extensionRefusal, setExtensionRefusal] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const basis = committeeDecisionBasis(card);
+  const [state, dispatch] = useReducer(
+    committeeDecisionReducer,
+    basis,
+    committeeDecisionInitial,
+  );
+  // The card re-read after a write or a concurrent-change refusal: the
+  // controls follow the stored status; the outcome and the comment stay.
+  if (state.basis !== basis) dispatch({ type: "card-read", basis });
+  const {
+    status,
+    comment,
+    extendTo,
+    notice,
+    decisionRefusal,
+    extensionRefusal,
+  } = state;
   const { mutate, mutation } = useCustomMutation();
-  const refusal = (key: keyof typeof FAILURE_KEY) =>
+  const refusal = (key: CommitteeDecisionRefusal) =>
     t(`decision.errors.${FAILURE_KEY[key]}`);
 
-  const onRefused = (set: (text: string) => void) => (error: unknown) => {
-    const failure = committeeWriteFailure(error);
-    if (failure === "forbidden") onForbidden();
-    // A concurrent change won: the card re-reads, so the next decision starts
-    // from the status that is actually stored.
-    if (failure === "status-conflict" || failure === "not-needs-revision") {
-      onWritten();
-    }
-    set(refusal(failure));
-  };
+  const onRefused =
+    (type: "decision-refused" | "extension-refused") => (error: unknown) => {
+      const failure = committeeWriteFailure(error);
+      if (failure === "forbidden") onForbidden();
+      dispatch({ type, failure });
+      // A concurrent change won: the card re-reads, so the next decision
+      // starts from the status that is actually stored.
+      if (failure === "status-conflict" || failure === "not-needs-revision") {
+        onWritten();
+      }
+    };
 
   const submitDecision = () => {
-    setNotice(null);
+    dispatch({ type: "submit" });
     const invalid = committeeDecisionError(status, comment);
     if (invalid || !status) {
-      setDecisionRefusal(refusal(invalid ?? "statusRequired"));
+      dispatch({
+        type: "decision-refused",
+        failure: invalid ?? "statusRequired",
+      });
       return;
     }
-    setDecisionRefusal(null);
     const text = comment.trim();
     mutate(
       {
@@ -369,33 +384,33 @@ function Decision({
         values: {
           status,
           expectedStatus: card.status,
-          ...(text ? { comment: text } : {}),
+          // Only the statuses whose change carries the comment send one.
+          ...(congressStatusNeedsComment(status) ? { comment: text } : {}),
         },
         successNotification: false,
         errorNotification: false,
       },
       {
         onSuccess: () => {
-          setNotice(t("decision.saved"));
+          dispatch({ type: "decision-saved" });
           onWritten();
         },
-        onError: onRefused(setDecisionRefusal),
+        onError: onRefused("decision-refused"),
       },
     );
   };
 
   const submitExtension = () => {
-    setNotice(null);
+    dispatch({ type: "submit" });
     const invalid = revisionExtensionError(
       extendTo,
       card.revisionLastDay,
       instantToMskDay(new Date()),
     );
     if (invalid) {
-      setExtensionRefusal(refusal(invalid));
+      dispatch({ type: "extension-refused", failure: invalid });
       return;
     }
-    setExtensionRefusal(null);
     mutate(
       {
         url: congressSubmissionsUrl.revisionDeadline(eventId, card.id),
@@ -406,16 +421,22 @@ function Decision({
       },
       {
         onSuccess: () => {
-          setNotice(t("decision.extensionSaved"));
+          dispatch({ type: "extension-saved" });
           onWritten();
         },
-        onError: onRefused(setExtensionRefusal),
+        onError: onRefused("extension-refused"),
       },
     );
   };
 
   const pending = mutation.isPending;
-  const commentNeeded = status === "rejected" || status === "needs_revision";
+  // The comment field exists only where the status change carries it.
+  const commentTaken = status !== "" && congressStatusNeedsComment(status);
+  const decisionRefused = decisionRefusal ? (
+    <Alert variant="danger" data-testid="submission-decision-refused">
+      {refusal(decisionRefusal)}
+    </Alert>
+  ) : null;
 
   return (
     <section
@@ -435,16 +456,20 @@ function Decision({
           role="status"
           data-testid="submission-decision-saved"
         >
-          {notice}
+          {t(`decision.${notice}`)}
         </Alert>
       ) : null}
       {targets.length === 0 ? (
-        <p
-          className="text-sm text-muted-foreground"
-          data-testid="submission-decision-withdrawn"
-        >
-          {t("decision.withdrawn")}
-        </p>
+        <>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="submission-decision-withdrawn"
+          >
+            {t("decision.withdrawn")}
+          </p>
+          {/* A concurrent withdrawal refused the write: the reason stays. */}
+          {decisionRefused}
+        </>
       ) : (
         <form
           className="flex flex-col gap-4"
@@ -460,7 +485,10 @@ function Decision({
               value={status}
               data-testid="submission-decision-status"
               onChange={(event) =>
-                setStatus(event.target.value as CongressCommitteeStatus | "")
+                dispatch({
+                  type: "choose",
+                  status: event.target.value as CongressCommitteeStatus | "",
+                })
               }
             >
               <option value="">{t("decision.statusPlaceholder")}</option>
@@ -471,27 +499,27 @@ function Decision({
               ))}
             </NativeSelect>
           </Field>
-          <Field
-            id="submission-decision-comment"
-            label={t("decision.comment")}
-            hint={t("decision.commentHint")}
-          >
-            <Textarea
+          {commentTaken ? (
+            <Field
               id="submission-decision-comment"
-              value={comment}
-              rows={5}
-              maxLength={CONGRESS_COMMITTEE_COMMENT_MAX}
-              aria-required={commentNeeded}
-              aria-describedby="submission-decision-comment-hint"
-              data-testid="submission-decision-comment"
-              onChange={(event) => setComment(event.target.value)}
-            />
-          </Field>
-          {decisionRefusal ? (
-            <Alert variant="danger" data-testid="submission-decision-refused">
-              {decisionRefusal}
-            </Alert>
+              label={t("decision.comment")}
+              hint={t("decision.commentHint")}
+            >
+              <Textarea
+                id="submission-decision-comment"
+                value={comment}
+                rows={5}
+                maxLength={CONGRESS_COMMITTEE_COMMENT_MAX}
+                aria-required
+                aria-describedby="submission-decision-comment-hint"
+                data-testid="submission-decision-comment"
+                onChange={(event) =>
+                  dispatch({ type: "type", comment: event.target.value })
+                }
+              />
+            </Field>
           ) : null}
+          {decisionRefused}
           <div>
             <Button
               type="submit"
@@ -524,12 +552,14 @@ function Decision({
               value={extendTo}
               aria-describedby="submission-extension-day-hint"
               data-testid="submission-extension-day"
-              onChange={(event) => setExtendTo(event.target.value)}
+              onChange={(event) =>
+                dispatch({ type: "day", day: event.target.value })
+              }
             />
           </Field>
           {extensionRefusal ? (
             <Alert variant="danger" data-testid="submission-extension-refused">
-              {extensionRefusal}
+              {refusal(extensionRefusal)}
             </Alert>
           ) : null}
           <div>

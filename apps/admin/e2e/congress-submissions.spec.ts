@@ -121,7 +121,25 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     await expect(page.getByTestId("submission-card-status")).toHaveText(
       "На рассмотрении",
     );
+    // The confirmation outlives the card's re-read after the write.
+    await expect(page.getByTestId("submission-decision-saved")).toContainText(
+      "Решение сохранено.",
+    );
     await withdrawSubmission(author, withdrawn);
+    // The card still shows «На рассмотрении»: a decision made on it races the
+    // withdrawal and is refused by name, and the card re-reads the truth.
+    await page
+      .getByTestId("submission-decision-status")
+      .selectOption("rejected");
+    await page.getByTestId("submission-decision-comment").fill(comment);
+    await page.getByTestId("submission-decision-submit").click();
+    await expect(page.getByTestId("submission-card-status")).toHaveText(
+      "Отозвана",
+    );
+    await expect(page.getByTestId("submission-decision-refused")).toContainText(
+      "Статус заявки уже изменился. Карточка обновлена — проверьте и повторите.",
+    );
+    await expect(page.getByTestId("submission-decision-saved")).toHaveCount(0);
 
     const committee = await bootstrapCommitteeAccount(ADMIN_ORIGIN);
     await bindCommitteeToEvent(committee.email, slugA);
@@ -223,6 +241,17 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
       "На доработке",
     ]);
 
+    // The comment field exists only for the statuses that carry it.
+    await expect(member.getByTestId("submission-decision-comment")).toHaveCount(
+      0,
+    );
+    await member
+      .getByTestId("submission-decision-status")
+      .selectOption("accepted");
+    await expect(member.getByTestId("submission-decision-comment")).toHaveCount(
+      0,
+    );
+
     // Reject path: «Отклонена» without a comment is refused before any write.
     await member
       .getByTestId("submission-decision-status")
@@ -256,6 +285,10 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     );
     await expect(member.getByTestId("submission-card-comment")).toHaveText(
       comment,
+    );
+    // The confirmation outlives the card's re-read after the write.
+    await expect(member.getByTestId("submission-decision-saved")).toContainText(
+      "Решение сохранено.",
     );
     await expect(member.getByTestId("submission-card-revision")).toHaveText(
       /^до \d{2}\.\d{2}\.\d{4}, 23:59 МСК$/,
@@ -320,6 +353,9 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     const [y, m, d] = next.split("-");
     await expect(page.getByTestId("submission-card-revision")).toHaveText(
       `до ${d}.${m}.${y}, 23:59 МСК`,
+    );
+    await expect(page.getByTestId("submission-decision-saved")).toContainText(
+      "Срок доработки продлён.",
     );
     await evidenceShot(page, "card-extension", {
       prepare: () =>

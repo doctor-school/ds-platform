@@ -34,6 +34,7 @@ import {
   submissionCardHref,
   submissionRegistryCells,
   submissionRegistryQuery,
+  submissionSentRangeChips,
   type SubmissionRegistryCells,
   type SubmissionRegistryFilter,
 } from "@/lib/congress-submissions";
@@ -355,24 +356,13 @@ export default function CongressSubmissionsPage() {
           },
         ]
       : []),
-    ...(filter.sentFrom
-      ? [
-          {
-            id: "sentFrom",
-            label: t("filters.chips.sentFrom", { day: filter.sentFrom }),
-            onRemove: () => changeFilter({ sentFrom: "" }),
-          },
-        ]
-      : []),
-    ...(filter.sentTo
-      ? [
-          {
-            id: "sentTo",
-            label: t("filters.chips.sentTo", { day: filter.sentTo }),
-            onRemove: () => changeFilter({ sentTo: "" }),
-          },
-        ]
-      : []),
+    // Only the bounds the query carries (an inverted range holds its end
+    // back), each day as ДД.ММ.ГГГГ.
+    ...submissionSentRangeChips(filter).map(({ id, day }) => ({
+      id,
+      label: t(`filters.chips.${id}`, { day }),
+      onRemove: () => changeFilter({ [id]: "" }),
+    })),
   ];
 
   return (

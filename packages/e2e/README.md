@@ -330,3 +330,23 @@ separate direct code-link login journey remains unchanged.
 ```sh
 pnpm e2e:stage pr-<N> --project academy --grep "The typed address survives a switch between the sign-in methods"
 ```
+
+### Cold email confirmation (003 EARS-39/41)
+
+`A cold verification step still signs in by the code` registers a unique owned
+account with the supported `/account` return target, then genuinely reloads the
+verification document before entering its fresh six-digit mail code. It asserts
+one code-only confirmation request, the same email-verified profile and secure
+host-only session at `/account`, no registration or login replay, and no second
+addressed mail for 15 seconds. A separate clean guest browser then submits the
+original registration password and proves its generic refusal without private
+session or profile access.
+
+`steps/cold-verification.steps.ts` reuses the registration, mail, secret-safe
+input and session helpers. Only the hard-reload trigger is claimed here; the
+existing auth-flow cold-state and IdP password-invalidation unit tests remain.
+The test revokes its owned session and closes both contexts on completion.
+
+```sh
+pnpm e2e:stage pr-<N> --project academy --grep "A cold verification step still signs in by the code"
+```

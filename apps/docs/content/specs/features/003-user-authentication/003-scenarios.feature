@@ -768,14 +768,20 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the password field is masked again
     And revealing emitted no network request, log entry, or storage write
 
-  @EARS-39 @EARS-41 @happy
+  @EARS-39 @EARS-41 @happy @cold-email-confirmation
   Scenario: A cold verification step still signs in by the code
-    Given a registrant who has submitted the registration form and is on the verification step
-    And the in-memory password hold is lost to a hard reload, a restored tab, or an expired hold
-    When the registrant submits a valid verification code
-    Then the verification completes and a BFF session is established from the code
-    And the registrant is returned to the return target signed in, never routed to /login
-    And the password typed at registration is invalidated, leaving a code-only account until a reset
+    Given a uniquely registered Academy account awaits its fresh unconsumed confirmation code with the account return target
+    When the registrant hard reloads the Academy verification step before entering any code
+    Then the reloaded step keeps the same address and account return target without private access
+    When the registrant enters that same delivered six-digit code once on the cold step
+    Then the cold verification submits only that address and code once and opens the verified owned account with a secure session
+    And the verification journey never visits login, replays registration, or requests another code mail
+    When a separate guest browser submits the original registration password for that account
+    Then that password is refused generically and the guest has no private session or profile access
+    # Hard reload is the actual cold-state trigger; restored tabs and hold expiry
+    # remain in packages/auth-flow/src/verify/verify-door.test.tsx EARS-39/41.
+    # Internal password invalidation: apps/api/src/auth/idp/zitadel.idp.spec.ts
+    # EARS-41; retain both mocked contracts, which are not this live browser proof.
 
   @EARS-39 @EARS-41 @failure @email-confirmation
   Scenario: A refused code keeps the registrant on the verification step

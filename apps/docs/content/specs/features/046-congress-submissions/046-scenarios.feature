@@ -1,6 +1,6 @@
 @feature:046 @track:doctor @host:doctor
 Feature: 046 — Congress submissions: oral talks, posters and abstracts
-  As a registered congress participant, a program committee member, a congress partner and a platform administrator
+  As a registered congress participant, a program committee member and a platform administrator
   I want submissions of three kinds to be prepared, sent, reviewed and read in one platform cabinet and one admin registry
   So that every submission belongs to a registered participant, deadlines and limits are settings, and the author always sees the committee's decision
 
@@ -215,14 +215,6 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Then the poster's revision deadline is stored as 2027-03-04T00:00+03:00 and the change is recorded with the administrator as the actor
     And the author can edit and send the poster again
     And the same extension from a committee member, or with a day not after the current deadline, is refused
-
-  @EARS-32
-  Scenario: Congress partner reads without acting
-    Given a principal holding only "congress-partner" bound to the 2027 congress
-    When the partner opens a poster in the registry
-    Then the card shows the content, the authors and the submitter's contacts
-    And the card shows no status control, no committee comment and no age
-    And a status-change request from the partner is refused
 
   @EARS-33
   Scenario: Reminder before the abstract deadline

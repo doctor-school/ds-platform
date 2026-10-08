@@ -136,8 +136,47 @@ function isChangesetPath(path: string): boolean {
   return /^\.changeset\/[^/]+\.md$/.test(path);
 }
 
+/** #2699: PR evidence captures are evidence, not CI config — exempt like tests. */
+function isUiEvidencePath(path: string): boolean {
+  return /^\.github\/ui-evidence\//.test(path);
+}
+
+/**
+ * #2699: files that change nothing a user runs — tests, changesets, evidence
+ * captures, docs content (specs / ADRs / skills / product docs) and `.feature`
+ * files. The Stage-B guard routes on the remaining (runtime) files and carries
+ * a recorded GO over a delta made only of these.
+ */
+export function isNonRuntimePath(path: string): boolean {
+  return (
+    isTestPath(path) ||
+    isChangesetPath(path) ||
+    isUiEvidencePath(path) ||
+    /^apps\/docs\/content\/.+\.(?:mdx?|feature)$/.test(path) ||
+    /\.feature$/.test(path)
+  );
+}
+
+/**
+ * #2699: paths whose behaviour depends on the live environment (identity,
+ * mail, schema, infrastructure, captcha), so a lead certification for them
+ * keeps the live slot harness report: auth paths as the ship rules read them,
+ * migrations, infra, the mailer, IdP/captcha tooling.
+ */
+export function isEnvironmentSensitivePath(path: string): boolean {
+  if (isNonRuntimePath(path)) return false;
+  return (
+    path.split("/").some((segment) => /auth/i.test(segment)) ||
+    /(?:^|\/)migrations\//.test(path) ||
+    /^infra\//.test(path) ||
+    /^apps\/api\/src\/mailer\//.test(path) ||
+    /(?:^|[/._-])(?:idp|zitadel|captcha)/i.test(path)
+  );
+}
+
 export function isAskPath(path: string): boolean {
   if (API_COPY_ALLOWLIST.includes(path)) return false;
+  if (isUiEvidencePath(path)) return false;
   return ASK_PATH_RES.some((re) => re.test(path));
 }
 
@@ -162,7 +201,10 @@ export function classifyChangeTier(
       (p): p is string => typeof p === "string" && p.length > 0,
     ))
       if (isAskPath(path)) ask.push(`ask path: ${path}`);
-    const exempt = isTestPath(file.path) || isChangesetPath(file.path);
+    const exempt =
+      isTestPath(file.path) ||
+      isChangesetPath(file.path) ||
+      isUiEvidencePath(file.path);
     if (exempt) {
       if (file.status !== "modified" && file.status !== "added")
         show.push(`${file.status || "unknown-status"} file: ${file.path}`);

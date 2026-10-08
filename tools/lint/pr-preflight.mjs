@@ -95,8 +95,14 @@ export const GUARDS = [
  * approval, which happens just before merge, so at create time there is nothing
  * to check yet.
  */
+// #2699: the pre-CI pass tolerates a still-running CI e2e check for a
+// slot-free lead certification; the post-CI binding pass requires it green.
 export const PRE_CI_MERGE_GUARDS = [
-  { name: "stage-b", file: "stage-b-lint.ts" },
+  {
+    name: "stage-b",
+    file: "stage-b-lint.ts",
+    env: { STAGE_B_CI_PHASE: "pre-ci" },
+  },
 ];
 export const POST_CI_MERGE_GUARDS = [
   { name: "stage-b", file: "stage-b-lint.ts" },

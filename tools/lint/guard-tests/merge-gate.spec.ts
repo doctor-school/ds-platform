@@ -14,6 +14,7 @@ import {
   isWorktreeCwd,
   latestRunsByName,
   parseModeAExempt,
+  splitDiffByFile,
   verifyChangeTierShip,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
@@ -798,5 +799,58 @@ describe("merge-gate verifyChangeTierShip() (#2584)", () => {
     expect(
       verifyChangeTierShip([copyFile], meta(shipBody, 1), head, "").ok,
     ).toBe(false);
+  });
+});
+
+describe("#2699: splitDiffByFile — a PR's own per-file patches, comparable across a rebase", () => {
+  const diff = (indexLine: string, hunk: string) =>
+    [
+      "diff --git a/apps/portal/src/x.tsx b/apps/portal/src/x.tsx",
+      indexLine,
+      "--- a/apps/portal/src/x.tsx",
+      "+++ b/apps/portal/src/x.tsx",
+      `${hunk} export function X() {`,
+      "-  return 1;",
+      "+  return 2;",
+      "diff --git a/.changeset/gone.md b/.changeset/gone.md",
+      "deleted file mode 100644",
+      "index 1111111..0000000",
+      "--- a/.changeset/gone.md",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-x",
+      "",
+    ].join("\n");
+  it("keys each file, a deletion by its pre-image path", () => {
+    expect([
+      ...splitDiffByFile(
+        diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@"),
+      ).keys(),
+    ]).toEqual(["apps/portal/src/x.tsx", ".changeset/gone.md"]);
+  });
+  it("a rebase that only moved blob ids and hunk line numbers yields identical patches", () => {
+    const before = splitDiffByFile(
+      diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@"),
+    );
+    const after = splitDiffByFile(
+      diff("index 9999999..8888888 100644", "@@ -40,1 +41,1 @@"),
+    );
+    expect(after.get("apps/portal/src/x.tsx")).toBe(
+      before.get("apps/portal/src/x.tsx"),
+    );
+  });
+  it("a changed line in the patch differs", () => {
+    const before = splitDiffByFile(
+      diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@"),
+    );
+    const after = splitDiffByFile(
+      diff("index abc1234..def5678 100644", "@@ -3,1 +3,1 @@").replace(
+        "return 2",
+        "return 3",
+      ),
+    );
+    expect(after.get("apps/portal/src/x.tsx")).not.toBe(
+      before.get("apps/portal/src/x.tsx"),
+    );
   });
 });

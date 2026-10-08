@@ -91,12 +91,13 @@ export async function MonthView({
           nextYearLabel={t.nextYear}
         />
       </div>
-      <Button asChild variant="outline" size="icon">
+      {/* Default size, not `icon`: the four toolbar controls share one height (004 owner verdict #6). */}
+      <Button asChild variant="outline">
         <Link href={at(prev)} aria-label={t.prevMonth} data-testid="month-prev">
           <span aria-hidden="true">‹</span>
         </Link>
       </Button>
-      <Button asChild variant="outline" size="icon">
+      <Button asChild variant="outline">
         <Link href={at(next)} aria-label={t.nextMonth} data-testid="month-next">
           <span aria-hidden="true">›</span>
         </Link>

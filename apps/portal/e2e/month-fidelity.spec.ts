@@ -5,7 +5,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * `events-feed-month.dc.html`, design §5.4). Drives the DEV-STAND-gated live portal
  * (guest, no session — the month projection is public) at BOTH breakpoints ×
  * BOTH themes, asserting the canvas STRUCTURE rather than pixels: the 7-column
- * desktop grid + its weekday header + state legend + «Неделя / Месяц» switcher;
+ * desktop grid + its weekday header + state legend + «← Лента событий» switch link;
  * the mobile dot-grid + selected-day agenda + day selection; the live signal
  * carried in text, never colour-only. `test.skip`s on a bare CI run (no
  * `E2E_PORTAL_URL`), like the sibling live-stand specs.
@@ -132,30 +132,23 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await expect(grid).toBeVisible();
       await expect(grid.locator("a[href^='/webinars/']").first()).toBeVisible();
 
-      // The month heading (МСК, capitalised — «<Месяц> <год>»).
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // The displayed month (МСК, capitalised — «<Месяц> <год>») on the picker trigger.
+      await expect(page.getByTestId("month-toolbar").locator("summary")).toBeVisible();
 
       // The state legend — the three labelled swatches (colour is never the only
-      // cue). Scoped to the legend container: the «В эфире» label also appears as
-      // the sr-only text on every live pill, so a page-wide match is ambiguous
-      // when the month carries live events.
+      // cue). Scoped to the legend container: the «Идёт сейчас» label also
+      // appears on every live pill, so a page-wide match is ambiguous when the
+      // month carries live events (gate §4.3 D6 legend copy).
       const legend = grid.getByTestId("grid-legend");
-      await expect(legend.getByText("В эфире")).toBeVisible();
-      await expect(legend.getByText("Запланирован")).toBeVisible();
-      await expect(legend.getByText("Прошёл / пусто")).toBeVisible();
+      await expect(legend.getByText("Идёт сейчас")).toBeVisible();
+      await expect(legend.getByText("Запланировано")).toBeVisible();
+      await expect(legend.getByText("Прошло")).toBeVisible();
 
-      // The «Неделя / Месяц» switcher — a real link back to the week listing + the
-      // active pane. The «Неделя» link carries the displayed month so the week↔month
-      // round-trip is loss-free (EARS-18, #1051) — `/webinars?month=YYYY-MM`.
-      const switcher = page.getByTestId("view-switcher");
-      await expect(switcher.getByRole("link", { name: "Неделя" })).toHaveAttribute(
-        "href",
-        /^\/webinars\?month=\d{4}-\d{2}$/,
-      );
-      await expect(switcher.getByText("Месяц")).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
+      // The head switch link back to the feed (gate row 51) — the ONE codec drops
+      // only `view`, so the current month (no `month` param) returns to the bare feed.
+      const toFeed = page.getByTestId("events-view-switch");
+      await expect(toFeed).toHaveText("← Лента событий");
+      await expect(toFeed).toHaveAttribute("href", /^\/webinars(\?month=\d{4}-\d{2})?$/);
 
       // Today is outlined + labelled «· сегодня» in the grid (independent of seed).
       await expect(grid.getByText(/· сегодня/)).toBeVisible();
@@ -166,7 +159,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       ).toBeVisible();
     });
 
-    test(`EARS-19: canvas scale invariants — 11px pills, 118px cells, 1240px grid column, header/hero one blue, toolbar on hero (${theme})`, async ({
+    test(`EARS-19: canvas scale invariants — 11px pills, 118px cells, 300px column + month view span the 1240px content column, header/hero one blue (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -217,29 +210,18 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         ),
       ).toBe("118px");
 
-      // Page column — canvas line 44: `main` caps at 1240px of CONTENT with
-      // the gutter outside (content-box). Tailwind preflight is border-box, so
-      // the Container `calendar` cap is 1336px (1240 + 2 × 48px desktop-max
-      // gutter, #1080 rework #3) and the canvas invariant is the GRID CONTENT
-      // spanning the full 1240px at ≥1336px viewports.
+      // Page column — `events-feed.dc.html` «боковая колонка» (:45): the 300px
+      // column (filter only in the month view) beside the month view; together
+      // they span the 1240px content column at ≥1336px viewports (gate row 52).
       const toolbar = page.getByTestId("month-toolbar");
+      const column = await page.getByTestId("events-column").boundingBox();
+      const gridBox = await grid.boundingBox();
+      expect(column).not.toBeNull();
+      expect(gridBox).not.toBeNull();
+      expect(column!.width).toBe(300);
       expect(
-        await toolbar.evaluate(
-          (el) => getComputedStyle(el.parentElement!).maxWidth,
-        ),
-      ).toBe("1336px");
-      const gridWidth = await grid.evaluate(
-        (el) => el.getBoundingClientRect().width,
-      );
-      expect(Math.abs(gridWidth - 1240)).toBeLessThanOrEqual(0.5);
-
-      // Toolbar sits ON the hero band — canvas line 42 / 289: `main` pulls up
-      // by 60px on desktop, so the toolbar's top edge overlaps the hero.
-      const heroBox = await page.locator("main header").boundingBox();
-      const toolbarBox = await toolbar.boundingBox();
-      expect(heroBox).not.toBeNull();
-      expect(toolbarBox).not.toBeNull();
-      expect(toolbarBox!.y).toBeLessThan(heroBox!.y + heroBox!.height - 1);
+        Math.abs(gridBox!.x + gridBox!.width - column!.x - 1240),
+      ).toBeLessThanOrEqual(0.5);
 
       // Trigger contrast (owner verdict #1, #1052): «Июль 2026 ▾» reads as a WHITE
       // bordered control on the navy hero — the Button `outline` surface (2px
@@ -316,18 +298,18 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       // pill (the seed carries a live event today).
       const livePill = grid
         .locator("a[href^='/webinars/']")
-        .filter({ hasText: "В эфире" })
+        .filter({ hasText: "Идёт сейчас" })
         .first();
       await expect(livePill).toBeVisible();
       expect(
         await livePill.evaluate((el) => getComputedStyle(el).fontWeight),
       ).toBe("700");
 
-      // Hero parity — canvas lines 35–38: no «МЕСЯЦ» kicker above the h1, the
-      // right-side uppercase tagline present.
-      const hero = page.locator("main header");
-      await expect(hero.getByText(/^месяц$/i)).toHaveCount(0);
-      await expect(hero.getByText("Врачи учат врачей")).toBeVisible();
+      // Head parity — the month view shares the feed's canvas head (gate row 50):
+      // no «МЕСЯЦ» kicker, no Academy hero tagline.
+      const head = page.locator('[data-feed-block="head"]');
+      await expect(head.getByText(/^месяц$/i)).toHaveCount(0);
+      await expect(page.getByText("Врачи учат врачей")).toHaveCount(0);
 
       // Legend row — canvas line 155 + owner rule (#1052 verdict #2): the
       // bottom-right accent link is ALWAYS the displayed month + 1, rendered
@@ -453,11 +435,10 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         "aria-selected",
         "true",
       );
-      // The month view is one link away from the head until PR 2.5.
-      await expect(head.getByTestId("events-month-view-link")).toHaveAttribute(
-        "href",
-        "/webinars?view=month",
-      );
+      // The month view is one link away from the head (gate row 51).
+      const toMonth = head.getByTestId("events-view-switch");
+      await expect(toMonth).toHaveText("Календарь на месяц →");
+      await expect(toMonth).toHaveAttribute("href", "/webinars?view=month");
 
       // The Academy hero taglines leave the head (row 50) and the cursor-era
       // in-list tabs and «Неделя / Месяц» switcher are gone from the feed view.
@@ -540,13 +521,13 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       // `<details>` wrapper stretched under the toolbar's `items-stretch` while
       // the summary sat at its own content height (owner verdict #6 on #1052).
       const heights = await toolbar.evaluate((root) => {
-        // The picker trigger (`<summary>`) + the three outline Button anchors that
-        // are DIRECT children of the toolbar row — `:scope > a.border-2` excludes
-        // the picker popover's own month-cell anchors (also `border-2`, nested
-        // inside the `<details>`).
+        // The picker trigger (`<summary>`) + the three outline Button anchors,
+        // by their own test ids (the picker popover's month-cell anchors excluded).
         const els = [
           root.querySelector("summary"),
-          ...root.querySelectorAll(":scope > a.border-2"),
+          ...["month-prev", "month-next", "month-today"].map((id) =>
+            root.querySelector(`[data-testid="${id}"]`),
+          ),
         ].filter(Boolean) as HTMLElement[];
         return els.map(
           (el) => Math.round(el.getBoundingClientRect().height * 100) / 100,

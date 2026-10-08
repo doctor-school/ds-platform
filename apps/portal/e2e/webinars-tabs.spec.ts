@@ -1,42 +1,44 @@
 import { expect, test } from "@playwright/test";
 
+/**
+ * 004 EARS-11 — the feed ↔ month round-trip on the Academy mount keeps the tense
+ * and every applied facet on the ONE codec (gate §2.5 row 51, §4.3 D1). An
+ * unknown topic slug is a valid facet value (empty result, not a 400), so the
+ * round-trip is seed-independent.
+ */
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
 
 test.skip(!process.env.E2E_PORTAL_URL, "requires a live portal");
+test.use({ viewport: { width: 1440, height: 900 } });
 
-const upcomingTab = (page: import("@playwright/test").Page) =>
-  page.getByTestId("events-tense-tabs").getByRole("tab", { name: "Будущие" });
+const tab = (page: import("@playwright/test").Page, name: string) =>
+  page.getByTestId("events-tense-tabs").getByRole("tab", { name });
 
-test("EARS-11: the feed to month round-trip preserves facet state", async ({
+test("EARS-11: the feed to month round-trip preserves tense and facet state", async ({
   page,
 }) => {
-  await page.goto(`${BASE}/webinars?specialty=cardiology`);
-  await expect(upcomingTab(page)).toHaveAttribute("aria-selected", "true");
+  await page.goto(`${BASE}/webinars?tense=past&topic=kardiologiya`);
+  await expect(tab(page, "Прошедшие")).toHaveAttribute("aria-selected", "true");
 
-  await page.getByTestId("events-month-view-link").click();
+  await page.getByTestId("events-view-switch").click();
   await expect(page).toHaveURL(/view=month/);
-  await expect(page).toHaveURL(/specialty=cardiology/);
+  await expect(page).toHaveURL(/topic=kardiologiya/);
 
   const firstMonth = new URL(page.url()).searchParams.get("month");
-  const nextMonthLink = page.getByRole("link", { name: /Следующий месяц/ });
-  const nextMonthHref = await nextMonthLink.getAttribute("href");
-  const targetMonth = new URL(nextMonthHref!, BASE).searchParams.get("month");
+  const next = page.getByTestId("month-next");
+  const targetMonth = new URL((await next.getAttribute("href"))!, BASE).searchParams.get(
+    "month",
+  );
   expect(targetMonth).toBeTruthy();
   expect(targetMonth).not.toBe(firstMonth);
-  await nextMonthLink.click();
-  await expect
-    .poll(() => new URL(page.url()).searchParams.get("month"))
-    .toBe(targetMonth);
-  const pagedMonth = new URL(page.url()).searchParams.get("month");
-  expect(pagedMonth).not.toBe(firstMonth);
-  await expect(page).toHaveURL(/specialty=cardiology/);
+  await next.click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("month")).toBe(targetMonth);
+  await expect(page).toHaveURL(/topic=kardiologiya/);
 
-  await page
-    .getByTestId("month-toolbar")
-    .getByRole("link", { name: /Неделя/ })
-    .click();
+  await page.getByTestId("events-view-switch").click();
   await expect(page).not.toHaveURL(/view=month/);
-  await expect(page).toHaveURL(/specialty=cardiology/);
-  expect(new URL(page.url()).searchParams.get("month")).toBe(pagedMonth);
-  await expect(upcomingTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/topic=kardiologiya/);
+  await expect(page).toHaveURL(/tense=past/);
+  expect(new URL(page.url()).searchParams.get("month")).toBe(targetMonth);
+  await expect(tab(page, "Прошедшие")).toHaveAttribute("aria-selected", "true");
 });

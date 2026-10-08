@@ -120,7 +120,7 @@ When(
       if (request.method() !== "POST") return;
       const path = new URL(request.url()).pathname;
       if (path === "/v1/auth/verify") state.verificationRequests += 1;
-      if (path === "/v1/auth/login" || path.startsWith("/v1/auth/otp/"))
+      if (path === "/v1/auth/login" || path.startsWith("/v1/auth/login/"))
         state.extraLoginRequests += 1;
     });
     const verified = state.page

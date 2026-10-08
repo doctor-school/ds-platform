@@ -94,8 +94,10 @@ Order is mandatory: the API startup reconciler compares the Zitadel profile
    emit a duplicate password column (SQLSTATE 42601, still present in v4.17.3
    `reduceSMTPConfigChanged`). Read back via `POST /admin/v1/smtp/_search` and
    check `projections.failed_events2` for SMTP rows. The secret never appears
-   on a command line or in argv: build the password PUT body from stdin
-   (`jq -n --arg … | curl --data @-`, the value read from the key file).
+   on a command line or in argv (`jq --arg` puts it in jq's argv): build each
+   PUT body from stdin, e.g. `jq -Rn '{password: input}' < <secret-line file>`
+   (a `0600` temp file) piped to `curl --data @-`; build the user PUT body the
+   same way for consistency.
 4. Back up `api.env`, replace both values, keep it `0600` root, then run
    `sudo docker compose up -d --no-deps api` in
    `/home/deploy/ds-platform/infra/deploy/compose/api-prod`. The replacement

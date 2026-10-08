@@ -2828,6 +2828,7 @@ export interface components {
             /** @enum {string} */
             tense: "upcoming" | "past";
             to: string;
+            today: string;
             totalCount: number;
         };
         DoctorEventsMonthGridDto: {
@@ -3199,6 +3200,7 @@ export interface components {
                 nextTo: string | null;
                 remaining: number;
                 to: string;
+                today: string;
             };
             pagination: {
                 hasMore: boolean;

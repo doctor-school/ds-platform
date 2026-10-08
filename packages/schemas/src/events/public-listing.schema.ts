@@ -143,11 +143,14 @@ export const PublicEventListingPageSchema = z.object({
    * URL — `nextTo` on «Будущие», `nextFrom` (an older `from`) on
    * «Прошедшие», each `null` when nothing lies beyond; `remaining`, the
    * matching events beyond the extent; and `nextBatch`, the ones the next step
-   * adds. Same names and semantics as the doctor feed's `from` / `to` /
+   * adds; and `today`, the api's day the window resolved against (D10). Same
+   * names and semantics as the doctor feed's `today` / `from` / `to` /
    * `nextTo` / `nextFrom` / `remaining` / `nextBatch`.
    */
   horizon: z
     .object({
+      /** Wave-2 gate §4.3 D10 — the api's «сегодня» (МСК), the doctor feed's `today`. */
+      today: DoctorEventsFeedDaySchema,
       from: DoctorEventsFeedDaySchema,
       to: DoctorEventsFeedDaySchema,
       nextTo: DoctorEventsFeedDaySchema.nullable(),

@@ -11,11 +11,11 @@ import {
   type BlockRead,
   type EventsFeedPage,
   emptyFeedState,
+  pageTodayOf,
 } from "../model/feed";
 import { dayHref, monthHref } from "../model/feed-url";
 import {
   buildMonthGrid,
-  currentMskMonth,
   formatMonthTitle,
   isMonthFuture,
   shiftMonth,
@@ -60,7 +60,11 @@ export async function MonthView({
   const t = LISTING_COPY.month;
   const noun = eventNounOf(config.copy);
   const listing = config.routes.listing;
-  const displayed = month ?? currentMskMonth();
+  // D10 — the page's one today is the feed read's: the default month, the
+  // grid's today and past days, «архив» and the day-href tense boundary.
+  const read = await feed;
+  const today = pageTodayOf(read);
+  const displayed = month ?? today.slice(0, 7);
   const at = (target: string | undefined) => monthHref(listing, raw, target);
   const year = Number(displayed.slice(0, 4));
   const years = Array.from(
@@ -68,9 +72,8 @@ export async function MonthView({
     (_, i) => String(year - PICKER_YEAR_RADIUS + i),
   );
 
-  const [entries, read, counts] = await Promise.all([
+  const [entries, counts] = await Promise.all([
     fetchMonthEntries(config, raw, displayed, request),
-    feed,
     Promise.all(
       years.map(async (y) => {
         const read = await fetchMonthCounts(config, raw, y, request);
@@ -92,7 +95,7 @@ export async function MonthView({
           triggerLabel={formatMonthTitle(displayed)}
           pickerLabel={t.pickerLabel}
           initialYear={String(year)}
-          years={pickerYearsOf(counts, displayed, noun, at)}
+          years={pickerYearsOf(counts, displayed, noun, at, today)}
           prevYearHref={at(shiftMonth(displayed, -12 * (PICKER_YEAR_RADIUS + 1)))}
           nextYearHref={at(shiftMonth(displayed, 12 * (PICKER_YEAR_RADIUS + 1)))}
           prevYearLabel={t.prevYear}
@@ -138,7 +141,7 @@ export async function MonthView({
         />
       );
     }
-    const grid = buildMonthGrid({ month: displayed, entries: entries.value });
+    const grid = buildMonthGrid({ month: displayed, entries: entries.value, today });
     const horizon = read.ok ? read.value.horizon : undefined;
     const hrefs: MonthHrefs = {
       event: Object.fromEntries(
@@ -149,7 +152,7 @@ export async function MonthView({
           .flat()
           .flatMap((cell) =>
             cell.inMonth && cell.isoDay !== null
-              ? [[cell.isoDay, dayHref(listing, raw, cell.isoDay, horizon)]]
+              ? [[cell.isoDay, dayHref(listing, raw, cell.isoDay, horizon, today)]]
               : [],
           ),
       ),
@@ -165,7 +168,7 @@ export async function MonthView({
             liveLabel={t.liveLabel}
             legend={{ live: t.legendLive, planned: t.legendPlanned, past: t.legendPast }}
             nextMonthLink={{ href: at(next), label: t.nextMonthLink(formatMonthTitle(next)) }}
-            {...(isMonthFuture(displayed)
+            {...(isMonthFuture(displayed, today)
               ? { prevMonthLink: { href: at(prev), label: t.prevMonthLink(formatMonthTitle(prev)) } }
               : {})}
           />

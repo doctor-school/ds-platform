@@ -234,12 +234,44 @@ describe("dayHref — one day-href rule over the extent (row 57)", () => {
     expect(far.get("to")).toBe("2026-09-02");
   });
 
-  it("NEW: with no today given, the boundary is the served extent's anchor — the read's own today", () => {
-    expect(params(dayHref("/events", {}, "2026-08-31", HORIZON)).get("tense")).toBe("past");
-    expect(params(dayHref("/events", {}, "2026-09-01", HORIZON)).get("tense")).toBeNull();
-    const served = { from: "2026-08-18", to: "2026-09-02" };
-    expect(params(dayHref("/events", { tense: "past" }, "2026-08-31", served)).get("tense")).toBe("past");
-    expect(params(dayHref("/events", { tense: "past" }, "2026-09-01", served)).get("tense")).toBeNull();
+  it("NEW: a widened «Будущие» extent that holds the day is kept — never shrunk to the default read", () => {
+    // After «Показать ещё»: `?from=2026-09-01&to=2026-09-29`; 09-20 lies past the default 14-day extent.
+    const widened = { from: "2026-09-01", to: "2026-09-29" };
+    const query = params(dayHref("/events", { ...widened, format: "online" }, "2026-09-20", widened, TODAY));
+    expect(query.get("tense")).toBeNull();
+    expect(query.get("from")).toBe("2026-09-01");
+    expect(query.get("to")).toBe("2026-09-29");
+    expect(query.get("day")).toBe("2026-09-20");
+    expect(query.get("format")).toBe("online");
+  });
+
+  it("NEW: a widened «Прошедшие» extent that holds the day is kept — never shrunk to the default read", () => {
+    const served = { from: "2026-08-03", to: "2026-09-02" };
+    const query = params(dayHref("/events", { tense: "past", from: "2026-08-03" }, "2026-08-10", served, TODAY));
+    expect(query.get("tense")).toBe("past");
+    expect(query.get("from")).toBe("2026-08-03");
+    expect(query.get("to")).toBeNull();
+    expect(query.get("day")).toBe("2026-08-10");
+  });
+
+  it("NEW: a tense switch from a widened extent drops it for the other tense's default read", () => {
+    const widened = { from: "2026-09-01", to: "2026-09-29" };
+    const query = params(dayHref("/events", widened, "2026-08-25", widened, TODAY));
+    expect(query.get("tense")).toBe("past");
+    expect(query.get("from")).toBeNull();
+    expect(query.get("to")).toBeNull();
+  });
+
+  it("D10: the tense boundary is the api's today, never the served extent's anchor", () => {
+    // A link from Monday (`from=2026-10-05`) opened on Wednesday: Tuesday is past.
+    const stale = { from: "2026-10-05", to: "2026-11-02" };
+    const tuesday = params(dayHref("/events", stale, "2026-10-06", stale, "2026-10-07"));
+    expect(tuesday.get("tense")).toBe("past");
+    expect(tuesday.get("from")).toBeNull();
+    expect(tuesday.get("to")).toBeNull();
+    const wednesday = params(dayHref("/events", stale, "2026-10-07", stale, "2026-10-07"));
+    expect(wednesday.get("tense")).toBeNull();
+    expect(wednesday.get("from")).toBe("2026-10-05");
   });
 
   it("NEW: a day across the tense boundary switches the tense and lands on that day — today and later under «Прошедшие»", () => {

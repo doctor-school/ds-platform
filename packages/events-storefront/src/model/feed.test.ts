@@ -7,6 +7,7 @@ import {
   emptyFeedState,
   liveStripView,
   myEventsCut,
+  pageTodayOf,
   showMoreLabel,
 } from "./feed";
 
@@ -372,5 +373,27 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     );
     expect(state.title).toBe("Эфиров нет");
     expect(state.action).toBeNull();
+  });
+});
+
+describe("the page's one today (wave-2 gate §4.3 D10)", () => {
+  const page = {
+    today: "2026-10-07",
+    cards: [],
+    horizon: { from: "2026-10-05", to: "2026-11-02", nextTo: null, nextFrom: null },
+    remaining: 0,
+    nextBatch: 0,
+    facetOptions: {},
+    matching: 0,
+  };
+
+  it("D10: the page takes the api's today from the feed read — not the extent, not the clock", () => {
+    const clock = new Date("2026-12-31T12:00:00.000Z");
+    expect(pageTodayOf({ ok: true, value: page }, clock)).toBe("2026-10-07");
+  });
+
+  it("D10: only a failed feed read falls back to the МСК day of the page clock", () => {
+    // 22:30 UTC on 7 Oct is 01:30 МСК on 8 Oct.
+    expect(pageTodayOf({ ok: false }, new Date("2026-10-07T22:30:00.000Z"))).toBe("2026-10-08");
   });
 });

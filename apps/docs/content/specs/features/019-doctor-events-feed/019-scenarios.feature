@@ -6,6 +6,9 @@
 # Stage-A picks in force: F-019-1 = Б (facet sidebar / mobile sheet), F-019-2 = Б
 # (month beside the feed) with its dedicated calendar page, F-019-3 = А (live block
 # above the feed).
+# Read under 019 «Amendment — 2026-10-05»: the month is a view of the same page (no
+# dedicated calendar page), the head carries the tense tabs in both views, and the
+# compact month and facet panel sit in a sticky column at 1024 px and wider.
 # Route-level scenarios tagged EARS-2/3/4/7/8/9 are integration obligations of
 # EARS-1 / #1516. Their predecessor Issues prove route-independent components,
 # the API contract, query state, or state matrix and do not publish `/events`.
@@ -97,6 +100,7 @@ Feature: A doctor opens one screen and sees what is on now, what is on this week
     And the feed body moves to that day without reloading the shell
 
   @EARS-5 @happy
+  # Read under 019 «Amendment — 2026-10-05»: the month view of the same page replaces the dedicated calendar page; it keeps the tense tabs and the facets, and a day lands in the feed at that day.
   Scenario: The dedicated calendar page renders the month as the page body
     When the doctor opens the dedicated calendar page
     Then the month grid is the body of the page inside feature 017's shell

@@ -49,6 +49,7 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
     throw new Error("The Academy feed read answered without its horizon");
   }
   return {
+    today: horizon.today,
     cards,
     horizon: {
       from: horizon.from,
@@ -95,6 +96,7 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     ),
   );
   return {
+    today: feed.today,
     cards,
     horizon: {
       from: feed.from,

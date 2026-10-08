@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { fetchEventsFeed, fetchEventsLive } from "./events-feed";
 
-const page = { cards: [], horizon: { from: "a", to: "b", nextTo: null, nextFrom: null }, remaining: 0, nextBatch: 0, facetOptions: {}, matching: 0 };
+const page = { today: "2026-10-08", cards: [], horizon: { from: "a", to: "b", nextTo: null, nextFrom: null }, remaining: 0, nextBatch: 0, facetOptions: {}, matching: 0 };
 const contentSet = {
   feedPath: "/v1/storefront/doctor/events",
   tenseParam: "tense" as const,

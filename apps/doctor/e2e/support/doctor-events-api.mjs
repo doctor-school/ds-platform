@@ -168,6 +168,9 @@ const MONTH = "2026-09";
 const KINDS = [
   { slug: "vebinar", title: "Вебинар" },
   { slug: "master-klass", title: "Мастер-класс" },
+  // The 2026-09-20 разборы's kind — the real `facetOptions` lists every kind
+  // the reach holds.
+  { slug: RAZBOR.slug, title: RAZBOR.title },
 ];
 const SPECIALTIES = [
   { id: "00000000-0000-4000-8000-000000000001", code: "kardiologiya", name: "Кардиология", isOther: false },
@@ -177,7 +180,8 @@ const MONTH_TODAY = "2026-09-01";
 const MONTH_COUNTS = {
   "2026-09-02": { count: 2, hasLive: true },
   "2026-09-04": { count: 1, hasLive: false },
-  "2026-09-20": { count: 1, hasLive: false },
+  // evt-4 plus the three разборы of WIDENED_DAY.
+  "2026-09-20": { count: 4, hasLive: false },
 };
 
 const HORIZON_STEP_DAYS = 14;
@@ -462,6 +466,8 @@ const server = createServer((request, response) => {
       const nextFrom = nextFromBefore(from, to);
       return json(response, 200, {
         tense: "past",
+        // D10 — every read carries the api's (here: pinned) today.
+        today: MONTH_TODAY,
         from,
         to,
         days,
@@ -519,6 +525,8 @@ const server = createServer((request, response) => {
     const nextTo = nextToBeyond(to, matched);
     return json(response, 200, {
       tense: "upcoming",
+      // D10 — every read carries the api's (here: pinned) today.
+      today: MONTH_TODAY,
       from,
       to,
       days,

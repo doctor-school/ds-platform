@@ -660,6 +660,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(feed.nextTo! > addDoctorEventsFeedDays(today, 40)).toBe(true);
     });
 
+    it("D10: every feed read carries the api's today (МСК), whatever extent the URL echoes", async () => {
+      // A stale shared link: its `from` is days before today.
+      const stale = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${addDoctorEventsFeedDays(today, -3)}&to=${addDoctorEventsFeedDays(today, 20)}`,
+      });
+      expect(stale.from).toBe(addDoctorEventsFeedDays(today, -3));
+      expect(stale.today).toBe(doctorEventsFeedDayOf(new Date()));
+      const past = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      expect(past.today).toBe(doctorEventsFeedDayOf(new Date()));
+    });
+
     it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` covers the nearest older event beyond the 14-day default (rows 30, 32)", async () => {
       const feed = await readFeed({
         specialtyCode: lonelyCode,

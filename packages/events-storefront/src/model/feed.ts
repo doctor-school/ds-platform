@@ -4,6 +4,7 @@ import {
   type MyEventItem,
   type RawQueryRecord,
   type RecordingProjection,
+  doctorEventsFeedDayOf,
   formatEventTime,
   rawQueryBoolean,
   rawQueryList,
@@ -74,6 +75,12 @@ export interface EventsFeedSummary {
  * M of «Показать ещё N из M»); `nextBatch` = the ones the next step adds (N).
  */
 export interface EventsFeedPage {
+  /**
+   * Wave-2 gate §4.3 D10 — the api's «сегодня» (`YYYY-MM-DD`, МСК), the day
+   * the read resolved its horizon against: the page's one today
+   * ({@link pageTodayOf}).
+   */
+  readonly today: string;
   readonly cards: readonly EventsFeedCard[];
   readonly horizon: EventsFeedHorizon;
   readonly remaining: number;
@@ -113,6 +120,21 @@ export type EventsStorefrontAdapter = (
 export type BlockRead<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false };
+
+/**
+ * Wave-2 gate §4.3 D10 — the page's ONE today: the api's, from the feed read
+ * the page rendered with (both views make that read). The month grid (today,
+ * past days), «Сегодня», the default month, the picker's «архив» and the
+ * day-href tense boundary all take it, so they never disagree with the read.
+ * Only a failed feed read — no read carries a today — falls back to the МСК
+ * day of the page clock.
+ */
+export function pageTodayOf(
+  read: BlockRead<EventsFeedPage>,
+  now: Date = new Date(),
+): string {
+  return read.ok ? read.value.today : doctorEventsFeedDayOf(now);
+}
 
 /** The live block's strip cap (019 «Amendment — 2026-10-05», «Live block»). */
 export const LIVE_STRIP_CAP = 2;

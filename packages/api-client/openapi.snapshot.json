@@ -2792,6 +2792,10 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
           },
+          "today": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
           "totalCount": {
             "maximum": 9007199254740991,
             "minimum": 0,
@@ -2800,6 +2804,7 @@
         },
         "required": [
           "tense",
+          "today",
           "from",
           "to",
           "days",
@@ -4488,9 +4493,14 @@
               "to": {
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                 "type": "string"
+              },
+              "today": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
               }
             },
             "required": [
+              "today",
               "from",
               "to",
               "nextTo",

@@ -142,6 +142,14 @@ export type DoctorEventFacetOptions = z.infer<
 export const DoctorEventsFeedSchema = z
   .object({
     tense: DoctorEventsFeedTenseSchema,
+    /**
+     * Wave-2 gate §4.3 D10 — the api's «сегодня», the codec-zone (МСК)
+     * calendar day the read resolved its horizon against; the month read's
+     * `today` field. The page takes its one today from here (month grid,
+     * «Сегодня», the day-href tense boundary), never from the device clock or
+     * the URL-echoed extent.
+     */
+    today: DoctorEventsFeedDaySchema,
     /** The applied horizon, echoed so the client never has to re-derive it. */
     from: DoctorEventsFeedDaySchema,
     to: DoctorEventsFeedDaySchema,

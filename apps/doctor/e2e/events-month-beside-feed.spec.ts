@@ -120,6 +120,29 @@ test("EARS-4.3: selecting a day beyond the current horizon widens `to=` so the d
   await expect(selected).toBeInViewport();
 });
 
+test("NEW: after «Показать ещё» a day click keeps the widened extent that already holds the day (row 57)", async ({
+  page,
+}) => {
+  // No `month=` in the URL: the compact month opens on the month of the api's
+  // today the feed read carries (D10, the double's pinned 2026-09-01).
+  await page.goto("/events");
+  await page.getByTestId("events-feed-show-more").click();
+  await expect(page).toHaveURL(/\?from=2026-09-01&to=2026-09-29$/);
+
+  await page
+    .getByTestId("events-compact-month")
+    .getByRole("button", { name: /^20 сентября/ })
+    .click();
+
+  await expect(page).toHaveURL(new RegExp(`day=${BEYOND_DAY}`));
+  // The widening is kept — the day click never shrinks the read to the default extent.
+  await expect(page).toHaveURL(/from=2026-09-01/);
+  await expect(page).toHaveURL(/to=2026-09-29/);
+  const selected = page.locator(`section[id="day-${BEYOND_DAY}"]`);
+  await expect(selected).toBeVisible();
+  await expect(selected).toBeInViewport();
+});
+
 test("EARS-4.4: a day with no events keeps the whole feed and lands on the nearest following day group", async ({
   page,
 }) => {

@@ -17,8 +17,8 @@ export class DoctorEventsFeedDto extends createZodDto(DoctorEventsFeedSchema) {}
  * 019 EARS-4 — the `MonthGrid` response of
  * `GET /v1/storefront/doctor/events/month`. Same rule as the feed DTO: the Zod
  * schema is the SSOT and this class exists only so the OpenAPI document — and
- * the generated `@ds/api-client` both the in-feed grid (#1516) and the calendar
- * page (#1520) read — carries the real day-cell array rather than an object.
+ * the generated `@ds/api-client` the month view of the one events page reads —
+ * carries the real day-cell array rather than an object.
  */
 export class DoctorEventsMonthGridDto extends createZodDto(
   DoctorEventsMonthGridSchema,

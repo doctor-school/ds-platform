@@ -4,7 +4,6 @@ import type { MonthBroadcastEntry } from "@ds/schemas";
 import {
   buildMonthGrid,
   capDayEntries,
-  currentMskMonth,
   formatMonthTitle,
   isMonthFuture,
   isMonthPast,
@@ -37,21 +36,8 @@ const entry = (
   participationFormat: "online",
 });
 
-// 13:00 МСК on 16 July 2026 (10:00 UTC) — "today" for the reference month.
-const NOW = new Date("2026-07-16T10:00:00.000Z");
-
-describe("currentMskMonth", () => {
-  it("EARS-19: folds an instant to its МСК YYYY-MM month", () => {
-    expect(currentMskMonth(NOW)).toBe("2026-07");
-  });
-
-  it("EARS-19: an instant late-evening UTC still reports the МСК day's month (UTC+3 roll)", () => {
-    // 22:30 UTC on 31 Jan is 01:30 МСК on 1 Feb → February, not January.
-    expect(currentMskMonth(new Date("2026-01-31T22:30:00.000Z"))).toBe(
-      "2026-02",
-    );
-  });
-});
+// D10 — the api's today (МСК) for the reference month, as the feed read carries it.
+const TODAY = "2026-07-16";
 
 describe("mskDateParts", () => {
   it("EARS-19: reports the МСК calendar date, not the UTC date", () => {
@@ -66,7 +52,7 @@ describe("mskDateParts", () => {
 describe("buildMonthGrid — July 2026 (canvas reference)", () => {
   const grid = buildMonthGrid({
     month: "2026-07",
-    now: NOW,
+    today: TODAY,
     entries: [
       entry("16", "2026-07-16T16:00:00.000Z", "live"), // 19:00 МСК, today, LIVE
       entry("17", "2026-07-16T17:30:00.000Z", "published"), // 20:30 МСК, today
@@ -128,7 +114,7 @@ describe("buildMonthGrid — July 2026 (canvas reference)", () => {
   });
 
   it("EARS-19: a non-current month has no today marker", () => {
-    const other = buildMonthGrid({ month: "2026-09", now: NOW, entries: [] });
+    const other = buildMonthGrid({ month: "2026-09", today: TODAY, entries: [] });
     expect(other.todayDom).toBeNull();
     expect(other.weeks.flat().every((c) => !c.isToday)).toBe(true);
   });
@@ -165,33 +151,33 @@ describe("shiftMonth (EARS-17 — month paging, year-boundary safe)", () => {
 
 describe("isMonthPast (EARS-16 — picker muting, МСК)", () => {
   it("EARS-16: a month strictly before the current МСК month is past", () => {
-    expect(isMonthPast("2026-06", NOW)).toBe(true);
-    expect(isMonthPast("2025-12", NOW)).toBe(true);
+    expect(isMonthPast("2026-06", TODAY)).toBe(true);
+    expect(isMonthPast("2025-12", TODAY)).toBe(true);
   });
 
   it("EARS-16: the current МСК month is not past", () => {
-    expect(isMonthPast("2026-07", NOW)).toBe(false);
+    expect(isMonthPast("2026-07", TODAY)).toBe(false);
   });
 
   it("EARS-16: a future month is not past", () => {
-    expect(isMonthPast("2026-08", NOW)).toBe(false);
-    expect(isMonthPast("2027-01", NOW)).toBe(false);
+    expect(isMonthPast("2026-08", TODAY)).toBe(false);
+    expect(isMonthPast("2027-01", TODAY)).toBe(false);
   });
 });
 
 describe("isMonthFuture (owner verdict #5 — return-from-future back link)", () => {
   it("a month strictly after the current МСК month is future", () => {
-    expect(isMonthFuture("2026-08", NOW)).toBe(true);
-    expect(isMonthFuture("2027-01", NOW)).toBe(true);
+    expect(isMonthFuture("2026-08", TODAY)).toBe(true);
+    expect(isMonthFuture("2027-01", TODAY)).toBe(true);
   });
 
   it("the current МСК month is NOT future (no back link)", () => {
-    expect(isMonthFuture("2026-07", NOW)).toBe(false);
+    expect(isMonthFuture("2026-07", TODAY)).toBe(false);
   });
 
   it("a past month is NOT future (no back link)", () => {
-    expect(isMonthFuture("2026-06", NOW)).toBe(false);
-    expect(isMonthFuture("2025-12", NOW)).toBe(false);
+    expect(isMonthFuture("2026-06", TODAY)).toBe(false);
+    expect(isMonthFuture("2025-12", TODAY)).toBe(false);
   });
 });
 

@@ -125,6 +125,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
       counts: { upcoming: 5, past: 0, upcomingSchools: 2 },
       pagination: { nextCursor: null, hasMore: true },
       horizon: {
+        today: "2026-10-08",
         from: "2026-10-08",
         to: "2026-10-22",
         nextTo: "2026-11-05",
@@ -136,6 +137,12 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.horizon?.nextTo).toBe("2026-11-05");
+    // D10 — the api's today rides the horizon page; one without it is refused.
+    expect(parsed.data.horizon?.today).toBe("2026-10-08");
+    const { today: _today, ...noToday } = parsed.data.horizon!;
+    expect(
+      PublicEventListingPageSchema.safeParse({ ...parsed.data, horizon: noToday }).success,
+    ).toBe(false);
   });
 
   it("NEW: a past horizon page names the older `from` and the remainder; a horizon without them is refused (rows 30, 32)", () => {
@@ -147,6 +154,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     const parsed = PublicEventListingPageSchema.safeParse({
       ...base,
       horizon: {
+        today: "2026-10-08",
         from: "2026-09-24",
         to: "2026-10-09",
         nextTo: null,

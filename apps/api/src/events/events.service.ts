@@ -1257,9 +1257,11 @@ export class EventsService {
       query.to !== undefined ||
       (query.cursor === undefined && query.limit === undefined);
     if (horizonRead) {
+      // Wave-2 gate §4.3 D10 — one today per read, echoed on the horizon.
+      const today = doctorEventsFeedDayOf(now);
       const requested = resolveEventHorizon(
         { tense: query.timeframe, from: query.from, to: query.to },
-        doctorEventsFeedDayOf(now),
+        today,
       );
       const window = eventHorizonInstants(requested);
       // Read from the moving edge, so the cap keeps the batch just asked for.
@@ -1293,7 +1295,7 @@ export class EventsService {
       const beyond = await resolveEventHorizonBeyond(
         bounded.horizon,
         query.timeframe,
-        doctorEventsFeedDayOf(now),
+        today,
         (range) =>
           this.repo.listListingStartsIn(
             query.timeframe,
@@ -1313,6 +1315,7 @@ export class EventsService {
         ),
         pagination: { hasMore: beyond.remaining > 0, nextCursor: null },
         horizon: {
+          today,
           ...clampRequestedPastFrom(
             bounded.horizon,
             query.timeframe,

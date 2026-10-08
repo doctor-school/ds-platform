@@ -4,7 +4,6 @@ import {
   type EventListingQueryEntry,
   addDoctorEventsFeedDays,
   DOCTOR_EVENTS_FEED_HORIZON_DAYS,
-  doctorEventsFeedDayOf,
   type RawQueryRecord,
   encodeQueryString,
   rawQueryList,
@@ -251,33 +250,29 @@ function defaultExtent(
  *
  * A day on the other side of today selects the tense that holds it: a day
  * before today reads «Прошедшие», today and later read «Будущие» (today is
- * «Будущие»'s anchor). Today is the read's own: the served extent is anchored
- * on the api's today (`resolveEventHorizon`: «Будущие» `from` = today,
- * «Прошедшие» `to` = tomorrow), so the page and the read never disagree on
- * which side a day lies; the page clock answers only when no extent is
- * served. The extent is then the served one when the tense stays,
- * the tense's default extent when it switches. A day that extent does not hold
- * widens it in the tense's direction so the day is inside the read: «Будущие»
- * widens the exclusive `to` to the day after it, «Прошедшие» widens `from`
- * back to it. With the tense unchanged and no served extent known the href
- * never invents one.
+ * «Будущие»'s anchor). `today` is the page's one today — the api's, carried by
+ * the feed read (wave-2 gate §4.3 D10, `pageTodayOf`) — never inferred from
+ * the extent, which the URL echoes and «Показать ещё» widens.
+ *
+ * With the tense unchanged the reader's extent is KEPT (the raw `from` / `to`,
+ * a «Показать ещё» widening included) — a day click never shrinks the read to
+ * the default one. A tense switch drops it for the other tense's default
+ * extent. A day the extent does not hold widens it in the tense's direction so
+ * the day is inside the read: «Будущие» widens the exclusive `to` to the day
+ * after it, «Прошедшие» widens `from` back to it. With the tense unchanged and
+ * no served extent known the href never invents one.
  */
 export function dayHref(
   listing: string,
   raw: RawQueryRecord,
   date: string,
-  horizon?: { from: string; to: string },
-  today?: string,
+  horizon: { from: string; to: string } | undefined,
+  today: string,
 ): string {
   const current = feedTenseOf(raw);
-  today ??=
-    horizon === undefined
-      ? doctorEventsFeedDayOf(new Date())
-      : current === "past"
-        ? addDoctorEventsFeedDays(horizon.to, -1)
-        : horizon.from;
   const tense: FeedTense = date < today ? "past" : "upcoming";
-  const extent = tense === current ? horizon : defaultExtent(tense, today);
+  const switched = tense !== current;
+  const extent = switched ? defaultExtent(tense, today) : horizon;
   const widen =
     extent === undefined
       ? {}
@@ -291,8 +286,7 @@ export function dayHref(
     codecEntries({
       ...raw,
       tense: tense === "past" ? "past" : undefined,
-      from: undefined,
-      to: undefined,
+      ...(switched ? { from: undefined, to: undefined } : {}),
       ...widen,
       view: undefined,
       day: date,

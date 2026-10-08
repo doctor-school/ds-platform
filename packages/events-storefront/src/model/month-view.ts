@@ -164,6 +164,8 @@ export function pickerYearsOf(
   displayed: string,
   noun: PluralNoun,
   monthLink: (month: string) => string,
+  /** The page's one today (D10) — «архив» marks a month before its month. */
+  today: string,
 ): MonthPickerYear[] {
   const labels = monthShortLabels();
   return counts.map(([year, rows]) => {
@@ -177,7 +179,7 @@ export function pickerYearsOf(
         note:
           count > 0
             ? t.pickerCount(count, noun)
-            : isMonthPast(month)
+            : isMonthPast(month, today)
               ? t.pickerPast
               : t.pickerEmpty(noun),
         current,

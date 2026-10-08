@@ -48,7 +48,6 @@ export {
   type MonthGrid,
   buildMonthGrid,
   capDayEntries,
-  currentMskMonth,
   formatAgendaDayTitle,
   formatMonthTitle,
   isMonthFuture,

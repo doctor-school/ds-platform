@@ -11,7 +11,7 @@ import {
   type SpecialtyChoice,
   filterOptionsOf,
 } from "../model/facets";
-import type { BlockRead, EventsFeedPage } from "../model/feed";
+import { type BlockRead, type EventsFeedPage, pageTodayOf } from "../model/feed";
 import {
   canonicalFeedRedirect,
   dayHref,
@@ -24,7 +24,6 @@ import {
 } from "../model/feed-url";
 import {
   buildMonthGrid,
-  currentMskMonth,
   formatMonthTitle,
   shiftMonth,
   weekdayShortLabels,
@@ -116,20 +115,21 @@ export async function CompactMonthSection({
   feed: FeedRead;
   request: ReadRequest;
 }) {
-  const month = pageMonthOf(raw) ?? currentMskMonth();
-  const [entries, read] = await Promise.all([
-    fetchMonthEntries(config, raw, month, request),
-    feed,
-  ]);
+  // D10 — the page's one today is the feed read's; with no month in the URL
+  // it also picks the month shown.
+  const read = await feed;
+  const today = pageTodayOf(read);
+  const month = pageMonthOf(raw) ?? today.slice(0, 7);
+  const entries = await fetchMonthEntries(config, raw, month, request);
   if (!entries.ok) return null;
   const listing = config.routes.listing;
   const horizon = read.ok ? read.value.horizon : undefined;
-  const grid = buildMonthGrid({ month, entries: entries.value });
+  const grid = buildMonthGrid({ month, entries: entries.value, today });
   const day = rawQueryScalar(raw.day);
   const dayHrefs: Record<number, string> = {};
   for (const cell of grid.weeks.flat()) {
     if (cell.inMonth && cell.isoDay !== null) {
-      dayHrefs[cell.day] = dayHref(listing, raw, cell.isoDay, horizon);
+      dayHrefs[cell.day] = dayHref(listing, raw, cell.isoDay, horizon, today);
     }
   }
   return (

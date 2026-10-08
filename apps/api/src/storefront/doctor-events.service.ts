@@ -186,6 +186,9 @@ export class DoctorEventsService {
 
     return {
       tense: query.tense,
+      // Wave-2 gate §4.3 D10 — the day this read resolved its horizon
+      // against; the page takes its one today from here.
+      today,
       facets,
       ...clampRequestedPastFrom(
         bounded.horizon,

@@ -103,6 +103,7 @@ const PAGE: EventsFeedPage = {
   facetOptions: {},
   matching: 0,
   cards: [CARD],
+  today: "2026-10-08",
   horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null },
   remaining: 57,
   nextBatch: 6,

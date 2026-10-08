@@ -128,9 +128,11 @@ is mutable and shared between files.
 pnpm --filter @ds/doctor exec playwright test --config=playwright.events.config.ts
 ```
 
-This is coverage of the existing R1 feed and desktop month pane. Filter mounting
-and final route composition (#1516), the calendar page (#1520), past (#1525) and
-mine (#1526) remain R1.1 deliverables with their own mobile/axe obligations.
+This is coverage of the one events page of `@ds/events-storefront`: the feed in
+both tenses with «Мои события», its month view on the same page (which replaces
+the dedicated calendar page, 019 «Amendment — 2026-10-05»), and the facet
+column and «Фильтры (N)» sheet — the route composition of #1516 and the month
+view of #1520.
 
 For real API/DB verification, build and start doctor with the same real
 `API_PROXY_TARGET`, seed an isolated branch DB with `pnpm --filter @ds/api

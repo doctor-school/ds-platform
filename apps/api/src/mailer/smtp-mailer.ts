@@ -2,8 +2,11 @@ import { emailSender } from "./email-layout.js";
 import {
   adminLockoutMessage,
   congressConfirmationMessage,
+  type CongressSubmissionDecisionContent,
+  congressSubmissionDecisionMessage,
   congressSubmissionReceiptMessage,
   formatCongressEventDate,
+  formatRevisionLastDay,
 } from "./notice-emails.js";
 import { resolveRealSmtp } from "../config/real-smtp.js";
 import {
@@ -18,6 +21,7 @@ import {
   assertSendableCode,
   assertSendableEmail,
   type CongressConfirmationRequest,
+  type CongressSubmissionDecisionRequest,
   type CongressSubmissionReceiptRequest,
   type Mailer,
 } from "./mailer.types.js";
@@ -154,6 +158,16 @@ export class SmtpMailer implements Mailer {
         eventTitle: input.eventTitle,
       }),
       "congress submission receipt",
+    );
+  }
+  async sendCongressSubmissionDecision(
+    input: CongressSubmissionDecisionRequest,
+  ): Promise<void> {
+    assertSendableEmail(input.email);
+    await this.dispatch(
+      input.email,
+      congressSubmissionDecisionMessage(decisionContent(input)),
+      "congress submission decision",
     );
   }
   private async dispatch(
@@ -318,4 +332,33 @@ function buildSmtpChannel(
     }),
     emailSender(cfg.from),
   );
+}
+
+/**
+ * 046 EARS-29, EARS-35 — the request as the letter renders it: the stored
+ * deadline instant becomes its Moscow last day, the only presentation step.
+ */
+function decisionContent(
+  input: CongressSubmissionDecisionRequest,
+): CongressSubmissionDecisionContent {
+  const named = { title: input.title, kindLabel: input.kindLabel };
+  switch (input.letter) {
+    case "accepted":
+      return { ...named, letter: "accepted" };
+    case "rejected":
+      return { ...named, letter: "rejected", comment: input.comment };
+    case "needs_revision":
+      return {
+        ...named,
+        letter: "needs_revision",
+        comment: input.comment,
+        lastDay: formatRevisionLastDay(input.revisionDueAt),
+      };
+    case "revision_extended":
+      return {
+        ...named,
+        letter: "revision_extended",
+        lastDay: formatRevisionLastDay(input.revisionDueAt),
+      };
+  }
 }

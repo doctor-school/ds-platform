@@ -46,6 +46,25 @@ export interface CongressSubmissionReceiptRequest {
   eventTitle: string;
 }
 
+/**
+ * 046 EARS-29, EARS-35 — what a committee decision letter or a revision
+ * deadline extension letter is rendered from. The deadline arrives as the
+ * stored instant; rendering its last day is presentation, the mail layer's.
+ */
+export type CongressSubmissionDecisionRequest = {
+  /** The account email of the submission's author. */
+  email: string;
+  /** The submission's title («тема»). */
+  title: string;
+  /** The kind's Russian name as the section shows it. */
+  kindLabel: string;
+} & (
+  | { letter: "accepted" }
+  | { letter: "rejected"; comment: string }
+  | { letter: "needs_revision"; comment: string; revisionDueAt: Date }
+  | { letter: "revision_extended"; revisionDueAt: Date }
+);
+
 export interface Mailer {
   /**
    * EARS-29: dispatch the §13.3 email-verification artifact — the one-time
@@ -133,6 +152,18 @@ export interface Mailer {
    */
   sendCongressSubmissionReceipt(
     input: CongressSubmissionReceiptRequest,
+  ): Promise<void>;
+
+  /**
+   * 046 EARS-29, EARS-35: send the author the letter of a committee decision
+   * (`accepted`, `rejected`, `needs_revision`) or of the platform
+   * administrator's revision-deadline extension — a **product notice**, sent
+   * by the caller after commit and off the response path with the outcome
+   * recorded on the submission. Resolves on acceptance, rejects on a relay
+   * failure after failover; MUST reject an invalid email like the receipt.
+   */
+  sendCongressSubmissionDecision(
+    input: CongressSubmissionDecisionRequest,
   ): Promise<void>;
 }
 

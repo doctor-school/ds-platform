@@ -166,6 +166,11 @@ export class AdminAuthorityGuard implements CanActivate {
  * the administrator's unrestricted one; if the IdP withdrew it, the unrestricted
  * reach must go with it even when a registrar grant remains.
  *
+ * 046 EARS-28 (ADR-0001 A3): a row that admits
+ * `congress-program-committee` (the committee status change) is revalidated
+ * the same way — a committee-only principal is asked about the committee grant
+ * and answered `403 PROGRAM_COMMITTEE_REQUIRED` once the IdP withdrew it.
+ *
  * The matrix validator already refuses a `revalidate: "live"` row that names
  * neither `platform_admin` nor `pd_officer`, so the `platform_admin` fallback is
  * reached only by rows that genuinely require it.
@@ -175,12 +180,22 @@ function requiredAuthorityRole(
   principal: AdminSessionPrincipal,
 ): AdminAuthorityRole {
   if (meta.roles?.includes("pd_officer")) return "pd_officer";
+  if (principal.roles?.includes("platform_admin")) return "platform_admin";
   if (
     meta.roles?.includes("event-registrar") &&
-    !principal.roles?.includes("platform_admin")
+    principal.roles?.includes("event-registrar")
   ) {
     return "event-registrar";
   }
+  // 046 EARS-28 (ADR-0001 A3): the committee status change is revalidated
+  // against the committee grant a committee-only principal acts under.
+  if (
+    meta.roles?.includes("congress-program-committee") &&
+    principal.roles?.includes("congress-program-committee")
+  ) {
+    return "congress-program-committee";
+  }
+  if (meta.roles?.includes("event-registrar")) return "event-registrar";
   return "platform_admin";
 }
 
@@ -191,4 +206,5 @@ const REVOKED_CODE: Readonly<
   platform_admin: "PLATFORM_ADMIN_REQUIRED",
   pd_officer: "PD_OFFICER_REQUIRED",
   "event-registrar": "EVENT_REGISTRAR_REQUIRED",
+  "congress-program-committee": "PROGRAM_COMMITTEE_REQUIRED",
 };

@@ -21,18 +21,28 @@ export interface GoldenIdpAccount {
   username: string;
   /**
    * `users.role` the mirror row carries. The union is the coarse-role vocabulary
-   * the converge may grant — `event-registrar` (044 EARS-17) is declarable here
+   * the converge may grant — `event-registrar` (044 EARS-17) and
+   * `congress-program-committee` (046 EARS-26) are declarable here
    * before any golden account uses it, so the registrar fixture of the congress
    * roster lands as a catalogue row rather than a type change.
    */
-  role: "doctor_guest" | "platform_admin" | "event-registrar";
+  role:
+    | "doctor_guest"
+    | "platform_admin"
+    | "event-registrar"
+    | "congress-program-committee";
   /**
    * The project roles the IdP grant carries (#2456). A staff account is a user
    * of the sites too: it holds the visitor role `doctor_guest` AND its staff
    * role, while `role` above is the mirror's staff marker (the api projects the
    * session's roles onto it; participant counts leave staff out).
    */
-  roleKeys: readonly ("doctor_guest" | "platform_admin" | "event-registrar")[];
+  roleKeys: readonly (
+    | "doctor_guest"
+    | "platform_admin"
+    | "event-registrar"
+    | "congress-program-committee"
+  )[];
   /** `users.email_verified` — the storefront's «подтвердите почту» fork. */
   emailVerified: boolean;
   /**

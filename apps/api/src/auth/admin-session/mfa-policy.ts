@@ -32,6 +32,9 @@ export const MFA_REQUIRED_BY_ROLE: Readonly<Partial<Record<Role, true>>> =
   Object.freeze({
     platform_admin: true,
     "event-registrar": true,
+    // 046 EARS-26 — committee members are external users working in
+    // `apps/admin`; they enrol TOTP on first login, exactly like the registrar.
+    "congress-program-committee": true,
   });
 
 /**

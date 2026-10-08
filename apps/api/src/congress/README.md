@@ -269,3 +269,65 @@ no mail-link origin.
 trigger — the ledger is the status history — and `authors` is a PD-masked
 column. `revision_due_at` is read by the section and the autosave rule; the
 committee's status route writes it.
+
+## Programme committee (feature 046, EARS-26…EARS-29, EARS-34, EARS-35)
+
+`congress-submissions.admin.controller.ts` + `.admin.service.ts`. The coarse
+role `congress-program-committee` (IdP project role, TOTP second factor) is
+bound to one or more events by `event_role_grants` rows; `EventGrantPolicy`
+admits a committee-only principal to its bound events only, and the platform
+administrator to every event. Every other route omits the role (046 EARS-31,
+asserted over the real router).
+
+| Route                                                                                              | Roles                       | Revalidate         |
+| -------------------------------------------------------------------------------------------------- | --------------------------- | ------------------ |
+| `GET /v1/admin/events/:idOrSlug/congress-submissions` — registry (EARS-27)                         | `platform_admin`, committee | none               |
+| `GET …/congress-submissions/:submissionId` — card (EARS-28)                                        | `platform_admin`, committee | none               |
+| `POST …/:submissionId/status` — `in_review` / `accepted` / `rejected` / `needs_revision` (EARS-28) | `platform_admin`, committee | live (ADR-0001 A3) |
+| `POST …/:submissionId/revision-deadline` — extension (EARS-35)                                     | `platform_admin`            | live               |
+
+- **Registry.** Drafts are never listed. Server-side sort (kind, title,
+  submitter, status, sent, changed) and filters (kind, status, send-date range in
+  Moscow days, submitter) compose with the title/author search and the page. `№`
+  is the row's 1-based position in the sorted, filtered listing; «изменена» is
+  `updated_at`.
+- **Card.** Full content, authors, the submitter's email and phone (044 answers,
+  then the account), the status history from the 010 audit (who: display name or
+  email, never a raw IdP subject), the linked source work (only within the same
+  event and never a draft), the last letter outcome and, for `needs_revision`,
+  the deadline. A poster shows the submitter's age on the event start date; no
+  card exposes the birth date. A submission of another event or a draft answers
+  `404`, the same as an unknown id.
+- **Status change.** Conditional on `expectedStatus` (`409` on a stale view);
+  only the 046-design transitions; `withdrawn` is final. `rejected` and
+  `needs_revision` require a 1–2000-character comment; the other statuses clear
+  it. `needs_revision` sets `revision_due_at = revisionDueAt(now)` in the same
+  transaction (Moscow day + 3 Monday–Friday days, stored as 00:00 Moscow of the
+  following day; `packages/schemas` `congress-revision-deadline.ts`); leaving
+  `needs_revision` clears it.
+- **Extension.** Platform administrator only; the new last day is a Moscow
+  calendar date after the current last day and not before today; stored as
+  00:00 Moscow of the following day.
+- **Letters (EARS-29, EARS-35).** `accepted`, `rejected`, `needs_revision` and
+  the extension each send their owner-approved letter after commit, off the
+  response path (`sendCongressSubmissionDecision`, `notice-emails.ts`); the
+  outcome lands in `last_letter_*`, and a relay failure keeps the status and the
+  deadline. `in_review` sends none. The date in the letters is `ДД.ММ.ГГГГ`.
+
+### Binding a committee member to an event (runbook, until #2378)
+
+The member's account must exist and hold the `congress-program-committee`
+project role in Zitadel (granted like `platform_admin`, `infra/deploy/README.md`
+«Operator access»). Then, one row per congress:
+
+```sql
+-- Outside any API request, so the 010 audit trigger records `db-direct`.
+-- A duplicate (user, role, event) is refused by the unique index.
+INSERT INTO event_role_grants (user_id, role, event_id)
+SELECT u.id, 'congress-program-committee', e.id
+FROM users u, events e
+WHERE u.email = '<member email>' AND e.slug = '<event slug>';
+```
+
+The binding is read on every request, so it takes effect (and a `DELETE` of the
+row withdraws it, `403 EVENT_BINDING_REQUIRED`) without a re-login.

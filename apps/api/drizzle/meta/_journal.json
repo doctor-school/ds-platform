@@ -330,6 +330,13 @@
       "when": 1791204605452,
       "tag": "0046_event_kinds_and_audience",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791446010245,
+      "tag": "0047_congress_program_committee_role",
+      "breakpoints": true
     }
   ]
 }

@@ -321,9 +321,14 @@ export interface EmailCodeSubmission {
  * `event-registrar` is here because the 044 desk registration (EARS-35) is a
  * WRITE that role reaches: a registrar acting there is revalidated against the
  * grant it acts under, not against a `platform_admin` it never held.
+ * `congress-program-committee` joins for the same reason: the 046 committee
+ * status change (EARS-28) is a write that role reaches (ADR-0001 A1).
  */
 export type AdminAuthorityRole =
-  "platform_admin" | "pd_officer" | "event-registrar";
+  | "platform_admin"
+  | "pd_officer"
+  | "event-registrar"
+  | "congress-program-committee";
 
 /** Input to {@link IdpClient.revalidateAdminAuthority} (#1304). */
 export interface RevalidateAdminAuthorityInput {

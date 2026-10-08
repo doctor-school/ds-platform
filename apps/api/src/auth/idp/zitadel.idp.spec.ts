@@ -505,6 +505,7 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
       sendAdminLockoutNotice: () => Promise.resolve(),
       sendCongressRegistrationConfirmation: () => Promise.resolve(),
       sendCongressSubmissionReceipt: () => Promise.resolve(),
+      sendCongressSubmissionDecision: () => Promise.resolve(),
     };
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,

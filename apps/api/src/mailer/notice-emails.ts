@@ -1,4 +1,8 @@
-import { MOSCOW_TIME_ZONE, formatEventTime } from "@ds/schemas";
+import {
+  MOSCOW_TIME_ZONE,
+  formatEventTime,
+  revisionLastDay,
+} from "@ds/schemas";
 
 import { composeEmail, type EmailMessage } from "./email-layout.js";
 
@@ -133,6 +137,87 @@ export function congressSubmissionReceiptMessage(
       `Ваша заявка «${content.title}» (${kind}) получена и передана ` +
       `программному комитету ${content.eventTitle}. Статус можно посмотреть ` +
       "в кабинете.",
+    paragraphs: [CONGRESS_AUTHOR_CABINET_ENTRY],
+    footer: ["Команда Doctor.School"],
+  });
+}
+
+/**
+ * 046 EARS-29, EARS-35 — what a committee decision or a deadline extension
+ * letter is rendered from. `lastDay` is already rendered for a human — see
+ * {@link formatRevisionLastDay}.
+ */
+export type CongressSubmissionDecisionContent = {
+  /** «{тема}» — the submission's title. */
+  title: string;
+  /** «{вид}» — the kind's name as the section shows it. */
+  kindLabel: string;
+} & (
+  | { letter: "accepted" }
+  | { letter: "rejected"; comment: string }
+  | { letter: "needs_revision"; comment: string; lastDay: string }
+  | { letter: "revision_extended"; lastDay: string }
+);
+
+/**
+ * 046 EARS-29, EARS-35 — «{дата}» of «до {дата}, 23:59 МСК»: the last day a
+ * stored revision deadline keeps open (the day before the stored instant), as
+ * a Moscow calendar date `ДД.ММ.ГГГГ` (046 V-12: «до 03.03.2027, 23:59 МСК»).
+ */
+export function formatRevisionLastDay(revisionDueAt: Date): string {
+  const [year, month, day] = revisionLastDay(revisionDueAt).split("-");
+  return `${day}.${month}.${year}`;
+}
+
+/**
+ * 046 EARS-29, EARS-35 — the author's letter after a committee decision
+ * (`accepted`, `rejected`, `needs_revision`) or the platform administrator's
+ * revision-deadline extension. Copy approved at Stage A (L-2, 2026-10-08,
+ * #2437), verbatim. A product notice with no link, button or URL: like the
+ * receipt it ends with the cabinet-entry paragraph (046 «Letters», #2634). The
+ * committee comment is carried verbatim; the layout escapes it as text.
+ */
+export function congressSubmissionDecisionMessage(
+  content: CongressSubmissionDecisionContent,
+): EmailMessage {
+  const kind = content.kindLabel.toLocaleLowerCase("ru-RU");
+  const named = `«${content.title}» (${kind})`;
+  const until = (lastDay: string) =>
+    `Исправить и отправить заявку можно в кабинете до ${lastDay}, 23:59 МСК.`;
+  let subject: string;
+  let preheader: string;
+  let intro: string;
+  switch (content.letter) {
+    case "accepted":
+      subject = "Doctor.School — заявка принята";
+      preheader = "Заявка принята";
+      intro = `Программный комитет принял вашу заявку ${named}.`;
+      break;
+    case "rejected":
+      subject = "Doctor.School — заявка отклонена";
+      preheader = "Заявка отклонена";
+      intro =
+        `Программный комитет отклонил заявку ${named}. ` +
+        `Комментарий комитета: ${content.comment}`;
+      break;
+    case "needs_revision":
+      subject = "Doctor.School — заявку нужно доработать";
+      preheader = "Заявку нужно доработать";
+      intro =
+        `Программный комитет просит доработать заявку ${named}: ` +
+        `${content.comment}. ${until(content.lastDay)}`;
+      break;
+    case "revision_extended":
+      subject = "Doctor.School — срок доработки продлён";
+      preheader = "Срок доработки продлён";
+      intro =
+        `Срок доработки заявки ${named} продлён. ` + until(content.lastDay);
+      break;
+  }
+  return composeEmail({
+    subject,
+    preheader,
+    intro,
     paragraphs: [CONGRESS_AUTHOR_CABINET_ENTRY],
     footer: ["Команда Doctor.School"],
   });

@@ -58,18 +58,19 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
   // 044 EARS-19: `event-registrar` joined the `role → mfa_required` policy, so
   // the second-factor entry routes admit a pending registrar on exactly the
   // `platform_admin` flow. Admission to the admin ORIGIN is not reach: what a
-  // registrar may then do is the per-route classification below.
+  // registrar may then do is the per-route classification below. 046 EARS-26
+  // adds `congress-program-committee` to the same policy (TOTP) on the same terms.
   "POST /v1/admin/auth/mfa/enroll/start": {
     access: "pending-auth",
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
   },
   "POST /v1/admin/auth/mfa/enroll/verify": {
     access: "pending-auth",
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
   },
   "POST /v1/admin/auth/mfa/verify": {
     access: "pending-auth",
-    roles: ["platform_admin", "event-registrar"],
+    roles: ["platform_admin", "event-registrar", "congress-program-committee"],
   },
 };
 
@@ -86,8 +87,16 @@ const ADMIN_ENTRY_CLASSIFICATION: Record<
  */
 const REGISTRAR_ADMITTED: Record<string, string[]> = {
   // Holding a session: reading back one's own roles, and ending the session.
-  "GET /v1/admin/auth/session": ["platform_admin", "event-registrar"],
-  "POST /v1/admin/auth/logout": ["platform_admin", "event-registrar"],
+  "GET /v1/admin/auth/session": [
+    "platform_admin",
+    "event-registrar",
+    "congress-program-committee",
+  ],
+  "POST /v1/admin/auth/logout": [
+    "platform_admin",
+    "event-registrar",
+    "congress-program-committee",
+  ],
   // 044 EARS-18 — the congress roster read, the working surface the role
   // exists for: a read of one event's roster.
   "GET /v1/admin/events/:idOrSlug/roster": [
@@ -103,14 +112,27 @@ const REGISTRAR_ADMITTED: Record<string, string[]> = {
   ],
   // 044 EARS-34 — the per-day attendance mark on that same event's roster, the
   // other registrar write the amendment admits; bound by EARS-38 likewise.
-  "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day": [
-    "platform_admin",
-    "event-registrar",
-  ],  // 044 EARS-36 — the participant card, a read of one registration on that same
+  "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day":
+    ["platform_admin", "event-registrar"], // 044 EARS-36 — the participant card, a read of one registration on that same
   // event's roster; the registrar is admitted and bound to the event (EARS-38).
   "GET /v1/admin/events/:idOrSlug/registrations/:registrationId": [
     "platform_admin",
     "event-registrar",
+  ],
+  // 046 EARS-26…EARS-28 (#2437) — the programme committee's registry, card and
+  // status change of its bound events; the denial side is proven in
+  // `apps/api/test/congress/submissions-committee.e2e-spec.ts`.
+  "GET /v1/admin/events/:idOrSlug/congress-submissions": [
+    "platform_admin",
+    "congress-program-committee",
+  ],
+  "GET /v1/admin/events/:idOrSlug/congress-submissions/:submissionId": [
+    "platform_admin",
+    "congress-program-committee",
+  ],
+  "POST /v1/admin/events/:idOrSlug/congress-submissions/:submissionId/status": [
+    "platform_admin",
+    "congress-program-committee",
   ],
 };
 
@@ -253,7 +275,8 @@ const FLOOR_ROUTES: {
   // the same reason. A well-formed body and a configured congress day, so an
   // admitted principal reaches the absent-event 404, never a 400 or a 422.
   {
-    endpoint: "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day",
+    endpoint:
+      "PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day",
     method: "PUT",
     url: `/v1/admin/events/${ABSENT_ID}/registrations/${ABSENT_ID}/attendance/2027-04-23`,
     payload: { present: true },
@@ -280,6 +303,34 @@ const FLOOR_ROUTES: {
     method: "PUT",
     url: `/v1/admin/events/${ABSENT_ID}/congress-intake-settings`,
     payload: CONGRESS_INTAKE_DEFAULTS,
+  },
+  // 046 EARS-26…EARS-28, EARS-35 (#2437) — the programme committee routes,
+  // excluded from the EARS-11.7 count for the same reason. Well-formed bodies,
+  // so an admitted principal reaches the absent-event 404, never a 400.
+  {
+    endpoint: "GET /v1/admin/events/:idOrSlug/congress-submissions",
+    method: "GET",
+    url: `/v1/admin/events/${ABSENT_ID}/congress-submissions`,
+  },
+  {
+    endpoint:
+      "GET /v1/admin/events/:idOrSlug/congress-submissions/:submissionId",
+    method: "GET",
+    url: `/v1/admin/events/${ABSENT_ID}/congress-submissions/${ABSENT_ID}`,
+  },
+  {
+    endpoint:
+      "POST /v1/admin/events/:idOrSlug/congress-submissions/:submissionId/status",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/congress-submissions/${ABSENT_ID}/status`,
+    payload: { status: "in_review", expectedStatus: "submitted" },
+  },
+  {
+    endpoint:
+      "POST /v1/admin/events/:idOrSlug/congress-submissions/:submissionId/revision-deadline",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/congress-submissions/${ABSENT_ID}/revision-deadline`,
+    payload: { lastDay: "2099-01-01" },
   },
   // 012 EARS-1/EARS-16 (#1283) — the taxonomy project routes sit on the same
   // raised floor as every other admin route: the guard refuses before validation,
@@ -1152,7 +1203,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // for the same reason as the recordings routes: they share the path
       // prefix but are a different feature with its own EARS coverage (and its
       // own role set), and the floor-table rows above assert them. 046's
-      // congress intake settings are excluded likewise.
+      // congress intake settings and committee routes are excluded likewise.
       const events = adminRows().filter(
         (r) =>
           r.endpoint.includes(" /v1/admin/events") &&
@@ -1161,7 +1212,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           !r.endpoint.endsWith("/:idOrSlug/registrations") &&
           !r.endpoint.endsWith("/attendance/:day") &&
           !r.endpoint.endsWith("/registrations/:registrationId") &&
-          !r.endpoint.endsWith("/congress-intake-settings"),
+          !r.endpoint.endsWith("/congress-intake-settings") &&
+          !r.endpoint.includes("/congress-submissions"),
       );
       expect(events.length).toBe(12);
       for (const row of events) {

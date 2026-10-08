@@ -221,6 +221,26 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 
 **Affects.** 003 EARS-13 (поправка к production 2026-10-07); `apps/api/src/auth/rate-limit/`; `apps/api/src/auth/README.md` (раздел rate-limit); design §5.5 SD1.
 
+### A3 — Программный комитет ревалидируется под собственным grant'ом; `403 PROGRAM_COMMITTEE_REQUIRED` (2026-10-08, #2437)
+
+**Context.** A1 работает в production: live-строка, допускающая `event-registrar`, спрашивает IdP о grant'е регистратора для сессии только-регистратора. Фича 046 добавляет вторую привязанную к событию staff-роль — `congress-program-committee` (046 EARS-26), привязанную к одному или нескольким событиям строками `event_role_grants`. Смена статуса заявки комитетом (046 EARS-28) — запись с `revalidate: "live"`, а у сессии только-комитета нет `platform_admin`, поэтому правило A1 в нынешней формулировке отказывало бы каждому члену комитета.
+
+**Decision.**
+
+- **Какой grant ревалидируется.** На строке, допускающей `congress-program-committee`, сессию с `platform_admin` спрашивают о `platform_admin`; сессию без него, держащую `congress-program-committee`, — о `congress-program-committee`. Правила A1 для регистратора и `pd_officer` не меняются.
+- **Новая строка таблицы вердиктов.** Grant отозван, случай `congress-program-committee` → `403` `errorCode: PROGRAM_COMMITTEE_REQUIRED`, рядом с `PLATFORM_ADMIN_REQUIRED`, `PD_OFFICER_REQUIRED` и `EVENT_REGISTRAR_REQUIRED`.
+- **Ревалидация никогда не расширяет доступ.** Как в A1: допуск решают проверка `roles` маршрута и привязка к событию (`EventGrantPolicy.assertEventAccess` по `event_role_grants` для роли комитета). Сессию только-комитета на строке, не допускающей комитет, спрашивают о `platform_admin` и отказывают.
+- **Нижняя граница второго фактора.** `congress-program-committee` требует TOTP, как `event-registrar` (`MFA_REQUIRED_BY_ROLE`).
+- **Без изменений.** `401 ADMIN_SESSION_REQUIRED`, `503 IDP_REVALIDATION_UNAVAILABLE` и порядок authority до presence.
+
+**Consequences.** Члены комитета получают live-ревалидацию на записи решения без расширения доступа. Admin-консоль обязана трактовать `403 PROGRAM_COMMITTEE_REQUIRED` как отказ по credential (нет доступа), никогда как повод для retry.
+
+**Why now.** #2437 выпускает маршрут смены статуса комитетом с `revalidate: "live"` — первую live-запись, доступную комитету.
+
+**Open follow-up.** Интерфейс решений в админке (следующий слой #2437) отображает `403 PROGRAM_COMMITTEE_REQUIRED` как «нет доступа», а `503 IDP_REVALIDATION_UNAVAILABLE` — как retry.
+
+**Affects.** 046 EARS-26 / EARS-28 / EARS-31; `apps/api/src/auth/admin-session/admin-authority.guard.ts`; `apps/api/src/auth/README.md`; `apps/api/docs/endpoint-authz-matrix.md` (колонка `revalidate`); `infra/dev-stand/idp/provision.sh` (seed проектной роли).
+
 ## Consequences
 
 ### Положительные

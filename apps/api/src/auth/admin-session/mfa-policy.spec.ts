@@ -6,14 +6,19 @@ import {
 } from "./mfa-policy.js";
 
 describe("011 EARS-3 — role → mfa_required policy", () => {
-  it("EARS-3: the policy is populated with exactly its two named tenants", () => {
+  it("EARS-3: the policy is populated with exactly its named tenants", () => {
     // 011 Scope → Out is explicit that `moderator` / `support` / `expert` /
     // `clinic_admin` / `investor` are NOT tenants yet (their factor kinds differ
     // per ADR-0001 §4). A silent extra entry here would mandate TOTP for a role
     // with no enrollment path — a lockout, not a hardening. `event-registrar`
     // (044 EARS-19) is a named tenant precisely because it DOES have one: it
-    // enrols and is challenged on the `platform_admin` TOTP flow unchanged.
-    expect(mfaRequiredRoles()).toEqual(["platform_admin", "event-registrar"]);
+    // enrols and is challenged on the `platform_admin` TOTP flow unchanged;
+    // `congress-program-committee` (046 EARS-26) on exactly the same terms.
+    expect(mfaRequiredRoles()).toEqual([
+      "platform_admin",
+      "event-registrar",
+      "congress-program-committee",
+    ]);
   });
 
   it("044 EARS-19: a principal holding only event-registrar requires a second factor", () => {
@@ -21,6 +26,10 @@ describe("011 EARS-3 — role → mfa_required policy", () => {
     // refuses a principal the policy does not cover, so without this entry the
     // registrar would need a second, weaker door into the admin tier.
     expect(requiresMfa(["event-registrar"])).toBe(true);
+  });
+
+  it("046 EARS-26: a principal holding only congress-program-committee requires a second factor", () => {
+    expect(requiresMfa(["congress-program-committee"])).toBe(true);
   });
 
   it("EARS-3: a principal holding platform_admin requires a second factor", () => {

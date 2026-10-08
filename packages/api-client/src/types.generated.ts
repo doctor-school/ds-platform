@@ -1876,6 +1876,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/events/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["EventsPublicController_live"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/events/month-counts": {
         parameters: {
             query?: never;
@@ -2600,17 +2616,6 @@ export interface components {
             to: string;
             totalCount: number;
         };
-        DoctorEventsLiveDto: {
-            /** Format: date-time */
-            endsAt: string;
-            eventId: string;
-            href: string;
-            presenceCount: number;
-            school: string;
-            slug: string;
-            title: string;
-            viewerIsRegistered: boolean;
-        };
         DoctorEventsMonthGridDto: {
             days: {
                 count: number;
@@ -2694,6 +2699,17 @@ export interface components {
             page: number;
             pageSize: number;
             total: number;
+        };
+        EventLiveStripDto: {
+            /** Format: date-time */
+            endsAt: string;
+            eventId: string;
+            href: string;
+            presenceCount: number;
+            school: string;
+            slug: string;
+            title: string;
+            viewerIsRegistered: boolean;
         };
         EventPageViewDto: {
             description: string;
@@ -2871,9 +2887,17 @@ export interface components {
                 upcoming: number;
             };
             data: ({
+                /** @enum {string} */
+                format: "online" | "offline" | "hybrid";
                 /** Format: uuid */
                 id: string;
+                kind: {
+                    id: string;
+                    slug: string;
+                    title: string;
+                };
                 school: string;
+                signUpCount: number;
                 slug: string;
                 speakers: {
                     name: string;
@@ -2885,8 +2909,15 @@ export interface components {
                 state: "published" | "live";
                 title: string;
             } | {
+                /** @enum {string} */
+                format: "online" | "offline" | "hybrid";
                 /** Format: uuid */
                 id: string;
+                kind: {
+                    id: string;
+                    slug: string;
+                    title: string;
+                };
                 recording: {
                     expectedBy: string | null;
                     posterUrl: string | null;
@@ -2896,6 +2927,7 @@ export interface components {
                     state: "montage" | "raw-only" | "preparing";
                 };
                 school: string;
+                signUpCount: number;
                 slug: string;
                 speakers: {
                     name: string;
@@ -2907,6 +2939,11 @@ export interface components {
                 state: "ended";
                 title: string;
             })[];
+            horizon?: {
+                from: string;
+                nextTo: string | null;
+                to: string;
+            };
             pagination: {
                 hasMore: boolean;
                 nextCursor: string | null;
@@ -2930,9 +2967,17 @@ export interface components {
             to: "draft" | "published" | "live" | "ended" | "hidden" | "in_archive";
         };
         UpcomingBroadcastListDto: {
+            /** @enum {string} */
+            format: "online" | "offline" | "hybrid";
             /** Format: uuid */
             id: string;
+            kind: {
+                id: string;
+                slug: string;
+                title: string;
+            };
             school: string;
+            signUpCount: number;
             slug: string;
             speakers: {
                 name: string;
@@ -5788,9 +5833,11 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: string;
+                from?: string;
                 limit?: number;
                 month?: string;
                 timeframe?: "upcoming" | "past";
+                to?: string;
             };
             header?: never;
             path?: never;
@@ -5902,6 +5949,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    EventsPublicController_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventLiveStripDto"][];
+                };
             };
         };
     };
@@ -6229,7 +6295,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DoctorEventsLiveDto"] | null;
+                    "application/json": components["schemas"]["EventLiveStripDto"][];
                 };
             };
         };

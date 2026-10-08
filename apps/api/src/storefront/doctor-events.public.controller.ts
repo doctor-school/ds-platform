@@ -11,16 +11,11 @@ import {
   Req,
   UseFilters,
 } from "@nestjs/common";
-import {
-  ApiExtraModels,
-  ApiOkResponse,
-  ApiQuery,
-  getSchemaPath,
-} from "@nestjs/swagger";
+import { ApiOkResponse, ApiQuery } from "@nestjs/swagger";
 import type { FastifyRequest } from "fastify";
 import {
   type DoctorEventsFeed,
-  type DoctorEventsLiveRead,
+  type EventsLiveRead,
   type DoctorEventsMonthGrid,
   type EventPageView,
   type ParticipationCta,
@@ -30,14 +25,17 @@ import {
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { EventsService } from "../events/events.service.js";
-import { EventPageViewDto, ParticipationCtaDto } from "../events/events.dto.js";
+import {
+  EventLiveStripDto,
+  EventPageViewDto,
+  ParticipationCtaDto,
+} from "../events/events.dto.js";
 import type { AroundEventRoutes } from "../events/around-event.resolver.js";
 import { resolveAroundEvent } from "../events/around-event.resolver.js";
 import { DOCTOR_ROUTES } from "../events/host-routes.js";
 import { ParticipationService } from "../events/participation.service.js";
 import {
   DoctorEventsFeedDto,
-  DoctorEventsLiveDto,
   DoctorEventsMonthGridDto,
 } from "./doctor-events.dto.js";
 import { DoctorEventsService } from "./doctor-events.service.js";
@@ -204,7 +202,9 @@ export class DoctorEventsPublicController {
 
   /**
    * 019 EARS-6 (#1521) — `GET /v1/storefront/doctor/events/live`, the
-   * «Идёт сейчас» strip that stands above the feed.
+   * «Идёт сейчас» strips that stand above the feed: every targeted эфир
+   * running now, earliest first, `[]` when none — the doctor twin of
+   * `GET /v1/public/events/live` over the one live resolution (wave-2 gate D5).
    *
    * Declared BEFORE `@Get(":idOrSlug")` so the literal segment keeps winning
    * over the parameter — the same ordering rule `@Get("month")` follows.
@@ -215,7 +215,7 @@ export class DoctorEventsPublicController {
    * and the strip is per-viewer (its `href` depends on whether this reader holds
    * a registration) — folding it in would poison the feed's `private, max-age=30`
    * cache with one doctor's room link. And the strip is a LIVE fact the host
-   * re-reads on its own bounded cadence (`DOCTOR_EVENTS_LIVE_REFRESH_SECONDS`);
+   * re-reads on its own bounded cadence (`EVENTS_LIVE_REFRESH_SECONDS`);
    * re-reading the whole day-grouped feed every 30 s to refresh one badge would
    * be the cost this split exists to avoid.
    *
@@ -225,16 +225,9 @@ export class DoctorEventsPublicController {
    * because the answer varies per viewer AND changes the moment a room closes.
    */
   @Get("live")
-  @ApiExtraModels(DoctorEventsLiveDto)
-  @ApiOkResponse({
-    // `LiveStrip | null` (`DoctorEventsLiveReadSchema`), not a bare strip: the
-    // most common answer on this route is «nothing is live», and a published
-    // contract that types the 200 body as an always-present object would make
-    // every SDK consumer wrong about its own happy path.
-    schema: {
-      oneOf: [{ $ref: getSchemaPath(DoctorEventsLiveDto) }, { type: "null" }],
-    },
-  })
+  // `LiveStrip[]` (`EventsLiveReadSchema`): «nothing is live» — the most
+  // common answer — is `[]`, a value of the same contract, never a null.
+  @ApiOkResponse({ type: EventLiveStripDto, isArray: true })
   @Public()
   @Header("Cache-Control", "private, no-store")
   @Authz({
@@ -246,7 +239,7 @@ export class DoctorEventsPublicController {
   live(
     @Req() req: FastifyRequest,
     @Headers("cookie") cookie?: string,
-  ): Promise<DoctorEventsLiveRead> {
+  ): Promise<EventsLiveRead> {
     const sub = (req as { user?: { sub?: string } }).user?.sub;
     return this.feed.live({
       specialtyReference: readSpecialtyChoiceCookie(cookie),

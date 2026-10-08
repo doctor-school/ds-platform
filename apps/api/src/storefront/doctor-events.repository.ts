@@ -2,7 +2,6 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   and,
   asc,
-  count,
   eq,
   gte,
   ilike,
@@ -14,14 +13,12 @@ import {
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import {
-  eventDirections,
   eventExperts,
   eventKinds,
   eventProjects,
   events,
   experts,
   projects,
-  registrations,
 } from "@ds/db";
 import {
   type EventKindRef,
@@ -29,7 +26,8 @@ import {
   MONTH_BROADCAST_STATES,
 } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
-import { isParticipant } from "../auth/staff-role.js";
+import { eventsOnActiveDirections } from "../events/event-direction-restriction.js";
+import { countEventSignUps } from "../events/event-sign-ups.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -99,19 +97,9 @@ export interface DoctorFeedFilters {
 export class DoctorEventsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
-  /** The active managed direction rows an event carries, used both to filter and to label. */
+  /** The active managed direction rows an event carries — the one shared targeting subquery. */
   private activeDirectionsOf(directionIds: string[] | null) {
-    const restriction = [
-      eq(eventDirections.status, "active"),
-      isNull(eventDirections.deletedAt),
-    ];
-    if (directionIds !== null) {
-      restriction.push(inArray(eventDirections.directionId, directionIds));
-    }
-    return this.db
-      .select({ id: eventDirections.eventId })
-      .from(eventDirections)
-      .where(and(...restriction));
+    return eventsOnActiveDirections(this.db, directionIds);
   }
 
   /**
@@ -174,48 +162,6 @@ export class DoctorEventsRepository {
     }
 
     const where = this.feedWhere(filters);
-
-    const rows = await this.db
-      .select(FEED_ROW_COLUMNS)
-      .from(events)
-      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
-      .where(and(...where))
-      .orderBy(asc(events.startsAt), asc(events.id));
-
-    return rows as DoctorFeedRow[];
-  }
-
-  /**
-   * 019 EARS-6 (#1521) — the targeted эфиры that are RUNNING right now.
-   *
-   * The selection is the feed's own targeting predicate — the same
-   * {@link activeDirectionsOf} subquery over the managed `event_directions`
-   * rows — with two differences and no others: the lifecycle filter is the
-   * single `live` state instead of the whole publish window, and there is NO
-   * horizon. The horizon is deliberately dropped rather than widened: an эфир
-   * that started before the rendered window is EXCLUDED from the feed (stand
-   * finding 2026-09-02), and the live block is precisely the surface where a
-   * running эфир must still be reachable.
-   *
-   * What this method must never become is a second selection path: liveness is
-   * 006's `state` column, never `startsAt + durationMin` compared to `now()`
-   * here or on any client (019-design §4). Ordered by `startsAt` so a viewer
-   * targeted at several concurrent эфиры sees the one that has been running
-   * longest — a deterministic tie-break, not a ranking.
-   */
-  async findLiveRows(directionIds: string[] | null): Promise<DoctorFeedRow[]> {
-    // A targeted read that reaches no direction has nothing live, full stop —
-    // the same short-circuit `findFeedRows` applies, for the same reason.
-    if (directionIds !== null && directionIds.length === 0) return [];
-
-    const where = [
-      eq(events.recordStatus, "active"),
-      DOCTOR_AUDIENCE,
-      eq(events.state, "live"),
-    ];
-    if (directionIds !== null) {
-      where.push(inArray(events.id, this.activeDirectionsOf(directionIds)));
-    }
 
     const rows = await this.db
       .select(FEED_ROW_COLUMNS)
@@ -334,20 +280,7 @@ export class DoctorEventsRepository {
    * Live registrations per event — the «сколько коллег записалось» of EARS-2.
    * Participants only: a staff account's sign-up is not a colleague (#2456).
    */
-  async countSignUps(eventIds: string[]): Promise<Map<string, number>> {
-    if (eventIds.length === 0) return new Map();
-    const rows = await this.db
-      .select({ eventId: registrations.eventId, total: count() })
-      .from(registrations)
-      .where(
-        and(
-          inArray(registrations.eventId, eventIds),
-          eq(registrations.recordStatus, "active"),
-          isParticipant(registrations.userId),
-        ),
-      )
-      .groupBy(registrations.eventId);
-
-    return new Map(rows.map((row) => [row.eventId, Number(row.total)]));
+  countSignUps(eventIds: string[]): Promise<Map<string, number>> {
+    return countEventSignUps(this.db, eventIds);
   }
 }

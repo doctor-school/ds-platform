@@ -75,24 +75,29 @@ another visitor.
 One contract serves two compositions (LD-3): the grid beside the feed (#1516)
 and the dedicated calendar page (#1520) read the SAME endpoint.
 
-## 019 «Идёт сейчас» — the live strip
+## 019 «Идёт сейчас» — the live strips
 
-`GET /v1/storefront/doctor/events/live` (EARS-6, #1521) returns `LiveStrip | null`
-— the ONE targeted эфир that is running right now, or `null`. `access: public`
-with an OPTIONAL principal and `private, no-store`: the body varies per viewer
-and changes the moment a room closes.
+`GET /v1/storefront/doctor/events/live` (EARS-6, #1521) returns `LiveStrip[]` —
+every targeted эфир running right now, earliest start first, `[]` when none.
+`access: public` with an OPTIONAL principal and `private, no-store`: the body
+varies per viewer and changes the moment a room closes. It is the doctor twin of
+the Academy's `GET /v1/public/events/live`: both read the ONE live resolution,
+`EventsLiveService` (`../events/events-live.service.ts`, wave-2 entry gate §4.3
+D5), parameterised by audience; this host hands it the `doctors` audience, the
+feed's own targeting and `DOCTOR_ROUTES`.
 
 - **It exists because the feed cannot carry it.** An эфир that started before the
   rendered horizon is excluded by the feed's lower bound, so a doctor arriving
-  mid-эфир would see only what is still to come. `findLiveRows` applies the
-  feed's OWN targeting subquery with the horizon dropped and the lifecycle
-  narrowed to `state = 'live'` — a projection of the same selection, never a
-  second one, and never `startsAt + durationMin` compared to the clock.
-- **The entry policy is 020's, not a second room rule.** The strip asks
-  `ParticipationService.cta()` under `DOCTOR_ROUTES`: `enter-room` means the
-  viewer holds a registration and its `href` is the room; every other answer —
-  guest and signed-in-unregistered alike — resolves to the event page, where 020
-  already renders the honest next step.
+  mid-эфир would see only what is still to come. `EventsRepository.findLiveRows`
+  applies the feed's OWN targeting subquery (`eventsOnActiveDirections`) with the
+  horizon dropped and the lifecycle narrowed to `state = 'live'` — a projection
+  of the same selection, never a second one, and never `startsAt + durationMin`
+  compared to the clock.
+- **The entry policy is 020's, not a second room rule.** Each strip asks
+  `ParticipationService.cta()` under the calling host's routes: `enter-room`
+  means the viewer holds a registration and its `href` is the room; every other
+  answer — guest and signed-in-unregistered alike — resolves to the event page,
+  where 020 already renders the honest next step.
 - **One presence aggregate, two callers.** A registered viewer's `presenceCount`
   arrives with the CTA and excludes themself («коллеги» = other people, 020
   EARS-7); everyone else is not in the room, so the same
@@ -100,11 +105,12 @@ and changes the moment a room closes.
   with no exclusion.
 - **The contract carries no `startsAt`.** `endsAt` is present only as the «до
   HH:MM МСК» line and nothing branches on it, so no host can derive liveness
-  from its own clock (019-design §4). `DOCTOR_EVENTS_LIVE_REFRESH_SECONDS = 30`
-  is the bounded re-read cadence (LD-6) — a socket for one badge is not built.
-- **Several concurrent эфиры → the earliest `startsAt`.** A deterministic
-  tie-break over rows targeting already chose, not a ranking; the strip is
-  `.strict()` and has no field a score could be written into.
+  from its own clock (019-design §4). `EVENTS_LIVE_REFRESH_SECONDS = 30` is the
+  bounded re-read cadence (LD-6) — a socket for one badge is not built.
+- **Several concurrent эфиры → every strip, earliest `startsAt` first.** A
+  deterministic order over rows targeting already chose, not a ranking; the
+  block shows two and «Ещё N в эфире →» (019 «Amendment — 2026-10-05»), and the
+  strip is `.strict()` with no field a score could be written into.
 
 ## Exported symbols
 

@@ -16,6 +16,7 @@ import {
   getSchemaPath,
 } from "@nestjs/swagger";
 import {
+  type EventsLiveRead,
   MONTH_PARAM,
   type MonthBroadcastEntry,
   type MonthlyEventCount,
@@ -30,6 +31,7 @@ import { Authz, Public } from "../authz/index.js";
 import { EventsService } from "./events.service.js";
 import { InvalidEventListingCursorError } from "./events.service.js";
 import {
+  EventLiveStripDto,
   MonthBroadcastListDto,
   ParticipationCtaDto,
   PublicEventListingPageDto,
@@ -39,6 +41,7 @@ import type { AroundEventRoutes } from "./around-event.resolver.js";
 import { resolveAroundEvent } from "./around-event.resolver.js";
 import { ACADEMY_ROUTES } from "./host-routes.js";
 import { ParticipationService } from "./participation.service.js";
+import { EventsLiveService } from "./events-live.service.js";
 
 /**
  * 020 EARS-2 (#1765) — the ACADEMY host's «вокруг события» table. Every entry
@@ -86,6 +89,7 @@ export class EventsPublicController {
   constructor(
     private readonly events: EventsService,
     private readonly participation: ParticipationService,
+    private readonly liveEvents: EventsLiveService,
   ) {}
 
   /**
@@ -100,6 +104,11 @@ export class EventsPublicController {
    *   already-past events, ordered nearest first; an empty month is a valid
    *   `200 []`. A malformed `month` is a 400 before any read.
    *
+   * - `?timeframe=upcoming|past` → the `/webinars` tab page
+   *   (`PublicEventListingPage`, 014 EARS-11), paged either by the horizon
+   *   `from`/`to` of the one codec (wave-2 entry gate §4.3 D2) or by `cursor`;
+   *   the two never combine (400).
+   *
    * Public + cacheable like the event page (no per-session variation). Placed
    * before `:idOrSlug` so the bare-path reads are unambiguous.
    */
@@ -108,6 +117,8 @@ export class EventsPublicController {
   @ApiQuery({ name: "timeframe", required: false, enum: ["upcoming", "past"] })
   @ApiQuery({ name: "limit", required: false, type: Number })
   @ApiQuery({ name: "cursor", required: false, type: String })
+  @ApiQuery({ name: "from", required: false, type: String })
+  @ApiQuery({ name: "to", required: false, type: String })
   @ApiExtraModels(
     UpcomingBroadcastListDto,
     MonthBroadcastListDto,
@@ -135,14 +146,20 @@ export class EventsPublicController {
     @Query("timeframe") timeframe?: string,
     @Query("limit") limit?: string,
     @Query("cursor") cursor?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ): Promise<
     UpcomingBroadcastCard[] | MonthBroadcastEntry[] | PublicEventListingPage
   > {
-    if (timeframe !== undefined) {
+    // A horizon without a timeframe is a malformed listing query (400), never
+    // a silent fall-through to the legacy bare read.
+    if (timeframe !== undefined || from !== undefined || to !== undefined) {
       const parsed = PublicEventListingQuerySchema.safeParse({
         timeframe,
         limit,
         cursor,
+        from,
+        to,
       });
       if (!parsed.success) {
         throw new BadRequestException("invalid public event listing query");
@@ -188,6 +205,39 @@ export class EventsPublicController {
       throw new BadRequestException("year must be formatted YYYY");
     }
     return this.events.monthlyEventCounts(year);
+  }
+
+  /**
+   * Wave-2 entry gate §4.3 D5 — `GET /v1/public/events/live`, the Academy's
+   * «Идёт сейчас»: every `experts` эфир running now, earliest first, `[]` when
+   * none (019 EARS-6). The twin of `GET /v1/storefront/doctor/events/live` over
+   * the ONE live resolution ({@link EventsLiveService}), handed this host's
+   * audience and route table — the href is the room for a registered viewer and
+   * the event page otherwise, both on `/webinars`.
+   *
+   * `@Public()` with an OPTIONAL principal like the participation sibling (a
+   * guest is sent to the event page, never a 401), and `private, no-store`
+   * because the href varies per viewer and the list changes the moment a room
+   * closes. MUST be declared BEFORE `:idOrSlug`.
+   */
+  @Get("live")
+  @ApiOkResponse({ type: EventLiveStripDto, isArray: true })
+  @Public()
+  @Header("Cache-Control", "private, no-store")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-6"],
+  })
+  live(@Req() req: FastifyRequest): Promise<EventsLiveRead> {
+    const sub = (req as { user?: { sub?: string } }).user?.sub;
+    return this.liveEvents.live({
+      audience: "experts",
+      directionIds: null,
+      routes: ACADEMY_ROUTES,
+      sub,
+    });
   }
 
   @Get(":idOrSlug")

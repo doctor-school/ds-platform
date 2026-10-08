@@ -1,34 +1,29 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
-  addDoctorEventsFeedDays,
-  DOCTOR_EVENTS_FEED_HORIZON_DAYS,
-  DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS,
-  DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
   type DoctorEventCard,
   type DoctorEventDayGroup,
   type DoctorEventsFeed,
   type DoctorEventsFeedQuery,
   type DoctorEventsFeedTargeting,
-  type DoctorEventsLiveRead,
   type DoctorEventsMonthGrid,
   type DoctorEventsMonthQuery,
+  type EventsLiveRead,
   doctorEventsFeedDayOf,
   doctorEventsMonthDayList,
   doctorEventsMonthFacets,
   doctorEventsMonthFirstDay,
   doctorEventsMonthNextFirstDay,
   doctorEventsMonthOf,
-  doctorEventsFeedHorizonWidth,
   formatDoctorEventsFeedDayLabel,
 } from "@ds/schemas";
 import { eventEconomyFacts } from "../events/event-economy-facts.js";
-import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
-import { ParticipationService } from "../events/participation.service.js";
-import { PresenceRepository } from "../room/presence.repository.js";
 import {
-  ROOM_HEARTBEAT_INTERVAL_SECONDS,
-  presenceWindowSeconds,
-} from "../room/room.tokens.js";
+  eventHorizonInstants,
+  resolveEventHorizon,
+  resolveNextHorizonTo,
+} from "../events/event-horizon.js";
+import { EventsLiveService } from "../events/events-live.service.js";
+import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
 import {
   type DoctorFeedRow,
   DoctorEventsRepository,
@@ -76,16 +71,11 @@ export class DoctorEventsService {
     private readonly repository: DoctorEventsRepository,
     @Inject(TargetingService)
     private readonly targeting: TargetingService,
-    // 019 EARS-6 (#1521): the live strip reuses 020's ONE participation policy
-    // for the entry decision and 006's ONE presence aggregate for the count.
-    // Neither is re-implemented here — a second room-eligibility rule is
-    // exactly the drift 019-design §4 forbids.
-    @Inject(ParticipationService)
-    private readonly participation: ParticipationService,
-    @Inject(PresenceRepository)
-    private readonly presence: PresenceRepository,
-    @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
-    private readonly heartbeatIntervalSeconds: number,
+    // 019 EARS-6 (#1521) + wave-2 gate D5: the live strips come from the ONE
+    // live resolution both storefronts share; this service hands it only the
+    // doctor audience, the targeting and the doctor route table.
+    @Inject(EventsLiveService)
+    private readonly liveEvents: EventsLiveService,
   ) {}
 
   async feed(input: {
@@ -98,7 +88,7 @@ export class DoctorEventsService {
     const today = doctorEventsFeedDayOf(now);
     const { query } = input;
 
-    const horizon = resolveHorizon(query, today);
+    const horizon = resolveEventHorizon(query, today);
     const targeting = await this.resolveTargeting(
       query,
       input.specialtyReference,
@@ -111,8 +101,7 @@ export class DoctorEventsService {
 
     const rows = await this.repository.findFeedRows({
       directionIds,
-      fromInstant: new Date(`${horizon.from}T00:00:00+03:00`),
-      toInstant: new Date(`${horizon.to}T00:00:00+03:00`),
+      ...eventHorizonInstants(horizon),
       kindSlugs: query.kind,
       q: query.q,
     });
@@ -121,7 +110,16 @@ export class DoctorEventsService {
     const filtered = applyCardFacets(cards, query);
 
     const days = groupByDay(rows, filtered);
-    const nextTo = await this.resolveNextTo({ horizon, directionIds, query });
+    // #1803: «показать ещё» is offered only when the SAME feed predicate finds
+    // an event past the window — the one resolution both storefronts share.
+    const nextTo = await resolveNextHorizonTo(horizon, (range) =>
+      this.repository.findFirstFeedStartAfter({
+        directionIds,
+        ...range,
+        kindSlugs: query.kind,
+        q: query.q,
+      }),
+    );
 
     return {
       tense: query.tense,
@@ -134,60 +132,6 @@ export class DoctorEventsService {
       nextTo,
       targeting,
     };
-  }
-
-  /**
-   * The `to` «показать ещё» leads to — or `null` when the control must not be
-   * offered at all (#1803).
-   *
-   * The horizon width alone cannot answer this. A feed whose window simply ends
-   * says nothing about whether ANYTHING lies past it, and naming a next `to`
-   * regardless offered the doctor a control that walked into an empty widening
-   * — visibly so on the adjacency-less specialties, whose whole future may be a
-   * single event months out. So the question is asked of the data, under the
-   * SAME predicate the feed itself selects with: is there a feed-eligible event
-   * in `[to, from + MAX)`?
-   *
-   * When there is, the step is walked WHOLE rather than once: the answer is the
-   * smallest `to + k * STEP` (k ≥ 1, clamped to the maximum horizon) strictly
-   * past the day that event falls on, so the widening the doctor is handed
-   * always contains at least that event. An event inside the very next step
-   * therefore still yields today's `to + STEP`.
-   */
-  private async resolveNextTo(input: {
-    horizon: { from: string; to: string };
-    directionIds: string[] | null;
-    query: DoctorEventsFeedQuery;
-  }): Promise<string | null> {
-    const { horizon, query } = input;
-    const width = doctorEventsFeedHorizonWidth(horizon.from, horizon.to);
-    if (width >= DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) return null;
-
-    const maxTo = addDoctorEventsFeedDays(
-      horizon.from,
-      DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
-    );
-    const firstStart = await this.repository.findFirstFeedStartAfter({
-      directionIds: input.directionIds,
-      fromInstant: new Date(`${horizon.to}T00:00:00+03:00`),
-      toInstant: new Date(`${maxTo}T00:00:00+03:00`),
-      kindSlugs: query.kind,
-      q: query.q,
-    });
-    if (firstStart === null) return null;
-
-    const gap = doctorEventsFeedHorizonWidth(
-      horizon.to,
-      doctorEventsFeedDayOf(firstStart),
-    );
-    const steps = Math.floor(gap / DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS) + 1;
-    return addDoctorEventsFeedDays(
-      horizon.from,
-      Math.min(
-        width + steps * DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS,
-        DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS,
-      ),
-    );
   }
 
   /**
@@ -287,43 +231,12 @@ export class DoctorEventsService {
   }
 
   /**
-   * 019 EARS-6 (#1521) — «Идёт сейчас»: the ONE targeted эфир that is running
-   * right now, or `null` (019-design §3 «model: `LiveStrip | null`», §4).
-   *
-   * ## Why this read exists at all
-   *
-   * Because the feed cannot carry it. An эфир that started before the rendered
-   * horizon is excluded from `findFeedRows` by the horizon's lower bound (stand
-   * finding 2026-09-02), so a doctor arriving mid-эфир would otherwise see the
-   * feed of what is still to come and no way into what is happening. The live
-   * block is that way in — a projection of the SAME targeted selection, with
-   * the horizon dropped and the lifecycle narrowed to `live`.
-   *
-   * ## Nothing is derived here that 006 or 020 already decide
-   *
-   * Liveness is 006's `state` (never `startsAt + durationMin` against a clock,
-   * here or on any client). The ENTRY POLICY is 020's
-   * {@link ParticipationService}: the strip asks for the participation CTA of
-   * the resolved event under THIS host's routes and reads the answer —
-   * `enter-room` means «registered, the room is open», and its `href` is the
-   * room. Anything else, guest and signed-in-unregistered alike, is sent to the
-   * event page, where 020 already renders the honest next step. So there is no
-   * second room-eligibility rule to drift out of step with the event page.
-   *
-   * ## Two counts, one aggregate
-   *
-   * A registered viewer's count arrives with the CTA and excludes themself —
-   * «коллеги» means other people (020 EARS-7). Everyone else is not in the room
-   * and therefore excludes nobody, so the count is read from the SAME
-   * {@link PresenceRepository} aggregate over the SAME `2 × N` window with no
-   * exclusion. Two callers, one query, one definition of «в комнате».
-   *
-   * ## Several эфиры at once
-   *
-   * The earliest `startsAt` wins — the эфир that has been running longest, and
-   * so the one nearest its end. It is a deterministic tie-break over rows the
-   * targeting already chose, not a ranking: the strip has no score field and
-   * this method computes none.
+   * 019 EARS-6 (#1521) — «Идёт сейчас» on the doctor storefront: every targeted
+   * эфир running right now, earliest start first, `[]` when none (wave-2 gate
+   * §4.2, D5). The selection, the entry policy and the counts are the shared
+   * {@link EventsLiveService}'s; this method contributes the doctor's own
+   * inputs — the `doctors` audience and the SAME targeting the feed resolves
+   * («моя и смежные» over the remembered specialty; none chosen ⇒ untargeted).
    */
   async live(input: {
     /** The remembered specialty of the 017 anonymous session; `null` degrades to the untargeted read. */
@@ -332,45 +245,20 @@ export class DoctorEventsService {
     routes: ParticipationRoutes;
     /** The authenticated subject, absent for a guest. */
     sub?: string | undefined;
-  }): Promise<DoctorEventsLiveRead> {
+  }): Promise<EventsLiveRead> {
     const targeting = await this.resolveTargeting(
       { specialty: "mine-and-adjacent" },
       input.specialtyReference,
     );
-    const rows = await this.repository.findLiveRows(
-      targeting.mode === "all"
-        ? null
-        : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
-    );
-
-    const row = rows[0];
-    if (row === undefined) return null;
-
-    const cta = await this.participation.cta(row.slug, input.routes, input.sub);
-    const viewerIsRegistered = cta?.action === "enter-room";
-    const href =
-      viewerIsRegistered && cta.href !== null
-        ? cta.href
-        : input.routes.eventPath(row.slug);
-
-    return {
-      eventId: row.id,
-      slug: row.slug,
-      title: row.title,
-      school: row.school,
-      href,
-      // Rendered as «до HH:MM МСК» and nothing else — no host branches on it.
-      endsAt: new Date(
-        row.startsAt.getTime() + row.durationMin * 60_000,
-      ).toISOString(),
-      presenceCount: viewerIsRegistered
-        ? (cta.presenceCount ?? 0)
-        : await this.presence.countLivePresence(
-            row.id,
-            presenceWindowSeconds(this.heartbeatIntervalSeconds),
-          ),
-      viewerIsRegistered,
-    };
+    return this.liveEvents.live({
+      audience: "doctors",
+      directionIds:
+        targeting.mode === "all"
+          ? null
+          : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
+      routes: input.routes,
+      sub: input.sub,
+    });
   }
 
   private async resolveTargeting(
@@ -516,38 +404,6 @@ export class DoctorEventsService {
             : "normal",
     }));
   }
-}
-
-/**
- * The LD-2 bounded horizon. `from` defaults to today for «Будущие» and to the
- * window ending today for «Прошедшие»; `to` defaults to one horizon width on.
- * A caller-supplied `to` is CLAMPED to the maximum rather than rejected — a
- * hand-edited URL degrades to the widest honest read, never to a 400.
- */
-function resolveHorizon(
-  query: DoctorEventsFeedQuery,
-  today: string,
-): { from: string; to: string } {
-  const past = query.tense === "past";
-  const from =
-    query.from ??
-    (past
-      ? addDoctorEventsFeedDays(today, -DOCTOR_EVENTS_FEED_HORIZON_DAYS)
-      : today);
-  const fallbackTo = past
-    ? addDoctorEventsFeedDays(today, 1)
-    : addDoctorEventsFeedDays(from, DOCTOR_EVENTS_FEED_HORIZON_DAYS);
-  const requested = query.to ?? fallbackTo;
-
-  const width = doctorEventsFeedHorizonWidth(from, requested);
-  if (width <= 0) return { from, to: addDoctorEventsFeedDays(from, 1) };
-  if (width > DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) {
-    return {
-      from,
-      to: addDoctorEventsFeedDays(from, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-    };
-  }
-  return { from, to: requested };
 }
 
 /**

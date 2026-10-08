@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import {
   DoctorEventsFeedSchema,
-  DoctorEventsLiveReadSchema,
+  EventsLiveReadSchema,
   doctorEventsFeedDayOf,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
@@ -178,7 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         : { ...device, cookie: jar.join("; ") };
     };
 
-    const readLive = async (input: {
+    const readLiveList = async (input: {
       specialtyCode?: string;
       session?: string;
     }) => {
@@ -190,7 +190,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(response.statusCode).toBe(200);
       // The SSOT schema is `.strict()` and carries no `startsAt`, so a body that
       // leaked one — or a score — fails HERE rather than in a host.
-      return DoctorEventsLiveReadSchema.parse(response.json());
+      return EventsLiveReadSchema.parse(response.json());
+    };
+
+    /** The one strip a viewer targeted at exactly one running эфир reads. */
+    const readLive = async (input: {
+      specialtyCode?: string;
+      session?: string;
+    }) => {
+      const list = await readLiveList(input);
+      expect(list).toHaveLength(1);
+      return list[0]!;
     };
 
     const register = async (slug: string, session: string): Promise<void> => {
@@ -304,15 +314,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-6.1: a targeted live эфир surfaces as a strip carrying its title, school and live room count", async () => {
       const strip = await readLive({ specialtyCode: ownCode });
-      expect(strip).not.toBeNull();
-      expect(strip!.eventId).toBe(liveEventId);
-      expect(strip!.title).toBe("Идущий эфир по ортобиологии");
-      expect(strip!.school).toBe("Школа ортобиологии");
+      expect(strip.eventId).toBe(liveEventId);
+      expect(strip.title).toBe("Идущий эфир по ортобиологии");
+      expect(strip.school).toBe("Школа ортобиологии");
       // Both beating doctors count for a viewer who is neither of them.
-      expect(strip!.presenceCount).toBe(2);
-      expect(strip!.viewerIsRegistered).toBe(false);
+      expect(strip.presenceCount).toBe(2);
+      expect(strip.viewerIsRegistered).toBe(false);
       // The эфир ends three hours after it started; nothing branches on this.
-      expect(new Date(strip!.endsAt).getTime()).toBe(
+      expect(new Date(strip.endsAt).getTime()).toBe(
         liveStartsAt.getTime() + 180 * 60_000,
       );
     });
@@ -322,11 +331,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         specialtyCode: ownCode,
         session: registeredSession,
       });
-      expect(strip).not.toBeNull();
-      expect(strip!.viewerIsRegistered).toBe(true);
-      expect(strip!.href).toBe(`/events/${liveSlug}/room`);
+      expect(strip.viewerIsRegistered).toBe(true);
+      expect(strip.href).toBe(`/events/${liveSlug}/room`);
       // «N в комнате» is colleagues, and a colleague is someone other than you.
-      expect(strip!.presenceCount).toBe(1);
+      expect(strip.presenceCount).toBe(1);
     });
 
     it("EARS-6.3: a signed-in doctor who never registered is sent to the event page, never the room", async () => {
@@ -334,26 +342,43 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         specialtyCode: ownCode,
         session: unregisteredSession,
       });
-      expect(strip).not.toBeNull();
-      expect(strip!.viewerIsRegistered).toBe(false);
-      expect(strip!.href).toBe(`/events/${liveSlug}`);
-      expect(strip!.href).not.toContain("/room");
+      expect(strip.viewerIsRegistered).toBe(false);
+      expect(strip.href).toBe(`/events/${liveSlug}`);
+      expect(strip.href).not.toContain("/room");
     });
 
     it("EARS-6.4: a guest reads the same strip and the same count, and is sent to the event page", async () => {
       const strip = await readLive({ specialtyCode: ownCode });
-      expect(strip).not.toBeNull();
-      expect(strip!.href).toBe(`/events/${liveSlug}`);
-      expect(strip!.presenceCount).toBe(2);
+      expect(strip.href).toBe(`/events/${liveSlug}`);
+      expect(strip.presenceCount).toBe(2);
     });
 
-    it("EARS-6.5: a viewer whose specialty reaches no direction sees null, even while two эфиры are live", async () => {
-      expect(await readLive({ specialtyCode: unreachedCode })).toBeNull();
+    it("EARS-6.5: a viewer whose specialty reaches no direction reads an empty list, even while two эфиры are live", async () => {
+      expect(await readLiveList({ specialtyCode: unreachedCode })).toEqual([]);
       // The targeting is per-specialty, not a global «what is live»: the second
       // specialty resolves to its OWN эфир, never the first one's.
       const otherStrip = await readLive({ specialtyCode: otherCode });
-      expect(otherStrip).not.toBeNull();
-      expect(otherStrip!.title).toBe("Идущий эфир по ревматологии");
+      expect(otherStrip.title).toBe("Идущий эфир по ревматологии");
+    });
+
+    it("NEW: several targeted эфиры running at once are each a strip, earliest start first (wave-2 gate row 44)", async () => {
+      const ownDirection = directionIds[0]!;
+      const later = await makeEvent({
+        title: "Второй идущий эфир по ортобиологии",
+        startsAt: new Date(Date.now() - 10 * 60_000),
+        durationMin: 60,
+        directionId: ownDirection,
+      });
+      await setState(later.id, "live");
+      try {
+        const list = await readLiveList({ specialtyCode: ownCode });
+        expect(list.map((strip) => strip.eventId)).toEqual([
+          liveEventId,
+          later.id,
+        ]);
+      } finally {
+        await setState(later.id, "ended");
+      }
     });
 
     it("EARS-6.7: the live эфир is ALSO present in today's day group of the feed, so the two reads agree", async () => {
@@ -370,16 +395,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(day?.items.map((item) => item.id)).toContain(liveEventId);
     });
 
-    it("EARS-6.6: when the room closes the next read is null — the block clears itself rather than being hidden", async () => {
+    it("EARS-6.6: when the room closes the next read is an empty list — the block clears itself rather than being hidden", async () => {
       await setState(liveEventId, "ended");
       try {
-        expect(await readLive({ specialtyCode: ownCode })).toBeNull();
+        expect(await readLiveList({ specialtyCode: ownCode })).toEqual([]);
         expect(
-          await readLive({
+          await readLiveList({
             specialtyCode: ownCode,
             session: registeredSession,
           }),
-        ).toBeNull();
+        ).toEqual([]);
       } finally {
         await setState(liveEventId, "live");
       }

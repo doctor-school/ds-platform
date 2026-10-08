@@ -5,6 +5,7 @@ import {
   canTransition,
   type ConfigureStreamRequest,
   type CreateEventRequest,
+  doctorEventsFeedDayOf,
   type EventAdminDetail,
   type EventAdminListItem,
   type EventAdminListQuery,
@@ -41,6 +42,11 @@ import {
   type Tx,
 } from "./events.repository.js";
 import { eventEconomyFacts } from "./event-economy-facts.js";
+import {
+  eventHorizonInstants,
+  resolveEventHorizon,
+  resolveNextHorizonTo,
+} from "./event-horizon.js";
 import { EVENT_CURSOR_SHAPE } from "../taxonomy/public-event-cursor.js";
 
 /**
@@ -1213,25 +1219,50 @@ export class EventsService {
   async listUpcoming(now: Date = new Date()): Promise<UpcomingBroadcastCard[]> {
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
     const rows = await this.repo.listUpcoming(cutoff);
-    // 012 EARS-8: ONE batched resolver call for the whole page — never one per
-    // card. The card's `{ name }` array is a MAPPING of the merged result, not a
-    // second merge (012-design §5.2).
-    const speakers = await this.speakerProjection.resolveMany(
-      rows.map((r) => r.event.id),
-    );
-    return rows.map((r) =>
-      this.toUpcomingCard(r, speakers.get(r.event.id) ?? []),
-    );
+    return this.toUpcomingCards(rows);
   }
 
-  /** 014 EARS-11 cursor-paged public list used by the controlled `/webinars` tabs. */
+  /**
+   * 014 EARS-11 public list used by the controlled `/webinars` tabs. Two paging
+   * modes off one read (wave-2 entry gate §4.3 D2): the horizon (`from`, `to`)
+   * of the one codec — the doctor feed's own bounded window and «Показать ещё»
+   * resolution ({@link resolveEventHorizon}, {@link resolveNextHorizonTo}) — or
+   * the keyset cursor, which stays for other callers. The schema refuses the
+   * two together.
+   */
   async listPublicEvents(
     query: PublicEventListingQuery,
     now: Date = new Date(),
   ): Promise<PublicEventListingPage> {
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
-    const after = decodeEventListingCursor(query.cursor);
     const counts = await this.repo.publicListingCounts(cutoff);
+
+    if (query.from !== undefined || query.to !== undefined) {
+      const horizon = resolveEventHorizon(
+        { tense: query.timeframe, from: query.from, to: query.to },
+        doctorEventsFeedDayOf(now),
+      );
+      const window = eventHorizonInstants(horizon);
+      const rows =
+        query.timeframe === "past"
+          ? await this.repo.listPast(undefined, null, window)
+          : await this.repo.listUpcoming(cutoff, undefined, null, window);
+      const nextTo = await resolveNextHorizonTo(horizon, (range) =>
+        this.repo.findFirstListingStartIn(
+          query.timeframe,
+          query.timeframe === "past" ? null : cutoff,
+          range,
+        ),
+      );
+      return {
+        data: await this.toListingCards(query.timeframe, rows),
+        counts,
+        pagination: { hasMore: nextTo !== null, nextCursor: null },
+        horizon: { ...horizon, nextTo },
+      };
+    }
+
+    const after = decodeEventListingCursor(query.cursor);
     const rows =
       query.timeframe === "past"
         ? await this.repo.listPast(query.limit + 1, after)
@@ -1239,39 +1270,9 @@ export class EventsService {
     const hasMore = rows.length > query.limit;
     const pageRows = rows.slice(0, query.limit);
     const next = hasMore ? pageRows.at(-1) : undefined;
-    const speakers = await this.speakerProjection.resolveMany(
-      pageRows.map((row) => row.event.id),
-    );
-
-    if (query.timeframe === "past") {
-      const recordings =
-        await this.recordingsProjection.resolveRecordingProjections(
-          pageRows.map((row) => row.event.id),
-        );
-      const data: PastBroadcastCard[] = pageRows.map((row) => ({
-        ...this.toUpcomingCard(row, speakers.get(row.event.id) ?? []),
-        state: "ended",
-        recording: recordings.get(row.event.id)!,
-      }));
-      return {
-        data,
-        counts,
-        pagination: {
-          hasMore,
-          nextCursor: next
-            ? encodeEventListingCursor({
-                startsAt: next.startsAtCursor,
-                id: next.event.id,
-              })
-            : null,
-        },
-      };
-    }
 
     return {
-      data: pageRows.map((row) =>
-        this.toUpcomingCard(row, speakers.get(row.event.id) ?? []),
-      ),
+      data: await this.toListingCards(query.timeframe, pageRows),
       counts,
       pagination: {
         hasMore,
@@ -1283,6 +1284,58 @@ export class EventsService {
           : null,
       },
     };
+  }
+
+  /** One listing page → its cards; a past page carries each event's recording answer. */
+  private async toListingCards(
+    timeframe: PublicEventListingQuery["timeframe"],
+    rows: EventAggregate[],
+  ): Promise<PublicEventListingPage["data"]> {
+    const cards = await this.toUpcomingCards(rows);
+    if (timeframe !== "past") return cards;
+    const recordings =
+      await this.recordingsProjection.resolveRecordingProjections(
+        rows.map((row) => row.event.id),
+      );
+    return cards.map(
+      (card): PastBroadcastCard => ({
+        ...card,
+        state: "ended",
+        recording: recordings.get(card.id)!,
+      }),
+    );
+  }
+
+  /**
+   * Rows → {@link UpcomingBroadcastCard}s with every per-card lookup batched
+   * for the whole page — never one query per card: the speakers (012 EARS-8,
+   * the merged resolver's result mapped, not re-merged — 012-design §5.2), the
+   * 012 kinds (wave-2 gate D3) and the colleagues' sign-up count (A2), the
+   * same count the doctor card carries.
+   */
+  private async toUpcomingCards(
+    rows: EventAggregate[],
+  ): Promise<UpcomingBroadcastCard[]> {
+    const ids = rows.map((row) => row.event.id);
+    const [speakers, kinds, signUps] = await Promise.all([
+      this.speakerProjection.resolveMany(ids),
+      this.repo.findKinds(rows.map((row) => row.event.kindId)),
+      this.repo.countSignUps(ids),
+    ]);
+    return rows.map((row) => {
+      const kind = kinds.get(row.event.kindId);
+      // `events.kind_id` is a NOT NULL FK, so a missing kind is a broken
+      // invariant, never a card to render without its label.
+      if (kind === undefined) {
+        throw new Error(`event ${row.event.id} has no kind ${row.event.kindId}`);
+      }
+      return this.toUpcomingCard(
+        row,
+        speakers.get(row.event.id) ?? [],
+        kind,
+        signUps.get(row.event.id) ?? 0,
+      );
+    });
   }
 
   /**
@@ -1334,6 +1387,8 @@ export class EventsService {
   private toUpcomingCard(
     a: EventAggregate,
     merged: PublicEventPageSpeaker[],
+    kind: EventKindProjection,
+    signUpCount: number,
   ): UpcomingBroadcastCard {
     const e = a.event;
     return {
@@ -1350,6 +1405,10 @@ export class EventsService {
       speakers: merged.map((s) => ({ name: s.name })),
       // The repo filters to published/live, so the residual is the card subset.
       state: e.state as UpcomingBroadcastState,
+      // Wave-2 gate D3 — the event's own kind and attendance mode.
+      kind: { id: kind.id, slug: kind.slug, title: kind.title },
+      format: e.participationFormat,
+      signUpCount,
     };
   }
 

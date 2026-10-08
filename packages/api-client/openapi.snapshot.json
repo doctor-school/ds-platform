@@ -2155,54 +2155,6 @@
         ],
         "type": "object"
       },
-      "DoctorEventsLiveDto": {
-        "additionalProperties": false,
-        "properties": {
-          "endsAt": {
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-            "type": "string"
-          },
-          "eventId": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "href": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "presenceCount": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "school": {
-            "type": "string"
-          },
-          "slug": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "title": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "viewerIsRegistered": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "eventId",
-          "slug",
-          "title",
-          "school",
-          "href",
-          "endsAt",
-          "presenceCount",
-          "viewerIsRegistered"
-        ],
-        "type": "object"
-      },
       "DoctorEventsMonthGridDto": {
         "additionalProperties": false,
         "properties": {
@@ -2539,6 +2491,54 @@
           }
         },
         "required": ["data", "total", "page", "pageSize"],
+        "type": "object"
+      },
+      "EventLiveStripDto": {
+        "additionalProperties": false,
+        "properties": {
+          "endsAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "type": "string"
+          },
+          "eventId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "href": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "presenceCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "school": {
+            "type": "string"
+          },
+          "slug": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "viewerIsRegistered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eventId",
+          "slug",
+          "title",
+          "school",
+          "href",
+          "endsAt",
+          "presenceCount",
+          "viewerIsRegistered"
+        ],
         "type": "object"
       },
       "EventPageViewDto": {
@@ -3367,13 +3367,38 @@
               "anyOf": [
                 {
                   "properties": {
+                    "format": {
+                      "enum": ["online", "offline", "hybrid"],
+                      "type": "string"
+                    },
                     "id": {
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                       "type": "string"
                     },
+                    "kind": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "slug", "title"],
+                      "type": "object"
+                    },
                     "school": {
                       "type": "string"
+                    },
+                    "signUpCount": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
                     },
                     "slug": {
                       "type": "string"
@@ -3417,17 +3442,40 @@
                     "startsAt",
                     "specialties",
                     "speakers",
-                    "state"
+                    "state",
+                    "kind",
+                    "format",
+                    "signUpCount"
                   ],
                   "type": "object"
                 },
                 {
                   "additionalProperties": false,
                   "properties": {
+                    "format": {
+                      "enum": ["online", "offline", "hybrid"],
+                      "type": "string"
+                    },
                     "id": {
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                       "type": "string"
+                    },
+                    "kind": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "slug", "title"],
+                      "type": "object"
                     },
                     "recording": {
                       "properties": {
@@ -3493,6 +3541,11 @@
                     "school": {
                       "type": "string"
                     },
+                    "signUpCount": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
                     "slug": {
                       "type": "string"
                     },
@@ -3535,6 +3588,9 @@
                     "startsAt",
                     "specialties",
                     "speakers",
+                    "kind",
+                    "format",
+                    "signUpCount",
                     "state",
                     "recording"
                   ],
@@ -3543,6 +3599,31 @@
               ]
             },
             "type": "array"
+          },
+          "horizon": {
+            "properties": {
+              "from": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              "nextTo": {
+                "anyOf": [
+                  {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              }
+            },
+            "required": ["from", "to", "nextTo"],
+            "type": "object"
           },
           "pagination": {
             "properties": {
@@ -3635,13 +3716,38 @@
       "UpcomingBroadcastListDto": {
         "items": {
           "properties": {
+            "format": {
+              "enum": ["online", "offline", "hybrid"],
+              "type": "string"
+            },
             "id": {
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
               "type": "string"
             },
+            "kind": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "slug", "title"],
+              "type": "object"
+            },
             "school": {
               "type": "string"
+            },
+            "signUpCount": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
             },
             "slug": {
               "type": "string"
@@ -3685,7 +3791,10 @@
             "startsAt",
             "specialties",
             "speakers",
-            "state"
+            "state",
+            "kind",
+            "format",
+            "signUpCount"
           ],
           "type": "object"
         },
@@ -6948,6 +7057,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7085,6 +7210,28 @@
           }
         },
         "tags": ["EventSpeakersPublic"]
+      }
+    },
+    "/v1/public/events/live": {
+      "get": {
+        "operationId": "EventsPublicController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EventLiveStripDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["EventsPublic"]
       }
     },
     "/v1/public/events/month-counts": {
@@ -7490,14 +7637,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/DoctorEventsLiveDto"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "items": {
+                    "$ref": "#/components/schemas/EventLiveStripDto"
+                  },
+                  "type": "array"
                 }
               }
             },

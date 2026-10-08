@@ -20,10 +20,12 @@ import type { RawQueryValue } from "./event-listing-query.schema.js";
  * The SAME projection serves the month grid standing beside the day feed
  * (EARS-4, F-019-2 Б) and the dedicated calendar page (EARS-5, #1520). There is
  * no second month contract to keep in step, and — per 019-design §1.1 — no
- * client-side grid assembly either: Academy's `month-calendar-view.tsx` builds
- * its month from the public listing, which is exactly what the Doctor read does
- * NOT do. Every day of the month is present in `days`, `count: 0` included, so
- * a host renders the grid straight from the response and fills nothing in.
+ * host-side grid assembly either: the Academy month pane
+ * (`@ds/events-storefront` `month-calendar-view.tsx`) assembles its grid with
+ * `buildMonthGrid` from the `GET /v1/public/events?month=` entries, which is
+ * exactly what the Doctor read does NOT need. Every day of the month is present
+ * in `days`, `count: 0` included, so a host renders the grid straight from the
+ * response and fills nothing in.
  *
  * ## The grid is navigation over the SAME targeted read
  *

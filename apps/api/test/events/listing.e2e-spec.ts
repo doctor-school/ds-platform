@@ -249,6 +249,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
           "startsAt",
           "state",
           "title",
+          // Wave-2 entry gate §4.2: kind + format (D3), the sign-up count (A2).
+          "kind",
+          "format",
+          "signUpCount",
         ].sort(),
       );
       // Operator/commercial, storage-internal, and heavier public-page fields

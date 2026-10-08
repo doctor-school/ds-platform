@@ -7,6 +7,7 @@ import {
   LegacyBroadcastCreateBodySchema,
   ParticipationCtaSchema,
   MonthBroadcastListSchema,
+  MonthlyEventCountsSchema,
   PublicEventListingPageSchema,
   TransitionEventRequestSchema,
   UpcomingBroadcastListSchema,
@@ -84,3 +85,12 @@ export class PublicEventListingPageDto extends createZodDto(
  * schema as a full list, never an empty body or a `null` it special-cases.
  */
 export class EventLiveStripDto extends createZodDto(EventLiveStripSchema) {}
+
+/**
+ * 004 EARS-16 — the month picker's 12 dense `{ month, count }` rows. One DTO
+ * for both storefronts' per-month counts reads (the Academy `month-counts`
+ * and the doctor counterpart of wave-2 gate row 54).
+ */
+export class MonthlyEventCountsDto extends createZodDto(
+  MonthlyEventCountsSchema,
+) {}

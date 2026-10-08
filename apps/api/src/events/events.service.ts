@@ -15,6 +15,7 @@ import {
   type LegacyBroadcastCreateBody,
   type MonthBroadcastEntry,
   type MonthBroadcastState,
+  type AcademyEventFacets,
   type MonthlyEventCount,
   type PastBroadcastCard,
   type PublicEventListingPage,
@@ -42,6 +43,8 @@ import {
   type Tx,
 } from "./events.repository.js";
 import { eventEconomyFacts } from "./event-economy-facts.js";
+import { academyFacetsOf, NO_ACADEMY_FACETS } from "./academy-facets.js";
+import { denseMonthlyCounts } from "./monthly-counts.js";
 import {
   boundEventHorizonRows,
   clampRequestedPastFrom,
@@ -1245,7 +1248,9 @@ export class EventsService {
     now: Date = new Date(),
   ): Promise<PublicEventListingPage> {
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
-    const counts = await this.repo.publicListingCounts(cutoff);
+    // 014 EARS-12 — the facets narrow every read below, the tab counts too.
+    const facets = academyFacetsOf(query);
+    const counts = await this.repo.publicListingCounts(cutoff, facets);
 
     const horizonRead =
       query.from !== undefined ||
@@ -1266,6 +1271,7 @@ export class EventsService {
               null,
               window,
               order,
+              facets,
             )
           : await this.repo.listUpcoming(
               cutoff,
@@ -1273,6 +1279,7 @@ export class EventsService {
               null,
               window,
               order,
+              facets,
             );
       // One response stays bounded; the extent it echoes is the one it holds.
       const bounded = boundEventHorizonRows(
@@ -1292,11 +1299,18 @@ export class EventsService {
             query.timeframe,
             query.timeframe === "past" ? null : cutoff,
             range,
+            facets,
           ),
       );
       return {
         data: await this.toListingCards(query.timeframe, rows),
         counts,
+        // 014 EARS-12 — the options the facet panel beside this page lists.
+        facets: await this.repo.facetOptions(
+          query.timeframe,
+          query.timeframe === "past" ? null : cutoff,
+          facets,
+        ),
         pagination: { hasMore: beyond.remaining > 0, nextCursor: null },
         horizon: {
           ...clampRequestedPastFrom(
@@ -1315,8 +1329,15 @@ export class EventsService {
     const limit = query.limit ?? PUBLIC_EVENT_LISTING_PAGE_SIZE;
     const rows =
       query.timeframe === "past"
-        ? await this.repo.listPast(limit + 1, after)
-        : await this.repo.listUpcoming(cutoff, limit + 1, after);
+        ? await this.repo.listPast(limit + 1, after, undefined, "desc", facets)
+        : await this.repo.listUpcoming(
+            cutoff,
+            limit + 1,
+            after,
+            undefined,
+            "asc",
+            facets,
+          );
     const hasMore = rows.length > limit;
     const pageRows = rows.slice(0, limit);
     const next = hasMore ? pageRows.at(-1) : undefined;
@@ -1398,9 +1419,12 @@ export class EventsService {
    * has already validated the `YYYY-MM` shape (a malformed month is a 400 before
    * this runs). An empty month is a valid `[]`.
    */
-  async listMonthBroadcasts(month: string): Promise<MonthBroadcastEntry[]> {
+  async listMonthBroadcasts(
+    month: string,
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
+  ): Promise<MonthBroadcastEntry[]> {
     const { start, end } = mskMonthRange(month);
-    const rows = await this.repo.listMonthBroadcasts(start, end);
+    const rows = await this.repo.listMonthBroadcasts(start, end, facets);
     return rows.map((e) => this.toMonthEntry(e));
   }
 
@@ -1412,13 +1436,14 @@ export class EventsService {
    * the picker always receives a dense 12-row response. The caller (controller)
    * has already validated the `YYYY` shape (a malformed year is a 400).
    */
-  async monthlyEventCounts(year: string): Promise<MonthlyEventCount[]> {
+  async monthlyEventCounts(
+    year: string,
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
+  ): Promise<MonthlyEventCount[]> {
     const { start, end } = mskYearRange(year);
-    const counts = await this.repo.monthlyCounts(start, end);
-    return Array.from({ length: 12 }, (_, i) => ({
-      month: i + 1,
-      count: counts.get(i + 1) ?? 0,
-    }));
+    return denseMonthlyCounts(
+      await this.repo.monthlyCounts(start, end, facets),
+    );
   }
 
   private toMonthEntry(e: Event): MonthBroadcastEntry {

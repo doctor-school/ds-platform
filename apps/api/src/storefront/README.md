@@ -46,23 +46,29 @@ another visitor.
 
 - **The month grid is navigation over the same read.** `DoctorEventsService.month()`
   resolves targeting with the same `resolveTargeting`, selects with the same
-  `findFeedRows`, maps with the same `toCards` and narrows with the same
-  `applyCardFacets` the day feed uses. A grid count and the feed's day-group size
-  for that day are therefore the same number by construction. The month codec
-  (`parseDoctorEventsMonthQuery`) delegates its facet half to the feed's codec,
-  so the two routes cannot disagree about what a facet means either.
+  `findFeedRows` and narrows with the same `applyCardFacets` over the same
+  `cardFacetsOf` projection the day feed uses. A grid count and the feed's
+  day-group size for that day are therefore the same number by construction.
+  The month codec (`parseDoctorEventsMonthQuery`) delegates its facet half to
+  the feed's codec, so the two routes cannot disagree about what a facet means
+  either.
 - **One aggregate query, never one per day.** The whole month is a single
-  `findFeedRows` call over `[max(first-of-month, today), first-of-next-month)`,
-  plus the per-event lookups `toCards` already batches.
-- **Every day is emitted, `count: 0` included**, so a host renders the grid
-  straight from the response — Academy's client-side month assembly
-  (`packages/events-storefront/src/ui/month-calendar-view.tsx`) is deliberately NOT the
-  Doctor shape (019-design §1.1, §3).
-- **«Будущие» only in release 1** (LD-10, #1525): a day already past carries
-  `count: 0` rather than a historical figure the feed beside the grid would not
-  show. There is no `tense`, `day`, `from` or `to` on the month route, and no
-  `view` parameter anywhere — F-019-2 Б renders grid and feed together and
-  builds no «Неделя / Месяц» switch.
+  `findFeedRows` call over `[first-of-month, first-of-next-month)` МСК.
+- **Every day is emitted, `count: 0` included**, and `entries` names the month's
+  events in the Academy `MonthBroadcastEntry` shape (the pills of the package
+  month grid; wave-2 entry gate row 53), so a host renders the grid straight
+  from the response.
+- **The whole month, past days included** (019 «Amendment — 2026-10-05»): the
+  month view shows the month's past events as muted pills beside the scheduled
+  and live ones, so the read covers the `MONTH_BROADCAST_STATES` window — the
+  Academy month read's set. There is no `tense`, `day`, `from` or `to` on the
+  month route.
+- **Per-month counts** (wave-2 entry gate row 54):
+  `GET /v1/storefront/doctor/events/month-counts?year=YYYY` is the counterpart
+  of the Academy `month-counts` — the same `MonthlyEventCount[12]` answer
+  (`denseMonthlyCounts`, shared), the month read's facets and posture. Each row
+  is the size of that month's grid by construction: the SAME window selection
+  (`monthWindowRows`) over the year, bucketed by МСК month.
 - **`hasLive` is 007's lifecycle state**, the same `state: "live"` the feed's
   card carries. Nothing here compares a start time to the clock.
 - **The two empty reasons stay distinct** (LD-9): the grid carries the feed's own

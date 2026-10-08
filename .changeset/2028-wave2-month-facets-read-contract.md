@@ -1,0 +1,7 @@
+---
+"@ds/schemas": patch
+"@ds/api": patch
+"@ds/api-client": patch
+---
+
+Events storefront wave 2 (#2028), the read contract of the month view and the facet panel on both hosts. The Academy reads take the 014 facets Проект, Эксперт, Тема as the repeatable slug lists `project`, `expert`, `topic` of the one listing codec (`ACADEMY_EVENT_FACETS_QUERY_CODEC`, `parseAcademyEventFacets`): `GET /v1/public/events?timeframe=…`, `?month=YYYY-MM` and `/month-counts?year=YYYY` narrow alike — values of one facet OR together, the facets AND together; a malformed slug is a 400, a slug nothing carries reads empty, and a facet on the bare legacy read is a 400. A horizon listing page carries the additive `facets { project, expert, topic }` options block (`{ slug, title, count }`, each counted under the other facets; zero-yield options stay listed at 0). The doctor storefront gains `GET /v1/storefront/doctor/events/month-counts?year=YYYY` with the month read's facets and posture, answering the Academy `MonthlyEventCount[12]`. The doctor month read `GET /v1/storefront/doctor/events/month` now covers the whole month — past days count their ended events — and carries `entries`, the month's events in the Academy `MonthBroadcastEntry` shape (the month grid's pills).

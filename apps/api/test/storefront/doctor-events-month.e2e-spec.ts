@@ -10,6 +10,7 @@ import type pg from "pg";
 import {
   DoctorEventsFeedSchema,
   DoctorEventsMonthGridSchema,
+  MonthlyEventCountsSchema,
   addDoctorEventsFeedDays,
   doctorEventsFeedDayOf,
   doctorEventsMonthDayList,
@@ -100,11 +101,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       day: string;
       hour: number;
       directionId: string;
-      state?: "published" | "live";
+      state?: "published" | "live" | "ended";
+      audience?: "doctors" | "experts";
     }) => {
       const id = randomUUID();
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, $6, ${eventClassificationSql("doctors")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, $6, ${eventClassificationSql(input.audience ?? "doctors")})`,
         [
           id,
           `month-${randomUUID()}`,
@@ -330,8 +332,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(byFacets.days.every((day) => day.count === 0)).toBe(true);
     });
 
-    it("EARS-4.6: serves a named month, and reads a past month as an empty upcoming-only grid", async () => {
+    it("EARS-4.6: serves a named past month with its past events as entries in the past state (019 «Amendment — 2026-10-05», row 53)", async () => {
       const past = "2020-02";
+      const pastEventId = await makeEvent({
+        title: "Прошедший эфир",
+        day: "2020-02-10",
+        hour: 11,
+        directionId: directionIds[0]!,
+        state: "ended",
+      });
       const grid = await readMonth({
         specialtyCode: targetedCode,
         query: `?month=${past}`,
@@ -340,7 +349,134 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(grid.month).toBe(past);
       expect(grid.today).toBe(today);
       expect(grid.days).toHaveLength(29);
-      expect(grid.days.every((day) => day.count === 0)).toBe(true);
+      // The month grid shows the whole month — past pills muted, not dropped.
+      expect(grid.days.find((d) => d.date === "2020-02-10")?.count).toBe(1);
+      const entry = grid.entries.find((e) => e.id === pastEventId);
+      expect(entry?.state).toBe("ended");
+    });
+
+    it("NEW: the month grid names its entries — each day's count is its slice of them (row 53)", async () => {
+      const grid = await readMonth({
+        specialtyCode: targetedCode,
+        query: `?month=${fixtureMonth}`,
+      });
+      const ids = grid.entries.map((e) => e.id);
+      expect(ids).toContain(liveEventId);
+      expect(ids).toContain(plainEventId);
+      expect(ids).not.toContain(unreachableEventId);
+      expect(grid.entries.find((e) => e.id === liveEventId)?.state).toBe(
+        "live",
+      );
+      for (const day of grid.days) {
+        expect(
+          grid.entries.filter(
+            (e) => doctorEventsFeedDayOf(new Date(e.startsAt)) === day.date,
+          ).length,
+        ).toBe(day.count);
+      }
+      const starts = grid.entries.map((e) => e.startsAt);
+      expect(starts).toEqual([...starts].sort());
+    });
+
+    const readCounts = async (input: {
+      specialtyCode?: string;
+      query: string;
+    }) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/storefront/doctor/events/month-counts${input.query}`,
+        headers:
+          input.specialtyCode === undefined
+            ? {}
+            : {
+                cookie: `${SPECIALTY_CHOICE_COOKIE_NAME}=${encodeURIComponent(input.specialtyCode)}`,
+              },
+      });
+      expect(response.statusCode).toBe(200);
+      return MonthlyEventCountsSchema.parse(response.json());
+    };
+
+    const gridTotal = async (input: {
+      specialtyCode?: string;
+      query: string;
+    }) => {
+      const grid = await readMonth({
+        ...input,
+        query: `?month=${fixtureMonth}${input.query}`,
+      });
+      return grid.days.reduce((sum, day) => sum + day.count, 0);
+    };
+
+    it("NEW: the doctor month counts give 12 months, each the size of that month's grid (row 54)", async () => {
+      const year = fixtureMonth.slice(0, 4);
+      const monthIndex = Number(fixtureMonth.slice(5));
+      for (const specialtyCode of [targetedCode, undefined]) {
+        const counts = await readCounts({
+          ...(specialtyCode === undefined ? {} : { specialtyCode }),
+          query: `?year=${year}`,
+        });
+        expect(counts.map((row) => row.month)).toEqual(
+          Array.from({ length: 12 }, (_, i) => i + 1),
+        );
+        expect(counts[monthIndex - 1]!.count).toBe(
+          await gridTotal({
+            ...(specialtyCode === undefined ? {} : { specialtyCode }),
+            query: "",
+          }),
+        );
+      }
+    });
+
+    it("NEW: the doctor month counts honour the doctor facets like the month read (row 54)", async () => {
+      const year = fixtureMonth.slice(0, 4);
+      const monthIndex = Number(fixtureMonth.slice(5));
+      for (const facets of [
+        "&format=offline",
+        "&format=online",
+        `&q=${encodeURIComponent(randomUUID())}`,
+        "&kind=no-such-kind",
+        "&specialty=all",
+      ]) {
+        const counts = await readCounts({
+          specialtyCode: targetedCode,
+          query: `?year=${year}${facets}`,
+        });
+        expect(counts[monthIndex - 1]!.count).toBe(
+          await gridTotal({ specialtyCode: targetedCode, query: facets }),
+        );
+      }
+      const none = await readCounts({
+        specialtyCode: targetedCode,
+        query: `?year=${year}&q=${encodeURIComponent(randomUUID())}`,
+      });
+      expect(none.every((row) => row.count === 0)).toBe(true);
+    });
+
+    it("NEW: an experts event never counts on the doctor read (012 LD-12)", async () => {
+      const year = fixtureMonth.slice(0, 4);
+      const monthIndex = Number(fixtureMonth.slice(5));
+      const before = await readCounts({ query: `?year=${year}` });
+      const expertsEventId = await makeEvent({
+        title: "Событие Академии",
+        day: plainDay,
+        hour: 16,
+        directionId: directionIds[0]!,
+        audience: "experts",
+      });
+      const after = await readCounts({ query: `?year=${year}` });
+      expect(after[monthIndex - 1]!.count).toBe(before[monthIndex - 1]!.count);
+      const grid = await readMonth({ query: `?month=${fixtureMonth}` });
+      expect(grid.entries.map((e) => e.id)).not.toContain(expertsEventId);
+    });
+
+    it("NEW: the doctor month counts refuse a missing or malformed year", async () => {
+      for (const query of ["", "?year=26", "?year=2026&format=radio"]) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/v1/storefront/doctor/events/month-counts${query}`,
+        });
+        expect(response.statusCode).toBe(400);
+      }
     });
 
     it("EARS-4.7: refuses a malformed month with RFC 7807 Problem Details", async () => {

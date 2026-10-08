@@ -2783,6 +2783,45 @@
             "minItems": 28,
             "type": "array"
           },
+          "entries": {
+            "items": {
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "school": {
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string"
+                },
+                "startsAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["published", "live", "ended", "in_archive"],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "slug",
+                "title",
+                "school",
+                "startsAt",
+                "state"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "month": {
             "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
             "type": "string"
@@ -2830,7 +2869,7 @@
             "type": "string"
           }
         },
-        "required": ["month", "today", "days", "targeting"],
+        "required": ["month", "today", "days", "entries", "targeting"],
         "type": "object"
       },
       "DoctorRegisterRequestDto": {
@@ -3828,6 +3867,27 @@
         },
         "type": "array"
       },
+      "MonthlyEventCountsDto": {
+        "items": {
+          "properties": {
+            "count": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "month": {
+              "maximum": 12,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": ["month", "count"],
+          "type": "object"
+        },
+        "maxItems": 12,
+        "minItems": 12,
+        "type": "array"
+      },
       "OtpRequestDto": {
         "properties": {
           "captchaToken": {
@@ -4232,6 +4292,88 @@
               ]
             },
             "type": "array"
+          },
+          "facets": {
+            "additionalProperties": false,
+            "properties": {
+              "expert": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "slug": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["slug", "title", "count"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "project": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "slug": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["slug", "title", "count"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "topic": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "count": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "slug": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["slug", "title", "count"],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["project", "expert", "topic"],
+            "type": "object"
           },
           "horizon": {
             "properties": {
@@ -7993,6 +8135,39 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "topic",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expert",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
           }
         ],
         "responses": {
@@ -8165,10 +8340,50 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "topic",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expert",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
           }
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyEventCountsDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -8662,6 +8877,107 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DoctorEventsMonthGridDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": ["DoctorEventsPublic"]
+      }
+    },
+    "/v1/storefront/doctor/events/month-counts": {
+      "get": {
+        "operationId": "DoctorEventsPublicController_monthCounts",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {}
+          },
+          {
+            "in": "query",
+            "name": "free",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nmo",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialty",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "ISO YYYY",
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyEventCountsDto"
                 }
               }
             },

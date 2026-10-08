@@ -16,8 +16,12 @@ import {
   getSchemaPath,
 } from "@nestjs/swagger";
 import {
+  type AcademyEventFacets,
   type EventsLiveRead,
+  hasAcademyEventFacets,
   MONTH_PARAM,
+  parseAcademyEventFacets,
+  type RawQueryValue,
   type MonthBroadcastEntry,
   type MonthlyEventCount,
   type ParticipationCta,
@@ -33,6 +37,7 @@ import { InvalidEventListingCursorError } from "./events.service.js";
 import {
   EventLiveStripDto,
   MonthBroadcastListDto,
+  MonthlyEventCountsDto,
   ParticipationCtaDto,
   PublicEventListingPageDto,
   UpcomingBroadcastListDto,
@@ -84,6 +89,19 @@ const ACADEMY_AROUND_ROUTES: AroundEventRoutes = {
  * portal's `/webinars` listing reads the latter. Both are classified public with
  * the identical publish-safe posture (EARS-10).
  */
+/**
+ * 014 EARS-12 — the Academy facets of one read, decoded by the one codec
+ * (`ACADEMY_EVENT_FACETS_QUERY_CODEC`). A malformed slug is a 400; a slug
+ * nothing carries narrows to an empty set (the doctor `kind` facet's rule).
+ */
+function parseFacets(raw: Record<string, RawQueryValue>): AcademyEventFacets {
+  const parsed = parseAcademyEventFacets(raw ?? {});
+  if (!parsed.success) {
+    throw new BadRequestException("invalid event facets");
+  }
+  return parsed.data;
+}
+
 @Controller({ path: "public/events", version: "1" })
 export class EventsPublicController {
   constructor(
@@ -119,6 +137,9 @@ export class EventsPublicController {
   @ApiQuery({ name: "cursor", required: false, type: String })
   @ApiQuery({ name: "from", required: false, type: String })
   @ApiQuery({ name: "to", required: false, type: String })
+  @ApiQuery({ name: "project", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "expert", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "topic", required: false, isArray: true, type: String })
   @ApiExtraModels(
     UpcomingBroadcastListDto,
     MonthBroadcastListDto,
@@ -142,6 +163,7 @@ export class EventsPublicController {
     tests: ["EARS-7", "EARS-10", "EARS-11", "EARS-15"],
   })
   list(
+    @Query() raw: Record<string, RawQueryValue>,
     @Query("month") month?: string,
     @Query("timeframe") timeframe?: string,
     @Query("limit") limit?: string,
@@ -153,6 +175,7 @@ export class EventsPublicController {
   > {
     // A horizon without a timeframe is a malformed listing query (400), never
     // a silent fall-through to the legacy bare read.
+    const facets = parseFacets(raw);
     if (timeframe !== undefined || from !== undefined || to !== undefined) {
       const parsed = PublicEventListingQuerySchema.safeParse({
         timeframe,
@@ -160,6 +183,7 @@ export class EventsPublicController {
         cursor,
         from,
         to,
+        ...facets,
       });
       if (!parsed.success) {
         throw new BadRequestException("invalid public event listing query");
@@ -173,13 +197,21 @@ export class EventsPublicController {
           throw error;
         });
     }
-    if (month === undefined) return this.events.listUpcoming();
+    if (month === undefined) {
+      // The legacy bare upcoming array takes no facet: a faceted read names its
+      // tense (`timeframe`) or its `month`, so a facet is never silently dropped.
+      if (hasAcademyEventFacets(facets)) {
+        throw new BadRequestException("the facets need a timeframe or a month");
+      }
+      return this.events.listUpcoming();
+    }
     // EARS-15: the boundary rejects a malformed month structurally (400) before
     // any read — the shape SSOT is `MONTH_PARAM` (@ds/schemas).
     if (!MONTH_PARAM.test(month)) {
       throw new BadRequestException("month must be formatted YYYY-MM");
     }
-    return this.events.listMonthBroadcasts(month);
+    // 014 EARS-12 — the month entries narrow by the same facets as the feed.
+    return this.events.listMonthBroadcasts(month, facets);
   }
 
   /**
@@ -192,6 +224,11 @@ export class EventsPublicController {
    * would capture the literal `month-counts` segment.
    */
   @Get("month-counts")
+  @ApiQuery({ name: "year", required: true })
+  @ApiQuery({ name: "project", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "expert", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "topic", required: false, isArray: true, type: String })
+  @ApiOkResponse({ type: MonthlyEventCountsDto })
   @Public()
   @Header("Cache-Control", "public, max-age=30")
   @Authz({
@@ -200,11 +237,15 @@ export class EventsPublicController {
     audit: "none",
     tests: ["EARS-16", "EARS-10"],
   })
-  monthCounts(@Query("year") year?: string): Promise<MonthlyEventCount[]> {
+  monthCounts(
+    @Query() raw: Record<string, RawQueryValue>,
+    @Query("year") year?: string,
+  ): Promise<MonthlyEventCount[]> {
+    const facets = parseFacets(raw);
     if (year === undefined || !YEAR_PARAM.test(year)) {
       throw new BadRequestException("year must be formatted YYYY");
     }
-    return this.events.monthlyEventCounts(year);
+    return this.events.monthlyEventCounts(year, facets);
   }
 
   /**
@@ -262,7 +303,10 @@ export class EventsPublicController {
     // 020 EARS-2: the host contributes its route table and nothing else; the
     // link policy is the shared resolver. It reads no principal, so the body
     // stays byte-identical for a guest and a signed-in doctor (EARS-1).
-    return { ...found, links: resolveAroundEvent(found, ACADEMY_AROUND_ROUTES) };
+    return {
+      ...found,
+      links: resolveAroundEvent(found, ACADEMY_AROUND_ROUTES),
+    };
   }
 
   /**

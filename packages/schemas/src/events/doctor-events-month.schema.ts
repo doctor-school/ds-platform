@@ -10,6 +10,7 @@ import {
   parseDoctorEventsFeedQuery,
 } from "./doctor-events-feed.schema.js";
 import type { RawQueryValue } from "./event-listing-query.schema.js";
+import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
 
 /**
  * 019 EARS-4 (#1519) — the `MonthGrid` read contract of
@@ -105,11 +106,48 @@ export const DoctorEventsMonthGridSchema = z
     today: DoctorEventsFeedDaySchema,
     /** EVERY day of `month`, ascending — the host fills nothing in. */
     days: z.array(DoctorEventsMonthDaySchema).min(28),
+    /**
+     * Wave-2 entry gate row 53 (PR 2.5) — the month's events behind `days`,
+     * ascending by start: the pills of the package month grid (time · title,
+     * the live pill, the muted past pill). The Academy month read's entry
+     * shape, reused rather than forked; `days[].count` is the size of each
+     * day's slice of this list.
+     */
+    entries: z.array(MonthBroadcastEntrySchema),
     /** The same envelope field the feed carries — see the file docblock. */
     targeting: DoctorEventsFeedTargetingSchema,
   })
   .strict();
 export type DoctorEventsMonthGrid = z.infer<typeof DoctorEventsMonthGridSchema>;
+
+/**
+ * Wave-2 entry gate row 54 (PR 2.5) — the doctor per-month counts read, the
+ * counterpart of the Academy `GET /v1/public/events/month-counts`: the same
+ * `year` (`YYYY`) and the same facets as the month read. Its answer is the
+ * Academy's `MonthlyEventCount[]` (12 dense rows), reused, not forked.
+ */
+export const DoctorEventsMonthCountsQuerySchema =
+  DoctorEventsMonthQuerySchema.omit({ month: true })
+    .extend({ year: z.string().regex(YEAR_PARAM, "expected a year (YYYY)") })
+    .strict();
+export type DoctorEventsMonthCountsQuery = z.infer<
+  typeof DoctorEventsMonthCountsQuerySchema
+>;
+
+/** The counts codec: the month codec's facet half plus the year — no fork. */
+export function parseDoctorEventsMonthCountsQuery(
+  raw: Record<string, RawQueryValue>,
+): z.ZodSafeParseResult<DoctorEventsMonthCountsQuery> {
+  const facets = parseDoctorEventsMonthQuery({ ...raw, month: undefined });
+  if (!facets.success) {
+    return facets as unknown as z.ZodSafeParseResult<DoctorEventsMonthCountsQuery>;
+  }
+  const year = Array.isArray(raw.year) ? raw.year[0] : raw.year;
+  return DoctorEventsMonthCountsQuerySchema.safeParse({
+    ...doctorEventsMonthFacets(facets.data),
+    year,
+  });
+}
 
 /**
  * The month query codec. The facet half is DELEGATED to the feed's codec — the

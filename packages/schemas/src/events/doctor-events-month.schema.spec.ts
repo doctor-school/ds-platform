@@ -6,6 +6,7 @@ import {
   doctorEventsMonthFirstDay,
   doctorEventsMonthNextFirstDay,
   doctorEventsMonthOf,
+  parseDoctorEventsMonthCountsQuery,
   parseDoctorEventsMonthQuery,
 } from "./doctor-events-month.schema.js";
 
@@ -23,6 +24,7 @@ describe("019 EARS-4 doctor events month contract", () => {
       count: 0,
       hasLive: false,
     })),
+    entries: [],
     targeting: {
       mode: "targeted" as const,
       specialtyReference: "31.08.36",
@@ -125,5 +127,72 @@ describe("019 EARS-4 doctor events month contract", () => {
     const partial = grid();
     partial.days = partial.days.slice(0, 10);
     expect(DoctorEventsMonthGridSchema.safeParse(partial).success).toBe(false);
+  });
+});
+
+/**
+ * Wave-2 entry gate §4.2 (PR 2.5) — the doctor month view on the package grid:
+ * the month read names its entries (row 53: pills, live and past state), and a
+ * per-month counts read (row 54) takes the year plus the same facets.
+ */
+describe("019 EARS-4 doctor month entries and per-month counts (wave-2 gate §4.2, PR 2.5)", () => {
+  const base = {
+    month: "2026-09",
+    today: "2026-09-02",
+    days: doctorEventsMonthDayList("2026-09").map((date) => ({
+      date,
+      count: 0,
+      hasLive: false,
+    })),
+    targeting: {
+      mode: "all" as const,
+      specialtyReference: null,
+      directionIds: [],
+      adjacentDirectionIds: [],
+    },
+  };
+
+  it("NEW: the month grid carries the month's entries with their lifecycle state (row 53)", () => {
+    const entry = {
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "ortho",
+      title: "Ортобиология",
+      school: "Школа",
+      startsAt: "2026-09-01T09:00:00.000Z",
+      state: "ended",
+    };
+    expect(
+      DoctorEventsMonthGridSchema.safeParse({ ...base, entries: [entry] })
+        .success,
+    ).toBe(true);
+    expect(DoctorEventsMonthGridSchema.safeParse(base).success).toBe(false);
+  });
+
+  it("NEW: the counts read decodes the year plus the feed's facets (row 54)", () => {
+    const parsed = parseDoctorEventsMonthCountsQuery({
+      year: "2026",
+      format: "online",
+      kind: ["vebinar"],
+      specialty: "all",
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toMatchObject({
+      year: "2026",
+      format: ["online"],
+      kind: ["vebinar"],
+      specialty: "all",
+      city: [],
+    });
+  });
+
+  it("NEW: the counts read refuses a missing or malformed year (row 54)", () => {
+    expect(parseDoctorEventsMonthCountsQuery({}).success).toBe(false);
+    expect(parseDoctorEventsMonthCountsQuery({ year: "26" }).success).toBe(
+      false,
+    );
+    expect(
+      parseDoctorEventsMonthCountsQuery({ year: "2026", format: "radio" })
+        .success,
+    ).toBe(false);
   });
 });

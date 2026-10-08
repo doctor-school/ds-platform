@@ -18,8 +18,10 @@ import {
   type EventsLiveRead,
   type DoctorEventsMonthGrid,
   type EventPageView,
+  type MonthlyEventCount,
   type ParticipationCta,
   parseDoctorEventsFeedQuery,
+  parseDoctorEventsMonthCountsQuery,
   parseDoctorEventsMonthQuery,
   type RawQueryValue,
 } from "@ds/schemas";
@@ -28,6 +30,7 @@ import { EventsService } from "../events/events.service.js";
 import {
   EventLiveStripDto,
   EventPageViewDto,
+  MonthlyEventCountsDto,
   ParticipationCtaDto,
 } from "../events/events.dto.js";
 import type { AroundEventRoutes } from "../events/around-event.resolver.js";
@@ -195,6 +198,48 @@ export class DoctorEventsPublicController {
     }
 
     return this.feed.month({
+      query: parsed.data,
+      specialtyReference: readSpecialtyChoiceCookie(cookie),
+    });
+  }
+
+  /**
+   * Wave-2 entry gate §4.2 row 54 (PR 2.5) — the doctor month picker's
+   * per-month counts, the counterpart of the Academy
+   * `GET /v1/public/events/month-counts`: the same `year` and the same
+   * `MonthlyEventCount[12]` answer, under the month read's posture (the
+   * specialty cookie relay, session-optional, the same `Cache-Control`) and
+   * its facets. Declared BEFORE `:idOrSlug`, which would capture the segment.
+   */
+  @Get("month-counts")
+  @ApiQuery({ name: "year", required: true, description: "ISO YYYY" })
+  @ApiQuery({ name: "format", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "kind", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "specialty", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "city", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "nmo", required: false, type: Boolean })
+  @ApiQuery({ name: "free", required: false, type: Boolean })
+  @ApiQuery({ name: "q", required: false })
+  @ApiOkResponse({ type: MonthlyEventCountsDto })
+  @Public()
+  @Header("Cache-Control", "private, max-age=30")
+  @Header("Vary", "Cookie")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-4"],
+  })
+  monthCounts(
+    @Query() query: Record<string, RawQueryValue>,
+    @Headers("cookie") cookie?: string,
+  ): Promise<MonthlyEventCount[]> {
+    const parsed = parseDoctorEventsMonthCountsQuery(query ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException("invalid doctor events month counts query");
+    }
+
+    return this.feed.monthCounts({
       query: parsed.data,
       specialtyReference: readSpecialtyChoiceCookie(cookie),
     });

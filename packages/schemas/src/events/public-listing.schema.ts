@@ -1,7 +1,91 @@
 import { z } from "zod";
 import { RecordingProjectionSchema } from "../recordings/recordings.schema.js";
+import { SlugSchema } from "../taxonomy/taxonomy.schema.js";
 import { DoctorEventsFeedDaySchema } from "./doctor-events-feed.schema.js";
+import {
+  createEventListingQueryCodec,
+  type RawQueryRecord,
+} from "./event-listing-query.schema.js";
 import { UpcomingBroadcastCardSchema } from "./events.schema.js";
+
+/**
+ * 014 EARS-12 (wave-2 entry gate §4.2, PR 2.5) — the Academy facets Проект,
+ * Эксперт, Тема. Each is a list of 012 taxonomy SLUGS — `project` a project,
+ * `expert` an expert, `topic` a direction (012's topics book, renamed by
+ * ADR-0016 §5) — the same reference kind the doctor `kind` facet carries.
+ * Values of one facet OR together, the facets AND together (014-design §9). A
+ * malformed slug is a 400 at the boundary; a well-formed slug nothing carries
+ * reads an empty set, never an error — the doctor `kind` facet's behaviour.
+ */
+const AcademyEventFacetsShape = {
+  project: z.array(SlugSchema).default([]),
+  expert: z.array(SlugSchema).default([]),
+  topic: z.array(SlugSchema).default([]),
+};
+
+export const AcademyEventFacetsSchema = z
+  .object(AcademyEventFacetsShape)
+  .strict();
+export type AcademyEventFacets = z.infer<typeof AcademyEventFacetsSchema>;
+
+/**
+ * The Academy mount of the PORTABLE codec — the doctor facets' grammar
+ * (`event-listing-query.schema.ts`: repeated or comma form, unknown keys
+ * dropped, fixed key order) over the Academy vocabulary. One codec, two facet
+ * sets: the listing, the month read and the month counts all decode their
+ * facets through THIS, so the month view and the feed read the same set.
+ */
+export const ACADEMY_EVENT_FACETS_QUERY_CODEC = createEventListingQueryCodec({
+  schema: AcademyEventFacetsSchema,
+  fields: [
+    { key: "project", kind: "list" },
+    { key: "expert", kind: "list" },
+    { key: "topic", kind: "list" },
+  ],
+} as const);
+
+export function parseAcademyEventFacets(
+  raw: RawQueryRecord,
+): z.ZodSafeParseResult<AcademyEventFacets> {
+  return ACADEMY_EVENT_FACETS_QUERY_CODEC.parse(raw);
+}
+
+/** `true` when any Academy facet narrows the read. */
+export function hasAcademyEventFacets(facets: AcademyEventFacets): boolean {
+  return (
+    facets.project.length > 0 ||
+    facets.expert.length > 0 ||
+    facets.topic.length > 0
+  );
+}
+
+/**
+ * One option the facet panel lists: the taxonomy record's slug (the value
+ * written into the URL) and its title, with `count` — the events of the read's
+ * tense carrying it under the OTHER facets' current selections (014-design
+ * §9). A zero-yield option stays listed with `count: 0` (014 EARS-12).
+ */
+export const PublicEventFacetOptionSchema = z
+  .object({
+    slug: SlugSchema,
+    title: z.string().min(1),
+    count: z.number().int().nonnegative(),
+  })
+  .strict();
+export type PublicEventFacetOption = z.infer<
+  typeof PublicEventFacetOptionSchema
+>;
+
+export const PublicEventFacetOptionsSchema = z
+  .object({
+    project: z.array(PublicEventFacetOptionSchema),
+    expert: z.array(PublicEventFacetOptionSchema),
+    topic: z.array(PublicEventFacetOptionSchema),
+  })
+  .strict();
+export type PublicEventFacetOptions = z.infer<
+  typeof PublicEventFacetOptionsSchema
+>;
 
 /** 014 EARS-11 selector; the legacy no-query/upcoming array remains stable. */
 export const EventListingTimeframeSchema = z.enum(["upcoming", "past"]);
@@ -27,6 +111,7 @@ export const PublicEventListingQuerySchema = z
     cursor: z.string().min(1).max(512).optional(),
     from: DoctorEventsFeedDaySchema.optional(),
     to: DoctorEventsFeedDaySchema.optional(),
+    ...AcademyEventFacetsShape,
   })
   .refine(
     (query) =>
@@ -87,6 +172,11 @@ export const PublicEventListingPageSchema = z.object({
       nextBatch: z.number().int().nonnegative(),
     })
     .optional(),
+  /**
+   * 014 EARS-12 — the facet options the panel lists, present exactly on a
+   * horizon read (the page the panel sits on). Additive.
+   */
+  facets: PublicEventFacetOptionsSchema.optional(),
 });
 export type PublicEventListingPage = z.infer<
   typeof PublicEventListingPageSchema

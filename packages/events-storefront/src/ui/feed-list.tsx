@@ -39,28 +39,7 @@ export function FeedList({
   const viewerZone = useViewerZone();
 
   if (cards.length === 0) {
-    return (
-      <section
-        className="border-2 border-dashed border-border"
-        data-feed-block="feed"
-        data-testid="events-feed-empty"
-      >
-        <EmptyState
-          variant="no-records"
-          title={empty.title}
-          {...(empty.description ? { description: empty.description } : {})}
-          {...(empty.action
-            ? {
-                action: (
-                  <Button asChild variant="outline">
-                    <Link href={empty.action.href}>{empty.action.label}</Link>
-                  </Button>
-                ),
-              }
-            : {})}
-        />
-      </section>
-    );
+    return <EmptyFeedBlock empty={empty} testId="events-feed-empty" />;
   }
 
   const items = buildFeedItems(cards, {
@@ -95,6 +74,42 @@ export function FeedList({
             </Button>
           )
         }
+      />
+    </section>
+  );
+}
+
+/**
+ * An empty reading (019 EARS-9, LD-9): the cause, and the one action that
+ * widens it — removing the facet that emptied it. Shared by the feed and the
+ * month view (row 55 «пусто по фильтрам»).
+ */
+export function EmptyFeedBlock({
+  empty,
+  testId,
+}: {
+  empty: EmptyFeedState;
+  testId: string;
+}) {
+  return (
+    <section
+      className="border-2 border-dashed border-border"
+      data-feed-block="feed"
+      data-testid={testId}
+    >
+      <EmptyState
+        variant="no-records"
+        title={empty.title}
+        {...(empty.description ? { description: empty.description } : {})}
+        {...(empty.action
+          ? {
+              action: (
+                <Button asChild variant="outline">
+                  <Link href={empty.action.href}>{empty.action.label}</Link>
+                </Button>
+              ),
+            }
+          : {})}
       />
     </section>
   );

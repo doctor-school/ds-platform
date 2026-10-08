@@ -78,13 +78,15 @@ export const FEED_COPY = {
   facet: {
     specialty: "Специальность",
     format: "Формат",
-    kind: "Вид",
+    kind: "Вид события",
     city: "Город",
     nmo: "Только с НМО",
+    project: "Проект",
+    expert: "Эксперт",
+    topic: "Тема",
     query: (q: string) => `Поиск: «${q}»`,
   },
   retry: "Повторить",
-  monthView: "Календарь на месяц →",
 } as const;
 
 export type FeedCopy = typeof FEED_COPY;

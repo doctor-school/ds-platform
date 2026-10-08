@@ -1,6 +1,6 @@
 import type { MonthBroadcastEntry } from "@ds/schemas";
 
-import { formatMskDayLabel, formatMskParts } from "./msk";
+import { formatMskDayLabel } from "./msk";
 
 /**
  * 004 EARS-19 — the pure month-calendar layout logic behind the `?view=month`
@@ -308,8 +308,4 @@ export function capDayEntries(
     (a, b) => Number(b.state === "live") - Number(a.state === "live"),
   );
   return { visible: sorted.slice(0, max), overflow: Math.max(0, sorted.length - max) };
-}
-
-export function entryTime(entry: MonthBroadcastEntry): string {
-  return formatMskParts(entry.startsAt).time;
 }

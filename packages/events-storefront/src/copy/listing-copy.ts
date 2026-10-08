@@ -20,11 +20,8 @@ const RECORD_NOUN: PluralNoun = {
   few: "записи",
   many: "записей",
 };
-const SCHOOL_NOUN: PluralNoun = { one: "школа", few: "школы", many: "школ" };
 
 export const LISTING_COPY = {
-  taglineTop: "Врачи учат врачей",
-  taglineBottom: "Бесплатно · без бюрократии",
   archiveSubtitle: (count: number) =>
     `Архив · ${formatEventCount(count, RECORD_NOUN)} · доступ после входа`,
   cardTz: "МСК",
@@ -52,25 +49,26 @@ export const LISTING_COPY = {
     body: "После завершения мероприятия появятся здесь вместе со статусом записи.",
   },
   registered: "Вы записаны",
+  /**
+   * The month view of the one page (wave-2 gate rows 53–55, the #2076 canvas
+   * `events-feed-kit.js` `gridWeeks` / `dotWeeks` / `agenda` / `pickerFor`);
+   * the month-grid pill and legend say «Идёт сейчас» on both hosts (§4.3 D6).
+   */
   month: {
-    subtitle: (count: number, schools: number, noun: PluralNoun) =>
-      `${formatEventCount(count, noun)} · ${formatEventCount(schools, SCHOOL_NOUN)} · время — МСК`,
-    viewWeek: "Неделя",
-    viewMonth: "Месяц",
     todaySuffix: " · сегодня",
-    liveBadge: "LIVE",
-    legendLive: "В эфире",
-    legendPlanned: "Запланирован",
-    legendPast: "Прошёл / пусто",
-    agendaEmptyFuture: "В этот день эфиров нет",
-    agendaEmptyPast: "Эфиры этого дня уже прошли",
+    liveLabel: "Идёт сейчас",
+    agendaLive: "В эфире",
+    legendLive: "Идёт сейчас",
+    legendPlanned: "Запланировано",
+    legendPast: "Прошло",
+    agendaEmpty: (noun: PluralNoun) => `В этот день ${noun.many} нет`,
     dayEventsLabel: (count: number, noun: PluralNoun) =>
       formatEventCount(count, noun),
-    dayLiveLabel: "идёт эфир",
     pickerLabel: "Выбрать месяц",
     pickerCount: (count: number, noun: PluralNoun) =>
       formatEventCount(count, noun),
-    pickerPast: "прошёл",
+    pickerPast: "архив",
+    pickerEmpty: (noun: PluralNoun) => `нет ${noun.many}`,
     moreLink: (count: number) => `+${count} ещё`,
     nextMonthLink: (month: string) => `${month} →`,
     prevMonthLink: (month: string) => `← ${month}`,
@@ -79,6 +77,13 @@ export const LISTING_COPY = {
     prevYear: "Предыдущий год",
     nextYear: "Следующий год",
     todayButton: "Сегодня",
+    errorTitle: "Не удалось загрузить календарь",
+    errorBody: "Сервер не ответил. Проверьте соединение и попробуйте снова.",
+  },
+  /** The switch between the two views of the one page (row 51). */
+  view: {
+    toMonth: "Календарь на месяц →",
+    toFeed: "← Лента событий",
   },
 } as const;
 

@@ -53,6 +53,11 @@ function href(listing: string, entries: readonly EventListingQueryEntry[]): stri
   return query ? `${listing}?${query}` : listing;
 }
 
+/** The page at a raw query — the canonical href of any state the page writes. */
+export function pageHref(listing: string, raw: RawQueryRecord): string {
+  return href(listing, codecEntries(raw));
+}
+
 /** The tense a raw query reads — «Будущие» unless it says `tense=past`. */
 export function feedTenseOf(raw: RawQueryRecord): FeedTense {
   return rawQueryScalar(raw.tense) === "past" ? "past" : "upcoming";

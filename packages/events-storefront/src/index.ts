@@ -49,7 +49,6 @@ export {
   buildMonthGrid,
   capDayEntries,
   currentMskMonth,
-  entryTime,
   formatAgendaDayTitle,
   formatMonthTitle,
   isMonthFuture,
@@ -70,11 +69,6 @@ export {
   resolveRecordingSignal,
 } from "./model/recording-signal";
 export { isRecordingPlayable } from "./model/recording-cta";
-export {
-  type ListingHrefChange,
-  type ListingQueryInput,
-  buildListingHref,
-} from "./model/listing-href";
 export {
   DEFAULT_EVENT_NOUN,
   type PluralNoun,

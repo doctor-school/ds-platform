@@ -242,7 +242,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const found = entry as Record<string, unknown>;
 
       expect(Object.keys(found).sort()).toEqual(
-        ["id", "school", "slug", "startsAt", "state", "title"].sort(),
+        [
+          "id",
+          "participationFormat",
+          "school",
+          "slug",
+          "startsAt",
+          "state",
+          "title",
+        ].sort(),
       );
       for (const forbidden of [
         "partnerRef",

@@ -322,8 +322,17 @@ export function emptyFeedState(
     listing,
     noun,
     copy,
-  }: { listing: string; noun: PluralNoun; copy: FeedCopy },
+    titles = {},
+  }: {
+    listing: string;
+    noun: PluralNoun;
+    copy: FeedCopy;
+    /** The read's facet options — a facet value is named by its title. */
+    titles?: FeedFacetOptions;
+  },
 ): EmptyFeedState {
+  const titleOf = (key: string, value: string) =>
+    titles[key]?.find((option) => option.slug === value)?.title ?? value;
   const remove = (key: string, value?: string) =>
     withoutFeedParam(listing, query, key, value);
 
@@ -346,13 +355,24 @@ export function emptyFeedState(
     chips.push({ label: `${copy.facet.format}: ${name}`, href: remove("format", value) });
   }
   for (const value of rawQueryList(query.kind) ?? []) {
-    chips.push({ label: copy.facet.kind, href: remove("kind", value) });
+    chips.push({
+      label: `${copy.facet.kind}: ${titleOf("kind", value)}`,
+      href: remove("kind", value),
+    });
   }
   for (const value of rawQueryList(query.city) ?? []) {
     chips.push({ label: `${copy.facet.city}: ${value}`, href: remove("city", value) });
   }
   if (rawQueryBoolean(query.nmo) === true) {
     chips.push({ label: copy.facet.nmo, href: remove("nmo") });
+  }
+  for (const key of ["project", "expert", "topic"] as const) {
+    for (const value of rawQueryList(query[key]) ?? []) {
+      chips.push({
+        label: `${copy.facet[key]}: ${titleOf(key, value)}`,
+        href: remove(key, value),
+      });
+    }
   }
   const q = rawQueryScalar(query.q);
   if (q !== undefined) {

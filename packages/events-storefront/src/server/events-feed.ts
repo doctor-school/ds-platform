@@ -6,9 +6,11 @@ import {
   type MonthlyEventCount,
   MonthlyEventCountsSchema,
   type RawQueryRecord,
+  SpecialtyBookSchema,
 } from "@ds/schemas";
 
 import type { EventsStorefrontHostConfig } from "../host-config";
+import type { SpecialtyChoice } from "../model/facets";
 import type { BlockRead, EventsFeedPage } from "../model/feed";
 import { feedReadQuery, feedTenseOf, monthReadQuery } from "../model/feed-url";
 import { type ForwardedSession, forwardedHeaders } from "./registration-state";
@@ -84,7 +86,7 @@ export async function fetchEventsLive(
   }
 }
 
-type ReadRequest = { readonly cookie: string; readonly forwardedFor: string };
+export type ReadRequest = { readonly cookie: string; readonly forwardedFor: string };
 type ReadConfig = Pick<EventsStorefrontHostConfig, "contentSet" | "filterSet">;
 
 async function readJson<T>(
@@ -148,4 +150,27 @@ export function fetchMonthCounts(
     MonthlyEventCountsSchema,
     fetchImpl,
   );
+}
+
+/**
+ * The specialties the doctor specialty facet offers (row 59) — the 017
+ * specialty book, without its «Другое» entry (no specialty to narrow by). A
+ * failed read offers none; the scope chips still work.
+ */
+export async function fetchSpecialtyChoices(
+  fetchImpl: typeof fetch = fetch,
+): Promise<SpecialtyChoice[]> {
+  try {
+    const res = await fetchImpl(`${API_BASE}/v1/public/specialties`, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const book = SpecialtyBookSchema.parse(await res.json());
+    return book.entries
+      .filter((entry) => !entry.isOther)
+      .map((entry) => ({ code: entry.code, name: entry.name }));
+  } catch {
+    return [];
+  }
 }

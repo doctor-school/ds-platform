@@ -34,6 +34,7 @@ const entry = (
   school: `School ${id}`,
   startsAt,
   state,
+  participationFormat: "online",
 });
 
 // 13:00 МСК on 16 July 2026 (10:00 UTC) — "today" for the reference month.

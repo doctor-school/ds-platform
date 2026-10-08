@@ -2839,6 +2839,8 @@ export interface components {
             entries: {
                 /** Format: uuid */
                 id: string;
+                /** @enum {string} */
+                participationFormat: "online" | "offline" | "hybrid";
                 school: string;
                 slug: string;
                 /** Format: date-time */
@@ -3067,6 +3069,8 @@ export interface components {
         MonthBroadcastListDto: {
             /** Format: uuid */
             id: string;
+            /** @enum {string} */
+            participationFormat: "online" | "offline" | "hybrid";
             school: string;
             slug: string;
             /** Format: date-time */

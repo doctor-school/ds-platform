@@ -1453,6 +1453,7 @@ export class EventsService {
       title: e.title,
       school: e.school,
       startsAt: e.startsAt.toISOString(),
+      participationFormat: e.participationFormat,
       // The repo filters to published/live/ended, so the residual is the month
       // entry subset (draft/hidden have no month projection — EARS-15).
       state: e.state as MonthBroadcastState,

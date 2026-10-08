@@ -2846,6 +2846,10 @@
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                   "type": "string"
                 },
+                "participationFormat": {
+                  "enum": ["online", "offline", "hybrid"],
+                  "type": "string"
+                },
                 "school": {
                   "type": "string"
                 },
@@ -2871,7 +2875,8 @@
                 "title",
                 "school",
                 "startsAt",
-                "state"
+                "state",
+                "participationFormat"
               ],
               "type": "object"
             },
@@ -3898,6 +3903,10 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
               "type": "string"
             },
+            "participationFormat": {
+              "enum": ["online", "offline", "hybrid"],
+              "type": "string"
+            },
             "school": {
               "type": "string"
             },
@@ -3917,7 +3926,15 @@
               "type": "string"
             }
           },
-          "required": ["id", "slug", "title", "school", "startsAt", "state"],
+          "required": [
+            "id",
+            "slug",
+            "title",
+            "school",
+            "startsAt",
+            "state",
+            "participationFormat"
+          ],
           "type": "object"
         },
         "type": "array"

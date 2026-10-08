@@ -338,6 +338,33 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     expect(state.action?.href).toBe("/events");
   });
 
+  it("NEW: an Academy facet-emptied feed names the facet by its title and links its removal (row 58)", () => {
+    const state = emptyFeedState(
+      { project: ["orto", "sport"], topic: ["metrics"] },
+      {
+        listing: "/webinars",
+        noun: { one: "эфир", few: "эфира", many: "эфиров" },
+        copy: FEED_COPY,
+        titles: { project: [{ slug: "orto", title: "Школа ортобиологии", count: 0 }] },
+      },
+    );
+    expect(state.title).toBe("Нет эфиров по фильтру «Проект: Школа ортобиологии»");
+    expect(state.action?.href).toBe("/webinars?project=sport&topic=metrics");
+  });
+
+  it("NEW: a kind chip names the kind by its title", () => {
+    const state = emptyFeedState(
+      { kind: ["lecture"] },
+      {
+        listing: "/events",
+        noun: { one: "событие", few: "события", many: "событий" },
+        copy: FEED_COPY,
+        titles: { kind: [{ slug: "lecture", title: "Лекция", count: 0 }] },
+      },
+    );
+    expect(state.title).toBe("Нет событий по фильтру «Вид события: Лекция»");
+  });
+
   it("no facet ⇒ the plain empty feed, no action", () => {
     const state = emptyFeedState(
       {},

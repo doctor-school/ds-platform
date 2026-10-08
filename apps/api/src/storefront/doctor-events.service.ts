@@ -284,6 +284,7 @@ export class DoctorEventsService {
         school: row.school,
         startsAt: row.startsAt.toISOString(),
         state: row.state,
+        participationFormat: row.participationFormat,
       })),
       targeting,
     };

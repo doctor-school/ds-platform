@@ -1,7 +1,5 @@
-import { type ReactNode, Suspense } from "react";
-import { headers } from "next/headers";
 import { Skeleton } from "@ds/design-system/skeleton";
-import type { MyEventItem, RawQueryRecord } from "@ds/schemas";
+import { type MyEventItem, type RawQueryRecord, rawQueryScalar } from "@ds/schemas";
 
 import { FEED_COPY } from "../copy/feed-copy";
 import { eventNounOf } from "../copy/listing-copy";
@@ -9,27 +7,20 @@ import { type PluralNoun, formatEventCount } from "../model/event-count";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import {
   type BlockRead,
-  type EventsFeedHorizon,
   type EventsFeedPage,
   emptyFeedState,
   showMoreLabel,
 } from "../model/feed";
-import { feedTenseOf, showMoreHref, tenseHref } from "../model/feed-url";
-import {
-  type ForwardedSession,
-  fetchEventsFeed,
-  fetchEventsLive,
-  fetchMyEvents,
-  forwardedSessionFrom,
-} from "../server";
+import { feedTenseOf, showMoreHref } from "../model/feed-url";
+import { type ForwardedSession, fetchEventsLive, fetchMyEvents } from "../server";
 import { BlockError } from "./block-error";
-import { FeedFrame } from "./feed-frame";
+import { DayAnchorScroll } from "./day-anchor-scroll";
 import { FeedList } from "./feed-list";
 import { LiveBlock } from "./live-block";
 import { MyEventsCut } from "./my-events-cut";
 
 /** The viewer's upcoming registrations; `null` for a guest. */
-async function readMyEvents(
+export async function readMyEvents(
   path: string,
   session: ForwardedSession,
 ): Promise<BlockRead<readonly MyEventItem[] | null>> {
@@ -49,7 +40,7 @@ async function readMyEvents(
  * and how much room it reserves, the canvas `sk(height, width)` boxes); the
  * primitive keeps its own fill and pulse.
  */
-function SkeletonSlot({ className }: { className: string }) {
+export function SkeletonSlot({ className }: { className: string }) {
   return (
     <div className={className}>
       <Skeleton className="h-full w-full" />
@@ -57,7 +48,7 @@ function SkeletonSlot({ className }: { className: string }) {
   );
 }
 
-function LiveSkeleton() {
+export function LiveSkeleton() {
   return (
     <div data-testid="events-live-skeleton">
       <SkeletonSlot className="h-24 w-full" />
@@ -65,7 +56,7 @@ function LiveSkeleton() {
   );
 }
 
-function MyEventsSkeleton() {
+export function MyEventsSkeleton() {
   return (
     <div
       className="flex flex-col gap-3"
@@ -95,7 +86,7 @@ function FeedSkeletonCard() {
   );
 }
 
-function FeedSkeleton() {
+export function FeedSkeleton() {
   return (
     <div className="flex flex-col gap-10" data-testid="events-feed-skeleton">
       {[2, 1].map((cards, day) => (
@@ -178,13 +169,11 @@ export async function FeedSection({
   query,
   feed,
   mine,
-  monthNav,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
   feed: Promise<BlockRead<EventsFeedPage>>;
   mine: Promise<BlockRead<readonly MyEventItem[] | null>>;
-  monthNav?: ((horizon: EventsFeedHorizon) => ReactNode) | undefined;
 }) {
   const tense = feedTenseOf(query);
   const [read, registered] = await Promise.all([feed, mine]);
@@ -201,7 +190,7 @@ export async function FeedSection({
   const more = showMoreHref(config.routes.listing, query, page.horizon);
   return (
     <>
-      {monthNav?.(page.horizon)}
+      <DayAnchorScroll day={rawQueryScalar(query.day) ?? null} />
       <FeedList
         cards={page.cards}
         tense={tense}
@@ -220,88 +209,9 @@ export async function FeedSection({
           listing: config.routes.listing,
           noun: eventNounOf(config.copy),
           copy: FEED_COPY,
+          titles: page.facetOptions,
         })}
       />
     </>
-  );
-}
-
-/**
- * The events feed view of both storefronts (wave-2 entry gate §2.4, the #2076
- * canvas): the head with the tense tabs, then «Идёт сейчас», «Мои события» and
- * the day feed (row 50). Each block reads on its own and streams behind its own
- * skeleton (019 EARS-9); a block whose read fails shows its cause and a retry
- * while the others stay usable (row 48). The live block and «Мои события» belong
- * to «Будущие»; «Мои события» is a signed-in reader's block only (019 EARS-11).
- *
- * `headAction` and `monthNav` carry the month navigation each host keeps until
- * the same-page month view replaces both in PR 2.5 (gate §4.1, «After 2.4»).
- */
-export async function EventsFeedView({
-  config,
-  query,
-  headAction,
-  monthNav,
-}: {
-  config: EventsStorefrontHostConfig;
-  query: RawQueryRecord;
-  headAction?: ReactNode;
-  monthNav?: (horizon: EventsFeedHorizon) => ReactNode;
-}) {
-  const tense = feedTenseOf(query);
-  const requestHeaders = await headers();
-  const session = forwardedSessionFrom(requestHeaders);
-  const mine = readMyEvents(config.contentSet.myEventsPath, session);
-  // One feed read serves the day feed and the counted head subline.
-  const feed = fetchEventsFeed(config, query, {
-    cookie: requestHeaders.get("cookie") ?? "",
-    forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
-  });
-  const listing = config.routes.listing;
-  const { subline } = config.headerCopy;
-
-  return (
-    <FeedFrame
-      title={config.headerCopy.title}
-      subline={
-        typeof subline === "string" ? (
-          subline
-        ) : (
-          <Suspense fallback={<SkeletonSlot className="inline-block h-4 w-48" />}>
-            <CountedSubline
-              feed={feed}
-              eventNoun={eventNounOf(config.copy)}
-              schoolNoun={subline.schoolNoun}
-            />
-          </Suspense>
-        )
-      }
-      tense={tense}
-      hrefs={{
-        upcoming: tenseHref(listing, query, "upcoming"),
-        past: tenseHref(listing, query, "past"),
-      }}
-      headAction={headAction}
-    >
-      {tense === "upcoming" ? (
-        <Suspense fallback={<LiveSkeleton />}>
-          <LiveSection config={config} session={session} />
-        </Suspense>
-      ) : null}
-      {tense === "upcoming" && session.cookie !== "" ? (
-        <Suspense fallback={<MyEventsSkeleton />}>
-          <MyEventsSection config={config} mine={mine} />
-        </Suspense>
-      ) : null}
-      <Suspense fallback={<FeedSkeleton />}>
-        <FeedSection
-          config={config}
-          query={query}
-          feed={feed}
-          mine={mine}
-          monthNav={monthNav}
-        />
-      </Suspense>
-    </FeedFrame>
   );
 }

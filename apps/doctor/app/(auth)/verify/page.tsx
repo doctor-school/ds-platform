@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { VerifyRoute } from "@ds/auth-flow/verify/route";
 
 import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
@@ -22,7 +23,7 @@ import { DOCTOR_AUTH_FLOW } from "../../../lib/auth-flow.host-config";
  * «Подтверждение» composition (`design-source/auth.dc.html`).
  */
 export const metadata: Metadata = {
-  title: "Подтверждение почты — Doctor.School",
+  title: AUTH_FLOW_PAGE_TITLES.verify,
 };
 
 export default async function DoctorVerifyPage({

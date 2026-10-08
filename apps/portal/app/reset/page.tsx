@@ -1,3 +1,6 @@
+import type { Metadata } from "next";
+
+import { AUTH_FLOW_PAGE_TITLES } from "@ds/auth-flow/copy";
 import { ResetRoute } from "@ds/auth-flow/reset/route";
 
 import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
@@ -17,6 +20,10 @@ import { ACADEMY_AUTH_FLOW } from "../../lib/auth-flow.host-config";
  * stays here is what this host STATES about itself: `ACADEMY_AUTH_FLOW`. The
  * guard runs inside the mount, so `app/reset/layout.tsx` is gone.
  */
+export const metadata: Metadata = {
+  title: AUTH_FLOW_PAGE_TITLES.reset,
+};
+
 export default async function ResetPage({
   searchParams,
 }: {

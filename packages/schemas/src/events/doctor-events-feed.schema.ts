@@ -124,8 +124,31 @@ export const DoctorEventsFeedSchema = z
     to: DoctorEventsFeedDaySchema,
     days: z.array(DoctorEventDayGroupSchema),
     totalCount: z.number().int().nonnegative(),
-    /** The `to` «показать ещё» writes into the URL; `null` when the horizon is already maximal. */
+    /**
+     * «Будущие»: the `to` «показать ещё» writes into the URL; `null` when
+     * nothing lies past the window or the horizon is already maximal. Always
+     * `null` on «Прошедшие», whose extent widens backward ({@link nextFrom}).
+     */
     nextTo: DoctorEventsFeedDaySchema.nullable(),
+    /**
+     * «Прошедшие»: the older `from` «показать ещё» writes into the URL; `null`
+     * when nothing older lies within the widest horizon. Always `null` on
+     * «Будущие». One codec: the past extent moves its `from`, the upcoming
+     * extent its `to` — the same two URL keys.
+     */
+    nextFrom: DoctorEventsFeedDaySchema.nullable(),
+    /**
+     * The matching events beyond the current extent that further «показать
+     * ещё» steps can still reach (within the widest horizon) — the M of
+     * «Показать ещё N из M»; `0` exactly when both next bounds are `null`.
+     */
+    remaining: z.number().int().nonnegative(),
+    /**
+     * The matching events the NEXT «показать ещё» step adds — the events in
+     * `[to, nextTo)` on «Будущие», `[nextFrom, from)` on «Прошедшие» — the N
+     * of «Показать ещё N из M»; `0` exactly when both next bounds are `null`.
+     */
+    nextBatch: z.number().int().nonnegative(),
     targeting: DoctorEventsFeedTargetingSchema,
   })
   .strict();

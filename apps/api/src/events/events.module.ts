@@ -9,6 +9,7 @@ import { LegacyBroadcastsAdminController } from "./legacy-broadcasts.admin.contr
 import { RegistrationModule } from "../registration/registration.module.js";
 import { RoomModule } from "../room/room.module.js";
 import { ParticipationService } from "./participation.service.js";
+import { EventsLiveService } from "./events-live.service.js";
 
 /**
  * Event module. Hosts both the 007 admin authoring surface (write side) and the
@@ -51,11 +52,17 @@ import { ParticipationService } from "./participation.service.js";
     EventsPublicController,
     LegacyBroadcastsAdminController,
   ],
-  providers: [EventsService, EventsRepository, ParticipationService],
+  providers: [
+    EventsService,
+    EventsRepository,
+    ParticipationService,
+    EventsLiveService,
+  ],
   // `ParticipationService` and `EventsService` are exported for the DOCTOR
   // storefront's twin routes (020 LD-1): the doctor host mounts thin routes over
   // these same providers, so a second read model or a second CTA resolver
-  // cannot come into existence on that side.
-  exports: [EventsService, ParticipationService],
+  // cannot come into existence on that side. `EventsLiveService` is the ONE
+  // live resolution both storefronts' «Идёт сейчас» reads share (wave-2 D5).
+  exports: [EventsService, ParticipationService, EventsLiveService],
 })
 export class EventsModule {}

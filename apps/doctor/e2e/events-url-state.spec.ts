@@ -9,9 +9,9 @@ import { expect, test } from "@playwright/test";
  * those — the browser BACK button, the shared-link entry route and the return
  * from feature 021 are #1516's, not this Issue's.
  *
- * Every assertion is on structure (`[data-events-feed]` attributes, the
- * `#day-<YYYY-MM-DD>` sections, link hrefs), never on copy: the defect being
- * guarded is a screen-local state store, which copy cannot reveal.
+ * Every assertion is on structure (the `#day-<YYYY-MM-DD>` sections, the cards,
+ * link hrefs), never on copy: the defect being guarded is a screen-local state
+ * store, which copy cannot reveal.
  *
  * The upstream is the fixed stand-in `e2e/support/doctor-events-api.mjs`; it
  * honours the `format` facet, so a facet that reached the SERVER is
@@ -28,14 +28,19 @@ const showMoreHrefOf = async (page: import("@playwright/test").Page) => {
 
 /** The structural fingerprint of a rendered feed — what a shared link must reproduce. */
 const fingerprint = async (page: import("@playwright/test").Page) => {
-  const feed = page.locator("[data-events-feed]");
+  const feed = page.getByTestId("events-feed");
   await expect(feed).toHaveCount(1);
   return {
-    from: await feed.getAttribute("data-feed-from"),
-    to: await feed.getAttribute("data-feed-to"),
     days: await page.locator('section[id^="day-"]').evaluateAll((nodes) =>
       nodes.map((node) => node.id),
     ),
+    cards: await feed
+      .locator("[data-webinar-card] h3 a")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href"))),
+    tense: await page
+      .getByTestId("events-tense-tabs")
+      .getByRole("tab", { selected: true })
+      .textContent(),
     showMore: await showMoreHrefOf(page),
   };
 };
@@ -56,9 +61,11 @@ test("019 EARS-8.18: a pasted URL reproduces the same feed in a fresh browser co
   const shared = await fingerprint(secondPage);
 
   expect(shared).toEqual(original);
-  // The horizon in the URL is the horizon on the screen, not a default.
-  expect(original.from).toBe("2026-09-01");
-  expect(original.to).toBe("2026-09-29");
+  // The horizon in the URL is the horizon on the screen, not a default: the
+  // widened extent serves the day beyond the default window, and nothing lies
+  // beyond it any more.
+  expect(original.tense).toBe("Будущие");
+  expect(original.showMore).toBeNull();
   expect(original.days).toEqual([
     "day-2026-09-02",
     "day-2026-09-04",
@@ -78,7 +85,7 @@ test("019 EARS-8.19: the facet in the URL reaches the read rather than the brows
   await page.goto(
     "/events?from=2026-09-01&to=2026-09-29&format=offline&specialty=all",
   );
-  await expect(page.locator("[data-events-feed]")).toHaveCount(1);
+  await expect(page.getByTestId("events-feed-empty")).toHaveCount(1);
   await expect(page.locator('section[id^="day-"]')).toHaveCount(0);
 
   await page.goto(
@@ -102,9 +109,11 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
   const params = new URL(href!, "http://127.0.0.1").searchParams;
 
   // Every understood parameter survives the widening — a control that dropped
-  // one would hand the reader a link to a DIFFERENT screen.
+  // one would hand the reader a link to a DIFFERENT screen. The default reading
+  // («Будущие») is stated by the absence of `tense` (the canonical URL states
+  // only what differs from the default).
   expect(params.get("day")).toBe("2026-09-02");
-  expect(params.get("tense")).toBe("upcoming");
+  expect(params.has("tense")).toBe(false);
   expect(params.getAll("format")).toEqual(["online"]);
   expect(params.get("specialty")).toBe("all");
   expect(params.getAll("city")).toEqual(["msk"]);
@@ -119,7 +128,6 @@ test("019 EARS-8.20: the forward control carries the whole state and drops nothi
   // only link the feature itself writes.
   expect([...params.keys()]).toEqual([
     "day",
-    "tense",
     "from",
     "to",
     "format",
@@ -147,9 +155,27 @@ test.describe("with JavaScript disabled", () => {
     // empty feed here.
     await page.goto(FULL_STATE);
 
-    const feed = page.locator("[data-events-feed]");
-    await expect(feed).toHaveAttribute("data-feed-from", "2026-09-01");
-    await expect(feed).toHaveAttribute("data-feed-to", "2026-09-29");
+    await expect(page.getByTestId("events-feed")).toHaveCount(1);
     await expect(page.locator('section[id^="day-"]')).toHaveCount(3);
+    await expect(page.locator("#day-2026-09-20")).toHaveCount(1);
   });
+});
+
+test("gate row 28: a tense tab keeps the facets and resets the horizon", async ({
+  page,
+}) => {
+  await page.goto(
+    "/events?day=2026-09-04&from=2026-09-01&to=2026-09-29&format=online&specialty=all",
+  );
+  const past = page
+    .getByTestId("events-tense-tabs")
+    .getByRole("tab", { name: "Прошедшие" });
+  await past.click();
+
+  // The horizon is the extent of one tense's reading and means nothing in the
+  // other: `from`, `to` and `day` leave, the facets stay, `tense=past` is written.
+  await expect(page).toHaveURL(
+    /\/events\?tense=past&format=online&specialty=all$/,
+  );
+  await expect(past).toHaveAttribute("aria-selected", "true");
 });

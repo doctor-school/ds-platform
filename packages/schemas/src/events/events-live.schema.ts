@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /**
- * 019 EARS-6 (#1521) — the «Идёт сейчас» contract of
- * `GET /v1/storefront/doctor/events/live` (019-design §3 «model: `LiveStrip |
- * null`», §4).
+ * 019 EARS-6 (#1521) — the «Идёт сейчас» contract of BOTH hosts' live reads:
+ * `GET /v1/storefront/doctor/events/live` (audience `doctors`, targeted) and
+ * `GET /v1/public/events/live` (audience `experts`) — one live resolution
+ * parameterised by audience (wave-2 entry gate §4.2, §4.3 D5).
  *
  * Three invariants are expressed as types rather than as review etiquette:
  *
@@ -12,11 +13,13 @@ import { z } from "zod";
  *    own clock to decide «this эфир must be running by now». Liveness is 006's
  *    lifecycle `state`, resolved on the server; `endsAt` is present only as the
  *    «до HH:MM МСК» line the canvas asks for, and no code branches on it.
- * 2. **Nothing live ⇒ no strip, not an empty strip.** The read is
- *    `LiveStrip | null` ({@link DoctorEventsLiveReadSchema}); the design's
- *    dataState matrix puts the block ABSENT from the tree when nothing is
- *    live, so there is no `visible: false` field and no empty-shape variant a
- *    host could render a hollow frame from.
+ * 2. **Nothing live ⇒ an empty list, never an empty strip.** The read is
+ *    `LiveStrip[]` ({@link EventsLiveReadSchema}), every running эфир the
+ *    viewer may see, earliest start first; the block shows at most two strips
+ *    and «Ещё N в эфире →» for the rest (019 «Amendment — 2026-10-05»). An
+ *    empty list puts the block ABSENT from the tree, so there is no
+ *    `visible: false` field and no empty-shape variant a host could render a
+ *    hollow frame from.
  * 3. **The entry policy is the server's.** `href` is already resolved — the
  *    room for a registered viewer, the event page for everyone else — and
  *    `viewerIsRegistered` reports which of the two it is so a host can pick the
@@ -27,7 +30,7 @@ import { z } from "zod";
  * `personalised` field added upstream is REJECTED at the boundary rather than
  * forwarded — «Идёт сейчас» is a lifecycle fact, never a recommendation.
  */
-export const DoctorEventsLiveStripSchema = z
+export const EventLiveStripSchema = z
   .object({
     eventId: z.string().min(1),
     slug: z.string().min(1),
@@ -49,11 +52,11 @@ export const DoctorEventsLiveStripSchema = z
     viewerIsRegistered: z.boolean(),
   })
   .strict();
-export type DoctorEventsLiveStrip = z.infer<typeof DoctorEventsLiveStripSchema>;
+export type EventLiveStrip = z.infer<typeof EventLiveStripSchema>;
 
-/** The whole response body: the strip, or `null` when nothing targeted is live. */
-export const DoctorEventsLiveReadSchema = DoctorEventsLiveStripSchema.nullable();
-export type DoctorEventsLiveRead = z.infer<typeof DoctorEventsLiveReadSchema>;
+/** The whole response body: every live strip, earliest start first; `[]` when nothing is live. */
+export const EventsLiveReadSchema = z.array(EventLiveStripSchema);
+export type EventsLiveRead = z.infer<typeof EventsLiveReadSchema>;
 
 /**
  * The bounded refresh cadence of the block (019 LD-6). The strip is a LIVE fact
@@ -63,4 +66,4 @@ export type DoctorEventsLiveRead = z.infer<typeof DoctorEventsLiveReadSchema>;
  * the same order as the feed's own `max-age=30`, so a room that closes clears
  * the block within one cadence with no reload.
  */
-export const DOCTOR_EVENTS_LIVE_REFRESH_SECONDS = 30;
+export const EVENTS_LIVE_REFRESH_SECONDS = 30;

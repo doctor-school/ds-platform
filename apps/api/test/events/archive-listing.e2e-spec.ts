@@ -30,7 +30,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     async function seed(
       state: "draft" | "published" | "live" | "ended" | "hidden",
       hoursAgo: number,
-      overrides: { id?: string; startsAt?: string } = {},
+      overrides: { id?: string; startsAt?: string; school?: string } = {},
     ) {
       const id = overrides.id ?? randomUUID();
       const slug = `archive-${state}-${id}`;
@@ -40,8 +40,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await pool.query(
         `INSERT INTO events
        (id, slug, title, school, starts_at, duration_min, description, specialties, state, kind_id, audience)
-       VALUES ($1,$2,$3,'Школа',$4,60,'Описание',ARRAY['Кардиология'],$5, ${eventClassificationSql()})`,
-        [id, slug, `Event ${state} ${hoursAgo}`, startsAt, state],
+       VALUES ($1,$2,$3,$6,$4,60,'Описание',ARRAY['Кардиология'],$5, ${eventClassificationSql()})`,
+        [
+          id,
+          slug,
+          `Event ${state} ${hoursAgo}`,
+          startsAt,
+          state,
+          overrides.school ?? "Школа",
+        ],
       );
       createdExpertIds.push(
         ...(await seedEventSpeakers(pool, id, [
@@ -130,6 +137,31 @@ describe.skipIf(!process.env.DATABASE_URL)(
         url: "/v1/public/events?timeframe=past&cursor=not-issued",
       });
       expect(malformed.statusCode).toBe(400);
+    });
+
+    it("NEW: the listing counts shall carry the distinct schools among upcoming published events for the «N эфиров · M школ» subline", async () => {
+      const read = async () => {
+        const res = await app.inject({
+          method: "GET",
+          url: "/v1/public/events?timeframe=upcoming&limit=1",
+        });
+        expect(res.statusCode).toBe(200);
+        return (
+          res.json() as {
+            counts: { upcoming: number; past: number; upcomingSchools: number };
+          }
+        ).counts;
+      };
+      const before = await read();
+      const tag = randomUUID().slice(0, 8);
+      await seed("published", -500_000, { school: `Школа A ${tag}` });
+      await seed("published", -500_001, { school: `Школа A ${tag}` });
+      await seed("published", -500_002, { school: `Школа B ${tag}` });
+      await seed("draft", -500_003, { school: `Школа C ${tag}` });
+      await seed("ended", 500_000, { school: `Школа D ${tag}` });
+      const after = await read();
+      expect(after.upcoming - before.upcoming).toBe(3);
+      expect(after.upcomingSchools - before.upcomingSchools).toBe(2);
     });
 
     it("EARS-11.1: when past events share a millisecond but differ in microseconds, the descending cursor shall not skip the row after the cutoff", async () => {

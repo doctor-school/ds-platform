@@ -15,8 +15,7 @@ import { useViewerZone } from "./use-viewer-zone";
  * matches and nothing shifts; after mount an online or hybrid row re-formats to
  * the viewer's zone, an offline row stays МСК.
  *
- * `MyEvents` returns a whole tab at once — no paging; `pageCount = 1` makes the
- * shared `Pagination` block render nothing at all.
+ * `MyEvents` returns a whole tab at once — no paging.
  */
 export function MyEventsList({
   events,
@@ -59,16 +58,7 @@ export function MyEventsList({
         past: COPY.tabs.recordings,
         emptyTitle: empty.title,
         emptyDescription: empty.body,
-        pagination: COPY.pagination.label,
-        previous: COPY.pagination.previous,
-        next: COPY.pagination.next,
-        pagePrefix: COPY.pagination.page,
       }}
-      paginationMode="pages"
-      pageCount={1}
-      page={1}
-      nextCursor={null}
-      hasMore={false}
     />
   );
 }

@@ -8,10 +8,6 @@ export {
 } from "./registration-state";
 export { registerForEventAction } from "./register-action";
 export {
-  type EventListingInput,
-  InvalidEventCursorError,
-  fetchEventListing,
-  fetchEventListingWithCursorFallback,
   fetchMonthBroadcasts,
   fetchMonthlyCounts,
   fetchPublicEventPage,
@@ -19,3 +15,7 @@ export {
 } from "./public-events";
 export { fetchParticipationCta } from "./participation-cta";
 export { type MyEventsResult, fetchMyEvents } from "./my-events";
+export {
+  fetchEventsFeed,
+  fetchEventsLive,
+} from "./events-feed";

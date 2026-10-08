@@ -15,5 +15,9 @@ test("EARS-11: with no upcoming event, the listing renders the empty-state", asy
 }) => {
   test.skip(!EXPECTED_EMPTY, "requires a branch DB with no upcoming events");
   await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Нет предстоящих эфиров")).toBeVisible();
+  // The feed view's empty state (gate row 47): with no facet applied it names
+  // none — «Эфиров нет».
+  const empty = page.getByTestId("events-feed-empty");
+  await expect(empty).toBeVisible();
+  await expect(empty.getByText("Эфиров нет", { exact: true })).toBeVisible();
 });

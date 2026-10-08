@@ -786,7 +786,8 @@ export type UpcomingBroadcastSpeaker = z.infer<
  * `UpcomingBroadcastCard` — the publish-safe projection returned by
  * `GET /v1/public/events?upcoming` (004 design §3, §4, EARS-7). A THINNER
  * allow-list than `PublicEventPageSchema`: only the card choose-set (EARS-8)
- * — `id, slug, title, school, startsAt, specialties[], speakers[]{name}, state` —
+ * — `id, slug, title, school, startsAt, specialties[], speakers[]{name}, state,
+ * kind, format, signUpCount` —
  * with **no** description, partners, program PDF, duration, or any
  * operator/commercial field or registrant PII (the structural half of EARS-10).
  * Like the event-page projection it is an allow-list, not a redactor: a new
@@ -807,6 +808,20 @@ export const UpcomingBroadcastCardSchema = z.object({
   specialties: z.array(z.string()),
   speakers: z.array(UpcomingBroadcastSpeakerSchema),
   state: UpcomingBroadcastStateSchema,
+  /**
+   * Wave-2 entry gate §4.3 D3 — the event's 012 kind (`{ id, slug, title }`)
+   * and its attendance mode, the two card labels (019 «Amendment —
+   * 2026-10-01»). Projections of the event's own `kind_id` and
+   * `participation_format`, the same fields the doctor card carries.
+   */
+  kind: EventKindRefSchema,
+  format: EventParticipationFormatSchema,
+  /**
+   * Wave-2 entry gate §4.2 (owner decision A2) — the colleagues' sign-up count:
+   * active participant registrations, the same count the doctor card carries.
+   * Whether a card SHOWS it (upcoming and live, never past) is a UI rule.
+   */
+  signUpCount: z.number().int().nonnegative(),
 });
 export type UpcomingBroadcastCard = z.infer<typeof UpcomingBroadcastCardSchema>;
 

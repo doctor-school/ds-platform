@@ -1,4 +1,5 @@
 import type { PluralNoun } from "./model/event-count";
+import type { EventsStorefrontAdapter } from "./model/feed";
 
 /**
  * What a storefront states about itself so the shared events listing can serve
@@ -7,17 +8,37 @@ import type { PluralNoun } from "./model/event-count";
  * `*.host-config.ts` is checked against this type with `satisfies`.
  *
  * The fields are the ones whose consumers are in the package today; the rest of
- * the §4.4 draft (the listing reads of `contentSet`, `filterSet`) lands with the
- * PR that mounts its consumer.
+ * the §4.4 draft (the month reads of `contentSet`, `filterSet`) lands with the
+ * PR that mounts its consumer (PR 2.5).
  */
 export type EventsStorefrontHostConfig = {
   /** The host's content set — the endpoints its reads call (019 `contentSet`). */
   contentSet: {
+    /** The feed read (gate row 12). */
+    feedPath: string;
+    /**
+     * The name the feed read takes the tense under: the codec's `tense` on the
+     * doctor read, `timeframe` on the Academy listing read (gate row 32, D2).
+     */
+    tenseParam: "tense" | "timeframe";
+    /** The one cookie the feed read forwards (row 13); unset = no cookie header. */
+    relayCookie?: string;
+    /** The «Идёт сейчас» read, same-origin path the browser re-reads too (row 43, D5). */
+    livePath: string;
     /** The viewer's «Мои события» read (gate row 15, §4.3 D8). */
     myEventsPath: string;
+    /** The one adapter of §4.5: the feed read's DTO → the feed page model. */
+    adapt: EventsStorefrontAdapter;
   };
-  /** The page head (gate row 19, 019 `headerCopy`). */
-  headerCopy: { title: string; subline: string };
+  /**
+   * The page head (gate row 19, 019 `headerCopy`). The subline is either fixed
+   * copy, or the counted form «N <eventNoun> · M <schoolNoun>» over the read's
+   * upcoming events and their distinct schools — the host states the nouns only.
+   */
+  headerCopy: {
+    title: string;
+    subline: string | { schoolNoun: PluralNoun };
+  };
   /** Deep-partial copy overrides (gate row 5). */
   copy?: {
     /** The event noun of every count; «событие» by default. */
@@ -41,10 +62,10 @@ export type EventsStorefrontHostConfig = {
  * host that mounts only that page states only these fields; the page head and
  * the copy overrides belong to the listing.
  */
-export type MyEventsHostConfig = Pick<
-  EventsStorefrontHostConfig,
-  "contentSet" | "routes"
->;
+export type MyEventsHostConfig = {
+  contentSet: Pick<EventsStorefrontHostConfig["contentSet"], "myEventsPath">;
+  routes: EventsStorefrontHostConfig["routes"];
+};
 
 /** An event's page on the host. */
 export function eventPageHref(

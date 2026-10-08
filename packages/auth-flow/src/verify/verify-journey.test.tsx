@@ -100,6 +100,7 @@ const EVENT_PAGE = {
     secondaryKind: null,
     posterUrl: null,
     expectedBy: null,
+    durationSec: null,
   },
 };
 

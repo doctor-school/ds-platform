@@ -335,7 +335,6 @@ export default [
       "apps/admin/components/back-to-list.tsx",
       "apps/admin/components/fields.tsx",
       "apps/doctor/app/(storefront)/events/month-pane.tsx",
-      "apps/doctor/app/(storefront)/events/page.tsx",
       "apps/doctor/components/account-screen.tsx",
       "apps/doctor/components/specialty-catalog-view.tsx",
       "apps/portal/app/academy-home-view.tsx",
@@ -344,7 +343,6 @@ export default [
       "apps/portal/app/webinars/[[]slug[]]/recording-gate.tsx",
       // Moved unchanged from `apps/portal/components/` by #2028 PR 2.2.
       "packages/events-storefront/src/ui/calendar-shell.tsx",
-      "packages/events-storefront/src/ui/discovery-listing.tsx",
       "packages/events-storefront/src/ui/month-calendar-view.tsx",
       // The «Мои события» page head, moved unchanged from
       // `apps/portal/app/account/events/page.tsx` by #1972 (wave-2 PR 2.3).

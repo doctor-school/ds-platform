@@ -7,7 +7,6 @@ import {
   encodeDoctorEventsFeedQueryEntries,
   type RawQueryValue,
 } from "@ds/schemas";
-import { encodeDoctorEventsFeedQuery } from "@/lib/events-feed";
 
 /**
  * 019 EARS-4 (#1519) — the projection of the `MonthGrid` read onto the SHARED
@@ -20,7 +19,7 @@ import { encodeDoctorEventsFeedQuery } from "@/lib/events-feed";
  * counts and the live marker come from `GET /v1/storefront/doctor/events/month`
  * (LD-3, EARS-15), which decodes its facets with the feed's own codec.
  *
- * Every href is built from the SHARED feed codec (`encodeDoctorEventsFeedQuery`)
+ * Every href is built from the SHARED feed codec (`encodeDoctorEventsFeedQueryEntries`)
  * with `day` / `month` written onto the result — a hand-assembled query string
  * would be the second query model LD-1 exists to prevent.
  */
@@ -219,7 +218,7 @@ export function doctorEventsDayHref(
           to: addDoctorEventsFeedDays(date, 1),
         }),
       )
-    : encodeDoctorEventsFeedQuery(raw);
+    : new URLSearchParams(encodeDoctorEventsFeedQueryEntries(raw));
   params.set("day", date);
   params.set("month", doctorEventsMonthOf(date));
   return `/events?${params.toString()}`;
@@ -230,7 +229,7 @@ export function doctorEventsMonthHref(
   raw: Record<string, RawQueryValue>,
   month: string,
 ): string {
-  const params = encodeDoctorEventsFeedQuery(raw);
+  const params = new URLSearchParams(encodeDoctorEventsFeedQueryEntries(raw));
   params.delete("day");
   params.set("month", month);
   return `/events?${params.toString()}`;

@@ -414,7 +414,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const day = mskDay(heldAtMsk);
       const res = await app.inject({
         method: "GET",
-        url: `/v1/storefront/doctor/events?from=${day}&to=${nextDay(day)}`,
+        // An archived эфир has ended: it reads in «Прошедшие» (wave-2 gate
+        // row 30 — the tense is the lifecycle split, never the date window).
+        url: `/v1/storefront/doctor/events?tense=past&from=${day}&to=${nextDay(day)}`,
       });
       expect(res.statusCode).toBe(200);
       const feed = res.json() as {

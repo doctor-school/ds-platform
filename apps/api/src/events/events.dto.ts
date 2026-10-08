@@ -2,6 +2,7 @@ import { createZodDto } from "nestjs-zod";
 import {
   ConfigureStreamRequestSchema,
   EventAdminListSchema,
+  EventLiveStripSchema,
   EventPageViewSchema,
   LegacyBroadcastCreateBodySchema,
   ParticipationCtaSchema,
@@ -74,3 +75,12 @@ export class MonthBroadcastListDto extends createZodDto(
 export class PublicEventListingPageDto extends createZodDto(
   PublicEventListingPageSchema,
 ) {}
+
+/**
+ * 019 EARS-6 / wave-2 entry gate §4.3 D5 — one strip of BOTH hosts' «Идёт
+ * сейчас» reads (`GET /v1/public/events/live`, `GET
+ * /v1/storefront/doctor/events/live`). Each route's 200 body is an ARRAY of
+ * these, `[]` when nothing is live — a value the client parses with the same
+ * schema as a full list, never an empty body or a `null` it special-cases.
+ */
+export class EventLiveStripDto extends createZodDto(EventLiveStripSchema) {}

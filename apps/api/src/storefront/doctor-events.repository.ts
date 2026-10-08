@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   and,
   asc,
-  count,
+  desc,
   eq,
   gte,
   ilike,
@@ -14,22 +14,25 @@ import {
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import {
-  eventDirections,
   eventExperts,
   eventKinds,
   eventProjects,
   events,
   experts,
   projects,
-  registrations,
 } from "@ds/db";
 import {
   type EventKindRef,
   type EventParticipationFormat,
   MONTH_BROADCAST_STATES,
 } from "@ds/schemas";
+
+/** A lifecycle set a feed read selects — one tense's, or the month grid's. */
+export type DoctorFeedStates =
+  readonly (typeof MONTH_BROADCAST_STATES)[number][];
 import { DRIZZLE_DB } from "../database/database.tokens.js";
-import { isParticipant } from "../auth/staff-role.js";
+import { eventsOnActiveDirections } from "../events/event-direction-restriction.js";
+import { countEventSignUps } from "../events/event-sign-ups.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -85,51 +88,54 @@ const FEED_ROW_COLUMNS = {
 const DOCTOR_AUDIENCE = eq(events.audience, "doctors");
 
 export interface DoctorFeedFilters {
+  /**
+   * The lifecycle set the read selects (wave-2 gate row 30): «Будущие» =
+   * `UPCOMING_BROADCAST_STATES`, «Прошедшие» = `PAST_BROADCAST_STATES` — the
+   * split the Academy listing applies — so a not-yet-ended эфир is never past
+   * and an ended one never upcoming, whatever window the read covers.
+   */
+  states: DoctorFeedStates;
+  /** `asc` = soonest first («Будущие», the month grid); `desc` = newest first («Прошедшие», LD-13). */
+  order: "asc" | "desc";
   /** `null` = targeting off (`specialty=all`); `[]` = a targeted read with no reachable direction. */
   directionIds: string[] | null;
-  /** Half-open horizon `[fromInstant, toInstant)` in UTC. */
-  fromInstant: Date;
+  /** Half-open horizon `[fromInstant, toInstant)` in UTC; `fromInstant: null` = no older bound (the «Прошедшие» archive). */
+  fromInstant: Date | null;
   toInstant: Date;
   /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
   kindSlugs: string[];
   q?: string | undefined;
+  /** At most this many rows, in `order` — the horizon row cap; omitted = every matching row. */
+  limit?: number;
 }
 
 @Injectable()
 export class DoctorEventsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
 
-  /** The active managed direction rows an event carries, used both to filter and to label. */
+  /** The active managed direction rows an event carries — the one shared targeting subquery. */
   private activeDirectionsOf(directionIds: string[] | null) {
-    const restriction = [
-      eq(eventDirections.status, "active"),
-      isNull(eventDirections.deletedAt),
-    ];
-    if (directionIds !== null) {
-      restriction.push(inArray(eventDirections.directionId, directionIds));
-    }
-    return this.db
-      .select({ id: eventDirections.eventId })
-      .from(eventDirections)
-      .where(and(...restriction));
+    return eventsOnActiveDirections(this.db, directionIds);
   }
 
   /**
    * The ONE selection predicate of the Doctor feed — eligibility window,
-   * targeting, `kind` and `q` — shared by {@link findFeedRows} and
-   * {@link findFirstFeedStartAfter}. It is a single builder rather than two
-   * copies on purpose: «показать ещё» may only be offered for events the very
-   * same predicate would then list, so a divergence here would re-open #1803
-   * (a control leading into an empty widening).
+   * targeting, `kind` and `q` — of {@link findFeedRows}, which serves the
+   * rendered window AND the range beyond it («показать ещё» and its
+   * remainder). One builder on purpose: «показать ещё» may only be offered for
+   * events the very same predicate would then list, so a divergence here would
+   * re-open #1803 (a control leading into an empty widening).
    */
   private feedWhere(filters: DoctorFeedFilters) {
     const where = [
       eq(events.recordStatus, "active"),
       DOCTOR_AUDIENCE,
-      inArray(events.state, [...MONTH_BROADCAST_STATES]),
-      gte(events.startsAt, filters.fromInstant),
+      inArray(events.state, [...filters.states]),
       lt(events.startsAt, filters.toInstant),
     ];
+    if (filters.fromInstant !== null) {
+      where.push(gte(events.startsAt, filters.fromInstant));
+    }
 
     // `specialty=all` drops the targeting subquery entirely rather than passing
     // "every direction id", so an event with no managed direction row is still
@@ -175,83 +181,22 @@ export class DoctorEventsRepository {
 
     const where = this.feedWhere(filters);
 
-    const rows = await this.db
+    const query = this.db
       .select(FEED_ROW_COLUMNS)
       .from(events)
       .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
       .where(and(...where))
-      .orderBy(asc(events.startsAt), asc(events.id));
+      .orderBy(
+        ...(filters.order === "desc"
+          ? [desc(events.startsAt), desc(events.id)]
+          : [asc(events.startsAt), asc(events.id)]),
+      );
+    const rows =
+      filters.limit === undefined
+        ? await query
+        : await query.limit(filters.limit);
 
     return rows as DoctorFeedRow[];
-  }
-
-  /**
-   * 019 EARS-6 (#1521) — the targeted эфиры that are RUNNING right now.
-   *
-   * The selection is the feed's own targeting predicate — the same
-   * {@link activeDirectionsOf} subquery over the managed `event_directions`
-   * rows — with two differences and no others: the lifecycle filter is the
-   * single `live` state instead of the whole publish window, and there is NO
-   * horizon. The horizon is deliberately dropped rather than widened: an эфир
-   * that started before the rendered window is EXCLUDED from the feed (stand
-   * finding 2026-09-02), and the live block is precisely the surface where a
-   * running эфир must still be reachable.
-   *
-   * What this method must never become is a second selection path: liveness is
-   * 006's `state` column, never `startsAt + durationMin` compared to `now()`
-   * here or on any client (019-design §4). Ordered by `startsAt` so a viewer
-   * targeted at several concurrent эфиры sees the one that has been running
-   * longest — a deterministic tie-break, not a ranking.
-   */
-  async findLiveRows(directionIds: string[] | null): Promise<DoctorFeedRow[]> {
-    // A targeted read that reaches no direction has nothing live, full stop —
-    // the same short-circuit `findFeedRows` applies, for the same reason.
-    if (directionIds !== null && directionIds.length === 0) return [];
-
-    const where = [
-      eq(events.recordStatus, "active"),
-      DOCTOR_AUDIENCE,
-      eq(events.state, "live"),
-    ];
-    if (directionIds !== null) {
-      where.push(inArray(events.id, this.activeDirectionsOf(directionIds)));
-    }
-
-    const rows = await this.db
-      .select(FEED_ROW_COLUMNS)
-      .from(events)
-      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
-      .where(and(...where))
-      .orderBy(asc(events.startsAt), asc(events.id));
-
-    return rows as DoctorFeedRow[];
-  }
-
-  /**
-   * The earliest start of a feed-eligible event inside `[fromInstant,
-   * toInstant)` under the SAME predicate {@link findFeedRows} applies — the
-   * question «is there anything at all past the rendered horizon?» (019 LD-2,
-   * #1803). `null` means the horizon may not be widened, because widening it
-   * would reveal nothing.
-   */
-  async findFirstFeedStartAfter(
-    filters: DoctorFeedFilters,
-  ): Promise<Date | null> {
-    if (filters.directionIds !== null && filters.directionIds.length === 0) {
-      return null;
-    }
-    if (filters.fromInstant.getTime() >= filters.toInstant.getTime()) {
-      return null;
-    }
-
-    const rows = await this.db
-      .select({ startsAt: events.startsAt })
-      .from(events)
-      .where(and(...this.feedWhere(filters)))
-      .orderBy(asc(events.startsAt))
-      .limit(1);
-
-    return rows[0]?.startsAt ?? null;
   }
 
   /**
@@ -334,20 +279,7 @@ export class DoctorEventsRepository {
    * Live registrations per event — the «сколько коллег записалось» of EARS-2.
    * Participants only: a staff account's sign-up is not a colleague (#2456).
    */
-  async countSignUps(eventIds: string[]): Promise<Map<string, number>> {
-    if (eventIds.length === 0) return new Map();
-    const rows = await this.db
-      .select({ eventId: registrations.eventId, total: count() })
-      .from(registrations)
-      .where(
-        and(
-          inArray(registrations.eventId, eventIds),
-          eq(registrations.recordStatus, "active"),
-          isParticipant(registrations.userId),
-        ),
-      )
-      .groupBy(registrations.eventId);
-
-    return new Map(rows.map((row) => [row.eventId, Number(row.total)]));
+  countSignUps(eventIds: string[]): Promise<Map<string, number>> {
+    return countEventSignUps(this.db, eventIds);
   }
 }

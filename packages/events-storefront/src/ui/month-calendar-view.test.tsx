@@ -32,6 +32,7 @@ vi.mock("./view-switcher", () => ({
   ViewSwitcher: () => null,
 }));
 
+import { adaptPublicEventListing } from "../adapters";
 import { MonthCalendarView } from "./month-calendar-view";
 
 describe("<MonthCalendarView>", () => {
@@ -59,7 +60,13 @@ describe("<MonthCalendarView>", () => {
         config: {
           headerCopy: { title: "t", subline: "s" },
           copy: { eventNoun: { one: "эфир", few: "эфира", many: "эфиров" } },
-          contentSet: { myEventsPath: "/v1/me/events" },
+          contentSet: {
+            feedPath: "/v1/public/events",
+            tenseParam: "timeframe",
+            livePath: "/v1/public/events/live",
+            myEventsPath: "/v1/me/events",
+            adapt: adaptPublicEventListing,
+          },
           routes: {
             listing: "/webinars",
             eventPage: "/webinars",

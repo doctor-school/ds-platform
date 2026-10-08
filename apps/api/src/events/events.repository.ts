@@ -18,6 +18,7 @@ import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { assertEventClassification } from "./event-classification.js";
 import {
   type ConfigureStreamRequest,
+  type EventAudience,
   type EventAdminListQuery,
   MONTH_BROADCAST_STATES,
   PAST_BROADCAST_STATES,
@@ -35,9 +36,12 @@ import {
   inArray,
   lt,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { eventsOnActiveDirections } from "./event-direction-restriction.js";
+import { countEventSignUps } from "./event-sign-ups.js";
 import {
   afterEventCursor,
   beforeEventCursor,
@@ -94,6 +98,56 @@ const ACTIVE_EVENT = eq(events.recordStatus, "active");
  * The public event page (by slug/id) is unchanged and not audience-scoped.
  */
 const ACADEMY_AUDIENCE = eq(events.audience, "experts");
+
+/**
+ * Half-open МСК-day horizon `[fromInstant, toInstant)` of a listing read
+ * (wave-2 gate §4.3 D2); `fromInstant: null` = no older bound (the «Прошедшие»
+ * archive has no age floor).
+ */
+export interface EventListingWindow {
+  fromInstant: Date | null;
+  toInstant: Date;
+}
+
+/**
+ * The ONE selection predicate of the Academy listing tabs — shared by the
+ * pages, their counts and the «Показать ещё» probe, so a widening can only be
+ * offered for events the very same predicate would then list (#1803).
+ * «Будущие»: `published`/`live` at or after the air-window `cutoff`;
+ * «Прошедшие»: the {@link PAST_BROADCAST_STATES} set. A `window` (the horizon)
+ * narrows either by start instant.
+ */
+function listingWhere(
+  timeframe: "upcoming" | "past",
+  cutoff: Date | null,
+  window?: EventListingWindow,
+): SQL[] {
+  const where: SQL[] = [
+    ACTIVE_EVENT,
+    ACADEMY_AUDIENCE,
+    timeframe === "upcoming"
+      ? inArray(events.state, [...UPCOMING_BROADCAST_STATES])
+      : inArray(events.state, [...PAST_BROADCAST_STATES]),
+  ];
+  if (cutoff !== null) where.push(gte(events.startsAt, cutoff));
+  if (window !== undefined) {
+    if (window.fromInstant !== null) {
+      where.push(gte(events.startsAt, window.fromInstant));
+    }
+    where.push(lt(events.startsAt, window.toInstant));
+  }
+  return where;
+}
+
+/** One running эфир of the shared live resolution (019 EARS-6, wave-2 gate D5). */
+export interface LiveEventRow {
+  id: string;
+  slug: string;
+  title: string;
+  school: string;
+  startsAt: Date;
+  durationMin: number;
+}
 
 /**
  * 012 EARS-26 — read the referenced kind `FOR SHARE` inside the write
@@ -160,6 +214,11 @@ export class EventsRepository {
       .from(eventKinds)
       .where(inArray(eventKinds.id, [...new Set(ids)]));
     return new Map(rows.map((row) => [row.id, row]));
+  }
+
+  /** Wave-2 entry gate §4.2 (A2) — the colleagues' sign-up count of a page of events, in ONE read. */
+  countSignUps(ids: readonly string[]): Promise<Map<string, number>> {
+    return countEventSignUps(this.db, ids);
   }
 
   async insert(event: NewEvent): Promise<EventAggregate> {
@@ -394,21 +453,17 @@ export class EventsRepository {
     cutoff: Date,
     limit?: number,
     after: EventListingCursor | null = null,
+    window?: EventListingWindow,
+    /** `desc` = farthest first: the capped horizon read (`EVENT_HORIZON_READ_ORDER`). */
+    order: "asc" | "desc" = "asc",
   ): Promise<EventListingRow[]> {
     const cursor = after ? afterEventCursor(after) : undefined;
+    const direction = order === "asc" ? asc : desc;
     const query = this.db
       .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
-      .where(
-        and(
-          ACTIVE_EVENT,
-          ACADEMY_AUDIENCE,
-          inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
-          gte(events.startsAt, cutoff),
-          cursor,
-        ),
-      )
-      .orderBy(asc(events.startsAt), asc(events.id));
+      .where(and(...listingWhere("upcoming", cutoff, window), cursor))
+      .orderBy(direction(events.startsAt), direction(events.id));
     const selected =
       limit === undefined ? await query : await query.limit(limit);
     return selected.map(({ event, startsAtCursor }) => ({
@@ -427,23 +482,21 @@ export class EventsRepository {
    * same set.
    */
   async listPast(
-    limit: number,
+    limit: number | undefined,
     after: EventListingCursor | null,
+    window?: EventListingWindow,
+    /** `asc` = oldest first: the capped horizon read (`EVENT_HORIZON_READ_ORDER`). */
+    order: "asc" | "desc" = "desc",
   ): Promise<EventListingRow[]> {
     const cursor = after ? beforeEventCursor(after) : undefined;
-    const selected = await this.db
+    const direction = order === "asc" ? asc : desc;
+    const query = this.db
       .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
-      .where(
-        and(
-          ACTIVE_EVENT,
-          ACADEMY_AUDIENCE,
-          inArray(events.state, [...PAST_BROADCAST_STATES]),
-          cursor,
-        ),
-      )
-      .orderBy(desc(events.startsAt), desc(events.id))
-      .limit(limit);
+      .where(and(...listingWhere("past", null, window), cursor))
+      .orderBy(direction(events.startsAt), direction(events.id));
+    const selected =
+      limit === undefined ? await query : await query.limit(limit);
     return selected.map(({ event, startsAtCursor }) => ({
       event,
       startsAtCursor,
@@ -454,34 +507,100 @@ export class EventsRepository {
   /** Counts backing the two controlled `/webinars` tabs. */
   async publicListingCounts(
     cutoff: Date,
-  ): Promise<{ upcoming: number; past: number }> {
+  ): Promise<{ upcoming: number; past: number; upcomingSchools: number }> {
     const [upcomingRow, pastRow] = await Promise.all([
       this.db
-        .select({ count: sql<number>`count(*)::int` })
+        .select({
+          count: sql<number>`count(*)::int`,
+          schools: sql<number>`count(DISTINCT ${events.school})::int`,
+        })
         .from(events)
-        .where(
-          and(
-            ACTIVE_EVENT,
-            ACADEMY_AUDIENCE,
-            inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
-            gte(events.startsAt, cutoff),
-          ),
-        ),
+        .where(and(...listingWhere("upcoming", cutoff))),
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(events)
-        .where(
-          and(
-            ACTIVE_EVENT,
-            ACADEMY_AUDIENCE,
-            inArray(events.state, [...PAST_BROADCAST_STATES]),
-          ),
-        ),
+        .where(and(...listingWhere("past", null))),
     ]);
     return {
       upcoming: upcomingRow[0]?.count ?? 0,
       past: pastRow[0]?.count ?? 0,
+      upcomingSchools: upcomingRow[0]?.schools ?? 0,
     };
+  }
+
+  /**
+   * Wave-2 entry gate §4.3 D2 (rows 30, 32) — the start instant of every
+   * listing-eligible event inside `range`, under the SAME predicate
+   * {@link listUpcoming} / {@link listPast} select with: what lies beyond the
+   * rendered horizon, for the next «Показать ещё» bound and the remainder
+   * (019 LD-2, #1803). Empty means the control is not offered.
+   */
+  async listListingStartsIn(
+    timeframe: "upcoming" | "past",
+    cutoff: Date | null,
+    range: EventListingWindow,
+  ): Promise<Date[]> {
+    if (
+      range.fromInstant !== null &&
+      range.fromInstant.getTime() >= range.toInstant.getTime()
+    ) {
+      return [];
+    }
+    const rows = await this.db
+      .select({ startsAt: events.startsAt })
+      .from(events)
+      .where(and(...listingWhere(timeframe, cutoff, range)));
+    return rows.map((row) => row.startsAt);
+  }
+
+  /**
+   * 019 EARS-6 / wave-2 entry gate §4.3 D5 — the эфиры of ONE audience that are
+   * RUNNING right now, earliest start first: the selection of the one live
+   * resolution both storefronts read (`EventsLiveService`).
+   *
+   * The lifecycle filter is the single `live` state and there is NO horizon: an
+   * эфир that started before a rendered window is excluded from the feed (stand
+   * finding 2026-09-02), and the live block is precisely the surface where a
+   * running эфир must still be reachable. Liveness is 006's `state` column,
+   * never `startsAt + durationMin` compared to `now()` (019-design §4).
+   *
+   * `directionIds` is the doctor storefront's targeting (017/018): `null` reads
+   * the whole audience, a list restricts through the one targeting subquery,
+   * and an empty list reads nothing — the short-circuit the feed applies too.
+   * The order is a deterministic tie-break, not a ranking.
+   */
+  async findLiveRows(input: {
+    audience: EventAudience;
+    directionIds: string[] | null;
+  }): Promise<LiveEventRow[]> {
+    if (input.directionIds !== null && input.directionIds.length === 0) {
+      return [];
+    }
+    const where = [
+      ACTIVE_EVENT,
+      eq(events.audience, input.audience),
+      eq(events.state, "live"),
+    ];
+    if (input.directionIds !== null) {
+      where.push(
+        inArray(
+          events.id,
+          eventsOnActiveDirections(this.db, input.directionIds),
+        ),
+      );
+    }
+    return this.db
+      .select({
+        id: events.id,
+        slug: events.slug,
+        title: events.title,
+        school: events.school,
+        startsAt: events.startsAt,
+        durationMin: events.durationMin,
+      })
+      .from(events)
+      .where(and(...where))
+      .orderBy(asc(events.startsAt), asc(events.id));
   }
 
   /**

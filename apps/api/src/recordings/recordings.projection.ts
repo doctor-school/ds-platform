@@ -34,6 +34,7 @@ function preparing(expectedBy: string | null): RecordingProjection {
     secondaryKind: null,
     posterUrl: null,
     expectedBy,
+    durationSec: null,
   };
 }
 
@@ -51,7 +52,11 @@ function preparing(expectedBy: string | null): RecordingProjection {
  * show the visitor a frame from a video they are not being given.
  */
 export function foldRecordingProjection(
-  rows: readonly { kind: RecordingKind; posterRef: string | null }[],
+  rows: readonly {
+    kind: RecordingKind;
+    posterRef: string | null;
+    durationSec?: number | null;
+  }[],
   expectedBy: string | null,
 ): RecordingProjection {
   const edited = rows.find((r) => r.kind === "edited");
@@ -63,6 +68,9 @@ export function foldRecordingProjection(
       primaryKind: "edited",
       secondaryKind: raw ? "raw" : null,
       posterUrl: edited.posterRef,
+      // Like the poster, the PRIMARY cut's own length — the «Запись · 54 мин»
+      // of a past card (wave-2 gate rows 10, 31).
+      durationSec: edited.durationSec ?? null,
       // The promise has been kept — repeating a «готовится к» date beside a
       // working player would contradict the page it sits on.
       expectedBy: null,
@@ -74,6 +82,7 @@ export function foldRecordingProjection(
       primaryKind: "raw",
       secondaryKind: null,
       posterUrl: raw.posterRef,
+      durationSec: raw.durationSec ?? null,
       expectedBy: null,
     };
   }
@@ -89,7 +98,11 @@ export function foldProjectionRows(
     string,
     {
       expectedBy: string | null;
-      kinds: { kind: RecordingKind; posterRef: string | null }[];
+      kinds: {
+        kind: RecordingKind;
+        posterRef: string | null;
+        durationSec: number | null;
+      }[];
     }
   >();
   for (const row of rows) {
@@ -99,7 +112,11 @@ export function foldProjectionRows(
       grouped.set(row.eventId, bucket);
     }
     if (row.kind !== null) {
-      bucket.kinds.push({ kind: row.kind, posterRef: row.posterRef });
+      bucket.kinds.push({
+        kind: row.kind,
+        posterRef: row.posterRef,
+        durationSec: row.durationSec,
+      });
     }
   }
 

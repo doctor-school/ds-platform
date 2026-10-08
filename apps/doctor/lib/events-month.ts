@@ -19,7 +19,7 @@ import { SPECIALTY_CHOICE_COOKIE_NAME } from "@/lib/specialty-choice";
  * are therefore the feed's own day-group sizes for the same facets, and no
  * client-side month assembly exists to drift from them.
  *
- * Cookie forwarding matches `events-feed.ts` exactly: ONLY 017's remembered
+ * Cookie forwarding matches the feed read (`relayCookie` of `lib/events-storefront.host-config.ts`) exactly: ONLY 017's remembered
  * specialty travels with the public read, so a guest with no remembered choice
  * gets the untargeted month (EARS-12).
  */
@@ -72,7 +72,7 @@ export function encodeDoctorEventsMonthQuery(
   return params;
 }
 
-/** See `events-feed.ts` — the same single-cookie rule, kept literally identical. */
+/** The feed read's single-cookie rule (gate row 13), kept literally identical. */
 function specialtyCookieOnly(cookie: string | null): string {
   if (cookie === null) return "";
   return (

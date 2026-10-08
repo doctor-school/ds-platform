@@ -64,7 +64,7 @@ async function presentation(page: Page, theme: "light" | "dark", path: string) {
     "aria-pressed",
     String(theme === "dark"),
   );
-  await expect(page.locator("[data-events-feed]")).toBeVisible();
+  await expect(page.locator('[data-feed-block="feed"]')).toBeVisible();
 }
 
 async function accessiblePage(page: Page) {
@@ -146,11 +146,14 @@ for (const width of [390, 1440]) {
               }
             } else {
               await expect(cards).toHaveCount(0);
-              await expect(
-                page.getByText("На выбранном отрезке событий нет", {
-                  exact: true,
-                }),
-              ).toBeVisible();
+              const empty = page.getByTestId("events-feed-empty");
+              await expect(empty).toBeVisible();
+              // The fixture's empty window carries no facet, so the empty
+              // state names no facet to weaken (gate row 47).
+              if (!live)
+                await expect(
+                  empty.getByText("Событий нет", { exact: true }),
+                ).toBeVisible();
             }
             const block = page.getByTestId("events-live-block");
             if (phase === "present") {

@@ -57,6 +57,7 @@ const EVENT: EventPageView = {
     secondaryKind: null,
     posterUrl: null,
     expectedBy: null,
+    durationSec: null,
   },
   format: "online",
   seatsLeft: null,

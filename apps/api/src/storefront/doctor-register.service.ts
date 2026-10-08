@@ -103,9 +103,7 @@ const SERVER_STAMPED_CONSENT_VERSIONS: Record<
 export class DoctorRegisterService {
   // Explicit @Inject token — the API boots under `tsx`, which emits no
   // `design:paramtypes`.
-  constructor(
-    @Inject(AuthService) private readonly auth: AuthService,
-  ) {}
+  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   /**
    * EARS-4. Refuses before ANY side-effect when the medical-worker declaration

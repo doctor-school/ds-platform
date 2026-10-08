@@ -25,4 +25,9 @@ describe("formatEventCount — one plural rule, the noun from copy", () => {
     expect(formatEventCount(21)).toBe("21 событие");
     expect(formatEventCount(22)).toBe("22 события");
   });
+
+  it("a count is plain digits — no locale digit grouping («1000», never «1 000»)", () => {
+    expect(formatEventCount(1000)).toBe("1000 событий");
+    expect(formatEventCount(12345)).toBe("12345 событий");
+  });
 });

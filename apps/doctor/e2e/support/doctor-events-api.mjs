@@ -1,14 +1,15 @@
 import { createServer } from "node:http";
 
 /**
- * 019 EARS-3 (#1518) — the upstream stand-in for the `/events` route tier.
+ * 019 EARS-3 (#1518) — the upstream stand-in for the `/events` route tier
+ * (wave-2 entry gate §2.4: the one feed view of both storefronts).
  *
  * The route reads `GET /v1/storefront/doctor/events` on the SERVER, so the only
  * way to drive the day grouping and the «Показать ещё» horizon walk in a browser
  * is to answer that read. This server answers it with a FIXED, deterministic
  * payload: the assertions are about the route's projection of the contract (day
- * groups rendered as groups, the horizon echoed into the DOM, «показать ещё»
- * widening `to=` in the URL), never about the api's targeting arithmetic — that
+ * groups rendered as groups, «Показать ещё N из M» widening the extent in the
+ * URL), never about the api's targeting arithmetic — that
  * half is owned by `apps/api/test/storefront/doctor-events-feed.e2e-spec.ts`
  * against the real database.
  *
@@ -24,8 +25,7 @@ const DEFAULT_TO = "2026-09-15";
 
 const card = (id, startsAt, overrides = {}) => ({
   id,
-  // 019 EARS-12: the slug is what the guest hand-off carries into 021 and what
-  // the `?resume=` return re-seats on, so the fixture cards must carry it.
+  // The card is one link to its event page (gate row 40), built from the slug.
   slug: id,
   href: `/events/${id}`,
   startsAt,
@@ -74,6 +74,70 @@ const WIDENED_DAY = {
 const ALL_DAYS = [...BASE_DAYS, WIDENED_DAY];
 
 /**
+ * «Прошедшие» (019 LD-13, gate rows 29–31) — ended events only, served NEWEST
+ * FIRST: the real service selects the past tense by lifecycle
+ * (`PAST_BROADCAST_STATES`) and orders it `starts_at DESC`
+ * (`DoctorEventsRepository.findFeedRows`, proven against the database in
+ * `doctor-events-feed.e2e-spec.ts`). The default past window is the service's
+ * `[today − 14, tomorrow)` with this fixture's today (2026-09-01). Two ended
+ * events sit inside it: one with a published 54-minute recording («Запись · 54
+ * мин» + «Смотреть запись») and one with nothing published — the `preparing`
+ * projection the real service attaches to every ended card without a published
+ * cut («Без записи», no action); one older event lies beyond the window so
+ * «Показать ещё» widens `from` backward to it.
+ */
+const PAST_DEFAULT_FROM = "2026-08-18";
+const PAST_DEFAULT_TO = "2026-09-02";
+const PUBLISHED_RECORDING = {
+  state: "montage",
+  primaryKind: "edited",
+  secondaryKind: "raw",
+  posterUrl: null,
+  expectedBy: null,
+  durationSec: 54 * 60,
+};
+const NOTHING_PUBLISHED = {
+  state: "preparing",
+  primaryKind: null,
+  secondaryKind: null,
+  posterUrl: null,
+  expectedBy: null,
+  durationSec: null,
+};
+const PAST_DAYS = [
+  {
+    day: "2026-08-25",
+    label: "25 августа, вторник",
+    items: [
+      card("past-recorded", "2026-08-25T09:00:00.000Z", {
+        state: "recorded",
+        recording: PUBLISHED_RECORDING,
+      }),
+    ],
+  },
+  {
+    day: "2026-08-20",
+    label: "20 августа, четверг",
+    items: [
+      card("past-no-cut", "2026-08-20T09:00:00.000Z", {
+        state: "recorded",
+        recording: NOTHING_PUBLISHED,
+      }),
+    ],
+  },
+  {
+    day: "2026-07-30",
+    label: "30 июля, четверг",
+    items: [
+      card("past-older", "2026-07-30T09:00:00.000Z", {
+        state: "recorded",
+        recording: PUBLISHED_RECORDING,
+      }),
+    ],
+  },
+];
+
+/**
  * 019 EARS-4 (#1519) — the month the calendar pane paints. `today` is a day
  * with NO events so «сегодня» and the live marker are two independent signals
  * the spec can assert apart: 2026-09-02 is the live day, 2026-09-04 and
@@ -102,6 +166,24 @@ const dayGap = (from, to) =>
       new Date(`${from}T00:00:00Z`).getTime()) /
       86_400_000,
   );
+
+/**
+ * The real `resolveEventHorizonBeyond` past branch: the next `from` is
+ * `to − (width + k·STEP)`, k the fewest whole steps that cover the newest
+ * fixture day before `from`; `null` when none lies before it.
+ */
+function nextFromBefore(from, to) {
+  const before = PAST_DAYS.map((group) => group.day)
+    .filter((day) => day < from)
+    .sort()
+    .at(-1);
+  if (before === undefined) return null;
+  const steps = Math.ceil(dayGap(before, from) / HORIZON_STEP_DAYS);
+  return addDays(to, -(dayGap(from, to) + steps * HORIZON_STEP_DAYS));
+}
+
+const itemCount = (days) =>
+  days.reduce((sum, group) => sum + group.items.length, 0);
 
 /** `null` when no fixture day lies at or past `to`; else the covering step boundary. */
 function nextToBeyond(to) {
@@ -133,8 +215,14 @@ function monthDays() {
  *
  *   registered   — a live эфир this viewer holds a registration for (room entry)
  *   unregistered — the same эфир, guest/unregistered entry (the event page)
- *   none         — nothing targeted is live: the body is `null` and the block
+ *   three        — three эфиры at once, earliest first (gate row 44: two strips
+ *                  and «Ещё 1 в эфире →»)
+ *   failing      — the live read answers 500 (gate row 44: the block's own
+ *                  error line + retry while the feed keeps working)
+ *   none         — nothing targeted is live: the body is `[]` and the block
  *                  must be ABSENT from the tree, not hidden
+ *
+ * The read is a LIST (`EventsLiveReadSchema`), earliest start first.
  */
 let liveScenario = "none";
 
@@ -157,12 +245,75 @@ const LIVE_STRIP = {
  * which is exactly what the guest spec asserts.
  */
 function liveBody(cookie) {
-  if (liveScenario === "none") return null;
+  if (liveScenario === "none") return [];
+  if (liveScenario === "three") {
+    return [1, 2, 3].map((n) => ({
+      ...LIVE_STRIP,
+      eventId: `00000000-0000-4000-8000-0000000000f${n}`,
+      slug: `live-${n}`,
+      title: `Эфир номер ${n}`,
+      href: `/events/live-${n}`,
+    }));
+  }
   const signedIn = (cookie ?? "").includes("__Host-ds_session=");
   const registered = liveScenario === "registered" && signedIn;
-  return registered
-    ? { ...LIVE_STRIP, href: `/events/${LIVE_SLUG}/room`, viewerIsRegistered: true }
-    : LIVE_STRIP;
+  return [
+    registered
+      ? {
+          ...LIVE_STRIP,
+          href: `/events/${LIVE_SLUG}/room`,
+          viewerIsRegistered: true,
+        }
+      : LIVE_STRIP,
+  ];
+}
+
+/**
+ * Gate row 48 — a test control fails the FEED read only (`POST /__e2e/feed`
+ * `{ "failing": true }`), so a spec can prove the feed block states its cause
+ * with a retry while the live block and «Мои события» keep rendering.
+ */
+let feedFailing = false;
+
+/**
+ * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
+ * read `GET /v1/storefront/doctor/me/events`. No `__Host-ds_session` ⇒ 401 (a
+ * guest). The session value `e2e-doctor-empty` is a doctor with no
+ * registrations; any other session holds four upcoming registrations and one
+ * live one, deliberately out of order so «nearest first» is the page's rule,
+ * not the fixture's.
+ */
+const myEvent = (n, slug, startsAt, overrides = {}) => ({
+  eventId: `00000000-0000-4000-8000-0000000000a${n}`,
+  slug,
+  title: `Моё событие ${slug}`,
+  school: "Doctor.School",
+  startsAt,
+  state: "published",
+  recording: null,
+  participationFormat: "online",
+  roomHref: null,
+  ...overrides,
+});
+const MY_UPCOMING = [
+  myEvent(4, "evt-4", "2026-09-20T10:00:00.000Z"),
+  myEvent(1, "evt-1", "2026-09-02T09:00:00.000Z"),
+  myEvent(5, "mine-live", "2026-09-01T08:00:00.000Z", {
+    state: "live",
+    roomHref: "/events/mine-live/room",
+  }),
+  myEvent(3, "evt-3", "2026-09-04T15:00:00.000Z"),
+  myEvent(2, "evt-2", "2026-09-02T12:30:00.000Z"),
+];
+
+function myEventsBody(cookie, tab) {
+  const empty = cookie.includes("__Host-ds_session=e2e-doctor-empty");
+  const upcoming = empty ? [] : MY_UPCOMING;
+  return {
+    tab,
+    data: tab === "upcoming" ? upcoming : [],
+    counts: { upcoming: upcoming.length, recordings: 0 },
+  };
 }
 
 const server = createServer((request, response) => {
@@ -172,6 +323,20 @@ const server = createServer((request, response) => {
 
   // Test-only control: flip the live scenario mid-run so a spec can prove the
   // block clears itself on the next read rather than on a reload.
+  if (url.pathname === "/__e2e/feed" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      try {
+        feedFailing = JSON.parse(body || "{}").failing === true;
+      } catch {
+        feedFailing = false;
+      }
+      json(response, 200, { failing: feedFailing });
+    });
+    return undefined;
+  }
+
   if (url.pathname === "/__e2e/live" && request.method === "POST") {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
@@ -189,7 +354,18 @@ const server = createServer((request, response) => {
   // 019 EARS-6 — declared BEFORE the `:idOrSlug` shape for the same reason the
   // real controller declares it first: `live` is a literal route, not a slug.
   if (url.pathname === "/v1/storefront/doctor/events/live") {
+    if (liveScenario === "failing") return json(response, 500, { status: 500 });
     return json(response, 200, liveBody(request.headers.cookie));
+  }
+
+  if (url.pathname === "/v1/storefront/doctor/me/events") {
+    const cookie = request.headers.cookie ?? "";
+    if (!cookie.includes("__Host-ds_session=")) {
+      return json(response, 401, { status: 401 });
+    }
+    const tab =
+      url.searchParams.get("tab") === "recordings" ? "recordings" : "upcoming";
+    return json(response, 200, myEventsBody(cookie, tab));
   }
 
   if (url.pathname === "/v1/storefront/doctor/events/month") {
@@ -207,6 +383,41 @@ const server = createServer((request, response) => {
   }
 
   if (url.pathname === "/v1/storefront/doctor/events") {
+    if (feedFailing) return json(response, 500, { status: 500 });
+    if (url.searchParams.get("tense") === "past") {
+      // «Прошедшие» widens BACKWARD: `from` moves, `to` stays (019 LD-2, D2).
+      const from = url.searchParams.get("from") ?? PAST_DEFAULT_FROM;
+      const to = url.searchParams.get("to") ?? PAST_DEFAULT_TO;
+      const days = PAST_DAYS.filter(
+        (group) => group.day >= from && group.day < to,
+      );
+      const nextFrom = nextFromBefore(from, to);
+      return json(response, 200, {
+        tense: "past",
+        from,
+        to,
+        days,
+        totalCount: itemCount(days),
+        nextTo: null,
+        nextFrom,
+        remaining: itemCount(PAST_DAYS.filter((group) => group.day < from)),
+        // N of «Показать ещё N из M»: the events the next step adds.
+        nextBatch:
+          nextFrom === null
+            ? 0
+            : itemCount(
+                PAST_DAYS.filter(
+                  (group) => group.day >= nextFrom && group.day < from,
+                ),
+              ),
+        targeting: {
+          mode: "general",
+          specialtyReference: null,
+          directionIds: [],
+          adjacentDirectionIds: [],
+        },
+      });
+    }
     // The window is `[from, to)` — an INCLUSIVE lower and an EXCLUSIVE upper
     // bound, exactly as `DoctorEventsService.feed()` builds it
     // (`gte(startsAt, fromInstant)` / `lt(startsAt, toInstant)`). Deciding the
@@ -235,18 +446,33 @@ const server = createServer((request, response) => {
               items: group.items.filter((item) => formats.includes(item.format)),
             }))
             .filter((group) => group.items.length > 0);
+    const nextTo = nextToBeyond(to);
     return json(response, 200, {
       tense: "upcoming",
       from,
       to,
       days,
-      totalCount: days.reduce((sum, group) => sum + group.items.length, 0),
+      totalCount: itemCount(days),
       // «показать ещё» is offered only when a fixture day actually lies beyond
       // the served window, and the `to` it names COVERS that day — the same
       // data-aware rule the service applies (#1803). Deriving it from the mere
       // presence of a `to` would let the route look green while production
       // offered a control walking into an empty widening.
-      nextTo: nextToBeyond(to),
+      nextTo,
+      nextFrom: null,
+      // The M of «Показать ещё N из M»: the fixture events beyond the extent;
+      // `0` exactly when `nextTo` is `null`, as the contract states.
+      remaining:
+        nextTo === null
+          ? 0
+          : itemCount(ALL_DAYS.filter((group) => group.day >= to)),
+      // N: the events in `[to, nextTo)` — what the next step adds.
+      nextBatch:
+        nextTo === null
+          ? 0
+          : itemCount(
+              ALL_DAYS.filter((group) => group.day >= to && group.day < nextTo),
+            ),
       targeting: {
         mode: "general",
         specialtyReference: null,
@@ -259,10 +485,10 @@ const server = createServer((request, response) => {
   // The shell reads these on every route; «unknown» is a valid answer for both.
   if (url.pathname === "/v1/auth/session") {
     // 019 EARS-12 needs BOTH viewers on the same fixture: the feed read is
-    // viewer-independent, and the only difference the route may show is where a
-    // card's «Участвовать ↗» points. So the session read answers the forwarded
-    // `__Host-ds_session` cookie — present means a signed-in doctor, absent
-    // means a guest — rather than 401ing unconditionally.
+    // viewer-independent, and a guest reads every block except «Мои события».
+    // So the session read answers the forwarded `__Host-ds_session` cookie —
+    // present means a signed-in doctor, absent means a guest — rather than
+    // 401ing unconditionally.
     const cookie = request.headers.cookie ?? "";
     if (!cookie.includes("__Host-ds_session=")) {
       return json(response, 401, { status: 401 });

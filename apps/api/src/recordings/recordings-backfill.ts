@@ -96,11 +96,7 @@ export type BackfillManifest = BackfillTarget[];
  * and the accompanying `detail` names which of the two it is.
  */
 export type BackfillOutcome =
-  | "attached+published"
-  | "published"
-  | "skipped"
-  | "would-attach"
-  | "refused";
+  "attached+published" | "published" | "skipped" | "would-attach" | "refused";
 
 export interface BackfillEntry {
   event: string;

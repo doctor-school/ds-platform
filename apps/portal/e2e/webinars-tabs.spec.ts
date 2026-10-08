@@ -4,15 +4,16 @@ const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
 
 test.skip(!process.env.E2E_PORTAL_URL, "requires a live portal");
 
-test("EARS-11: the upcoming week to month round-trip preserves facet state", async ({
+const upcomingTab = (page: import("@playwright/test").Page) =>
+  page.getByTestId("events-tense-tabs").getByRole("tab", { name: "Будущие" });
+
+test("EARS-11: the feed to month round-trip preserves facet state", async ({
   page,
 }) => {
   await page.goto(`${BASE}/webinars?specialty=cardiology`);
-  await expect(
-    page.getByRole("tab", { name: /Расписание · \d+/ }),
-  ).toHaveAttribute("aria-selected", "true");
+  await expect(upcomingTab(page)).toHaveAttribute("aria-selected", "true");
 
-  await page.getByRole("link", { name: /Месяц/ }).click();
+  await page.getByTestId("events-month-view-link").click();
   await expect(page).toHaveURL(/view=month/);
   await expect(page).toHaveURL(/specialty=cardiology/);
 
@@ -37,7 +38,5 @@ test("EARS-11: the upcoming week to month round-trip preserves facet state", asy
   await expect(page).not.toHaveURL(/view=month/);
   await expect(page).toHaveURL(/specialty=cardiology/);
   expect(new URL(page.url()).searchParams.get("month")).toBe(pagedMonth);
-  await expect(
-    page.getByRole("tab", { name: /Расписание · \d+/ }),
-  ).toHaveAttribute("aria-selected", "true");
+  await expect(upcomingTab(page)).toHaveAttribute("aria-selected", "true");
 });

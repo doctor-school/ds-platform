@@ -272,6 +272,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         primaryKind: null,
         secondaryKind: null,
         expectedBy: "2026-09-15",
+        durationSec: null,
       });
     });
 

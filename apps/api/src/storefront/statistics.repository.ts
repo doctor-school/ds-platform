@@ -1,5 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, count, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  sql,
+} from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { events, users } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";

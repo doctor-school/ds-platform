@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * 019 EARS-6 (#1521) — the «Идёт сейчас» block above the doctor events feed.
+ * 019 EARS-6 (#1521) — the «Идёт сейчас» block above the doctor events feed,
+ * the doctor mount of the one feed view's live block (wave-2 entry gate §2.4,
+ * rows 43–45). The read is a LIST, earliest start first; `[]` = nothing live.
  *
  * The four things only a real browser can evidence:
  *
@@ -21,7 +23,7 @@ const SLUG = "prp-questions";
 
 async function setScenario(
   request: { post: (url: string, init: { data: unknown }) => Promise<unknown> },
-  scenario: "registered" | "unregistered" | "none",
+  scenario: "registered" | "unregistered" | "three" | "failing" | "none",
 ) {
   await request.post(`${API}/__e2e/live`, { data: { scenario } });
 }
@@ -54,10 +56,19 @@ test("019 EARS-6: a registered doctor's live strip leads into the room", async (
     "href",
     `/events/${SLUG}`,
   );
-  // The block sits ABOVE the feed, as the canvas has it.
-  await expect(
-    block.locator("xpath=following-sibling::*[@data-events-feed]"),
-  ).toHaveCount(0);
+  // The block sits ABOVE the feed, as the canvas has it (gate row 50).
+  const feed = page.getByTestId("events-feed");
+  await expect(feed).toBeVisible();
+  expect(
+    await block.evaluate(
+      (node, feedNode) =>
+        Boolean(
+          node.compareDocumentPosition(feedNode!) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      await feed.elementHandle(),
+    ),
+  ).toBe(true);
 });
 
 test("019 EARS-6: a guest sees the same эфир but is sent to the event page, never the room", async ({
@@ -85,7 +96,7 @@ test("019 EARS-6: nothing live ⇒ the block is absent from the tree, not hidden
   await expect(page.getByTestId("events-live-block")).toHaveCount(0);
   await expect(page.getByTestId("live-event-strip")).toHaveCount(0);
   // The feed itself is untouched by the absent block.
-  await expect(page.locator("[data-events-feed]")).toBeVisible();
+  await expect(page.getByTestId("events-feed")).toBeVisible();
 });
 
 test("019 EARS-6: the block clears itself when the эфир ends — on the bounded refresh, with no reload", async ({
@@ -111,4 +122,41 @@ test("019 EARS-6: the block clears itself when the эфир ends — on the boun
 
   await page.clock.fastForward(31_000);
   await expect(page.getByTestId("events-live-block")).toHaveCount(0);
+});
+
+test("gate row 44: three эфиры ⇒ two strips, earliest first, and «Ещё 1 в эфире →»", async ({
+  page,
+  request,
+}) => {
+  await setScenario(request, "three");
+  await page.goto("/events");
+
+  const block = page.getByTestId("events-live-block");
+  await expect(block).toBeVisible();
+  const titles = block.getByTestId("live-event-strip-title");
+  await expect(titles).toHaveText(["Эфир номер 1", "Эфир номер 2"]);
+  await expect(block.getByTestId("live-event-strip")).toHaveCount(2);
+  await expect(block.getByRole("link", { name: "Ещё 1 в эфире →" })).toBeVisible();
+});
+
+test("gate row 44: a failed live read states its cause with a retry while the feed keeps working", async ({
+  page,
+  request,
+}) => {
+  await setScenario(request, "failing");
+  await page.goto("/events");
+
+  const error = page.getByTestId("events-live-error");
+  await expect(error).toBeVisible();
+  await expect(error).toContainText("Не удалось проверить, что сейчас в эфире");
+  await expect(page.getByTestId("events-live-block")).toHaveCount(0);
+  // The feed is untouched by the live block's failure.
+  await expect(page.getByTestId("events-feed")).toBeVisible();
+  await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
+
+  // The retry re-reads the live path only.
+  await setScenario(request, "unregistered");
+  await error.getByRole("button", { name: "Повторить" }).click();
+  await expect(page.getByTestId("events-live-block")).toBeVisible();
+  await expect(page.getByTestId("events-live-error")).toHaveCount(0);
 });

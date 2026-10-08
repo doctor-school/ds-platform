@@ -78,7 +78,32 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
   });
 
   it("019 EARS-2.6: zero cost is a valid Pul cost — the free-for-the-doctor reading", () => {
-    expect(DoctorEventCardSchema.parse({ ...BASE, pulCost: 0 }).pulCost).toBe(0);
+    expect(DoctorEventCardSchema.parse({ ...BASE, pulCost: 0 }).pulCost).toBe(
+      0,
+    );
+  });
+
+  it("NEW: a recorded card carries the Academy recording projection, and an upcoming card none (rows 10, 31)", () => {
+    const recording = {
+      state: "montage" as const,
+      primaryKind: "edited" as const,
+      secondaryKind: "raw" as const,
+      posterUrl: null,
+      expectedBy: null,
+      durationSec: null,
+    };
+    expect(
+      DoctorEventCardSchema.safeParse({ ...BASE, state: "recorded", recording })
+        .success,
+    ).toBe(true);
+    expect(DoctorEventCardSchema.safeParse(BASE).success).toBe(true);
+    expect(
+      DoctorEventCardSchema.safeParse({
+        ...BASE,
+        state: "recorded",
+        recording: { ...recording, state: "published" },
+      }).success,
+    ).toBe(false);
   });
 
   it("019 EARS-12: the card carries its own slug, so a host never slices it out of href", () => {
@@ -97,9 +122,9 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
       { partner: "…" },
       { priceRub: 4900 },
     ]) {
-      expect(DoctorEventCardSchema.safeParse({ ...BASE, ...leak }).success).toBe(
-        false,
-      );
+      expect(
+        DoctorEventCardSchema.safeParse({ ...BASE, ...leak }).success,
+      ).toBe(false);
     }
   });
 });

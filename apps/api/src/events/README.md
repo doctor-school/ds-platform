@@ -22,7 +22,7 @@ The webinar event module. It hosts two surfaces over one aggregate:
   supersedes the stored reference so the 004 page serves the current file). The
   rendered stock-Refine admin surface + the browser E2E journey (incl. the admin
   publish/hide actions and the edit form) are the integration slice (#595).
-- **004 public read (read side)** — four **public** endpoints over publish-safe
+- **004 public read (read side)** — the **public** endpoints over publish-safe
   projections: the event-page endpoint (`GET /v1/public/events/:idOrSlug` →
   `PublicEventPage`, 004 EARS-1), the upcoming-broadcasts listing
   (`GET /v1/public/events` → `UpcomingBroadcastCard[]`, 004 EARS-7), the
@@ -32,7 +32,15 @@ The webinar event module. It hosts two surfaces over one aggregate:
   archive and one batch-resolved `RecordingProjection` per past card; its
   `(starts_at, id)` keyset cursor is the SHARED, microsecond-exact
   `../taxonomy/public-event-cursor.ts` — never a millisecond `Date`, which
-  truncates the cutoff and re-serves the row that issued it, #1888), the
+  truncates the cutoff and re-serves the row that issued it, #1888; or, in
+  place of the cursor, the horizon `from`/`to` of the one listing codec with
+  the doctor feed's own window and «Показать ещё» resolution, `event-horizon.ts`
+  — wave-2 entry gate §4.3 D2; every card carries its 012 `kind`, its attendance
+  `format` and the colleagues' `signUpCount`, the doctor card's count via the
+  shared `event-sign-ups.ts`), the Academy live read
+  (`GET /v1/public/events/live` → `LiveStrip[]`, the `experts`-audience call
+  of the ONE live resolution `EventsLiveService` the doctor storefront's live
+  read shares — wave-2 entry gate §4.3 D5), the
   month-range read (`GET /v1/public/events?month=YYYY-MM` →
   `MonthBroadcastEntry[]`, 004 EARS-15: every `published`/`live`/`ended` event
   whose start instant falls in the requested month — МСК month boundaries via the

@@ -341,6 +341,27 @@ function specs(now: number): SeedSpec[] {
         durationSec: 124 * 60,
       },
     },
+    // ── wave-2 «Прошедшие» widening fixture (#2028, gate row 32) ─────────────
+    // An ended эфир a month back — past the 14-day default extent, so only
+    // «Показать ещё» reaches it — with a published montage whose length the
+    // canvas recording line reads («Запись · 1 ч 12 мин»).
+    {
+      slug: "seed-014-ended-month-ago",
+      state: "ended",
+      title: "Итоги: остеоартрит коленного сустава",
+      school: "Школа ортобиологии",
+      startsAt: new Date(now - 30 * DAY),
+      durationMin: 80,
+      description:
+        "Завершённый эфир месячной давности с опубликованной записью — разбор тактики при остеоартрите.",
+      specialties: ["Ревматология"],
+      partnerRef: "Партнёр Фарма",
+      recording: {
+        provider: "rutube",
+        embedRef: "5d1c9e7a3b2f48a6c0e4d8b1f7a9c2e3",
+        durationSec: 72 * 60,
+      },
+    },
     // ── 014 legacy-archive fixture (#1741) ────────────────────────────────────
     // The ONE `legacy` эфир: an archive-only broadcast the platform never
     // hosted, sitting in the legacy machine's `in_archive` state with a

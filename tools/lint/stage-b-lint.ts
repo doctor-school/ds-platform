@@ -134,6 +134,11 @@ const CI_E2E_CHECKS = [
   "admin-e2e",
 ];
 
+// Strict is the default: only an explicit `--pre-ci` argument (passed by
+// pr-preflight's pre-CI pass alone) relaxes the CI e2e check — never an
+// environment variable an operator's shell could leak into the post-CI pass.
+const PRE_CI_PHASE = process.argv.slice(2).includes("--pre-ci");
+
 /**
  * #2699: the required CI e2e check on the PR head (the rollup is read in the
  * same `gh pr view` as `headRefOid`). The pre-CI merge-guard pass runs before
@@ -168,7 +173,7 @@ function ciE2eOnHead(rollup: GhCheck[] | undefined): {
     const detail = pending.length
       ? `CI e2e still running: ${pending.join(", ")}`
       : `no CI e2e check (${CI_E2E_CHECKS.join(", ")}) succeeded on the head`;
-    return process.env.STAGE_B_CI_PHASE === "pre-ci"
+    return PRE_CI_PHASE
       ? { ok: true, detail: `${detail}; the post-CI pass re-checks it` }
       : { ok: false, detail };
   }

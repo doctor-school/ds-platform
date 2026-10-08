@@ -100,6 +100,12 @@ describe("pr-preflight MERGE_GUARDS roster (#692)", () => {
 
   it("runs current-body/source binding only after the long head-pinned CI poll", () => {
     expect(PRE_CI_MERGE_GUARDS.map((g) => g.name)).toEqual(["stage-b"]);
+    // #2699: only the pre-CI pass relaxes, by an explicit argument — never by
+    // an environment variable an operator's shell could leak into the post-CI pass
+    expect(PRE_CI_MERGE_GUARDS[0].args).toEqual(["--pre-ci"]);
+    for (const g of [...PRE_CI_MERGE_GUARDS, ...POST_CI_MERGE_GUARDS])
+      expect(g.env?.STAGE_B_CI_PHASE, g.name).toBeUndefined();
+    expect(POST_CI_MERGE_GUARDS.some((g) => g.args?.length)).toBe(false);
     expect(MERGE_GATE.name).toBe("merge-gate");
     expect(POST_CI_MERGE_GUARDS.map((g) => g.name)).toEqual([
       "stage-b",

@@ -34,7 +34,7 @@ describe("change-tier classifier (#2584)", () => {
       "apps/doctor/package.json",
       "apps/doctor/next.config.ts",
       "apps/doctor/middleware.ts",
-      "apps/api/drizzle/migrations/0001.sql",
+      "apps/api/drizzle/0048_event_kinds.sql",
       "apps/docs/content/specs/features/001-x/001-design.md",
       "AGENTS.md",
     ])
@@ -276,20 +276,40 @@ describe("#2699: evidence captures and non-runtime / environment-sensitive paths
   });
   it("environment-sensitive = auth paths, migrations, infra, the mailer, IdP/captcha tooling", () => {
     for (const path of [
-      "apps/portal/src/lib/auth/session.ts",
+      // auth: every path the change-tier auth rules match + the auth pages
+      "apps/portal/lib/shell-auth.ts",
+      "apps/doctor/lib/auth-flow-client.ts",
       "apps/api/src/auth/auth.service.ts",
-      "apps/api/drizzle/migrations/0001.sql",
-      "infra/compose/api.yml",
+      "apps/api/src/authz/roles.guard.ts",
+      "packages/auth-flow/src/login/login-form.tsx",
+      "packages/schemas/src/auth/login.ts",
+      "apps/portal/app/login/page.tsx",
+      "apps/portal/app/verify/verify-form.tsx",
+      "apps/doctor/app/(auth)/register/page.tsx",
+      "apps/admin/app/mfa/enroll/page.tsx",
+      // request routing in front of every page
+      "apps/portal/middleware.ts",
+      "apps/doctor/proxy.ts",
+      // schema: the real migration layout + the Drizzle schema
+      "apps/api/drizzle/0048_event_kinds.sql",
+      "apps/api/drizzle/meta/0048_snapshot.json",
+      "packages/db/src/schema/users.ts",
+      // infra, mail, IdP, captcha / bot protection
+      "infra/deploy/zitadel.env.example",
+      "infra/dev-stand/idp/provision.sh",
       "apps/api/src/mailer/notice-emails.ts",
       "tools/staging/idp.mjs",
-      "tools/dev/zitadel-provision.ts",
-      "apps/portal/src/components/captcha-widget.tsx",
+      "tools/deploy/idp-policy.mjs",
+      "packages/db/src/seed/golden/idp.ts",
+      "apps/api/src/bot-protection/bot-protection.guard.ts",
+      "apps/portal/components/captcha-widget.tsx",
     ])
       expect(isEnvironmentSensitivePath(path), path).toBe(true);
     for (const path of [
-      "apps/portal/src/app/room/header.tsx",
+      "apps/portal/app/room/header.tsx",
       "packages/design-system/src/ui/button.tsx",
-      "apps/portal/src/app/room/header.test.tsx",
+      "apps/portal/app/room/header.test.tsx",
+      "apps/portal/middleware.test.ts",
     ])
       expect(isEnvironmentSensitivePath(path), path).toBe(false);
   });

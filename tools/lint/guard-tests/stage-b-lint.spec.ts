@@ -212,9 +212,11 @@ describe("stage-b-lint", () => {
       name: string,
       pr: string,
       extra: Record<string, string> = {},
+      extraArgs: string[] = [],
     ) =>
       runGuard(GUARD, caseDir("stage-b", name), {
         env: { ...prEnv(pr, name), STAGE_B_CI_PHASE: "", ...extra },
+        extraArgs,
       });
 
     it("green: UI files + a spec / test / ui-evidence file resolve the Stage-B route from the UI files alone (show GO on a capture) → exit 0", () => {
@@ -242,10 +244,23 @@ describe("stage-b-lint", () => {
 
     it("lead-certified N/A with the CI e2e check still running: tolerated pre-CI, refused post-CI", () => {
       expect(
-        run("lead-slot-free-ci-pending", "225", { STAGE_B_CI_PHASE: "pre-ci" })
-          .code,
+        run("lead-slot-free-ci-pending", "225", {}, ["--pre-ci"]).code,
       ).toBe(0);
       expect(run("lead-slot-free-ci-pending", "225").code).toBe(1);
+    });
+
+    it("red: a pre-CI phase inherited from the shell environment does not relax the post-CI pass → exit 1", () => {
+      expect(
+        run("lead-slot-free-ci-pending", "225", { STAGE_B_CI_PHASE: "pre-ci" })
+          .code,
+      ).toBe(1);
+    });
+
+    it("red: UI files + an apps/api runtime file route ask, so a show GO on a capture is refused → exit 1", () => {
+      const { code, stdout, stderr } = run("red-route-runtime-api", "226");
+      expect(code).toBe(1);
+      expect(stdout).not.toContain("Stage-B route tier show");
+      expect(stderr).toContain("live URL");
     });
 
     it("red: an owner quote copied verbatim from a repo instruction file is refused → exit 1", () => {

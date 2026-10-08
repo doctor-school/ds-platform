@@ -11,25 +11,35 @@ const SCHOOL = "Doctor.School";
 const SPECIALTIES = ["Кардиология", "Терапия"];
 const SPEAKER = "Ветров Дмитрий Аркадьевич";
 const RECORDED_TITLE = "Прошедший эфир с записью (эталон)";
+// The feed card states a playable recording with its length: the golden
+// published edited cut runs 3600 s (golden dataset `pastEdited`).
+const RECORDING_STATUS = "Запись · 1 ч 00 мин";
+const RECORDING_CTA = "Смотреть запись";
 
 async function findCard(page: Page, link: Locator) {
-  // Generic navigation stops at DOMContentLoaded. The server-rendered pager is
-  // already enabled then, before its client handler exists (archive trace #2253).
+  // Generic navigation stops at DOMContentLoaded. The server-rendered feed link
+  // is already live then, before its client handler exists (archive trace #2253).
   // Match the shared sign-in helper's initial client-readiness wait before clicks.
   await page.waitForLoadState("load");
   await page.waitForLoadState("networkidle");
-  // Reach the named event through real pagination on either listing.
-  const seenPages = new Set<string>();
+  // Reach the named event through the feed's real «Показать ещё» on either tense:
+  // each activation widens the URL horizon and renders the wider reading.
+  const seenHorizons = new Set<string>();
   while ((await link.count()) === 0) {
-    const address = page.url();
-    expect(seenPages.has(address), "listing pagination must advance").toBe(
-      false,
-    );
-    seenPages.add(address);
-    const next = page.getByRole("button", { name: "Вперёд", exact: true });
-    await expect(next, "named golden event must be reachable").toBeEnabled();
-    await next.click();
-    await page.waitForURL((url) => url.href !== address);
+    const more = page.getByTestId("events-feed-show-more");
+    await expect(more, "named golden event must be reachable").toBeVisible();
+    await expect(more).toHaveAccessibleName(/^Показать ещё/);
+    const horizon = await more.getAttribute("href");
+    expect(horizon, "show-more link carries the wider horizon").toBeTruthy();
+    expect(
+      seenHorizons.has(horizon!),
+      "listing show-more must widen the horizon",
+    ).toBe(false);
+    seenHorizons.add(horizon!);
+    await more.click();
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === horizon);
+    // The wider reading has rendered once the link no longer offers this horizon.
+    await expect(more).not.toHaveAttribute("href", horizon!);
     await expect(page.locator("[data-webinar-card]").first()).toBeVisible();
   }
   await expect(link).toBeVisible();
@@ -38,21 +48,55 @@ async function findCard(page: Page, link: Locator) {
   return card;
 }
 
-async function expectMoscowDateTime(card: Locator, startsAt: string) {
+/** The browser's IANA zone — the viewer zone the feed re-formats into. */
+async function viewerZoneOf(page: Page): Promise<string> {
+  return page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+}
+
+/**
+ * The explicit zone label of an online card (004 «Amendment — 2026-10-02»):
+ * «МСК» at +03:00, otherwise «GMT±N» / «GMT±N:MM», «GMT+0» at zero.
+ */
+function zoneLabel(instant: Date, timeZone: string): string {
+  const name =
+    new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+      .formatToParts(instant)
+      .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const match = /^GMT([+-])(\d{2}):(\d{2})$/u.exec(name);
+  if (!match) return "GMT+0";
+  const [, sign, hh, mm] = match;
+  if (sign === "+" && hh === "03" && mm === "00") return "МСК";
+  const hours = Number(hh);
+  if (hours === 0 && mm === "00") return "GMT+0";
+  return mm === "00" ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${mm}`;
+}
+
+/**
+ * The golden events are online, so their cards show the start in the viewer's
+ * zone with its explicit label (004 «Amendment — 2026-10-02», read by the 004
+ * and 014 scenarios); a viewer in Moscow reads the Moscow date, time and «МСК».
+ */
+async function expectShownDateTime(
+  page: Page,
+  card: Locator,
+  startsAt: string,
+) {
+  const timeZone = await viewerZoneOf(page);
   const instant = new Date(startsAt);
   const date = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
+    timeZone,
     day: "numeric",
     month: "long",
   }).format(instant);
   const time = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
+    timeZone,
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   }).format(instant);
   await expect(card).toContainText(date);
   await expect(card).toContainText(time);
-  await expect(card).toContainText("МСК");
+  await expect(card).toContainText(zoneLabel(instant, timeZone));
 }
 
 function recordedPath(host: HostConfig): string {
@@ -88,6 +132,7 @@ Given(
       slug: golden.events.upcoming.slug,
       title: TITLE,
       school: SCHOOL,
+      format: "online",
       state: "published",
       specialties: SPECIALTIES,
     });
@@ -122,10 +167,10 @@ Then(
     if (!world.upcomingStartsAt)
       throw new Error("The golden event was not read before its card");
     const card = await findCard(page, cardLink(page, host));
-    for (const value of [TITLE, SCHOOL, ...SPECIALTIES, SPEAKER, "МСК"]) {
+    for (const value of [TITLE, SCHOOL, ...SPECIALTIES, SPEAKER]) {
       await expect(card).toContainText(value);
     }
-    await expectMoscowDateTime(card, world.upcomingStartsAt);
+    await expectShownDateTime(page, card, world.upcomingStartsAt);
   },
 );
 
@@ -143,6 +188,7 @@ Given(
       id: golden.events.pastWithRecording.id,
       slug: golden.events.pastWithRecording.slug,
       title: RECORDED_TITLE,
+      format: "online",
       state: "ended",
       recording: { state: "montage", primaryKind: "edited" },
     });
@@ -159,10 +205,14 @@ Then(
   "the public archive is selected without week or month controls",
   async ({ page, host }) => {
     expect(new URL(page.url()).pathname).toBe(host.eventsPath);
-    expect(new URL(page.url()).searchParams.get("tab")).toBe("past");
-    await expect(page.getByTestId("event-list-tabs")).toBeVisible();
+    // A legacy `?tab=past` address lands on the feed's canonical tense URL.
+    const params = new URL(page.url()).searchParams;
+    expect(params.get("tense")).toBe("past");
+    expect(params.has("tab")).toBe(false);
+    const tabs = page.getByTestId("events-tense-tabs");
+    await expect(tabs).toBeVisible();
     await expect(
-      page.getByRole("tab", { name: /Архив записей · \d+/ }),
+      tabs.getByRole("tab", { name: "Прошедшие", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(page.getByTestId("week-toolbar")).toHaveCount(0);
     await expect(
@@ -181,10 +231,11 @@ Then(
       throw new Error("The recorded golden event was not read before its card");
     const card = await findCard(page, recordedLink(page, host));
     await expect(card).toContainText(RECORDED_TITLE);
-    await expect(card).toContainText("Запись · монтаж");
-    await expectMoscowDateTime(card, world.recordedStartsAt);
+    await expect(card).toContainText(RECORDING_STATUS);
+    await expectShownDateTime(page, card, world.recordedStartsAt);
+    // Archive cards group by the month of the time they show.
     const parts = new Intl.DateTimeFormat("ru-RU", {
-      timeZone: "Europe/Moscow",
+      timeZone: await viewerZoneOf(page),
       month: "long",
       year: "numeric",
     }).formatToParts(new Date(world.recordedStartsAt));
@@ -205,7 +256,7 @@ When(
       has: recordedLink(page, host),
     });
     const cta = card.getByRole("link", {
-      name: "Смотреть запись ↗",
+      name: RECORDING_CTA,
       exact: true,
     });
     await expect(cta).toBeVisible();

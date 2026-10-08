@@ -35,7 +35,6 @@ import {
   resolveEventHorizonBeyond,
 } from "../events/event-horizon.js";
 import { EventsLiveService } from "../events/events-live.service.js";
-import { facetOptionsOver } from "../events/facet-options.js";
 import { denseMonthlyCounts, tallyMonths } from "../events/monthly-counts.js";
 import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
@@ -134,6 +133,7 @@ export class DoctorEventsService {
       directionIds,
       ...eventHorizonInstants(requested),
       kindSlugs: query.kind,
+      formats: query.format,
       q: query.q,
       // Read from the moving edge, so the cap keeps the batch just asked for;
       // the bound hands the rows back in the tense's display order.
@@ -162,6 +162,7 @@ export class DoctorEventsService {
           directionIds,
           ...range,
           kindSlugs: query.kind,
+          formats: query.format,
           q: query.q,
         });
         return applyCardFacets(
@@ -344,6 +345,7 @@ export class DoctorEventsService {
       fromInstant: new Date(`${fromDay}T00:00:00+03:00`),
       toInstant: new Date(`${toDay}T00:00:00+03:00`),
       kindSlugs: facets.kind,
+      formats: facets.format,
       q: facets.q,
     });
     return applyCardFacets(
@@ -485,50 +487,33 @@ export class DoctorEventsService {
   }
 
   /**
-   * The doctor facet options (wave-2 gate §4.3 D9): `kind` (012 dictionary)
-   * and `city` (the card's city), counted by the one in-memory option rule
-   * ({@link facetOptionsOver}) under every other doctor facet the read applies.
+   * The doctor facet options (wave-2 gate §4.3 D9). `kind` is the Academy SQL
+   * option rule over the feed's own predicate (014-design §9): counted under
+   * the `format` facet in SQL, and under the constant card facts
+   * (`nmo` / `free` / `city`) — which hold for every event or for none, so a
+   * selection they reject zeroes every count. `city` has no source: 007
+   * authors no city on an event (DEBT.md «PR for #1518»), so the panel
+   * receives no city option.
    */
   private async facetOptions(
     query: DoctorEventsFeedQuery,
-    base: Pick<DoctorFeedFilters, "states" | "order" | "directionIds">,
+    base: Pick<DoctorFeedFilters, "states" | "directionIds">,
     reach: EventHorizonReach,
   ): Promise<DoctorEventFacetOptions> {
-    const rows = await this.repository.findFeedRows({
+    const kind = await this.repository.findKindOptions({
       ...base,
       ...reach,
-      kindSlugs: [],
+      formats: query.format,
       q: query.q,
     });
-    const yes = [{ slug: "true", title: "true" }];
-    const options = facetOptionsOver(
-      rows.map((row) => ({ kind: row.kind, ...cardFacetsOf(row) })),
-      {
-        kind: {
-          selected: query.kind,
-          valuesOf: (row) => [{ slug: row.kind.slug, title: row.kind.title }],
-        },
-        city: {
-          selected: query.city,
-          valuesOf: (row) =>
-            row.city === undefined ? [] : [{ slug: row.city, title: row.city }],
-        },
-        format: {
-          selected: query.format,
-          valuesOf: (row) => [{ slug: row.format, title: row.format }],
-        },
-        nmo: {
-          selected: query.nmo === true ? ["true"] : [],
-          valuesOf: (row) => (row.nmo ? yes : []),
-        },
-        free: {
-          selected: query.free === true ? ["true"] : [],
-          valuesOf: (row) => (row.pulCost === 0 ? yes : []),
-        },
-      },
-      ["kind", "city"],
-    );
-    return { kind: options.kind, city: options.city };
+    const factsHold = constantCardFactsMatch(query);
+    return {
+      kind: kind.map((option) => ({
+        ...option,
+        count: factsHold ? option.count : 0,
+      })),
+      city: [],
+    };
   }
 
   private async toCards(rows: DoctorFeedRow[]): Promise<DoctorEventCard[]> {
@@ -599,19 +584,18 @@ function cardFacetsOf(row: DoctorFeedRow): CardFacetFields {
 }
 
 /**
- * The card-level facets — the ones 007 does not yet author as columns and that
- * are therefore applied after the mapping. ONE predicate, shared by the day feed
- * and the month grid, so the grid's counts and the feed's day-group sizes cannot
- * disagree about what a facet means (019-design §3, EARS-4).
+ * The card-level facets — the ones 007 does not yet author as columns
+ * (`nmo` / `free` / `city`; `format` and `kind` are columns and live in the SQL
+ * predicate). Today they are constant facts of every event
+ * ({@link eventEconomyFacts}), so they keep or drop a read whole and never
+ * change which bound «показать ещё» names. ONE predicate, shared by the day
+ * feed and the month grid (019-design §3, EARS-4).
  */
 function applyCardFacets<T extends CardFacetFields>(
   cards: T[],
-  facets: Pick<DoctorEventsFeedQuery, "format" | "nmo" | "free" | "city">,
+  facets: Pick<DoctorEventsFeedQuery, "nmo" | "free" | "city">,
 ): T[] {
   return cards.filter((card) => {
-    if (facets.format.length > 0 && !facets.format.includes(card.format)) {
-      return false;
-    }
     if (facets.nmo === true && !card.nmo) return false;
     if (facets.free === true && card.pulCost !== 0) return false;
     if (facets.city.length > 0) {
@@ -619,6 +603,18 @@ function applyCardFacets<T extends CardFacetFields>(
     }
     return true;
   });
+}
+
+/** Whether the constant card facts pass the read's card-level facets. */
+function constantCardFactsMatch(
+  facets: Pick<DoctorEventsFeedQuery, "nmo" | "free" | "city">,
+): boolean {
+  return (
+    applyCardFacets(
+      [{ format: "online" as const, ...eventEconomyFacts() }],
+      facets,
+    ).length === 1
+  );
 }
 
 /** Chronological rows → day groups. A day with no surviving card is not emitted. */

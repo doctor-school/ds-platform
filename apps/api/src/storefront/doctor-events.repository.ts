@@ -10,6 +10,7 @@ import {
   isNull,
   lt,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
@@ -25,6 +26,7 @@ import {
   type EventKindRef,
   type EventParticipationFormat,
   MONTH_BROADCAST_STATES,
+  type PublicEventFacetOption,
 } from "@ds/schemas";
 
 /** A lifecycle set a feed read selects — one tense's, or the month grid's. */
@@ -104,9 +106,16 @@ export interface DoctorFeedFilters {
   toInstant: Date;
   /** 012 event-kind dictionary SLUGS of the `kind` facet — matched on `events.kind_id`. */
   kindSlugs: string[];
+  /** The `format` facet — matched on the event's own `participation_format` column. */
+  formats: EventParticipationFormat[];
   q?: string | undefined;
   /** At most this many rows, in `order` — the horizon row cap; omitted = every matching row. */
   limit?: number;
+}
+
+/** The `format` facet over the event's own attendance-mode column. */
+function formatClause(formats: EventParticipationFormat[]): SQL {
+  return inArray(events.participationFormat, formats);
 }
 
 @Injectable()
@@ -120,7 +129,7 @@ export class DoctorEventsRepository {
 
   /**
    * The ONE selection predicate of the Doctor feed — eligibility window,
-   * targeting, `kind` and `q` — of {@link findFeedRows}, which serves the
+   * targeting, the `kind` and `format` facets and `q` — of {@link findFeedRows}, which serves the
    * rendered window AND the range beyond it («показать ещё» and its
    * remainder). One builder on purpose: «показать ещё» may only be offered for
    * events the very same predicate would then list, so a divergence here would
@@ -149,15 +158,12 @@ export class DoctorEventsRepository {
     // `kind_id` among the kinds the slugs name (a retired kind is still matched,
     // because the event keeps its reference — EARS-28).
     if (filters.kindSlugs.length > 0) {
-      where.push(
-        inArray(
-          events.kindId,
-          this.db
-            .select({ id: eventKinds.id })
-            .from(eventKinds)
-            .where(inArray(eventKinds.slug, filters.kindSlugs)),
-        ),
-      );
+      where.push(this.kindClause(filters.kindSlugs));
+    }
+    // The `format` facet is the event's own column, so a facet-narrowed read
+    // and its «показать ещё» probe count the same narrowed set (#1805).
+    if (filters.formats.length > 0) {
+      where.push(formatClause(filters.formats));
     }
     if (filters.q !== undefined) {
       const pattern = `%${filters.q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
@@ -169,6 +175,54 @@ export class DoctorEventsRepository {
     }
 
     return where;
+  }
+
+  private kindClause(kindSlugs: string[]): SQL {
+    return inArray(
+      events.kindId,
+      this.db
+        .select({ id: eventKinds.id })
+        .from(eventKinds)
+        .where(inArray(eventKinds.slug, kindSlugs)),
+    );
+  }
+
+  /**
+   * Wave-2 gate §4.3 D9 — the `kind` facet's options over the events the
+   * feed predicate selects WITHOUT the kind facet: every 012 kind one of them
+   * carries, with `count` = those events under the OTHER SQL facet (`format`).
+   * The Academy option rule (014-design §9, `academyFacetOptions`): a kind no
+   * base event carries is not an option; a zero-yield one stays at `0`.
+   * Ordered by title, then slug.
+   */
+  async findKindOptions(
+    filters: Omit<DoctorFeedFilters, "kindSlugs" | "limit" | "order">,
+  ): Promise<PublicEventFacetOption[]> {
+    if (filters.directionIds !== null && filters.directionIds.length === 0) {
+      return [];
+    }
+    const where = this.feedWhere({
+      ...filters,
+      order: "asc",
+      kindSlugs: [],
+      formats: [],
+    });
+    const count =
+      filters.formats.length === 0
+        ? sql<number>`count(DISTINCT ${events.id})::int`
+        : sql<number>`(count(DISTINCT ${events.id}) FILTER (WHERE ${formatClause(filters.formats)}))::int`;
+    const rows = await this.db
+      .select({ slug: eventKinds.slug, title: eventKinds.title, count })
+      .from(events)
+      .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
+      .where(and(...where))
+      .groupBy(eventKinds.id)
+      .orderBy(asc(eventKinds.title), asc(eventKinds.slug));
+    return rows.map((row) => ({
+      slug: row.slug,
+      title: row.title,
+      count: Number(row.count),
+    }));
   }
 
   async findFeedRows(filters: DoctorFeedFilters): Promise<DoctorFeedRow[]> {

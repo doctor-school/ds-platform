@@ -54,6 +54,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let lonelyEventId = "";
     /** Far past the default horizon, on the adjacency-less direction (EARS-3.7/3.8/9.1). */
     let lonelyFarEventId = "";
+    /** The adjacency-less direction (the facet-narrowed «показать ещё» case). */
+    let lonelyDirectionId = "";
     let expertsEventId = "";
     /** «Прошедшие» fixtures on the adjacency-less direction (gate rows 10/30/31/32). */
     let pastMontageEventId = "";
@@ -201,6 +203,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       await linkSpecialty(own, withAdjacency!.id);
       await linkSpecialty(lonelyDirection, lonely!.id);
+      lonelyDirectionId = lonelyDirection;
       const tenseDirection = await makeDirection("Тенз ленты");
       await linkSpecialty(tenseDirection, tenseSpecialty!.id);
       await makeEdge(own, adjacent);
@@ -530,6 +533,64 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
       // No card carries a city today (007 authors none) — so no city option.
       expect(feed.facets?.city).toEqual([]);
+    });
+
+    it("NEW: a facet-narrowed feed names the next bound and the remainder of the narrowed set — `format` and `kind` live in the one SQL predicate (row 58, #1805)", async () => {
+      // An offline event at +20 sits between the window (+14) and the online
+      // +40 event: unfaceted it is the next bound; under `format=online` the
+      // probe must skip it, and under `format=offline` it is all that remains.
+      const offlineId = await makeEvent({
+        title: "Очное событие",
+        startsAt: at(20, 12),
+        directionId: lonelyDirectionId,
+      });
+      await pool.query(
+        "UPDATE events SET participation_format = 'offline' WHERE id = $1",
+        [offlineId],
+      );
+      try {
+        const all = await readFeed({ specialtyCode: lonelyCode });
+        expect(all.nextTo).toBe(addDoctorEventsFeedDays(today, 28));
+        expect(all.remaining).toBe(2);
+
+        const online = await readFeed({
+          specialtyCode: lonelyCode,
+          query: "?format=online",
+        });
+        expect(online.nextTo).toBe(addDoctorEventsFeedDays(today, 42));
+        expect(online.remaining).toBe(1);
+
+        const offline = await readFeed({
+          specialtyCode: lonelyCode,
+          query: "?format=offline",
+        });
+        expect(offline.days).toEqual([]);
+        expect(offline.nextTo).toBe(addDoctorEventsFeedDays(today, 28));
+        expect(offline.remaining).toBe(1);
+
+        const card = all.days.flatMap((day) => day.items).at(0)!;
+        const kindAndOffline = await readFeed({
+          specialtyCode: lonelyCode,
+          query: `?format=offline&kind=${card.kind.slug}`,
+        });
+        expect(kindAndOffline.remaining).toBe(1);
+        const noKind = await readFeed({
+          specialtyCode: lonelyCode,
+          query: "?kind=no-such-kind",
+        });
+        expect(noKind.nextTo).toBeNull();
+        expect(noKind.remaining).toBe(0);
+        // The kind options count under the `format` selection, in SQL.
+        expect(
+          offline.facets?.kind.find((entry) => entry.slug === card.kind.slug)
+            ?.count,
+        ).toBe(1);
+      } finally {
+        await pool.query("DELETE FROM event_directions WHERE event_id = $1", [
+          offlineId,
+        ]);
+        await pool.query("DELETE FROM events WHERE id = $1", [offlineId]);
+      }
     });
 
     it("EARS-3.6: a stale specialty cookie degrades to the untargeted feed instead of refusing it (EARS-12)", async () => {

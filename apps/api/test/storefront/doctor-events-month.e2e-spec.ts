@@ -445,6 +445,24 @@ describe.skipIf(!process.env.DATABASE_URL)(
           await gridTotal({ specialtyCode: targetedCode, query: facets }),
         );
       }
+      // Every fixture is online and of the fixture kind: `format` and `kind`
+      // narrow the counts in the shared SQL predicate.
+      const unfaceted = await readCounts({
+        specialtyCode: targetedCode,
+        query: `?year=${year}`,
+      });
+      const online = await readCounts({
+        specialtyCode: targetedCode,
+        query: `?year=${year}&format=online`,
+      });
+      expect(online).toEqual(unfaceted);
+      for (const facets of ["&format=offline", "&kind=no-such-kind"]) {
+        const narrowed = await readCounts({
+          specialtyCode: targetedCode,
+          query: `?year=${year}${facets}`,
+        });
+        expect(narrowed.every((row) => row.count === 0)).toBe(true);
+      }
       const none = await readCounts({
         specialtyCode: targetedCode,
         query: `?year=${year}&q=${encodeURIComponent(randomUUID())}`,

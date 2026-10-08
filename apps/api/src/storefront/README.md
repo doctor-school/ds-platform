@@ -46,8 +46,11 @@ another visitor.
 
 - **The month grid is navigation over the same read.** `DoctorEventsService.month()`
   resolves targeting with the same `resolveTargeting`, selects with the same
-  `findFeedRows` and narrows with the same `applyCardFacets` over the same
-  `cardFacetsOf` projection the day feed uses. A grid count and the feed's
+  `findFeedRows` (whose ONE predicate carries targeting, `kind`, `format` and
+  `q` — so the feed, its «показать ещё» probe, the grid, the month counts and
+  the `kind` facet options count one narrowed set) and narrows with the same
+  `applyCardFacets` (the constant card facts `nmo` / `free` / `city`) over the
+  same `cardFacetsOf` projection the day feed uses. A grid count and the feed's
   day-group size for that day are therefore the same number by construction.
   The month codec (`parseDoctorEventsMonthQuery`) delegates its facet half to
   the feed's codec, so the two routes cannot disagree about what a facet means

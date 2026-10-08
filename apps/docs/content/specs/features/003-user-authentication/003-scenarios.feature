@@ -716,12 +716,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the length-only registrant enters that fresh delivered confirmation code once
     Then that one confirmation opens the verified length-only account with a secure session and no additional sign-in
 
-  @EARS-36 @failure
+  @EARS-36 @failure @password-refusal
   Scenario: A password shorter than the minimum length is rejected by the single rule
-    Given a visitor on the registration form
-    When the visitor submits a password of seven characters
-    Then the submission is rejected before it reaches the IdP
-    And the rejection names only the minimum-length rule
+    Given an Academy short-password registrant with a unique never-registered email and the account return target
+    When that registrant enters seven lowercase letters, blurs the password and attempts the normal registration submit
+    Then only the minimum-length rule rejects that password without any registration POST or private access
+    When that registrant corrects the same password field to eight lowercase letters without submitting
+    Then the length error clears and normal submission is available with the same address and registration context and no account created
+    # Retain schemas/auth.schema.spec.ts seven-character rejection and portal
+    # identifier-validation.e2e.spec.ts blur-only copy checks: neither proves
+    # the normal submit refusal and correction on the shared live Academy flow.
 
   @EARS-36 @happy
   Scenario: A credential created under the previous four-class policy still signs in

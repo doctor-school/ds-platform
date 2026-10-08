@@ -51,8 +51,9 @@ both profile IDs after success or rollback; do not delete/recreate profiles.
 
 ## Projection failure and evidence
 
-Pinned Zitadel v4.15.0 can persist a password update while its SMTP projection
-fails with SQLSTATE 42601 (duplicate password assignment). The old ID's by-ID test
+Zitadel can persist a password update while its SMTP projection fails with
+SQLSTATE 42601 (duplicate password assignment): reproduced on v4.15.0 and still
+present in the v4.17.3 source running in production (2026-10-08). The old ID's by-ID test
 reads the event write model, whereas actual native delivery uses the query
 projection. Therefore `_test` of that ID cannot certify mail.ru rollback. Prove
 the native notification itself. The isolated rehearsal reproduces delayed
@@ -92,13 +93,20 @@ Order is mandatory: the API startup reconciler compares the Zitadel profile
    then a separate `PUT /admin/v1/smtp/{id}/password`. Both in one change event
    emit a duplicate password column (SQLSTATE 42601, still present in v4.17.3
    `reduceSMTPConfigChanged`). Read back via `POST /admin/v1/smtp/_search` and
-   check `projections.failed_events2` for SMTP rows.
+   check `projections.failed_events2` for SMTP rows. The secret never appears
+   on a command line or in argv: build the password PUT body from stdin
+   (`jq -n --arg … | curl --data @-`, the value read from the key file).
 4. Back up `api.env`, replace both values, keep it `0600` root, then run
    `sudo docker compose up -d --no-deps api` in
-   `/home/deploy/ds-platform/infra/deploy/compose/api-prod`.
+   `/home/deploy/ds-platform/infra/deploy/compose/api-prod`. The replacement
+   reads the new values from stdin/environment into `awk` or an editor — never
+   `sed -i 's/…secret…/'`, which puts the secret in argv.
 5. Verify: container healthy, public `/v1/health` 200, no new `535`, and a real
    message received.
 6. Delete the local key file.
+7. Once the new key is verified, revoke the old `postbox-sender` API key in the
+   Yandex Cloud console (a rotation before expiry leaves it valid) and delete the
+   `/etc/ds-platform/api.env.bak-*` backup that holds the old secret.
 
 Never log the key ID/secret pair. Postbox quotas (2026-10-08): 200 emails per
 24 h and 1 per second; an increase is requested.

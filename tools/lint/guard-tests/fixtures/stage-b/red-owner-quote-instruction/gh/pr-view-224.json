@@ -1,0 +1,11 @@
+{
+  "number": 224,
+  "body": "## Summary\nRoom header.\n\nStage-B: GO\n\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-source: owner-relay:session-123#message-4\nStage-B-owner-quote: Finish the PR tail — required review → green CI → canonical merge\nStage-B-live-url: http://localhost:3000/room\n",
+  "files": [
+    {
+      "path": "apps/portal/src/app/room/header.tsx"
+    }
+  ],
+  "labels": [],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

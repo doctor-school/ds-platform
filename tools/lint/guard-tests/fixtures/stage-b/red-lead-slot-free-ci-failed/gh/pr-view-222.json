@@ -1,0 +1,25 @@
+{
+  "number": 222,
+  "body": "## Summary\nInvisible refactor.\n\nStage-B: N/A (no visual surface) — lead-certified\n\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-source: owner-relay:session-123#message-4\nStage-B-owner-quote: Merge invisible refactors yourself once CI proves them\nStage-B-authorization: autonomous-merge\nStage-B-visual-change: none\nStage-B-evidence: https://github.com/acme/repo/pull/221#issuecomment-9\n",
+  "files": [
+    {
+      "path": "apps/portal/src/app/room/header.tsx"
+    }
+  ],
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "name": "api-e2e",
+      "status": "COMPLETED",
+      "conclusion": "SKIPPED"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "playwright-axe-portal",
+      "status": "COMPLETED",
+      "conclusion": "FAILURE"
+    }
+  ],
+  "labels": [],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

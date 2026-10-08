@@ -666,11 +666,11 @@ function gh(args) {
 
 /** Spawn git in the current cwd (the cwd guard already pins that to the main
  * tree); returns {status, stdout, stderr, error} — callers decide on failure. */
-function git(args) {
+function git(args, cwd = process.cwd()) {
   return spawnSync("git", args, {
     encoding: "utf8",
     maxBuffer: GH_MAX_BUFFER,
-    cwd: process.cwd(),
+    cwd,
   });
 }
 
@@ -702,23 +702,27 @@ function git(args) {
  * @param {string} headSha      current head
  * @returns {{accepted: boolean, reason: string, equal?: number, total?: number}}
  */
-export function checkRebaseEquivalence(approvedSha, headSha) {
-  if (!approvedSha || !headSha)
-    return { accepted: false, reason: "the approved head SHA is unknown" };
-  for (const sha of [approvedSha, headSha]) {
-    let present = git(["cat-file", "-e", `${sha}^{commit}`]);
+/** Both commits present locally (one fetch each if not), or why not. */
+function missingCommit(shas, cwd = process.cwd()) {
+  for (const sha of shas) {
+    let present = git(["cat-file", "-e", `${sha}^{commit}`], cwd);
     if (present.error || present.status !== 0) {
       // The pre-rebase head is normally still in the object store; fetch once
       // in case it was pruned or the rebase happened in another clone.
-      git(["fetch", "--quiet", "origin", sha]);
-      present = git(["cat-file", "-e", `${sha}^{commit}`]);
+      git(["fetch", "--quiet", "origin", sha], cwd);
+      present = git(["cat-file", "-e", `${sha}^{commit}`], cwd);
     }
     if (present.error || present.status !== 0)
-      return {
-        accepted: false,
-        reason: `commit ${sha.slice(0, 12)} is not present locally (git fetch origin ${sha.slice(0, 12)} did not recover it)`,
-      };
+      return `commit ${sha.slice(0, 12)} is not present locally (git fetch origin ${sha.slice(0, 12)} did not recover it)`;
   }
+  return null;
+}
+
+export function checkRebaseEquivalence(approvedSha, headSha) {
+  if (!approvedSha || !headSha)
+    return { accepted: false, reason: "the approved head SHA is unknown" };
+  const missing = missingCommit([approvedSha, headSha]);
+  if (missing) return { accepted: false, reason: missing };
   // Refresh the base best-effort: a stale local origin/main would make the
   // comparison meaningless. A failure here is not fatal — the range-diff below
   // still runs against whatever origin/main the clone has.
@@ -1066,4 +1070,97 @@ async function main() {
 const invokedPath = process.argv[1];
 if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
   main();
+}
+
+/**
+ * Split a `git diff` into per-file patches normalised for comparison across a
+ * rebase (#2699): `index` lines and hunk line numbers move when main moves
+ * under the branch, so they are dropped. The diff must come from
+ * `--no-renames`, so a rename is a deletion of the old path plus an addition of
+ * the new one and both paths are keyed — a runtime file moved into a test or
+ * docs path is then in the delta. A chunk whose header does not name one plain
+ * `a/<path> b/<path>` (a git-quoted path, a rename) throws: an unreadable file
+ * must refuse the carry-over, never vanish from the delta.
+ *
+ * @param {string} diff
+ * @returns {Map<string, string>}
+ */
+export function splitDiffByFile(diff) {
+  const out = new Map();
+  for (const chunk of String(diff ?? "").split(/^(?=diff --git )/m)) {
+    if (!chunk.trim()) continue;
+    const firstLine = chunk.split("\n", 1)[0];
+    // Without renames both halves name the same path: `a/<p> b/<p>`, so the
+    // path is the first half of the remainder (spaces in <p> stay unambiguous).
+    const rest = firstLine.startsWith("diff --git a/")
+      ? firstLine.slice("diff --git a/".length)
+      : "";
+    const path = rest.slice(0, (rest.length - 3) / 2);
+    if (!path || rest !== `${path} b/${path}` || firstLine.includes('"'))
+      throw new Error(`cannot parse the diff header: ${firstLine}`);
+    const body = chunk
+      .split("\n")
+      .filter((line) => !/^index [0-9a-f]+\.\.[0-9a-f]+/.test(line))
+      .map((line) => line.replace(/^@@ [^@]* @@/, "@@"))
+      .join("\n");
+    out.set(path, body);
+  }
+  return out;
+}
+
+/**
+ * The files this PR's OWN diff changed between a recorded head and the current
+ * head, net of main (#2699): each head is diffed against its merge-base with
+ * origin/main, and a file is in the delta when its normalised patch differs.
+ * A rebase that only brings in other people's files therefore yields nothing.
+ *
+ * @param {string} recordedSha
+ * @param {string} headSha
+ * @param {{cwd?: string}} [options] the repository to read (default: cwd)
+ * @returns {{ok: true, files: string[]} | {ok: false, reason: string}}
+ */
+export function prOwnDelta(recordedSha, headSha, { cwd = process.cwd() } = {}) {
+  if (!recordedSha || !headSha)
+    return { ok: false, reason: "the recorded head SHA is unknown" };
+  const missing = missingCommit([recordedSha, headSha], cwd);
+  if (missing) return { ok: false, reason: missing };
+  git(["fetch", "--quiet", "origin", "main"], cwd);
+  const own = [];
+  for (const sha of [recordedSha, headSha]) {
+    const base = git(["merge-base", "origin/main", sha], cwd);
+    if (base.error || base.status !== 0)
+      return {
+        ok: false,
+        reason: `git merge-base origin/main ${sha.slice(0, 12)} failed`,
+      };
+    const diff = git(
+      [
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-renames",
+        "--binary",
+        base.stdout.trim(),
+        sha,
+      ],
+      cwd,
+    );
+    if (diff.error || diff.status !== 0)
+      return {
+        ok: false,
+        reason: `git diff of ${sha.slice(0, 12)} against main failed`,
+      };
+    try {
+      own.push(splitDiffByFile(diff.stdout));
+    } catch (error) {
+      return { ok: false, reason: error.message };
+    }
+  }
+  const [before, after] = own;
+  const files = [...new Set([...before.keys(), ...after.keys()])]
+    .filter((path) => before.get(path) !== after.get(path))
+    .sort();
+  return { ok: true, files };
 }

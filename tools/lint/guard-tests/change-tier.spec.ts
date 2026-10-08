@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   API_COPY_ALLOWLIST,
   classifyChangeTier,
+  isEnvironmentSensitivePath,
+  isNonRuntimePath,
   normalizeTierFiles,
   parseDeclaredTier,
   resolveTier,
@@ -32,7 +34,7 @@ describe("change-tier classifier (#2584)", () => {
       "apps/doctor/package.json",
       "apps/doctor/next.config.ts",
       "apps/doctor/middleware.ts",
-      "apps/api/drizzle/migrations/0001.sql",
+      "apps/api/drizzle/0048_event_kinds.sql",
       "apps/docs/content/specs/features/001-x/001-design.md",
       "AGENTS.md",
     ])
@@ -234,5 +236,81 @@ describe("change-tier guard (#2584)", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("require at least ask");
     expect(stderr).toContain("ask path: packages/db/src/x.ts");
+  });
+});
+
+describe("#2699: evidence captures and non-runtime / environment-sensitive paths", () => {
+  it("`.github/ui-evidence/**` is evidence, not CI config: it no longer raises the minimum", () => {
+    const evidence: ChangeTierFile = {
+      path: ".github/ui-evidence/2699/after.png",
+      status: "added",
+      additions: 0,
+      deletions: 0,
+    };
+    expect(classifyChangeTier([copy, evidence]).minimum).toBe("ship");
+    expect(
+      classifyChangeTier([copy, mod(".github/workflows/ci.yml")]).minimum,
+    ).toBe("ask");
+  });
+  it("non-runtime = tests, changesets, ui-evidence captures, docs content and .feature files", () => {
+    for (const path of [
+      "apps/portal/src/app/room/header.test.tsx",
+      "apps/portal/e2e/room.spec.ts",
+      ".changeset/room.md",
+      ".github/ui-evidence/2699/after.png",
+      "apps/docs/content/specs/features/001-x/001-design.md",
+      "apps/docs/content/adr/0001-x.md",
+      "apps/docs/content/skills/x/SKILL.md",
+      "apps/docs/content/product/glossary/x.mdx",
+      "apps/docs/content/specs/features/001-x/room.feature",
+    ])
+      expect(isNonRuntimePath(path), path).toBe(true);
+    for (const path of [
+      "apps/portal/src/app/room/header.tsx",
+      "apps/api/src/mailer/notice-emails.ts",
+      ".github/workflows/ci.yml",
+      "apps/docs/app/page.tsx",
+      "AGENTS.md",
+    ])
+      expect(isNonRuntimePath(path), path).toBe(false);
+  });
+  it("environment-sensitive = auth paths, migrations, infra, the mailer, IdP/captcha tooling", () => {
+    for (const path of [
+      // auth: every path the change-tier auth rules match + the auth pages
+      "apps/portal/lib/shell-auth.ts",
+      "apps/doctor/lib/auth-flow-client.ts",
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/authz/roles.guard.ts",
+      "packages/auth-flow/src/login/login-form.tsx",
+      "packages/schemas/src/auth/login.ts",
+      "apps/portal/app/login/page.tsx",
+      "apps/portal/app/verify/verify-form.tsx",
+      "apps/doctor/app/(auth)/register/page.tsx",
+      "apps/admin/app/mfa/enroll/page.tsx",
+      // request routing in front of every page
+      "apps/portal/middleware.ts",
+      "apps/doctor/proxy.ts",
+      // schema: the real migration layout + the Drizzle schema
+      "apps/api/drizzle/0048_event_kinds.sql",
+      "apps/api/drizzle/meta/0048_snapshot.json",
+      "packages/db/src/schema/users.ts",
+      // infra, mail, IdP, captcha / bot protection
+      "infra/deploy/zitadel.env.example",
+      "infra/dev-stand/idp/provision.sh",
+      "apps/api/src/mailer/notice-emails.ts",
+      "tools/staging/idp.mjs",
+      "tools/deploy/idp-policy.mjs",
+      "packages/db/src/seed/golden/idp.ts",
+      "apps/api/src/bot-protection/bot-protection.guard.ts",
+      "apps/portal/components/captcha-widget.tsx",
+    ])
+      expect(isEnvironmentSensitivePath(path), path).toBe(true);
+    for (const path of [
+      "apps/portal/app/room/header.tsx",
+      "packages/design-system/src/ui/button.tsx",
+      "apps/portal/app/room/header.test.tsx",
+      "apps/portal/middleware.test.ts",
+    ])
+      expect(isEnvironmentSensitivePath(path), path).toBe(false);
   });
 });

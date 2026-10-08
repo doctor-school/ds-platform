@@ -136,8 +136,68 @@ function isChangesetPath(path: string): boolean {
   return /^\.changeset\/[^/]+\.md$/.test(path);
 }
 
+/** #2699: PR evidence captures are evidence, not CI config — exempt like tests. */
+function isUiEvidencePath(path: string): boolean {
+  return /^\.github\/ui-evidence\//.test(path);
+}
+
+/**
+ * #2699: files that change nothing a user runs — tests, changesets, evidence
+ * captures, docs content (specs / ADRs / skills / product docs) and `.feature`
+ * files. The Stage-B guard routes on the remaining (runtime) files and carries
+ * a recorded GO over a delta made only of these.
+ */
+export function isNonRuntimePath(path: string): boolean {
+  return (
+    isTestPath(path) ||
+    isChangesetPath(path) ||
+    isUiEvidencePath(path) ||
+    /^apps\/docs\/content\/.+\.(?:mdx?|feature)$/.test(path) ||
+    /\.feature$/.test(path)
+  );
+}
+
+/**
+ * #2699: paths whose behaviour depends on the live environment (identity,
+ * mail, schema, infrastructure, captcha), so a lead certification for them
+ * keeps the live slot harness report. Derived from the repo layout:
+ *   auth    — every path the ship rules read as auth (`lib/**auth*`, an `auth`
+ *             segment: `apps/api/src/{auth,authz}`, `packages/auth-flow`,
+ *             `packages/schemas/src/auth`, the doctor `(auth)` route group),
+ *             the portal/admin auth pages (`app/{login,register,verify,reset,
+ *             mfa}/`) and the request middleware in front of every page
+ *             (`apps/portal/middleware.ts`, `apps/doctor/proxy.ts`);
+ *   schema  — the Drizzle migrations `apps/api/drizzle/**` (incl. `meta/`)
+ *             and the schema they are generated from `packages/db/src/schema/`;
+ *   infra   — `infra/**`;
+ *   mail    — `apps/api/src/mailer/**`;
+ *   IdP / captcha — any `idp` / `zitadel` / `captcha` path
+ *             (`tools/staging/idp.mjs`, `tools/deploy/idp-policy.mjs`) and the
+ *             captcha enforcement `apps/api/src/bot-protection/**`.
+ */
+const ENVIRONMENT_SENSITIVE_RES: readonly RegExp[] = [
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
+  /(?:^|\/)app\/(?:.*\/)?(?:login|register|verify|reset|mfa)\//,
+  /(?:^|\/)(?:middleware|proxy)\.[^/]+$/,
+  /^apps\/api\/drizzle\//,
+  /^packages\/db\/src\/schema\//,
+  /^infra\//,
+  /^apps\/api\/src\/mailer\//,
+  /^apps\/api\/src\/bot-protection\//,
+  /(?:^|[/._-])(?:idp|zitadel|captcha)/i,
+];
+
+export function isEnvironmentSensitivePath(path: string): boolean {
+  if (isNonRuntimePath(path)) return false;
+  return (
+    path.split("/").some((segment) => /auth/i.test(segment)) ||
+    ENVIRONMENT_SENSITIVE_RES.some((re) => re.test(path))
+  );
+}
+
 export function isAskPath(path: string): boolean {
   if (API_COPY_ALLOWLIST.includes(path)) return false;
+  if (isUiEvidencePath(path)) return false;
   return ASK_PATH_RES.some((re) => re.test(path));
 }
 
@@ -162,7 +222,10 @@ export function classifyChangeTier(
       (p): p is string => typeof p === "string" && p.length > 0,
     ))
       if (isAskPath(path)) ask.push(`ask path: ${path}`);
-    const exempt = isTestPath(file.path) || isChangesetPath(file.path);
+    const exempt =
+      isTestPath(file.path) ||
+      isChangesetPath(file.path) ||
+      isUiEvidencePath(file.path);
     if (exempt) {
       if (file.status !== "modified" && file.status !== "added")
         show.push(`${file.status || "unknown-status"} file: ${file.path}`);

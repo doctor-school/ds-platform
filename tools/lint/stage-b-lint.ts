@@ -1,14 +1,25 @@
 #!/usr/bin/env tsx
 /** Pre-merge Stage-B: current, attributed live verdict or bounded documented carve-out. */
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ghViewJson } from "./lib/gh";
 import { isUiSourcePath } from "./lib/ui-surface";
-import { normalizeTierFiles, resolveTier } from "./lib/change-tier";
+import {
+  classifyChangeTier,
+  isEnvironmentSensitivePath,
+  isNonRuntimePath,
+  normalizeTierFiles,
+  resolveTier,
+  type ChangeTier,
+  type ChangeTierFile,
+  type ResolvedTier,
+} from "./lib/change-tier";
 import { stageBArtifact } from "./lib/stage-b-artifact";
 import { stageBComments } from "./lib/stage-b-comments";
 import {
+  instructionQuoteSource,
   validateStageB,
   stageBDecisions,
   stageBField,
@@ -16,7 +27,8 @@ import {
 } from "./lib/stage-b-evidence";
 // #2373: the Mode (a) rebase carry-over probe (#1865), reused — never
 // re-implemented. `merge-gate.mjs` guards its own entry point.
-import { checkRebaseEquivalence } from "../gh/merge-gate.mjs";
+// #2699: the PR's own delta between two heads, net of main, from the same file.
+import { checkRebaseEquivalence, prOwnDelta } from "../gh/merge-gate.mjs";
 // #2581: the copy-only certification is the `ui-parity` guard's own verdict,
 // reused so both guards read one reviewer line.
 import { certifiedNaVerdict } from "./ui-parity-lint";
@@ -40,6 +52,12 @@ interface GhPR {
   files?: ({ path: string } & Record<string, unknown>)[];
   changedFiles?: number;
   reviews?: Parameters<typeof certifiedNaVerdict>[1];
+  statusCheckRollup?: GhCheck[];
+}
+interface GhCheck {
+  name?: string;
+  status?: string;
+  conclusion?: string | null;
 }
 type GhComment = StageBRecord;
 interface GhIssue {
@@ -69,7 +87,7 @@ async function ghPR(prNumber: string): Promise<GhPR | null> {
   const res = await ghViewJson<GhPR>(
     "pr",
     prNumber,
-    "number,body,labels,files,changedFiles,headRefOid,updatedAt,reviews",
+    "number,body,labels,files,changedFiles,headRefOid,updatedAt,reviews,statusCheckRollup",
     REPO_ROOT,
     true,
   );
@@ -104,6 +122,126 @@ function extractClosedIssues(body: string): number[] {
   if (!body) return [];
   for (const m of body.matchAll(CLOSE_RE)) out.add(Number(m[1]));
   return [...out];
+}
+
+/** The affected-area CI e2e jobs (`.github/workflows/ci.yml`, #2597). */
+const CI_E2E_CHECKS = [
+  "api-e2e",
+  "playwright-axe",
+  "playwright-academy-demo",
+  "playwright-axe-portal",
+  "playwright-axe-doctor",
+  "admin-e2e",
+];
+
+// Strict is the default: only an explicit `--pre-ci` argument (passed by
+// pr-preflight's pre-CI pass alone) relaxes the CI e2e check — never an
+// environment variable an operator's shell could leak into the post-CI pass.
+const PRE_CI_PHASE = process.argv.slice(2).includes("--pre-ci");
+
+/**
+ * #2699: the required CI e2e check on the PR head (the rollup is read in the
+ * same `gh pr view` as `headRefOid`). The pre-CI merge-guard pass runs before
+ * CI is terminal, so there a still-running check is tolerated; the post-CI
+ * binding pass requires a success. A failed check refuses in both.
+ */
+function ciE2eOnHead(rollup: GhCheck[] | undefined): {
+  ok: boolean;
+  detail: string;
+} {
+  const latest = new Map<string, GhCheck>();
+  for (const check of rollup ?? [])
+    if (check.name && CI_E2E_CHECKS.includes(check.name))
+      latest.set(check.name, check);
+  const runs = [...latest.values()];
+  const done = (c: GhCheck) => (c.status ?? "").toUpperCase() === "COMPLETED";
+  const conclusion = (c: GhCheck) => (c.conclusion ?? "").toUpperCase();
+  const failed = runs.filter(
+    (c) =>
+      done(c) && !["SUCCESS", "SKIPPED", "NEUTRAL"].includes(conclusion(c)),
+  );
+  if (failed.length)
+    return {
+      ok: false,
+      detail: failed
+        .map((c) => `${c.name} ${conclusion(c).toLowerCase() || "unknown"}`)
+        .join(", "),
+    };
+  const passed = runs.filter((c) => done(c) && conclusion(c) === "SUCCESS");
+  const pending = runs.filter((c) => !done(c)).map((c) => c.name);
+  if (pending.length || !passed.length) {
+    const detail = pending.length
+      ? `CI e2e still running: ${pending.join(", ")}`
+      : `no CI e2e check (${CI_E2E_CHECKS.join(", ")}) succeeded on the head`;
+    return PRE_CI_PHASE
+      ? { ok: true, detail: `${detail}; the post-CI pass re-checks it` }
+      : { ok: false, detail };
+  }
+  return {
+    ok: true,
+    detail: `${passed.map((c) => `${c.name} success`).join(", ")} on the head`,
+  };
+}
+
+const ROUTE_ORDER: Record<ChangeTier, number> = { ship: 0, show: 1, ask: 2 };
+
+/**
+ * #2699: the Stage-B route comes from the PR's runtime files only. A
+ * declaration the non-runtime files forced up to the whole-PR minimum (a spec
+ * line, a test, an evidence capture) routes Stage-B by the runtime minimum; a
+ * declaration above the whole-PR minimum is the author's own escalation and
+ * stands. The change-tier guard and Mode (a) keep the whole-PR minimum.
+ */
+function stageBRouteTier(
+  tier: ResolvedTier,
+  files: ChangeTierFile[],
+): ChangeTier {
+  if (tier.effective === null) return "ask";
+  if (tier.reasons.some((r) => /^(?:incomplete|no changed-file)/.test(r)))
+    return "ask";
+  if (ROUTE_ORDER[tier.declared] > ROUTE_ORDER[tier.minimum])
+    return tier.declared;
+  const runtime = files.filter(
+    (f) =>
+      !isNonRuntimePath(f.path) ||
+      (f.previousPath !== undefined && !isNonRuntimePath(f.previousPath)),
+  );
+  const { minimum } = classifyChangeTier(runtime);
+  return ROUTE_ORDER[minimum] < ROUTE_ORDER[tier.declared]
+    ? minimum
+    : tier.declared;
+}
+
+/** #2699: the repo instruction files an owner quote must not be copied from. */
+function instructionDocs(): Record<string, string> {
+  const docs: Record<string, string> = {};
+  const add = (rel: string) => {
+    try {
+      docs[rel] = readFileSync(resolve(REPO_ROOT, rel), "utf8");
+    } catch {
+      // absent in this checkout: nothing to compare against
+    }
+  };
+  for (const rel of [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "apps/docs/content/agent-discipline.md",
+  ])
+    add(rel);
+  for (const dir of [".claude/rules", "apps/docs/content/skills"]) {
+    let entries: string[] = [];
+    try {
+      entries = readdirSync(resolve(REPO_ROOT, dir), {
+        recursive: true,
+        encoding: "utf8",
+      });
+    } catch {
+      continue;
+    }
+    for (const entry of entries)
+      if (/\.mdx?$/.test(entry)) add(`${dir}/${entry.replace(/\\/g, "/")}`);
+  }
+  return docs;
 }
 
 async function main(): Promise<void> {
@@ -176,15 +314,16 @@ async function main(): Promise<void> {
     );
   // #2584: a declaration below its minimum gets the strictest (ask) rules here;
   // the change-tier guard refuses it on its own.
+  const allFiles = normalizeTierFiles(pr.files ?? []);
   const tier = resolveTier(
     pr.body ?? "",
-    normalizeTierFiles(pr.files ?? []),
+    allFiles,
     typeof pr.changedFiles === "number" ? pr.changedFiles : undefined,
   );
-  const effectiveTier = tier.effective ?? "ask";
+  const effectiveTier = stageBRouteTier(tier, allFiles);
   if (effectiveTier !== "ask")
     info(
-      `PR #${pr.number} is Change-tier ${effectiveTier} (minimum ${tier.minimum})`,
+      `PR #${pr.number} Stage-B route tier ${effectiveTier} (declared ${tier.declared}, whole-PR minimum ${tier.minimum})`,
     );
   const verdict = validateStageB(
     records,
@@ -194,8 +333,29 @@ async function main(): Promise<void> {
     checkRebaseEquivalence,
     copyOnly,
     effectiveTier,
+    {
+      headDelta: prOwnDelta,
+      slotFree: {
+        environmentSensitive: allFiles
+          .flatMap((f) => [f.path, f.previousPath ?? ""])
+          .filter((p) => p && isEnvironmentSensitivePath(p)),
+        ciE2e: ciE2eOnHead(pr.statusCheckRollup),
+      },
+    },
   );
   if (!verdict.ok) fail(`PR #${pr.number}: ${verdict.reason}`);
+  // #2699: an owner quote is the owner's decision, never an instruction line.
+  const docs = instructionDocs();
+  for (const body of [verdict.decision.body, ...Object.values(gates)]) {
+    const copied = instructionQuoteSource(
+      stageBField(body, "owner-quote"),
+      docs,
+    );
+    if (copied)
+      fail(
+        `Stage-B-owner-quote occurs verbatim in ${copied}: an instruction line is not an owner decision — record the owner's own words and their source`,
+      );
+  }
   // URL-backed sources are fetched; relays remain explicit session/message
   // attribution, never a claim that a shared GitHub login proves identity.
   for (const record of [verdict.decision]) {

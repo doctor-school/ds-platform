@@ -1,0 +1,20 @@
+{
+  "number": 220,
+  "body": "## Summary\nRoom header card.\n\nChange-tier: ask — the spec line raises the whole-PR minimum\n\nStage-B: GO — owner confirmed the captures\n\nStage-B-head: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nStage-B-recorded-at: 2026-09-06T00:00:00Z\nStage-B-source: owner-relay:session-123#message-4\nStage-B-owner-quote: Looks right, go\nStage-B-evidence: https://github.com/acme/repo/pull/220#issuecomment-7\n",
+  "files": [
+    {
+      "path": "apps/portal/src/app/room/header.tsx"
+    },
+    {
+      "path": "apps/docs/content/specs/features/001-x/001-design.md"
+    },
+    {
+      "path": ".github/ui-evidence/220/after.png"
+    },
+    {
+      "path": "apps/portal/src/app/room/header.test.tsx"
+    }
+  ],
+  "labels": [],
+  "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

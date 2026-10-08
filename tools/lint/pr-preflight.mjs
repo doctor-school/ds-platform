@@ -95,8 +95,11 @@ export const GUARDS = [
  * approval, which happens just before merge, so at create time there is nothing
  * to check yet.
  */
+// #2699: the pre-CI pass tolerates a still-running CI e2e check for a
+// slot-free lead certification; the post-CI binding pass requires it green.
+// An argument, not an env var, so nothing inherited relaxes the post-CI pass.
 export const PRE_CI_MERGE_GUARDS = [
-  { name: "stage-b", file: "stage-b-lint.ts" },
+  { name: "stage-b", file: "stage-b-lint.ts", args: ["--pre-ci"] },
 ];
 export const POST_CI_MERGE_GUARDS = [
   { name: "stage-b", file: "stage-b-lint.ts" },
@@ -323,7 +326,12 @@ function runGuard(guard, root, extraEnv) {
   out(`── ${guard.name} ──`);
   const res = spawnSync(
     "pnpm",
-    ["exec", "tsx", resolve(root, "tools", "lint", guard.file)],
+    [
+      "exec",
+      "tsx",
+      resolve(root, "tools", "lint", guard.file),
+      ...(guard.args ?? []),
+    ],
     {
       cwd: root,
       env: { ...process.env, ...extraEnv, ...(guard.env ?? {}) },

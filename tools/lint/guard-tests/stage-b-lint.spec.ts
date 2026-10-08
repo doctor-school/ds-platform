@@ -206,4 +206,68 @@ describe("stage-b-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("live URL");
   });
+
+  describe("#2699", () => {
+    const run = (
+      name: string,
+      pr: string,
+      extra: Record<string, string> = {},
+      extraArgs: string[] = [],
+    ) =>
+      runGuard(GUARD, caseDir("stage-b", name), {
+        env: { ...prEnv(pr, name), STAGE_B_CI_PHASE: "", ...extra },
+        extraArgs,
+      });
+
+    it("green: UI files + a spec / test / ui-evidence file resolve the Stage-B route from the UI files alone (show GO on a capture) → exit 0", () => {
+      const { code, stdout } = run("green-route-runtime-only", "220");
+      expect(code).toBe(0);
+      expect(stdout).toContain("Stage-B route tier show");
+    });
+
+    it("green: lead-certified N/A, not environment-sensitive, green CI e2e on the head + captures, no slot report → exit 0", () => {
+      const { code } = run("green-lead-slot-free", "221");
+      expect(code).toBe(0);
+    });
+
+    it("red: lead-certified N/A whose CI e2e check failed on the head → exit 1", () => {
+      const { code, stderr } = run("red-lead-slot-free-ci-failed", "222");
+      expect(code).toBe(1);
+      expect(stderr).toContain("playwright-axe-portal");
+    });
+
+    it("red: lead-certified N/A on an environment-sensitive PR still needs the live slot report → exit 1", () => {
+      const { code, stderr } = run("red-lead-env-sensitive", "223");
+      expect(code).toBe(1);
+      expect(stderr).toContain("apps/api/src/mailer/notice-emails.ts");
+    });
+
+    it("lead-certified N/A with the CI e2e check still running: tolerated pre-CI, refused post-CI", () => {
+      expect(
+        run("lead-slot-free-ci-pending", "225", {}, ["--pre-ci"]).code,
+      ).toBe(0);
+      expect(run("lead-slot-free-ci-pending", "225").code).toBe(1);
+    });
+
+    it("red: a pre-CI phase inherited from the shell environment does not relax the post-CI pass → exit 1", () => {
+      expect(
+        run("lead-slot-free-ci-pending", "225", { STAGE_B_CI_PHASE: "pre-ci" })
+          .code,
+      ).toBe(1);
+    });
+
+    it("red: UI files + an apps/api runtime file route ask, so a show GO on a capture is refused → exit 1", () => {
+      const { code, stdout, stderr } = run("red-route-runtime-api", "226");
+      expect(code).toBe(1);
+      expect(stdout).not.toContain("Stage-B route tier show");
+      expect(stderr).toContain("live URL");
+    });
+
+    it("red: an owner quote copied verbatim from a repo instruction file is refused → exit 1", () => {
+      const { code, stderr } = run("red-owner-quote-instruction", "224");
+      expect(code).toBe(1);
+      expect(stderr).toContain("AGENTS.md");
+      expect(stderr).toContain("not an owner decision");
+    });
+  });
 });

@@ -206,7 +206,7 @@ Feature: 046 — Congress submissions: oral talks, posters and abstracts
     Given the author's oral talk is "На доработке" with the revision deadline 2027-02-20T00:00+03:00
     And the current time is 2027-02-20T00:00+03:00
     When the author opens the talk
-    Then it is read-only with "Срок доработки истёк 19 февраля, 23:59 МСК (меньше часа назад) — отправить заявку нельзя"
+    Then it is read-only with "Срок доработки истёк 19 февраля 2027, 23:59 МСК (меньше часа назад) — отправить заявку нельзя"
     And an autosave or a send request reaching the API is refused and the status stays "На доработке"
     When a committee member sets "Отклонена" with a comment
     Then the status becomes "rejected" and the author receives the rejection letter

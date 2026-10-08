@@ -17,7 +17,13 @@ export type EventListingTimeframe = z.infer<typeof EventListingTimeframeSchema>;
 export const PublicEventListingQuerySchema = z
   .object({
     timeframe: EventListingTimeframeSchema,
-    limit: z.coerce.number().int().min(1).max(50).default(20),
+    /**
+     * The cursor page's size. A read stating neither `limit` nor `cursor` is the
+     * horizon read of the tense's default extent (D2, row 32) — the bare
+     * `/webinars` and `?tense=past` — so the size has no default here; the
+     * cursor page applies its own.
+     */
+    limit: z.coerce.number().int().min(1).max(50).optional(),
     cursor: z.string().min(1).max(512).optional(),
     from: DoctorEventsFeedDaySchema.optional(),
     to: DoctorEventsFeedDaySchema.optional(),
@@ -66,9 +72,10 @@ export const PublicEventListingPageSchema = z.object({
    * Present exactly on a horizon read (D2): the applied window, echoed so the
    * client never re-derives it; the next bound «Показать ещё» writes into the
    * URL — `nextTo` on «Будущие», `nextFrom` (an older `from`) on
-   * «Прошедшие», each `null` when nothing lies beyond; and `remaining`, the
-   * matching events beyond the extent. Same names and semantics as the doctor
-   * feed's `from` / `to` / `nextTo` / `nextFrom` / `remaining`.
+   * «Прошедшие», each `null` when nothing lies beyond; `remaining`, the
+   * matching events beyond the extent; and `nextBatch`, the ones the next step
+   * adds. Same names and semantics as the doctor feed's `from` / `to` /
+   * `nextTo` / `nextFrom` / `remaining` / `nextBatch`.
    */
   horizon: z
     .object({
@@ -77,6 +84,7 @@ export const PublicEventListingPageSchema = z.object({
       nextTo: DoctorEventsFeedDaySchema.nullable(),
       nextFrom: DoctorEventsFeedDaySchema.nullable(),
       remaining: z.number().int().nonnegative(),
+      nextBatch: z.number().int().nonnegative(),
     })
     .optional(),
 });

@@ -13,7 +13,6 @@ export class DoctorRegisterRequestDto extends createZodDto(
   DoctorRegisterRequestSchema,
 ) {}
 
-
 // 003 EARS-23/41: the doctor host's code-step request — same boundary rule.
 export class DoctorVerifyRequestDto extends createZodDto(
   DoctorVerifyRequestSchema,

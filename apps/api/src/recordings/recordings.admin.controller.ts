@@ -128,7 +128,9 @@ export class RecordingsAdminController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
     const eventId = requireUuid(eventIdRaw);
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
     const parsed = AttachRecordingRequestSchema.safeParse(body ?? {});
     if (!parsed.success) throw validationFailed(parsed.error.issues);
 
@@ -182,8 +184,11 @@ export class RecordingsAdminController {
   ): Promise<unknown> {
     const eventId = requireUuid(eventIdRaw);
     const recordingId = requireUuid(recordingIdRaw);
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
-    const { raw: rawIfMatch, version: expectedVersion } = this.requireIfMatch(req);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
+    const { raw: rawIfMatch, version: expectedVersion } =
+      this.requireIfMatch(req);
     const parsed = UpdateRecordingRequestSchema.safeParse(body ?? {});
     if (!parsed.success) throw validationFailed(parsed.error.issues);
 
@@ -249,8 +254,11 @@ export class RecordingsAdminController {
     if (!isCommand(commandRaw)) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     const command: RecordingCommand = commandRaw;
 
-    const key = this.idempotency.requireKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
-    const { raw: rawIfMatch, version: expectedVersion } = this.requireIfMatch(req);
+    const key = this.idempotency.requireKey(
+      req.headers[IDEMPOTENCY_KEY_HEADER],
+    );
+    const { raw: rawIfMatch, version: expectedVersion } =
+      this.requireIfMatch(req);
 
     const path = `/v1/admin/events/${eventId}/recordings/${recordingId}/${command}`;
     const outcome = await this.idempotency.begin({
@@ -285,7 +293,10 @@ export class RecordingsAdminController {
    * nothing and therefore cannot pass — treating it as «no precondition» would
    * turn a malformed header into a bypass.
    */
-  private requireIfMatch(req: FastifyRequest): { raw: string; version: number } {
+  private requireIfMatch(req: FastifyRequest): {
+    raw: string;
+    version: number;
+  } {
     const raw = req.headers[IF_MATCH_HEADER] as string | undefined;
     if (!raw || raw.trim().length === 0) {
       throw new TaxonomyError(

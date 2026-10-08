@@ -42,6 +42,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     /** Specialty codes: one with adjacency, one deliberately without. */
     let adjacentCarryingCode = "";
     let lonelyCode = "";
+    /** A third specialty whose direction carries only the tense fixtures (row 30). */
+    let tenseCode = "";
 
     let today = "";
     let ownEventId = "";
@@ -59,6 +61,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let pastPreparingEventId = "";
     let pastAbsentEventId = "";
     let pastOldEventId = "";
+    /** Tense fixtures (row 30): today's three lifecycle answers + steps beyond both extents. */
+    let todayNotStartedId = "";
+    let todayLiveId = "";
+    let todayEndedId = "";
+    let upcomingStepIds: string[] = [];
+    let upcomingFarId = "";
+    let pastStepId = "";
+    let pastFarId = "";
 
     const at = (dayOffset: number, hour: number) =>
       new Date(
@@ -99,11 +109,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       directionId: string;
       /** 012 EARS-29 — the storefront selector; the doctor feed selects `doctors`. */
       audience?: "doctors" | "experts";
-      state?: "published" | "ended";
+      state?: "published" | "live" | "ended";
+      durationMin?: number;
     }) => {
       const id = randomUUID();
       await pool.query(
-        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, 60, $6, ${eventClassificationSql(input.audience ?? "doctors")})`,
+        `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience) VALUES ($1, $2, $3, $4, $5, $7, $6, ${eventClassificationSql(input.audience ?? "doctors")})`,
         [
           id,
           `feed-${randomUUID()}`,
@@ -111,6 +122,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           "Школа 019",
           input.startsAt.toISOString(),
           input.state ?? "published",
+          input.durationMin ?? 60,
         ],
       );
       eventIds.push(id);
@@ -128,11 +140,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       eventId: string,
       kind: "edited" | "raw",
       status: "draft" | "published",
+      durationSec: number | null = null,
     ) => {
       await pool.query(
-        `INSERT INTO event_recordings (event_id, kind, provider, embed_ref, status, first_published_at)
-         VALUES ($1, $2, 'rutube', '0123456789abcdef0123456789abcdef', $3, ${status === "published" ? "now()" : "NULL"})`,
-        [eventId, kind, status],
+        `INSERT INTO event_recordings (event_id, kind, provider, embed_ref, status, first_published_at, duration_sec)
+         VALUES ($1, $2, 'rutube', '0123456789abcdef0123456789abcdef', $3, ${status === "published" ? "now()" : "NULL"}, $4)`,
+        [eventId, kind, status, durationSec],
       );
     };
 
@@ -169,11 +182,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
       today = doctorEventsFeedDayOf(new Date());
 
       const specialties = await pool.query<{ id: string; code: string }>(
-        "SELECT id, code FROM specialties_minzdrav WHERE is_other = false ORDER BY code LIMIT 2",
+        "SELECT id, code FROM specialties_minzdrav WHERE is_other = false ORDER BY code LIMIT 3",
       );
-      const [withAdjacency, lonely] = specialties.rows;
+      const [withAdjacency, lonely, tenseSpecialty] = specialties.rows;
       adjacentCarryingCode = withAdjacency!.code;
       lonelyCode = lonely!.code;
+      tenseCode = tenseSpecialty!.code;
 
       const own = await makeDirection("Кардиология");
       const adjacent = await makeDirection("Функциональная диагностика");
@@ -186,6 +200,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       await linkSpecialty(own, withAdjacency!.id);
       await linkSpecialty(lonelyDirection, lonely!.id);
+      const tenseDirection = await makeDirection("Тенз ленты");
+      await linkSpecialty(tenseDirection, tenseSpecialty!.id);
       await makeEdge(own, adjacent);
 
       ownEventId = await makeEvent({
@@ -243,7 +259,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         directionId: lonelyDirection,
         state: "ended",
       });
-      await addRecording(pastMontageEventId, "edited", "published");
+      await addRecording(pastMontageEventId, "edited", "published", 54 * 60);
       pastRawEventId = await makeEvent({
         title: "Прошедший, только исходник",
         startsAt: at(-4, 12),
@@ -268,6 +284,51 @@ describe.skipIf(!process.env.DATABASE_URL)(
         title: "Прошедший месяц назад",
         startsAt: at(-30, 12),
         directionId: lonelyDirection,
+        state: "ended",
+      });
+
+      // Row 30 — the tense is a lifecycle split, not a date split: today's
+      // not-started and live эфиры belong to «Будущие», today's ended one to
+      // «Прошедшие», whatever window either read covers.
+      todayNotStartedId = await makeEvent({
+        title: "Сегодня, ещё не начался",
+        startsAt: at(0, 23),
+        directionId: tenseDirection,
+      });
+      todayLiveId = await makeEvent({
+        title: "Сегодня, в эфире",
+        startsAt: at(0, 12),
+        directionId: tenseDirection,
+        state: "live",
+        durationMin: 600,
+      });
+      todayEndedId = await makeEvent({
+        title: "Сегодня, завершён",
+        startsAt: at(0, 1),
+        directionId: tenseDirection,
+        state: "ended",
+      });
+      // Beyond «Будущие» [today, +14): two in the next 14-day step, one far.
+      upcomingStepIds = [
+        await makeEvent({ title: "Через 20 дней", startsAt: at(20, 12), directionId: tenseDirection }),
+        await makeEvent({ title: "Через 22 дня", startsAt: at(22, 12), directionId: tenseDirection }),
+      ];
+      upcomingFarId = await makeEvent({
+        title: "Через 50 дней",
+        startsAt: at(50, 12),
+        directionId: tenseDirection,
+      });
+      // Beyond «Прошедшие» [−14, +1): one in the next step back, one far.
+      pastStepId = await makeEvent({
+        title: "20 дней назад",
+        startsAt: at(-20, 12),
+        directionId: tenseDirection,
+        state: "ended",
+      });
+      pastFarId = await makeEvent({
+        title: "50 дней назад",
+        startsAt: at(-50, 12),
+        directionId: tenseDirection,
         state: "ended",
       });
     }, 60_000);
@@ -577,6 +638,83 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const next = upcoming.days.flatMap((day) => day.items).at(0);
       expect(next).toBeDefined();
       expect(next?.recording).toBeUndefined();
+    });
+    it("NEW: «Будущие» lists today's not-started and live эфиры and never today's ended one (row 30)", async () => {
+      const feed = await readFeed({ specialtyCode: tenseCode });
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(todayNotStartedId);
+      expect(ids).toContain(todayLiveId);
+      expect(ids).not.toContain(todayEndedId);
+      // Soonest first.
+      expect(ids.indexOf(todayLiveId)).toBeLessThan(ids.indexOf(todayNotStartedId));
+      expect(
+        feed.days.flatMap((day) => day.items).every((item) => item.state !== "recorded"),
+      ).toBe(true);
+    });
+
+    it("NEW: «Прошедшие» lists today's ended эфир and never today's not-started or live one (row 30)", async () => {
+      const feed = await readFeed({ specialtyCode: tenseCode, query: "?tense=past" });
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toContain(todayEndedId);
+      expect(ids).not.toContain(todayNotStartedId);
+      expect(ids).not.toContain(todayLiveId);
+      expect(
+        feed.days.flatMap((day) => day.items).every((item) => item.state === "recorded"),
+      ).toBe(true);
+    });
+
+    it("NEW: «Прошедшие» reads newest first — days and the events within them (row 30, LD-13)", async () => {
+      const feed = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const days = feed.days.map((day) => day.day);
+      expect(days).toEqual([...days].sort().reverse());
+      const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(ids).toEqual([
+        pastMontageEventId,
+        pastRawEventId,
+        pastPreparingEventId,
+        pastAbsentEventId,
+      ]);
+    });
+
+    it("NEW: `nextBatch` is exactly the events the next widening step adds, beside `remaining` (row 32)", async () => {
+      const upcoming = await readFeed({ specialtyCode: tenseCode });
+      expect(upcoming.remaining).toBe(3);
+      expect(upcoming.nextBatch).toBe(2);
+      const widened = await readFeed({
+        specialtyCode: tenseCode,
+        query: `?from=${upcoming.from}&to=${upcoming.nextTo!}`,
+      });
+      const before = new Set(
+        upcoming.days.flatMap((day) => day.items.map((item) => item.id)),
+      );
+      const added = widened.days
+        .flatMap((day) => day.items.map((item) => item.id))
+        .filter((id) => !before.has(id));
+      expect([...added].sort()).toEqual([...upcomingStepIds].sort());
+      expect(added).not.toContain(upcomingFarId);
+      expect(widened.nextBatch).toBe(1);
+      expect(widened.remaining).toBe(1);
+
+      const past = await readFeed({ specialtyCode: tenseCode, query: "?tense=past" });
+      expect(past.remaining).toBe(2);
+      expect(past.nextBatch).toBe(1);
+      const older = await readFeed({
+        specialtyCode: tenseCode,
+        query: `?tense=past&from=${past.nextFrom!}&to=${past.to}`,
+      });
+      const olderIds = older.days.flatMap((day) => day.items.map((item) => item.id));
+      expect(olderIds).toContain(pastStepId);
+      expect(olderIds).not.toContain(pastFarId);
+      expect(older.totalCount - past.totalCount).toBe(past.nextBatch);
+    });
+
+    it("NEW: a published recording carries its duration for the card's «Запись · N мин» line (rows 10, 31)", async () => {
+      const feed = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const card = (id: string) =>
+        feed.days.flatMap((day) => day.items).find((item) => item.id === id);
+      expect(card(pastMontageEventId)?.recording?.durationSec).toBe(54 * 60);
+      expect(card(pastRawEventId)?.recording?.durationSec).toBeNull();
+      expect(card(pastAbsentEventId)?.recording?.durationSec).toBeNull();
     });
   },
 );

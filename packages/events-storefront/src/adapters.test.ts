@@ -9,6 +9,7 @@ const RECORDING = {
   secondaryKind: null,
   posterUrl: null,
   expectedBy: null,
+  durationSec: 3240,
 };
 
 describe("adaptPublicEventListing — the Academy read onto the one feed model", () => {
@@ -34,7 +35,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         ],
         counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
         pagination: { nextCursor: null, hasMore: true },
-        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28 },
+        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
       },
       { tense: "upcoming" },
     );
@@ -53,6 +54,21 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
       nextFrom: null,
     });
     expect(page.remaining).toBe(28);
+    // N of «Показать ещё N из M» is the api's next batch, carried as is.
+    expect(page.nextBatch).toBe(5);
+  });
+
+  it("NEW: a listing page without a horizon is a refused read, never a feed without «Показать ещё» (D2)", () => {
+    expect(() =>
+      adaptPublicEventListing(
+        {
+          data: [],
+          counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+          pagination: { nextCursor: "abc", hasMore: true },
+        },
+        { tense: "upcoming" },
+      ),
+    ).toThrow();
   });
 
   it("NEW: the Academy read's counts become the head summary — upcoming эфиры and their distinct schools (row 19)", () => {
@@ -61,7 +77,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         data: [],
         counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0 },
+        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0 },
       },
       { tense: "past" },
     );
@@ -75,13 +91,14 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
       secondaryKind: "raw",
       posterUrl: null,
       expectedBy: null,
+      durationSec: 2820,
     };
     const page = adaptPublicEventListing(
       {
         data: [{ ...base, state: "ended", recording }],
         counts: { upcoming: 0, past: 1, upcomingSchools: 0 },
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3 },
+        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3, nextBatch: 2 },
       },
       { tense: "past" },
     );
@@ -89,6 +106,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     expect(page.cards[0]?.recording).toEqual(recording);
     expect(page.horizon.nextFrom).toBe("2026-09-10");
     expect(page.remaining).toBe(3);
+    expect(page.nextBatch).toBe(2);
   });
 });
 
@@ -124,6 +142,7 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
         nextTo: "2026-11-05",
         nextFrom: null,
         remaining: 7,
+        nextBatch: 4,
         targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
       },
       { tense: "upcoming" },
@@ -145,6 +164,7 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
       nextFrom: null,
     });
     expect(page.remaining).toBe(7);
+    expect(page.nextBatch).toBe(4);
   });
 
   it("NEW: an ended doctor card is a past card carrying its recording projection", () => {
@@ -158,6 +178,7 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
         nextTo: null,
         nextFrom: null,
         remaining: 0,
+        nextBatch: 0,
         targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
       },
       { tense: "past" },

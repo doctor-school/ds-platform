@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
 import {
   MARKETING_COMMUNICATIONS_VERSION,
   MEDICAL_WORKER_DECLARATION_VERSION,
   PARTNER_DATA_SHARING_VERSION,
-} from './doctor-register.service.js';
+} from "./doctor-register.service.js";
 
 /**
  * 021 EARS-7 / ADR-0009 — the version a consent row carries names the WORDING
@@ -21,14 +21,14 @@ import {
  * `test/storefront/doctor-register-consents.e2e-spec.ts`, which takes these
  * constants symbolically; what is pinned HERE is which wording each names.
  */
-describe('021 EARS-7: the server-stamped consent wording versions', () => {
-  it('021 EARS-7.4: the re-worded access condition and opt-in name the #2027 canvas wording', () => {
-    expect(PARTNER_DATA_SHARING_VERSION).toBe('2026-09-22');
-    expect(MARKETING_COMMUNICATIONS_VERSION).toBe('2026-09-22');
+describe("021 EARS-7: the server-stamped consent wording versions", () => {
+  it("021 EARS-7.4: the re-worded access condition and opt-in name the #2027 canvas wording", () => {
+    expect(PARTNER_DATA_SHARING_VERSION).toBe("2026-09-22");
+    expect(MARKETING_COMMUNICATIONS_VERSION).toBe("2026-09-22");
   });
 
-  it('021 EARS-7.5: the unchanged declaration keeps its own earlier version', () => {
-    expect(MEDICAL_WORKER_DECLARATION_VERSION).toBe('2026-09');
+  it("021 EARS-7.5: the unchanged declaration keeps its own earlier version", () => {
+    expect(MEDICAL_WORKER_DECLARATION_VERSION).toBe("2026-09");
     // The three wordings version INDEPENDENTLY (that is why they are three
     // constants): re-wording two of them may never restamp the third.
     expect(MEDICAL_WORKER_DECLARATION_VERSION).not.toBe(

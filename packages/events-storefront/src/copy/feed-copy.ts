@@ -28,11 +28,17 @@ export const FEED_COPY = {
     soldOut: "мест не осталось",
     venueTime: (time: string, zone: string) => `На площадке ${time} ${zone}`,
     recordingCta: "Смотреть запись",
-    recording: {
-      montage: "Запись · монтаж",
-      "raw-only": "Запись эфира",
-      preparing: "Запись готовится",
+    /** «Запись · 54 мин» / «Запись · 1 ч 12 мин»; a cut of unrecorded length reads «Запись». */
+    recording: (durationSec: number | null) => {
+      if (durationSec === null) return "Запись";
+      const minutes = Math.max(1, Math.round(durationSec / 60));
+      const hours = Math.floor(minutes / 60);
+      const rest = minutes % 60;
+      return hours === 0
+        ? `Запись · ${minutes} мин`
+        : `Запись · ${hours} ч ${String(rest).padStart(2, "0")} мин`;
     },
+    noRecording: "Без записи",
   },
   live: {
     heading: "Идёт сейчас",

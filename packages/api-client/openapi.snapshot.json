@@ -2012,6 +2012,18 @@
                       },
                       "recording": {
                         "properties": {
+                          "durationSec": {
+                            "anyOf": [
+                              {
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "expectedBy": {
                             "anyOf": [
                               {
@@ -2067,7 +2079,8 @@
                           "primaryKind",
                           "secondaryKind",
                           "posterUrl",
-                          "expectedBy"
+                          "expectedBy",
+                          "durationSec"
                         ],
                         "type": "object"
                       },
@@ -2141,6 +2154,11 @@
           "from": {
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
+          },
+          "nextBatch": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "nextFrom": {
             "anyOf": [
@@ -2230,6 +2248,7 @@
           "nextTo",
           "nextFrom",
           "remaining",
+          "nextBatch",
           "targeting"
         ],
         "type": "object"
@@ -2705,6 +2724,18 @@
           },
           "recording": {
             "properties": {
+              "durationSec": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "expectedBy": {
                 "anyOf": [
                   {
@@ -2760,7 +2791,8 @@
               "primaryKind",
               "secondaryKind",
               "posterUrl",
-              "expectedBy"
+              "expectedBy",
+              "durationSec"
             ],
             "type": "object"
           },
@@ -3563,6 +3595,18 @@
                     },
                     "recording": {
                       "properties": {
+                        "durationSec": {
+                          "anyOf": [
+                            {
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "expectedBy": {
                           "anyOf": [
                             {
@@ -3618,7 +3662,8 @@
                         "primaryKind",
                         "secondaryKind",
                         "posterUrl",
-                        "expectedBy"
+                        "expectedBy",
+                        "durationSec"
                       ],
                       "type": "object"
                     },
@@ -3690,6 +3735,11 @@
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                 "type": "string"
               },
+              "nextBatch": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "nextFrom": {
                 "anyOf": [
                   {
@@ -3722,7 +3772,14 @@
                 "type": "string"
               }
             },
-            "required": ["from", "to", "nextTo", "nextFrom", "remaining"],
+            "required": [
+              "from",
+              "to",
+              "nextTo",
+              "nextFrom",
+              "remaining",
+              "nextBatch"
+            ],
             "type": "object"
           },
           "pagination": {

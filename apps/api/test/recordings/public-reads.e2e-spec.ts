@@ -334,10 +334,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         secondaryKind: null,
         posterUrl: "posters/1341.webp",
         expectedBy: null,
+        durationSec: null,
       });
       // The projection's own keys are the whole contract — a source field added
       // to it later would be caught here rather than in a guest's HTML.
       expect(Object.keys(body.recording).sort()).toEqual([
+        "durationSec",
         "expectedBy",
         "posterUrl",
         "primaryKind",
@@ -381,6 +383,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         primaryKind: null,
         secondaryKind: null,
         expectedBy: "2026-09-15",
+        durationSec: null,
       });
     });
 

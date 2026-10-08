@@ -90,6 +90,7 @@ describe("019 EARS-2 — DoctorEventCard payload", () => {
       secondaryKind: "raw" as const,
       posterUrl: null,
       expectedBy: null,
+      durationSec: null,
     };
     expect(
       DoctorEventCardSchema.safeParse({ ...BASE, state: "recorded", recording })

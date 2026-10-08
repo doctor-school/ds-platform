@@ -62,6 +62,9 @@ import { EVENT_CURSOR_SHAPE } from "../taxonomy/public-event-cursor.js";
  */
 export const AIR_WINDOW_MS = 6 * 60 * 60 * 1000;
 
+/** The cursor page's size when the read states none (014 EARS-11). */
+const PUBLIC_EVENT_LISTING_PAGE_SIZE = 20;
+
 export class InvalidEventListingCursorError extends Error {
   constructor() {
     super("this cursor was not issued by this API; start from the first page");
@@ -1226,6 +1229,12 @@ export class EventsService {
    * resolution ({@link resolveEventHorizon}, {@link resolveEventHorizonBeyond}) — or
    * the keyset cursor, which stays for other callers. The schema refuses the
    * two together.
+   *
+   * A read that states neither a bound nor a cursor page (`cursor` / `limit`)
+   * is the horizon read of the tense's DEFAULT extent — the bare `/webinars`
+   * and `?tense=past` the shared feed sends (D2, row 32) — exactly as the
+   * doctor feed resolves a read without bounds. Without it the bare read was a
+   * 20-card cursor page with no next bound, and «Показать ещё» never appeared.
    */
   async listPublicEvents(
     query: PublicEventListingQuery,
@@ -1234,7 +1243,11 @@ export class EventsService {
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
     const counts = await this.repo.publicListingCounts(cutoff);
 
-    if (query.from !== undefined || query.to !== undefined) {
+    const horizonRead =
+      query.from !== undefined ||
+      query.to !== undefined ||
+      (query.cursor === undefined && query.limit === undefined);
+    if (horizonRead) {
       const horizon = resolveEventHorizon(
         { tense: query.timeframe, from: query.from, to: query.to },
         doctorEventsFeedDayOf(now),
@@ -1265,12 +1278,13 @@ export class EventsService {
     }
 
     const after = decodeEventListingCursor(query.cursor);
+    const limit = query.limit ?? PUBLIC_EVENT_LISTING_PAGE_SIZE;
     const rows =
       query.timeframe === "past"
-        ? await this.repo.listPast(query.limit + 1, after)
-        : await this.repo.listUpcoming(cutoff, query.limit + 1, after);
-    const hasMore = rows.length > query.limit;
-    const pageRows = rows.slice(0, query.limit);
+        ? await this.repo.listPast(limit + 1, after)
+        : await this.repo.listUpcoming(cutoff, limit + 1, after);
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
     const next = hasMore ? pageRows.at(-1) : undefined;
 
     return {

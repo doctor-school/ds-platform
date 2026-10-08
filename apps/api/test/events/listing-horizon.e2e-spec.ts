@@ -218,9 +218,33 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(body.horizon?.nextTo).toBeNull();
     });
 
+    it("NEW: a read with no bound and no cursor is the horizon read of the tense's default extent — the bare `/webinars` and `?tense=past` (D2, row 32)", async () => {
+      const upcoming = await page("timeframe=upcoming");
+      expect(upcoming.horizon?.from).toBe(today);
+      expect(upcoming.horizon?.to).toBe(addDoctorEventsFeedDays(today, 14));
+      expect(upcoming.data.map((card) => card.id)).not.toContain(far.id);
+      expect(upcoming.horizon?.nextTo).not.toBeNull();
+      expect(upcoming.pagination.nextCursor).toBeNull();
+
+      const past = await page("timeframe=past");
+      expect(past.horizon?.from).toBe(addDoctorEventsFeedDays(today, -14));
+      expect(past.horizon?.to).toBe(addDoctorEventsFeedDays(today, 1));
+      expect(past.data.map((card) => card.id)).toContain(pastNear.id);
+      expect(past.data.map((card) => card.id)).not.toContain(pastOld.id);
+      // «Показать ещё» from the bare past read walks back to the −30 event.
+      let extent = past;
+      while (extent.horizon?.nextFrom) {
+        extent = await page(
+          `timeframe=past&from=${extent.horizon.nextFrom}&to=${past.horizon!.to}`,
+        );
+      }
+      expect(extent.data.map((card) => card.id)).toContain(pastOld.id);
+    });
+
     it("NEW: the cursor stays accepted, and never combines with a horizon", async () => {
-      const cursorPage = await page("timeframe=upcoming&limit=1");
-      expect(cursorPage.horizon).toBeUndefined();
+      expect((await list("timeframe=upcoming&cursor=abc")).statusCode).toBe(
+        400,
+      );
       expect(
         (await list(`timeframe=upcoming&cursor=abc&to=${today}`)).statusCode,
       ).toBe(400);
@@ -319,6 +343,31 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         pastAll.data.length - past.data.length,
       );
       expect(pastAll.horizon?.remaining).toBe(0);
+    });
+    it("NEW: `nextBatch` is exactly the events the next widening step adds, on both tenses (row 32)", async () => {
+      const to = addDoctorEventsFeedDays(today, 14);
+      const first = await page(`timeframe=upcoming&from=${today}&to=${to}`);
+      const widened = await page(
+        `timeframe=upcoming&from=${today}&to=${first.horizon!.nextTo!}`,
+      );
+      expect(first.horizon?.nextBatch).toBeGreaterThanOrEqual(1);
+      expect(first.horizon?.nextBatch).toBe(
+        widened.data.length - first.data.length,
+      );
+      expect(first.horizon!.nextBatch).toBeLessThanOrEqual(
+        first.horizon!.remaining,
+      );
+
+      const past = await page(
+        `timeframe=past&from=${addDoctorEventsFeedDays(today, -14)}`,
+      );
+      const older = await page(
+        `timeframe=past&from=${past.horizon!.nextFrom!}&to=${past.horizon!.to}`,
+      );
+      expect(past.horizon?.nextBatch).toBeGreaterThanOrEqual(1);
+      expect(past.horizon?.nextBatch).toBe(
+        older.data.length - past.data.length,
+      );
     });
   },
 );

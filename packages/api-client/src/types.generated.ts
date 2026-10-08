@@ -2591,6 +2591,7 @@ export interface components {
                     nmo: boolean;
                     pulCost: number;
                     recording?: {
+                        durationSec: number | null;
                         expectedBy: string | null;
                         posterUrl: string | null;
                         primaryKind: ("edited" | "raw") | null;
@@ -2611,6 +2612,7 @@ export interface components {
                 label: string;
             }[];
             from: string;
+            nextBatch: number;
             nextFrom: string | null;
             nextTo: string | null;
             remaining: number;
@@ -2746,6 +2748,7 @@ export interface components {
             programPdfUrl?: string;
             pulCost: number;
             recording: {
+                durationSec: number | null;
                 expectedBy: string | null;
                 posterUrl: string | null;
                 primaryKind: ("edited" | "raw") | null;
@@ -2930,6 +2933,7 @@ export interface components {
                     title: string;
                 };
                 recording: {
+                    durationSec: number | null;
                     expectedBy: string | null;
                     posterUrl: string | null;
                     primaryKind: ("edited" | "raw") | null;
@@ -2952,6 +2956,7 @@ export interface components {
             })[];
             horizon?: {
                 from: string;
+                nextBatch: number;
                 nextFrom: string | null;
                 nextTo: string | null;
                 remaining: number;

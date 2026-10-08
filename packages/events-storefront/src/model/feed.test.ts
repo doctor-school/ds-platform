@@ -126,6 +126,7 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
             secondaryKind: null,
             posterUrl: null,
             expectedBy: null,
+            durationSec: null,
           } as EventsFeedCard["recording"],
         }),
       ],
@@ -137,28 +138,52 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
     expect(JSON.stringify(item)).not.toMatch(/материал/i);
   });
 
-  it("NEW: doctor host — an ended event without a published cut renders no recording action", () => {
-    const [none, preparing] = build(
+  it("NEW: the past card's recording line follows the canvas — «Запись · <duration>» for a published cut, «Без записи» otherwise (rows 10, 31)", () => {
+    const published = (durationSec: number | null) =>
+      ({
+        state: "montage",
+        primaryKind: "edited",
+        secondaryKind: null,
+        posterUrl: null,
+        expectedBy: null,
+        durationSec,
+      }) as EventsFeedCard["recording"];
+    const [short, long, padded, unknown, none, preparing, offline] = build(
       [
-        card({ id: "a", state: "past", recording: null }),
+        card({ id: "a", state: "past", recording: published(54 * 60) }),
+        card({ id: "b", state: "past", recording: published(72 * 60) }),
+        card({ id: "c", state: "past", recording: published(65 * 60 + 10) }),
+        card({ id: "d", state: "past", recording: published(null) }),
+        card({ id: "e", state: "past", recording: null }),
         card({
-          id: "b",
+          id: "f",
           state: "past",
           recording: {
             state: "preparing",
             primaryKind: null,
             secondaryKind: null,
             posterUrl: null,
-            expectedBy: "2026-10-20T00:00:00.000Z",
+            expectedBy: "2026-10-20",
+            durationSec: null,
           } as EventsFeedCard["recording"],
         }),
+        card({ id: "g", state: "past", format: "offline", recording: null }),
       ],
       { tense: "past" },
     );
-    expect(none?.ctaLabel).toBeUndefined();
-    expect(none?.ctaHref).toBeUndefined();
-    expect(preparing?.ctaLabel).toBeUndefined();
-    expect(preparing?.recordingLabel).toBe("Запись готовится");
+    expect(short?.recordingLabel).toBe("Запись · 54 мин");
+    expect(short?.ctaLabel).toBe("Смотреть запись");
+    expect(long?.recordingLabel).toBe("Запись · 1 ч 12 мин");
+    expect(padded?.recordingLabel).toBe("Запись · 1 ч 05 мин");
+    expect(unknown?.recordingLabel).toBe("Запись");
+    expect(unknown?.ctaLabel).toBe("Смотреть запись");
+    for (const item of [none, preparing, offline]) {
+      expect(item?.recordingLabel).toBe("Без записи");
+      expect(item?.ctaLabel).toBeUndefined();
+      expect(item?.ctaHref).toBeUndefined();
+    }
+    // The canvas has no «готовится» state on a feed card.
+    expect(JSON.stringify([none, preparing, offline])).not.toMatch(/готовится/);
   });
 
   it("NEW: the past card renders no discussion link or control", () => {
@@ -210,9 +235,11 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
 
 describe("showMoreLabel", () => {
   it("NEW: «Показать ещё» states the next batch and the remainder", () => {
-    expect(showMoreLabel(57, FEED_COPY)).toBe("Показать ещё 20 из 57");
-    expect(showMoreLabel(3, FEED_COPY)).toBe("Показать ещё 3 из 3");
-    expect(showMoreLabel(0, FEED_COPY)).toBe("Показать ещё");
+    // N is the api's `nextBatch` — the events the next widening adds — never a
+    // fixed page size: a 14-day step holding 6 of 45 reads «6 из 45».
+    expect(showMoreLabel(6, 45, FEED_COPY)).toBe("Показать ещё 6 из 45");
+    expect(showMoreLabel(3, 3, FEED_COPY)).toBe("Показать ещё 3 из 3");
+    expect(showMoreLabel(0, 0, FEED_COPY)).toBe("Показать ещё");
   });
 });
 

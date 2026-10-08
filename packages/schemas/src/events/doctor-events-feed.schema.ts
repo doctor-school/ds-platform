@@ -143,6 +143,12 @@ export const DoctorEventsFeedSchema = z
      * «Показать ещё N из M»; `0` exactly when both next bounds are `null`.
      */
     remaining: z.number().int().nonnegative(),
+    /**
+     * The matching events the NEXT «показать ещё» step adds — the events in
+     * `[to, nextTo)` on «Будущие», `[nextFrom, from)` on «Прошедшие» — the N
+     * of «Показать ещё N из M»; `0` exactly when both next bounds are `null`.
+     */
+    nextBatch: z.number().int().nonnegative(),
     targeting: DoctorEventsFeedTargetingSchema,
   })
   .strict();

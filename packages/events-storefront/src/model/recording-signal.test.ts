@@ -17,6 +17,7 @@ function projection(
     secondaryKind: null,
     posterUrl: null,
     expectedBy: null,
+    durationSec: null,
     ...over,
   } as RecordingProjection;
 }

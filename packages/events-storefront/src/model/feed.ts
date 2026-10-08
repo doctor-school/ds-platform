@@ -69,11 +69,15 @@ export interface EventsFeedSummary {
   readonly schools: number;
 }
 
-/** One feed read, mapped. `remaining` = matching events beyond the extent. */
+/**
+ * One feed read, mapped. `remaining` = matching events beyond the extent (the
+ * M of «Показать ещё N из M»); `nextBatch` = the ones the next step adds (N).
+ */
 export interface EventsFeedPage {
   readonly cards: readonly EventsFeedCard[];
   readonly horizon: EventsFeedHorizon;
   readonly remaining: number;
+  readonly nextBatch: number;
   readonly summary?: EventsFeedSummary;
 }
 
@@ -91,9 +95,6 @@ export type EventsStorefrontAdapter = (
 export type BlockRead<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false };
-
-/** The batch «Показать ещё» states (the canvas `PER`). */
-export const FEED_PAGE_SIZE = 20;
 
 /** The live block's strip cap (019 «Amendment — 2026-10-05», «Live block»). */
 export const LIVE_STRIP_CAP = 2;
@@ -165,8 +166,17 @@ export function buildFeedItems(
       ...(venue
         ? { venueTimeLabel: copy.card.venueTime(venue.time, venue.zoneLabel) }
         : {}),
-      ...(isPast && card.recording
-        ? { recordingLabel: copy.card.recording[card.recording.state] }
+      // The canvas recording line (`events-feed-kit.js` `card()`): a published
+      // cut reads «Запись · <duration>» and offers «Смотреть запись»; anything
+      // else — no recording, an offline event, a cut still being prepared —
+      // reads «Без записи» with no action. One rule decides «published»:
+      // `isRecordingPlayable`, so the line and the button never disagree.
+      ...(isPast
+        ? {
+            recordingLabel: isRecordingPlayable(card.recording)
+              ? copy.card.recording(card.recording?.durationSec ?? null)
+              : copy.card.noRecording,
+          }
         : {}),
       ...(isPast && isRecordingPlayable(card.recording)
         ? { ctaHref: href, ctaLabel: copy.card.recordingCta }
@@ -183,10 +193,18 @@ export function buildFeedItems(
   });
 }
 
-/** «Показать ещё N из M» — N the next batch, M the remainder (the canvas `Math.min(PER, remaining)`). */
-export function showMoreLabel(remaining: number, copy: FeedCopy): string {
-  if (remaining <= 0) return copy.feed.showMore;
-  return copy.feed.showMoreOf(Math.min(FEED_PAGE_SIZE, remaining), remaining);
+/**
+ * «Показать ещё N из M» — N the events the next widening adds (the api's
+ * `nextBatch`), M the remainder (`remaining`). The widening is a day step, not
+ * a fixed page, so N is read off the data, never a page size.
+ */
+export function showMoreLabel(
+  nextBatch: number,
+  remaining: number,
+  copy: FeedCopy,
+): string {
+  if (remaining <= 0 || nextBatch <= 0) return copy.feed.showMore;
+  return copy.feed.showMoreOf(nextBatch, remaining);
 }
 
 export interface LiveStripProps {

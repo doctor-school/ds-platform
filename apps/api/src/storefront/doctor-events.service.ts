@@ -15,6 +15,9 @@ import {
   doctorEventsMonthNextFirstDay,
   doctorEventsMonthOf,
   formatDoctorEventsFeedDayLabel,
+  MONTH_BROADCAST_STATES,
+  PAST_BROADCAST_STATES,
+  UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
 import { eventEconomyFacts } from "../events/event-economy-facts.js";
 import {
@@ -105,7 +108,17 @@ export class DoctorEventsService {
         ? null
         : [...targeting.directionIds, ...targeting.adjacentDirectionIds];
 
+    // Row 30 — the tense is the lifecycle split the Academy listing applies,
+    // read in its own order: «Будущие» soonest first, «Прошедшие» newest first.
+    const tenseRead = {
+      states:
+        query.tense === "past"
+          ? PAST_BROADCAST_STATES
+          : UPCOMING_BROADCAST_STATES,
+      order: query.tense === "past" ? "desc" : "asc",
+    } as const;
     const rows = await this.repository.findFeedRows({
+      ...tenseRead,
       directionIds,
       ...eventHorizonInstants(horizon),
       kindSlugs: query.kind,
@@ -125,6 +138,7 @@ export class DoctorEventsService {
       query.tense,
       async (range) => {
         const beyondRows = await this.repository.findFeedRows({
+          ...tenseRead,
           directionIds,
           ...range,
           kindSlugs: query.kind,
@@ -151,6 +165,7 @@ export class DoctorEventsService {
       nextTo: beyond.nextTo,
       nextFrom: beyond.nextFrom,
       remaining: beyond.remaining,
+      nextBatch: beyond.nextBatch,
       targeting,
     };
   }
@@ -210,6 +225,8 @@ export class DoctorEventsService {
       fromDay >= endDay
         ? []
         : await this.repository.findFeedRows({
+            states: MONTH_BROADCAST_STATES,
+            order: "asc",
             directionIds:
               targeting.mode === "all"
                 ? null

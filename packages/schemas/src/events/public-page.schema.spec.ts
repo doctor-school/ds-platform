@@ -89,6 +89,7 @@ describe("EventPageView economy facts", () => {
       secondaryKind: null,
       posterUrl: null,
       expectedBy: null,
+      durationSec: null,
     },
     format: "online",
     seatsLeft: null,

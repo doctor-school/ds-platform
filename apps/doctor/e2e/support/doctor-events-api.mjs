@@ -74,21 +74,35 @@ const WIDENED_DAY = {
 const ALL_DAYS = [...BASE_DAYS, WIDENED_DAY];
 
 /**
- * «Прошедшие» (019 LD-13, gate rows 29–31) — ended events, served NEWEST FIRST
- * the way the real service orders the past reading. Two ended events sit inside
- * the default past window: one with a published recording (the card offers
- * «Смотреть запись») and one with nothing published (no recording action at
- * all); one older event lies beyond the window so «Показать ещё» widens `from`
- * backward to it.
+ * «Прошедшие» (019 LD-13, gate rows 29–31) — ended events only, served NEWEST
+ * FIRST: the real service selects the past tense by lifecycle
+ * (`PAST_BROADCAST_STATES`) and orders it `starts_at DESC`
+ * (`DoctorEventsRepository.findFeedRows`, proven against the database in
+ * `doctor-events-feed.e2e-spec.ts`). The default past window is the service's
+ * `[today − 14, tomorrow)` with this fixture's today (2026-09-01). Two ended
+ * events sit inside it: one with a published 54-minute recording («Запись · 54
+ * мин» + «Смотреть запись») and one with nothing published — the `preparing`
+ * projection the real service attaches to every ended card without a published
+ * cut («Без записи», no action); one older event lies beyond the window so
+ * «Показать ещё» widens `from` backward to it.
  */
 const PAST_DEFAULT_FROM = "2026-08-18";
-const PAST_DEFAULT_TO = "2026-09-01";
+const PAST_DEFAULT_TO = "2026-09-02";
 const PUBLISHED_RECORDING = {
   state: "montage",
   primaryKind: "edited",
   secondaryKind: "raw",
   posterUrl: null,
   expectedBy: null,
+  durationSec: 54 * 60,
+};
+const NOTHING_PUBLISHED = {
+  state: "preparing",
+  primaryKind: null,
+  secondaryKind: null,
+  posterUrl: null,
+  expectedBy: null,
+  durationSec: null,
 };
 const PAST_DAYS = [
   {
@@ -105,7 +119,10 @@ const PAST_DAYS = [
     day: "2026-08-20",
     label: "20 августа, четверг",
     items: [
-      card("past-no-cut", "2026-08-20T09:00:00.000Z", { state: "recorded" }),
+      card("past-no-cut", "2026-08-20T09:00:00.000Z", {
+        state: "recorded",
+        recording: NOTHING_PUBLISHED,
+      }),
     ],
   },
   {
@@ -150,15 +167,19 @@ const dayGap = (from, to) =>
       86_400_000,
   );
 
-/** `null` when no past fixture day lies before `from`; else the covering step boundary. */
-function nextFromBefore(from) {
+/**
+ * The real `resolveEventHorizonBeyond` past branch: the next `from` is
+ * `to − (width + k·STEP)`, k the fewest whole steps that cover the newest
+ * fixture day before `from`; `null` when none lies before it.
+ */
+function nextFromBefore(from, to) {
   const before = PAST_DAYS.map((group) => group.day)
     .filter((day) => day < from)
     .sort()
     .at(-1);
   if (before === undefined) return null;
-  const steps = Math.floor(dayGap(before, from) / HORIZON_STEP_DAYS) + 1;
-  return addDays(from, -steps * HORIZON_STEP_DAYS);
+  const steps = Math.ceil(dayGap(before, from) / HORIZON_STEP_DAYS);
+  return addDays(to, -(dayGap(from, to) + steps * HORIZON_STEP_DAYS));
 }
 
 const itemCount = (days) =>
@@ -370,7 +391,7 @@ const server = createServer((request, response) => {
       const days = PAST_DAYS.filter(
         (group) => group.day >= from && group.day < to,
       );
-      const nextFrom = nextFromBefore(from);
+      const nextFrom = nextFromBefore(from, to);
       return json(response, 200, {
         tense: "past",
         from,
@@ -380,6 +401,15 @@ const server = createServer((request, response) => {
         nextTo: null,
         nextFrom,
         remaining: itemCount(PAST_DAYS.filter((group) => group.day < from)),
+        // N of «Показать ещё N из M»: the events the next step adds.
+        nextBatch:
+          nextFrom === null
+            ? 0
+            : itemCount(
+                PAST_DAYS.filter(
+                  (group) => group.day >= nextFrom && group.day < from,
+                ),
+              ),
         targeting: {
           mode: "general",
           specialtyReference: null,
@@ -436,6 +466,13 @@ const server = createServer((request, response) => {
         nextTo === null
           ? 0
           : itemCount(ALL_DAYS.filter((group) => group.day >= to)),
+      // N: the events in `[to, nextTo)` — what the next step adds.
+      nextBatch:
+        nextTo === null
+          ? 0
+          : itemCount(
+              ALL_DAYS.filter((group) => group.day >= to && group.day < nextTo),
+            ),
       targeting: {
         mode: "general",
         specialtyReference: null,

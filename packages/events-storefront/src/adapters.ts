@@ -40,14 +40,14 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
       recording: "recording" in card ? card.recording : null,
     }),
   );
-  // The feed always reads the horizon form (D2); a cursor page carries none.
-  const horizon = page.horizon ?? {
-    from: "",
-    to: "",
-    nextTo: null,
-    nextFrom: null,
-    remaining: 0,
-  };
+  // The feed always reads the horizon form (D2, `feedReadQuery`). A page
+  // without one is a cursor page — a read the feed never makes — and rendering
+  // it would silently drop «Показать ещё», so it is refused: the block shows
+  // its error state (019 EARS-9) instead.
+  const horizon = page.horizon;
+  if (horizon === undefined) {
+    throw new Error("The Academy feed read answered without its horizon");
+  }
   return {
     cards,
     horizon: {
@@ -57,6 +57,7 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
       nextFrom: horizon.nextFrom,
     },
     remaining: horizon.remaining,
+    nextBatch: horizon.nextBatch,
     summary: { events: page.counts.upcoming, schools: page.counts.upcomingSchools },
   };
 };
@@ -100,5 +101,6 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
       nextFrom: feed.nextFrom,
     },
     remaining: feed.remaining,
+    nextBatch: feed.nextBatch,
   };
 };

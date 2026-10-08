@@ -31,6 +31,7 @@ const CONFIG = {
       cards: [],
       horizon: { from: "", to: "", nextTo: null, nextFrom: null },
       remaining: 0,
+      nextBatch: 0,
     }),
   },
   routes: {

@@ -158,6 +158,7 @@ const PREPARING_PROJECTION = {
   secondaryKind: null,
   posterUrl: null,
   expectedBy: null,
+  durationSec: null,
 };
 
 function service(storage: RecordingStorage, repo: unknown): EventsService {

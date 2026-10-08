@@ -55,6 +55,7 @@ describe("014 EARS-3 edited-over-raw projection (fold)", () => {
       // The primary cut's poster, not the raw one that happened to arrive first.
       posterUrl: "edited-poster",
       expectedBy: null,
+      durationSec: null,
     });
   });
 
@@ -67,6 +68,7 @@ describe("014 EARS-3 edited-over-raw projection (fold)", () => {
       secondaryKind: null,
       posterUrl: null,
       expectedBy: null,
+      durationSec: null,
     });
   });
 
@@ -79,6 +81,7 @@ describe("014 EARS-3 edited-over-raw projection (fold)", () => {
       secondaryKind: null,
       posterUrl: "raw-poster",
       expectedBy: null,
+      durationSec: null,
     });
   });
 
@@ -89,6 +92,7 @@ describe("014 EARS-3 edited-over-raw projection (fold)", () => {
       secondaryKind: null,
       posterUrl: null,
       expectedBy: "2026-09-01",
+      durationSec: null,
     });
   });
 
@@ -229,6 +233,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         secondaryKind: "raw",
         posterUrl: "edited-poster",
         expectedBy: null,
+        durationSec: null,
       });
       expect(
         await projection.resolveRecordingProjection(editedOnly),
@@ -246,6 +251,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         secondaryKind: null,
         posterUrl: null,
         expectedBy: "2026-09-15",
+        durationSec: null,
       });
     });
 

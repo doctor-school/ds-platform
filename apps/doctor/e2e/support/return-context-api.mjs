@@ -90,6 +90,7 @@ const EVENT = {
     secondaryKind: null,
     posterUrl: null,
     expectedBy: null,
+    durationSec: null,
   },
 };
 

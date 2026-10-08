@@ -62,6 +62,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
           secondaryKind: null,
           posterUrl: null,
           expectedBy: null,
+          durationSec: null,
         },
       }),
     );
@@ -84,6 +85,16 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
         to: "22.10.2026",
       }).success,
     ).toBe(false);
+  });
+
+  it("NEW: a bare tense read states no page size — it is the horizon read of the default extent, not a cursor page (D2, row 32)", () => {
+    const bare = PublicEventListingQuerySchema.safeParse({ timeframe: "past" });
+    expect(bare.success).toBe(true);
+    if (!bare.success) return;
+    expect(bare.data.limit).toBeUndefined();
+    expect(bare.data.cursor).toBeUndefined();
+    const paged = PublicEventListingQuerySchema.safeParse({ timeframe: "past", limit: "1" });
+    expect(paged.success && paged.data.limit).toBe(1);
   });
 
   it("NEW: the cursor stays accepted for other callers, but never beside a horizon", () => {
@@ -113,6 +124,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
         nextTo: "2026-11-05",
         nextFrom: null,
         remaining: 3,
+        nextBatch: 2,
       },
     });
     expect(parsed.success).toBe(true);
@@ -134,12 +146,14 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
         nextTo: null,
         nextFrom: "2026-08-27",
         remaining: 4,
+        nextBatch: 1,
       },
     });
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.horizon?.nextFrom).toBe("2026-08-27");
     expect(parsed.data.horizon?.remaining).toBe(4);
+    expect(parsed.data.horizon?.nextBatch).toBe(1);
     expect(
       PublicEventListingPageSchema.safeParse({
         ...base,

@@ -98,6 +98,7 @@ const PAGE: EventsFeedPage = {
   cards: [CARD],
   horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null },
   remaining: 57,
+  nextBatch: 6,
 };
 
 const strip = (n: number) => ({
@@ -228,7 +229,7 @@ describe("<EventsFeedView> — the feed view of both storefronts", () => {
       }),
     );
     const more = screen.getByTestId("events-feed-show-more");
-    expect(more).toHaveTextContent("Показать ещё 20 из 57");
+    expect(more).toHaveTextContent("Показать ещё 6 из 57");
     expect(more).toHaveAttribute("href", "/events?from=2026-10-08&to=2026-11-05");
   });
 

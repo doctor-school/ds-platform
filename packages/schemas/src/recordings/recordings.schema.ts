@@ -248,6 +248,12 @@ export const RecordingProjectionSchema = z.object({
    * malformed or non-existent day cannot leave through the read model either.
    */
   expectedBy: RecordingExpectedBySchema.nullable(),
+  /**
+   * The PRIMARY cut's `event_recordings.duration_sec` — the «Запись · 54 мин»
+   * of a past card. `null` while `preparing` and when the cut's duration was
+   * never recorded.
+   */
+  durationSec: z.number().int().positive().nullable(),
 });
 export type RecordingProjection = z.infer<typeof RecordingProjectionSchema>;
 

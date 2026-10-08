@@ -1,5 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, count, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { DrizzleHandle, Event, EventRecording } from "@ds/db";
 import { eventRecordings, events } from "@ds/db";
 import {
@@ -43,6 +53,7 @@ export interface ProjectionRow {
   recordingExpectedBy: string | null;
   kind: RecordingKind | null;
   posterRef: string | null;
+  durationSec: number | null;
 }
 
 /**
@@ -151,10 +162,7 @@ export class RecordingsRepository {
   }
 
   async insert(tx: Tx, values: RecordingInsert): Promise<EventRecording> {
-    const [row] = await tx
-      .insert(eventRecordings)
-      .values(values)
-      .returning();
+    const [row] = await tx.insert(eventRecordings).values(values).returning();
     if (!row) throw new Error("recording insert returned no row");
     return row;
   }
@@ -218,6 +226,7 @@ export class RecordingsRepository {
         recordingExpectedBy: events.recordingExpectedBy,
         kind: eventRecordings.kind,
         posterRef: eventRecordings.posterRef,
+        durationSec: eventRecordings.durationSec,
       })
       .from(events)
       .leftJoin(

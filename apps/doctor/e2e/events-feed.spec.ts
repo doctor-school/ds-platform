@@ -112,6 +112,11 @@ test("gate rows 29–31: «Прошедшие» groups by month newest first, wi
     .filter({ hasText: "Событие past-no-cut" });
   await expect(noCut.getByRole("link")).toHaveCount(1);
   await expect(noCut.getByText("Смотреть запись")).toHaveCount(0);
+  // The canvas recording line: a published cut reads its length, nothing
+  // published reads «Без записи» — never «Запись готовится».
+  await expect(recorded).toContainText("Запись · 54 мин");
+  await expect(noCut).toContainText("Без записи");
+  await expect(page.getByText("Запись готовится")).toHaveCount(0);
 
   // The live block and «Мои события» belong to «Будущие».
   await expect(page.locator('[data-feed-block="live"]')).toHaveCount(0);
@@ -120,7 +125,7 @@ test("gate rows 29–31: «Прошедшие» groups by month newest first, wi
   // «Показать ещё» widens the past extent BACKWARD: `from` moves, `to` stays.
   await page.getByTestId("events-feed-show-more").click();
   await expect(page).toHaveURL(
-    /\/events\?tense=past&from=2026-07-21&to=2026-09-01$/,
+    /\/events\?tense=past&from=2026-07-21&to=2026-09-02$/,
   );
   await expect(groups).toHaveCount(2);
   await expect(groups.nth(1)).toHaveAttribute("id", "day-2026-07");

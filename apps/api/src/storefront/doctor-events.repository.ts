@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   and,
   asc,
+  desc,
   eq,
   gte,
   ilike,
@@ -25,6 +26,10 @@ import {
   type EventParticipationFormat,
   MONTH_BROADCAST_STATES,
 } from "@ds/schemas";
+
+/** A lifecycle set a feed read selects — one tense's, or the month grid's. */
+export type DoctorFeedStates =
+  readonly (typeof MONTH_BROADCAST_STATES)[number][];
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "../events/event-direction-restriction.js";
 import { countEventSignUps } from "../events/event-sign-ups.js";
@@ -83,6 +88,15 @@ const FEED_ROW_COLUMNS = {
 const DOCTOR_AUDIENCE = eq(events.audience, "doctors");
 
 export interface DoctorFeedFilters {
+  /**
+   * The lifecycle set the read selects (wave-2 gate row 30): «Будущие» =
+   * `UPCOMING_BROADCAST_STATES`, «Прошедшие» = `PAST_BROADCAST_STATES` — the
+   * split the Academy listing applies — so a not-yet-ended эфир is never past
+   * and an ended one never upcoming, whatever window the read covers.
+   */
+  states: DoctorFeedStates;
+  /** `asc` = soonest first («Будущие», the month grid); `desc` = newest first («Прошедшие», LD-13). */
+  order: "asc" | "desc";
   /** `null` = targeting off (`specialty=all`); `[]` = a targeted read with no reachable direction. */
   directionIds: string[] | null;
   /** Half-open horizon `[fromInstant, toInstant)` in UTC. */
@@ -114,7 +128,7 @@ export class DoctorEventsRepository {
     const where = [
       eq(events.recordStatus, "active"),
       DOCTOR_AUDIENCE,
-      inArray(events.state, [...MONTH_BROADCAST_STATES]),
+      inArray(events.state, [...filters.states]),
       gte(events.startsAt, filters.fromInstant),
       lt(events.startsAt, filters.toInstant),
     ];
@@ -168,7 +182,11 @@ export class DoctorEventsRepository {
       .from(events)
       .innerJoin(eventKinds, eq(eventKinds.id, events.kindId))
       .where(and(...where))
-      .orderBy(asc(events.startsAt), asc(events.id));
+      .orderBy(
+        ...(filters.order === "desc"
+          ? [desc(events.startsAt), desc(events.id)]
+          : [asc(events.startsAt), asc(events.id)]),
+      );
 
     return rows as DoctorFeedRow[];
   }

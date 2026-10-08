@@ -56,6 +56,7 @@ const VIEW: HostFreeEventPageView = {
     secondaryKind: null,
     posterUrl: null,
     expectedBy: null,
+    durationSec: null,
   },
   format: "online",
   seatsLeft: null,

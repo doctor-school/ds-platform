@@ -92,6 +92,11 @@ export interface EventHorizonBeyond {
   nextFrom: string | null;
   /** Matching events the widest horizon still reaches beyond the extent; `0` ⇔ both bounds `null`. */
   remaining: number;
+  /**
+   * Matching events the NEXT step adds — inside `[nextFrom, from)` /
+   * `[to, nextTo)` — the N of «Показать ещё N из M»; `0` ⇔ both bounds `null`.
+   */
+  nextBatch: number;
 }
 
 /**
@@ -124,6 +129,7 @@ export async function resolveEventHorizonBeyond(
     nextTo: null,
     nextFrom: null,
     remaining: 0,
+    nextBatch: 0,
   };
   const width = doctorEventsFeedHorizonWidth(horizon.from, horizon.to);
   if (width >= DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS) return none;
@@ -155,13 +161,20 @@ export async function resolveEventHorizonBeyond(
     const nearestDay = doctorEventsFeedDayOf(new Date(Math.max(...times)));
     const gap = doctorEventsFeedHorizonWidth(nearestDay, horizon.from);
     const steps = Math.ceil(gap / STEP);
+    const nextFrom = addDoctorEventsFeedDays(
+      horizon.to,
+      -Math.min(width + steps * STEP, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
+    );
+    // The same half-open instants the widened read selects with.
+    const { fromInstant } = eventHorizonInstants({
+      from: nextFrom,
+      to: horizon.to,
+    });
     return {
       nextTo: null,
-      nextFrom: addDoctorEventsFeedDays(
-        horizon.to,
-        -Math.min(width + steps * STEP, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-      ),
+      nextFrom,
       remaining: starts.length,
+      nextBatch: times.filter((time) => time >= fromInstant.getTime()).length,
     };
   }
 
@@ -169,12 +182,18 @@ export async function resolveEventHorizonBeyond(
   const nearestDay = doctorEventsFeedDayOf(new Date(Math.min(...times)));
   const gap = doctorEventsFeedHorizonWidth(horizon.to, nearestDay);
   const steps = Math.floor(gap / STEP) + 1;
+  const nextTo = addDoctorEventsFeedDays(
+    horizon.from,
+    Math.min(width + steps * STEP, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
+  );
+  const { toInstant } = eventHorizonInstants({
+    from: horizon.from,
+    to: nextTo,
+  });
   return {
-    nextTo: addDoctorEventsFeedDays(
-      horizon.from,
-      Math.min(width + steps * STEP, DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS),
-    ),
+    nextTo,
     nextFrom: null,
     remaining: starts.length,
+    nextBatch: times.filter((time) => time < toInstant.getTime()).length,
   };
 }

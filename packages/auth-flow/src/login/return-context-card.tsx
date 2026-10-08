@@ -94,19 +94,30 @@ function PanelBody({
 function PlateBody({
   copy,
   event,
+  variant,
 }: {
   copy: AuthFlowReturnContextCopy;
   event: ReturnContextEvent;
+  variant: ReturnContextVariant;
 }) {
   return (
     <div
       data-testid="return-context-plate"
       className="-mx-gutter-sm bg-muted px-gutter-sm pt-4 pb-1 layout:hidden"
     >
-      <p className="mb-1.5 text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
+      {/* The canvas mobile strip (auth.dc.html 44): 11px/800/.14em uppercase —
+          the wide panel's eyebrow tracking. The colour is the muted ink, not the
+          canvas's inkFaint: `text-faint` on `bg-muted` is 4.31:1 light / 3.93:1
+          dark, under the 4.5:1 floor for 11px text (#2465). */}
+      <p className="mb-1.5 text-eyebrow font-extrabold uppercase tracking-eyebrow text-muted-foreground">
         {copy.eyebrow}
       </p>
       <ReturnEventCard event={event} />
+      {/* The door's assurance line under the card (auth.dc.html 46): 13px on the
+          1.55 line in inkMuted — the same sentence the wide panel carries (#2465). */}
+      <p className="mt-2.5 mb-3 text-caption leading-prose text-muted-foreground">
+        {copy[variant]}
+      </p>
     </div>
   );
 }
@@ -129,16 +140,20 @@ export function ReturnContextPanel({
   ) : null;
 }
 
-/** The mobile composition: the card as the plate above the form, full-bleed across the column. */
+/** The mobile composition: the card as the plate above the form, full-bleed across the column, with the door's assurance line. */
 export function ReturnContextPlate({
   config,
   event,
+  variant,
 }: {
   config: CardConfig;
   event: ReturnContextEvent;
+  variant: ReturnContextVariant;
 }) {
   const copy = resolveAuthFlowCopy(config).returnContext;
-  return copy ? <PlateBody copy={copy} event={event} /> : null;
+  return copy ? (
+    <PlateBody copy={copy} event={event} variant={variant} />
+  ) : null;
 }
 
 /**
@@ -161,6 +176,6 @@ export function returnContextSlots({
   }
   return {
     panel: <PanelBody copy={copy} event={event} variant={variant} />,
-    plate: <PlateBody copy={copy} event={event} />,
+    plate: <PlateBody copy={copy} event={event} variant={variant} />,
   };
 }

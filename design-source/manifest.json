@@ -210,14 +210,16 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "events-feed-kit.js": {
-      "sha256": "fe4dbe4987d7ee1d2db915da4bd754a76841dee582e41c05124161603398efad",
-      "pulledAt": "2026-10-05T12:30:31.480Z",
-      "remotePath": "events-feed-kit.js"
+      "sha256": "e6a16d9bde189e401ba546e51e406adb9d541e2506427dcf8e15fefe8f9de812",
+      "pulledAt": "2026-10-08T03:06:37.224Z",
+      "remotePath": "events-feed-kit.js",
+      "note": "Redraw #2646 (2026-10-08 pull): live card pill «В эфире»; upcoming cards «Коллег записались: N»"
     },
     "events-feed.dc.html": {
-      "sha256": "9cee02f345b7a03ac81db58a698f647661212a5feebf3c5196a5eb6731606149",
-      "pulledAt": "2026-10-05T12:30:32.659Z",
-      "remotePath": "events-feed.dc.html"
+      "sha256": "10e714e7f1a29ed05f430306d7c0158ff78213a208510aa529c00c8592f10c23",
+      "pulledAt": "2026-10-08T03:06:36.190Z",
+      "remotePath": "events-feed.dc.html",
+      "note": "Redraw #2646 (2026-10-08 pull): live card pill «В эфире»; upcoming cards «Коллег записались: N»"
     },
     "room.dc.html": {
       "sha256": "c4412357fe81a2c26782d3835da3731e6cc4c3492ec8d5ea090b5be7a18abd63",

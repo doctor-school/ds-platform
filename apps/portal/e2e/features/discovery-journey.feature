@@ -8,8 +8,10 @@
 # Verification `all` row: a guest opens a sponsor-distributed direct link → reads
 # the page → opens the listing → clicks a card → back, across the upcoming / live /
 # ended / hidden lifecycle states. The whole run rides a deliberately non-Moscow
-# browser timezone (playwright.config `bdd` project, America/New_York), so the МСК
-# labels prove no viewer-local drift globally (EARS-12), not just in one tagged step.
+# browser timezone (playwright.config `bdd` project, America/New_York), so the
+# listing's time rule is proven against a real viewer zone: an online or hybrid
+# card reads in the viewer's zone with that zone's label, an offline card stays
+# МСК (004 «Amendment — 2026-10-02», EARS-12 as amended).
 #
 # Seeded fixture events (004↔007 fixture seam, parent #549): the journey drives the
 # shared seeded lifecycle events (apps/api/scripts/seed-events.ts), read by slug from
@@ -29,7 +31,7 @@ Feature: 004 Public webinar discovery — a guest reads an event page and scans 
     Then the full event page is server-rendered without authentication
     And the page carries the title, a МСК start time, and one «Участвовать» CTA
     When the guest opens the upcoming-broadcasts listing
-    Then the seeded upcoming event appears as a card labeled МСК
+    Then the seeded upcoming event appears as a card labeled with the viewer's zone
     When the guest activates that listing card
     Then the guest lands on that same event's page
     When the guest navigates back to the listing
@@ -66,11 +68,11 @@ Feature: 004 Public webinar discovery — a guest reads an event page and scans 
     When the guest opens the seeded live event's page
     Then the event page shows the same «В эфире» signal
 
-  # --- Cross-cutting: МСК presentation with no viewer-local drift (US-2/US-6) ---
+  # --- Cross-cutting: the viewer-zone time rule (US-2/US-6; 004 «Amendment — 2026-10-02») ---
 
   @EARS-12 @happy
-  Scenario: Times render in МСК regardless of the viewer's timezone
+  Scenario: Listing times follow the viewer's zone for online and hybrid events and МСК for offline ones
     Given a guest opens the seeded upcoming event by its direct link
     Then every time on the page is labeled МСК with no drift to the viewer timezone
     When the guest opens the upcoming-broadcasts listing
-    Then every time on the listing is labeled МСК with no drift to the viewer timezone
+    Then every online or hybrid card time reads in the viewer's zone and every offline card time in МСК

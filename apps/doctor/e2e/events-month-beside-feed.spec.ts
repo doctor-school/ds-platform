@@ -39,7 +39,7 @@ test("EARS-4.1: the month calendar and the day feed are shown at once on desktop
   await page.goto("/events");
 
   const calendar = page.locator("[data-events-month]");
-  const feed = page.locator("[data-events-feed]");
+  const feed = page.getByTestId("events-feed");
 
   // «Shown at once» is the whole clause — neither pane replaces the other.
   await expect(calendar).toBeVisible();

@@ -431,80 +431,56 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       expect(page.url()).toBe(urlBefore); // client-side presentation state only
     });
 
-    test(`owner verdict #3: static shell — hero band + content column stay pixel-identical across a Неделя⇄Месяц round-trip (${theme})`, async ({
+    test(`gate row 50: the feed view's head is the canvas head — title, subline, tense tabs, no hero taglines (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
-
-      // The «Месяц» pane's shell.
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
-      await applyTheme(page, theme);
-      await expect(page.getByTestId("month-toolbar")).toBeVisible();
-      const monthHero = await page.locator("main header").boundingBox();
-      const monthColumn = await page
-        .getByTestId("month-toolbar")
-        .evaluate((el) => {
-          const r = el.parentElement!.getBoundingClientRect();
-          return { left: r.left, right: r.right, width: r.width };
-        });
-      const monthSwitcher = await page
-        .getByTestId("view-switcher")
-        .boundingBox();
-
-      // The «Неделя» pane's shell — same CalendarShell, only the content swaps.
       await page.goto("/webinars", { waitUntil: "domcontentloaded" });
       await applyTheme(page, theme);
-      await expect(page.getByTestId("week-toolbar")).toBeVisible();
-      const weekHero = await page.locator("main header").boundingBox();
-      const weekColumn = await page
-        .getByTestId("week-toolbar")
-        .evaluate((el) => {
-          const r = el.parentElement!.getBoundingClientRect();
-          return { left: r.left, right: r.right, width: r.width };
-        });
-      const weekSwitcher = await page.getByTestId("view-switcher").boundingBox();
 
-      expect(monthHero).not.toBeNull();
-      expect(weekHero).not.toBeNull();
-      // The navy hero band: same position + width, same height (single-line copy).
-      expect(weekHero!.x).toBeCloseTo(monthHero!.x, 0);
-      expect(weekHero!.y).toBeCloseTo(monthHero!.y, 0);
-      expect(weekHero!.width).toBeCloseTo(monthHero!.width, 0);
-      expect(Math.abs(weekHero!.height - monthHero!.height)).toBeLessThanOrEqual(2);
-      // The content column edges never jump (the 1104⇄1240 defect, owner item 3).
-      expect(weekColumn.left).toBeCloseTo(monthColumn.left, 0);
-      expect(weekColumn.right).toBeCloseTo(monthColumn.right, 0);
-      expect(Math.abs(weekColumn.width - monthColumn.width)).toBeLessThanOrEqual(0.5);
-      // The «Неделя / Месяц» switcher sits at the same top-right position in both.
-      expect(monthSwitcher).not.toBeNull();
-      expect(weekSwitcher).not.toBeNull();
-      expect(weekSwitcher!.y).toBeCloseTo(monthSwitcher!.y, 0);
-      expect(weekSwitcher!.x + weekSwitcher!.width).toBeCloseTo(
-        monthSwitcher!.x + monthSwitcher!.width,
-        0,
+      const head = page.locator('[data-feed-block="head"]');
+      await expect(head).toBeVisible();
+      await expect(
+        head.getByRole("heading", { level: 1, name: "Расписание эфиров" }),
+      ).toBeVisible();
+      // Row 19: the counted subline «N эфиров · M школ» (plain digits).
+      await expect(head.getByTestId("events-feed-subline-counts")).toHaveText(
+        /^\d+ эфир(а|ов)? · \d+ школ(а|ы)?$/,
       );
+      const tabs = head.getByTestId("events-tense-tabs");
+      await expect(tabs.getByRole("tab")).toHaveText(["Прошедшие", "Будущие"]);
+      await expect(tabs.getByRole("tab", { name: "Будущие" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      // The month view is one link away from the head until PR 2.5.
+      await expect(head.getByTestId("events-month-view-link")).toHaveAttribute(
+        "href",
+        "/webinars?view=month",
+      );
+
+      // The Academy hero taglines leave the head (row 50) and the cursor-era
+      // in-list tabs and «Неделя / Месяц» switcher are gone from the feed view.
+      await expect(page.getByText("Врачи учат врачей")).toHaveCount(0);
+      await expect(page.getByText("Бесплатно · без бюрократии")).toHaveCount(0);
+      await expect(page.getByTestId("view-switcher")).toHaveCount(0);
+      await expect(page.getByTestId("event-list-tabs")).toHaveCount(0);
     });
 
-    test(`owner verdict #7: / permanent-redirects to the canonical /webinars, and nav «Эфиры» from an event page lands there (${theme})`, async ({
+    test(`owner verdict #7: nav «Эфиры» from an event page points at the canonical /webinars and lands on the feed view (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
 
-      // `/` permanent-redirects to the single canonical listing route: the
-      // browser lands on `/webinars` with the week listing + «Неделя / Месяц»
-      // switchers (no second, switcher-less front-door hero remains).
-      await page.goto("/", { waitUntil: "domcontentloaded" });
+      // `/` is the Academy home (#1313); the canonical listing is `/webinars`.
+      await page.goto("/webinars", { waitUntil: "domcontentloaded" });
       await applyTheme(page, theme);
-      await expect(page).toHaveURL(/\/webinars$/);
-      await expect(page.getByTestId("week-toolbar")).toBeVisible();
-      await expect(
-        page.getByTestId("view-switcher").getByText("Месяц"),
-      ).toBeVisible();
+      await expect(page.getByTestId("events-feed-view")).toBeVisible();
 
       // From an event detail page the nav «Эфиры» link points straight at
-      // `/webinars` (no `/` hop) and navigates back to the canonical listing.
+      // `/webinars` and navigates back to the canonical listing.
       const eventHref = await page
-        .getByTestId("week-listbody")
+        .getByTestId("events-feed")
         .locator("a[href^='/webinars/']")
         .first()
         .getAttribute("href");
@@ -517,7 +493,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await expect(broadcastsNav).toHaveAttribute("href", "/webinars");
       await broadcastsNav.click();
       await page.waitForURL("**/webinars");
-      await expect(page.getByTestId("week-toolbar")).toBeVisible();
+      await expect(page.getByTestId("events-feed-view")).toBeVisible();
     });
 
     test(`owner verdict #4: the picker year ‹ › pages in place — popover stays open, counters swap, no navigation (${theme})`, async ({
@@ -615,24 +591,25 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await expect(yearLabel).toHaveText(String(startYear));
     });
 
-    test(`owner verdict #6: the «Неделя» pane list body clears the navy hero — no day-heading overlap (${theme})`, async ({
+    test(`owner verdict #6: the feed body clears the navy head — no day-heading overlap (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto("/webinars", { waitUntil: "domcontentloaded" });
       await applyTheme(page, theme);
 
-      await expect(page.getByTestId("week-toolbar")).toBeVisible();
-      const heroBox = await page.locator("main header").boundingBox();
-      const listBox = await page.getByTestId("week-listbody").boundingBox();
-      expect(heroBox).not.toBeNull();
-      expect(listBox).not.toBeNull();
+      const head = page.locator('[data-feed-block="head"]');
+      const feed = page.getByTestId("events-feed");
+      await expect(feed).toBeVisible();
+      const headBox = await head.boundingBox();
+      const feedBox = await feed.boundingBox();
+      expect(headBox).not.toBeNull();
+      expect(feedBox).not.toBeNull();
 
-      // The week list body (its first day-group heading — bare text, no card)
-      // starts at or below the hero band's bottom edge; it no longer rides up
-      // onto the navy (regression from #1098's shared-shell unification).
-      expect(listBox!.y).toBeGreaterThanOrEqual(
-        heroBox!.y + heroBox!.height - 0.5,
+      // The day feed (its first day-group heading) starts at or below the head
+      // band's bottom edge; it never rides up onto the navy.
+      expect(feedBox!.y).toBeGreaterThanOrEqual(
+        headBox!.y + headBox!.height - 0.5,
       );
     });
 

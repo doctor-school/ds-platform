@@ -7,7 +7,9 @@ import { Given, Then, When } from "../support/fixtures";
  * link → reads the page → opens the listing → clicks a card → back, across the
  * upcoming / live / ended / hidden lifecycle states, driven on the live dev
  * stand. The whole journey rides a non-Moscow timezone (playwright.config `bdd`
- * project, America/New_York) so the МСК labels prove no viewer-local drift (EARS-12).
+ * project, America/New_York): the event page stays МСК, and the listing proves
+ * the viewer-zone rule (004 «Amendment — 2026-10-02») — an online or hybrid card
+ * reads in the viewer's zone with its label, an offline card in МСК.
  *
  * 004 is the PUBLIC read side — every step here is a genuine GUEST (cookies cleared,
  * no session), unlike the 005 registration journey. Fixture events are the shared
@@ -30,6 +32,13 @@ const SEED = {
 
 const PARTICIPATE = "Участвовать";
 const LIVE_LABEL = "В эфире";
+
+/**
+ * The `bdd` project's viewer zone, America/New_York, as `formatEventTime` labels
+ * it: «GMT-4» under daylight time, «GMT-5» under standard time — whichever the
+ * card's own instant falls in.
+ */
+const VIEWER_ZONE_LABEL = /GMT-[45]/;
 
 /** Map an EARS-4 outline `state` token to its seeded slug. */
 function slugForState(state: string): string {
@@ -92,19 +101,25 @@ When("the guest opens the upcoming-broadcasts listing", async ({ page, context }
   // populated list settle. A genuinely empty listing still shows the empty-state
   // after the reload, so this never masks a real regression (it just removes a
   // first-compile race from the seeded discovery arc).
-  const emptyState = page.getByText("Нет предстоящих эфиров");
+  const emptyState = page.getByTestId("events-feed-empty");
   if (await emptyState.isVisible().catch(() => false)) {
     await page.reload({ waitUntil: "networkidle" });
   }
 });
 
 Then(
-  "the seeded upcoming event appears as a card labeled МСК",
+  "the seeded upcoming event appears as a card labeled with the viewer's zone",
   async ({ page, world }) => {
-    // EARS-8: the seeded upcoming event is a card linking to its page, МСК-labeled.
-    const card = page.locator(`a[href="/webinars/${world.slug}"]`).first();
+    // EARS-8: the seeded upcoming event is a card linking to its page. The seed
+    // is an online event, so after hydration its time plate reads in the
+    // viewer's zone with that zone's label (004 «Amendment — 2026-10-02»).
+    const card = page.locator("[data-webinar-card]", {
+      has: page.locator(`a[href="/webinars/${world.slug}"]`),
+    });
     await expect(card).toBeVisible();
-    await expect(card).toContainText("МСК");
+    await expect(card.locator("[data-time-plate]")).toContainText(
+      VIEWER_ZONE_LABEL,
+    );
   },
 );
 
@@ -217,7 +232,11 @@ Then(
   "the seeded live event's card shows the «В эфире» signal",
   async ({ page, world }) => {
     world.slug = SEED.live;
-    const card = page.locator(`a[href="/webinars/${world.slug}"]`).first();
+    // The feed card, not the «Идёт сейчас» strip above the feed that links the
+    // same event page.
+    const card = page.getByTestId("events-feed").locator("[data-webinar-card]", {
+      has: page.locator(`a[href="/webinars/${world.slug}"]`),
+    });
     await expect(card).toBeVisible();
     // The live signal is inside the card itself (derived from state === 'live').
     await expect(card).toContainText(LIVE_LABEL);
@@ -249,8 +268,26 @@ Then(
 );
 
 Then(
-  "every time on the listing is labeled МСК with no drift to the viewer timezone",
+  "every online or hybrid card time reads in the viewer's zone and every offline card time in МСК",
   async ({ page }) => {
-    await expect(page.locator("body")).toContainText("МСК");
+    const cards = page.getByTestId("events-feed").locator("[data-webinar-card]");
+    await expect(cards.first()).toBeVisible();
+    const count = await cards.count();
+    for (let index = 0; index < count; index++) {
+      const card = cards.nth(index);
+      const format = (
+        (await card.locator("[data-event-format-label]").textContent()) ?? ""
+      ).trim();
+      const plate = card.locator("[data-time-plate]");
+      if (format === "Офлайн") {
+        // An offline event is attended at the venue: its time stays Moscow time.
+        await expect(plate).toContainText("МСК");
+      } else {
+        // Online and hybrid re-format to the viewer's zone after hydration.
+        expect(["Онлайн", "Гибрид"]).toContain(format);
+        await expect(plate).toContainText(VIEWER_ZONE_LABEL);
+        await expect(plate).not.toContainText("МСК");
+      }
+    }
   },
 );

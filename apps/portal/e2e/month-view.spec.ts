@@ -7,9 +7,9 @@ import { expect, test, type Page } from "@playwright/test";
  * picker + switcher BEHAVIOUR the sibling fidelity pin (`month-fidelity.spec.ts`)
  * does not: the ‹ › pager re-renders the grid + heading for the chosen month and
  * stays in month view; the 12-month picker shows per-month counts with past
- * months muted («прошёл») and selecting a month navigates to it; the «Неделя /
- * Месяц» switcher round-trips loss-free in BOTH directions (a carried month is
- * restored). Pure query-param navigation — no auth, no client state mutation.
+ * months muted («прошёл») and selecting a month navigates to it; the month
+ * pane's «Неделя» link and the feed view's «Календарь на месяц →» round-trip
+ * loss-free in BOTH directions (a carried month is restored). Pure query-param navigation — no auth, no client state mutation.
  *
  * `test.skip`s on a bare CI run (no `E2E_PORTAL_URL`), like the sibling live-stand
  * specs. The reference month arithmetic is anchored to fixed months (September →
@@ -82,10 +82,11 @@ test.describe("004 EARS-17/18 month navigation, picker, switcher", () => {
     await expect(h1(page)).toHaveText("Ноябрь 2026");
   });
 
-  test("EARS-18: «Неделя ↔ Месяц» switcher round-trips loss-free in both directions", async ({
+  test("EARS-18: the month pane and the feed view round-trip loss-free in both directions", async ({
     page,
   }) => {
-    // Month → week: the displayed month is carried on the «Неделя» link.
+    // Month → feed: the displayed month is carried on the «Неделя» link and
+    // passes through the feed URL unchanged (gate §4.3 D1).
     await page.goto("/webinars?view=month&month=2026-09", {
       waitUntil: "domcontentloaded",
     });
@@ -93,22 +94,21 @@ test.describe("004 EARS-17/18 month navigation, picker, switcher", () => {
       .getByTestId("view-switcher")
       .getByRole("link", { name: "Неделя" })
       .click();
-    await expect(page).toHaveURL(/\/webinars\?month=2026-09/);
-    // The week pane renders with its own switcher (the «Неделя» side active).
-    const weekSwitcher = page.getByTestId("view-switcher");
-    await expect(weekSwitcher.getByText("Неделя")).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await expect(page).toHaveURL(/\/webinars\?month=2026-09$/);
+    // The feed view renders with «Будущие» selected.
+    await expect(page.getByTestId("events-feed-view")).toBeVisible();
+    await expect(
+      page.getByTestId("events-tense-tabs").getByRole("tab", { name: "Будущие" }),
+    ).toHaveAttribute("aria-selected", "true");
 
-    // Week → month: «Месяц» restores the carried month (loss-free).
-    await weekSwitcher.getByRole("link", { name: "Месяц" }).click();
+    // Feed → month: «Календарь на месяц →» restores the carried month (loss-free).
+    await page.getByTestId("events-month-view-link").click();
     await expect(page).toHaveURL(/[?&]view=month/);
     await expect(page).toHaveURL(/[?&]month=2026-09/);
     await expect(h1(page)).toHaveText(HEADINGS["2026-09"]);
   });
 
-  test("EARS-18: both panes render for an unauthenticated visitor (no cookie)", async ({
+  test("EARS-18: the month pane and the feed view render for an unauthenticated visitor (no cookie)", async ({
     page,
     context,
   }) => {
@@ -119,7 +119,8 @@ test.describe("004 EARS-17/18 month navigation, picker, switcher", () => {
     await expect(page.getByTestId("month-grid-desktop")).toBeVisible();
 
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("view-switcher")).toBeVisible();
-    await expect(h1(page)).toBeVisible();
+    await expect(page.getByTestId("events-feed-view")).toBeVisible();
+    await expect(page.getByTestId("events-month-view-link")).toBeVisible();
+    await expect(h1(page)).toHaveText("Расписание эфиров");
   });
 });

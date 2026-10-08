@@ -81,7 +81,7 @@ test.describe("017 EARS-5: the header search narrows the shipped feed", () => {
   }) => {
     await page.goto("/events", { waitUntil: "domcontentloaded" });
 
-    const feed = page.locator("[data-events-feed]");
+    const feed = page.getByTestId("events-feed");
     await expect(feed).toBeVisible();
     const cards = feed.locator('a[href^="/events/"]');
     const before = await cards.count();
@@ -105,7 +105,7 @@ test.describe("017 EARS-5: the header search narrows the shipped feed", () => {
       new RegExp(`/events\\?[^#]*q=${encodeURIComponent(term!)}`, "i"),
     );
 
-    const narrowed = page.locator("[data-events-feed]");
+    const narrowed = page.getByTestId("events-feed");
     await expect(narrowed).toBeVisible();
     const after = await narrowed.locator('a[href^="/events/"]').count();
     // The feed ANSWERED the query: the matching card survived, and the listing

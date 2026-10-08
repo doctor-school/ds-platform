@@ -1,0 +1,137 @@
+import { describe, expect, it } from "vitest";
+
+import { adaptDoctorEventsFeed, adaptPublicEventListing } from "./adapters";
+
+const KIND = { id: "k-1", slug: "webinar", title: "Вебинар" };
+
+describe("adaptPublicEventListing — the Academy read onto the one feed model", () => {
+  const base = {
+    id: "11111111-1111-4111-8111-111111111111",
+    slug: "a-1",
+    title: "Эфир",
+    school: "Школа",
+    startsAt: "2026-10-20T16:00:00.000Z",
+    specialties: ["Кардиология"],
+    speakers: [{ name: "Иванов И. И." }],
+    kind: KIND,
+    format: "online",
+    signUpCount: 12,
+  };
+
+  it("maps upcoming / live / ended cards, the horizon and the remainder of the tense", () => {
+    const page = adaptPublicEventListing(
+      {
+        data: [
+          { ...base, state: "published" },
+          { ...base, id: "22222222-2222-4222-8222-222222222222", slug: "a-2", state: "live" },
+        ],
+        counts: { upcoming: 30, past: 4 },
+        pagination: { nextCursor: null, hasMore: true },
+        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05" },
+      },
+      { tense: "upcoming" },
+    );
+    expect(page.cards.map((c) => c.state)).toEqual(["upcoming", "live"]);
+    expect(page.cards[0]).toMatchObject({
+      kindTitle: "Вебинар",
+      format: "online",
+      signUpCount: 12,
+      speakers: ["Иванов И. И."],
+      recording: null,
+    });
+    expect(page.horizon).toEqual({
+      from: "2026-10-08",
+      to: "2026-10-22",
+      nextTo: "2026-11-05",
+    });
+    expect(page.remaining).toBe(28);
+  });
+
+  it("a past card carries its recording projection", () => {
+    const recording = {
+      state: "montage",
+      primaryKind: "edited",
+      secondaryKind: "raw",
+      posterUrl: null,
+      expectedBy: null,
+    };
+    const page = adaptPublicEventListing(
+      {
+        data: [{ ...base, state: "ended", recording }],
+        counts: { upcoming: 0, past: 1 },
+        pagination: { nextCursor: null, hasMore: false },
+        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null },
+      },
+      { tense: "past" },
+    );
+    expect(page.cards[0]?.state).toBe("past");
+    expect(page.cards[0]?.recording).toEqual(recording);
+    expect(page.remaining).toBe(0);
+  });
+});
+
+describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", () => {
+  const card = {
+    id: "d-1",
+    slug: "d-1",
+    href: "/events/d-1",
+    startsAt: "2026-10-20T16:00:00.000Z",
+    endsAt: "2026-10-20T17:00:00.000Z",
+    format: "offline",
+    kind: KIND,
+    title: "Событие",
+    speaker: "Петров П. П.",
+    source: "Проект",
+    nmo: false,
+    pulCost: 0,
+    signUpCount: 5,
+    city: "Казань",
+    state: "normal",
+  };
+
+  it("maps the day groups flat, the horizon, and leaves the remainder unknown", () => {
+    const page = adaptDoctorEventsFeed(
+      {
+        tense: "upcoming",
+        from: "2026-10-08",
+        to: "2026-10-22",
+        days: [
+          { day: "2026-10-20", label: "20 октября", items: [card, { ...card, id: "d-2", slug: "d-2", state: "live" }] },
+        ],
+        totalCount: 2,
+        nextTo: null,
+        targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
+      },
+      { tense: "upcoming" },
+    );
+    expect(page.cards.map((c) => c.state)).toEqual(["upcoming", "live"]);
+    expect(page.cards[0]).toMatchObject({
+      school: "Проект",
+      speakers: ["Петров П. П."],
+      kindTitle: "Вебинар",
+      city: "Казань",
+      nmo: false,
+      pulCost: 0,
+      recording: null,
+    });
+    expect(page.horizon).toEqual({ from: "2026-10-08", to: "2026-10-22", nextTo: null });
+    expect(page.remaining).toBeNull();
+  });
+
+  it("an ended doctor card is a past card that carries no recording projection", () => {
+    const page = adaptDoctorEventsFeed(
+      {
+        tense: "past",
+        from: "2026-09-24",
+        to: "2026-10-09",
+        days: [{ day: "2026-10-01", label: "1 октября", items: [{ ...card, state: "recorded" }] }],
+        totalCount: 1,
+        nextTo: null,
+        targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
+      },
+      { tense: "past" },
+    );
+    expect(page.cards[0]?.state).toBe("past");
+    expect(page.cards[0]?.recording).toBeNull();
+  });
+});

@@ -160,12 +160,24 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # "003 EARS-1/41/10" code/auto-session assertions -> registration.steps.ts.
     # Keep that broader registration/confirmation/logout test intact.
 
-  @EARS-3 @failure
+  @EARS-3 @EARS-13 @failure @email-confirmation @expired-email-confirmation
   Scenario: Expired email verification code is rejected
-    Given a registrant whose email verification code has expired
-    When the registrant submits that code
-    Then a generic failure is returned
-    And the attempt counts against the OTP attempt limit
+    Given the live email-verification generator lifetime has been read back for this run
+    And an Academy visitor with a unique never-registered email
+    When the visitor submits the Academy registration form with a policy-conforming password and accepted consent versions
+    Then the Academy code step has a fresh delivered confirmation code that remains unconsumed
+    When the fresh delivered confirmation code has aged through that complete real lifetime in the original tab
+    And the registrant enters that same delivered expired code once in the original Academy tab
+    Then Academy rejects that confirmation generically on the same verification step without navigation or private access
+    And the real expired refusal has exactly one masked failed-attempt record and leaves the account unverified
+    # Live proof: real elapsed IdP-generator TTL, same delivered code, browser 400,
+    # unchanged form/no private access, scoped read-only VerifyFailed ledger 0 -> 1.
+    # OTP attempt-limit accounting is separate retained HTTP boundary evidence:
+    # apps/api/test/auth/abuse-limits.e2e-spec.ts EARS-13 registration /verify
+    # admits exactly three refused submissions then 429. RateLimitGuard consumes
+    # before verify; AuthController refunds/resets only after successful verify.
+    # A ledger row alone does not prove a limiter debit; fake wrong-code API
+    # checks do not prove real expiry. Keep both evidence layers attributed.
 
   @EARS-5 @EARS-8 @happy
   Scenario: Log in with password and establish a BFF session

@@ -228,6 +228,35 @@ suite drives a captcha-gated step yet; the first one calls the helper.
 
 ## Running this suite against a staging slot
 
+The 003 **Expired email verification code is rejected** scenario automatically
+reads the live Zitadel `SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE` generator's
+`expiry` and six-digit configuration for every run. It validates the Academy
+host and IdP origin against the real staging configuration before reading the
+operator PAT, which remains in memory. `E2E_EMAIL_VERIFICATION_TTL_MS` is optional;
+when supplied, it must exactly match the live readback. Invalid or out-of-bounds
+readbacks fail the scenario; mail copy is not configuration evidence.
+With the live `3600s` lifetime, this
+case naturally waits one hour plus two seconds after retrieving the fresh mail.
+Only its own timeout grows, with UTC progress every minute. It changes no clock,
+generator, database value or shared rate-limit setting.
+
+The same scenario runs on the validated `main` Academy HTTPS slot in the
+unfiltered release suite and on per-PR slots using `pnpm e2e:stage <slot> --project
+academy --grep 'Expired email verification code is rejected'`. SSH operator access
+(`DS_STAGE_SSH`, default from the slot tool) is required: the existing SSH and
+slot naming helpers address the canonical API container (`main-api` or
+`pr-<N>-api`) and execute a bounded read-only query inside that slot's API
+container before the wait and after refusal. The query returns only a count and
+booleans, never the email, code, password, database credentials or HMAC pepper.
+Commands are recorded in `.scratch/stand-ops-2696.log`.
+
+The browser proves natural expiry of the same delivered code, generic refusal,
+no private access and exactly one masked failure record. OTP limiter debit is
+separate retained HTTP evidence in `apps/api/test/auth/abuse-limits.e2e-spec.ts`
+(EARS-13 registration `/verify`: three refused attempts then `429`), supported
+by the guard/controller consume-before-handler and refund-only-on-success path.
+The slot's broad functional ceilings are not lowered to reach that boundary.
+
 `pnpm --filter @ds/e2e test:e2e` runs whatever `E2E_PORTAL_URL` / `E2E_DOCTOR_URL` point
 at. The supported way to point them at a converged staging slot is
 [`pnpm e2e:stage <slot>`](../../tools/staging/README.md#regression-run-pnpm-e2estage-slot):

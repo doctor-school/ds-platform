@@ -290,3 +290,22 @@ Run on a lead-owned, converged PR slot:
 ```sh
 pnpm e2e:stage pr-<N> --project academy --grep "Registration is refused without consent"
 ```
+
+### Sign-in method switching (003 EARS-43)
+
+`The typed address survives a switch between the sign-in methods` drives the
+Academy password and code tabs without submitting an auth command. It asserts
+the exact email in both directions, an empty password on return, and the same
+account return target in the address bar and registration/reset links. It also
+asserts that the typed E.164 phone selects SMS and survives the return switch:
+Academy's `LoginDoor` serves the shared `AUTH_FLOW_CHANNELS` email/SMS constant.
+This is channel-selection proof, without an SMS send or sign-in claim.
+
+`steps/identifier-switch.steps.ts` reuses the host/auth fixtures and secret-safe
+input helper. The existing `login-card.test.tsx` EARS-43 component and request
+tests remain; no exactly matching app-local browser test was removed. The
+separate direct code-link login journey remains unchanged.
+
+```sh
+pnpm e2e:stage pr-<N> --project academy --grep "The typed address survives a switch between the sign-in methods"
+```

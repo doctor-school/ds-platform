@@ -829,7 +829,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the doctor's own profile is readable through the BFF
     And neither the login response nor JavaScript-readable browser stores expose access or refresh tokens
 
-  @EARS-43 @happy
+  @EARS-43 @happy @identifier-switch
   Scenario: The typed address survives a switch between the sign-in methods
     Given a guest on /login with the «Пароль» method
     When the guest types their email and a password, then switches to «По коду»
@@ -837,6 +837,13 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the guest edits the email and switches back to «Пароль»
     Then the edited email is in the identifier field
     And a typed phone number opens «По коду» on the phone channel where the storefront serves it
+    And the method switches preserve the account return context without sending credentials or code requests
+    # Academy serves email and SMS through @ds/auth-flow AUTH_FLOW_CHANNELS.
+    # No SMS delivery, sign-in, error-state reset or other-host claim here.
+    # Existing mapping: packages/design-system/src/blocks/login-card.test.tsx
+    # "003 EARS-43: the typed identifier carries..." and "a carried phone..."
+    # -> identifier-switch.steps.ts. Retain unit/channel-request coverage;
+    # no exactly matching app-local browser test exists to remove.
 
   @EARS-44 @happy
   Scenario: A valid hand-off reference opens the code step with the code already sent

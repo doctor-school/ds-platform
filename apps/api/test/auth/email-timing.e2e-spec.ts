@@ -23,6 +23,7 @@ import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SmtpMailer } from "../../src/mailer/smtp-mailer.js";
 import { createBoundedSmtpTransport } from "../../src/mailer/smtp-transport.js";
 import { ChannelRejection } from "../../src/mailer/relay-channel.js";
+import { RESEND_DOMAINS_URL } from "../../src/mailer/resend-transport.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -81,7 +82,22 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
                 from: "sender@ds.test",
               },
         isEnabled: () => scenario !== "smtp-stall",
-        observability: { relayFailure, failover, accepted },
+        // 003 EARS-32: one terminal chain outcome per send; a provider-failure
+        // on the SMTP primary is the step onto the next channel.
+        observability: {
+          attempt: (event) => {
+            if (
+              event.provider !== "resend" &&
+              event.outcome === "provider-failure"
+            )
+              failover(event);
+          },
+          chain: (event) =>
+            (event.outcome.startsWith("accepted-by-")
+              ? accepted
+              : relayFailure)(event),
+          configurationError: (event) => relayFailure(event),
+        },
         transportFactory: fallback
           ? () => ({
               sendMail: async () => {
@@ -98,7 +114,10 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
         resend: {
           enabled: fallback,
           apiKey: "test",
-          fetchFn: (async () => {
+          fetchFn: (async (input: string | URL | Request) => {
+            // 003 EARS-46: the readiness probe sends no message; count sends only.
+            if (String(input) === RESEND_DOMAINS_URL)
+              return new Response("{}", { status: 200 });
             // Exercise the actual Resend channel with delayed final rejection.
             await new Promise((resolve) => setTimeout(resolve, 350));
             fallbackFinished++;

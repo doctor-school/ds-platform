@@ -529,6 +529,9 @@ flowchart TD
   RS -->|recipient-permanent| R
   RS -->|ambiguous| X
   RS -->|provider-failure| E
+  P -->|budget expired| B[Stop: stopped-budget]
+  MR -->|budget expired| B
+  RS -->|budget expired| B
 ```
 
 - **Order and activation.** One ordered chain: **Postbox** (SMTP, `postbox.cloud.yandex.net:465`, implicit TLS with hostname/certificate verification, API key ID/secret as SMTP username/password; required primary in real mode; all recipient domains, no domain routing) → **mail.ru** (SMTP, `smtp.mail.ru:465`) → **Resend** (HTTP). The primary is selected by the explicit `IDP_SMTP_REAL_PROVIDER` discriminator (`postbox`; the pre-activation `mail.ru` primary stays selectable, and then no mail.ru reserve exists). No credential-presence heuristic promotes a channel. The mail.ru reserve joins only with its own explicit enable switch **and** a complete credential set; Resend joins only with its existing enable switch **and** API key. A disabled or absent channel is skipped and is never counted or reported as operational reserve. An enabled channel with incomplete credentials is a **startup configuration error** (an explicit switch is intent, never a silent skip), as are a mail.ru reserve while the primary is also mail.ru, and missing, unknown or mismatched primary configuration — including when the Unleash flag selects real mode after startup; none of them falls through to Mailpit or another provider. Intercept delivery is possible only when explicitly selected by the existing flag/env contract (§14.2). Secrets stay in the operator secret store/environment, never in repository files or diagnostics.

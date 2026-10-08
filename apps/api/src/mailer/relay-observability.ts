@@ -1,86 +1,84 @@
 import { Logger } from "@nestjs/common";
 import * as Sentry from "@sentry/node";
 import { Counter, register } from "prom-client";
+import type { AttemptOutcome } from "./relay-channel.js";
 
-/** One failed provider attempt. `detail` is ALREADY redacted (EARS-30). */
+/** 003 EARS-32 terminal chain outcomes. */
+export type ChainOutcome =
+  | `accepted-by-${string}`
+  | "stopped-recipient-permanent"
+  | "stopped-ambiguous"
+  | "stopped-budget"
+  | "exhausted";
+
+/** One provider attempt with its EARS-45 class. `code` is ALREADY bounded. */
 export interface RelayAttempt {
+  /** The actual provider called — `postbox` / `mail.ru` / `resend` / `mailpit`. */
   provider: string;
-  /** Provider response code — SMTP `451`, HTTP `429`, or an errno string. */
+  outcome: AttemptOutcome;
+  /** SMTP `451` / `550 5.1.1`, HTTP `429`, an errno label or `accepted`. */
   code: string;
-  detail?: string | undefined;
 }
 
-/** The active channel rejected the send and the chain switched (EARS-31). */
-export interface FailoverEvent {
+export interface AttemptEvent extends RelayAttempt {
   /** Mail-class context (e.g. `verification-code email`) — never a recipient. */
   context: string;
-  /** The rejecting provider. */
-  from: string;
-  /** Its response code. */
-  code: string;
-  /** The channel the send switched to. */
-  to: string;
-  detail?: string | undefined;
 }
 
-/** Every channel failed — the send failed closed with all provider codes. */
-export interface RelayFailureEvent {
+/** Exactly one per send (003 EARS-32). */
+export interface ChainEvent {
   context: string;
+  outcome: ChainOutcome;
+  /** Disabled or absent chain channels — never counted as reserve. */
+  skipped: number;
   attempts: RelayAttempt[];
-  outcome?: "configuration" | "uncertain" | "failure";
+}
+
+/** Invalid selected configuration; nothing was sent anywhere. */
+export interface ConfigurationErrorEvent {
+  context: string;
+  provider: string;
 }
 
 /**
- * Prometheus counter for every mailer failover / relay failure (003 EARS-32,
- * #1046): `bff_mailer_relay_events_total{event, provider, code}`. Label values
- * distinguish accepted primary/fallback, uncertain, configuration and failure. Registered in the prom-client DEFAULT registry — the exposition
- * endpoint lands with the engineering-readiness Prometheus slice (DEBT.md).
+ * Prometheus counter for every attempt, terminal chain outcome and
+ * configuration error (003 EARS-32): `bff_mailer_relay_events_total{event,
+ * provider, outcome, code, skipped}`. Registered in the prom-client DEFAULT
+ * registry — the exposition endpoint lands with the engineering-readiness
+ * Prometheus slice (DEBT.md).
  */
 export const MAILER_RELAY_EVENTS_METRIC = "bff_mailer_relay_events_total";
 
-type RelayLabel = "event" | "provider" | "code";
+type RelayLabel = "event" | "provider" | "outcome" | "code" | "skipped";
 
-/**
- * Get-or-create the relay counter in the default registry — idempotent across
- * repeated construction (prom-client throws on a duplicate registration) and
- * across `register.clear()` in tests.
- */
+/** Get-or-create in the default registry — idempotent across `register.clear()`. */
 function relayCounter(): Counter<RelayLabel> {
   const existing = register.getSingleMetric(MAILER_RELAY_EVENTS_METRIC);
   if (existing) return existing as Counter<RelayLabel>;
   return new Counter<RelayLabel>({
     name: MAILER_RELAY_EVENTS_METRIC,
-    help: "BFF mailer relay events (003 EARS-32): failovers and relay failures by provider and provider response code.",
-    labelNames: ["event", "provider", "code"],
+    help: "BFF mailer relay events (003 EARS-32): attempts by actual provider and outcome class, terminal chain outcomes, configuration errors.",
+    labelNames: ["event", "provider", "outcome", "code", "skipped"],
   });
 }
 
 /**
- * The observability port of the 003 §14.3 failover chain (EARS-32, #1046).
- * `SmtpMailer.dispatch` reports every channel switch and every fail-closed
- * send here; the unit specs inject a recording fake.
- *
- * EARS-30 contract for callers: every `detail` field handed in is ALREADY
- * redacted (the one-time code never reaches a sink through this port).
+ * The observability port of the 003 §14.3 chain (EARS-32). `SmtpMailer`
+ * reports every attempt, one terminal outcome per send and configuration
+ * errors here; the unit specs inject a recording fake. Callers hand in bounded
+ * codes only (EARS-30).
  */
-export interface AcceptanceEvent {
-  context: string;
-  provider: string;
-  route: "primary" | "fallback" | "intercept";
-}
-
 export interface RelayObservability {
-  accepted?(event: AcceptanceEvent): void;
-  /** The active channel rejected the send and the chain switched (EARS-31). */
-  failover(event: FailoverEvent): void;
-  /** Every channel failed — the send failed closed with all provider codes. */
-  relayFailure(event: RelayFailureEvent): void;
+  attempt(event: AttemptEvent): void;
+  chain(event: ChainEvent): void;
+  configurationError(event: ConfigurationErrorEvent): void;
 }
 
 export type CaptureLevel = "warning" | "error";
 
 /** Sink overrides for the unit specs; production uses Logger + Sentry defaults. */
 export interface RelayObservabilitySinks {
+  log?: ((line: string) => void) | undefined;
   warn?: ((line: string) => void) | undefined;
   error?: ((line: string) => void) | undefined;
   /** GlitchTip event sink — defaults to `Sentry.captureMessage` (no-op without a DSN). */
@@ -88,27 +86,21 @@ export interface RelayObservabilitySinks {
 }
 
 /**
- * Production {@link RelayObservability} (003 EARS-32): every failover and
- * relay failure emits the triple the spec mandates —
- *
- * 1. a STRUCTURED log line (JSON: event, mail-class context, provider,
- *    provider response code — never a recipient, never a code payload);
- * 2. a Prometheus counter increment labelled `{event, provider, code}` — the
- *    dashboards distinguish "healthy" / "primary rejected, fallback attempted" /
- *    "channel dead" from these series;
- * 3. a GlitchTip event (`Sentry.captureMessage`; PII-stripped by the
- *    `initSentry` config, a no-op when the DSN is unset — dev-stand / CI).
- *
- * Degraded-channel state is thereby visible, never silent: a failover logs at
- * WARN (fallback attempt begins), a relay failure at ERROR (fail-closed).
+ * Production {@link RelayObservability} (003 EARS-32): a structured log line
+ * and a counter increment per event; GlitchTip receives degraded acceptance
+ * (warning), every non-accepted chain and every configuration error (error).
+ * Acceptance is recorded as `accepted`, never as delivery.
  */
 export class DefaultRelayObservability implements RelayObservability {
   private static readonly logger = new Logger("MailerRelay");
+  private readonly log: (line: string) => void;
   private readonly warn: (line: string) => void;
   private readonly error: (line: string) => void;
   private readonly capture: (message: string, level: CaptureLevel) => void;
 
   constructor(sinks: RelayObservabilitySinks = {}) {
+    this.log =
+      sinks.log ?? ((line) => DefaultRelayObservability.logger.log(line));
     this.warn =
       sinks.warn ?? ((line) => DefaultRelayObservability.logger.warn(line));
     this.error =
@@ -120,71 +112,82 @@ export class DefaultRelayObservability implements RelayObservability {
       });
   }
 
-  accepted(event: AcceptanceEvent): void {
-    this.warn(
-      JSON.stringify({
-        event: "mailer_accepted",
-        context: event.context,
-        provider: event.provider,
-        route: event.route,
-      }),
-    );
-    relayCounter().inc({
-      event: `${event.route}_accepted`,
+  attempt(event: AttemptEvent): void {
+    const line = JSON.stringify({
+      event: "mailer_attempt",
+      context: event.context,
       provider: event.provider,
-      code: "accepted",
-    });
-  }
-
-  failover(event: FailoverEvent): void {
-    this.warn(
-      JSON.stringify({
-        event: "mailer_failover",
-        context: event.context,
-        provider: event.from,
-        code: event.code,
-        failover_to: event.to,
-      }),
-    );
-    relayCounter().inc({
-      event: "failover",
-      provider: event.from,
+      outcome: event.outcome,
       code: event.code,
     });
-    this.capture(
-      `BFF mailer failover: ${event.from} → ${event.to} (${event.code}) on ${event.context}`,
-      "warning",
-    );
+    if (event.outcome === "accepted") this.log(line);
+    else this.warn(line);
+    relayCounter().inc({
+      event: "attempt",
+      provider: event.provider,
+      outcome: event.outcome,
+      code: event.code,
+      skipped: "",
+    });
   }
 
-  relayFailure(event: RelayFailureEvent): void {
+  chain(event: ChainEvent): void {
+    const accepted = event.outcome.startsWith("accepted-by-");
+    const last = event.attempts.at(-1);
+    const line = JSON.stringify({
+      event: "mailer_chain",
+      context: event.context,
+      outcome: event.outcome,
+      skipped: event.skipped,
+      attempts: event.attempts.map((a) => ({
+        provider: a.provider,
+        outcome: a.outcome,
+        code: a.code,
+      })),
+    });
+    if (accepted && event.attempts.length === 1) this.log(line);
+    else if (accepted) this.warn(line);
+    else this.error(line);
+    relayCounter().inc({
+      event: "chain",
+      provider: last?.provider ?? "none",
+      outcome: event.outcome,
+      code: last?.code ?? "none",
+      skipped: String(event.skipped),
+    });
+    const summary = event.attempts
+      .map((a) => `${a.provider}=${a.code}`)
+      .join(", ");
+    if (!accepted)
+      this.capture(
+        `BFF mailer ${event.outcome} on ${event.context}: ${summary} — send failed closed`,
+        "error",
+      );
+    else if (event.attempts.length > 1)
+      this.capture(
+        `BFF mailer degraded ${event.outcome} on ${event.context}: ${summary}`,
+        "warning",
+      );
+  }
+
+  configurationError(event: ConfigurationErrorEvent): void {
     this.error(
       JSON.stringify({
-        event: "mailer_relay_failure",
-        outcome: event.outcome ?? "failure",
+        event: "mailer_configuration_error",
         context: event.context,
-        attempts: event.attempts.map((a: RelayAttempt) => ({
-          provider: a.provider,
-          code: a.code,
-        })),
+        provider: event.provider,
+        code: "configuration",
       }),
     );
-    for (const attempt of event.attempts) {
-      relayCounter().inc({
-        event:
-          event.outcome === "uncertain"
-            ? "uncertain"
-            : event.outcome === "configuration"
-              ? "configuration"
-              : "relay_failure",
-        provider: attempt.provider,
-        code: attempt.code,
-      });
-    }
+    relayCounter().inc({
+      event: "configuration",
+      provider: event.provider,
+      outcome: "configuration",
+      code: "configuration",
+      skipped: "",
+    });
     this.capture(
-      `BFF mailer relay failure on ${event.context}: ${event.attempts
-        .map((a) => `${a.provider}=${a.code}`)
-        .join(", ")} — send failed closed`,
+      `BFF mailer configuration error on ${event.context} (${event.provider}) — send failed closed`,
       "error",
     );
   }

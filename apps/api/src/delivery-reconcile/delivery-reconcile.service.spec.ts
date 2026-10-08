@@ -3,6 +3,7 @@ import type {
   FeatureFlags,
   FlagName,
 } from "../feature-flags/feature-flags.types.js";
+import type { ChannelReadiness } from "../mailer/mailer-readiness.js";
 import { DeliveryReconcileService } from "./delivery-reconcile.service.js";
 import {
   SMS_DESCRIPTION_INTERCEPT,
@@ -430,5 +431,61 @@ describe("native explicit provider contract", () => {
       sleep: async () => {},
     });
     await expect(svc.start(vi.fn())).rejects.toThrow("Native SMTP");
+  });
+});
+
+describe("003 EARS-46 mail-channel readiness reporting (design §14.3a)", () => {
+  function readinessSource(initial: ChannelReadiness[]) {
+    let listener: ((s: ChannelReadiness[]) => void) | undefined;
+    return {
+      emit: (s: ChannelReadiness[]) => listener?.(s),
+      source: {
+        statement: () => initial,
+        onChange: (l: (s: ChannelReadiness[]) => void) => {
+          listener = l;
+          return () => {
+            listener = undefined;
+          };
+        },
+      },
+    };
+  }
+
+  it("EARS-46: reports the mailer-owned statement at start and on every change, counting only verified reserves", async () => {
+    const { flags } = fakeFlags({});
+    const { admin } = fakeAdmin(smtpPair(), smsPair());
+    const r = readinessSource([
+      { role: "primary", provider: "postbox", state: "configured-unverified" },
+      { role: "reserve", provider: "mail.ru", state: "configured-unverified" },
+      { role: "resend", provider: "resend", state: "disabled" },
+    ]);
+    const svc = new DeliveryReconcileService(
+      flags,
+      admin,
+      envDefaults,
+      undefined,
+      r.source,
+    );
+    const info: string[] = [];
+    await svc.start(vi.fn(), (line) => info.push(line));
+    expect(JSON.parse(info[0]!)).toMatchObject({
+      event: "delivery_mail_readiness",
+      operational_reserve: [],
+    });
+    r.emit([
+      { role: "primary", provider: "postbox", state: "verified" },
+      { role: "reserve", provider: "mail.ru", state: "probe-failed" },
+      { role: "resend", provider: "resend", state: "verified" },
+    ]);
+    expect(JSON.parse(info[1]!)).toMatchObject({
+      channels: expect.arrayContaining([
+        { role: "reserve", provider: "mail.ru", state: "probe-failed" },
+      ]),
+      operational_reserve: ["resend"],
+    });
+    expect(info.join("\n")).not.toMatch(/fixture-secret|fixture-key|@example/);
+    svc.stop();
+    r.emit([]);
+    expect(info).toHaveLength(2);
   });
 });

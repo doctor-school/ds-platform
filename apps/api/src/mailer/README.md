@@ -37,38 +37,81 @@ The module shares the `email-delivery-real` Unleash flag with the
 moves both this channel and Zitadel's between Mailpit-intercept and the
 real relay with no restart.
 
-## Explicit transport chain (003 EARS-31/32, design ?14.3, #2118)
+## Transport chain — Postbox → mail.ru → Resend (003 EARS-31/32/45/46, design §14.3, #2144)
 
 Real mode requires `IDP_SMTP_REAL_PROVIDER=postbox` and the matching
-`postbox.cloud.yandex.net:465` endpoint, or deliberate `mail.ru` with
+`postbox.cloud.yandex.net:465` endpoint, or the pre-activation `mail.ru` with
 `smtp.mail.ru:465`. Both use verified implicit TLS and the shared
 `IDP_SMTP_REAL_USER`, `IDP_SMTP_REAL_PASSWORD`, and sender address.
-Missing or mismatched real configuration fails internally on every send,
-including after a flag flip; it never selects Mailpit or promotes a fallback.
-Explicit intercept mode requires `MAILER_SMTP_HOST`; an absent host is an error.
+Explicit intercept mode requires `MAILER_SMTP_HOST` and sends to Mailpit only.
 
-`RESEND_ENABLED=false` is the default. Only `true` plus `RESEND_API_KEY`
-enables the optional BFF fallback; enabling without a key is a configuration
-error. A definite SMTP rejection can switch once. Timeout/connection loss
-with uncertain acceptance never triggers an automatic duplicate. No retries.
-Login email uses this same configured route; no separate provider chain is introduced.
+Two reserves follow the primary, each joining only through its own switch:
+the mail.ru reserve (`MAILER_FALLBACK_SMTP_ENABLED=true` plus its own complete
+`MAILER_FALLBACK_SMTP_PROVIDER|HOST|PORT|USER|PASSWORD|SENDER_ADDRESS`, provider
+`mail.ru`, never the primary's values) and Resend (`RESEND_ENABLED=true` plus
+`RESEND_API_KEY`). Credentials alone are inert. An enabled reserve with
+incomplete credentials, a mail.ru reserve while the primary is mail.ru, or (when
+real mode is selected) a missing/unknown primary throws
+`Mailer: invalid transport configuration` at module construction, aborting
+startup, and again on every real-mode send; no Mailpit or other provider is
+used instead (`assertMailerConfiguration`, `config/real-smtp.ts`).
+
+Every channel receives the same composed object (same code, identical UTF-8
+content); Resend gets only `from/to/subject/text/html` — tracking is a Resend
+domain setting that must stay off (runbook). Each attempt ends in one EARS-45
+class (`smtp-outcome.ts`, `resend-transport.ts`):
+
+- `accepted` — final 2xx to the end-of-data sequence / Resend 2xx: stop.
+- `recipient-permanent` — only an enhanced `5.1.x` (not `5.1.7`/`5.1.8`) reply
+  to `RCPT TO`, or a Resend `validation_error` on the `to` field: stop.
+- `provider-failure` — any server reply that is not the above (MAIL FROM, AUTH
+  535, 4xx, bare 5xx, `5.7.x`, the end-of-data reply), connection refusal,
+  DNS/TLS failure, a timeout or connection loss proven before end-of-data;
+  Resend pre-send network failure, non-recipient 4xx, 429: next channel.
+- `ambiguous` — timeout/connection loss after end-of-data, or whenever the
+  phase cannot be proven; Resend 5xx or a failure after the request may have
+  left: stop, no resend.
+
+**Phase.** The owned socket (`smtp-transport.ts`) observes every byte
+Nodemailer writes: after the `DATA` command, the stream tail reveals the
+`CRLF.CRLF` end-of-data sequence (dot stuffing keeps it out of the body). Only
+that transport can claim "before end-of-data"; any other error source is
+classified with an unknown phase, so a non-reply failure is `ambiguous` unless
+it is pre-session by nature (refused, DNS, TLS, EAUTH, EENVELOPE).
 
 SMTP limits are 5 seconds for connection/TLS, 5 seconds greeting, 10 seconds
-socket inactivity, and 15 seconds absolute. Each send owns its socket through
-Nodemailer's public `getSocket`; timeout destroys it, rejects late handoff,
-and clears timers. HTTP uses an AbortController and a 10-second deadline,
-including error-body consumption. Total transport execution is at most
-25 seconds; enumeration-sensitive orchestration remains out of band.
+socket inactivity, and 15 seconds absolute; Resend has a 10-second deadline
+including body consumption. Each attempt's effective deadline is the lesser of
+its channel deadline and the remaining **40-second** chain budget; on budget
+expiry the attempt is cancelled (socket destroyed / fetch aborted, timers
+cleared), classified by phase, and the chain ends as `stopped-budget`.
+Enumeration-sensitive orchestration remains out of band.
 
 Final SMTP/HTTP 2xx means **provider accepted**, not delivered or Inbox.
-Structured logs and `bff_mailer_relay_events_total{event,provider,code}` distinguish
-`primary_accepted`, `fallback_accepted`, `intercept_accepted`, `failover`,
-`uncertain`, `configuration`, and `relay_failure`. Failures retain GlitchTip
-reporting. Provider response text is discarded rather than partially redacted:
-no address, subject, body, OTP or credential reaches these diagnostics.
+`relay-observability.ts` emits a structured `mailer_attempt` line per attempt
+(actual provider + class + bounded code) and one `mailer_chain` line per send
+with the terminal outcome (`accepted-by-<provider>`,
+`stopped-recipient-permanent`, `stopped-ambiguous`, `stopped-budget`,
+`exhausted`) and the skipped-channel count, mirrored on
+`bff_mailer_relay_events_total{event,provider,outcome,code,skipped}`.
+GlitchTip receives every failed chain and configuration error (error) and
+degraded acceptance (warning). Provider response text is discarded rather than
+partially redacted: no address, subject, body, OTP or credential reaches these
+diagnostics.
+
+**Readiness (EARS-46).** `MailerReadinessMonitor` (`mailer-readiness.ts`,
+token `MAILER_READINESS`) probes at startup and on every flag change, without
+sending: an authenticated SMTP handshake (Nodemailer `verify` over the owned
+socket) for Postbox and mail.ru, a `GET /domains` key check for Resend
+(`restricted_api_key` 401 = `verified`). States: `disabled`, `absent`,
+`configured-unverified`, `probe-failed`, `verified`; only verified reserves are
+operational reserve. It logs `mailer_channel_readiness` and sets the
+`mailer_channel_readiness{provider,state}` gauge;
+[`delivery-reconcile`](../delivery-reconcile/README.md) consumes and reports it.
 
 Production activation, native OTP readback, rollback, quotas and controlled
-received-artifact checks remain release-blocker #2116. Microsoft sender-auth
+received-artifact checks remain release-blocker #2116
+([runbook](../../../../infra/deploy/smtp-activation.md)). Microsoft sender-auth
 and Inbox evidence remain #1120; successful SMTP acceptance does not close it.
 
 ## Delivery-mode env defaults — and where SMS lives (not here)
@@ -103,8 +146,11 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
 | Admin-lockout content                              | `notice-emails.ts`            |
 | Production nodemailer adapter (chain + transports) | `smtp-mailer.ts`              |
 | Per-provider relay-channel contract                | `relay-channel.ts`            |
-| Resend failover channel (HTTPS adapter)            | `resend-transport.ts`         |
-| Failover/relay-failure observability (EARS-32)     | `relay-observability.ts`      |
+| Resend channel (HTTPS adapter, key probe)          | `resend-transport.ts`         |
+| EARS-45 SMTP outcome classes                       | `smtp-outcome.ts`             |
+| Owned-socket SMTP transport (deadlines, phase)     | `smtp-transport.ts`           |
+| EARS-46 channel readiness monitor                  | `mailer-readiness.ts`         |
+| Attempt/chain observability (EARS-32)              | `relay-observability.ts`      |
 | In-memory test double                              | `mailer.fake.ts`              |
 | Per-address anti-flood throttle                    | `register-notice-throttle.ts` |
 

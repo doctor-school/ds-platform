@@ -201,7 +201,20 @@ export const ApiEnvSchema = z.looseObject({
   IDP_SMTP_REAL_PASSWORD: z.string().optional(),
   IDP_SMTP_REAL_SENDER_ADDRESS: z.string().optional(),
 
-  // Dormant BFF-only fallback; true without a key is a send-time config error.
+  // 003 EARS-31 mail.ru reserve (BFF-only, own namespace, never the native
+  // Zitadel profile). Joins the chain only when ENABLED and complete; enabled
+  // and incomplete, or enabled while the primary is mail.ru, fails startup.
+  MAILER_FALLBACK_SMTP_ENABLED: z
+    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
+    .default(false),
+  MAILER_FALLBACK_SMTP_PROVIDER: z.string().optional(),
+  MAILER_FALLBACK_SMTP_HOST: z.string().optional(),
+  MAILER_FALLBACK_SMTP_PORT: z.coerce.number().int().positive().optional(),
+  MAILER_FALLBACK_SMTP_USER: z.string().optional(),
+  MAILER_FALLBACK_SMTP_PASSWORD: z.string().optional(),
+  MAILER_FALLBACK_SMTP_SENDER_ADDRESS: z.string().optional(),
+
+  // Last BFF-only channel; true without a key fails startup (003 EARS-31).
   // No provider selection or promotion based on secret presence.
   RESEND_ENABLED: z
     .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })

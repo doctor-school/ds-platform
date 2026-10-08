@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveRealSmtp } from "./real-smtp.js";
+import { resolveFallbackSmtp, resolveRealSmtp } from "./real-smtp.js";
 
 const valid = {
   IDP_SMTP_REAL_PROVIDER: "postbox",
@@ -43,5 +43,64 @@ describe("explicit real SMTP", () => {
         IDP_SMTP_REAL_PORT: 465,
       }).provider,
     ).toBe("mail.ru");
+  });
+});
+
+const reserve = {
+  MAILER_FALLBACK_SMTP_ENABLED: true,
+  MAILER_FALLBACK_SMTP_PROVIDER: "mail.ru",
+  MAILER_FALLBACK_SMTP_HOST: "smtp.mail.ru",
+  MAILER_FALLBACK_SMTP_PORT: 465,
+  MAILER_FALLBACK_SMTP_USER: "noreply@doctor.school",
+  MAILER_FALLBACK_SMTP_PASSWORD: "app-password",
+  MAILER_FALLBACK_SMTP_SENDER_ADDRESS: "noreply@doctor.school",
+};
+describe("003 EARS-31 mail.ru reserve configuration", () => {
+  it("EARS-31: joins only with its own switch and a complete independent credential set", () => {
+    expect(resolveFallbackSmtp(reserve, "postbox")).toEqual({
+      state: "configured",
+      config: {
+        provider: "mail.ru",
+        host: "smtp.mail.ru",
+        port: 465,
+        user: "noreply@doctor.school",
+        password: "app-password",
+        from: "noreply@doctor.school",
+      },
+    });
+  });
+  it("EARS-31: credentials alone are inert — switch off is disabled, nothing configured is absent", () => {
+    expect(
+      resolveFallbackSmtp(
+        { ...reserve, MAILER_FALLBACK_SMTP_ENABLED: false },
+        "postbox",
+      ),
+    ).toEqual({ state: "disabled" });
+    expect(resolveFallbackSmtp({}, "postbox")).toEqual({ state: "absent" });
+  });
+  it("EARS-31: an enabled reserve with incomplete credentials or another provider is a configuration error", () => {
+    for (const patch of [
+      { MAILER_FALLBACK_SMTP_PROVIDER: undefined },
+      { MAILER_FALLBACK_SMTP_PROVIDER: "postbox" },
+      { MAILER_FALLBACK_SMTP_HOST: "postbox.cloud.yandex.net" },
+      { MAILER_FALLBACK_SMTP_PORT: 587 },
+      { MAILER_FALLBACK_SMTP_USER: " " },
+      { MAILER_FALLBACK_SMTP_PASSWORD: undefined },
+      { MAILER_FALLBACK_SMTP_SENDER_ADDRESS: "broken" },
+    ]) {
+      expect(() =>
+        resolveFallbackSmtp({ ...reserve, ...patch }, "postbox"),
+      ).toThrow("Invalid fallback SMTP configuration");
+    }
+  });
+  it("EARS-31: a reserve identical to a mail.ru primary is a configuration error that names no secret", () => {
+    let message = "";
+    try {
+      resolveFallbackSmtp(reserve, "mail.ru");
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toBe("Invalid fallback SMTP configuration");
+    expect(message).not.toMatch(/app-password|noreply/);
   });
 });

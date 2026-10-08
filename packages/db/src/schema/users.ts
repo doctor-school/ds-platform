@@ -41,7 +41,7 @@ export const users = pgTable(
     displayName: text("display_name"),
     // 046 EARS-19 (#2434) — the holder's birth date, asked once in the poster
     // flow and reused across events; written only by the holder through
-    // `PUT /v1/me/birth-date`, never shown to the congress partner. Nullable:
+    // `PUT /v1/me/birth-date`. Nullable:
     // no backfill, an account without it is asked before its first poster.
     birthDate: date("birth_date", { mode: "string" }),
     emailVerified: boolean("email_verified").notNull().default(false),

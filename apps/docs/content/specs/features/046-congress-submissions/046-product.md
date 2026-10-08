@@ -45,7 +45,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 - **US-9** — As an author, I want to take back a sent submission before review to correct it, to withdraw a submission until it is decided, and to revise and resend a submission returned for revision within a deadline I can see.
 - **US-10** — As a program committee member, I want to see every sent submission of the congress, filter them, read each in full and set a status with a comment, so that the committee decides in one place.
 - **US-11** — As a Doctor.School administrator, I want to set the opening dates, deadlines, limits and the counting rule per kind in the admin, so that the organisers' changes need no release.
-- **US-12** — _Retired._ No partner role; the number stays unused.
+- **US-12** — _Retired._ No partner role (owner decision 2026-10-08, #2438); the number stays unused.
 - **US-13** — As an author with unsent drafts, I want a reminder before the deadline.
 - **US-14** — As a participant who just registered, I want the confirmation letter to show me where to send materials.
 

@@ -72,7 +72,10 @@ const ACADEMY: EventsStorefrontHostConfig = {
     myEventsPath: "/v1/me/events",
     adapt: adaptPublicEventListing,
   },
-  headerCopy: { title: "Расписание эфиров", subline: "Ближайшие эфиры" },
+  headerCopy: {
+    title: "Расписание эфиров",
+    subline: { schoolNoun: { one: "школа", few: "школы", many: "школ" } },
+  },
   copy: { eventNoun: { one: "эфир", few: "эфира", many: "эфиров" } },
   routes: { ...ROUTES, listing: "/webinars", eventPage: "/webinars" },
 };
@@ -202,7 +205,7 @@ describe("<EventsFeedView> — the feed view of both storefronts", () => {
         {await FeedSection({
           config: DOCTOR,
           query: {},
-          request: { cookie: "", forwardedFor: "" },
+          feed: Promise.resolve({ ok: false as const }),
           mine,
         })}
       </>,
@@ -220,13 +223,34 @@ describe("<EventsFeedView> — the feed view of both storefronts", () => {
       await FeedSection({
         config: DOCTOR,
         query: {},
-        request: { cookie: "", forwardedFor: "" },
+        feed: Promise.resolve({ ok: true as const, value: PAGE }),
         mine: Promise.resolve({ ok: true, value: null }),
       }),
     );
     const more = screen.getByTestId("events-feed-show-more");
     expect(more).toHaveTextContent("Показать ещё 20 из 57");
     expect(more).toHaveAttribute("href", "/events?from=2026-10-08&to=2026-11-05");
+  });
+
+  it("019 row 19: the Academy head subline counts the upcoming эфиры and their schools «N эфиров · M школ»; the doctor head keeps its copy", async () => {
+    mocks.fetchEventsFeed.mockResolvedValue({
+      ok: true,
+      value: { ...PAGE, summary: { events: 21, schools: 3 } },
+    });
+    const academy = await frame(ACADEMY);
+    const { subline } = academy.props as unknown as { subline: ReactElement };
+    expect(subline.type).toBe(Suspense);
+    const { children } = subline.props as { children: ReactElement };
+    render(await (children.type as (p: unknown) => Promise<ReactElement>)(children.props));
+    expect(screen.getByTestId("events-feed-subline-counts")).toHaveTextContent(
+      "21 эфир · 3 школы",
+    );
+    cleanup();
+
+    const doctor = await frame(DOCTOR);
+    expect((doctor.props as unknown as { subline: unknown }).subline).toBe(
+      "События по вашей специальности и смежным",
+    );
   });
 
   it("NEW: a guest gets no «Мои события» block even when its read answers", async () => {

@@ -32,7 +32,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
           { ...base, state: "published" },
           { ...base, id: "22222222-2222-4222-8222-222222222222", slug: "a-2", state: "live" },
         ],
-        counts: { upcoming: 30, past: 4 },
+        counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
         pagination: { nextCursor: null, hasMore: true },
         horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28 },
       },
@@ -55,6 +55,19 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     expect(page.remaining).toBe(28);
   });
 
+  it("NEW: the Academy read's counts become the head summary — upcoming эфиры and their distinct schools (row 19)", () => {
+    const page = adaptPublicEventListing(
+      {
+        data: [],
+        counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+        pagination: { nextCursor: null, hasMore: false },
+        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0 },
+      },
+      { tense: "past" },
+    );
+    expect(page.summary).toEqual({ events: 30, schools: 3 });
+  });
+
   it("a past card carries its recording projection", () => {
     const recording = {
       state: "montage",
@@ -66,7 +79,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
     const page = adaptPublicEventListing(
       {
         data: [{ ...base, state: "ended", recording }],
-        counts: { upcoming: 0, past: 1 },
+        counts: { upcoming: 0, past: 1, upcomingSchools: 0 },
         pagination: { nextCursor: null, hasMore: false },
         horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3 },
       },

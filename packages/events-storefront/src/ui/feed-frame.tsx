@@ -29,7 +29,7 @@ export function FeedFrame({
   children,
 }: {
   title: string;
-  subline: string;
+  subline: ReactNode;
   tense: FeedTense;
   hrefs: Readonly<Record<FeedTense, string>>;
   headAction?: ReactNode;
@@ -52,9 +52,9 @@ export function FeedFrame({
               <h1 className="text-3xl leading-none font-extrabold tracking-tight text-balance layout:text-4xl">
                 {title}
               </h1>
-              <p className="text-base font-semibold text-primary-surface-soft">
+              <div className="text-base font-semibold text-primary-surface-soft">
                 {subline}
-              </p>
+              </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
               {/* The canvas lifts the segment off the brand band

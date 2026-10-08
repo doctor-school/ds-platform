@@ -59,11 +59,22 @@ export interface EventsFeedHorizon {
   readonly nextFrom: string | null;
 }
 
+/**
+ * What the head subline counts when the host states it in counts (gate row 19):
+ * the upcoming events and their distinct schools. Absent when the read carries
+ * no such counts.
+ */
+export interface EventsFeedSummary {
+  readonly events: number;
+  readonly schools: number;
+}
+
 /** One feed read, mapped. `remaining` = matching events beyond the extent. */
 export interface EventsFeedPage {
   readonly cards: readonly EventsFeedCard[];
   readonly horizon: EventsFeedHorizon;
   readonly remaining: number;
+  readonly summary?: EventsFeedSummary;
 }
 
 /**

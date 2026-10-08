@@ -42,6 +42,12 @@ export type PastBroadcastCard = z.infer<typeof PastBroadcastCardSchema>;
 export const PublicEventListingCountsSchema = z.object({
   upcoming: z.number().int().nonnegative(),
   past: z.number().int().nonnegative(),
+  /**
+   * Distinct schools among the upcoming listing-eligible events — the «M школ»
+   * half of the Academy feed subline «N эфиров · M школ» (019 / wave-2 gate
+   * §2.4 row 19).
+   */
+  upcomingSchools: z.number().int().nonnegative(),
 });
 export type PublicEventListingCounts = z.infer<
   typeof PublicEventListingCountsSchema

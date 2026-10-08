@@ -3436,9 +3436,14 @@
                 "maximum": 9007199254740991,
                 "minimum": 0,
                 "type": "integer"
+              },
+              "upcomingSchools": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
               }
             },
-            "required": ["upcoming", "past"],
+            "required": ["upcoming", "past", "upcomingSchools"],
             "type": "object"
           },
           "data": {

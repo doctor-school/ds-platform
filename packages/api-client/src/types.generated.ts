@@ -2895,6 +2895,7 @@ export interface components {
             counts: {
                 past: number;
                 upcoming: number;
+                upcomingSchools: number;
             };
             data: ({
                 /** @enum {string} */

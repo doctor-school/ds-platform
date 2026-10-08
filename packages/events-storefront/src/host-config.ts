@@ -30,8 +30,15 @@ export type EventsStorefrontHostConfig = {
     /** The one adapter of §4.5: the feed read's DTO → the feed page model. */
     adapt: EventsStorefrontAdapter;
   };
-  /** The page head (gate row 19, 019 `headerCopy`). */
-  headerCopy: { title: string; subline: string };
+  /**
+   * The page head (gate row 19, 019 `headerCopy`). The subline is either fixed
+   * copy, or the counted form «N <eventNoun> · M <schoolNoun>» over the read's
+   * upcoming events and their distinct schools — the host states the nouns only.
+   */
+  headerCopy: {
+    title: string;
+    subline: string | { schoolNoun: PluralNoun };
+  };
   /** Deep-partial copy overrides (gate row 5). */
   copy?: {
     /** The event noun of every count; «событие» by default. */

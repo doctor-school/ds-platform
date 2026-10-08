@@ -5,10 +5,12 @@ import type { MyEventItem, RawQueryRecord } from "@ds/schemas";
 
 import { FEED_COPY } from "../copy/feed-copy";
 import { eventNounOf } from "../copy/listing-copy";
+import { type PluralNoun, formatEventCount } from "../model/event-count";
 import type { EventsStorefrontHostConfig } from "../host-config";
 import {
   type BlockRead,
   type EventsFeedHorizon,
+  type EventsFeedPage,
   emptyFeedState,
   showMoreLabel,
 } from "../model/feed";
@@ -146,24 +148,46 @@ export async function MyEventsSection({
   return <MyEventsCut events={read.value} routes={config.routes} />;
 }
 
+/**
+ * The counted head subline «N эфиров · M школ» (gate row 19, the canvas
+ * `headCount`), off the same feed read the day feed renders. A failed read
+ * states nothing here — the feed block below carries the cause.
+ */
+export async function CountedSubline({
+  feed,
+  eventNoun,
+  schoolNoun,
+}: {
+  feed: Promise<BlockRead<EventsFeedPage>>;
+  eventNoun: PluralNoun;
+  schoolNoun: PluralNoun;
+}) {
+  const read = await feed;
+  if (!read.ok || read.value.summary === undefined) return null;
+  const { events, schools } = read.value.summary;
+  return (
+    <span data-testid="events-feed-subline-counts">
+      {formatEventCount(events, eventNoun)} ·{" "}
+      {formatEventCount(schools, schoolNoun)}
+    </span>
+  );
+}
+
 export async function FeedSection({
   config,
   query,
-  request,
+  feed,
   mine,
   monthNav,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
-  request: { cookie: string; forwardedFor: string };
+  feed: Promise<BlockRead<EventsFeedPage>>;
   mine: Promise<BlockRead<readonly MyEventItem[] | null>>;
   monthNav?: ((horizon: EventsFeedHorizon) => ReactNode) | undefined;
 }) {
   const tense = feedTenseOf(query);
-  const [read, registered] = await Promise.all([
-    fetchEventsFeed(config.contentSet, query, request),
-    mine,
-  ]);
+  const [read, registered] = await Promise.all([feed, mine]);
   if (!read.ok) {
     return (
       <BlockError
@@ -228,12 +252,30 @@ export async function EventsFeedView({
   const requestHeaders = await headers();
   const session = forwardedSessionFrom(requestHeaders);
   const mine = readMyEvents(config.contentSet.myEventsPath, session);
+  // One feed read serves the day feed and the counted head subline.
+  const feed = fetchEventsFeed(config.contentSet, query, {
+    cookie: requestHeaders.get("cookie") ?? "",
+    forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
+  });
   const listing = config.routes.listing;
+  const { subline } = config.headerCopy;
 
   return (
     <FeedFrame
       title={config.headerCopy.title}
-      subline={config.headerCopy.subline}
+      subline={
+        typeof subline === "string" ? (
+          subline
+        ) : (
+          <Suspense fallback={<SkeletonSlot className="inline-block h-4 w-48" />}>
+            <CountedSubline
+              feed={feed}
+              eventNoun={eventNounOf(config.copy)}
+              schoolNoun={subline.schoolNoun}
+            />
+          </Suspense>
+        )
+      }
       tense={tense}
       hrefs={{
         upcoming: tenseHref(listing, query, "upcoming"),
@@ -255,10 +297,7 @@ export async function EventsFeedView({
         <FeedSection
           config={config}
           query={query}
-          request={{
-            cookie: requestHeaders.get("cookie") ?? "",
-            forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
-          }}
+          feed={feed}
           mine={mine}
           monthNav={monthNav}
         />

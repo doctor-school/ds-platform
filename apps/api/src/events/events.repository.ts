@@ -495,10 +495,13 @@ export class EventsRepository {
   /** Counts backing the two controlled `/webinars` tabs. */
   async publicListingCounts(
     cutoff: Date,
-  ): Promise<{ upcoming: number; past: number }> {
+  ): Promise<{ upcoming: number; past: number; upcomingSchools: number }> {
     const [upcomingRow, pastRow] = await Promise.all([
       this.db
-        .select({ count: sql<number>`count(*)::int` })
+        .select({
+          count: sql<number>`count(*)::int`,
+          schools: sql<number>`count(DISTINCT ${events.school})::int`,
+        })
         .from(events)
         .where(and(...listingWhere("upcoming", cutoff))),
       this.db
@@ -509,6 +512,7 @@ export class EventsRepository {
     return {
       upcoming: upcomingRow[0]?.count ?? 0,
       past: pastRow[0]?.count ?? 0,
+      upcomingSchools: upcomingRow[0]?.schools ?? 0,
     };
   }
 

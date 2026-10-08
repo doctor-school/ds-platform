@@ -105,7 +105,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
   it("NEW: a horizon page echoes the applied horizon and the `to` «Показать ещё» writes", () => {
     const parsed = PublicEventListingPageSchema.safeParse({
       data: [card()],
-      counts: { upcoming: 5, past: 0 },
+      counts: { upcoming: 5, past: 0, upcomingSchools: 2 },
       pagination: { nextCursor: null, hasMore: true },
       horizon: {
         from: "2026-10-08",
@@ -123,7 +123,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
   it("NEW: a past horizon page names the older `from` and the remainder; a horizon without them is refused (rows 30, 32)", () => {
     const base = {
       data: [card()],
-      counts: { upcoming: 0, past: 9 },
+      counts: { upcoming: 0, past: 9, upcomingSchools: 0 },
       pagination: { nextCursor: null, hasMore: true },
     };
     const parsed = PublicEventListingPageSchema.safeParse({

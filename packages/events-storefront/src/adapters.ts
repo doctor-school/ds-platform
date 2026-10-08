@@ -57,6 +57,7 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
       nextFrom: horizon.nextFrom,
     },
     remaining: horizon.remaining,
+    summary: { events: page.counts.upcoming, schools: page.counts.upcomingSchools },
   };
 };
 

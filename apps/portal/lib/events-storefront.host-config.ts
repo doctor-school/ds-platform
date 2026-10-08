@@ -19,7 +19,7 @@ export const ACADEMY_EVENTS_STOREFRONT = {
   },
   headerCopy: {
     title: "Расписание эфиров",
-    subline: "Ближайшие эфиры",
+    subline: { schoolNoun: { one: "школа", few: "школы", many: "школ" } },
   },
   copy: {
     eventNoun: { one: "эфир", few: "эфира", many: "эфиров" },

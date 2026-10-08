@@ -107,6 +107,16 @@ export default function EventEditPage() {
                       {t("congressIntake.entryLink")}
                     </Link>
                   </DsLink>
+                  {/* 046 EARS-31 — the event's congress submissions registry,
+                      beside its intake settings. */}
+                  <DsLink asChild variant="standalone" size="sm">
+                    <Link
+                      href={`/events/${id}/submissions`}
+                      data-testid="event-submissions-link"
+                    >
+                      {t("congressSubmissions.entryLink")}
+                    </Link>
+                  </DsLink>
                 </div>
               </div>
               <StateBadge state={detail.state} />

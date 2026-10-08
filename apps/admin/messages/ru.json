@@ -1406,8 +1406,8 @@
     }
   },
   "congressIntake": {
-    "entryLink": "Приём материалов Конгресса",
-    "title": "Приём материалов Конгресса",
+    "entryLink": "Настройки приёма",
+    "title": "Настройки приёма",
     "description": "{title} · {date} МСК",
     "loadingDescription": "Загрузка мероприятия…",
     "backToEvent": "← К мероприятию",
@@ -1452,6 +1452,136 @@
       "saveFailed": "Не удалось сохранить настройки. Попробуйте ещё раз."
     },
     "save": "Сохранить настройки"
+  },
+  "congressSubmissions": {
+    "entryLink": "Заявки",
+    "listTitle": "Заявки на Конгресс",
+    "listDescription": "{title} · {date} МСК",
+    "loadingDescription": "Загрузка мероприятия…",
+    "backToEvent": "← К мероприятию",
+    "tableCaption": "Заявки на Конгресс по мероприятию",
+    "empty": "Заявок пока нет.",
+    "emptyDescription": "Заявка появится здесь, как только автор её отправит. Черновики авторов сюда не попадают.",
+    "columns": {
+      "number": "№",
+      "kind": "Вид",
+      "title": "Тема",
+      "submitter": "Подающий",
+      "status": "Статус",
+      "submittedAt": "Отправлена",
+      "updatedAt": "Изменена"
+    },
+    "filters": {
+      "search": "Поиск по теме и авторам",
+      "searchPlaceholder": "Тема, фамилия автора…",
+      "kind": "Вид",
+      "kindAny": "Все виды",
+      "status": "Статус",
+      "statusAny": "Все статусы",
+      "submitter": "Подающий",
+      "submitterPlaceholder": "ФИО или email",
+      "sentFrom": "Отправлена с",
+      "sentTo": "Отправлена по",
+      "sort": "Сортировка",
+      "order": "Порядок",
+      "orders": {
+        "asc": "По возрастанию",
+        "desc": "По убыванию"
+      },
+      "chips": {
+        "submitter": "Подающий: {value}",
+        "sentFrom": "С {day}",
+        "sentTo": "По {day}"
+      }
+    },
+    "errors": {
+      "listFailed": "Не удалось загрузить заявки."
+    },
+    "card": {
+      "title": "Заявка",
+      "description": "Содержание заявки только для просмотра. Решение комитета — в блоке «Решение».",
+      "loading": "Загрузка заявки…",
+      "none": "—",
+      "submittedLine": "Отправлена {at} МСК",
+      "updatedLine": "Изменена {at} МСК",
+      "contentTitle": "Содержание",
+      "submitterTitle": "Подающий",
+      "fields": {
+        "authors": "Авторы",
+        "submitter": "ФИО",
+        "email": "Email",
+        "phone": "Телефон",
+        "age": "Возраст на дату начала мероприятия",
+        "derivedFrom": "Исходная работа",
+        "lastLetter": "Последнее письмо автору",
+        "committeeComment": "Комментарий комитета",
+        "revision": "Срок доработки"
+      },
+      "ageYears": "{years, plural, one {# год} few {# года} many {# лет} other {# лет}}",
+      "presenting": "докладчик",
+      "derivedFromLine": "{kind} «{title}» · {status}",
+      "lastLetter": {
+        "sent": "Отправлено {at} МСК",
+        "failed": "Не доставлено {at} МСК"
+      },
+      "revisionUntil": "до {day}, 23:59 МСК",
+      "revisionExpired": "Срок истёк {day}, 23:59 МСК",
+      "sections": {
+        "oral": {
+          "goal": "Образовательная цель",
+          "summary": "Краткое содержание"
+        },
+        "poster": {
+          "goal": "Цель",
+          "content": "Содержание"
+        },
+        "abstract": {
+          "relevance": "Актуальность",
+          "goal": "Цель",
+          "methods": "Материалы и методы",
+          "results": "Результаты и обсуждение",
+          "conclusions": "Выводы"
+        }
+      },
+      "historySummary": "История статусов ({count})",
+      "historyMeta": "{at} МСК · {actor}",
+      "historyNoActor": "Без автора",
+      "errors": {
+        "forbidden": "Нет доступа к этой заявке.",
+        "notFound": "Такой заявки нет в реестре этого мероприятия.",
+        "failed": "Не удалось загрузить заявку."
+      },
+      "retry": "Повторить"
+    },
+    "decision": {
+      "title": "Решение",
+      "status": "Новый статус",
+      "statusPlaceholder": "Выберите статус",
+      "comment": "Комментарий для автора",
+      "commentHint": "Обязателен для «Отклонена» и «На доработке», до 2000 символов. Автор получит его в письме.",
+      "submit": "Сохранить решение",
+      "saved": "Решение сохранено.",
+      "withdrawn": "Отозвана автором — решение не принимается.",
+      "extensionLabel": "Продлить срок доработки до",
+      "extensionHint": "Последний день включительно, по московскому времени. Автор получит письмо с новым сроком.",
+      "extensionSubmit": "Продлить срок",
+      "extensionSaved": "Срок доработки продлён.",
+      "errors": {
+        "statusRequired": "Выберите статус.",
+        "commentRequired": "Напишите комментарий для автора.",
+        "commentTooLong": "Комментарий длиннее 2000 символов — сократите его.",
+        "dayRequired": "Укажите дату.",
+        "statusConflict": "Статус заявки уже изменился. Карточка обновлена — проверьте и повторите.",
+        "transitionNotAllowed": "Из текущего статуса такой переход недоступен.",
+        "notNeedsRevision": "Заявка больше не на доработке — срок продлить нельзя.",
+        "revisionDayNotLater": "Новый срок должен быть позже текущего.",
+        "revisionDayInPast": "Новый срок не может быть раньше сегодняшнего дня.",
+        "forbidden": "Нет прав на это действие.",
+        "unavailable": "Не удалось подтвердить права. Ничего не изменилось — повторите через минуту.",
+        "invalid": "Проверьте выбранный статус и комментарий.",
+        "failed": "Не удалось сохранить. Попробуйте ещё раз."
+      }
+    }
   },
   "congressRoster": {
     "entryLink": "Реестр участников",

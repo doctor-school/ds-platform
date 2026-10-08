@@ -16,6 +16,26 @@ export async function bindRegistrarToEvent(
   registrarEmail: string,
   eventSlug: string,
 ): Promise<void> {
+  await bindToEvent("event-registrar", registrarEmail, eventSlug);
+}
+
+/**
+ * 046 EARS-26 — bind a programme committee member to an event, the same
+ * runbook row with `role = 'congress-program-committee'` (migration 0047); a
+ * member may hold several bindings.
+ */
+export async function bindCommitteeToEvent(
+  memberEmail: string,
+  eventSlug: string,
+): Promise<void> {
+  await bindToEvent("congress-program-committee", memberEmail, eventSlug);
+}
+
+async function bindToEvent(
+  role: "event-registrar" | "congress-program-committee",
+  email: string,
+  eventSlug: string,
+): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("E2E requires DATABASE_URL in the environment");
@@ -27,15 +47,15 @@ export async function bindRegistrarToEvent(
       if (attempt > 0) await new Promise((r) => setTimeout(r, 500));
       const result = await client.query(
         `INSERT INTO event_role_grants (user_id, role, event_id)
-         SELECT u.id, 'event-registrar', e.id
+         SELECT u.id, $3, e.id
          FROM users u, events e
          WHERE u.email = $1 AND e.slug = $2`,
-        [registrarEmail, eventSlug],
+        [email, eventSlug, role],
       );
       if (result.rowCount === 1) return;
     }
     throw new Error(
-      `could not bind ${registrarEmail} to ${eventSlug}: no users/events row matched`,
+      `could not bind ${email} as ${role} to ${eventSlug}: no users/events row matched`,
     );
   } finally {
     await client.end();

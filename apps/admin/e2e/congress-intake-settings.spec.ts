@@ -1,7 +1,6 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createPublishedEvent } from "./support/congress-roster";
+import { evidenceShot } from "./support/evidence-shot";
 import { signInAsAdmin } from "./support/sign-in";
 
 /**
@@ -21,49 +20,6 @@ import { signInAsAdmin } from "./support/sign-in";
  * route (Stage A «а», #2432): the defaults, saved and refused states at
  * 1440 and 390, light and dark.
  */
-const SHOT_DIR = process.env.E2E_SHOT_DIR;
-
-/** The admin's dark palette is the `.dark` token block on the document root. */
-async function setPalette(page: Page, palette: "light" | "dark") {
-  await page.evaluate((mode) => {
-    document.documentElement.classList.toggle("dark", mode === "dark");
-  }, palette);
-  await page.waitForFunction((mode) => {
-    const channels = getComputedStyle(document.body).backgroundColor.match(
-      /[\d.]+/g,
-    );
-    if (!channels || channels.length < 3) return false;
-    const [r, g, b] = channels.map(Number);
-    const luminance = (r * 299 + g * 587 + b * 114) / 1000;
-    return mode === "dark" ? luminance < 128 : luminance >= 128;
-  }, palette);
-}
-
-/** The state at both widths and both palettes; the page is left at 1440, light. */
-async function shot(page: Page, name: string) {
-  if (!SHOT_DIR) return;
-  await mkdir(SHOT_DIR, { recursive: true });
-  for (const [label, width] of [
-    ["desktop", 1440],
-    ["mobile", 390],
-  ] as const) {
-    await page.setViewportSize({ width, height: 900 });
-    for (const palette of ["light", "dark"] as const) {
-      await setPalette(page, palette);
-      // The controls fade their colours (`transition-colors`): a shot taken
-      // mid-fade after a palette or width switch shows washed-out fields.
-      await page.waitForFunction(() =>
-        document.getAnimations().every((a) => a.playState !== "running"),
-      );
-      await page.screenshot({
-        path: path.join(SHOT_DIR, `${name}-${label}-${palette}.png`),
-        fullPage: true,
-      });
-    }
-  }
-  await setPalette(page, "light");
-  await page.setViewportSize({ width: 1440, height: 900 });
-}
 
 /**
  * The settings as the server holds them now — read in-page, like the admin's
@@ -111,7 +67,7 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
     await page.getByTestId("event-congress-intake-link").click();
     await page.waitForURL(new RegExp(`/events/${eventId}/congress-intake$`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Приём материалов Конгресса",
+      "Настройки приёма",
     );
 
     // EARS-2 — an event with no settings opens on the product defaults.
@@ -139,7 +95,7 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
       "",
     );
     expect((await readSettings(page, eventId)).configured).toBe(false);
-    await shot(page, "intake-defaults");
+    await evidenceShot(page, "intake-defaults");
 
     await page
       .getByTestId("intake-registrationUrl")
@@ -192,7 +148,7 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
         },
       },
     });
-    await shot(page, "intake-saved");
+    await evidenceShot(page, "intake-saved");
 
     // A fresh load of the screen shows the saved settings, not the defaults.
     await page.reload();
@@ -233,7 +189,7 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
     );
     await expect(page.getByTestId("congress-intake-saved")).toHaveCount(0);
     expect(await readSettings(page, eventId)).toEqual(before);
-    await shot(page, "intake-refused");
+    await evidenceShot(page, "intake-refused");
 
     // Correcting the day and saving again clears the refusal.
     await lastDay.fill("2027-02-20");

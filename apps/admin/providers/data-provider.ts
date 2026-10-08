@@ -211,6 +211,12 @@ export interface TaxonomyHttpError extends HttpError {
   errorCode?: string;
   traceId?: string;
   fieldErrors?: { path: string; message: string }[];
+  /**
+   * The named refusals of the 046 congress surfaces (`{ problems: [{ code }] }`,
+   * a 409 / 422 body): carried verbatim, the caller parses them against its
+   * own problem schema.
+   */
+  problems?: unknown[];
 }
 
 async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
@@ -218,6 +224,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
   let errorCode: string | undefined;
   let traceId: string | undefined;
   let fieldErrors: { path: string; message: string }[] | undefined;
+  let problems: unknown[] | undefined;
   try {
     const body = (await res.json()) as {
       message?: unknown;
@@ -227,6 +234,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
       code?: unknown;
       traceId?: unknown;
       errors?: unknown;
+      problems?: unknown;
     };
     if (typeof body.message === "string") message = body.message;
     else if (typeof body.detail === "string") message = body.detail;
@@ -245,6 +253,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
     if (Array.isArray(body.errors)) {
       fieldErrors = body.errors as { path: string; message: string }[];
     }
+    if (Array.isArray(body.problems)) problems = body.problems;
   } catch {
     // Non-JSON / empty body — keep the generic message.
   }
@@ -254,6 +263,7 @@ async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
     ...(errorCode ? { errorCode } : {}),
     ...(traceId ? { traceId } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
+    ...(problems ? { problems } : {}),
   };
 }
 
@@ -964,6 +974,39 @@ export const congressRosterUrl = {
 export function congressIntakeSettingsUrl(eventId: string): string {
   return `${ADMIN_BASE}/events/${encodeURIComponent(eventId)}/congress-intake-settings`;
 }
+
+/**
+ * 046 EARS-27/28/35 (#2437) — one event's congress submissions: the registry
+ * (`GET`, server-sorted, -filtered and -paged), the card (`GET`), the
+ * committee's status change and the administrator's deadline extension (both
+ * `POST` through the `custom` transport, which owns the Idempotency-Key and
+ * CSRF headers a command owes). Not Refine resources: one event's committee
+ * desk, read and written through `custom` like the roster.
+ */
+export const congressSubmissionsUrl = {
+  list: (
+    eventIdOrSlug: string,
+    query: {
+      q?: string;
+      submitter?: string;
+      kind?: string;
+      status?: string;
+      sentFrom?: string;
+      sentTo?: string;
+      sort: string;
+      order: "asc" | "desc";
+      page: number;
+      pageSize: number;
+    },
+  ) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/congress-submissions?${relationQuery(query)}`,
+  card: (eventIdOrSlug: string, submissionId: string) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/congress-submissions/${encodeURIComponent(submissionId)}`,
+  status: (eventIdOrSlug: string, submissionId: string) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/congress-submissions/${encodeURIComponent(submissionId)}/status`,
+  revisionDeadline: (eventIdOrSlug: string, submissionId: string) =>
+    `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/congress-submissions/${encodeURIComponent(submissionId)}/revision-deadline`,
+};
 
 /** 044 EARS-34 — one registration's presence mark for one congress day. */
 export function congressAttendanceUrl(

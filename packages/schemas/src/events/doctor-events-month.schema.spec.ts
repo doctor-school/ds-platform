@@ -160,6 +160,7 @@ describe("019 EARS-4 doctor month entries and per-month counts (wave-2 gate §4.
       school: "Школа",
       startsAt: "2026-09-01T09:00:00.000Z",
       state: "ended",
+      participationFormat: "online",
     };
     expect(
       DoctorEventsMonthGridSchema.safeParse({ ...base, entries: [entry] })

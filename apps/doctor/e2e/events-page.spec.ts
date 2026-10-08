@@ -267,3 +267,50 @@ test.describe("at 390 px", () => {
     await expect(page.getByTestId("events-filter-open")).toHaveText("Фильтры");
   });
 });
+
+test.describe("the one day-href rule (rows 53, 56, 57)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("NEW: a day beyond the served extent widens the read so the day is inside it (row 57, «+N ещё»)", async ({
+    page,
+  }) => {
+    await page.goto(MONTH);
+    const more = page
+      .getByTestId("month-grid-desktop")
+      .getByRole("link", { name: "+1 ещё" });
+    await expect(more).toHaveAttribute("href", /day=2026-09-20/);
+    await more.click();
+
+    await expect(page).toHaveURL(/day=2026-09-20/);
+    await expect(page).toHaveURL(/to=2026-09-21/);
+    await expect(page).not.toHaveURL(/view=month/);
+    const day = page.locator('section[id="day-2026-09-20"]');
+    await expect(day).toBeVisible();
+    await expect(day).toBeInViewport();
+  });
+
+  test("NEW: a day across the tense boundary switches the tense and lands on that day (rows 56, 57)", async ({
+    page,
+  }) => {
+    // «Будущие» (the default tense), the compact month on a past month.
+    await page.goto("/events?month=2026-08");
+    await page
+      .getByTestId("events-compact-month")
+      .getByRole("button", { name: /^25 августа/ })
+      .click();
+
+    await expect(page).toHaveURL(/tense=past/);
+    await expect(page).toHaveURL(/day=2026-08-25/);
+    await expect(page.getByRole("tab", { name: "Прошедшие" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // «Прошедшие» groups by month; the day scroll lands on the day's month group.
+    const group = page.locator('section[id="day-2026-08"]');
+    await expect(group).toBeVisible();
+    await expect(group).toBeInViewport();
+    await expect(
+      group.getByRole("heading", { name: "Событие past-recorded" }),
+    ).toBeVisible();
+  });
+});

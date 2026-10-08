@@ -42,8 +42,8 @@ test("gate row 32: «Показать ещё N из M» states the batch and the
   await page.goto("/events");
 
   const more = page.getByTestId("events-feed-show-more");
-  // One fixture event lies beyond the default horizon: the next batch is it.
-  await expect(more).toHaveText("Показать ещё 1 из 1");
+  // One fixture day (four events) lies beyond the default horizon: the next batch is it.
+  await expect(more).toHaveText("Показать ещё 4 из 4");
   await more.click();
 
   await expect(page).toHaveURL(

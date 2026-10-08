@@ -81,8 +81,9 @@ another visitor.
 - **A malformed `month` is a 400.** Unlike the feed's `to=`, which is clamped, a
   month has no nearest honest value a reader could be assumed to have meant.
 
-One contract serves two compositions (LD-3): the grid beside the feed (#1516)
-and the dedicated calendar page (#1520) read the SAME endpoint.
+One contract (LD-3): the month view and the compact month beside the feed of
+the one events page (`@ds/events-storefront`) read the SAME endpoint, the
+whole МСК month, past days included.
 
 ## 019 «Идёт сейчас» — the live strips
 

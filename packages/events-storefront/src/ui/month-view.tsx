@@ -7,7 +7,11 @@ import { FEED_COPY } from "../copy/feed-copy";
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
 import { hasAppliedFacets } from "../model/facets";
-import { emptyFeedState } from "../model/feed";
+import {
+  type BlockRead,
+  type EventsFeedPage,
+  emptyFeedState,
+} from "../model/feed";
 import { dayHref, monthHref } from "../model/feed-url";
 import {
   buildMonthGrid,
@@ -37,17 +41,20 @@ const PICKER_YEAR_RADIUS = 3;
  * it the dot grid with the tapped day's agenda. Both reads take the page's
  * facets, so the month narrows as the feed does; a failed read shows its
  * cause and «Повторить», an empty month under a facet the empty-by-filter
- * offer of the feed.
+ * offer of the feed. A day's «+N ещё» (and the dot grid's agenda link) takes
+ * the one day-href rule over the served feed extent (rows 53, 57).
  */
 export async function MonthView({
   config,
   raw,
   month,
+  feed,
   request,
 }: {
   config: EventsStorefrontHostConfig;
   raw: RawQueryRecord;
   month: string | undefined;
+  feed: Promise<BlockRead<EventsFeedPage>>;
   request: ReadRequest;
 }) {
   const t = LISTING_COPY.month;
@@ -61,8 +68,9 @@ export async function MonthView({
     (_, i) => String(year - PICKER_YEAR_RADIUS + i),
   );
 
-  const [entries, counts] = await Promise.all([
+  const [entries, read, counts] = await Promise.all([
     fetchMonthEntries(config, raw, displayed, request),
+    feed,
     Promise.all(
       years.map(async (y) => {
         const read = await fetchMonthCounts(config, raw, y, request);
@@ -131,6 +139,7 @@ export async function MonthView({
       );
     }
     const grid = buildMonthGrid({ month: displayed, entries: entries.value });
+    const horizon = read.ok ? read.value.horizon : undefined;
     const hrefs: MonthHrefs = {
       event: Object.fromEntries(
         entries.value.map((e) => [e.slug, eventPageHref(config, e.slug)]),
@@ -140,7 +149,7 @@ export async function MonthView({
           .flat()
           .flatMap((cell) =>
             cell.inMonth && cell.isoDay !== null
-              ? [[cell.isoDay, dayHref(listing, raw, cell.isoDay)]]
+              ? [[cell.isoDay, dayHref(listing, raw, cell.isoDay, horizon)]]
               : [],
           ),
       ),

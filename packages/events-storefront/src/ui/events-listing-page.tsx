@@ -287,6 +287,7 @@ export async function EventsListingPage({
                 config={config}
                 raw={raw}
                 month={pageMonthOf(raw)}
+                feed={feed}
                 request={request}
               />
             </Suspense>

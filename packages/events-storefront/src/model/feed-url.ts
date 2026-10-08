@@ -3,6 +3,8 @@ import {
   EVENTS_PAGE_QUERY_CODEC,
   type EventListingQueryEntry,
   addDoctorEventsFeedDays,
+  DOCTOR_EVENTS_FEED_HORIZON_DAYS,
+  doctorEventsFeedDayOf,
   type RawQueryRecord,
   encodeQueryString,
   rawQueryList,
@@ -222,32 +224,75 @@ export function monthHref(
 }
 
 /**
- * The feed moved to `date` (rows 56, 57): the current query with `day` (the
- * day the feed scrolls to — it never narrows the read) and that day's month.
- * A day the served extent does not hold widens the extent in the tense's
- * direction so the day is inside the read: «Будущие» widens the exclusive `to`
- * to the day after it, «Прошедшие» widens `from` back to it. With no extent
- * known the href never invents one.
+ * A tense's default extent as of `today` — the one horizon resolution of both
+ * reads (`resolveEventHorizon`, apps/api): «Будущие» `[today, today + width)`,
+ * «Прошедшие» `[today − width, tomorrow)`.
+ */
+function defaultExtent(
+  tense: FeedTense,
+  today: string,
+): { from: string; to: string } {
+  return tense === "past"
+    ? {
+        from: addDoctorEventsFeedDays(today, -DOCTOR_EVENTS_FEED_HORIZON_DAYS),
+        to: addDoctorEventsFeedDays(today, 1),
+      }
+    : {
+        from: today,
+        to: addDoctorEventsFeedDays(today, DOCTOR_EVENTS_FEED_HORIZON_DAYS),
+      };
+}
+
+/**
+ * THE day-href rule (rows 53, 56, 57) — the compact month's day click, the
+ * month grid's «+N ещё» and the dot grid's agenda all take it: the feed moved
+ * to `date`, with `day` (the day the feed scrolls to — it never narrows the
+ * read) and that day's month.
+ *
+ * A day on the other side of today selects the tense that holds it: a day
+ * before today reads «Прошедшие», today and later read «Будущие» (today is
+ * «Будущие»'s anchor). Today is the read's own: the served extent is anchored
+ * on the api's today (`resolveEventHorizon`: «Будущие» `from` = today,
+ * «Прошедшие» `to` = tomorrow), so the page and the read never disagree on
+ * which side a day lies; the page clock answers only when no extent is
+ * served. The extent is then the served one when the tense stays,
+ * the tense's default extent when it switches. A day that extent does not hold
+ * widens it in the tense's direction so the day is inside the read: «Будущие»
+ * widens the exclusive `to` to the day after it, «Прошедшие» widens `from`
+ * back to it. With the tense unchanged and no served extent known the href
+ * never invents one.
  */
 export function dayHref(
   listing: string,
   raw: RawQueryRecord,
   date: string,
   horizon?: { from: string; to: string },
+  today?: string,
 ): string {
-  const past = feedTenseOf(raw) === "past";
-  const widen =
+  const current = feedTenseOf(raw);
+  today ??=
     horizon === undefined
+      ? doctorEventsFeedDayOf(new Date())
+      : current === "past"
+        ? addDoctorEventsFeedDays(horizon.to, -1)
+        : horizon.from;
+  const tense: FeedTense = date < today ? "past" : "upcoming";
+  const extent = tense === current ? horizon : defaultExtent(tense, today);
+  const widen =
+    extent === undefined
       ? {}
-      : !past && date >= horizon.to
-        ? { from: horizon.from, to: addDoctorEventsFeedDays(date, 1) }
-        : past && date < horizon.from
-          ? { from: date, to: horizon.to }
+      : tense === "upcoming" && date >= extent.to
+        ? { from: extent.from, to: addDoctorEventsFeedDays(date, 1) }
+        : tense === "past" && date < extent.from
+          ? { from: date, to: extent.to }
           : {};
   return href(
     listing,
     codecEntries({
       ...raw,
+      tense: tense === "past" ? "past" : undefined,
+      from: undefined,
+      to: undefined,
       ...widen,
       view: undefined,
       day: date,

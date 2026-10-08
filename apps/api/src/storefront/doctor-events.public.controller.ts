@@ -51,8 +51,8 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * EARS-4 (#1519) `GET …/events/month`, the `MonthGrid` projection of that same
  * read. Both live on ONE controller because they are one host projection with
  * two shapes (LD-3): same targeting, same cookie, same cache posture. The month
- * route serves BOTH the grid standing beside the feed (#1516) and the dedicated
- * calendar page (#1520) — one contract, two compositions.
+ * route serves the month view and the compact month of the one events page
+ * (`@ds/events-storefront`, wave-2 gate rows 53, 56) — one contract.
  *
  * ## Host projection, not a second engine
  *
@@ -156,11 +156,12 @@ export class DoctorEventsPublicController {
   }
 
   /**
-   * `GET /v1/storefront/doctor/events/month` — the `MonthGrid` of EARS-4.
+   * `GET /v1/storefront/doctor/events/month` — the `MonthGrid` of the month
+   * view and the compact month of the one events page (wave-2 gate rows 53, 56).
    *
-   * There is no `view` query parameter and no `tense`: under F-019-2 Б the grid
-   * and the feed render together (no «Неделя / Месяц» switch is built), and
-   * release 1 reads «Будущие» only per LD-10. A malformed `month` is a 400
+   * There is no `view` query parameter and no `tense`: the view is page state,
+   * and the read covers the whole МСК month, past days included (019
+   * «Amendment — 2026-10-05»). A malformed `month` is a 400
    * Problem Details at the boundary — unlike the feed's `to=`, a month cannot be
    * clamped to something honest, since there is no nearest month a reader could
    * be assumed to have meant.

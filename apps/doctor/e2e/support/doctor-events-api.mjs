@@ -64,10 +64,30 @@ const BASE_DAYS = [
   },
 ];
 
+/**
+ * The day beyond the default extent (row 57). It holds four events, so its
+ * month-grid cell overflows into «+1 ещё» — the day link the month view writes
+ * (row 53). The three extra ones are hybrid разборы — a format and a kind no
+ * spec narrows to — so every count and every empty-by-facet render the specs
+ * take under `format` / `kind` stays as it was.
+ */
+const RAZBOR = {
+  id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+  slug: "razbor",
+  title: "Разбор",
+};
 const WIDENED_DAY = {
   day: "2026-09-20",
   label: "20 сентября, воскресенье",
-  items: [card("evt-4", "2026-09-20T10:00:00.000Z")],
+  items: [
+    card("evt-4", "2026-09-20T10:00:00.000Z"),
+    ...["evt-5", "evt-6", "evt-7"].map((id, i) =>
+      card(id, `2026-09-20T1${2 + i}:00:00.000Z`, {
+        format: "hybrid",
+        kind: RAZBOR,
+      }),
+    ),
+  ],
 };
 
 /** Every day this fixture knows; a read serves the `[from, to)` slice of it. */
@@ -194,8 +214,10 @@ const itemCount = (days) =>
   days.reduce((sum, group) => sum + group.items.length, 0);
 
 /** `null` when no fixture day lies at or past `to`; else the covering step boundary. */
-function nextToBeyond(to) {
-  const beyond = ALL_DAYS.map((group) => group.day)
+function nextToBeyond(to, days = ALL_DAYS) {
+  const beyond = days
+    .filter((group) => group.items.length > 0)
+    .map((group) => group.day)
     .filter((day) => day >= to)
     .sort()
     .at(0);
@@ -488,7 +510,13 @@ const server = createServer((request, response) => {
         items: group.items.filter((item) => matchesFacets(item, url)),
       }))
       .filter((group) => group.items.length > 0);
-    const nextTo = nextToBeyond(to);
+    // The service's beyond-probe, the counts and the next bound run under the
+    // same facet predicate as the served days (`feedWhere`).
+    const matched = ALL_DAYS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => matchesFacets(item, url)),
+    }));
+    const nextTo = nextToBeyond(to, matched);
     return json(response, 200, {
       tense: "upcoming",
       from,
@@ -519,13 +547,13 @@ const server = createServer((request, response) => {
       remaining:
         nextTo === null
           ? 0
-          : itemCount(ALL_DAYS.filter((group) => group.day >= to)),
+          : itemCount(matched.filter((group) => group.day >= to)),
       // N: the events in `[to, nextTo)` — what the next step adds.
       nextBatch:
         nextTo === null
           ? 0
           : itemCount(
-              ALL_DAYS.filter((group) => group.day >= to && group.day < nextTo),
+              matched.filter((group) => group.day >= to && group.day < nextTo),
             ),
       targeting: {
         mode: "general",

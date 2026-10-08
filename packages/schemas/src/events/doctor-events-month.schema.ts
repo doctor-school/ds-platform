@@ -16,17 +16,16 @@ import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
  * 019 EARS-4 (#1519) — the `MonthGrid` read contract of
  * `GET /v1/storefront/doctor/events/month` (019-design §7, last line).
  *
- * ## One contract, two compositions (LD-3)
+ * ## One contract for the month view of the one events page
  *
- * The SAME projection serves the month grid standing beside the day feed
- * (EARS-4, F-019-2 Б) and the dedicated calendar page (EARS-5, #1520). There is
- * no second month contract to keep in step, and — per 019-design §1.1 — no
- * host-side grid assembly either: the Academy month pane
- * (`@ds/events-storefront` `month-calendar-view.tsx`) assembles its grid with
- * `buildMonthGrid` from the `GET /v1/public/events?month=` entries, which is
- * exactly what the Doctor read does NOT need. Every day of the month is present
- * in `days`, `count: 0` included, so a host renders the grid straight from the
- * response and fills nothing in.
+ * The projection serves the month view of the one events page of
+ * `@ds/events-storefront` (wave-2 gate rows 51, 53) and the compact month
+ * beside its feed (row 56) — one contract, no second month read to keep in
+ * step. The page builds its grid with `buildMonthGrid` from `entries`, the
+ * same `MonthBroadcastEntry` list the Academy month read answers, so both hosts
+ * pass one envelope (`EventsMonthEntriesReadSchema`) into one grid builder.
+ * `days` stays the per-day projection: every day of the month is present,
+ * `count: 0` included.
  *
  * ## The grid is navigation over the SAME targeted read
  *
@@ -38,8 +37,8 @@ import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
  * with one function.
  *
  * `tense`, `day`, `from` and `to` are deliberately absent. The horizon is the
- * month; release 1 reads «Будущие» only (LD-10, #1525), so a day already past
- * carries `count: 0` rather than a historical figure the feed would not show.
+ * whole МСК month, past days included (019 «Amendment — 2026-10-05»): a past
+ * day counts its ended events, which the grid shows as muted pills.
  *
  * ## The two empty reasons stay distinct
  *

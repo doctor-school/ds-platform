@@ -220,6 +220,12 @@
   }
   var noun = function (host, n) { return host === 'doctor' ? plural(n, ['событие', 'события', 'событий']) : plural(n, ['эфир', 'эфира', 'эфиров']); };
 
+  var SU = { 'd-1': 128, 'd-2': 0, 'd-3': 47, 'd-endo': 3, 'd-4': 19, 'd-l1': 212, 'a-1': 128, 'a-2': 0, 'a-3': 47, 'a-4': 3 };
+  function signUps(e) {
+    if (e.id in SU) return SU[e.id];
+    var h = 0; for (var i = 0; i < e.id.length; i++) h = (h * 31 + e.id.charCodeAt(i)) % 9973;
+    var r = h % 10; return r === 0 ? 0 : r < 4 ? 1 + h % 9 : r < 8 ? 10 + h % 80 : 100 + h % 160;
+  }
   function card(e, o) {
     var utc = parseMsk(e.msk), z = e.format === 'офлайн' ? 3 : o.tz, p = at(utc, z);
     var c = { variant: e.past ? 'past' : 'upcoming', href: e.past ? 'event-page-recording.dc.html' : 'event-page.dc.html', time: p.time, tzLabel: zl(z),
@@ -230,7 +236,8 @@
     if (!e.past && typeof e.seats === 'number') { c.seatsLeft = e.seats; c.seatsLeftLabel = 'мест осталось'; c.soldOutLabel = 'мест не осталось'; }
     if (e.format === 'гибрид' && e.venueTz) c.venueTimeLabel = 'На площадке ' + at(utc, e.venueTz).time + ' ' + zl(e.venueTz);
     if (e.past) { c.recordingLabel = e.recording; if (e.rec) { c.ctaHref = 'event-page-recording.dc.html'; c.ctaLabel = 'Смотреть запись'; } }
-    if (e.live && !e.past) { var reg = o.signedIn && e.registered; c.live = true; c.liveLabel = 'Идёт сейчас'; c.ctaHref = reg ? 'room.dc.html' : 'event-page.dc.html'; c.ctaLabel = reg ? 'Войти в комнату эфира' : 'Открыть страницу события'; }
+    if (e.live && !e.past) { var reg = o.signedIn && e.registered; c.live = true; c.liveLabel = 'В эфире'; c.ctaHref = reg ? 'room.dc.html' : 'event-page.dc.html'; c.ctaLabel = reg ? 'Войти в комнату эфира' : 'Открыть страницу события'; }
+    if (!e.past) { c.signUpCount = signUps(e); c.signUpLabel = 'Коллег записались'; }
     if (o.signedIn && e.registered && !e.past) { c.registered = true; c.registeredLabel = 'Вы записаны'; }
     return { e: e, c: c, p: p, utc: utc };
   }

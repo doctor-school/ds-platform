@@ -45,7 +45,7 @@ Roles: `ds-explorer` scouts; `ds-implementer` authors in isolation; `ds-reviewer
 
 Proportionate execution: the requested result sets scope and completion evidence — plans, specs, reviews and handoffs do not expand it. Keep valid facts, checks and approvals; repeat only what a relevant change, contradiction or missing proof invalidates. Security, privacy and data safeguards, required review, CI and owner gates stay in place at every scale. A merge, report or subagent return is intermediate while release or other requested work remains. A session ending before the outcome (owner defers, context tier fires, worktree-pinned tail) ends with skill `handoff-prompt` as the final message.
 
-Briefs: `pnpm dispatch:brief <N>`, ownership/worktree, relevant sources, affected checks, outcome/proof/stop. Preserve others' edits. Returns carry the conclusion; details go to the PR or a scratchpad artifact. Waves: ≤4–5 Issues, ≤2 layers.
+Briefs: `pnpm dispatch:brief <N>`, ownership/worktree, relevant sources, affected checks, outcome/proof/stop. Preserve others' edits. Returns carry the conclusion; details go to the PR or a scratchpad artifact. Redirected command output and temporary files go only to the session's own scratch directory (Claude: its scratchpad; Codex: its temp directory), never into the repository, a worktree or a directory outside them such as `..`. Waves: ≤4–5 Issues, ≤2 layers.
 
 Codex tiers: current observed input / reported `model_context_window` — at 70% finish and checkpoint; at 85% no new dispatch, rotate. Use observed input, not cumulative usage; telemetry missing or over 30 minutes old is advisory `unavailable`, not zero. Claude tiers: CLAUDE.md. Do not fabricate `<subagent_tokens>`.
 

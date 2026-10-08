@@ -51,6 +51,7 @@ none
 Replace every angle-bracket placeholder below. The PR-body guard rejects missing,
 placeholder, known-red, or failed evidence. Reasoned N/A examples:
 
+- Stage-B: N/A — no render surface (spec/ADR/test/tooling-only; the stage-b guard does not apply)
 - Stage-B: N/A (no visual surface) — lead-certified; authorization and live behavioral verification: <link>
 - Changeset: N/A — internal-only tooling change with no user-facing package impact
 - Behavior change: N/A — test-only change; runtime and user behavior are unchanged
@@ -64,7 +65,7 @@ exact `DEBT.md#<anchor>`.
 -->
 
 Change-tier: <ship|show|ask> — <reason; absent = ask — `.claude/rules/repo-conventions.md` → Change tiers>
-Stage-B: <GO with owner/date/link | batched at #N | reasoned N/A in the exact lead-certified form above>
+Stage-B: <GO with owner/date/link | batched at #N | N/A — no render surface | reasoned N/A in the exact lead-certified form above>
 Changeset: <`.changeset/<file>.md` | reasoned N/A>
 Behavior change: <concise user/runtime behavior change | reasoned N/A>
 Local touched-suite verification: <exact command(s) and PASS result>

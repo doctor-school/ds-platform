@@ -347,3 +347,11 @@ Every event time the feed and `WebinarCard` render reads under 004 EARS-12 as am
 - **Colleagues' count (EARS-2, kept).** The card shows the sign-up count of colleagues in every card state on both storefronts; the Academy card gains it. The canvas is redrawn to draw it.
 
 **What does not change.** The URL as the single state carrier (LD-1, EARS-8, apart from the LD-7 return), the content set (EARS-16), the one module (EARS-18) and every rule of the 2026-10-05 amendment.
+
+## Amendment — 2026-10-08 — the colleagues' sign-up count shows on upcoming and live cards only (source: [#2646](https://github.com/doctor-school/ds-platform/issues/2646), owner decision 2026-10-08)
+
+> **Status:** the doctor `/events` card is live in production and shows the count on every card, past ones included, so this is recorded as an amendment rather than an inline rewrite of EARS-2 (AGENTS.md §6). EARS-2 («the sign-up count of colleagues visible in every card state»), the `WebinarCard` bullet of Scope («always showing the sign-up count») and the invariant «Every card in every state shows the sign-up count» remain the decision as originally taken and are read under this amendment; so is the count rule of the 2026-10-06 amendment. The RU twin is [`019-requirements-ru.md`](./019-requirements-ru.md) → «Amendment — 2026-10-08». The live card keeps showing the count on past cards until the code slice [#2028](https://github.com/doctor-school/ds-platform/issues/2028) PR 2.4 lands.
+
+**Provenance.** Asked whether the past cards of the feed need «Коллег записались: N», the owner answered in chat on 2026-10-08: «Нет, только на будущих». This narrows EARS-2 and owner decision A2 of 2026-10-06 (wave-2 entry gate `apps/docs/content/specs/tech/2026-10-06-events-storefront-wave-2-entry-gate-en.md`, row 38). The canvas redrawn under [#2646](https://github.com/doctor-school/ds-platform/issues/2646) already draws exactly this (`design-source/events-feed-kit.js:240`, `if (!e.past)`).
+
+**The rule.** On both storefronts (LD-11, EARS-18), every card that is not past — upcoming and live — shows «Коллег записались: N»; a past card in «Прошедшие» shows no count. Everything else in EARS-2 is unchanged, including the count on the Academy card.

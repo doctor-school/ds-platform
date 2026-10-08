@@ -9,6 +9,11 @@ import { expect, test } from "@playwright/test";
  *
  *   row 28 — the head's tense tabs, «Будущие» by default, the tense in the URL;
  *   rows 29–30 — «Прошедшие» groups by month newest first, no archive block;
+ *   row 32 — «Показать ещё N из M» is offered from the bare `/webinars` and
+ *            `?tense=past` and widens the extent in the URL (seeded
+ *            `seed-005-upcoming-3` at +14 d, `seed-014-ended-month-ago` at
+ *            −30 d, `seed-006-legacy-archived` at −400 d — no age floor);
+ *   row 31 — a published recording reads «Запись · <length>» + «Смотреть запись»;
  *   row 43 — the live block renders an experts-audience live event
  *            (`E2E_WEBINAR_SLUG_LIVE`, default `seed-005-live`);
  *   row 50 — head → «Идёт сейчас» → day feed («Мои события» is absent for a guest);
@@ -74,6 +79,60 @@ test.describe("the Academy feed view (wave-2 entry gate §2.4)", () => {
     await expect(page.getByText("Архив записей")).toHaveCount(0);
     // The live block belongs to «Будущие».
     await expect(page.locator('[data-feed-block="live"]')).toHaveCount(0);
+  });
+
+  test("gate rows 31–32: the bare `?tense=past` offers «Показать ещё», which reaches a month-old recorded эфир and, step by step, the legacy archive", async ({
+    page,
+  }) => {
+    await page.goto("/webinars?tense=past", { waitUntil: "domcontentloaded" });
+    const cards = page.locator("[data-webinar-card]");
+    const monthAgo = cards.filter({
+      hasText: "Итоги: остеоартрит коленного сустава",
+    });
+    await expect(page.getByTestId("events-feed")).toBeVisible();
+    await expect(monthAgo).toHaveCount(0);
+
+    const more = page.getByTestId("events-feed-show-more");
+    await expect(more).toHaveText(/^Показать ещё \d+ из \d+$/);
+    await more.click();
+    await expect(page).toHaveURL(/[?&]from=\d{4}-\d{2}-\d{2}/);
+    await expect(page).toHaveURL(/[?&]to=\d{4}-\d{2}-\d{2}/);
+    await expect(monthAgo).toHaveCount(1);
+    await expect(monthAgo).toContainText("Запись · 1 ч 12 мин");
+    await expect(
+      monthAgo.getByRole("link", { name: "Смотреть запись" }),
+    ).toBeVisible();
+
+    // No age floor: repeated «Показать ещё» reaches the 400-day-old legacy эфир.
+    const legacy = cards.filter({
+      hasText: "Архивный эфир: инсулинотерапия (до платформы)",
+    });
+    for (let step = 0; step < 40; step += 1) {
+      if ((await legacy.count()) > 0) break;
+      await expect(more).toBeVisible();
+      const before = page.url();
+      await more.click();
+      await expect(page).not.toHaveURL(before);
+    }
+    await expect(legacy).toHaveCount(1);
+    await expect(legacy).toContainText("Запись · 1 ч 20 мин");
+  });
+
+  test("gate row 32: the bare `/webinars` offers «Показать ещё», which reaches the эфир just past the 14-day default", async ({
+    page,
+  }) => {
+    await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+    const later = page
+      .locator("[data-webinar-card]")
+      .filter({ hasText: "Ревматология: ранняя диагностика" });
+    await expect(page.getByTestId("events-feed")).toBeVisible();
+    await expect(later).toHaveCount(0);
+
+    const more = page.getByTestId("events-feed-show-more");
+    await expect(more).toHaveText(/^Показать ещё \d+ из \d+$/);
+    await more.click();
+    await expect(page).toHaveURL(/[?&]to=\d{4}-\d{2}-\d{2}/);
+    await expect(later).toHaveCount(1);
   });
 
   test("gate rows 43, 50: the live block renders the experts-audience live event, between the head and the day feed", async ({

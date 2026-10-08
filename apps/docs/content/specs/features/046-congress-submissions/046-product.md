@@ -1,6 +1,6 @@
 ---
 title: "Feature 046 — Congress submissions: oral talks, posters and abstracts (PRD)"
-description: "Product requirements for congress submissions in a «Мои заявки на Конгресс» section of the Doctor.School account: a registered participant sends oral talks, posters and abstracts, many and at any time while intake is open; drafts save themselves; statuses and committee comments show in the section and arrive by email; the program committee reviews in the admin; the congress partner reads; dates and limits are admin settings. Source of the 046 EARS triplet (ADR-0014)."
+description: "Product requirements for congress submissions in a «Мои заявки на Конгресс» section of the Doctor.School account: a registered participant sends oral talks, posters and abstracts, many and at any time while intake is open; drafts save themselves; statuses and committee comments show in the section and arrive by email; the program committee reviews in the admin; dates and limits are admin settings. Source of the 046 EARS triplet (ADR-0014)."
 slug: two-site-ia-046-congress-submissions-product
 epic: ../../product/two-site-ia/brief.md
 status: Draft
@@ -28,7 +28,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 
 **Statuses.** Черновик → Отправлена → На рассмотрении → Принята / Отклонена / На доработке, and Отозвана when the author withdraws. The author sees the status in the section and receives a letter when the submission is sent, accepted, rejected or returned for revision; for a rejection and a revision request the committee writes a comment, which the author reads in the letter and in the section. A submission returned for revision can be corrected and resent within 3 business days — the letter and the section name the exact deadline, and the section counts down the time left. Until a decision the author can withdraw a submission: before review, while its kind's intake is open, it goes back to a draft for correction; later it becomes «Отозвана» and still counts toward the limit. Before a deadline the platform reminds authors who still have unsent drafts.
 
-**Who reviews.** The **program committee** of the congress works in the Doctor.School admin: a list of every sent submission with filters by kind, status, date and author, and a card that opens at the side with the full text and the author's contacts, where the committee sets the status and writes the comment. Everyone in the committee sees all submissions; there is no distribution between reviewers. The **congress partner** sees the same list and cards read-only, to contact authors about their talks. Both roles are given per congress by the Doctor.School team.
+**Who reviews.** The **program committee** of the congress works in the Doctor.School admin: a list of every sent submission with filters by kind, status, date and author, and a card that opens at the side with the full text and the author's contacts, where the committee sets the status and writes the comment. Everyone in the committee sees all submissions; there is no distribution between reviewers. The role is given per congress by the Doctor.School team.
 
 **Dates and limits are settings.** Intake opens «по готовности» — when the organisers are ready — and closes on 15 January 2027 for oral talks and on 29 January 2027 for posters and abstracts, each inclusive, until 23:59 Moscow time. Abstracts are limited to 3 per author — every sent abstract counts, whatever became of it; talks and posters are unlimited. All of this, and the counting rule below, is changed by a Doctor.School administrator on a settings screen in the admin, without a platform release.
 
@@ -45,7 +45,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 - **US-9** — As an author, I want to take back a sent submission before review to correct it, to withdraw a submission until it is decided, and to revise and resend a submission returned for revision within a deadline I can see.
 - **US-10** — As a program committee member, I want to see every sent submission of the congress, filter them, read each in full and set a status with a comment, so that the committee decides in one place.
 - **US-11** — As a Doctor.School administrator, I want to set the opening dates, deadlines, limits and the counting rule per kind in the admin, so that the organisers' changes need no release.
-- **US-12** — As a congress partner, I want to read the submissions and the authors' contacts, so that I can contact people about their talks — without changing anything.
+- **US-12** — _Retired._ No partner role (owner decision 2026-10-08, #2438); the number stays unused.
 - **US-13** — As an author with unsent drafts, I want a reminder before the deadline.
 - **US-14** — As a participant who just registered, I want the confirmation letter to show me where to send materials.
 
@@ -58,9 +58,8 @@ The organisers of the 2027 congress want three kinds of materials from participa
 5. **The fourth abstract.** With three abstracts sent, the fourth is refused with «Можно отправить не больше 3 тезисов» — also when one of the three was rejected or withdrawn. Only an abstract taken back to a draft before review frees its place.
 6. **Closed kind.** On 16 January an oral talk draft can still be read, but says «Приём устных докладов закрыт 15 января 2027 — отправить заявку нельзя».
 7. **Committee returns a talk.** A committee member filters by «Устный доклад», opens a talk at the side, chooses «На доработке», writes the comment and saves. It is Tuesday 16 February, so the author has until Friday 19 February, 23:59 Moscow time. The author receives a letter with the comment and that deadline, sees it in the section with the time left, corrects the talk and sends it again, even though oral intake has already closed. Had the author missed the deadline, the talk would stay «На доработке», read-only, until the committee decides — or until the Doctor.School administrator extends the deadline, for example over a holiday.
-8. **Partner reads.** The congress partner opens the list, finds a poster by an author's surname, reads it and the author's phone; there is nothing to press.
-9. **Deadline moved.** The organisers extend abstracts to 31 January. The administrator changes the last day in the settings; the section shows the new date at once, and authors with drafts receive a fresh reminder.
-10. **Withdrawn after review started.** A talk is «На рассмотрении»; the author presses «Отозвать» and confirms. It becomes «Отозвана», cannot be edited or sent again, still counts toward the limit, and the committee sees it as withdrawn.
+8. **Deadline moved.** The organisers extend abstracts to 31 January. The administrator changes the last day in the settings; the section shows the new date at once, and authors with drafts receive a fresh reminder.
+9. **Withdrawn after review started.** A talk is «На рассмотрении»; the author presses «Отозвать» and confirms. It becomes «Отозвана», cannot be edited or sent again, still counts toward the limit, and the committee sees it as withdrawn.
 
 ## Product acceptance criteria
 
@@ -74,7 +73,7 @@ The organisers of the 2027 congress want three kinds of materials from participa
 - The author sees the status and the committee comment in the section and in letters for «Отправлена», «Принята», «Отклонена», «На доработке» and when the revision deadline is extended; «На рассмотрении» sends no letter.
 - A rejection or a revision request cannot be saved without a comment.
 - A submission returned for revision can be corrected and resent until 23:59 Moscow time of the 3rd business day after the committee's request, even after its kind's intake has closed; the letter names the deadline and the section shows it with a countdown. After it the submission waits for the committee's decision; only the Doctor.School administrator can extend it.
-- The committee sees every sent submission of its congress and nothing else in the admin; the partner sees the same read-only, without the committee comments and without age; neither sees drafts.
+- The committee sees every sent submission of its congress and nothing else in the admin; the committee does not see drafts.
 - Dates, limits and the counting rule change on the admin settings screen and take effect without a release.
 
 ## Decided rules
@@ -99,8 +98,8 @@ The cabinet section «Мои заявки на Конгресс» is drawn on th
 ## Dependencies
 
 - **Congress site — `doctor-school/orthobio-site#99`** (re-scoped by the tech lead): a «Подать материалы» section with «Зарегистрироваться» and «Войти в кабинет», and a «Подать материалы в кабинете» button on the «Заявка принята» card. It links to the platform section, today `https://new.doctor.school/account/congress`, and can ship once the section is live.
-- **The personal-data consent for submissions** is the organising committee's own text (owner decision 2026-09-30): one consent for every submission kind — the submission content, co-authors' data, the birth date for posters, passing submissions to the program committee and the congress partner, and publication of abstracts, РИНЦ included. The platform publishes it on its documents pages («Согласие на обработку персональных данных для заявок на Конгресс»), the form's checkbox links to it, and every acceptance is recorded with the text version, so a new edition is asked again. It is a separate text from the personal-data policy the congress registration consent records.
-- **Role grants** for committee members and the partner are made by the Doctor.School team on request until the grants screen (#2378) exists.
+- **The personal-data consent for submissions** is the organising committee's own text (owner decision 2026-09-30): one consent for every submission kind — the submission content, co-authors' data, the birth date for posters, passing submissions to the program committee, and publication of abstracts, РИНЦ included. The platform publishes it on its documents pages («Согласие на обработку персональных данных для заявок на Конгресс»), the form's checkbox links to it, and every acceptance is recorded with the text version, so a new edition is asked again. It is a separate text from the personal-data policy the congress registration consent records.
+- **Role grants** for committee members are made by the Doctor.School team on request until the grants screen (#2378) exists.
 
 ## Out of scope
 

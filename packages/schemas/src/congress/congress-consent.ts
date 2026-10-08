@@ -50,7 +50,7 @@ export const isCongressSignUpConsentPurpose = (
  * committee's own consent covering every submission kind (oral, poster,
  * abstract) — the submission content, the co-authors' data the author
  * supplies, the birth date for the poster rule, the disclosure to the event's
- * program committee and congress partner, and the publication of abstracts.
+ * program committee, and the publication of abstracts.
  *
  * Its document is a `@ds/legal-content` document
  * ({@link CONGRESS_SUBMISSION_CONSENT_DOCUMENT_SLUG}), NOT the congress site

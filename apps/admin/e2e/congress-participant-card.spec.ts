@@ -414,11 +414,16 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
     await shot(page, "participant-card-attendance");
 
     // Evidence: the open card, desktop inspector and phone full cover, both palettes.
+    // The day click above scrolls the card body; the evidence shows it from the top,
+    // where the registrar first looks.
     for (const [name, width, height] of [
       ["desktop", 1440, 900],
       ["mobile", 390, 844],
     ] as const) {
       await page.setViewportSize({ width, height });
+      await panel
+        .getByTestId("participant-card")
+        .evaluate((el) => el.scrollIntoView({ block: "start" }));
       await expect(panel).toHaveAttribute(
         "data-modal",
         name === "desktop" ? "false" : "true",

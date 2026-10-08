@@ -20,6 +20,7 @@ export type PosterBandProps =
       accountHref: string;
       eventLine: string | null;
       eventHref: string | null;
+      guideHref: string | null;
     }
   | {
       mode: "detail";
@@ -27,8 +28,29 @@ export type PosterBandProps =
       topic: string;
       status: CongressSubmissionStatus;
       dateLine: string;
+      guideHref: string | null;
       onBack: () => void;
     };
+
+/**
+ * 046 EARS-36 — «Как заполнить заявку ↗»: the congress site's filling guide,
+ * opened in a new tab so an open draft is never left behind.
+ */
+function GuideLink({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      tone="on-primary"
+      variant="inline"
+      size="sm"
+      weight="strong"
+    >
+      {COPY.fillingGuide}
+    </Link>
+  );
+}
 
 export function PosterBand(props: PosterBandProps) {
   return (
@@ -55,17 +77,23 @@ export function PosterBand(props: PosterBandProps) {
                   </p>
                 ) : null}
               </div>
-              {props.eventHref ? (
-                <Link
-                  href={props.eventHref}
-                  tone="on-primary"
-                  variant="inline"
-                  size="sm"
-                  weight="strong"
-                  className="mb-1"
-                >
-                  {COPY.eventPage}
-                </Link>
+              {props.eventHref || props.guideHref ? (
+                <div className="mb-1 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                  {props.guideHref ? (
+                    <GuideLink href={props.guideHref} />
+                  ) : null}
+                  {props.eventHref ? (
+                    <Link
+                      href={props.eventHref}
+                      tone="on-primary"
+                      variant="inline"
+                      size="sm"
+                      weight="strong"
+                    >
+                      {COPY.eventPage}
+                    </Link>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </>
@@ -87,9 +115,12 @@ export function PosterBand(props: PosterBandProps) {
               </h1>
               <StatusPlate status={props.status} />
             </div>
-            <p className="mt-3 text-sm font-medium text-hero-muted">
-              {props.dateLine}
-            </p>
+            <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+              <p className="text-sm font-medium text-hero-muted">
+                {props.dateLine}
+              </p>
+              {props.guideHref ? <GuideLink href={props.guideHref} /> : null}
+            </div>
           </>
         )}
       </Container>

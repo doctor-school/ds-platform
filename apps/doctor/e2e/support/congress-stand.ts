@@ -115,8 +115,19 @@ export async function provisionDoctor(tag: string): Promise<CongressDoctor> {
       true,
     );
     const code = await mailedCode(email, "verify", sentAt);
-    const confirm = await api.post("/v1/auth/verify", {
-      data: { email, code },
+    // 003 EARS-23/41: the doctor door's code step carries the in-tab
+    // registration values; the bare 003 `/v1/auth/verify` leaves the account
+    // without its password (#2678).
+    const confirm = await api.post("/v1/storefront/doctor/verify", {
+      data: {
+        email,
+        code,
+        registration: {
+          password,
+          medicalWorkerDeclaration: true,
+          consent: [{ purpose: "partner-data-sharing", version: "v1" }],
+        },
+      },
     });
     expect(
       confirm.ok(),
@@ -152,7 +163,11 @@ export async function signInInPage(
   expect(outcome.status, `in-page sign-in — ${outcome.body}`).toBe(200);
 }
 
-/** A congress event with its intake settings; the oral window open for a month. */
+/**
+ * A congress event with its intake settings; the oral window open for a month.
+ * The event is of the dictionary kind «Конгресс» and for the doctor audience —
+ * both required since 012 EARS-26/EARS-29 (#2509).
+ */
 export async function createCongressEvent(): Promise<string> {
   const id = randomUUID();
   const now = Date.now();
@@ -160,10 +175,12 @@ export async function createCongressEvent(): Promise<string> {
     await db.query(
       `INSERT INTO events
          (id, slug, title, school, starts_at, duration_min, description,
-          specialties, partner_ref, program_pdf_ref, state, participation_format)
+          specialties, partner_ref, program_pdf_ref, state, participation_format,
+          kind_id, audience)
        VALUES ($1, $2, 'Конгресс ортобиологии', 'Конгресс', $3, 480,
                'Ежегодный конгресс.', $4, 'sponsor:congress', NULL, 'published',
-               'offline')`,
+               'offline',
+               (SELECT id FROM event_kinds WHERE slug = 'kongress'), 'doctors')`,
       [
         id,
         `congress-2433-${id.slice(0, 8)}`,

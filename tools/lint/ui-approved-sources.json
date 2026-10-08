@@ -195,9 +195,11 @@
       "evidenceProfiles": ["responsive-web"],
       "surfacePaths": [
         "apps/admin/app/events/[id]/roster/page.tsx",
+        "apps/admin/components/admin-card-layout.tsx",
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/components/desk-registration-form.tsx",
         "apps/admin/components/participant-card-panel.tsx",
+        "apps/admin/components/submission-card-panel.tsx",
         "apps/admin/lib/congress-roster.ts",
         "apps/admin/messages/ru.json"
       ],

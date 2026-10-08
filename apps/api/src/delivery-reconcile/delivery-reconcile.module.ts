@@ -7,7 +7,15 @@ import {
 import { loadEnv } from "../config/env.schema.js";
 import { FEATURE_FLAGS } from "../feature-flags/feature-flags.tokens.js";
 import type { FeatureFlags } from "../feature-flags/feature-flags.types.js";
-import { DeliveryReconcileService } from "./delivery-reconcile.service.js";
+import { MailerModule } from "../mailer/mailer.module.js";
+import {
+  MAILER_READINESS,
+  type MailerReadinessSource,
+} from "../mailer/mailer-readiness.js";
+import {
+  DEFAULT_RETRY,
+  DeliveryReconcileService,
+} from "./delivery-reconcile.service.js";
 import { ZitadelDeliveryAdmin } from "./zitadel-delivery-admin.js";
 
 /** DI token for the optional reconcile service (absent without a live Zitadel admin). */
@@ -29,22 +37,33 @@ export const DELIVERY_RECONCILE = Symbol("DELIVERY_RECONCILE");
  * enabled in `main.ts`.
  */
 @Module({
+  // 003 EARS-46: consumes and reports the mailer-owned channel readiness.
+  imports: [MailerModule],
   providers: [
     {
       provide: DELIVERY_RECONCILE,
-      inject: [FEATURE_FLAGS],
-      useFactory: (flags: FeatureFlags): DeliveryReconcileService | null => {
+      inject: [FEATURE_FLAGS, MAILER_READINESS],
+      useFactory: (
+        flags: FeatureFlags,
+        readiness: MailerReadinessSource,
+      ): DeliveryReconcileService | null => {
         const env = loadEnv();
         if (!env.IDP_ISSUER || !env.IDP_SERVICE_TOKEN) return null;
         const admin = new ZitadelDeliveryAdmin({
           baseUrl: env.IDP_ISSUER,
           serviceToken: env.IDP_SERVICE_TOKEN,
         });
-        return new DeliveryReconcileService(flags, admin, {
-          emailReal: env.EMAIL_DELIVERY_MODE === "real",
-          smsReal: env.SMS_DELIVERY_MODE === "real",
-          realSmtp: env,
-        });
+        return new DeliveryReconcileService(
+          flags,
+          admin,
+          {
+            emailReal: env.EMAIL_DELIVERY_MODE === "real",
+            smsReal: env.SMS_DELIVERY_MODE === "real",
+            realSmtp: env,
+          },
+          DEFAULT_RETRY,
+          readiness,
+        );
       },
     },
   ],

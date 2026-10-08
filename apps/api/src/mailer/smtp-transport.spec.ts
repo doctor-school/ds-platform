@@ -11,10 +11,21 @@ const message = {
   html: "test",
 };
 
-async function smtpServer(
-  mode: "stall" | "drip" | "data-stall" | "accept" | "reject",
-) {
+type Mode =
+  | "stall"
+  | "drip"
+  | "data-stall"
+  | "accept"
+  | "reject"
+  | "rcpt-unknown"
+  | "rcpt-stall"
+  | "drop-before-data"
+  | "drop-after-eod"
+  | "auth-fail";
+
+async function smtpServer(mode: Mode) {
   const sockets = new Set<Socket>();
+  const commands: string[] = [];
   let accepted = 0;
   let dataStarted = 0;
   const server = createServer((socket) => {
@@ -45,14 +56,30 @@ async function smtpServer(
         if (data) {
           if (line === ".") {
             data = false;
-            if (mode !== "data-stall") {
+            if (mode === "drop-after-eod") socket.destroy();
+            else if (mode !== "data-stall") {
               accepted++;
-              socket.write("250 accepted\r\n");
+              socket.write("250 2.0.0 accepted\r\n");
             }
           }
-        } else if (line.startsWith("EHLO")) socket.write("250 local\r\n");
+          continue;
+        }
+        commands.push(line.split(" ")[0]!);
+        if (line.startsWith("EHLO"))
+          socket.write("250-local\r\n250 AUTH PLAIN\r\n");
+        else if (line.startsWith("AUTH"))
+          socket.write(
+            mode === "auth-fail"
+              ? "535 5.7.8 authentication failed\r\n"
+              : "235 2.7.0 ok\r\n",
+          );
+        else if (line.startsWith("MAIL") && mode === "drop-before-data")
+          socket.destroy();
         else if (line.startsWith("RCPT") && mode === "reject")
           socket.write("550 rejected\r\n");
+        else if (line.startsWith("RCPT") && mode === "rcpt-unknown")
+          socket.write("550 5.1.1 doctor@example.com unknown\r\n");
+        else if (line.startsWith("RCPT") && mode === "rcpt-stall") continue;
         else if (line === "DATA") {
           data = true;
           dataStarted++;
@@ -68,6 +95,7 @@ async function smtpServer(
   return {
     port,
     sockets,
+    commands,
     accepted: () => accepted,
     dataStarted: () => dataStarted,
     close: async () => {
@@ -78,8 +106,11 @@ async function smtpServer(
   };
 }
 
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+const fast = { absolute: 300, connection: 100, greeting: 150, socket: 300 };
+
 describe("owned SMTP deadline", () => {
-  it("EARS-31: stalled greeting and drip-fed responses terminate and destroy their sockets", async () => {
+  it("EARS-45: stalled greeting and drip-fed responses terminate before end-of-data as provider-failure and destroy their sockets", async () => {
     for (const mode of ["stall", "drip"] as const) {
       const server = await smtpServer(mode);
       try {
@@ -88,17 +119,17 @@ describe("owned SMTP deadline", () => {
           { absolute: 100, connection: 50, greeting: 300, socket: 300 },
         );
         await expect(transport.sendMail(message)).rejects.toMatchObject({
-          outcome: "uncertain",
+          outcome: "provider-failure",
           code: "timeout",
         });
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await settle();
         expect(server.sockets.size).toBe(0);
       } finally {
         await server.close();
       }
     }
   });
-  it("EARS-31: timeout after DATA remains uncertain and cannot become late acceptance", async () => {
+  it("EARS-45: timeout after the end-of-data sequence is ambiguous and cannot become late acceptance", async () => {
     const server = await smtpServer("data-stall");
     try {
       const transport = createBoundedSmtpTransport(
@@ -106,12 +137,84 @@ describe("owned SMTP deadline", () => {
         { absolute: 200, connection: 50, greeting: 100, socket: 300 },
       );
       await expect(transport.sendMail(message)).rejects.toMatchObject({
-        outcome: "uncertain",
+        outcome: "ambiguous",
       });
       expect(server.dataStarted()).toBe(1);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await settle();
       expect(server.sockets.size).toBe(0);
       expect(server.accepted()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+  it("EARS-45: a timeout waiting for the RCPT TO reply is provider-failure (end-of-data never written)", async () => {
+    const server = await smtpServer("rcpt-stall");
+    try {
+      const transport = createBoundedSmtpTransport(
+        { host: "127.0.0.1", port: server.port, secure: false },
+        fast,
+      );
+      await expect(transport.sendMail(message)).rejects.toMatchObject({
+        outcome: "provider-failure",
+        code: "timeout",
+      });
+      expect(server.dataStarted()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+  it("EARS-45: connection loss before DATA is provider-failure; after end-of-data it is ambiguous", async () => {
+    for (const [mode, outcome] of [
+      ["drop-before-data", "provider-failure"],
+      ["drop-after-eod", "ambiguous"],
+    ] as const) {
+      const server = await smtpServer(mode);
+      try {
+        const transport = createBoundedSmtpTransport(
+          { host: "127.0.0.1", port: server.port, secure: false },
+          fast,
+        );
+        await expect(transport.sendMail(message)).rejects.toMatchObject({
+          outcome,
+        });
+      } finally {
+        await server.close();
+      }
+    }
+  });
+  it("EARS-45: an enhanced 5.1.1 RCPT TO reply is recipient-permanent and a bare 550 is provider-failure", async () => {
+    for (const [mode, outcome, code] of [
+      ["rcpt-unknown", "recipient-permanent", "550 5.1.1"],
+      ["reject", "provider-failure", "550"],
+    ] as const) {
+      const server = await smtpServer(mode);
+      try {
+        const transport = createBoundedSmtpTransport(
+          { host: "127.0.0.1", port: server.port, secure: false },
+          fast,
+        );
+        const err = await transport.sendMail(message).catch((e: unknown) => e);
+        expect(err).toMatchObject({ outcome, code });
+        expect(JSON.stringify(err)).not.toContain("doctor@example.com");
+      } finally {
+        await server.close();
+      }
+    }
+  });
+  it("EARS-31: the effective deadline is the lesser of the channel deadline and the remaining budget", async () => {
+    const server = await smtpServer("stall");
+    try {
+      const transport = createBoundedSmtpTransport(
+        { host: "127.0.0.1", port: server.port, secure: false },
+        { absolute: 5_000, connection: 5_000, greeting: 5_000, socket: 5_000 },
+      );
+      const started = Date.now();
+      await expect(
+        transport.sendMail(message, { deadlineMs: 80 }),
+      ).rejects.toMatchObject({ code: "timeout" });
+      expect(Date.now() - started).toBeLessThan(2_000);
+      await settle();
+      expect(server.sockets.size).toBe(0);
     } finally {
       await server.close();
     }
@@ -134,7 +237,7 @@ describe("owned SMTP deadline", () => {
             (r) => r.status === (mode === "accept" ? "fulfilled" : "rejected"),
           ),
         ).toBe(true);
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await settle();
         expect(server.sockets.size).toBe(0);
         expect(server.accepted()).toBe(mode === "accept" ? 2 : 0);
       } finally {
@@ -150,13 +253,60 @@ describe("owned SMTP deadline", () => {
         { absolute: 200, connection: 50, greeting: 100, socket: 100 },
       );
       await expect(transport.sendMail(message)).rejects.toMatchObject({
-        outcome: "uncertain",
+        outcome: "provider-failure",
         code: "timeout",
       });
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await settle();
       expect(server.sockets.size).toBe(0);
     } finally {
       await server.close();
+    }
+  });
+});
+
+describe("003 EARS-46 SMTP readiness probe", () => {
+  it("EARS-46: verify performs an authenticated handshake and never issues MAIL FROM, RCPT TO or DATA", async () => {
+    const server = await smtpServer("accept");
+    try {
+      const transport = createBoundedSmtpTransport(
+        {
+          host: "127.0.0.1",
+          port: server.port,
+          secure: false,
+          auth: { user: "id", pass: "secret" },
+        },
+        fast,
+      );
+      await expect(transport.verify()).resolves.toBeUndefined();
+      expect(server.commands).toContain("AUTH");
+      expect(server.commands).not.toContain("MAIL");
+      expect(server.commands).not.toContain("RCPT");
+      expect(server.dataStarted()).toBe(0);
+      await settle();
+      expect(server.sockets.size).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+  it("EARS-46: an authentication failure or a stalled server fails the probe and releases the socket", async () => {
+    for (const mode of ["auth-fail", "stall"] as const) {
+      const server = await smtpServer(mode);
+      try {
+        const transport = createBoundedSmtpTransport(
+          {
+            host: "127.0.0.1",
+            port: server.port,
+            secure: false,
+            auth: { user: "id", pass: "secret" },
+          },
+          fast,
+        );
+        await expect(transport.verify()).rejects.toBeDefined();
+        await settle();
+        expect(server.sockets.size).toBe(0);
+      } finally {
+        await server.close();
+      }
     }
   });
 });

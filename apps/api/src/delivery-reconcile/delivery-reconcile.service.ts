@@ -1,5 +1,10 @@
 import { resolveRealSmtp, type RealSmtpEnv } from "../config/real-smtp.js";
 import { Injectable } from "@nestjs/common";
+import {
+  operationalReserve,
+  type ChannelReadiness,
+  type MailerReadinessSource,
+} from "../mailer/mailer-readiness.js";
 import type { FeatureFlags } from "../feature-flags/feature-flags.types.js";
 import {
   FLAG_EMAIL_DELIVERY_REAL,
@@ -40,7 +45,7 @@ export interface ReconcileRetryConfig {
   sleep: (ms: number) => Promise<void>;
 }
 
-const DEFAULT_RETRY: ReconcileRetryConfig = {
+export const DEFAULT_RETRY: ReconcileRetryConfig = {
   attempts: 5,
   baseDelayMs: 2000,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -56,16 +61,28 @@ const DEFAULT_RETRY: ReconcileRetryConfig = {
 export class DeliveryReconcileService {
   private unsubscribeChange: (() => void) | null = null;
   private unsubscribeSync: (() => void) | null = null;
+  private unsubscribeReadiness: (() => void) | null = null;
 
   constructor(
     private readonly flags: FeatureFlags,
     private readonly admin: DeliveryAdmin,
     private readonly envDefaults: DeliveryEnvDefaults,
     private readonly retry: ReconcileRetryConfig = DEFAULT_RETRY,
+    /** 003 EARS-46: the mailer-owned readiness statement; reported, never probed here. */
+    private readonly readiness?: MailerReadinessSource,
   ) {}
 
   /** Subscribe before bounded startup reconciliation; real-email failure aborts boot. */
-  async start(warn: WarnFn = defaultWarn): Promise<void> {
+  async start(
+    warn: WarnFn = defaultWarn,
+    info: WarnFn = defaultInfo,
+  ): Promise<void> {
+    if (this.readiness) {
+      const report = (statement: ChannelReadiness[]) =>
+        info(readinessReport(statement));
+      this.unsubscribeReadiness = this.readiness.onChange(report);
+      report(this.readiness.statement());
+    }
     const safeReconcile = (reason: string): void => {
       void this.reconcile(warn).catch((err: unknown) => {
         warn(
@@ -119,6 +136,8 @@ export class DeliveryReconcileService {
     this.unsubscribeChange = null;
     this.unsubscribeSync?.();
     this.unsubscribeSync = null;
+    this.unsubscribeReadiness?.();
+    this.unsubscribeReadiness = null;
   }
 
   /**
@@ -203,4 +222,22 @@ export class DeliveryReconcileService {
 /** Default warn sink — stderr, so the skip note is visible in the api logs. */
 function defaultWarn(message: string): void {
   console.warn(`[delivery-reconcile] ${message}`);
+}
+
+/** Structured readiness line — states and provider labels only (003 EARS-46). */
+function readinessReport(statement: ChannelReadiness[]): string {
+  return JSON.stringify({
+    event: "delivery_mail_readiness",
+    channels: statement.map(({ role, provider, state }) => ({
+      role,
+      provider,
+      state,
+    })),
+    operational_reserve: operationalReserve(statement),
+  });
+}
+
+/** Default info sink for the readiness report. */
+function defaultInfo(message: string): void {
+  console.info(`[delivery-reconcile] ${message}`);
 }

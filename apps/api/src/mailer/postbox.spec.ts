@@ -4,9 +4,9 @@ import { SmtpMailer, type SmtpMailerConfig } from "./smtp-mailer.js";
 function fixture(overrides: Partial<SmtpMailerConfig> = {}) {
   const smtp = vi.fn().mockResolvedValue({ response: "250 accepted" });
   const http = vi.fn().mockResolvedValue(new Response("{}"));
-  const failover = vi.fn();
-  const relayFailure = vi.fn();
-  const accepted = vi.fn();
+  const attempt = vi.fn();
+  const chain = vi.fn();
+  const configurationError = vi.fn();
   const config = {
     intercept: { host: "mailpit.test", port: 1025 },
     real: {
@@ -20,16 +20,16 @@ function fixture(overrides: Partial<SmtpMailerConfig> = {}) {
     resend: { enabled: false, apiKey: "dormant-key", fetchFn: http },
     isEnabled: () => true,
     transportFactory: () => ({ sendMail: smtp }),
-    observability: { failover, relayFailure, accepted },
+    observability: { attempt, chain, configurationError },
     ...overrides,
   } as SmtpMailerConfig;
   return {
     mailer: new SmtpMailer(config),
     smtp,
     http,
-    failover,
-    relayFailure,
-    accepted,
+    attempt,
+    chain,
+    configurationError,
   };
 }
 
@@ -52,27 +52,26 @@ describe("Postbox explicit topology", () => {
     ).rejects.toThrow(/configuration/);
     expect(f.smtp).not.toHaveBeenCalled();
   });
-  it("EARS-32: definite Postbox rejection can use enabled fallback exactly once", async () => {
+  it("EARS-31: a definite Postbox rejection uses an enabled Resend exactly once", async () => {
     const http = vi.fn().mockResolvedValue(new Response("{}"));
     const f = fixture({
       resend: { enabled: true, apiKey: "key", fetchFn: http },
     });
     f.smtp.mockRejectedValue(
-      Object.assign(new Error("recipient ABC123"), { responseCode: 550 }),
+      Object.assign(new Error("recipient ABC123"), {
+        responseCode: 550,
+        command: "RCPT TO",
+      }),
     );
     await f.mailer.sendVerificationCodeEmail("doctor@example.com", "ABC123");
     expect(http).toHaveBeenCalledTimes(1);
-    expect(f.accepted).toHaveBeenCalledWith({
-      context: "verification-code email",
-      provider: "resend",
-      route: "fallback",
-    });
-    expect(f.failover).toHaveBeenCalledWith({
-      context: "verification-code email",
-      from: "postbox",
-      code: "550",
-      to: "resend",
-    });
+    expect(f.attempt.mock.calls.map(([e]) => [e.provider, e.outcome])).toEqual([
+      ["postbox", "provider-failure"],
+      ["resend", "accepted"],
+    ]);
+    expect(f.chain).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "accepted-by-resend", skipped: 1 }),
+    );
   });
   it("EARS-31: when real configuration is missing, shall reject without intercept or promoting Resend", async () => {
     const f = fixture({ real: undefined });
@@ -81,9 +80,12 @@ describe("Postbox explicit topology", () => {
     ).rejects.toThrow(/configuration/);
     expect(f.smtp).not.toHaveBeenCalled();
     expect(f.http).not.toHaveBeenCalled();
-    expect(f.relayFailure).toHaveBeenCalled();
+    expect(f.configurationError).toHaveBeenCalledWith({
+      context: "verification-code email",
+      provider: "unconfigured",
+    });
   });
-  it("EARS-31: when credentials exist but fallback is disabled, shall leave Resend inert", async () => {
+  it("EARS-31: when credentials exist but Resend is disabled, it stays inert", async () => {
     const f = fixture();
     f.smtp.mockRejectedValue(
       Object.assign(
@@ -93,13 +95,13 @@ describe("Postbox explicit topology", () => {
     );
     await expect(
       f.mailer.sendVerificationCodeEmail("doctor@example.com", "ABC123"),
-    ).rejects.toThrow(/postbox=451/);
+    ).rejects.toThrow(/exhausted.*postbox=451/);
     expect(f.http).not.toHaveBeenCalled();
-    expect(JSON.stringify(f.relayFailure.mock.calls)).not.toMatch(
-      /key-secret|doctor@example.com|ABC123/,
-    );
+    expect(
+      JSON.stringify([f.attempt.mock.calls, f.chain.mock.calls]),
+    ).not.toMatch(/key-secret|doctor@example.com|ABC123/);
   });
-  it("EARS-31: when acceptance is uncertain, shall never automatically fail over", async () => {
+  it("EARS-45: an ambiguous attempt never automatically fails over", async () => {
     const http = vi.fn().mockResolvedValue(new Response("{}"));
     const f = fixture({
       resend: { enabled: true, apiKey: "key", fetchFn: http },
@@ -109,17 +111,21 @@ describe("Postbox explicit topology", () => {
     );
     await expect(
       f.mailer.sendVerificationCodeEmail("doctor@example.com", "ABC123"),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/stopped-ambiguous/);
     expect(http).not.toHaveBeenCalled();
-    expect(f.relayFailure.mock.calls[0]?.[0].outcome).toBe("uncertain");
+    expect(f.chain.mock.calls[0]?.[0].outcome).toBe("stopped-ambiguous");
   });
-  it("EARS-32: when Postbox accepts, shall report primary acceptance rather than delivery", async () => {
+  it("EARS-32: when Postbox accepts, shall report accepted-by-postbox rather than delivery", async () => {
     const f = fixture();
     await f.mailer.sendVerificationCodeEmail("doctor@example.com", "ABC123");
-    expect(f.accepted).toHaveBeenCalledWith({
+    expect(f.attempt).toHaveBeenCalledWith({
       context: "verification-code email",
       provider: "postbox",
-      route: "primary",
+      outcome: "accepted",
+      code: "accepted",
     });
+    expect(f.chain).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "accepted-by-postbox" }),
+    );
   });
 });

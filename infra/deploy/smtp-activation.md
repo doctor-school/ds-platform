@@ -49,6 +49,42 @@ previous application, reactivate the original ID and verify readback and receipt
 through both actual send paths. Incomplete restoration is a failed activation. Retain
 both profile IDs after success or rollback; do not delete/recreate profiles.
 
+## BFF reserve chain (Postbox -> mail.ru -> Resend)
+
+The BFF verify/reset sends use one ordered chain (003 design §14.3, #2144); native
+Zitadel login OTP is not part of it. Each reserve is configuration-only:
+
+- **mail.ru reserve:** `MAILER_FALLBACK_SMTP_ENABLED=true` plus a complete, separate
+  set `MAILER_FALLBACK_SMTP_PROVIDER=mail.ru`, `_HOST=smtp.mail.ru`, `_PORT=465`,
+  `_USER`, `_PASSWORD`, `_SENDER_ADDRESS`. Never copy the `IDP_SMTP_REAL_*` values.
+  Valid only while `IDP_SMTP_REAL_PROVIDER=postbox`.
+- **Resend:** `RESEND_ENABLED=true` plus `RESEND_API_KEY`, only with the recorded
+  processing decision (§14.6). Click and open tracking are domain settings in
+  Resend, not per-message options: confirm both are off for the sending domain
+  before enabling.
+
+An enabled reserve with incomplete credentials, or a mail.ru reserve while the
+primary is mail.ru, aborts api startup with `Mailer: invalid transport
+configuration` (no value is printed). Fix the environment; never disable a switch
+to get past a startup error you have not understood.
+
+**Readiness check (no message sent).** After the api starts, and after every
+`email-delivery-real` flag change, the mailer probes each configured channel: an
+authenticated SMTP handshake for Postbox and mail.ru, a read-only key check for
+Resend (a sending-only key's `restricted_api_key` 401 counts as verified). Read the
+`mailer_channel_readiness` log line (and the `delivery_mail_readiness` line the
+reconcile prints) and require `verified` for every channel that activation counts
+on. `configured-unverified`, `probe-failed`, `disabled` and `absent` are never
+operational reserve. The `mailer_channel_readiness{provider,state}` gauge carries
+the same states once a metrics endpoint exists (DEBT.md).
+
+**Rollback.** Set `MAILER_FALLBACK_SMTP_ENABLED=false` to return to Postbox ->
+Resend; set `RESEND_ENABLED=false` as well to return to Postbox only. Returning the
+primary to `IDP_SMTP_REAL_PROVIDER=mail.ru` requires
+`MAILER_FALLBACK_SMTP_ENABLED=false` in the same change, otherwise startup fails.
+Each rollback is an environment change plus the canonical redeploy; no code or
+data step is involved.
+
 ## Projection failure and evidence
 
 Zitadel can persist a password update while its SMTP projection fails with

@@ -668,7 +668,7 @@ and blanking those to make it pass would silently stop exercising what they prot
 # the caller's own shell cannot expand it and a bare
 # `sudo grep ... /etc/ds-platform/*.env` only prints `No such file or directory` — a
 # non-check that reads like a pass.
-sudo bash -c "grep -nE '^(RESEND_API_KEY|SMSAERO_EMAIL|SMSAERO_API_KEY|SMSAERO_SIGN|PGBACKREST_REPO1_S3_KEY|PGBACKREST_REPO1_S3_KEY_SECRET|PGBACKREST_REPO1_CIPHER_PASS|IDP_SMTP_REAL_HOST|IDP_SMTP_REAL_USER|IDP_SMTP_REAL_PASSWORD|IDP_SMTP_REAL_SENDER_ADDRESS|IDP_SMTP_REAL_SENDER_NAME)=.+' /etc/ds-platform/*.env" ; echo "exit=$?"
+sudo bash -c "grep -nE '^(RESEND_API_KEY|MAILER_FALLBACK_SMTP_USER|MAILER_FALLBACK_SMTP_PASSWORD|SMSAERO_EMAIL|SMSAERO_API_KEY|SMSAERO_SIGN|PGBACKREST_REPO1_S3_KEY|PGBACKREST_REPO1_S3_KEY_SECRET|PGBACKREST_REPO1_CIPHER_PASS|IDP_SMTP_REAL_HOST|IDP_SMTP_REAL_USER|IDP_SMTP_REAL_PASSWORD|IDP_SMTP_REAL_SENDER_ADDRESS|IDP_SMTP_REAL_SENDER_NAME)=.+' /etc/ds-platform/*.env" ; echo "exit=$?"
 # expected: NO output and exit=1 — grep matching nothing IS the pass here.
 
 # HALF B — this box's own values: set, and never still a template placeholder.

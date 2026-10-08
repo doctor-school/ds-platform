@@ -30,13 +30,19 @@ flag failure logs a sanitized error and retries on the next signal; it never
 activates a fallback. **This cannot stop independently scheduled Zitadel sends or
 retract already queued mail**: the previous active provider can still send until
 operations correct the configuration. Native failures must be monitored in Zitadel.
-BFF Resend fallback, per-send deadlines and acceptance metrics do not cover native
+The BFF reserve chain (mail.ru, Resend), per-send deadlines and acceptance metrics do not cover native
 sends. SMTP acceptance is not mailbox delivery evidence.
 
 `ZitadelDeliveryAdmin` reads the Admin SMTP/SMS search endpoints and activates by ID.
 Its SMTP metadata shape follows [ListSMTPConfigs](https://zitadel.com/docs/reference/api/admin/zitadel.admin.v1.AdminService.ListSMTPConfigs).
 Provider response bodies and SMTP credentials are never included in its errors.
-`stop()` removes both signal subscriptions. SMS/intercept retains its existing
+Mail-channel readiness (003 EARS-46) is owned by the mailer module: `MailerModule`
+probes at startup and on every real-email flag change and exposes the result through
+`MAILER_READINESS`. Reconcile only consumes it — it never probes — and logs
+`delivery_mail_readiness` (per-channel state plus `operational_reserve`, which lists
+only verified reserves) at start and on each change.
+
+`stop()` removes both signal subscriptions and the readiness subscription. SMS/intercept retains its existing
 missing-provider warning and transient startup recovery behavior.
 
 Tests: from the repo root, `node apps/api/node_modules/vitest/vitest.mjs run apps/api/src/delivery-reconcile`.

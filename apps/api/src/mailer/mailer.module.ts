@@ -1,4 +1,10 @@
-import { Logger, Module } from "@nestjs/common";
+import {
+  Inject,
+  Logger,
+  Module,
+  type OnApplicationBootstrap,
+  type OnModuleDestroy,
+} from "@nestjs/common";
 import { Redis } from "ioredis";
 import { loadEnv, type ApiEnv } from "../config/env.schema.js";
 import { FEATURE_FLAGS } from "../feature-flags/feature-flags.tokens.js";
@@ -7,7 +13,17 @@ import {
   type FeatureFlags,
 } from "../feature-flags/feature-flags.types.js";
 import { MAILER, type Mailer } from "./mailer.types.js";
-import { SmtpMailer, type SmtpTransportConfig } from "./smtp-mailer.js";
+import {
+  MAILER_READINESS,
+  MailerReadinessMonitor,
+  type ChannelReadiness,
+} from "./mailer-readiness.js";
+import {
+  assertMailerConfiguration,
+  SmtpMailer,
+  type SmtpMailerConfig,
+  type SmtpTransportConfig,
+} from "./smtp-mailer.js";
 import {
   SYNTHETIC_SUPPRESSION,
   SyntheticSuppression,
@@ -94,7 +110,7 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
         synthetic: SyntheticSuppression,
       ): Mailer => {
         const env = loadEnv();
-        return new SmtpMailer({
+        const config: SmtpMailerConfig = {
           synthetic,
           intercept: {
             host: env.MAILER_SMTP_HOST,
@@ -104,14 +120,22 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
             from: env.MAILER_SMTP_FROM,
           },
           real: resolveRealTransport(env),
-          // Explicit activation only; credentials alone remain inert.
-          resend: env.RESEND_ENABLED
-            ? {
-                enabled: true,
-                apiKey: env.RESEND_API_KEY ?? "",
-                from: env.IDP_SMTP_REAL_SENDER_ADDRESS,
-              }
-            : undefined,
+          // 003 EARS-31: each reserve joins only through its own switch;
+          // credentials alone remain inert.
+          fallback: {
+            enabled: env.MAILER_FALLBACK_SMTP_ENABLED,
+            provider: env.MAILER_FALLBACK_SMTP_PROVIDER,
+            host: env.MAILER_FALLBACK_SMTP_HOST,
+            port: env.MAILER_FALLBACK_SMTP_PORT,
+            user: env.MAILER_FALLBACK_SMTP_USER,
+            password: env.MAILER_FALLBACK_SMTP_PASSWORD,
+            from: env.MAILER_FALLBACK_SMTP_SENDER_ADDRESS,
+          },
+          resend: {
+            enabled: env.RESEND_ENABLED,
+            apiKey: env.RESEND_API_KEY ?? "",
+            from: env.IDP_SMTP_REAL_SENDER_ADDRESS,
+          },
           // Live read on every send: Unleash overrides when reachable; the
           // EMAIL_DELIVERY_MODE env default is the boot default AND the
           // Unleash-unreachable fallback (same contract as DeliveryReconcileService).
@@ -120,7 +144,26 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
               FLAG_EMAIL_DELIVERY_REAL,
               env.EMAIL_DELIVERY_MODE === "real",
             ),
-        });
+        };
+        // 003 EARS-31: invalid configuration fails startup loudly.
+        assertMailerConfiguration(config, config.isEnabled());
+        return new SmtpMailer(config);
+      },
+    },
+    {
+      // 003 EARS-46: readiness is owned here; delivery-reconcile only reports it.
+      provide: MAILER_READINESS,
+      inject: [MAILER],
+      useFactory: (mailer: Mailer): MailerReadinessMonitor => {
+        const probing = mailer as Partial<
+          Pick<SmtpMailer, "probeReadiness" | "readinessStatement">
+        >;
+        const initial: ChannelReadiness[] =
+          probing.readinessStatement?.() ?? [];
+        return new MailerReadinessMonitor(
+          () => probing.probeReadiness?.() ?? Promise.resolve(initial),
+          initial,
+        );
       },
     },
     {
@@ -143,6 +186,26 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
       },
     },
   ],
-  exports: [MAILER, REGISTER_NOTICE_THROTTLE, SYNTHETIC_SUPPRESSION],
+  exports: [
+    MAILER,
+    MAILER_READINESS,
+    REGISTER_NOTICE_THROTTLE,
+    SYNTHETIC_SUPPRESSION,
+  ],
 })
-export class MailerModule {}
+export class MailerModule implements OnApplicationBootstrap, OnModuleDestroy {
+  constructor(
+    @Inject(MAILER_READINESS)
+    private readonly readiness: MailerReadinessMonitor,
+    @Inject(FEATURE_FLAGS) private readonly flags: FeatureFlags,
+  ) {}
+
+  /** 003 EARS-46: probe at startup and on every real-email flag change. */
+  onApplicationBootstrap(): void {
+    this.readiness.start(this.flags);
+  }
+
+  onModuleDestroy(): void {
+    this.readiness.stop();
+  }
+}

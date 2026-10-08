@@ -292,8 +292,9 @@ even for an already-active identity. Real-email startup failures abort API boot;
 later flag failures log loudly. The BFF cannot suppress independently queued IdP
 emails: the previous active provider may still send until configuration is repaired.
 Verified-account login OTP remains Zitadel-generated/rendered/sent. BFF verify/reset
-uses `returnCode` and MailerModule. `RESEND_ENABLED=false` is the default; enabling
-Resend affects BFF sends only, as do BFF per-send deadlines.
+uses `returnCode` and MailerModule. `MAILER_FALLBACK_SMTP_ENABLED=false` and
+`RESEND_ENABLED=false` are the defaults; enabling
+the mail.ru reserve or Resend affects BFF sends only, as do BFF per-send deadlines.
 
 Production selection/secret injection, readback, rollback and received-message proof
 are release-blocker [#2116](https://github.com/doctor-school/ds-platform/issues/2116).

@@ -325,6 +325,27 @@ describe("003 /verify dual-affordance + resend (#227/#267)", () => {
     expect(h.replace).not.toHaveBeenCalled();
   });
 
+  // #2469 — the accepted code is spent: the route hop can take a while, and a
+  // second POST would answer 400 and draw an error under «Код принят».
+  it("003 EARS-3 (#2469): an accepted code is never sent again — no click, Enter or re-typed code reaches the verify command", async () => {
+    const user = userEvent.setup();
+    await enterCode();
+    await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("verify-succeeded")).toBeInTheDocument();
+
+    const submit = screen.getByTestId("verify-submit");
+    expect(submit).toBeDisabled();
+    await user.click(submit);
+    await act(async () => {
+      fireEvent.submit(submit.closest("form")!);
+    });
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("{Backspace}3{Enter}");
+
+    expect(h.verify).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("verify-error")).toBeNull();
+  });
+
   it("003 EARS-3: a refused code never shows the success banner", async () => {
     h.verify.mockRejectedValue(new AuthError(400, "Bad Request"));
     await enterCode();

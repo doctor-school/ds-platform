@@ -167,11 +167,23 @@ export function EmailConfirmCard({
   }, [resend.nonce]);
 
   // #175 — auto-submit on the sixth character, guarded against a double call.
-  const submit = form.handleSubmit(onSubmit, onInvalid);
+  // #2469 — an accepted code is spent: once the host reports acceptance no
+  // path (a click, Enter, a re-typed or pasted code) submits it again.
+  const handleSubmit = form.handleSubmit(onSubmit, onInvalid);
+  const submit = React.useCallback(
+    (event?: React.BaseSyntheticEvent) => {
+      if (succeeded) {
+        event?.preventDefault();
+        return Promise.resolve();
+      }
+      return handleSubmit(event);
+    },
+    [succeeded, handleSubmit],
+  );
   const onComplete = React.useCallback(() => {
-    if (form.formState.isSubmitting) return;
+    if (form.formState.isSubmitting || succeeded) return;
     void submit();
-  }, [form.formState.isSubmitting, submit]);
+  }, [form.formState.isSubmitting, succeeded, submit]);
 
   const ids = { ...EMAIL_CONFIRM_TEST_IDS, ...testIds };
   // Canvas 53-56 — ONE operation plate: the code failure wins over a resend

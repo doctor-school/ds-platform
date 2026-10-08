@@ -6,6 +6,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FieldValues, Resolver } from "react-hook-form";
 
@@ -115,6 +116,25 @@ describe("<EmailConfirmCard>", () => {
     expect(screen.getByTestId("verify-succeeded")).toHaveTextContent(
       "copy.codeAccepted",
     );
+  });
+
+  // #2469 — an accepted code is spent; a second submit would be refused (400)
+  // and draw an error under the success row.
+  it("003 EARS-3 (#2469): after acceptance no click, Enter or re-typed code submits again", async () => {
+    const onSubmit = vi.fn();
+    setup({ onSubmit, succeeded: true });
+
+    const submit = screen.getByTestId("verify-submit");
+    expect(submit).toBeDisabled();
+    await act(async () => {
+      fireEvent.click(submit);
+      fireEvent.submit(submit.closest("form")!);
+    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("482913{Enter}");
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("renders no error of its own — the host's already-localized string is what shows", () => {

@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import { adaptDoctorEventsFeed, adaptPublicEventListing } from "./adapters";
 
 const KIND = { id: "k-1", slug: "webinar", title: "Вебинар" };
+const RECORDING = {
+  state: "raw-only",
+  primaryKind: "raw",
+  secondaryKind: null,
+  posterUrl: null,
+  expectedBy: null,
+};
 
 describe("adaptPublicEventListing — the Academy read onto the one feed model", () => {
   const base = {
@@ -27,7 +34,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         ],
         counts: { upcoming: 30, past: 4 },
         pagination: { nextCursor: null, hasMore: true },
-        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05" },
+        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28 },
       },
       { tense: "upcoming" },
     );
@@ -43,6 +50,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
       from: "2026-10-08",
       to: "2026-10-22",
       nextTo: "2026-11-05",
+      nextFrom: null,
     });
     expect(page.remaining).toBe(28);
   });
@@ -60,13 +68,14 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         data: [{ ...base, state: "ended", recording }],
         counts: { upcoming: 0, past: 1 },
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null },
+        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3 },
       },
       { tense: "past" },
     );
     expect(page.cards[0]?.state).toBe("past");
     expect(page.cards[0]?.recording).toEqual(recording);
-    expect(page.remaining).toBe(0);
+    expect(page.horizon.nextFrom).toBe("2026-09-10");
+    expect(page.remaining).toBe(3);
   });
 });
 
@@ -89,7 +98,7 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
     state: "normal",
   };
 
-  it("maps the day groups flat, the horizon, and leaves the remainder unknown", () => {
+  it("maps the day groups flat, the horizon and the remainder", () => {
     const page = adaptDoctorEventsFeed(
       {
         tense: "upcoming",
@@ -99,7 +108,9 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
           { day: "2026-10-20", label: "20 октября", items: [card, { ...card, id: "d-2", slug: "d-2", state: "live" }] },
         ],
         totalCount: 2,
-        nextTo: null,
+        nextTo: "2026-11-05",
+        nextFrom: null,
+        remaining: 7,
         targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
       },
       { tense: "upcoming" },
@@ -114,24 +125,31 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
       pulCost: 0,
       recording: null,
     });
-    expect(page.horizon).toEqual({ from: "2026-10-08", to: "2026-10-22", nextTo: null });
-    expect(page.remaining).toBeNull();
+    expect(page.horizon).toEqual({
+      from: "2026-10-08",
+      to: "2026-10-22",
+      nextTo: "2026-11-05",
+      nextFrom: null,
+    });
+    expect(page.remaining).toBe(7);
   });
 
-  it("an ended doctor card is a past card that carries no recording projection", () => {
+  it("NEW: an ended doctor card is a past card carrying its recording projection", () => {
     const page = adaptDoctorEventsFeed(
       {
         tense: "past",
         from: "2026-09-24",
         to: "2026-10-09",
-        days: [{ day: "2026-10-01", label: "1 октября", items: [{ ...card, state: "recorded" }] }],
+        days: [{ day: "2026-10-01", label: "1 октября", items: [{ ...card, state: "recorded", recording: RECORDING }] }],
         totalCount: 1,
         nextTo: null,
+        nextFrom: null,
+        remaining: 0,
         targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
       },
       { tense: "past" },
     );
     expect(page.cards[0]?.state).toBe("past");
-    expect(page.cards[0]?.recording).toBeNull();
+    expect(page.cards[0]?.recording).toEqual(RECORDING);
   });
 });

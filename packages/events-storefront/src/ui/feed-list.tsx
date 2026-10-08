@@ -85,7 +85,7 @@ export function FeedList({
           showMore === null ? null : (
             <Button
               asChild
-              className="mt-8 no-underline"
+              className="mt-8"
               size="lg"
               variant="outline"
             >

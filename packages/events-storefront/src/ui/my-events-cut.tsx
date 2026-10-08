@@ -32,7 +32,7 @@ export function MyEventsCut({
     <section data-feed-block="my-events" data-testid="events-my-events">
       <DayAgenda title={FEED_COPY.my.title} rows={rows} emptyText="" />
       <div className="mt-4">
-        <DsLink asChild className="font-bold">
+        <DsLink asChild>
           <Link href={routes.accountEvents}>{FEED_COPY.my.all}</Link>
         </DsLink>
       </div>

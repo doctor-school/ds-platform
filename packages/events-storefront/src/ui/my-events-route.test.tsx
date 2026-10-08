@@ -38,11 +38,10 @@ vi.mock("../server/my-events", () => ({
   fetchMyEvents: (...args: unknown[]) => fetchMyEvents(...args),
 }));
 
-import type { EventsStorefrontHostConfig } from "../host-config";
+import type { MyEventsHostConfig } from "../host-config";
 import { MyEventsRoute } from "./my-events-route";
 
 const CONFIG = {
-  headerCopy: { title: "t", subline: "s" },
   contentSet: { myEventsPath: "/v1/me/events" },
   routes: {
     listing: "/webinars",
@@ -50,7 +49,7 @@ const CONFIG = {
     login: "/login",
     accountEvents: "/account/events",
   },
-} satisfies EventsStorefrontHostConfig;
+} satisfies MyEventsHostConfig;
 
 const MyEventsPage = ({
   searchParams,

@@ -212,7 +212,7 @@ describe("showMoreLabel", () => {
   it("NEW: «Показать ещё» states the next batch and the remainder", () => {
     expect(showMoreLabel(57, FEED_COPY)).toBe("Показать ещё 20 из 57");
     expect(showMoreLabel(3, FEED_COPY)).toBe("Показать ещё 3 из 3");
-    expect(showMoreLabel(null, FEED_COPY)).toBe("Показать ещё");
+    expect(showMoreLabel(0, FEED_COPY)).toBe("Показать ещё");
   });
 });
 

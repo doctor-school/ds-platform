@@ -60,16 +60,28 @@ describe("the one feed codec (019 LD-1)", () => {
     expect(feedTenseOf({ tense: "nonsense" })).toBe("upcoming");
   });
 
-  it("NEW: «Показать ещё» writes the extent to the URL", () => {
+  it("NEW: «Показать ещё» writes the extent to the URL — «Будущие» widens to, «Прошедшие» widens from", () => {
     expect(
-      showMoreHref("/events", { tense: "past" }, {
+      showMoreHref("/events", {}, {
         from: "2026-10-08",
         to: "2026-10-22",
         nextTo: "2026-11-05",
+        nextFrom: null,
       }),
-    ).toBe("/events?tense=past&from=2026-10-08&to=2026-11-05");
+    ).toBe("/events?from=2026-10-08&to=2026-11-05");
     expect(
-      showMoreHref("/events", {}, { from: "a", to: "b", nextTo: null }),
+      showMoreHref("/events", { tense: "past" }, {
+        from: "2026-09-24",
+        to: "2026-10-08",
+        nextTo: null,
+        nextFrom: "2026-09-10",
+      }),
+    ).toBe("/events?tense=past&from=2026-09-10&to=2026-10-08");
+    expect(
+      showMoreHref("/events", {}, { from: "a", to: "b", nextTo: null, nextFrom: "z" }),
+    ).toBeNull();
+    expect(
+      showMoreHref("/events", { tense: "past" }, { from: "a", to: "b", nextTo: "y", nextFrom: null }),
     ).toBeNull();
   });
 

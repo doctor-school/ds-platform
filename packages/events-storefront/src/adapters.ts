@@ -17,10 +17,7 @@ import type {
  */
 
 /** The Academy read `GET /v1/public/events?timeframe=…&from=&to=`. */
-export const adaptPublicEventListing: EventsStorefrontAdapter = (
-  dto,
-  { tense },
-): EventsFeedPage => {
+export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFeedPage => {
   const page = PublicEventListingPageSchema.parse(dto);
   const cards = page.data.map(
     (card): EventsFeedCard => ({
@@ -43,15 +40,23 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (
       recording: "recording" in card ? card.recording : null,
     }),
   );
+  // The feed always reads the horizon form (D2); a cursor page carries none.
   const horizon = page.horizon ?? {
     from: "",
     to: "",
     nextTo: null,
+    nextFrom: null,
+    remaining: 0,
   };
   return {
     cards,
-    horizon,
-    remaining: Math.max(0, page.counts[tense] - cards.length),
+    horizon: {
+      from: horizon.from,
+      to: horizon.to,
+      nextTo: horizon.nextTo,
+      nextFrom: horizon.nextFrom,
+    },
+    remaining: horizon.remaining,
   };
 };
 
@@ -81,14 +86,18 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
         pulCost: card.pulCost,
         ...(card.city ? { city: card.city } : {}),
         ...(card.seatsLeft !== undefined ? { seatsLeft: card.seatsLeft } : {}),
-        recording: null,
+        recording: card.recording ?? null,
       }),
     ),
   );
   return {
     cards,
-    horizon: { from: feed.from, to: feed.to, nextTo: feed.nextTo },
-    // The doctor read states the window's count only, not what lies beyond it.
-    remaining: null,
+    horizon: {
+      from: feed.from,
+      to: feed.to,
+      nextTo: feed.nextTo,
+      nextFrom: feed.nextFrom,
+    },
+    remaining: feed.remaining,
   };
 };

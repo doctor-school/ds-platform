@@ -95,7 +95,7 @@ export function LiveBlock({
       ))}
       {view.moreLabel ? (
         <div>
-          <DsLink className="font-bold" href={`#day-${today}`}>
+          <DsLink href={`#day-${today}`}>
             {view.moreLabel}
           </DsLink>
         </div>

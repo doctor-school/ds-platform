@@ -48,18 +48,22 @@ export interface EventsFeedCard {
   readonly venueZone?: string;
 }
 
-/** The read's extent (019 LD-2): `nextTo` is the next `to` «Показать ещё» writes. */
+/**
+ * The read's extent (019 LD-2). «Показать ещё» widens it: on «Будущие» to
+ * `nextTo`, on «Прошедшие» back to `nextFrom`; `null` = nothing lies beyond.
+ */
 export interface EventsFeedHorizon {
   readonly from: string;
   readonly to: string;
   readonly nextTo: string | null;
+  readonly nextFrom: string | null;
 }
 
-/** One feed read, mapped. `remaining` is `null` when the read states no total. */
+/** One feed read, mapped. `remaining` = matching events beyond the extent. */
 export interface EventsFeedPage {
   readonly cards: readonly EventsFeedCard[];
   readonly horizon: EventsFeedHorizon;
-  readonly remaining: number | null;
+  readonly remaining: number;
 }
 
 /**
@@ -168,9 +172,9 @@ export function buildFeedItems(
   });
 }
 
-/** «Показать ещё N из M» — N the next batch, M the remainder; plain when unknown. */
-export function showMoreLabel(remaining: number | null, copy: FeedCopy): string {
-  if (remaining === null || remaining <= 0) return copy.feed.showMore;
+/** «Показать ещё N из M» — N the next batch, M the remainder (the canvas `Math.min(PER, remaining)`). */
+export function showMoreLabel(remaining: number, copy: FeedCopy): string {
+  if (remaining <= 0) return copy.feed.showMore;
   return copy.feed.showMoreOf(Math.min(FEED_PAGE_SIZE, remaining), remaining);
 }
 

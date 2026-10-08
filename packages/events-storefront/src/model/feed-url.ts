@@ -99,17 +99,21 @@ export function tenseHref(
   return href(listing, codecEntries(next));
 }
 
-/** «Показать ещё» — the same reading with `to` widened to the read's `nextTo`. */
+/**
+ * «Показать ещё» — the same reading over a wider extent: «Будущие» widens `to`
+ * to the read's `nextTo`, «Прошедшие» widens `from` back to `nextFrom` (D2).
+ * `null` when nothing lies beyond in the reading's direction.
+ */
 export function showMoreHref(
   listing: string,
   raw: RawQueryRecord,
   horizon: EventsFeedHorizon,
 ): string | null {
-  if (horizon.nextTo === null) return null;
-  return href(
-    listing,
-    codecEntries({ ...raw, from: horizon.from, to: horizon.nextTo }),
-  );
+  const past = feedTenseOf(raw) === "past";
+  const from = past ? horizon.nextFrom : horizon.from;
+  const to = past ? horizon.to : horizon.nextTo;
+  if (from === null || to === null) return null;
+  return href(listing, codecEntries({ ...raw, from, to }));
 }
 
 /** The feed href with one facet value (or the whole facet) removed. */

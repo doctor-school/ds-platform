@@ -42,16 +42,53 @@ async function readMyEvents(
   }
 }
 
+/**
+ * A skeleton in a sized slot: the slot is layout (where the placeholder sits
+ * and how much room it reserves, the canvas `sk(height, width)` boxes); the
+ * primitive keeps its own fill and pulse.
+ */
+function SkeletonSlot({ className }: { className: string }) {
+  return (
+    <div className={className}>
+      <Skeleton className="h-full w-full" />
+    </div>
+  );
+}
+
 function LiveSkeleton() {
-  return <Skeleton className="h-24 w-full" data-testid="events-live-skeleton" />;
+  return (
+    <div data-testid="events-live-skeleton">
+      <SkeletonSlot className="h-24 w-full" />
+    </div>
+  );
 }
 
 function MyEventsSkeleton() {
   return (
-    <div className="flex flex-col gap-3" data-testid="events-my-events-skeleton">
-      <Skeleton className="h-4 w-40" />
-      <Skeleton className="h-18 w-full" />
-      <Skeleton className="h-18 w-full" />
+    <div
+      className="flex flex-col gap-3"
+      data-testid="events-my-events-skeleton"
+    >
+      <SkeletonSlot className="h-3.5 w-40" />
+      <SkeletonSlot className="h-18 w-full" />
+      <SkeletonSlot className="h-18 w-full" />
+    </div>
+  );
+}
+
+function FeedSkeletonCard() {
+  return (
+    <div className="flex flex-col border-2 border-hairline bg-card layout:flex-row">
+      <div className="flex shrink-0 flex-col gap-3 bg-section px-6 py-7 layout:w-52">
+        <SkeletonSlot className="h-9 w-26" />
+        <SkeletonSlot className="h-3 w-22" />
+      </div>
+      <div className="flex flex-1 flex-col gap-3.5 p-7">
+        <SkeletonSlot className="h-3 w-2/5" />
+        <SkeletonSlot className="h-5.5 w-5/6" />
+        <SkeletonSlot className="h-5.5 w-7/12" />
+        <SkeletonSlot className="h-3 w-2/5" />
+      </div>
     </div>
   );
 }
@@ -61,9 +98,9 @@ function FeedSkeleton() {
     <div className="flex flex-col gap-10" data-testid="events-feed-skeleton">
       {[2, 1].map((cards, day) => (
         <div className="flex flex-col gap-6" key={day}>
-          <Skeleton className="h-5 w-60" />
+          <SkeletonSlot className="h-4 w-60" />
           {Array.from({ length: cards }, (_, i) => (
-            <Skeleton className="h-40 w-full" key={i} />
+            <FeedSkeletonCard key={i} />
           ))}
         </div>
       ))}

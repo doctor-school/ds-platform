@@ -490,21 +490,34 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
     Examples:
       | refusal                                  |
-      | a basic 550 reply at RCPT TO, no enhanced code |
-      | an enhanced status 5.1.1 on a reply            |
+      | an enhanced status 5.1.1 on the RCPT TO reply |
+      | an enhanced status 5.1.6 on the RCPT TO reply |
 
   @EARS-45 @happy
-  Scenario: A policy refusal at RCPT TO is a provider failure, not a recipient refusal
-    Given Postbox answers RCPT TO with "550 5.7.1"
+  Scenario Outline: A refusal that is not a recipient-address status moves to the next channel
+    Given Postbox answers <reply>
     And the mail.ru reserve is enabled with its own complete credentials
     When the BFF mailer dispatches a verification or reset email
     Then the attempt is a provider-failure and mail.ru is called next
+
+    Examples:
+      | reply                                    |
+      | RCPT TO with "550 5.7.1"                 |
+      | RCPT TO with a bare "550", no enhanced code |
+      | MAIL FROM with "553 5.1.8"               |
 
   @EARS-45 @failure
   Scenario: A lost acknowledgement after the end-of-data sequence stops the chain
     Given Postbox received the complete end-of-data sequence
     And no final reply arrives before the attempt ends by timeout or connection loss
     And the mail.ru reserve and Resend are enabled and configured
+    When the BFF mailer dispatches a verification or reset email
+    Then no further channel is called and nothing is resent
+    And the terminal outcome is stopped-ambiguous
+
+  @EARS-45 @failure
+  Scenario: An unknown SMTP phase is treated as ambiguous
+    Given Postbox ends with a timeout the adapter cannot place before or after the end-of-data sequence
     When the BFF mailer dispatches a verification or reset email
     Then no further channel is called and nothing is resent
     And the terminal outcome is stopped-ambiguous
@@ -561,8 +574,9 @@ Feature: Net-new web authentication producing a doctor_guest identity
   Scenario: Channels have independent credentials and only verified channels are reserve
     Given the primary uses IDP_SMTP_REAL_* and the mail.ru reserve uses its own MAILER_FALLBACK_SMTP_* set
     When readiness is evaluated without sending any message
-    Then each channel reports disabled, absent, configured-unverified or verified
+    Then each channel reports disabled, absent, configured-unverified, probe-failed or verified
     And only a channel whose authenticated handshake or key check succeeded counts as operational reserve
+    And a Resend sending-only key answering restricted_api_key 401 is verified while an invalid key is probe-failed
     And the statement contains no secret, credential or recipient address
 
   @EARS-31 @happy
@@ -572,6 +586,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the chain is Postbox then Resend
     When both reserve switches are off
     Then only Postbox is used
+    When the primary is switched back to mail.ru
+    Then the mail.ru reserve switch must be off or startup fails
     When intercept mode is explicitly selected instead
     Then only the configured Mailpit intercept receives the next email
 
@@ -600,6 +616,8 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the Resend attempt is still in flight when the 40 s total budget expires
     When the budget expires
     Then the Resend fetch is aborted and its timers are cleared
+    And the in-flight attempt is classified by its phase and no further channel is tried
+    And the terminal outcome is stopped-budget
     And a late Resend 2xx cannot report success
     And the API response timing is unchanged because the send is detached
 

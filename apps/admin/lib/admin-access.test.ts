@@ -125,3 +125,118 @@ describe("044 EARS-20 admin access projection", () => {
     expect(landingRedirect(adminAccess(platformAdmin), "/events")).toBeNull();
   });
 });
+
+/**
+ * 046 EARS-31 — the programme committee's admin chrome is the same projection:
+ * a committee-only principal sees the «Заявки» entry of each bound event and
+ * nothing else; the server refusals of EARS-26 stay the authority.
+ */
+describe("046 EARS-31 programme committee access projection", () => {
+  const committeeBoundToAB: AdminSessionResponse = {
+    roles: ["congress-program-committee"],
+    eventGrants: [
+      {
+        role: "congress-program-committee",
+        eventId: EVENT_A,
+        eventSlug: "congress-a",
+      },
+      {
+        role: "congress-program-committee",
+        eventId: EVENT_B,
+        eventSlug: "congress-b",
+      },
+    ],
+  };
+
+  it("046 EARS-31: a committee member bound to events gets only their «Заявки» entries", () => {
+    const access = adminAccess(committeeBoundToAB);
+
+    expect(adminNavItems(access)).toEqual([
+      {
+        href: `/events/${EVENT_A}/submissions`,
+        testId: "nav-submissions",
+        labelKey: "congressSubmissions.entryLink",
+      },
+      {
+        href: `/events/${EVENT_B}/submissions`,
+        testId: "nav-submissions",
+        labelKey: "congressSubmissions.entryLink",
+      },
+    ]);
+    expect(canAccessPath(access, `/events/${EVENT_A}/submissions`)).toBe(true);
+    expect(canAccessPath(access, `/events/congress-b/submissions`)).toBe(true);
+    expect(canAccessPath(access, `/events/${EVENT_A}/roster`)).toBe(false);
+    expect(canAccessPath(access, `/events/${EVENT_A}/congress-intake`)).toBe(
+      false,
+    );
+    expect(canAccessPath(access, `/events/${EVENT_A}`)).toBe(false);
+    expect(canAccessPath(access, "/events")).toBe(false);
+    expect(
+      canAccessResource(access, "congress-submissions", { id: EVENT_A }),
+    ).toBe(true);
+    expect(canAccessResource(access, "congress-roster", { id: EVENT_A })).toBe(
+      false,
+    );
+    // Several entries: no single obvious landing.
+    expect(landingRedirect(access, "/events")).toBeNull();
+  });
+
+  it("046 EARS-31: a committee member bound to one event lands on its «Заявки»", () => {
+    const access = adminAccess({
+      roles: ["congress-program-committee"],
+      eventGrants: [committeeBoundToAB.eventGrants[0]!],
+    });
+
+    expect(landingRedirect(access, "/events")).toBe(
+      `/events/${EVENT_A}/submissions`,
+    );
+    expect(canAccessPath(access, `/events/${EVENT_B}/submissions`)).toBe(false);
+  });
+
+  it("046 EARS-31: a committee member without a binding row gets nothing", () => {
+    const access = adminAccess({
+      roles: ["congress-program-committee"],
+      eventGrants: [],
+    });
+
+    expect(adminNavItems(access)).toEqual([]);
+    expect(canAccessPath(access, `/events/${EVENT_A}/submissions`)).toBe(false);
+  });
+
+  it("046 EARS-31: a grant of one role never opens the other role's screen", () => {
+    // A committee grant held without the coarse role draws nothing.
+    expect(
+      adminNavItems(
+        adminAccess({
+          roles: ["event-registrar"],
+          eventGrants: committeeBoundToAB.eventGrants,
+        }),
+      ),
+    ).toEqual([]);
+    // Registrar of A and committee of B: the union, each on its own screen.
+    const both = adminAccess({
+      roles: ["event-registrar", "congress-program-committee"],
+      eventGrants: [
+        registrarBoundToA.eventGrants[0]!,
+        committeeBoundToAB.eventGrants[1]!,
+      ],
+    });
+    expect(adminNavItems(both).map((item) => item.href)).toEqual([
+      `/events/${EVENT_A}/roster`,
+      `/events/${EVENT_B}/submissions`,
+    ]);
+    expect(canAccessPath(both, `/events/${EVENT_A}/roster`)).toBe(true);
+    expect(canAccessPath(both, `/events/${EVENT_B}/submissions`)).toBe(true);
+    expect(canAccessPath(both, `/events/${EVENT_A}/submissions`)).toBe(false);
+    expect(canAccessPath(both, `/events/${EVENT_B}/roster`)).toBe(false);
+  });
+
+  it("046 EARS-31: platform_admin reaches every event's «Заявки», unbound by grants", () => {
+    const access = adminAccess(platformAdmin);
+
+    expect(canAccessPath(access, `/events/${EVENT_A}/submissions`)).toBe(true);
+    expect(
+      canAccessResource(access, "congress-submissions", { id: EVENT_B }),
+    ).toBe(true);
+  });
+});

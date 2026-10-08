@@ -111,7 +111,7 @@ test.describe("046 EARS-2 — the congress intake settings screen in admin", () 
     await page.getByTestId("event-congress-intake-link").click();
     await page.waitForURL(new RegExp(`/events/${eventId}/congress-intake$`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Приём материалов Конгресса",
+      "Настройки приёма",
     );
 
     // EARS-2 — an event with no settings opens on the product defaults.

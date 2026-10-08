@@ -17,9 +17,12 @@ export const SESSION_COOKIE_NAME = "__Host-ds_session";
 const ADMIN_ROLE = "platform_admin";
 /** 044 EARS-17: the congress registrar project role (seeded by `provision.sh`). */
 export const REGISTRAR_ROLE = "event-registrar";
+/** 046 EARS-26: the programme committee project role (seeded by `provision.sh`). */
+export const COMMITTEE_ROLE = "congress-program-committee";
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
   [ADMIN_ROLE]: "Platform Admin",
   [REGISTRAR_ROLE]: "Event Registrar",
+  [COMMITTEE_ROLE]: "Congress Program Committee",
 };
 
 export interface BootstrapResult {
@@ -217,6 +220,23 @@ export async function bootstrapRegistrarAccount(
   await register(adminOrigin, email, E2E_PASSWORD);
   const sub = await resolveSub(email);
   await grantProjectRole(sub, REGISTRAR_ROLE);
+  await new Promise((r) => setTimeout(r, 2500));
+  return { email, password: E2E_PASSWORD };
+}
+
+/**
+ * Provision a programme committee member (046 EARS-26): register → grant the
+ * `congress-program-committee` project role on the IdP. Bound to its events by
+ * `bindCommitteeToEvent` (`support/event-grants.ts`); signs in through the
+ * same browser arc as an administrator (`signInAsAdmin`).
+ */
+export async function bootstrapCommitteeAccount(
+  adminOrigin: string,
+): Promise<BootstrapResult> {
+  const email = uniqueEmail("committee");
+  await register(adminOrigin, email, E2E_PASSWORD);
+  const sub = await resolveSub(email);
+  await grantProjectRole(sub, COMMITTEE_ROLE);
   await new Promise((r) => setTimeout(r, 2500));
   return { email, password: E2E_PASSWORD };
 }

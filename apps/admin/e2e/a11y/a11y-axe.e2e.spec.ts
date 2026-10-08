@@ -11,6 +11,11 @@ import {
   eventSlugFromRoster,
   registerDoctorThroughPlatform,
 } from "../support/congress-roster";
+import {
+  congressAuthor,
+  openOralIntake,
+  sendOralSubmission,
+} from "../support/congress-submissions";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
 import { totpCode } from "../support/totp";
 
@@ -788,6 +793,49 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
       "aria-invalid",
       "true",
     );
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 046 EARS-27/28/35 (#2437) — the submissions registry with a real row, then
+  // the card open over it with the «Решение» block, then the same card on
+  // `needs_revision` with the administrator's extension field.
+  test("046 EARS-27: the congress submissions registry and its card pass WCAG 2 A/AA (light)", async ({
+    page,
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    await loginAsAdmin(page);
+    const id = await createPublishedEvent(page, `Axe-скан заявки ${Date.now()}`);
+    await openOralIntake(page, id);
+    const slug = await eventSlugFromRoster(page, id);
+    const author = await congressAuthor(browser, slug, "Аксенова Мария Петровна");
+    const title = `Axe-тема ${Date.now()}`;
+    try {
+      await sendOralSubmission(author, id, title);
+    } finally {
+      await author.context.close();
+    }
+
+    await page.goto(`/events/${id}/submissions`);
+    await expect(page.getByTestId("submissions-total")).toHaveText("Найдено: 1");
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page
+      .getByTestId("submissions-table")
+      .getByRole("button", { name: title })
+      .click();
+    await expect(page).toHaveURL(/[?&]submission=[0-9a-f-]{36}/);
+    await expect(page.getByTestId("submission-card-title")).toHaveText(title);
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page
+      .getByTestId("submission-decision-status")
+      .selectOption("needs_revision");
+    await page
+      .getByTestId("submission-decision-comment")
+      .fill("Добавьте данные о наблюдении.");
+    await page.getByTestId("submission-decision-submit").click();
+    await expect(page.getByTestId("submission-extension")).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
   });
 });

@@ -15,18 +15,28 @@ import type { AdminSessionResponse } from "@ds/schemas";
  * - only `event-registrar` → exactly the roster of each bound event (the partial
  *   unique index keeps that at one), no events list, no other section; with no
  *   binding row → nothing at all.
+ * - only `congress-program-committee` (046 EARS-31) → exactly the «Заявки»
+ *   (submissions registry) of each bound event — a member may be bound to
+ *   several — and nothing else; with no binding row → nothing at all.
+ * - both coarse roles → the union, each grant opening only its own role's
+ *   screen of its own event.
  * - an unreadable session (`null`) → nothing: fail closed, like
  *   `readAdminAuthState`.
  */
 
 const PLATFORM_ADMIN = "platform_admin";
 const EVENT_REGISTRAR = "event-registrar";
+const PROGRAM_COMMITTEE = "congress-program-committee";
+
+type EventRef = { eventId: string; eventSlug: string };
 
 export interface AdminAccess {
   /** `platform_admin`: every section, every event. */
   readonly full: boolean;
   /** Events whose roster a registrar is bound to — ids and slugs both match. */
-  readonly rosterEvents: ReadonlyArray<{ eventId: string; eventSlug: string }>;
+  readonly rosterEvents: ReadonlyArray<EventRef>;
+  /** 046 EARS-31 — events whose submissions a committee member is bound to. */
+  readonly committeeEvents: ReadonlyArray<EventRef>;
 }
 
 export interface AdminNavItem {
@@ -74,57 +84,106 @@ export const ADMIN_SECTION_NAV: readonly AdminNavItem[] = [
   },
 ];
 
+const NO_ACCESS: AdminAccess = {
+  full: false,
+  rosterEvents: [],
+  committeeEvents: [],
+};
+
+/** The bound events of one coarse role — only when the role itself is held. */
+function grantsOf(session: AdminSessionResponse, role: string): EventRef[] {
+  if (!session.roles.includes(role)) return [];
+  return session.eventGrants
+    .filter((grant) => grant.role === role)
+    .map(({ eventId, eventSlug }) => ({ eventId, eventSlug }));
+}
+
 export function adminAccess(session: AdminSessionResponse | null): AdminAccess {
-  if (!session) return { full: false, rosterEvents: [] };
+  if (!session) return NO_ACCESS;
   if (session.roles.includes(PLATFORM_ADMIN)) {
-    return { full: true, rosterEvents: [] };
-  }
-  if (!session.roles.includes(EVENT_REGISTRAR)) {
-    return { full: false, rosterEvents: [] };
+    return { ...NO_ACCESS, full: true };
   }
   return {
     full: false,
-    rosterEvents: session.eventGrants
-      .filter((grant) => grant.role === EVENT_REGISTRAR)
-      .map(({ eventId, eventSlug }) => ({ eventId, eventSlug })),
+    rosterEvents: grantsOf(session, EVENT_REGISTRAR),
+    committeeEvents: grantsOf(session, PROGRAM_COMMITTEE),
   };
 }
 
 export function adminNavItems(access: AdminAccess): AdminNavItem[] {
   if (access.full) return [...ADMIN_SECTION_NAV];
-  return access.rosterEvents.map(({ eventId }) => ({
-    href: `/events/${eventId}/roster`,
-    testId: "nav-roster",
-    labelKey: "congressRoster.entryLink",
-  }));
+  return [
+    ...access.rosterEvents.map(({ eventId }) => ({
+      href: `/events/${eventId}/roster`,
+      testId: "nav-roster",
+      labelKey: "congressRoster.entryLink",
+    })),
+    ...access.committeeEvents.map(({ eventId }) => ({
+      href: `/events/${eventId}/submissions`,
+      testId: "nav-submissions",
+      labelKey: "congressSubmissions.entryLink",
+    })),
+  ];
 }
 
-function boundTo(access: AdminAccess, event: string | undefined): boolean {
+function boundTo(
+  events: ReadonlyArray<EventRef>,
+  event: string | undefined,
+): boolean {
   if (!event) return false;
-  return access.rosterEvents.some(
+  return events.some(
     ({ eventId, eventSlug }) => eventId === event || eventSlug === event,
   );
 }
 
-const ROSTER_PATH = /^\/events\/([^/]+)\/roster\/?$/;
+/** Each bound-event screen, with the grant set that opens it. */
+const EVENT_SCREENS: ReadonlyArray<{
+  path: RegExp;
+  resource: string;
+  events: (access: AdminAccess) => ReadonlyArray<EventRef>;
+}> = [
+  {
+    path: /^\/events\/([^/]+)\/roster\/?$/,
+    resource: "congress-roster",
+    events: (access) => access.rosterEvents,
+  },
+  // 046 EARS-31 — the programme committee's submissions registry.
+  {
+    path: /^\/events\/([^/]+)\/submissions\/?$/,
+    resource: "congress-submissions",
+    events: (access) => access.committeeEvents,
+  },
+];
 
 /** May the chrome render this admin route's content for the principal? */
 export function canAccessPath(access: AdminAccess, pathname: string): boolean {
   if (access.full) return true;
-  const match = ROSTER_PATH.exec(pathname);
-  return boundTo(access, match?.[1] ? decodeURIComponent(match[1]) : undefined);
+  return EVENT_SCREENS.some((screen) => {
+    const match = screen.path.exec(pathname);
+    return (
+      match?.[1] !== undefined &&
+      boundTo(screen.events(access), decodeURIComponent(match[1]))
+    );
+  });
 }
 
-/** The Refine `can` answer — the roster resource is `congress-roster`, keyed by event. */
+/**
+ * The Refine `can` answer — the roster resource is `congress-roster`, the
+ * submissions registry `congress-submissions`, both keyed by event.
+ */
 export function canAccessResource(
   access: AdminAccess,
   resource: string | undefined,
   params?: { id?: string | number },
 ): boolean {
   if (access.full) return true;
+  const screen = EVENT_SCREENS.find((entry) => entry.resource === resource);
   return (
-    resource === "congress-roster" &&
-    boundTo(access, params?.id === undefined ? undefined : String(params.id))
+    screen !== undefined &&
+    boundTo(
+      screen.events(access),
+      params?.id === undefined ? undefined : String(params.id),
+    )
   );
 }
 

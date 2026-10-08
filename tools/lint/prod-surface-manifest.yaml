@@ -297,6 +297,17 @@ routes:
     route: /events/[id]/congress-intake
     file: apps/admin/app/events/[id]/congress-intake/page.tsx
     status: product-ready
+  # 046 EARS-27/28/31/35 (#2437): the programme committee's submissions registry
+  # of one event on the shared AdminDataList shell, the card in a DS Sheet with
+  # the «Решение» block and the platform administrator's revision-deadline
+  # extension (Stage A route A, no canvas: the approved 044 roster pattern,
+  # https://github.com/doctor-school/ds-platform/issues/2437#issuecomment-6055235674).
+  # Driven live in `apps/admin/e2e/congress-submissions.spec.ts` and scanned by
+  # the 046 block of `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`.
+  - app: admin
+    route: /events/[id]/submissions
+    file: apps/admin/app/events/[id]/submissions/page.tsx
+    status: product-ready
   # 012 EARS-1 (#1283): the project authoring vertical — the shared taxonomy admin
   # list shell plus the Stage-A composition-B tabbed detail (#1282, owner pick
   # 2026-08-17). Real product deliverables, driven live in

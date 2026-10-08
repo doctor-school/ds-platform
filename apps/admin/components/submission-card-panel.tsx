@@ -1,0 +1,596 @@
+"use client";
+
+import { useEffect, useState, type ReactNode, type Ref } from "react";
+import { useCustom, useCustomMutation, type HttpError } from "@refinedev/core";
+import { useTranslations } from "next-intl";
+import { KIND_COPY, STATUS_LABEL } from "@ds/congress-submissions";
+import {
+  Alert,
+  Badge,
+  Button,
+  Input,
+  Label,
+  NativeSelect,
+  Textarea,
+} from "@ds/design-system";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@ds/design-system/sheet";
+import {
+  CONGRESS_COMMITTEE_COMMENT_MAX,
+  CongressSubmissionCardSchema,
+  instantToMskDay,
+  type CongressCommitteeStatus,
+  type CongressSubmissionCard,
+} from "@ds/schemas";
+import { formatMskDateTime } from "@/lib/msk";
+import { participantCardFailure } from "@/lib/participant-card";
+import {
+  committeeDecisionError,
+  committeeTargets,
+  committeeWriteFailure,
+  mayExtendRevision,
+  revisionDeadlineView,
+  revisionExtensionError,
+  submissionBodySections,
+  type CommitteeDecisionError,
+  type CommitteeWriteFailure,
+} from "@/lib/congress-submissions";
+import { congressSubmissionsUrl } from "@/providers/data-provider";
+
+/**
+ * 046 EARS-28 / EARS-35 (#2437) — the submission card: the right-hand `Sheet`
+ * side panel over the registry, the same slot and behaviour as the 044
+ * participant card (`participant-card-panel.tsx`, Stage A route А on #2437):
+ * ↑/↓ walk the rows, Esc closes, the address carries `?submission=`.
+ *
+ * The content is read-only. The one write is the «Решение» block — a status
+ * select limited to the machine's edges from the current status and a comment
+ * required for «Отклонена» / «На доработке»; a `withdrawn` card offers nothing.
+ * For the platform administrator only, a `needs_revision` card also carries
+ * «Продлить срок доработки до» (EARS-35). After a write the card AND the
+ * registry re-read, so both show the server's truth. The client checks mirror
+ * the schema; the server's refusals are the authority and are named in RU.
+ */
+export function SubmissionCardPanel({
+  eventId,
+  submissionId,
+  platformAdmin,
+  onClose,
+  onNavigate,
+  onRegistryStale,
+  onCloseAutoFocus,
+  contentRef,
+}: {
+  eventId: string;
+  /** The open card's submission; `null` = the panel is closed. */
+  submissionId: string | null;
+  /** The platform administrator sees the EARS-35 extension. */
+  platformAdmin: boolean;
+  onClose: () => void;
+  onNavigate: (direction: "prev" | "next") => void;
+  /** A write changed the registry, or the grant is gone: the page re-reads. */
+  onRegistryStale: () => void;
+  onCloseAutoFocus: (event: Event) => void;
+  contentRef?: Ref<HTMLDivElement>;
+}) {
+  const t = useTranslations("congressSubmissions.card");
+  const { query } = useCustom<CongressSubmissionCard, HttpError>({
+    url: congressSubmissionsUrl.card(eventId, submissionId ?? ""),
+    method: "get",
+    queryOptions: { enabled: submissionId !== null },
+  });
+
+  const parsed = query.data
+    ? CongressSubmissionCardSchema.safeParse(query.data.data)
+    : null;
+  const card =
+    !query.isError && parsed?.success && parsed.data.id === submissionId
+      ? parsed.data
+      : null;
+  const failure = query.isError
+    ? participantCardFailure(query.error?.statusCode)
+    : parsed && !parsed.success
+      ? "failed"
+      : null;
+
+  useEffect(() => {
+    if (failure === "forbidden") onRegistryStale();
+  }, [failure, onRegistryStale]);
+
+  const body = () => {
+    if (failure) {
+      return (
+        <Alert variant="danger" data-testid="submission-card-error">
+          <p>{t(`errors.${failure}`)}</p>
+          {failure === "failed" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => void query.refetch()}
+            >
+              {t("retry")}
+            </Button>
+          ) : null}
+        </Alert>
+      );
+    }
+    if (!card) {
+      return (
+        <p
+          className="text-sm text-muted-foreground"
+          role="status"
+          data-testid="submission-card-loading"
+        >
+          {t("loading")}
+        </p>
+      );
+    }
+    const written = () => {
+      void query.refetch();
+      onRegistryStale();
+    };
+    return (
+      <div className="flex flex-col gap-6" data-testid="submission-card">
+        <CardFacts card={card} />
+        <Decision
+          // A new card, or a new status of this one, starts a fresh decision.
+          key={`${card.id}:${card.status}:${card.revisionDueAt ?? ""}`}
+          card={card}
+          eventId={eventId}
+          platformAdmin={platformAdmin}
+          onWritten={written}
+          onForbidden={onRegistryStale}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <Sheet
+      open={submissionId !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent
+        ref={contentRef}
+        size="md"
+        data-testid="submission-card-panel"
+        onNavigate={onNavigate}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
+        <SheetHeader>
+          <SheetTitle>{t("title")}</SheetTitle>
+          <SheetDescription>{t("description")}</SheetDescription>
+        </SheetHeader>
+        <SheetBody>{body()}</SheetBody>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function CardFacts({ card }: { card: CongressSubmissionCard }) {
+  const t = useTranslations("congressSubmissions");
+  const c = (key: string, values?: Record<string, string | number>) =>
+    t(`card.${key}`, values);
+  const deadline =
+    card.status === "needs_revision"
+      ? revisionDeadlineView(card, new Date())
+      : null;
+  const none = c("none");
+
+  return (
+    <dl className="grid grid-cols-1 gap-3">
+      <Fact label={c("fields.title")} testId="title">
+        {card.title || none}
+      </Fact>
+      <Fact label={c("fields.kind")} testId="kind">
+        {KIND_COPY[card.kind].label}
+      </Fact>
+      <Fact label={c("fields.status")} testId="status">
+        <Badge variant="label">{STATUS_LABEL[card.status]}</Badge>
+      </Fact>
+      {deadline ? (
+        <Fact label={c("fields.revision")} testId="revision">
+          {deadline.expired
+            ? c("revisionExpired", { day: deadline.day })
+            : c("revisionUntil", { day: deadline.day })}
+        </Fact>
+      ) : null}
+      {card.committeeComment ? (
+        <Fact label={c("fields.committeeComment")} testId="comment">
+          <span className="whitespace-pre-wrap">{card.committeeComment}</span>
+        </Fact>
+      ) : null}
+      <Fact label={c("fields.authors")} testId="authors">
+        {card.authors.length === 0 ? (
+          none
+        ) : (
+          <ol className="flex flex-col gap-1">
+            {card.authors.map((author, index) => (
+              <li key={index}>
+                {[author.surname, author.firstName, author.patronymic]
+                  .filter(Boolean)
+                  .join(" ")}
+                {author.workplace ? `, ${author.workplace}` : ""}
+                {author.presenting ? ` — ${c("presenting")}` : ""}
+              </li>
+            ))}
+          </ol>
+        )}
+      </Fact>
+      {submissionBodySections(card.kind, card.body).map((section) => (
+        <Fact
+          key={section.key}
+          label={c(`sections.${section.key}`)}
+          testId={`section-${section.key.replace(".", "-")}`}
+        >
+          <span className="whitespace-pre-wrap">{section.text}</span>
+        </Fact>
+      ))}
+      <Fact label={c("fields.submitter")} testId="submitter">
+        {card.submitter.fullName}
+      </Fact>
+      <Fact label={c("fields.email")} testId="email">
+        {card.submitter.email ?? none}
+      </Fact>
+      <Fact label={c("fields.phone")} testId="phone">
+        {card.submitter.phone ?? none}
+      </Fact>
+      {card.kind === "poster" ? (
+        <Fact label={c("fields.age")} testId="age">
+          {card.submitter.ageOnEventStart === null
+            ? none
+            : c("ageYears", { years: card.submitter.ageOnEventStart })}
+        </Fact>
+      ) : null}
+      {card.derivedFrom ? (
+        <Fact label={c("fields.derivedFrom")} testId="derived-from">
+          {c("derivedFromLine", {
+            kind: KIND_COPY[card.derivedFrom.kind].label,
+            title: card.derivedFrom.title,
+            status: STATUS_LABEL[card.derivedFrom.status],
+          })}
+        </Fact>
+      ) : null}
+      <Fact label={c("fields.submittedAt")} testId="submitted-at">
+        {card.submittedAt
+          ? c("atMsk", { at: formatMskDateTime(card.submittedAt) })
+          : none}
+      </Fact>
+      <Fact label={c("fields.updatedAt")} testId="updated-at">
+        {c("atMsk", { at: formatMskDateTime(card.updatedAt) })}
+      </Fact>
+      <Fact label={c("fields.lastLetter")} testId="last-letter">
+        {card.lastLetter
+          ? c(`lastLetter.${card.lastLetter.status}`, {
+              at: formatMskDateTime(card.lastLetter.at),
+            })
+          : none}
+      </Fact>
+      <Fact label={c("historyTitle")} testId="history">
+        <ul className="flex flex-col gap-1">
+          {card.history.map((entry, index) => (
+            <li
+              key={`${entry.at}:${index}`}
+              data-testid="submission-card-history-entry"
+            >
+              {c("historyEntry", {
+                at: formatMskDateTime(entry.at),
+                actor: entry.actor ?? c("historyNoActor"),
+                change: entry.from
+                  ? `${STATUS_LABEL[entry.from]} → ${STATUS_LABEL[entry.to]}`
+                  : STATUS_LABEL[entry.to],
+              })}
+            </li>
+          ))}
+        </ul>
+      </Fact>
+    </dl>
+  );
+}
+
+/** The catalog key of each refusal (problem codes are kebab-case on the wire). */
+const FAILURE_KEY: Record<
+  CommitteeWriteFailure | CommitteeDecisionError | "dayRequired",
+  string
+> = {
+  "status-conflict": "statusConflict",
+  "transition-not-allowed": "transitionNotAllowed",
+  "not-needs-revision": "notNeedsRevision",
+  "revision-day-not-later": "revisionDayNotLater",
+  "revision-day-in-past": "revisionDayInPast",
+  forbidden: "forbidden",
+  unavailable: "unavailable",
+  invalid: "invalid",
+  failed: "failed",
+  statusRequired: "statusRequired",
+  commentRequired: "commentRequired",
+  commentTooLong: "commentTooLong",
+  dayRequired: "dayRequired",
+};
+
+function Decision({
+  card,
+  eventId,
+  platformAdmin,
+  onWritten,
+  onForbidden,
+}: {
+  card: CongressSubmissionCard;
+  eventId: string;
+  platformAdmin: boolean;
+  onWritten: () => void;
+  onForbidden: () => void;
+}) {
+  const t = useTranslations("congressSubmissions");
+  const targets = committeeTargets(card.status);
+  const [status, setStatus] = useState<CongressCommitteeStatus | "">("");
+  const [comment, setComment] = useState("");
+  const [extendTo, setExtendTo] = useState("");
+  const [decisionRefusal, setDecisionRefusal] = useState<string | null>(null);
+  const [extensionRefusal, setExtensionRefusal] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const { mutate, mutation } = useCustomMutation();
+  const refusal = (key: keyof typeof FAILURE_KEY) =>
+    t(`decision.errors.${FAILURE_KEY[key]}`);
+
+  const onRefused = (set: (text: string) => void) => (error: unknown) => {
+    const failure = committeeWriteFailure(error);
+    if (failure === "forbidden") onForbidden();
+    // A concurrent change won: the card re-reads, so the next decision starts
+    // from the status that is actually stored.
+    if (failure === "status-conflict" || failure === "not-needs-revision") {
+      onWritten();
+    }
+    set(refusal(failure));
+  };
+
+  const submitDecision = () => {
+    setNotice(null);
+    const invalid = committeeDecisionError(status, comment);
+    if (invalid || !status) {
+      setDecisionRefusal(refusal(invalid ?? "statusRequired"));
+      return;
+    }
+    setDecisionRefusal(null);
+    const text = comment.trim();
+    mutate(
+      {
+        url: congressSubmissionsUrl.status(eventId, card.id),
+        method: "post",
+        values: {
+          status,
+          expectedStatus: card.status,
+          ...(text ? { comment: text } : {}),
+        },
+        successNotification: false,
+        errorNotification: false,
+      },
+      {
+        onSuccess: () => {
+          setNotice(t("decision.saved"));
+          onWritten();
+        },
+        onError: onRefused(setDecisionRefusal),
+      },
+    );
+  };
+
+  const submitExtension = () => {
+    setNotice(null);
+    const invalid = revisionExtensionError(
+      extendTo,
+      card.revisionLastDay,
+      instantToMskDay(new Date()),
+    );
+    if (invalid) {
+      setExtensionRefusal(refusal(invalid));
+      return;
+    }
+    setExtensionRefusal(null);
+    mutate(
+      {
+        url: congressSubmissionsUrl.revisionDeadline(eventId, card.id),
+        method: "post",
+        values: { lastDay: extendTo },
+        successNotification: false,
+        errorNotification: false,
+      },
+      {
+        onSuccess: () => {
+          setNotice(t("decision.extensionSaved"));
+          onWritten();
+        },
+        onError: onRefused(setExtensionRefusal),
+      },
+    );
+  };
+
+  const pending = mutation.isPending;
+  const commentNeeded = status === "rejected" || status === "needs_revision";
+
+  return (
+    <section
+      className="flex flex-col gap-4 border-t border-border pt-4"
+      aria-labelledby="submission-decision-title"
+      data-testid="submission-decision"
+    >
+      <h3
+        id="submission-decision-title"
+        className="text-sm font-bold text-foreground"
+      >
+        {t("decision.title")}
+      </h3>
+      {notice ? (
+        <Alert
+          variant="success"
+          role="status"
+          data-testid="submission-decision-saved"
+        >
+          {notice}
+        </Alert>
+      ) : null}
+      {targets.length === 0 ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="submission-decision-withdrawn"
+        >
+          {t("decision.withdrawn")}
+        </p>
+      ) : (
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitDecision();
+          }}
+        >
+          <Field id="submission-decision-status" label={t("decision.status")}>
+            <NativeSelect
+              id="submission-decision-status"
+              value={status}
+              data-testid="submission-decision-status"
+              onChange={(event) =>
+                setStatus(event.target.value as CongressCommitteeStatus | "")
+              }
+            >
+              <option value="">{t("decision.statusPlaceholder")}</option>
+              {targets.map((target) => (
+                <option key={target} value={target}>
+                  {STATUS_LABEL[target]}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field
+            id="submission-decision-comment"
+            label={t("decision.comment")}
+            hint={t("decision.commentHint")}
+          >
+            <Textarea
+              id="submission-decision-comment"
+              value={comment}
+              rows={5}
+              maxLength={CONGRESS_COMMITTEE_COMMENT_MAX}
+              aria-required={commentNeeded}
+              aria-describedby="submission-decision-comment-hint"
+              data-testid="submission-decision-comment"
+              onChange={(event) => setComment(event.target.value)}
+            />
+          </Field>
+          {decisionRefusal ? (
+            <Alert variant="danger" data-testid="submission-decision-refused">
+              {decisionRefusal}
+            </Alert>
+          ) : null}
+          <div>
+            <Button
+              type="submit"
+              disabled={pending}
+              data-testid="submission-decision-submit"
+            >
+              {t("decision.submit")}
+            </Button>
+          </div>
+        </form>
+      )}
+      {mayExtendRevision(platformAdmin, card.status) ? (
+        <form
+          className="flex flex-col gap-4 border-t border-border pt-4"
+          noValidate
+          data-testid="submission-extension"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitExtension();
+          }}
+        >
+          <Field
+            id="submission-extension-day"
+            label={t("decision.extensionLabel")}
+            hint={t("decision.extensionHint")}
+          >
+            <Input
+              id="submission-extension-day"
+              type="date"
+              value={extendTo}
+              aria-describedby="submission-extension-day-hint"
+              data-testid="submission-extension-day"
+              onChange={(event) => setExtendTo(event.target.value)}
+            />
+          </Field>
+          {extensionRefusal ? (
+            <Alert variant="danger" data-testid="submission-extension-refused">
+              {extensionRefusal}
+            </Alert>
+          ) : null}
+          <div>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={pending}
+              data-testid="submission-extension-submit"
+            >
+              {t("decision.extensionSubmit")}
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+function Field({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {hint ? (
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** One read-only fact — the participant card's `<dl>` row. */
+function Fact({
+  label,
+  testId,
+  children,
+}: {
+  label: string;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd
+        className="text-sm text-foreground wrap-anywhere"
+        data-testid={`submission-card-${testId}`}
+      >
+        {children}
+      </dd>
+    </div>
+  );
+}

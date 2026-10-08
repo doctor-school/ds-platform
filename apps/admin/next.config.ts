@@ -38,11 +38,13 @@ const config: NextConfig = {
   outputFileTracingRoot: path.join(configDir, "../../"),
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model,
   // no separate build step for the internal package (ADR-0004 §6).
-  transpilePackages: ["@ds/design-system"],
+  transpilePackages: ["@ds/design-system", "@ds/congress-submissions"],
   // Reverse-proxy the live `/v1/*` BFF under the admin origin so the `__Host-`
   // session cookie is set/sent same-origin (see API_PROXY_TARGET above).
   async rewrites() {
-    return [{ source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` }];
+    return [
+      { source: "/v1/:path*", destination: `${API_PROXY_TARGET}/v1/:path*` },
+    ];
   },
 };
 

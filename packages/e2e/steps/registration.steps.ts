@@ -17,7 +17,13 @@ import {
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
 import { assertSecureSession } from "../lib/secure-session.js";
-import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import {
+  expiryBudget,
+  expiredVerificationEvidence,
+  readExpiryAudit,
+  type ExpiryAudit,
+} from "../lib/expired-verification.js";
+import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 interface Registration extends OwnedCredentials {
   context: BrowserContext;
@@ -26,9 +32,15 @@ interface Registration extends OwnedCredentials {
   code?: string;
   verification?: Response;
   verificationRequests?: number;
-  refusal?: ReturnType<typeof verificationRefusalEvidence>;
+  refusal?:
+    | ReturnType<typeof verificationRefusalEvidence>
+    | ReturnType<typeof expiredVerificationEvidence>;
   submittedCode?: string;
   verificationNavigations?: number;
+  expiry?: ReturnType<typeof expiryBudget> & {
+    elapsedMs?: number;
+    before?: ExpiryAudit;
+  };
 }
 const registrations = new WeakMap<Page, Registration>();
 function registration(key: Page): Registration {
@@ -36,6 +48,17 @@ function registration(key: Page): Registration {
   if (!state) throw new Error("Owned registration was not prepared");
   return state;
 }
+
+Given(
+  "the live email-verification generator lifetime has been read back for this run",
+  async ({ page }) => {
+    const budget = expiryBudget(process.env.E2E_EMAIL_VERIFICATION_TTL_MS);
+    test.setTimeout(budget.timeoutMs);
+    // The next shared Given owns registration; keep only this scenario's budget.
+    expiryBudgets.set(page, budget);
+  },
+);
+const expiryBudgets = new WeakMap<Page, ReturnType<typeof expiryBudget>>();
 
 Given(
   "an Academy visitor with a unique never-registered email",
@@ -46,13 +69,46 @@ Given(
       ...(httpCredentials ? { httpCredentials } : {}),
     });
     const owned = await context.newPage();
+    const expiry = expiryBudgets.get(page);
     registrations.set(page, {
       context,
       page: owned,
       email: `register-2673-${randomUUID()}@example.test`,
       password: `Register-${randomUUID()}-aA1!`,
+      ...(expiry ? { expiry } : {}),
     });
     await installCaptchaStub(context);
+  },
+);
+
+When(
+  "the fresh delivered confirmation code has aged through that complete real lifetime in the original tab",
+  async ({ page }) => {
+    const state = registration(page);
+    if (!state.expiry || !state.code)
+      throw new Error(
+        "Fresh owned confirmation and live expiry budget required",
+      );
+    state.expiry.before = await readExpiryAudit(state.page.url(), state.email);
+    expect(
+      state.expiry.before,
+      "owned unverified account has no prior verification failure",
+    ).toEqual({ failed: 0, safe: true, unverified: true });
+    const started = performance.now();
+    while (performance.now() - started < state.expiry.waitMs) {
+      const remaining = state.expiry.waitMs - (performance.now() - started);
+      console.log(
+        `Email verification expiry wait ${new Date().toISOString()}: ${Math.ceil(remaining / 1000)} seconds remain`,
+      );
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(60000, remaining)),
+      );
+    }
+    state.expiry.elapsedMs = performance.now() - started;
+    expect(
+      state.expiry.elapsedMs >= state.expiry.waitMs,
+      "complete live TTL elapsed after fresh mail retrieval",
+    ).toBe(true);
   },
 );
 
@@ -64,6 +120,66 @@ When(
       state,
       await registerOwnedCredentials(state.page, world.hostBaseUrl, state),
     );
+  },
+);
+
+When(
+  "the registrant enters that same delivered expired code once in the original Academy tab",
+  async ({ page }) => {
+    const state = registration(page);
+    if (!state.expiry?.elapsedMs || !state.code)
+      throw new Error("The real delivered confirmation code has not expired");
+    state.submittedCode = state.code;
+    state.verificationNavigations = 0;
+    state.verificationRequests = 0;
+    state.page.on("framenavigated", (frame) => {
+      if (frame === state.page.mainFrame()) state.verificationNavigations! += 1;
+    });
+    state.page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname === "/v1/auth/verify" &&
+        request.method() === "POST"
+      )
+        state.verificationRequests! += 1;
+    });
+    const refused = state.page
+      .waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/v1/auth/verify" &&
+          response.request().method() === "POST",
+      )
+      .then(async (response) => {
+        state.refusal = expiredVerificationEvidence(
+          response.request().postData() ?? "",
+          await response.text(),
+          state,
+          state.code!,
+          state.submittedCode!,
+          state.expiry!.ttlMs,
+          state.expiry!.elapsedMs!,
+        );
+        return response;
+      });
+    await inputSecret(
+      state.page.locator('input[autocomplete="one-time-code"]'),
+      state.submittedCode,
+    );
+    state.verification = await refused;
+  },
+);
+
+Then(
+  "the real expired refusal has exactly one masked failed-attempt record and leaves the account unverified",
+  async ({ page }) => {
+    const state = registration(page);
+    expect(
+      state.expiry?.before?.failed,
+      "exact owned pre-submission attempt baseline",
+    ).toBe(0);
+    expect(
+      await readExpiryAudit(state.page.url(), state.email),
+      "exact owned failed-attempt delta with only masked metadata",
+    ).toEqual({ failed: 1, safe: true, unverified: true });
   },
 );
 
@@ -170,12 +286,17 @@ Then(
   async ({ page, world }) => {
     const state = registration(page);
     const response = state.verification!;
-    expect(response.status(), "wrong confirmation code refused").toBe(400);
-    expect(state.refusal).toEqual({
-      credentialsMatch: true,
-      wrongCode: true,
-      refusalMatches: true,
-    });
+    expect(response.status(), "confirmation code refused").toBe(400);
+    expect(state.refusal).toEqual(
+      state.expiry
+        ? {
+            credentialsMatch: true,
+            deliveredCode: true,
+            expired: true,
+            refusalMatches: true,
+          }
+        : { credentialsMatch: true, wrongCode: true, refusalMatches: true },
+    );
     const error = state.page.getByTestId("verify-error");
     await expect(error).toBeVisible();
     await expect
@@ -248,7 +369,7 @@ Then(
     ).toBe(1);
     expect(
       state.verificationNavigations,
-      "no navigation after wrong code",
+      "no navigation after refused code",
     ).toBe(0);
   },
 );
@@ -399,6 +520,7 @@ After(
       await Promise.all(state.context.pages().map((owned) => owned.close()));
       await state.context.close();
       registrations.delete(page);
+      expiryBudgets.delete(page);
     }
   },
 );

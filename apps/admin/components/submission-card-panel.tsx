@@ -38,6 +38,7 @@ import {
   committeeDecisionReducer,
   committeeTargets,
   committeeWriteFailure,
+  extensionRefusalOutsideForm,
   mayExtendRevision,
   revisionDeadlineView,
   revisionExtensionError,
@@ -437,6 +438,13 @@ function Decision({
       {refusal(decisionRefusal)}
     </Alert>
   ) : null;
+  const extensionRefused = (failure: CommitteeDecisionRefusal | null) =>
+    failure ? (
+      <Alert variant="danger" data-testid="submission-extension-refused">
+        {refusal(failure)}
+      </Alert>
+    ) : null;
+  const mayExtend = mayExtendRevision(platformAdmin, card.status);
 
   return (
     <section
@@ -531,7 +539,7 @@ function Decision({
           </div>
         </form>
       )}
-      {mayExtendRevision(platformAdmin, card.status) ? (
+      {mayExtend ? (
         <form
           className="flex flex-col gap-4 border-t border-border pt-4"
           noValidate
@@ -557,11 +565,7 @@ function Decision({
               }
             />
           </Field>
-          {extensionRefusal ? (
-            <Alert variant="danger" data-testid="submission-extension-refused">
-              {refusal(extensionRefusal)}
-            </Alert>
-          ) : null}
+          {extensionRefused(extensionRefusal)}
           <div>
             <Button
               type="submit"
@@ -573,7 +577,13 @@ function Decision({
             </Button>
           </div>
         </form>
-      ) : null}
+      ) : (
+        // The re-read took the submission off needs_revision and the form
+        // with it: the refusal that says so stays.
+        extensionRefused(
+          extensionRefusalOutsideForm(state, platformAdmin, card.status),
+        )
+      )}
     </section>
   );
 }

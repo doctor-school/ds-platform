@@ -12,6 +12,7 @@ import {
   committeeDecisionReducer,
   committeeTargets,
   committeeWriteFailure,
+  extensionRefusalOutsideForm,
   mayExtendRevision,
   revisionDeadlineView,
   revisionExtensionError,
@@ -380,6 +381,47 @@ describe("046 EARS-35 the revision deadline in the card", () => {
     expect(state.notice).toBe("extensionSaved");
     expect(state.extensionRefusal).toBeNull();
     expect(state.extendTo).toBe("");
+  });
+
+  it("046 EARS-35: an extension refused because the submission left needs_revision names the refusal after the re-read", () => {
+    let state = committeeDecisionInitial(
+      committeeDecisionBasis({
+        status: "needs_revision",
+        revisionDueAt: "2026-10-22T21:00:00.000Z",
+      }),
+    );
+    state = committeeDecisionReducer(state, { type: "day", day: "2026-11-05" });
+    // While the form is offered, its own refusal renders inside it.
+    expect(
+      committeeDecisionReducer(state, {
+        type: "extension-refused",
+        failure: "revision-day-not-later",
+      }),
+    ).toMatchObject({ extensionRefusal: "revision-day-not-later" });
+    expect(
+      extensionRefusalOutsideForm(
+        { ...state, extensionRefusal: "revision-day-not-later" },
+        true,
+        "needs_revision",
+      ),
+    ).toBeNull();
+    // The status changed elsewhere: the write is refused and the card re-reads.
+    state = committeeDecisionReducer(state, {
+      type: "extension-refused",
+      failure: "not-needs-revision",
+    });
+    state = committeeDecisionReducer(state, {
+      type: "card-read",
+      basis: committeeDecisionBasis({
+        status: "in_review",
+        revisionDueAt: null,
+      }),
+    });
+    // The extension form is gone with the status; its refusal is not.
+    expect(mayExtendRevision(true, "in_review")).toBe(false);
+    expect(extensionRefusalOutsideForm(state, true, "in_review")).toBe(
+      "not-needs-revision",
+    );
   });
 
   it("046 EARS-35: only the platform administrator extends, and only a needs_revision submission", () => {

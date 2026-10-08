@@ -371,5 +371,31 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
         { timeZone: "Europe/Moscow" },
       ),
     ).toBe(`${d}.${m}.${y}`);
+
+    // The member accepts the submission while the administrator's card still
+    // reads «На доработке»: the next extension is refused by name, and the
+    // reason stays after the re-read takes the extension form away.
+    await member.goto(`/events/${eventA}/submissions?submission=${revisionId}`);
+    await expect(member.getByTestId("submission-card-title")).toHaveText(alpha);
+    await member
+      .getByTestId("submission-decision-status")
+      .selectOption("accepted");
+    await member.getByTestId("submission-decision-submit").click();
+    await expect(member.getByTestId("submission-card-status")).toHaveText(
+      "Принята",
+    );
+    later.setUTCDate(later.getUTCDate() + 5);
+    await page
+      .getByTestId("submission-extension-day")
+      .fill(later.toISOString().slice(0, 10));
+    await page.getByTestId("submission-extension-submit").click();
+    await expect(page.getByTestId("submission-card-status")).toHaveText(
+      "Принята",
+    );
+    await expect(page.getByTestId("submission-extension")).toHaveCount(0);
+    await expect(
+      page.getByTestId("submission-extension-refused"),
+    ).toContainText("Заявка больше не на доработке — срок продлить нельзя.");
+    await expect(page.getByTestId("submission-decision-saved")).toHaveCount(0);
   });
 });

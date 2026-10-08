@@ -359,6 +359,22 @@ export function mayExtendRevision(
 }
 
 /**
+ * The extension refusal the card shows outside the extension form: the form
+ * exists only on `needs_revision`, so a refusal whose re-read took the
+ * submission off that status (`not-needs-revision`) would unmount with it.
+ * `null` while the form is offered — there its refusal renders inside it.
+ */
+export function extensionRefusalOutsideForm(
+  state: Pick<CommitteeDecisionState, "extensionRefusal">,
+  platformAdmin: boolean,
+  status: CongressSubmissionStatus,
+): CommitteeDecisionRefusal | null {
+  return mayExtendRevision(platformAdmin, status)
+    ? null
+    : state.extensionRefusal;
+}
+
+/**
  * The client half of the extension rules (EARS-35): a day is chosen, it is
  * after the current last day and not before today (Moscow). The codes are
  * the server's own, so one message table covers both refusals.

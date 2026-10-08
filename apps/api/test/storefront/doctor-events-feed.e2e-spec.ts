@@ -745,5 +745,108 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(card(pastRawEventId)?.recording?.durationSec).toBeNull();
       expect(card(pastAbsentEventId)?.recording?.durationSec).toBeNull();
     });
+
+    describe("past the row cap — the capped window slides with «Показать ещё» (row 32)", () => {
+      /** More events than the cap in EACH tense, two a day, on their own specialty. */
+      const CAP_WALK_COUNT = EVENT_HORIZON_ROW_CAP + 40;
+      let capCode = "";
+      let pastWalkIds: string[] = [];
+      let upcomingWalkIds: string[] = [];
+      const capLinkIds: string[] = [];
+
+      const seedWalk = async (
+        directionId: string,
+        anchor: Date,
+        sign: 1 | -1,
+        state: "published" | "ended",
+      ) => {
+        const inserted = await pool.query<{ id: string }>(
+          `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, kind_id, audience)
+           SELECT gen_random_uuid(), 'cap-walk-' || g || '-' || $4, 'Окно ленты ' || g, 'Школа 019',
+                  $1::timestamptz + $3::int * g * interval '12 hours', 60, $5, ${eventClassificationSql("doctors")}
+           FROM generate_series(0, $2::int - 1) AS g
+           RETURNING id`,
+          [anchor.toISOString(), CAP_WALK_COUNT, sign, randomUUID().slice(0, 8), state],
+        );
+        const ids = inserted.rows.map((row) => row.id);
+        const links = await pool.query<{ id: string }>(
+          `INSERT INTO event_directions (id, event_id, direction_id, status)
+           SELECT gen_random_uuid(), unnest($1::uuid[]), $2, 'active'
+           RETURNING id`,
+          [ids, directionId],
+        );
+        capLinkIds.push(...links.rows.map((row) => row.id));
+        return ids;
+      };
+
+      beforeAll(async () => {
+        const specialty = await pool.query<{ id: string; code: string }>(
+          "SELECT id, code FROM specialties_minzdrav WHERE is_other = false ORDER BY code OFFSET 3 LIMIT 1",
+        );
+        capCode = specialty.rows[0]!.code;
+        const direction = await makeDirection("Окно ленты");
+        await linkSpecialty(direction, specialty.rows[0]!.id);
+        pastWalkIds = await seedWalk(direction, at(-20, 12), -1, "ended");
+        upcomingWalkIds = await seedWalk(direction, at(20, 12), 1, "published");
+      });
+
+      afterAll(async () => {
+        await pool.query(
+          "DELETE FROM event_directions WHERE id = ANY($1::uuid[])",
+          [capLinkIds],
+        );
+        await pool.query("DELETE FROM events WHERE id = ANY($1::uuid[])", [
+          [...pastWalkIds, ...upcomingWalkIds],
+        ]);
+      });
+
+      const idsOf = (feed: { days: { items: { id: string }[] }[] }) =>
+        feed.days.flatMap((day) => day.items.map((item) => item.id));
+
+      it("NEW: «Прошедшие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the oldest event and ends", async () => {
+        let feed = await readFeed({ specialtyCode: capCode, query: "?tense=past" });
+        let steps = 0;
+        let crossed = false;
+        while (feed.nextFrom !== null) {
+          const previous = new Set(idsOf(feed));
+          // «Показать ещё» writes BOTH returned bounds into the URL.
+          const next = await readFeed({
+            specialtyCode: capCode,
+            query: `?tense=past&from=${feed.nextFrom}&to=${feed.to}`,
+          });
+          expect(next.totalCount).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
+          expect(idsOf(next).some((id) => !previous.has(id))).toBe(true);
+          if (next.to < feed.to) crossed = true;
+          feed = next;
+          expect(++steps).toBeLessThan(200);
+        }
+        expect(crossed).toBe(true);
+        expect(idsOf(feed)).toContain(pastWalkIds.at(-1));
+        expect(feed.remaining).toBe(0);
+        expect(feed.nextBatch).toBe(0);
+      });
+
+      it("NEW: «Будущие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the farthest event and ends", async () => {
+        let feed = await readFeed({ specialtyCode: capCode });
+        let steps = 0;
+        let crossed = false;
+        while (feed.nextTo !== null) {
+          const previous = new Set(idsOf(feed));
+          const next = await readFeed({
+            specialtyCode: capCode,
+            query: `?from=${feed.from}&to=${feed.nextTo}`,
+          });
+          expect(next.totalCount).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
+          expect(idsOf(next).some((id) => !previous.has(id))).toBe(true);
+          if (next.from > feed.from) crossed = true;
+          feed = next;
+          expect(++steps).toBeLessThan(200);
+        }
+        expect(crossed).toBe(true);
+        expect(idsOf(feed)).toContain(upcomingWalkIds.at(-1));
+        expect(feed.remaining).toBe(0);
+        expect(feed.nextBatch).toBe(0);
+      });
+    });
   },
 );

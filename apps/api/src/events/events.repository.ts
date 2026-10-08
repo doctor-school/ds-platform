@@ -454,13 +454,16 @@ export class EventsRepository {
     limit?: number,
     after: EventListingCursor | null = null,
     window?: EventListingWindow,
+    /** `desc` = farthest first: the capped horizon read (`EVENT_HORIZON_READ_ORDER`). */
+    order: "asc" | "desc" = "asc",
   ): Promise<EventListingRow[]> {
     const cursor = after ? afterEventCursor(after) : undefined;
+    const direction = order === "asc" ? asc : desc;
     const query = this.db
       .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
       .where(and(...listingWhere("upcoming", cutoff, window), cursor))
-      .orderBy(asc(events.startsAt), asc(events.id));
+      .orderBy(direction(events.startsAt), direction(events.id));
     const selected =
       limit === undefined ? await query : await query.limit(limit);
     return selected.map(({ event, startsAtCursor }) => ({
@@ -482,13 +485,16 @@ export class EventsRepository {
     limit: number | undefined,
     after: EventListingCursor | null,
     window?: EventListingWindow,
+    /** `asc` = oldest first: the capped horizon read (`EVENT_HORIZON_READ_ORDER`). */
+    order: "asc" | "desc" = "desc",
   ): Promise<EventListingRow[]> {
     const cursor = after ? beforeEventCursor(after) : undefined;
+    const direction = order === "asc" ? asc : desc;
     const query = this.db
       .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
       .where(and(...listingWhere("past", null, window), cursor))
-      .orderBy(desc(events.startsAt), desc(events.id));
+      .orderBy(direction(events.startsAt), direction(events.id));
     const selected =
       limit === undefined ? await query : await query.limit(limit);
     return selected.map(({ event, startsAtCursor }) => ({

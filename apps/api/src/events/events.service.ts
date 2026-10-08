@@ -45,6 +45,7 @@ import { eventEconomyFacts } from "./event-economy-facts.js";
 import {
   boundEventHorizonRows,
   clampRequestedPastFrom,
+  EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   eventHorizonInstants,
   resolveEventHorizon,
@@ -1256,14 +1257,22 @@ export class EventsService {
         doctorEventsFeedDayOf(now),
       );
       const window = eventHorizonInstants(requested);
+      // Read from the moving edge, so the cap keeps the batch just asked for.
+      const order = EVENT_HORIZON_READ_ORDER[query.timeframe];
       const read =
         query.timeframe === "past"
-          ? await this.repo.listPast(EVENT_HORIZON_ROW_CAP + 1, null, window)
+          ? await this.repo.listPast(
+              EVENT_HORIZON_ROW_CAP + 1,
+              null,
+              window,
+              order,
+            )
           : await this.repo.listUpcoming(
               cutoff,
               EVENT_HORIZON_ROW_CAP + 1,
               null,
               window,
+              order,
             );
       // One response stays bounded; the extent it echoes is the one it holds.
       const bounded = boundEventHorizonRows(
@@ -1277,6 +1286,7 @@ export class EventsService {
       const beyond = await resolveEventHorizonBeyond(
         bounded.horizon,
         query.timeframe,
+        doctorEventsFeedDayOf(now),
         (range) =>
           this.repo.listListingStartsIn(
             query.timeframe,

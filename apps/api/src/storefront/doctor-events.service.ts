@@ -23,6 +23,7 @@ import { eventEconomyFacts } from "../events/event-economy-facts.js";
 import {
   boundEventHorizonRows,
   clampRequestedPastFrom,
+  EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
   eventHorizonInstants,
   resolveEventHorizon,
@@ -112,7 +113,7 @@ export class DoctorEventsService {
         : [...targeting.directionIds, ...targeting.adjacentDirectionIds];
 
     // Row 30 — the tense is the lifecycle split the Academy listing applies,
-    // read in its own order: «Будущие» soonest first, «Прошедшие» newest first.
+    // shown in its own order: «Будущие» soonest first, «Прошедшие» newest first.
     const tenseRead = {
       states:
         query.tense === "past"
@@ -126,6 +127,9 @@ export class DoctorEventsService {
       ...eventHorizonInstants(requested),
       kindSlugs: query.kind,
       q: query.q,
+      // Read from the moving edge, so the cap keeps the batch just asked for;
+      // the bound hands the rows back in the tense's display order.
+      order: EVENT_HORIZON_READ_ORDER[query.tense],
       limit: EVENT_HORIZON_ROW_CAP + 1,
     });
     // One response stays bounded; the extent it echoes is the one it holds.
@@ -143,6 +147,7 @@ export class DoctorEventsService {
     const beyond = await resolveEventHorizonBeyond(
       bounded.horizon,
       query.tense,
+      today,
       async (range) => {
         const beyondRows = await this.repository.findFeedRows({
           ...tenseRead,

@@ -407,5 +407,55 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         older.data.length - past.data.length,
       );
     });
+
+    describe("past the row cap — the capped window slides with «Показать ещё» (row 32)", () => {
+      /** More «Прошедшие» events than the cap, two a day from 20 days back. */
+      const CAP_WALK_COUNT = EVENT_HORIZON_ROW_CAP + 40;
+      let capWalkIds: string[] = [];
+
+      beforeAll(async () => {
+        const anchor = new Date(
+          `${addDoctorEventsFeedDays(today, -20)}T12:00:00+03:00`,
+        );
+        const inserted = await pool.query<{ id: string }>(
+          `INSERT INTO events (id, slug, title, school, starts_at, duration_min, state, participation_format, kind_id, audience)
+           SELECT gen_random_uuid(), 'cap-walk-' || g || '-' || $3, 'Окно архива ' || g, 'Школа ортобиологии',
+                  $1::timestamptz - g * interval '12 hours', 90, 'ended', 'online', ${eventClassificationSql("experts")}
+           FROM generate_series(0, $2::int - 1) AS g
+           RETURNING id`,
+          [anchor.toISOString(), CAP_WALK_COUNT, randomUUID().slice(0, 8)],
+        );
+        capWalkIds = inserted.rows.map((row) => row.id);
+      });
+
+      afterAll(async () => {
+        await pool.query("DELETE FROM events WHERE id = ANY($1::uuid[])", [
+          capWalkIds,
+        ]);
+      });
+
+      it("NEW: «Прошедшие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the oldest event and ends", async () => {
+        const oldest = capWalkIds.at(-1)!;
+        let extent = await page("timeframe=past");
+        let steps = 0;
+        let crossed = false;
+        while (extent.horizon!.nextFrom !== null) {
+          const previous = new Set(extent.data.map((card) => card.id));
+          // «Показать ещё» writes BOTH returned bounds into the URL.
+          const next = await page(
+            `timeframe=past&from=${extent.horizon!.nextFrom}&to=${extent.horizon!.to}`,
+          );
+          expect(next.data.length).toBeLessThanOrEqual(EVENT_HORIZON_ROW_CAP);
+          expect(next.data.some((card) => !previous.has(card.id))).toBe(true);
+          if (next.horizon!.to < extent.horizon!.to) crossed = true;
+          extent = next;
+          expect(++steps).toBeLessThan(200);
+        }
+        expect(crossed).toBe(true);
+        expect(extent.data.map((card) => card.id)).toContain(oldest);
+        expect(extent.horizon?.remaining).toBe(0);
+        expect(extent.horizon?.nextBatch).toBe(0);
+      });
+    });
   },
 );

@@ -85,6 +85,26 @@ describe("the one feed codec (019 LD-1)", () => {
     ).toBeNull();
   });
 
+  it("NEW: «Показать ещё» writes BOTH returned bounds — a capped read that moved its fixed edge slides the window instead of growing it (row 32)", () => {
+    // «Прошедшие»: the URL asked for [2026-01-01, 2026-10-09); the capped read
+    // answered [2026-01-01, 2026-03-01) and names the next older `from`.
+    expect(
+      showMoreHref(
+        "/webinars",
+        { tense: "past", from: "2026-01-01", to: "2026-10-09" },
+        { from: "2026-01-01", to: "2026-03-01", nextTo: null, nextFrom: "2025-12-18" },
+      ),
+    ).toBe("/webinars?tense=past&from=2025-12-18&to=2026-03-01");
+    // «Будущие»: the capped read moved `from` up past the nearest days.
+    expect(
+      showMoreHref(
+        "/events",
+        { from: "2026-10-08", to: "2027-06-01" },
+        { from: "2026-12-20", to: "2027-06-01", nextTo: "2027-06-15", nextFrom: null },
+      ),
+    ).toBe("/events?from=2026-12-20&to=2027-06-15");
+  });
+
   it("the read query carries the tense under the host's read param and the codec's horizon and facets", () => {
     expect(
       feedReadQuery({ from: "2026-10-08", to: "2026-10-22", junk: "x" }, "timeframe").toString(),

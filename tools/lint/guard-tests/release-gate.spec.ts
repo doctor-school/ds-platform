@@ -3,8 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RELEASE_BLOCKER_LABEL,
   RELEASE_GATE_EXEMPT_FLAG,
-  STAGE_E2E_STATUS_CONTEXT,
-  buildStageE2eStatus,
   evaluateReleaseGate,
   extractReleaseRequires,
   extractBatchedGateRefs,
@@ -13,7 +11,6 @@ import {
   formatReleaseGateHold,
   parseReleaseGateExempt,
   probeReleaseGate,
-  readStageE2eRecord,
 } from "../../deploy/release-gate.mjs";
 
 /**
@@ -29,7 +26,6 @@ const probe = (over: Record<string, unknown> = {}) => ({
   openRequires: [],
   openBatched: [] as Array<{ pr: number; gate: number; gateTitle: string }>,
   basisSha: "b9d81e6a1c2d3e4f5061728394a5b6c7d8e9f0a1",
-  stageE2e: { state: "success", description: "PASS", updatedAt: "t" },
   ...over,
 });
 
@@ -261,74 +257,8 @@ describe("release-gate formatReleaseGateClear()", () => {
   });
 });
 
-const STAGE_PASS = JSON.stringify({
-  statuses: [
-    { context: "ci/other", state: "failure" },
-    {
-      context: STAGE_E2E_STATUS_CONTEXT,
-      state: "success",
-      description: "PASS",
-      updated_at: "2026-10-08T10:00:00Z",
-    },
-  ],
-});
-
 // The probe uses injected command responses and fetch, exercising the same
 // selected deployed..target range used by deploy:prod, including hotfixes.
-const fixture = async (
-  body: string,
-  state = "OPEN",
-  subjects = "fix: selected change (#901)",
-  prRead = "ok",
-  stageStatus = STAGE_PASS,
-) => {
-  const calls: string[] = [];
-  const run = (cmd: string, args: string[]) => {
-    calls.push(`${cmd} ${args.join(" ")}`);
-    if (cmd === "git") return subjects;
-    if (args[0] === "api" && args[1].includes("deployments"))
-      return '[{"sha":"deployed"}]';
-    if (args[0] === "issue" && args[1] === "list") return "[]";
-    if (args[0] === "api" && args[1].endsWith("/commits/selected/status"))
-      return stageStatus;
-    if (args[0] === "pr" && args[2] === "904")
-      return '{"body":"unrelated fix"}';
-    if (args[0] === "pr" && args[2] === "901") {
-      if (prRead !== "ok") throw new Error("PR lookup failed");
-      return JSON.stringify({ body });
-    }
-    if (args[0] === "api" && args[1].endsWith("/issues/901")) {
-      if (prRead === "ordinary-issue") return '{"number":901}';
-      if (prRead === "unreadable") throw new Error("HTTP 502");
-      return '{"number":901,"pull_request":{"url":"https://api.example/pulls/901"}}';
-    }
-    if (args[0] === "issue" && args[2] === "902") {
-      if (state === "ERROR") throw new Error("HTTP 502");
-      return JSON.stringify({ state, title: "provider prerequisite" });
-    }
-    throw new Error(`Unexpected call: ${cmd} ${args.join(" ")}`);
-  };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ version: "deployed" }),
-    }),
-  );
-  try {
-    return {
-      result: await probeReleaseGate({
-        targetSha: "selected",
-        healthUrl: "https://health.example",
-        run,
-      }),
-      calls,
-    };
-  } finally {
-    vi.unstubAllGlobals();
-  }
-};
-
 describe("release-gate scoped prerequisites", () => {
   it("EARS-8: template instructions are not executable declarations", () => {
     expect(
@@ -337,6 +267,57 @@ describe("release-gate scoped prerequisites", () => {
       ),
     ).toEqual([902, 903]);
   });
+  const fixture = async (
+    body: string,
+    state = "OPEN",
+    subjects = "fix: selected change (#901)",
+    prRead = "ok",
+  ) => {
+    const calls: string[] = [];
+    const run = (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(" ")}`);
+      if (cmd === "git") return subjects;
+      if (args[0] === "api" && args[1].includes("deployments"))
+        return '[{"sha":"deployed"}]';
+      if (args[0] === "issue" && args[1] === "list") return "[]";
+      if (args[0] === "pr" && args[2] === "904")
+        return '{"body":"unrelated fix"}';
+      if (args[0] === "pr" && args[2] === "901") {
+        if (prRead !== "ok") throw new Error("PR lookup failed");
+        return JSON.stringify({ body });
+      }
+      if (args[0] === "api" && args[1].endsWith("/issues/901")) {
+        if (prRead === "ordinary-issue") return '{"number":901}';
+        if (prRead === "unreadable") throw new Error("HTTP 502");
+        return '{"number":901,"pull_request":{"url":"https://api.example/pulls/901"}}';
+      }
+      if (args[0] === "issue" && args[2] === "902") {
+        if (state === "ERROR") throw new Error("HTTP 502");
+        return JSON.stringify({ state, title: "provider prerequisite" });
+      }
+      throw new Error(`Unexpected call: ${cmd} ${args.join(" ")}`);
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ version: "deployed" }),
+      }),
+    );
+    try {
+      return {
+        result: await probeReleaseGate({
+          targetSha: "selected",
+          healthUrl: "https://health.example",
+          run,
+        }),
+        calls,
+      };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+
   it("EARS-1: holds only the selected PR's open prerequisite, without a global label", async () => {
     const { result, calls } = await fixture("Release-requires: #902");
     expect(evaluateReleaseGate(result).hold).toBe(true);
@@ -432,114 +413,5 @@ describe("release-gate scoped prerequisites", () => {
       "ordinary-issue",
     );
     expect(evaluateReleaseGate(result).hold).toBe(false);
-  });
-});
-
-// #2701 — release readiness: the stage `main` slot ran `pnpm e2e:stage main` on
-// the release target SHA and passed. The record is a GitHub commit status on
-// that SHA (context STAGE_E2E_STATUS_CONTEXT) written by the e2e:stage command;
-// the deploy pre-flight reads it fail-closed like the other release-gate items.
-describe("release-gate stage main e2e record (#2701)", () => {
-  it("holds a target SHA with no stage main e2e record, naming the SHA and the command", () => {
-    const v = evaluateReleaseGate(
-      probe({ targetSha: "a".repeat(40), stageE2e: { state: "absent" } }),
-    );
-    expect(v.hold).toBe(true);
-    const msg = formatReleaseGateHold(v) ?? "";
-    expect(msg).toContain("no stage `main` e2e record");
-    expect(msg).toContain("aaaaaaaaaaaa");
-    expect(msg).toContain("pnpm e2e:stage main");
-  });
-
-  it.each(["failure", "error", "pending"])(
-    "holds when the recorded run on the target SHA is %s",
-    (state) => {
-      const v = evaluateReleaseGate(
-        probe({ stageE2e: { state, description: "FAIL · 3 failed" } }),
-      );
-      expect(v.hold).toBe(true);
-      expect(formatReleaseGateHold(v)).toContain("FAIL · 3 failed");
-    },
-  );
-
-  it("fails closed when the record could not be read", () => {
-    const v = evaluateReleaseGate(
-      probe({ stageE2e: null, stageE2eError: "HTTP 502" }),
-    );
-    expect(v.hold).toBe(true);
-    expect(formatReleaseGateHold(v)).toContain("UNKNOWN");
-    expect(formatReleaseGateHold(v)).toContain("HTTP 502");
-  });
-
-  it("clears on a passing record and says so in the clear line", () => {
-    expect(evaluateReleaseGate(probe()).hold).toBe(false);
-    expect(formatReleaseGateClear(null)).toContain("stage `main` e2e PASS");
-  });
-
-  it("reads only the stage context out of the combined status, absent when missing", () => {
-    expect(readStageE2eRecord(JSON.parse(STAGE_PASS))).toEqual({
-      state: "success",
-      description: "PASS",
-      updatedAt: "2026-10-08T10:00:00Z",
-    });
-    expect(
-      readStageE2eRecord({
-        statuses: [{ context: "ci/other", state: "success" }],
-      }),
-    ).toEqual({ state: "absent" });
-    expect(readStageE2eRecord({})).toEqual({ state: "absent" });
-  });
-
-  it("the probe reads the combined status of the TARGET SHA", async () => {
-    const { result, calls } = await fixture("no deferred action");
-    expect(calls).toContain(
-      "gh api repos/{owner}/{repo}/commits/selected/status",
-    );
-    expect(result.stageE2e?.state).toBe("success");
-    expect(evaluateReleaseGate(result).hold).toBe(false);
-  });
-
-  it("the probe holds a target SHA whose combined status carries no stage record", async () => {
-    const { result } = await fixture(
-      "no deferred action",
-      "OPEN",
-      "fix: selected change (#901)",
-      "ok",
-      JSON.stringify({ statuses: [] }),
-    );
-    expect(result.stageE2e).toEqual({ state: "absent" });
-    expect(evaluateReleaseGate(result).hold).toBe(true);
-  });
-
-  it("the probe fails closed when the status read errors", async () => {
-    const { result } = await fixture(
-      "no deferred action",
-      "OPEN",
-      "fix: selected change (#901)",
-      "ok",
-      "not json",
-    );
-    expect(result.stageE2e).toBeNull();
-    expect(evaluateReleaseGate(result).hold).toBe(true);
-  });
-
-  it("builds the record the writer posts: success/failure, the stage context, a ≤140-char description", () => {
-    const pass = buildStageE2eStatus({
-      pass: true,
-      summary: { total: 212, failed: 0 },
-      nowIso: "2026-10-08T10:11:12.000Z",
-    });
-    expect(pass.state).toBe("success");
-    expect(pass.context).toBe(STAGE_E2E_STATUS_CONTEXT);
-    expect(pass.description).toContain("PASS");
-    expect(pass.description).toContain("2026-10-08T10:11:12Z");
-    expect(pass.description.length).toBeLessThanOrEqual(140);
-    const fail = buildStageE2eStatus({
-      pass: false,
-      summary: { total: 212, failed: 3 },
-      nowIso: "2026-10-08T10:11:12.000Z",
-    });
-    expect(fail.state).toBe("failure");
-    expect(fail.description).toContain("3 failed");
   });
 });

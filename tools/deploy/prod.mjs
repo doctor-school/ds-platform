@@ -20,8 +20,9 @@
 //                                          release-cycle spec §10.4 item 7)
 //     pnpm deploy:prod --release-gate-exempt "<reason>"   (escape hatch for the
 //                                          release-blocker / open batched
-//                                          Stage-B hold — #1662; reason is
-//                                          mandatory and loudly printed)
+//                                          Stage-B hold — #1662 — and the
+//                                          stage `main` check — #2701; reason
+//                                          is mandatory and loudly printed)
 //
 // Hotfix path (`--ref <sha>`, #1881 / spec §10.11): prod is behind main and a
 // single already-merged fix must ship WITHOUT everything else on main. The extra
@@ -35,6 +36,8 @@
 //   pre-flight  clean tree · HEAD==origin/main · green CI for the SHA (gh)
 //               · no live broadcast (tools/deploy/live-broadcast-check.mjs)
 //               · release gate (tools/deploy/release-gate.mjs)
+//               · stage `main` check: converge the slot to the target, run
+//                 the full stage suite (tools/deploy/stage-main-check.mjs)
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
 //   data-prod   verify cluster/artifacts → up immutable images (no build/pull)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
@@ -82,6 +85,7 @@ import {
   probeReleaseGate,
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
+import { runStageMainCheck } from "./stage-main-check.mjs";
 import {
   assertPostgresEvidence,
   certifiedTarget,
@@ -342,8 +346,8 @@ function localCap(cmd, args) {
 async function preflight(hotfixRef = null) {
   step(
     hotfixRef
-      ? `Pre-flight (HOTFIX ${REF_FLAG}): clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate`
-      : "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate",
+      ? `Pre-flight (HOTFIX ${REF_FLAG}): clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate · stage main check`
+      : "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · stage main check",
   );
 
   // 1. clean working tree
@@ -407,15 +411,19 @@ async function preflight(hotfixRef = null) {
     assertNoLiveBroadcast();
   }
 
-  // 5. release gate (#1662, #2701, spec §10): an OPEN `release-blocker` Issue,
-  //    a merged-but-not-yet-deployed PR whose `Stage-B: batched at #<gate>` gate
-  //    Issue is still open, or a target SHA without a passing `stage-e2e/main`
-  //    record (`pnpm e2e:stage main` on that SHA) HOLDS the deploy. Fail-closed on an UNKNOWN, like
+  // 5. release gate (#1662, spec §10): an OPEN `release-blocker` Issue, or a
+  //    merged-but-not-yet-deployed PR whose `Stage-B: batched at #<gate>` gate
+  //    Issue is still open, HOLDS the deploy. Fail-closed on an UNKNOWN, like
   //    the эфир probe above; the only bypass is the explicit, printed flag.
   //    In `--ref` mode the gate's range is already `<live deployed>..<target>`
   //    (the basis is the LIVE prod SHA, not main) — i.e. exactly the hotfix
   //    range, with no extra wiring.
   await assertReleaseGate(target);
+
+  // 6. stage `main` check (#2701, spec §10.4 item 8): converge the stage `main`
+  //    slot to the target and run the full stage suite from a clean checkout of
+  //    it. Last, because it is the slowest step; same owner-go bypass as step 5.
+  assertStageMainCheck(target);
 
   return target;
 }
@@ -501,7 +509,7 @@ async function assertHotfixInvariants(target) {
   );
 }
 
-// Release-blocker + open-batched-Stage-B + stage-e2e hold (#1662, #2701). The evidence probe and
+// Release-blocker + open-batched-Stage-B hold (#1662). The evidence probe and
 // the pure verdict live in tools/deploy/release-gate.mjs (unit-tested there);
 // this is the deploy-side wiring: print the exemption loudly, else hold.
 async function assertReleaseGate(sha) {
@@ -509,7 +517,7 @@ async function assertReleaseGate(sha) {
   if (exempt.error) die(exempt.error); // already caught at start-up; belt-and-braces
   if (exempt.exempt) {
     console.log(
-      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the release-blocker / batched-Stage-B / stage-e2e gate` +
+      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the release-blocker / batched-Stage-B gate` +
         ` — ${exempt.reason} (this line is the audit record).`,
     );
     return;
@@ -523,6 +531,33 @@ async function assertReleaseGate(sha) {
   const hold = formatReleaseGateHold(verdict);
   if (hold) die(hold);
   ok(formatReleaseGateClear(probe.basisSha));
+}
+
+// The stage `main` check (tools/deploy/stage-main-check.mjs, unit-tested there);
+// this is the deploy-side wiring: print the exemption loudly, else refuse on red.
+function assertStageMainCheck(sha) {
+  const exempt = parseReleaseGateExempt(process.argv);
+  if (exempt.error) die(exempt.error);
+  if (exempt.exempt) {
+    console.log(
+      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the stage \`main\` check` +
+        ` — ${exempt.reason} (this line is the audit record).`,
+    );
+    return;
+  }
+  const t = Date.now();
+  const result = runStageMainCheck({ sha, repoRoot: process.cwd() });
+  if (!result.ok) {
+    die(
+      `stage \`main\` check: ${result.reason}.\n` +
+        `  Fix the cause and re-run \`pnpm deploy:prod\`; skipping it needs the owner's go` +
+        ` + ${RELEASE_GATE_EXEMPT_FLAG} "<reason>".`,
+    );
+  }
+  ok(
+    `stage \`main\` slot serves ${sha.slice(0, 12)} and the full stage suite PASSED`,
+    t,
+  );
 }
 
 // Read-only probe of the public upcoming-broadcasts listing (exit 0 = CLEAR,

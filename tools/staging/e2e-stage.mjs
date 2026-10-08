@@ -4,18 +4,11 @@
  *
  * Staging/previews/regression-contour tech spec, C4 and §8 step 7: the C6 suite and
  * the a11y suites are driven from the OPERATOR's machine against the slot's PUBLIC
- * hostnames — the same edge a reviewer uses, basic auth included — and the verdict is
- * pasted into the PR body by hand. There is deliberately no CI check-run: staging is
- * operated by hand like production (#2202), and a check-run would need the LLM-free
- * runner to hold the stand's credentials.
- *
- * ── The release record (#2701) ───────────────────────────────────────────────
- * A FULL run on the `main` slot (no `--project`, `--grep` or `--no-axe`) is the
- * release-readiness run: the operator's `gh` posts its verdict as a GitHub commit
- * status (`STAGE_E2E_STATUS_CONTEXT`, success OR failure) on the SHA the slot served
- * per `/v1/health`, and `pnpm deploy:prod`'s release gate (tools/deploy/release-gate.mjs)
- * refuses a target SHA whose latest record is not `success`. A record that cannot be
- * written exits 3 — the verdict never silently fails to reach the gate.
+ * hostnames — the same edge a reviewer uses, basic auth included. A preview verdict is
+ * pasted into the PR body by hand; `--expect-sha` is the release check `pnpm deploy:prod`
+ * runs itself (C7, tools/deploy/stage-main-check.mjs). There is deliberately no CI
+ * check-run and no GitHub status: staging is operated by hand like production (#2202),
+ * and a check-run would need the LLM-free runner to hold the stand's credentials.
  *
  * ── What this command is NOT ─────────────────────────────────────────────────
  * It never raises, syncs or tears down a slot. «A converged slot» is its
@@ -41,12 +34,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  FULL_SHA_RE,
   SlotError,
   STAGE_ENV_FILE,
   HEALTH_TIMEOUT_MS,
   assertBaseDomain,
   assertSlotName,
   basicAuthHeader,
+  healthVerdict,
   readBoxEnvFile,
   requiredBaseDomain,
   requiredBasicAuthUser,
@@ -55,10 +50,6 @@ import {
   slotHostnames,
 } from "./slot.mjs";
 import { GOLDEN_PASSWORD_ENV_VARS } from "./idp.mjs";
-import {
-  STAGE_E2E_STATUS_CONTEXT,
-  buildStageE2eStatus,
-} from "../deploy/release-gate.mjs";
 
 /** The repo root — every leg runs from there, like the scripts in `package.json`. */
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -89,7 +80,7 @@ export function parseE2eArgs(argv) {
   if (slot === undefined || slot.startsWith("-")) {
     throw new SlotError(
       "usage: pnpm e2e:stage <slot> [--project academy|doctor|walks] [--grep <re>] " +
-        "[--no-axe] [--report-dir <path>] — the slot must be named",
+        "[--no-axe] [--report-dir <path>] [--expect-sha <sha>] — the slot must be named",
     );
   }
   assertSlotName(slot);
@@ -99,6 +90,7 @@ export function parseE2eArgs(argv) {
     grep: undefined,
     axe: true,
     reportDir: undefined,
+    expectSha: undefined,
   };
   const takeValue = (flag) => {
     const value = rest.shift();
@@ -126,11 +118,61 @@ export function parseE2eArgs(argv) {
       case "--report-dir":
         options.reportDir = takeValue(flag);
         break;
+      case "--expect-sha": {
+        const sha = takeValue(flag);
+        if (!FULL_SHA_RE.test(sha)) {
+          throw new SlotError(
+            `unusable --expect-sha: ${JSON.stringify(sha)} — expected a full 40-character lowercase hex SHA`,
+          );
+        }
+        options.expectSha = sha;
+        break;
+      }
       default:
         throw new SlotError(`unknown flag: ${flag}`);
     }
   }
+  if (options.expectSha !== undefined) assertReleaseCheckShape(options);
   return options;
+}
+
+/**
+ * `--expect-sha` is the RELEASE CHECK `pnpm deploy:prod` runs before shipping (#2701):
+ * the `main` slot, the whole suite, every leg. A narrowed run proves only its slice,
+ * so the release check refuses any narrowing flag instead of passing on part of it.
+ */
+function assertReleaseCheckShape(options) {
+  if (options.slot !== "main") {
+    throw new SlotError(
+      `--expect-sha is the release check and runs on the \`main\` slot only, not ${options.slot}`,
+    );
+  }
+  const narrowing = [
+    options.project !== undefined && "--project",
+    options.grep !== undefined && "--grep",
+    options.axe === false && "--no-axe",
+  ].filter(Boolean);
+  if (narrowing.length > 0) {
+    throw new SlotError(
+      `--expect-sha is the release check and runs the full suite — drop ${narrowing.join(", ")}`,
+    );
+  }
+}
+
+/**
+ * The env-side half of the same rule: `E2E_GREP` in the inherited env filters the
+ * suite (`packages/e2e/playwright.config.ts` compiles it), and without `CI` the
+ * config's `forbidOnly` is off, so a stray `test.only` would pass on one scenario.
+ * Returns the refusal reason, or `undefined` when the env runs the full suite.
+ */
+export function releaseCheckEnvRefusal(env) {
+  if (env?.E2E_GREP) {
+    return "E2E_GREP is set and would filter the suite — unset it for the release check";
+  }
+  if (!env?.CI) {
+    return "CI=1 is required for the release check — it turns on Playwright's forbidOnly";
+  }
+  return undefined;
 }
 
 /**
@@ -389,50 +431,9 @@ export const realEffects = {
       return undefined;
     }
   },
-  // No shell: the body travels on stdin and `gh` is a real executable (the
-  // deploy tools spawn it the same way), so the `{owner}/{repo}` placeholder and
-  // the free-text description never meet a command-line parser.
-  recordStatus: (sha, status) => {
-    const out = spawnSync(
-      "gh",
-      [
-        "api",
-        "-X",
-        "POST",
-        `repos/{owner}/{repo}/statuses/${sha}`,
-        "--input",
-        "-",
-      ],
-      { cwd: REPO_ROOT, encoding: "utf8", input: JSON.stringify(status) },
-    );
-    if (out.error) return { ok: false, error: out.error.message };
-    if (out.status !== 0) {
-      return {
-        ok: false,
-        error: (out.stderr || out.stdout || `gh exited ${out.status}`)
-          .trim()
-          .split("\n")[0],
-      };
-    }
-    return { ok: true };
-  },
   log: (line) => console.log(line),
   now: () => new Date(),
 };
-
-/**
- * Whether this run is the release-readiness run (#2701): the `main` slot, the whole
- * suite, every leg the gate Issue allows. A narrowed run proves only its slice and
- * never writes the record the deploy gate reads.
- */
-export function isReleaseRecordRun(options) {
-  return (
-    options.slot === "main" &&
-    options.project === undefined &&
-    options.grep === undefined &&
-    options.axe === true
-  );
-}
 
 // --- the command --------------------------------------------------------------
 
@@ -442,6 +443,14 @@ export async function runE2eStage(
 ) {
   const options = parseE2eArgs(argv);
   const { slot } = options;
+
+  if (options.expectSha !== undefined) {
+    const refusal = releaseCheckEnvRefusal(env);
+    if (refusal) {
+      effects.log(`e2e:stage refuses the release check: ${refusal}.`);
+      return exitCodeFor({ preflightOk: false, legs: [] });
+    }
+  }
 
   // The box is read ONLY for what the operator's own env does not already carry, so
   // an operator without ssh can run the suite with `STAGE_BASE_DOMAIN` +
@@ -474,6 +483,19 @@ export async function runE2eStage(
         "` first.",
     );
     return exitCodeFor({ preflightOk: false, legs: [] });
+  }
+
+  // The release check asserts the slot serves the release TARGET, not merely a SHA:
+  // a suite run against a stale `main` slot would certify code the deploy does not ship.
+  if (options.expectSha !== undefined) {
+    const served = healthVerdict({ ...health, sha: options.expectSha });
+    if (!served.ok) {
+      effects.log(
+        `e2e:stage refuses the release check: ${healthUrl} — ${served.reason}. ` +
+          `Converge it with \`pnpm stage:slot up main --ref ${options.expectSha}\` first.`,
+      );
+      return exitCodeFor({ preflightOk: false, legs: [] });
+    }
   }
 
   // ABSOLUTE: Playwright resolves a reporter's `outputFile`/`outputFolder` against
@@ -551,26 +573,7 @@ export async function runE2eStage(
       reportDir,
     }),
   );
-  const code = exitCodeFor({ preflightOk: true, legs });
-  if (!isReleaseRecordRun(options)) return code;
-
-  const status = buildStageE2eStatus({
-    pass: code === 0,
-    summary,
-    nowIso: effects.now().toISOString(),
-  });
-  const written = effects.recordStatus(preflight.sha, status);
-  if (!written.ok) {
-    effects.log(
-      `release record NOT written on ${shortSha(preflight.sha)} (${STAGE_E2E_STATUS_CONTEXT}): ${written.error} — ` +
-        "re-run after fixing `gh` access; `pnpm deploy:prod` holds this SHA until a record exists.",
-    );
-    return 3;
-  }
-  effects.log(
-    `release record: ${STAGE_E2E_STATUS_CONTEXT}=${status.state} on ${shortSha(preflight.sha)} — ${status.description}`,
-  );
-  return code;
+  return exitCodeFor({ preflightOk: true, legs });
 }
 
 const invokedDirectly =

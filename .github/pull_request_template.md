@@ -52,7 +52,7 @@ Replace every angle-bracket placeholder below. The PR-body guard rejects missing
 placeholder, known-red, or failed evidence. Reasoned N/A examples:
 
 - Stage-B: N/A — no render surface (spec/ADR/test/tooling-only; the stage-b guard does not apply)
-- Stage-B: N/A (no visual surface) — lead-certified; authorization and live behavioral verification: <link>
+- Stage-B: N/A (no visual surface) — lead-certified; authorization + CI e2e and before/after captures (slot report if environment-sensitive): <link>
 - Changeset: N/A — internal-only tooling change with no user-facing package impact
 - Behavior change: N/A — test-only change; runtime and user behavior are unchanged
 - Deviations: N/A — no ADR/spec deviations

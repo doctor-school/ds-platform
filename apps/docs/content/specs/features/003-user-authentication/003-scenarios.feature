@@ -26,12 +26,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # "003 EARS-1/41/10" registration/verify arrival/mail -> registration.steps.ts.
     # Keep that full test: its confirmation/session/logout assertions are distinct.
 
-  @EARS-20 @failure
+  @EARS-20 @failure @consent-refusal
   Scenario: Registration is refused without consent
-    Given a visitor with a valid email and password
-    When the visitor submits the registration form without any accepted consent version
-    Then no PD-bearing UserMirror row is committed
-    And the response is a generic validation failure
+    Given an Academy visitor with unique owned credentials for the consent-refusal request
+    When that browser sends a real Academy BFF registration request without any accepted consent version
+    Then the consent-free registration request receives the generic validation failure
+    And no PD-bearing UserMirror row exists for that exact owned registration address
+    And the refused registrant has no private session, profile access, password or token exposure
+    # Academy's form records tos/2026-01 from its read-only statement (no checkbox).
+    # This request-level omission probe does not claim a form-level refusal.
+    # Retained internal mapping: apps/api/test/auth/register.e2e-spec.ts EARS-20
+    # -> consent-refusal.steps.ts: real BFF refusal + exact owned mirror count.
+    # Keep broader portal registration/confirmation journeys and the API test.
 
   @EARS-1 @EARS-16 @failure
   Scenario: Registration with an already-registered email is enumeration-resistant

@@ -44,6 +44,75 @@ function parsedObject(text: string): Record<string, unknown> {
   }
 }
 
+/** 003 EARS-20: project the empty-consent probe without retaining secrets. */
+export function consentRefusalEvidence(
+  requestText: string,
+  responseText: string,
+  account: OwnedCredentials,
+) {
+  const request = parsedObject(requestText);
+  const response = parsedObject(responseText);
+  return {
+    credentialsMatch:
+      request.email === account.email && request.password === account.password,
+    consentAbsent:
+      Array.isArray(request.consent) && request.consent.length === 0,
+    refusalMatches:
+      Object.keys(response).length === 3 &&
+      response.statusCode === 400 &&
+      response.message === "the request could not be completed" &&
+      response.error === "Bad Request",
+  };
+}
+
+/** Shared absent-session proof for pending registration and consent refusal. */
+export async function assertNoPrivateRegistrationAccess(
+  page: Page,
+  setCookie: string,
+  account: OwnedCredentials,
+): Promise<void> {
+  const sessionName = "__Host-ds_session";
+  expect(
+    setCookie.includes(`${sessionName}=`),
+    "registration minted no private session",
+  ).toBe(false);
+  const cookies = await page.context().cookies();
+  expect(
+    cookies.some((cookie) => cookie.name === sessionName),
+    "browser has no private session",
+  ).toBe(false);
+  expect(
+    cookies.some((cookie) => cookie.value.includes(account.password)),
+    "cookies contain no registration password",
+  ).toBe(false);
+  const exposed = await page.evaluate((password) => {
+    const readable = JSON.stringify({
+      url: location.href,
+      cookie: document.cookie,
+      local: Object.entries(localStorage),
+      session: Object.entries(sessionStorage),
+    });
+    return (
+      readable.includes(password) ||
+      readable.includes(encodeURIComponent(password)) ||
+      /__Host-ds_session|access[_-]?token|refresh[_-]?token|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
+        readable,
+      )
+    );
+  }, account.password);
+  expect(
+    exposed,
+    "URL and JavaScript-readable stores expose no password or tokens",
+  ).toBe(false);
+  expect(
+    await page.evaluate(
+      async () =>
+        (await fetch("/v1/me/profile", { credentials: "include" })).status,
+    ),
+    "registration cannot read a private profile",
+  ).toBe(401);
+}
+
 /** Return only booleans so an assertion can never print credential-bearing bytes. */
 export function registrationEvidence(
   requestText: string,

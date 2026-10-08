@@ -237,3 +237,27 @@ keeps the HTML + JSON report under `packages/e2e/playwright-report/<slot>-<times
 and prints the verdict block the operator pastes into the PR body or the release record.
 `--project walks` selects the derived walks alone (the two storefront a11y legs belong to
 the host projects, so that selection runs neither).
+
+### Registration without consent (003 EARS-20)
+
+`Registration is refused without consent` uses unique owned credentials and a
+real same-origin browser request to `/v1/auth/register` with `consent: []` and
+the stage CAPTCHA test token. Academy's approved form records `tos/2026-01`
+from its read-only terms statement; this scenario tests the BFF's omission
+refusal, without claiming an unchecked-checkbox UI path. It asserts the generic
+400, no private session or profile access, and no credential/token exposure.
+The retained API `register.e2e-spec.ts` EARS-20 proof remains intact.
+
+`lib/consent-refusal.ts` reads only the count for that journey's exact generated
+`register-2704-<UUID>@example.test` address, before and after refusal. It verifies
+the browser origin against the canonical stage hostnames, uses the shared SSH
+transport and slot database name, and runs a read-only transaction with a
+five-second statement timeout. SSH access is required; missing access or an
+invalid count fails closed. Every remote command is appended to
+`.scratch/stand-ops-2704.log`; the probe emits no mirror fields or credentials.
+
+Run on a lead-owned, converged PR slot:
+
+```sh
+pnpm e2e:stage pr-<N> --project academy --grep "Registration is refused without consent"
+```

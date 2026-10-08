@@ -18,6 +18,7 @@ import {
 // client components and the host proxy, where an inline server action may not
 // be defined. Only these server mounts build the action.
 import { signedInLandingAction } from "../server/signed-in-landing";
+import { completionTargetAction } from "../server/completion-target";
 import { AuthShell } from "../shell";
 import { LoginDoor } from "./login-door";
 import { LOGIN_HANDOFF_PARAM, resolveHandoffRef } from "./login-handoff";
@@ -156,6 +157,15 @@ export async function LoginRoute({
     ? undefined
     : signedInLandingAction(config);
 
+  // 021 EARS-10 (#2477) — the render-time эфир answer is re-asked when the
+  // sign-in succeeds, through the same action the registration journey's
+  // `/verify` step calls: an эфир gone while /login stood open lands the
+  // visitor on the LD-4 landing, never on its dead page.
+  const resolveCompletionTarget =
+    safeTarget && landingTarget && gateResolved
+      ? completionTargetAction(config, safeTarget, landingTarget)
+      : undefined;
+
   guardAuthRoute({
     authenticated,
     pathname: config.routes.login,
@@ -176,6 +186,7 @@ export async function LoginRoute({
         config={config}
         landing={landing}
         {...(resolveSignedInLanding ? { resolveSignedInLanding } : {})}
+        {...(resolveCompletionTarget ? { resolveCompletionTarget } : {})}
         // The RAW arrival value: the door's shared carry helper answers both the
         // эфир and the account shape and re-appends only what the guards
         // reconstructed, so a hostile param is dropped at the hop (#2258 / S3).

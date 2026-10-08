@@ -163,6 +163,32 @@ export function verificationEvidence(
   };
 }
 
+/** 003 EARS-41: a cold confirmation submits no held registration password. */
+export function coldVerificationEvidence(
+  requestText: string,
+  responseText: string,
+  account: OwnedCredentials,
+  code: string,
+) {
+  const request = parsedObject(requestText);
+  const response = parsedObject(responseText);
+  return {
+    credentialsMatch: request.email === account.email && request.code === code,
+    codeOnly:
+      Object.keys(request).length === 2 &&
+      Object.hasOwn(request, "email") &&
+      Object.hasOwn(request, "code"),
+    acknowledgementMatches:
+      Object.keys(response).length === 1 && response.status === "verified",
+  };
+}
+
+export function registrationUrl(base: string, returnTo?: "/account"): string {
+  if (returnTo !== undefined && returnTo !== "/account")
+    throw new Error("Unsupported owned registration return target");
+  return `${base}/register${returnTo ? `?${new URLSearchParams({ returnTo })}` : ""}`;
+}
+
 export function differentVerificationCode(delivered: string): string {
   if (!/^\d{6}$/.test(delivered)) {
     throw new Error("Expected a delivered six-digit confirmation code");
@@ -203,8 +229,9 @@ export async function registerOwnedCredentials(
   page: Page,
   base: string,
   account: OwnedCredentials,
+  returnTo?: "/account",
 ): Promise<{ response: Response; code: string }> {
-  await page.goto(`${base}/register`, { waitUntil: "load" });
+  await page.goto(registrationUrl(base, returnTo), { waitUntil: "load" });
   await page.waitForLoadState("networkidle");
   await inputSecret(page.locator('input[autocomplete="email"]'), account.email);
   await inputSecret(

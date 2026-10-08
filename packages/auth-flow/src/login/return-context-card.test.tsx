@@ -283,9 +283,13 @@ describe("#2465: the mobile plate draws the canvas strip — eyebrow, card, then
       plate?.lastElementChild,
     ];
 
-    // Eyebrow: 11px/800/.14em uppercase. Its colour stays the AA-safe muted ink:
-    // the canvas's inkFaint (`text-faint`) on the plate's `bg-muted` measures
-    // 4.31:1 light / 3.93:1 dark — under the 4.5:1 small-text floor.
+    // The band is the section surface (canvas `sectionGray`; #2710 tracks the
+    // canvas light value).
+    const plateClasses = plate?.className.split(" ") ?? [];
+    expect(plateClasses).toContain("bg-section");
+    expect(plateClasses).not.toContain("bg-muted");
+
+    // Eyebrow: 11px/800/.14em uppercase in the AA-safe muted ink (#2710).
     const eyebrowClasses = eyebrow?.className.split(" ") ?? [];
     expect(eyebrowClasses).toContain("tracking-eyebrow");
     expect(eyebrowClasses).toContain("text-muted-foreground");

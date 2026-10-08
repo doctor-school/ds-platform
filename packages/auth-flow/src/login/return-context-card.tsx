@@ -103,18 +103,15 @@ function PlateBody({
   return (
     <div
       data-testid="return-context-plate"
-      className="-mx-gutter-sm bg-muted px-gutter-sm pt-4 pb-1 layout:hidden"
+      className="-mx-gutter-sm bg-section px-gutter-sm pt-4 pb-1 layout:hidden"
     >
-      {/* The canvas mobile strip (auth.dc.html 44): 11px/800/.14em uppercase —
-          the wide panel's eyebrow tracking. The colour is the muted ink, not the
-          canvas's inkFaint: `text-faint` on `bg-muted` is 4.31:1 light / 3.93:1
-          dark, under the 4.5:1 floor for 11px text (#2465). */}
+      {/* 021 EARS-2 — the canvas mobile strip; the muted ink instead of the
+          canvas inkFaint is an AA contrast deviation tracked by #2710. */}
       <p className="mb-1.5 text-eyebrow font-extrabold uppercase tracking-eyebrow text-muted-foreground">
         {copy.eyebrow}
       </p>
       <ReturnEventCard event={event} />
-      {/* The door's assurance line under the card (auth.dc.html 46): 13px on the
-          1.55 line in inkMuted — the same sentence the wide panel carries (#2465). */}
+      {/* 021 EARS-2 (#2465) — the door's assurance line, as the wide panel carries it. */}
       <p className="mt-2.5 mb-3 text-caption leading-prose text-muted-foreground">
         {copy[variant]}
       </p>

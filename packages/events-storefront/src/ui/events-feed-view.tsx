@@ -108,7 +108,7 @@ function FeedSkeleton() {
   );
 }
 
-async function LiveSection({
+export async function LiveSection({
   config,
   session,
 }: {
@@ -125,7 +125,7 @@ async function LiveSection({
   );
 }
 
-async function MyEventsSection({
+export async function MyEventsSection({
   config,
   mine,
 }: {
@@ -146,7 +146,7 @@ async function MyEventsSection({
   return <MyEventsCut events={read.value} routes={config.routes} />;
 }
 
-async function FeedSection({
+export async function FeedSection({
   config,
   query,
   request,

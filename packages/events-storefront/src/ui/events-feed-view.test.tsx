@@ -49,12 +49,15 @@ const ROUTES = {
 };
 
 const DOCTOR: EventsStorefrontHostConfig = {
+  filterSet: "doctor",
   contentSet: {
     feedPath: "/v1/storefront/doctor/events",
     tenseParam: "tense",
     relayCookie: "__Host-ds_specialty",
     livePath: "/v1/storefront/doctor/events/live",
     myEventsPath: "/v1/storefront/doctor/me/events",
+    monthPath: "/v1/storefront/doctor/events/month",
+    countsPath: "/v1/storefront/doctor/events/month-counts",
     adapt: adaptDoctorEventsFeed,
   },
   headerCopy: {
@@ -65,11 +68,14 @@ const DOCTOR: EventsStorefrontHostConfig = {
 };
 
 const ACADEMY: EventsStorefrontHostConfig = {
+  filterSet: "academy",
   contentSet: {
     feedPath: "/v1/public/events",
     tenseParam: "timeframe",
     livePath: "/v1/public/events/live",
     myEventsPath: "/v1/me/events",
+    monthPath: "/v1/public/events",
+    countsPath: "/v1/public/events/month-counts",
     adapt: adaptPublicEventListing,
   },
   headerCopy: {
@@ -95,6 +101,8 @@ const CARD: EventsFeedCard = {
 };
 
 const PAGE: EventsFeedPage = {
+  facetOptions: {},
+  matching: 0,
   cards: [CARD],
   horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null },
   remaining: 57,

@@ -79,7 +79,25 @@ export interface EventsFeedPage {
   readonly remaining: number;
   readonly nextBatch: number;
   readonly summary?: EventsFeedSummary;
+  /**
+   * The facet panel's options the read names, keyed by facet (`project` …
+   * on the Academy, `kind` / `city` on the doctor host — D9); empty when the
+   * read names none.
+   */
+  readonly facetOptions: FeedFacetOptions;
+  /** The events this reading matches — the page plus the rest of its reach («Показать N», row 60). */
+  readonly matching: number;
 }
+
+/** One facet option: the URL value, its title and its count under the other facets. */
+export interface FeedFacetOption {
+  readonly slug: string;
+  readonly title: string;
+  readonly count: number;
+}
+export type FeedFacetOptions = Readonly<
+  Record<string, readonly FeedFacetOption[]>
+>;
 
 /**
  * The one adapter of gate §4.5: a pure mapping of the host's feed read DTO onto

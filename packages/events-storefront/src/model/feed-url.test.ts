@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { appliedFacetsOf, withAppliedFacets } from "./facets";
 import {
   canonicalFeedRedirect,
+  dayHref,
+  monthHref,
+  monthReadQuery,
+  pageMonthOf,
+  pageViewOf,
+  viewHref,
   feedReadQuery,
   feedTenseOf,
   showMoreHref,
@@ -29,7 +36,7 @@ describe("canonicalFeedRedirect — §4.3 D1, the legacy Academy URL", () => {
     );
   });
 
-  it("between PR 2.4 and 2.5 the redirect passes view and month through unchanged", () => {
+  it("NEW: §4.3 D1 — view and month keep their meaning in the one codec through the legacy redirect", () => {
     expect(
       canonicalFeedRedirect("/webinars", {
         tab: "past",
@@ -107,10 +114,114 @@ describe("the one feed codec (019 LD-1)", () => {
 
   it("the read query carries the tense under the host's read param and the codec's horizon and facets", () => {
     expect(
-      feedReadQuery({ from: "2026-10-08", to: "2026-10-22", junk: "x" }, "timeframe").toString(),
+      feedReadQuery({ from: "2026-10-08", to: "2026-10-22", junk: "x" }, "timeframe", "academy").toString(),
     ).toBe("from=2026-10-08&to=2026-10-22&timeframe=upcoming");
     expect(
-      feedReadQuery({ tense: "past", format: "online" }, "tense").toString(),
+      feedReadQuery({ tense: "past", format: "online" }, "tense", "doctor").toString(),
     ).toBe("format=online&tense=past");
+  });
+});
+
+describe("the month view is a view of the one page (row 51)", () => {
+  it("NEW: the round-trip keeps tense and facets on both hosts", () => {
+    const doctor = { tense: "past", format: "online", specialty: "all", from: "2026-09-01", to: "2026-10-01", day: "2026-09-10" };
+    const toMonth = viewHref("/events", doctor, "month");
+    expect(toMonth).toBe("/events?view=month&tense=past&format=online&specialty=all");
+    const back = viewHref("/events", Object.fromEntries(new URL(toMonth, "http://x").searchParams), "feed");
+    expect(back).toBe("/events?tense=past&format=online&specialty=all");
+
+    const academy = { tense: "past", project: ["a", "b"], topic: "t" };
+    const toAcademyMonth = viewHref("/webinars", academy, "month");
+    expect(toAcademyMonth).toBe("/webinars?view=month&tense=past&project=a&project=b&topic=t");
+    expect(pageViewOf({ view: "month" })).toBe("month");
+    expect(pageViewOf({ view: "week" })).toBe("feed");
+  });
+
+  it("NEW: a malformed month reads as absent and never voids the rest of the URL", () => {
+    expect(pageMonthOf({ month: "2026-13" })).toBeUndefined();
+    expect(pageMonthOf({ month: "2026-09" })).toBe("2026-09");
+    expect(monthHref("/events", { view: "month", month: "nope", format: "online" }, "2026-11")).toBe(
+      "/events?view=month&month=2026-11&format=online",
+    );
+    expect(monthHref("/events", { view: "month", month: "2026-11", day: "2026-11-02" }, undefined)).toBe(
+      "/events?view=month",
+    );
+  });
+
+  it("NEW: each host's reads take only that host's facets", () => {
+    const raw = { view: "month", month: "2026-09", format: "online", project: "p" };
+    expect(monthReadQuery(raw, "doctor", { month: "2026-09" }).toString()).toBe("month=2026-09&format=online");
+    expect(monthReadQuery(raw, "academy", { year: "2026" }).toString()).toBe("year=2026&project=p");
+    expect(feedReadQuery(raw, "timeframe", "academy").toString()).toBe("project=p&timeframe=upcoming");
+  });
+});
+
+describe("dayHref — one day-href rule over the extent (row 57)", () => {
+  const HORIZON = { from: "2026-09-01", to: "2026-09-15" };
+  const params = (value: string) => new URL(value, "http://127.0.0.1").searchParams;
+
+  it("EARS-4.5: a day inside the served horizon leaves the horizon alone", () => {
+    const query = params(dayHref("/events", { format: "online" }, "2026-09-04", HORIZON));
+    expect(query.get("day")).toBe("2026-09-04");
+    expect(query.get("month")).toBe("2026-09");
+    expect(query.get("to")).toBeNull();
+    expect(query.get("from")).toBeNull();
+    expect(query.get("format")).toBe("online");
+  });
+
+  it("EARS-4.5: the day AT the exclusive bound widens — that day is not served yet", () => {
+    const query = params(dayHref("/events", {}, "2026-09-15", HORIZON));
+    expect(query.get("from")).toBe("2026-09-01");
+    expect(query.get("to")).toBe("2026-09-16");
+  });
+
+  it("EARS-4.5: a day past the horizon widens to the day AFTER it, so the day itself is inside the read", () => {
+    const query = params(dayHref("/events", {}, "2026-09-20", HORIZON));
+    expect(query.get("day")).toBe("2026-09-20");
+    expect(query.get("to")).toBe("2026-09-21");
+  });
+
+  it("EARS-4.5: widening at a month boundary rolls the bound into the next month", () => {
+    const query = params(dayHref("/events", {}, "2026-09-30", { from: "2026-09-01", to: "2026-09-29" }));
+    expect(query.get("to")).toBe("2026-10-01");
+    expect(query.get("month")).toBe("2026-09");
+  });
+
+  it("EARS-4.5: with no horizon known the href never invents one", () => {
+    const query = params(dayHref("/events", {}, "2026-09-20"));
+    expect(query.get("to")).toBeNull();
+    expect(query.get("from")).toBeNull();
+  });
+
+  it("NEW: on «Прошедшие» a day older than the extent widens `from` back to it", () => {
+    const query = params(dayHref("/webinars", { tense: "past" }, "2026-08-20", HORIZON));
+    expect(query.get("from")).toBe("2026-08-20");
+    expect(query.get("to")).toBe("2026-09-15");
+    expect(query.get("tense")).toBe("past");
+  });
+});
+
+describe("the facet panel writes the URL (rows 58, 59)", () => {
+  it("NEW: each host writes exactly its set; an applied facet round-trips through the URL", () => {
+    const applied = appliedFacetsOf({ format: "online", project: "p", from: "2026-09-01" });
+    expect(applied.format).toEqual(["online"]);
+    expect(withAppliedFacets({ tense: "past", format: "online", from: "x" }, { ...applied, kind: ["lecture"] }, "doctor"))
+      .toMatchObject({ tense: "past", format: ["online"], kind: ["lecture"], from: undefined });
+    expect(withAppliedFacets({ project: "p" }, { ...applied, project: ["q"], format: ["offline"] }, "academy"))
+      .toMatchObject({ project: ["q"] });
+    expect(withAppliedFacets({}, { ...applied, format: ["offline"] }, "academy").format).toBeUndefined();
+  });
+
+  it("NEW: the three specialty states round-trip through the URL; removing the last picked one returns to «Моя и смежные»", () => {
+    expect(appliedFacetsOf({}).specialtyScope).toBe("mine-and-adjacent");
+    expect(appliedFacetsOf({ specialty: "all" }).specialtyScope).toBe("all");
+    expect(appliedFacetsOf({ specialty: ["s1", "s2"] }, (id) => `name-${id}`).specialtyScope).toEqual([
+      { id: "s1", label: "name-s1" },
+      { id: "s2", label: "name-s2" },
+    ]);
+    const base = appliedFacetsOf({});
+    expect(withAppliedFacets({}, { ...base, specialtyScope: "all" }, "doctor").specialty).toBe("all");
+    expect(withAppliedFacets({}, { ...base, specialtyScope: [{ id: "s1", label: "x" }] }, "doctor").specialty).toEqual(["s1"]);
+    expect(withAppliedFacets({ specialty: "s1" }, { ...base, specialtyScope: [] }, "doctor").specialty).toBeUndefined();
   });
 });

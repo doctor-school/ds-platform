@@ -21,14 +21,17 @@ vi.mock("next/navigation", () => ({ permanentRedirect }));
 import { EventsListingPage } from "./events-listing-page";
 
 const CONFIG = {
+  filterSet: "academy",
   headerCopy: { title: "Расписание эфиров", subline: "Ближайшие эфиры" },
   contentSet: {
     feedPath: "/v1/public/events",
     tenseParam: "timeframe",
     livePath: "/v1/public/events/live",
     myEventsPath: "/v1/me/events",
+    monthPath: "/v1/public/events",
+    countsPath: "/v1/public/events/month-counts",
     adapt: () => ({
-      cards: [],
+      cards: [], facetOptions: {}, matching: 0,
       horizon: { from: "", to: "", nextTo: null, nextFrom: null },
       remaining: 0,
       nextBatch: 0,

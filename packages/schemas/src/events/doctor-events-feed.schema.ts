@@ -10,6 +10,7 @@ import { MOSCOW_TIME_ZONE, formatEventTime } from "./event-time.js";
 import {
   createEventListingQueryCodec,
   type EventListingQueryEntry,
+  type EventListingQueryField,
   type RawQueryRecord,
 } from "./event-listing-query.schema.js";
 
@@ -188,9 +189,8 @@ export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;
  * a missing `specialty` means `mine-and-adjacent`. The field table below is
  * ordered, and that order IS the URL's key order.
  */
-export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
-  schema: DoctorEventsFeedQuerySchema,
-  fields: [
+/** The doctor codec's field table — its order IS the URL's key order. */
+export const DOCTOR_EVENTS_FEED_QUERY_FIELDS = [
     { key: "day", kind: "scalar" },
     { key: "tense", kind: "scalar" },
     { key: "from", kind: "scalar" },
@@ -206,8 +206,12 @@ export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
     { key: "nmo", kind: "boolean" },
     { key: "free", kind: "boolean" },
     { key: "q", kind: "scalar" },
-  ],
-} as const);
+  ] as const satisfies readonly EventListingQueryField[];
+
+export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
+  schema: DoctorEventsFeedQuerySchema,
+  fields: DOCTOR_EVENTS_FEED_QUERY_FIELDS,
+});
 
 /**
  * The single query codec of 019 (019-design §3). The API controller and the

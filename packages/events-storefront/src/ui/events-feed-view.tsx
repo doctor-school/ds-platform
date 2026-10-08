@@ -253,7 +253,7 @@ export async function EventsFeedView({
   const session = forwardedSessionFrom(requestHeaders);
   const mine = readMyEvents(config.contentSet.myEventsPath, session);
   // One feed read serves the day feed and the counted head subline.
-  const feed = fetchEventsFeed(config.contentSet, query, {
+  const feed = fetchEventsFeed(config, query, {
     cookie: requestHeaders.get("cookie") ?? "",
     forwardedFor: requestHeaders.get("x-forwarded-for") ?? "",
   });

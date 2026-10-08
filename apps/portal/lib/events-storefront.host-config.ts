@@ -15,8 +15,11 @@ export const ACADEMY_EVENTS_STOREFRONT = {
     tenseParam: "timeframe",
     livePath: "/v1/public/events/live",
     myEventsPath: "/v1/me/events",
+    monthPath: "/v1/public/events",
+    countsPath: "/v1/public/events/month-counts",
     adapt: adaptPublicEventListing,
   },
+  filterSet: "academy",
   headerCopy: {
     title: "Расписание эфиров",
     subline: { schoolNoun: { one: "школа", few: "школы", many: "школ" } },

@@ -1,3 +1,5 @@
+import type { EventsFilterHost } from "@ds/design-system/blocks";
+
 import type { PluralNoun } from "./model/event-count";
 import type { EventsStorefrontAdapter } from "./model/feed";
 
@@ -7,15 +9,19 @@ import type { EventsStorefrontAdapter } from "./model/feed";
  * lifecycle callback, resolver or predicate (plan §2 L39). A host's
  * `*.host-config.ts` is checked against this type with `satisfies`.
  *
- * The fields are the ones whose consumers are in the package today; the rest of
- * the §4.4 draft (the month reads of `contentSet`, `filterSet`) lands with the
- * PR that mounts its consumer (PR 2.5).
+ * The fields are the §4.4 draft's: the one page reads its feed, month and
+ * per-month counts from `contentSet`, renders the facet set `filterSet` names,
+ * and states its copy from the package defaults plus `headerCopy` / `copy`.
  */
 export type EventsStorefrontHostConfig = {
   /** The host's content set — the endpoints its reads call (019 `contentSet`). */
   contentSet: {
     /** The feed read (gate row 12). */
     feedPath: string;
+    /** One month's entries — the month grid's pills (row 14): `?month=YYYY-MM` + the facets. */
+    monthPath: string;
+    /** The per-month counts of the picker (row 54): `?year=YYYY` + the facets. */
+    countsPath: string;
     /**
      * The name the feed read takes the tense under: the codec's `tense` on the
      * doctor read, `timeframe` on the Academy listing read (gate row 32, D2).
@@ -30,6 +36,8 @@ export type EventsStorefrontHostConfig = {
     /** The one adapter of §4.5: the feed read's DTO → the feed page model. */
     adapt: EventsStorefrontAdapter;
   };
+  /** The facet set the panel renders — the design-system `EventsFilter` `host` (row 58, #2578). */
+  filterSet: EventsFilterHost;
   /**
    * The page head (gate row 19, 019 `headerCopy`). The subline is either fixed
    * copy, or the counted form «N <eventNoun> · M <schoolNoun>» over the read's

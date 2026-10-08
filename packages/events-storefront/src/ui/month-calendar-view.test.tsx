@@ -58,6 +58,7 @@ describe("<MonthCalendarView>", () => {
     render(
       await MonthCalendarView({
         config: {
+          filterSet: "academy",
           headerCopy: { title: "t", subline: "s" },
           copy: { eventNoun: { one: "эфир", few: "эфира", many: "эфиров" } },
           contentSet: {
@@ -65,6 +66,8 @@ describe("<MonthCalendarView>", () => {
             tenseParam: "timeframe",
             livePath: "/v1/public/events/live",
             myEventsPath: "/v1/me/events",
+    monthPath: "/v1/public/events",
+    countsPath: "/v1/public/events/month-counts",
             adapt: adaptPublicEventListing,
           },
           routes: {

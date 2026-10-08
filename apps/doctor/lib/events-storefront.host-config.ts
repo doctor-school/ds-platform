@@ -17,8 +17,11 @@ export const DOCTOR_EVENTS_STOREFRONT = {
     relayCookie: "__Host-ds_specialty",
     livePath: "/v1/storefront/doctor/events/live",
     myEventsPath: "/v1/storefront/doctor/me/events",
+    monthPath: "/v1/storefront/doctor/events/month",
+    countsPath: "/v1/storefront/doctor/events/month-counts",
     adapt: adaptDoctorEventsFeed,
   },
+  filterSet: "doctor",
   headerCopy: {
     title: "События",
     subline: "События по вашей специальности и смежным",

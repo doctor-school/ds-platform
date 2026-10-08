@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthLayout } from "@ds/design-system/blocks";
 
+import { DEFAULT_AUTH_FLOW_COPY } from "../copy";
 import type { AuthFlowHostConfig } from "../host-config";
 import type { ReturnContextEvent } from "../server/return-context";
 import {
@@ -31,6 +32,9 @@ import {
  * about what reaches the HTML.
  */
 afterEach(cleanup);
+
+/** The package's two assurance lines — asserted by reference, never by wording. */
+const ASSURANCE = DEFAULT_AUTH_FLOW_COPY.returnContext;
 
 /** The HTML a subtree renders to — the assertion is about markup, not interaction. */
 function renderToStaticMarkup(node: ReactNode): string {
@@ -63,19 +67,17 @@ describe("021 #1955: the return-context assurance line", () => {
   it("021 #1955.1: the login door promises the return happens on sign-in, not after an email", () => {
     const html = renderPanel("login");
 
-    expect(html).toContain("После входа вы вернётесь сюда же — место за вами.");
+    expect(html).toContain(ASSURANCE.login);
     // The registration wording is the defect this closes — it must not survive
     // anywhere in the login render.
-    expect(html).not.toContain("После подтверждения почты");
+    expect(html).not.toContain(ASSURANCE.register);
   });
 
   it("021 #1955.2: the registration door keeps its own confirmation wording", () => {
     const html = renderPanel("register");
 
-    expect(html).toContain(
-      "После подтверждения почты вы вернётесь сюда же — место за вами.",
-    );
-    expect(html).not.toContain("После входа вы вернётесь");
+    expect(html).toContain(ASSURANCE.register);
+    expect(html).not.toContain(ASSURANCE.login);
   });
 
   it("021 #1955.3: both doors render the same shared card and eyebrow — only the line forks", () => {
@@ -144,9 +146,8 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the arrival 
     expect(plate).toMatch(
       /data-testid="return-context-plate"[^>]*class="[^"]*layout:hidden/,
     );
-    // The plate names the event once and carries no assurance line.
+    // The plate names the event once.
     expect(plate.split(EVENT.title)).toHaveLength(2);
-    expect(plate).not.toContain("После входа");
   });
 
   it("021 EARS-2.6: the plate bleeds by exactly the gutter its form column stands on — no horizontal overflow at 390", () => {
@@ -155,7 +156,11 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the arrival 
     // and the gutter must be the SAME spacing token, read off the real layout.
     const { container } = render(
       <AuthLayout logo={<span>logo</span>}>
-        <ReturnContextPlate config={DOCTOR_FIXTURE} event={EVENT} />
+        <ReturnContextPlate
+          config={DOCTOR_FIXTURE}
+          event={EVENT}
+          variant="login"
+        />
       </AuthLayout>,
     );
     const plate = container.querySelector(
@@ -215,10 +220,91 @@ describe("021 EARS-2 / EARS-3: the card renders beside the form iff the arrival 
 
   it("021 EARS-2: the plate reads its eyebrow from the host copy", () => {
     const html = renderToStaticMarkup(
-      <ReturnContextPlate config={DOCTOR_FIXTURE} event={EVENT} />,
+      <ReturnContextPlate
+        config={DOCTOR_FIXTURE}
+        event={EVENT}
+        variant="login"
+      />,
     );
 
     expect(html).toContain('data-testid="return-context-card"');
     expect(html).toContain("Вы вернётесь к этому событию");
+  });
+});
+
+describe("#2465: the mobile plate draws the canvas strip — eyebrow, card, then the door's assurance line", () => {
+  it.each(["login", "register"] as const)(
+    "021 EARS-2 (#2465): the %s plate ends with its own door's assurance line, as the wide panel does",
+    (variant) => {
+      const other = variant === "login" ? "register" : "login";
+      const { container } = render(
+        <ReturnContextPlate
+          config={DOCTOR_FIXTURE}
+          event={EVENT}
+          variant={variant}
+        />,
+      );
+      const plate = container.querySelector(
+        '[data-testid="return-context-plate"]',
+      );
+      const assurance = plate?.lastElementChild;
+
+      expect(assurance?.tagName).toBe("P");
+      expect(assurance?.textContent).toBe(ASSURANCE[variant]);
+      expect(plate?.textContent).not.toContain(ASSURANCE[other]);
+    },
+  );
+
+  it("021 EARS-2 (#2465): the slots hand the plate the same door variant as the panel", () => {
+    const slots = returnContextSlots({
+      config: ACADEMY_FIXTURE,
+      event: EVENT,
+      variant: "register",
+    });
+    const plate = renderToStaticMarkup(<>{slots.plate}</>);
+
+    expect(plate).toContain(ASSURANCE.register);
+    expect(plate).not.toContain(ASSURANCE.login);
+  });
+
+  it("#2465: the plate's eyebrow and assurance line take the canvas strip measures (auth.dc.html 44/46)", () => {
+    const { container } = render(
+      <ReturnContextPlate
+        config={DOCTOR_FIXTURE}
+        event={EVENT}
+        variant="login"
+      />,
+    );
+    const plate = container.querySelector(
+      '[data-testid="return-context-plate"]',
+    );
+    const [eyebrow, assurance] = [
+      plate?.firstElementChild,
+      plate?.lastElementChild,
+    ];
+
+    // The band is the section surface (canvas `sectionGray`; #2710 tracks the
+    // canvas light value).
+    const plateClasses = plate?.className.split(" ") ?? [];
+    expect(plateClasses).toContain("bg-section");
+    expect(plateClasses).not.toContain("bg-muted");
+
+    // Eyebrow: 11px/800/.14em uppercase in the AA-safe muted ink (#2710).
+    const eyebrowClasses = eyebrow?.className.split(" ") ?? [];
+    expect(eyebrowClasses).toContain("tracking-eyebrow");
+    expect(eyebrowClasses).toContain("text-muted-foreground");
+    expect(eyebrowClasses).not.toContain("tracking-micro");
+    expect(eyebrowClasses).not.toContain("text-faint");
+
+    // Assurance: margin 10px 0 12px, 13px on the 1.55 line in inkMuted.
+    expect(assurance?.className.split(" ").sort()).toEqual(
+      [
+        "mb-3",
+        "mt-2.5",
+        "leading-prose",
+        "text-caption",
+        "text-muted-foreground",
+      ].sort(),
+    );
   });
 });

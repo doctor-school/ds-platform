@@ -107,7 +107,7 @@ export default defineConfig({
   // build, so the CI job must run the portal build first. No backend env is
   // needed; Academy persistence receives only the guarded temp directory below.
   webServer: {
-    command: `pnpm --filter @ds/portal exec next start -p ${PORT}`,
+    command: `pnpm --filter @ds/portal exec next start -p ${PORT} --keepAliveTimeout 125000`,
     url: READY_URL,
     timeout: 120_000,
     reuseExistingServer: false,

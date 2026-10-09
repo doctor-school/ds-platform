@@ -69,5 +69,9 @@ COPY --from=build --chown=node:node /repo/apps/doctor/.next/static ./apps/doctor
 COPY --from=build --chown=node:node /repo/apps/doctor/public ./apps/doctor/public
 USER node
 EXPOSE 3004
-ENV PORT=3004 HOSTNAME=0.0.0.0
+# Idle keep-alive above every client of this server (#2682): Caddy keeps its
+# upstream connections ~120 s idle and the /v1 rewrite forwards the api's
+# `Keep-Alive: timeout=72`; Node's 5 s default let a client write onto a socket
+# the server was closing. tools/ci/next-keep-alive.test.mjs pins the value.
+ENV PORT=3004 HOSTNAME=0.0.0.0 KEEP_ALIVE_TIMEOUT=125000
 CMD ["node", "apps/doctor/server.js"]

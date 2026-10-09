@@ -55,7 +55,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: `pnpm --filter @ds/doctor exec next start -p ${PORT}`,
+      command: `pnpm --filter @ds/doctor exec next start -p ${PORT} --keepAliveTimeout 125000`,
       url: BASE,
       env: { API_PROXY_TARGET: API },
       timeout: 120_000,

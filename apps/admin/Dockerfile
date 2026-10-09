@@ -48,5 +48,9 @@ USER node
 # 3002 continues the prod compose port sequence (api 3000, portal 3001); the
 # dev-script's 3200 is a workstation convention, not a container contract.
 EXPOSE 3002
-ENV PORT=3002 HOSTNAME=0.0.0.0
+# Idle keep-alive above every client of this server (#2682): Caddy keeps its
+# upstream connections ~120 s idle and the /v1 rewrite forwards the api's
+# `Keep-Alive: timeout=72`; Node's 5 s default let a client write onto a socket
+# the server was closing. tools/ci/next-keep-alive.test.mjs pins the value.
+ENV PORT=3002 HOSTNAME=0.0.0.0 KEEP_ALIVE_TIMEOUT=125000
 CMD ["node", "apps/admin/server.js"]

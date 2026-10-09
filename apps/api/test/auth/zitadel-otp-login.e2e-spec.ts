@@ -445,7 +445,8 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       (user) => user?.emailVerified === true,
     );
 
-    // EARS-6 step 1: arm the login challenge — Zitadel mails the code.
+    // EARS-6 step 1: arm the login challenge — Zitadel returns the code and
+    // the application mailer delivers it; Zitadel itself sends nothing.
     let tokens: Awaited<
       ReturnType<typeof client.exchangeSessionForTokens>
     > | null = null;
@@ -496,7 +497,9 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(tokens!.accessToken).toBeTruthy();
     expect(tokens!.refreshToken).toBeTruthy();
     expect(tokens!.claims.sub).toBe(created.sub);
-    // After verification and token exchange, exactly one login mail must exist.
+    // After verification and token exchange the fresh address holds EXACTLY one
+    // mail per login-code request, and every one is the application's login-code
+    // email — no native Zitadel duplicate or any other message rides alongside.
     const mailbox = await fetch(
       `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
     );
@@ -504,11 +507,11 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     const delivered = (await mailbox.json()) as {
       messages?: Array<{ Subject?: string }>;
     };
-    expect(
-      (delivered.messages ?? []).filter((mail) =>
-        mail.Subject?.includes(NOTIFICATION_SUBJECTS.verifyEmailOtp),
-      ),
-    ).toHaveLength(evidence.attempts.length);
+    const subjects = (delivered.messages ?? []).map((mail) => mail.Subject);
+    expect(subjects).toHaveLength(evidence.attempts.length);
+    for (const subject of subjects) {
+      expect(subject).toContain(NOTIFICATION_SUBJECTS.verifyEmailOtp);
+    }
     evidence.passed = true;
   }, 45_000);
 

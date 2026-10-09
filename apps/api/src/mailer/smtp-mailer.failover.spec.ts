@@ -290,6 +290,93 @@ describe("003 EARS-31 Postbox → mail.ru → Resend chain (design §14.3)", () 
     );
   });
 
+  const CODE_FAMILIES: Array<{
+    family: string;
+    sendCode: (m: SmtpMailer, code: string) => Promise<void>;
+  }> = [
+    {
+      family: "verification code",
+      sendCode: (m, code) =>
+        m.sendVerificationCodeEmail("doctor@example.com", code),
+    },
+    {
+      family: "password-reset code",
+      sendCode: (m, code) =>
+        m.sendPasswordResetCodeEmail("doctor@example.com", code),
+    },
+    {
+      family: "login code (5 min)",
+      sendCode: (m, code) =>
+        m.sendLoginCodeEmail("doctor@example.com", code, "5m"),
+    },
+    {
+      family: "login code (1 h hand-off)",
+      sendCode: (m, code) =>
+        m.sendLoginCodeEmail("doctor@example.com", code, "1h"),
+    },
+    {
+      family: "re-registration code",
+      sendCode: (m, code) =>
+        m.sendReRegistrationCodeEmail("doctor@example.com", code, {
+          lifetime: "1h",
+          passwordKept: true,
+        }),
+    },
+  ];
+
+  it("EARS-31: every code-email family — verification, password reset, login (5 min and 1 h) and re-registration — fails over Postbox → mail.ru → Resend with the identical code and content, one attempt each", async () => {
+    for (const { family, sendCode } of CODE_FAMILIES) {
+      const f = chain({
+        postbox: reply("RCPT TO", "451 4.7.1 try later"),
+        mailru: errno("ECONNREFUSED"),
+      });
+      await sendCode(f.mailer, "LGN482");
+      expect(
+        f.obs.attempts.map((a) => a.provider),
+        family,
+      ).toEqual(["postbox", "mail.ru", "resend"]);
+      expect(f.postbox.calls, family).toHaveLength(1);
+      expect(f.mailru.calls, family).toHaveLength(1);
+      expect(f.resend.calls, family).toHaveLength(1);
+      expect(f.intercept.calls, family).toHaveLength(0);
+      const p = f.postbox.calls[0]!;
+      const m = f.mailru.calls[0]!;
+      const payload = JSON.parse(
+        String(f.resend.calls[0]!.init.body),
+      ) as Record<string, unknown>;
+      for (const field of ["subject", "text", "html"] as const) {
+        expect(m[field], `${family} ${field}`).toBe(p[field]);
+        expect(payload[field], `${family} ${field}`).toBe(p[field]);
+      }
+      expect(p.text, family).toContain("LGN482");
+      expect(p.to, family).toBe("doctor@example.com");
+      expect(f.obs.chains, family).toEqual([
+        expect.objectContaining({ outcome: "accepted-by-resend", skipped: 0 }),
+      ]);
+    }
+  });
+
+  it("EARS-31: a login-code email that every channel refuses throws the sanitized chain error — provider codes only, never the code or address", async () => {
+    const f = chain({
+      postbox: reply("RCPT TO", "451 4.7.1 doctor@example.com LGN482"),
+      mailru: errno("ECONNREFUSED"),
+      resend: { status: 429, body: '{"message":"LGN482 doctor@example.com"}' },
+    });
+    const err = (await f.mailer
+      .sendLoginCodeEmail("doctor@example.com", "LGN482")
+      .catch((e: unknown) => e)) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toMatch(/exhausted.*postbox=451 4\.7\.1.*resend=429/);
+    expect(f.obs.attempts.map((a) => a.provider)).toEqual([
+      "postbox",
+      "mail.ru",
+      "resend",
+    ]);
+    expect(
+      JSON.stringify([err.message, f.obs.attempts, f.obs.chains]),
+    ).not.toMatch(/LGN482|doctor@example\.com|key-secret|re_test_key/);
+  });
+
   it("EARS-31: the total budget is 40 s and each attempt gets the lesser of its channel deadline and the remaining budget", async () => {
     expect(MAIL_CHAIN_BUDGET_MS).toBe(40_000);
     vi.useFakeTimers();

@@ -6,7 +6,7 @@ import {
   type Request,
   type Route,
 } from "@playwright/test";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
+import { ADMIN_ORIGIN, signInAsAdmin } from "@ds/e2e/admin-events";
 
 const PNG_1x1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",

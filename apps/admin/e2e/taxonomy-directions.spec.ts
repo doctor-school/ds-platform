@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { visible } from "./support/visible";
-import { signInAsAdmin } from "./support/sign-in";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
  * 012 EARS-3 (#1285) + 017 EARS-16…18 (#1483), browser half — the REAL

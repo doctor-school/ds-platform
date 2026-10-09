@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
+import { bootstrapAdminSession, totpCode } from "@ds/e2e/admin-events";
 
 /**
  * 011 Verification rows 4 + 5, browser half — the forced-enrollment screen.
@@ -81,7 +80,7 @@ test.describe("011 EARS-4/5 — forced TOTP enrollment (admin)", () => {
       return { status: res.status, body: await res.text() };
     });
     expect(events.status).toBe(401);
-    expect(events.body).not.toContain("\"items\"");
+    expect(events.body).not.toContain('"items"');
     // …and the app-level route is not a way around it either: with no admin
     // session the events surface bounces BACK to the enrollment step rather than
     // painting a shell an operator could mistake for admitted access. It bounces
@@ -111,7 +110,10 @@ test.describe("011 EARS-4/5 — forced TOTP enrollment (admin)", () => {
 
     // Wrong code → one uniform RU message, still on the enrollment screen, factor
     // unconfirmed.
-    await page.getByTestId("mfa-enroll-form").getByRole("textbox").fill("000000");
+    await page
+      .getByTestId("mfa-enroll-form")
+      .getByRole("textbox")
+      .fill("000000");
     await expect(page.getByTestId("mfa-error")).toBeVisible();
     await expect(page.getByTestId("mfa-error")).toContainText(/[А-Яа-я]/);
     await expect(page).toHaveURL(/\/mfa\/enroll/);

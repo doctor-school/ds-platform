@@ -1,8 +1,7 @@
-import { chooseEventClassification } from "./support/event-classification";
+import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * #1593, browser half — what an operator SEES when a lifecycle command is refused

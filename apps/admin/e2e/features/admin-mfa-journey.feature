@@ -13,7 +13,7 @@
 # they may already be carrying does not open the admin door. That is this file.
 #
 # Every code submitted here is derived from the secret the enrollment screen
-# RENDERED, by an independent RFC 6238 implementation (`e2e/support/totp.ts`) —
+# RENDERED, by an independent RFC 6238 implementation (`packages/e2e/admin/totp.ts`) —
 # the operator's phone, modelled. A test that asked the server for the code would
 # prove only that the server agrees with itself.
 #

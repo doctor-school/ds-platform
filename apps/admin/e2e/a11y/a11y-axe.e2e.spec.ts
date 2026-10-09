@@ -1,23 +1,21 @@
-import {
-  chooseEventClassification,
-  chooseProjectDefaultAudience,
-} from "../support/event-classification";
+import { chooseProjectDefaultAudience } from "../support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PROJECT_DESCRIPTION_MAX } from "@ds/schemas";
-import { bootstrapAdminSession } from "../support/admin-session";
 import {
+  bootstrapAdminSession,
+  chooseEventClassification,
   createPublishedEvent,
   eventSlugFromRoster,
-  registerDoctorThroughPlatform,
-} from "../support/congress-roster";
+  totpCode,
+} from "@ds/e2e/admin-events";
+import { registerDoctorThroughPlatform } from "../support/congress-roster";
 import {
   congressAuthor,
   openOralIntake,
   sendOralSubmission,
 } from "../support/congress-submissions";
 import { selectRelationshipCombobox } from "../support/relationship-combobox";
-import { totpCode } from "../support/totp";
 
 /**
  * 007 EARS-11 — axe-core WCAG 2 A/AA scan of the admin event surface (the runtime

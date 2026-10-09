@@ -1,4 +1,11 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Browser, type Page } from "@playwright/test";
+import {
+  ADMIN_ORIGIN,
+  createPublishedEvent,
+  eventSlugFromDetail,
+  openEventLive,
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
 import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
 
 /**
@@ -19,6 +26,11 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  *   - `E2E_MY_EVENT_SLUG` / `E2E_MY_EVENT_TITLE` / `E2E_MY_EVENT_SCHOOL` — a
  *     registrable upcoming event the fresh doctor registers for; the Предстоящие
  *     list must then show it, linking to its page.
+ * The 006 EARS-6 room-entry case additionally provisions its own `live` event
+ * through the admin screens, so it also needs a running admin and the IdP
+ * service credentials the admin bootstrap uses:
+ *   - `E2E_ADMIN_URL` — the running admin origin;
+ *   - `IDP_SERVICE_TOKEN` / `IDP_PROJECT_ID` — grant the fresh `platform_admin`.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -312,25 +324,57 @@ test.describe("005 EARS-7 my-events freshness (e2e)", () => {
  * the event page. This drives the invariant in the ACTUAL running stack (browser →
  * portal SSR → `/v1/*` rewrite → api → Postgres → the room gate).
  *
- * Self-provisioning (like the freshness journey above): a fresh 003 doctor
- * registers for the seeded `live` event through the REAL `RegisterForEvent` command
- * (its session + fingerprint surface ride the same-origin POST), then reads «мои
- * события». Live-stand-gated (portal + real Zitadel + Mailpit) via `LIVE_STAND`;
- * inert on a bare CI run. The `live` event is the `seed:events` fixture
- * `seed-005-live` (override with `E2E_LIVE_SLUG`).
+ * Self-provisioning end to end (#2751): the `live` event is produced for THIS run
+ * through the real admin screens — a fresh `platform_admin` signs in on the admin
+ * origin in its own browser context, creates and publishes an event starting a
+ * few minutes from now and opens it `live` (`@ds/e2e/admin-events`) — so the test
+ * never depends on a fixed seed whose start time drifts out of the air window.
+ * A fresh 003 doctor then registers for it through the REAL `RegisterForEvent`
+ * command (its session + fingerprint surface ride the same-origin POST) and reads
+ * «мои события». Live-stand-gated via `ROOM_CTA_STAND` (portal + real Zitadel +
+ * Mailpit + a running admin + the IdP service credentials); inert on a bare CI run.
  */
-const LIVE_SLUG = process.env.E2E_LIVE_SLUG ?? "seed-005-live";
+const ROOM_CTA_STAND =
+  LIVE_STAND &&
+  !!process.env.E2E_ADMIN_URL &&
+  !!process.env.IDP_SERVICE_TOKEN &&
+  !!process.env.IDP_PROJECT_ID;
+
+/** A fresh event the admin creates, publishes and opens `live`; returns its slug. */
+async function provisionLiveEvent(browser: Browser): Promise<string> {
+  const context = await browser.newContext({ baseURL: ADMIN_ORIGIN });
+  try {
+    const admin = await context.newPage();
+    await signInAsAdmin(admin);
+    const id = await createPublishedEvent(
+      admin,
+      `Эфир в «Мои события» ${Date.now()}`,
+      { startsInMs: 5 * 60 * 1000 },
+    );
+    await openEventLive(admin);
+    return await eventSlugFromDetail(admin, id);
+  } finally {
+    await context.close();
+  }
+}
 
 test.describe("006 EARS-6 my-events room-entry CTA (e2e)", () => {
   test("006 EARS-6: a registered doctor on a live event sees «Войти в эфир» on «мои события», routing to the room with no nested anchor", async ({
+    browser,
     page,
   }) => {
-    test.skip(!LIVE_STAND, "requires a live portal + real Zitadel + Mailpit");
+    test.skip(
+      !ROOM_CTA_STAND,
+      "requires a live portal + real Zitadel + Mailpit + a running admin (E2E_ADMIN_URL) + IDP_SERVICE_TOKEN / IDP_PROJECT_ID",
+    );
+
+    // A `live` event produced by the admin's own lifecycle for this run.
+    const LIVE_SLUG = await provisionLiveEvent(browser);
 
     // Real 003 signup → a logged-in doctor landing on /account.
     await provisionLoggedInDoctor(page);
 
-    // Register for the seeded LIVE event via the REAL same-origin RegisterForEvent
+    // Register for the LIVE event via the REAL same-origin RegisterForEvent
     // command (the exact POST the portal client fires) — carries the browser session.
     expect(await registerFor(page, LIVE_SLUG)).toBe(200);
 

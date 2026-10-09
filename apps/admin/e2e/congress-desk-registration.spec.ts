@@ -2,13 +2,14 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { bootstrapRegistrarAccount } from "./support/admin-session";
 import {
+  ADMIN_ORIGIN,
+  bootstrapRegistrarAccount,
   createPublishedEvent,
   eventSlugFromRoster,
-} from "./support/congress-roster";
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
 import { bindRegistrarToEvent, unbindRegistrar } from "./support/event-grants";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 import { visible } from "./support/visible";
 
 /**

@@ -2,14 +2,15 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { bootstrapRegistrarAccount } from "./support/admin-session";
 import {
+  ADMIN_ORIGIN,
+  bootstrapRegistrarAccount,
   createPublishedEvent,
   eventSlugFromRoster,
-  registerDoctorThroughPlatform,
-} from "./support/congress-roster";
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
+import { registerDoctorThroughPlatform } from "./support/congress-roster";
 import { bindRegistrarToEvent } from "./support/event-grants";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 import { visible } from "./support/visible";
 
 /**
@@ -115,7 +116,10 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await signInAsAdmin(page);
-    eventId = await createPublishedEvent(page, `Конгресс-присутствие ${Date.now()}`);
+    eventId = await createPublishedEvent(
+      page,
+      `Конгресс-присутствие ${Date.now()}`,
+    );
     const slug = await eventSlugFromRoster(page, eventId);
     for (const name of [MARKED, ...OTHERS]) {
       await registerDoctorThroughPlatform(browser, slug, name);

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { visible } from "./support/visible";
-import { signInAsAdmin } from "./support/sign-in";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
  * 017 EARS-19 (LD-9), browser half — the Минздрав specialty book in the running
@@ -57,7 +57,9 @@ test.describe("017 EARS-19 — the Минздрав specialty book in the live a
     // No lifecycle: a specialty is in the nomenclature or it is not, so neither
     // the «Состояние» facet nor the retired toggle may exist.
     await expect(page.getByTestId("specialties-status")).toHaveCount(0);
-    await expect(page.getByTestId("specialties-include-retired")).toHaveCount(0);
+    await expect(page.getByTestId("specialties-include-retired")).toHaveCount(
+      0,
+    );
     // EARS-17 readouts still stand — the operator is told how much book there is.
     await expect(page.getByTestId("specialties-total")).toBeVisible();
     // The pagination readout ships with each DataTable variant (see
@@ -80,7 +82,9 @@ test.describe("017 EARS-19 — the Минздрав specialty book in the live a
     }
 
     // ── Search narrows the book by CODE, instantly and undoably ───────────
-    await page.getByRole("searchbox", { name: "Поиск специальности" }).fill(code);
+    await page
+      .getByRole("searchbox", { name: "Поиск специальности" })
+      .fill(code);
     // No «Применить» — the bar debounces and applies on its own.
     await expect(
       page.getByRole("button", { name: "Применить", exact: true }),

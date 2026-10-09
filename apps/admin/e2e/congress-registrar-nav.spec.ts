@@ -1,13 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { bootstrapRegistrarAccount } from "./support/admin-session";
 import {
+  ADMIN_ORIGIN,
+  bootstrapRegistrarAccount,
   createPublishedEvent,
   eventSlugFromRoster,
-} from "./support/congress-roster";
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
 import { bindRegistrarToEvent } from "./support/event-grants";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 044 EARS-20 / EARS-38 — the admin navigation of a congress registrar bound to

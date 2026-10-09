@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { academyPublicLinkPrefix } from "./support/academy-origin";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
+import { ADMIN_ORIGIN, signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
  * 012 EARS-4 (#1286) + EARS-23 (#1297), browser half — the REAL Refine → NestJS → Postgres path.

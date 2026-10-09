@@ -4,6 +4,12 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["*.ts", "steps/**/*.ts", "derived/**/*.ts", "lib/**/*.ts"],
+  "include": [
+    "*.ts",
+    "steps/**/*.ts",
+    "derived/**/*.ts",
+    "lib/**/*.ts",
+    "admin/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist", ".features-gen"]
 }

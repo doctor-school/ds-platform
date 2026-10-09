@@ -1,80 +1,17 @@
-import { chooseEventClassification } from "./event-classification";
 import { expect, type Browser, type Page } from "@playwright/test";
-import { bootstrapDoctorSession } from "./admin-session";
-import { ADMIN_ORIGIN } from "./sign-in";
+import { ADMIN_ORIGIN, bootstrapDoctorSession } from "@ds/e2e/admin-events";
 
 /**
  * Seeding for the 044 roster specs, through the PRODUCTION writers only — no
  * database access, no fixture endpoint.
  *
  * The event is created and published through the real 007 admin form and
- * lifecycle bar. A roster row is written by the platform registration path
- * (EARS-16): a freshly registered doctor signs in, sets a display name and
- * registers for the published event. Such a row carries no congress answers, so
+ * lifecycle bar (`createPublishedEvent`, `@ds/e2e/admin-events`). A roster row
+ * is written by the platform registration path (EARS-16): a freshly registered
+ * doctor signs in, sets a display name and registers for the published event. Such a row carries no congress answers, so
  * the roster renders it from the account's profile — ФИО from the display name,
  * the email from the account, every other cell empty.
  */
-
-/** A `datetime-local` value for the МСК wall clock `offsetMs` from now. */
-function mskInput(offsetMs: number): string {
-  return new Date(Date.now() + offsetMs + 3 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 16);
-}
-
-/** A real, PUBLISHED event through the admin create form + lifecycle bar; returns its id. */
-export async function createPublishedEvent(
-  page: Page,
-  title: string,
-): Promise<string> {
-  await page.goto("/events/create");
-  await expect(page.getByTestId("event-form")).toBeVisible();
-  await page.locator("#title").fill(title);
-  await page.locator("#school").fill("Кардиология");
-  await page.locator("#startsAtMsk").fill(mskInput(7 * 24 * 60 * 60 * 1000));
-  await page.locator("#durationMin").fill("90");
-  await page.getByTestId("program-pdf").setInputFiles({
-    name: "program.pdf",
-    mimeType: "application/pdf",
-    buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF"),
-  });
-  await chooseEventClassification(page);
-  await page.getByTestId("submit-event").click();
-  await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-  const id = page.url().split("/").pop()!;
-
-  await page.getByTestId("action-publish").click();
-  await expect(page.getByTestId("state-published")).toBeVisible({
-    timeout: 20_000,
-  });
-  return id;
-}
-
-/**
- * The event's public slug, read from the roster route itself with the signed-in
- * admin's session (the registration endpoint addresses an event by slug).
- */
-export async function eventSlugFromRoster(
-  page: Page,
-  eventId: string,
-): Promise<string> {
-  // In-page, like the admin's own data provider: the browser's request carries
-  // the same session and device headers the signed-in UI does.
-  const read = await page.evaluate(async (id) => {
-    const res = await fetch(`/v1/admin/events/${id}/roster`, {
-      credentials: "include",
-      headers: { accept: "application/json" },
-    });
-    return {
-      status: res.status,
-      slug: res.ok
-        ? ((await res.json()) as { event: { slug: string } }).event.slug
-        : "",
-    };
-  }, eventId);
-  expect(read.status, "roster route for the admin").toBe(200);
-  return read.slug;
-}
 
 /**
  * Register one doctor for the event through the platform path. Runs in its OWN

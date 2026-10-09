@@ -4,9 +4,9 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   createPublishedEvent,
   eventSlugFromRoster,
-  registerDoctorThroughPlatform,
-} from "./support/congress-roster";
-import { signInAsAdmin } from "./support/sign-in";
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
+import { registerDoctorThroughPlatform } from "./support/congress-roster";
 import { visible } from "./support/visible";
 
 /**

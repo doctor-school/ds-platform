@@ -16,6 +16,7 @@ is configured from.
 | `derived/`             | The two derived walks (§6.3): `navigation.walk.spec.ts` and `routes.walk.spec.ts`. Plain Playwright specs, run by the `walks` project.                                                               |
 | `steps/`               | The shared Gherkin vocabulary: `support/fixtures.ts` (the `host` fixture), `golden.steps.ts`, `navigation.steps.ts`.                                                                                 |
 | `lib/`                 | The pure, unit-tested seams (`golden.ts`: seed name → `@ds/db` golden account; `routes.ts`: route-manifest → visitable addresses) plus `sign-in.ts`, the package's one login path.                   |
+| `admin/`               | The admin-side writers (export `@ds/e2e/admin-events`): `platform_admin` bootstrap, browser sign-in with TOTP, and the event writers over the real 007 screens.                                      |
 | `playwright.config.ts` | `bddgen` over the spec feature files + the two host projects + the `walks` project.                                                                                                                  |
 
 ## Running it
@@ -225,6 +226,39 @@ The token comes from `E2E_CAPTCHA_TEST_TOKEN` (set by `pnpm e2e:stage` from the 
 or exported by hand — `tools/staging/README.md` → «Driving captcha-gated auth on a
 slot»). Absent ⇒ `CaptchaTestTokenMissingError`, never a silent skip. No walk in this
 suite drives a captcha-gated step yet; the first one calls the helper.
+
+## Admin-side writers: `@ds/e2e/admin-events` (#2751)
+
+`admin/` holds what an e2e flow needs to produce admin-side state through the real
+admin screens: `bootstrapAdminSession` (a fresh `platform_admin` granted on the
+stand's IdP; the registrar/committee variants alongside), `signInAsAdmin` (the
+browser login with its TOTP enrollment/challenge, `totp.ts` being the independent
+RFC 6238 generator), and the event writers `createPublishedEvent`,
+`openEventLive` and the slug read-backs `eventSlugFromDetail` /
+`eventSlugFromRoster`. The admin flow specs consume them, and so does a
+storefront spec that needs an event in a given state — it drives them on the
+admin origin in its own browser context instead of depending on a fixed seed whose
+wall clock drifts:
+
+```ts
+import {
+  ADMIN_ORIGIN,
+  createPublishedEvent,
+  eventSlugFromDetail,
+  openEventLive,
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
+
+const context = await browser.newContext({ baseURL: ADMIN_ORIGIN });
+const admin = await context.newPage();
+await signInAsAdmin(admin);
+const id = await createPublishedEvent(admin, title, { startsInMs: 5 * 60_000 });
+await openEventLive(admin);
+const slug = await eventSlugFromDetail(admin, id);
+```
+
+Dev-stand-gated: needs a running admin (`E2E_ADMIN_URL`) and `IDP_ISSUER` /
+`IDP_SERVICE_TOKEN` / `IDP_PROJECT_ID`.
 
 ## Running this suite against a staging slot
 

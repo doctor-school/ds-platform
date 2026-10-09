@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { bootstrapAdminSession } from "../support/admin-session";
-import { totpCode } from "../support/totp";
+import { bootstrapAdminSession, totpCode } from "@ds/e2e/admin-events";
 
 /**
  * 011 EARS-12 — the enrollment and challenge screens are **localized and

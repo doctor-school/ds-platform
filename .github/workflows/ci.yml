@@ -1418,7 +1418,7 @@ jobs:
   # caught by hand on the dev stand.
   #
   # Unlike `playwright-axe-portal` / `-doctor`, this tier is NOT backend-free:
-  # `bootstrapAdminSession` (apps/admin/e2e/support/admin-session.ts) POSTs
+  # `bootstrapAdminSession` (packages/e2e/admin/admin-session.ts) POSTs
   # `/v1/auth/register` through the ADMIN origin (the `__Host-ds_session`
   # cookie needs the same-origin `/v1/*` rewrite) and then grants the
   # `platform_admin` role through the IdP's `management/v1/*` REST API. So the

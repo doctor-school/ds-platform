@@ -19,43 +19,6 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("003 EARS-40 — /verify without an address goes to /register", () => {
-  test("EARS-40: a bare /verify lands on /register, with no step painted on the way", async ({
-    page,
-  }) => {
-    await page.goto("/verify");
-
-    await page.waitForURL((url) => url.pathname === "/register");
-    expect(new URL(page.url()).search).toBe("");
-    await expect(page.getByTestId("verify-card")).toHaveCount(0);
-    await expect(page.getByText("ваш аккаунт")).toHaveCount(0);
-    // `replace`, not `push`: Back does not return to the address-less /verify.
-    expect(
-      await page.evaluate(() => window.history.length),
-    ).toBeLessThanOrEqual(2);
-  });
-
-  test("EARS-40: the server HTML of a bare /verify carries no step and no shell to flash", async ({
-    request,
-  }) => {
-    const html = await (await request.get("/verify")).text();
-
-    expect(html).not.toContain('data-testid="verify-card"');
-    expect(html).not.toContain("ваш аккаунт");
-    // Nor the frame: the shell (its wordmark) sits inside the client gate.
-    expect(html).not.toContain('data-testid="auth-wordmark"');
-  });
-
-  test("EARS-40: a bare /verify carries its returnTo onward to /register", async ({
-    page,
-  }) => {
-    await page.goto("/verify?returnTo=%2Fwebinars%2Fahilles-042");
-
-    await page.waitForURL((url) => url.pathname === "/register");
-    expect(new URL(page.url()).searchParams.get("returnTo")).toBe(
-      "/webinars/ahilles-042",
-    );
-  });
-
   test("003 EARS-29 (#2455): the verification mail carries no link, so a URL fragment is never an address — /verify#email= goes to /register", async ({
     page,
   }) => {

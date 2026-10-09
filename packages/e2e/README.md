@@ -370,3 +370,21 @@ The test revokes its owned session and closes both contexts on completion.
 ```sh
 pnpm e2e:stage pr-<N> --project academy --grep "A cold verification step still signs in by the code"
 ```
+
+### Address-less verification (003 EARS-40)
+
+`A /verify opened with no address goes to the registration door` drives two
+clean Academy tabs, first with a bare URL and then with the same-origin
+`/webinars/ahilles-042` return target. Both must replace onto registration;
+actual Back/Forward navigation proves the invalid entry is absent from history.
+A document-start DOM observer and the real server HTML check require no
+address-less verification card, generic account description or auth frame.
+Neither arrival may send an auth request, establish a private session or read
+the private profile. The first three portal `verify-bare-entry.e2e.spec.ts`
+cases move to `steps/bare-verification.steps.ts` with every original assertion
+retained; its fragment and positive addressed-entry cases remain app-local,
+along with the existing auth-flow unit contracts. No account is created.
+
+```sh
+pnpm e2e:stage <slot> --project academy --grep "A /verify opened with no address goes to the registration door"
+```

@@ -807,13 +807,17 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the password hold is inspected on every path including reload and abandonment
     Then the password is absent from the URL, localStorage, sessionStorage, and cookies
 
-  @EARS-40 @failure
+  @EARS-40 @failure @bare-verification
   Scenario: A /verify opened with no address goes to the registration door
-    Given a visitor opens /verify with no ?email= query
-    When the route has mounted
-    Then the visitor is taken to /register in place of the address-less /verify
-    And a same-origin returnTo on the arrival is carried onward to /register
-    And no verification step without an address is ever shown
+    Given a clean Academy browser with no private session for an address-less verification arrival
+    When that visitor opens bare /verify and the route mounts
+    Then registration replaces that address-less arrival and Back never returns to /verify
+    And the bare verification server HTML and mounted journey render no verification step, generic account description or auth frame
+    When that visitor opens /verify without an address but with a same-origin webinar return target
+    Then registration replaces the arrival with that exact return target and grants no private access or auth command
+    # Migrated mapping: apps/portal/e2e/verify-bare-entry.e2e.spec.ts first three
+    # EARS-40 cases -> bare-verification.steps.ts, including HTML and history.
+    # Retain fragment and positive ?email= cases plus auth-flow unit contracts.
 
   @EARS-41 @EARS-16 @failure
   Scenario: A wrong code fails identically for every identifier

@@ -219,7 +219,8 @@
         "apps/admin/components/admin-data-list.tsx",
         "apps/admin/lib/congress-roster.ts",
         "apps/admin/messages/ru.json",
-        "packages/design-system/src/blocks/data-table.tsx"
+        "packages/design-system/src/blocks/data-table.tsx",
+        "packages/design-system/src/blocks/index.ts"
       ],
       "states": [
         "roster-sort-default",

@@ -1,5 +1,130 @@
 # @ds/admin
 
+## 3.1.0
+
+### Minor Changes
+
+- [#2724](https://github.com/doctor-school/ds-platform/pull/2724) [`0583ccd`](https://github.com/doctor-school/ds-platform/commit/0583ccd4b5b891b3da03650f5a6c367d2fc02e47) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 046 programme committee in the admin ([#2437](https://github.com/doctor-school/ds-platform/issues/2437)): a committee member's admin is the «Заявки» registry of each bound event — filters by kind, status, sent dates and submitter, title/author search, server-side sort — with the submission card in a side panel and the «Решение» block (allowed transitions only, a comment required for «Отклонена» and «На доработке»); the platform administrator sees «Заявки» and «Настройки приёма» per event and alone can extend a revision deadline in the card. Status and kind labels come from `@ds/congress-submissions`, the author cabinet's source.
+
+- [#2407](https://github.com/doctor-school/ds-platform/pull/2407) [`4f34db2`](https://github.com/doctor-school/ds-platform/commit/4f34db29f1bbf1354108277b2c6133a808f00949) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress roster gains the attendance mark per congress day ([#2381](https://github.com/doctor-school/ds-platform/issues/2381), 044
+  EARS-34). A new last column «Присутствие» carries one checkbox per congress day
+  («23.04», «24.04»): a click marks or clears the participant's presence at once
+  through `PUT /v1/admin/events/:idOrSlug/registrations/:registrationId/attendance/:day`,
+  the box is disabled while the write is in flight, and a refused write reverts
+  the box and says why (withdrawn grant — never retried; outage — retry; other).
+  The filter bar gains a day select and a presence select («Все» /
+  «Присутствовал» / «Не отмечен») sent to the roster GET as `attendanceDay` /
+  `present`, composing with search and paging.
+
+- [#2451](https://github.com/doctor-school/ds-platform/pull/2451) [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A platform administrator edits an event's congress intake settings in the admin
+  (046 EARS-2/EARS-3, [#2432](https://github.com/doctor-school/ds-platform/issues/2432)): «Приём материалов Конгресса» on the event detail
+  opens `/events/:id/congress-intake` — registration address, first-author rule,
+  last revision day, and per kind (oral, poster, abstracts) the opening day, the
+  last day, the limit and the age limit, as Moscow calendar days. An event
+  without settings opens on the product defaults; a server refusal lands on its
+  field in Russian. The golden seed configures the upcoming эфир as a congress
+  (oral and poster open, abstracts announced).
+
+- [#2423](https://github.com/doctor-school/ds-platform/pull/2423) [`2f10e2b`](https://github.com/doctor-school/ds-platform/commit/2f10e2b0da93fa61f34a1dfbfa373d11a14871db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress roster opens a participant card and shows seven columns ([#2383](https://github.com/doctor-school/ds-platform/issues/2383),
+  044 EARS-36/EARS-37, admin layer). The roster now shows exactly №, ФИО,
+  специальность, город, телефон, дата регистрации, присутствие; workplace,
+  region, email and the mail status move into the card. A row click (or Enter on
+  the focused row) opens the card in the right-hand side panel over the roster:
+  every stored field read-only, the registration source (сайт / стойка
+  регистрации / платформа), the consent (purpose, version, time, «на бумаге»),
+  the confirmation-mail outcome with its time, the «возможный дубль» marker, and
+  per congress day the attendance box (the same mark as the roster's) with the
+  history «кто — когда — отметил/снял». ↑/↓ in the panel walk the page's rows,
+  Esc closes it and returns focus to the row; the open card is in the address as
+  `?registration=<id>`, so a record can be linked. The desk's «Открыть запись»
+  for an already-registered email now opens that registration's card.
+
+- [#2399](https://github.com/doctor-school/ds-platform/pull/2399) [`5dd751f`](https://github.com/doctor-school/ds-platform/commit/5dd751fae545e980a4ddc50c79c1fd601b64fb8d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The congress roster screen gets the registrar's desk entry (044 EARS-35, [#2382](https://github.com/doctor-school/ds-platform/issues/2382)):
+  «Добавить участника» opens a side panel beside the roster (the roster stays
+  visible and usable on a wide screen; a full screen on a phone) with the site
+  form's fields (фамилия, имя, отчество — optional, email, телефон, место работы)
+  and the tick «Согласие на обработку персональных данных получено на бумаге».
+  «Специальность» is searched in the closed book; «Населённый пункт» is searched in
+  the same directory as the congress site — a pick fills the region and shows it
+  under the field, and the «Регион» field appears only for a place not in the list.
+  An accepted entry closes the panel, names the participant and shows the new row;
+  an email already registered for the event keeps the panel open with an explicit
+  notice at its top — «Участник уже зарегистрирован», the address, «Новая запись не
+  создана» — and links to that
+  participant's row; without the tick nothing is sent. A grant withdrawn since the
+  page loaded replaces the page with the «нет прав» message; a failed rights check
+  asks to try again with the typed values kept. The roster search can be seeded
+  from the address (`?q=`).
+
+- [#2390](https://github.com/doctor-school/ds-platform/pull/2390) [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The admin navigation follows the signed-in principal's role and event binding
+  (044 EARS-20 / EARS-38, [#2384](https://github.com/doctor-school/ds-platform/issues/2384)). A congress registrar sees exactly one link —
+  the participant roster of its bound event — and no events list, no other section
+  and no link back to the event, and lands on that roster after sign-in (the
+  admin landings `/` and `/events` send a one-link principal there); any other
+  admin route reached directly renders the existing «нет
+  прав» message in place of the page (the server refuses its data regardless). A
+  registrar with no binding sees no link at all. The platform administrator's
+  navigation is unchanged. The Refine access-control provider now answers from
+  `GET /v1/admin/auth/session` (`roles` + `eventGrants`) instead of session presence,
+  the same cached read the chrome draws from; sign-in and sign-out drop that cache.
+
+- [#2358](https://github.com/doctor-school/ds-platform/pull/2358) [`d9454b6`](https://github.com/doctor-school/ds-platform/commit/d9454b69c50b4fe34080c41748107564450fc4cc) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the congress roster screen to admin (044 EARS-21, [#2315](https://github.com/doctor-school/ds-platform/issues/2315)): `/events/:id/roster` shows one event's registrations on the `AdminDataList` composition — instant search and server paging over `GET /v1/admin/events/:idOrSlug/roster`, columns in the EARS-25 order (№, ФИО, специальность, место работы, город, область, телефон, email, дата регистрации, статус письма), answer-less cells rendered empty. View-only: no create, no row link, no lifecycle filter. The event detail page links to it as «Реестр участников». Sort, per-column filters, print and the registrar's navigation are later handlers.
+
+- [#2610](https://github.com/doctor-school/ds-platform/pull/2610) [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Each event now carries an audience and a kind from an editable dictionary
+  (012 EARS-25…30, [#2509](https://github.com/doctor-school/ds-platform/issues/2509)). The audience — doctors or market experts — alone
+  decides the storefront: doctors' events show only on the doctor storefront,
+  experts' events only on the Academy, in every public read. The kind (Вебинар,
+  Эфир, Конгресс, Встреча клуба, Мастер-класс, and any kind an editor adds in the
+  admin «Типы мероприятий» screen) allows a set of participation formats; the
+  admin event form offers only the formats the chosen kind allows, and narrowing
+  a kind while its events use a removed format is refused with those events
+  named. A project carries a default audience that prefills a new linked event.
+  Breaking API contract: creating an event requires `kindId` and `audience` (plus
+  a `participationFormat` the kind allows); creating a project requires
+  `defaultAudience`. The doctor storefront card shows the event's kind title.
+  Migration 0046 maps the existing events per the reviewed table and removes five
+  test events.
+
+### Patch Changes
+
+- [#2622](https://github.com/doctor-school/ds-platform/pull/2622) [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One event-time formatter (004 EARS-12 as amended): `formatEventTime` in `@ds/schemas` presents an online/hybrid event in the viewer's zone and an offline one in Moscow, with an explicit «МСК» / «GMT±N[:MM]» label and grouping keys of the shown time; `@ds/events-storefront` re-exports it and adds `useViewerZone()` (`./ui`); the design system adds the `min-w-zone-label` token. Every former Moscow-time copy (portal, admin, auth-flow, doctor feed, event page, mailer) now delegates to it pinned to Moscow — output unchanged.
+
+- [#2572](https://github.com/doctor-school/ds-platform/pull/2572) [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One code step (003 EARS-42/41): sign-in by code and the post-registration confirmation draw the same step on both storefronts — «Проверьте почту» / «Проверьте телефон», the address exactly as typed (bold, wrapping inside the column), six letter-or-digit cells, «Подтвердить и войти», «← Изменить способ» / «← Изменить почту» beside the resend cooldown, and «Мы отправили новый код на …» after a resend; the sign-in method tabs are hidden on that step. Every code step — this one, the reset «Новый пароль» step and every resend note — names the email or phone exactly as the visitor typed it, never masked ([#2607](https://github.com/doctor-school/ds-platform/issues/2607)).
+
+  The auth screens converge on the approved canvas (`design-source/auth.dc.html`) on both storefronts: «Создать аккаунт» / «Забыли пароль?» share one row under the sign-in card and its code step (`AuthCard` footer), the form column stands on the 16px mobile gutter (`AuthLayout`, the new `gutter-sm` spacing role), the return-context plate above a form bleeds by that same token so a 390 screen never scrolls sideways, and «Начать заново» on the reset code step sits on the content edge.
+
+  The Academy sign-in and registration screens show the white «Doctor School» lockup on the dark page (the host states `darkSrc`, as the doctor host does); `dark:` now means the theme class in every app (`@custom-variant dark` in `@ds/design-system/globals.css`, the doctor app's local copy removed), so the swap follows the theme the page shows — the stored choice or the system scheme.
+
+  Breaking (`@ds/design-system`): the 8-digit login code is gone — `LOGIN_OTP_LENGTH`, `EMAIL_CONFIRM_OTP_LENGTH` and every `otpLength` prop of `LoginCard` / `EmailConfirmCard` are removed (`CODE_STEP_LENGTH` = 6); `OtpFocusScreen` takes `backLabel` / `onBack` and no longer renders a title, a sent-to line, a length, a variant or a charset; `OtpField` drops the `plain` variant and its `variant` / `placeholder` props; `LoginCardCopy.otp.verifyTitle` / `codeLabel` are per channel and `resentTo` is new; `EmailConfirmCard` loses the co-equal sign-in / reset links (`links`, `renderLink`, the existing-account copy) and requires `onBack` and `resend`; `takePendingRegistration` is replaced by `peekPendingRegistration` over a `{ identifier, registration, form }` hold; `maskDestination` is removed and `LoginCard` / `PasswordRecoveryCard` render the destination unmasked ([#2607](https://github.com/doctor-school/ds-platform/issues/2607)).
+
+  Breaking (`@ds/auth-flow`): the host config names its verify command in `api.verifyPath`; the code step submits the held registration values with the code to it and the accepted answer is the session — the post-verify password replay and the cold-step routing to `/login` are gone. A 021 access-condition refusal on the doctor verify reads as the registration door reads that condition.
+
+- [#2756](https://github.com/doctor-school/ds-platform/pull/2756) [`dd00ae7`](https://github.com/doctor-school/ds-platform/commit/dd00ae77470dd7d0b0df08960c8dc3c1af4e402f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The admin, portal and doctor servers keep an idle connection open 125 s, longer than the proxy in front of them and the api hint they forward, so a request no longer lands on a connection the server is closing ([#2682](https://github.com/doctor-school/ds-platform/issues/2682)).
+
+- [#2738](https://github.com/doctor-school/ds-platform/pull/2738) [`f19a617`](https://github.com/doctor-school/ds-platform/commit/f19a617861edc3fd47bd2e6eacf9aab3340bbff6) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 044 participant card in the admin ([#2731](https://github.com/doctor-school/ds-platform/issues/2731)): the card is split into sections like the 046 submission card — the participant's name as the panel title with origin and registration time under it, the day marks first, then contacts, questionnaire, consent and letter; the per-day mark history is collapsed. Contacts (phone, email) read as plain one-line body text in both cards — an address is never broken across lines and is cut with an ellipsis only when it cannot fit, the full value in its title. Both cards share one layout module. Presentation only.
+
+- [#2631](https://github.com/doctor-school/ds-platform/pull/2631) [`21d8e25`](https://github.com/doctor-school/ds-platform/commit/21d8e252b7c145dd2a0b1aea9f7d644402540566) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Admin «Публичная ссылка» on a project, partner and expert ([#2619](https://github.com/doctor-school/ds-platform/issues/2619)) is built from
+  the configured Academy origin instead of a hardcoded production URL, so a stage
+  slot links to its own `academy-<slot>.…` host. New REQUIRED admin key
+  `ACADEMY_PUBLIC_ORIGIN`, read at request time (the admin refuses to render
+  without it): production `/etc/ds-platform/api.env` needs the line
+  `ACADEMY_PUBLIC_ORIGIN=https://academy.doctor.school` BEFORE this ships; a local
+  `apps/admin/.env.local` needs `ACADEMY_PUBLIC_ORIGIN=http://localhost:3001`
+  (see `apps/admin/.env.example`). Stage slots get it from `tools/staging/slot.mjs`.
+
+- [#2399](https://github.com/doctor-school/ds-platform/pull/2399) [`5dd751f`](https://github.com/doctor-school/ds-platform/commit/5dd751fae545e980a4ddc50c79c1fd601b64fb8d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - A registrar refused by the event binding (044 EARS-38 — no binding, a withdrawn
+  or re-pointed one, another or an unknown event) now gets the stable
+  `403 EVENT_BINDING_REQUIRED` problem code instead of a codeless 403. The admin
+  desk side panel shows it as the «нет прав» refusal, never a retry; a desk answer that
+  arrives after the side panel was closed no longer leaves a stale line on the next
+  open. Across the admin, only a 401 signs the operator out: a 403 keeps the
+  session and the screen shows its refusal (ADR-0001 A1).
+- Updated dependencies [[`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`5922a37`](https://github.com/doctor-school/ds-platform/commit/5922a373daa5fd617f2b3076cf7ea9be97f4c32b), [`b54d3db`](https://github.com/doctor-school/ds-platform/commit/b54d3dbda91585981f3c29b162049031cd7d3336), [`8350915`](https://github.com/doctor-school/ds-platform/commit/835091584a7a9f2e44a3e5dbbc70bd27e7b17495), [`4f6fb18`](https://github.com/doctor-school/ds-platform/commit/4f6fb1869cbf13a68d7433c7aaf798fac21af4ab), [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9), [`b00b042`](https://github.com/doctor-school/ds-platform/commit/b00b042452a1323b34e9580035a3ee014597cc82), [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb), [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb), [`8c72f43`](https://github.com/doctor-school/ds-platform/commit/8c72f43cd72f8fad78a7952e6e71309ab055b2b0), [`d2f3d91`](https://github.com/doctor-school/ds-platform/commit/d2f3d91dcae0e6be16cb50c9c598dfd000f4a678), [`3f5fb3e`](https://github.com/doctor-school/ds-platform/commit/3f5fb3efc32cb9b49e61662a57e79157e52fc2eb), [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2), [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2), [`4016b60`](https://github.com/doctor-school/ds-platform/commit/4016b60050758927b682d76baae9cddbfd2d9330), [`a8eed16`](https://github.com/doctor-school/ds-platform/commit/a8eed16a5c10884386df93c1af1fd650296ef2d9), [`1a6572d`](https://github.com/doctor-school/ds-platform/commit/1a6572de022247474a1209c9ba4f0409ba1b51a4), [`c5b00a4`](https://github.com/doctor-school/ds-platform/commit/c5b00a46231c2505c378df27fc0856f07260483b), [`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14), [`247b352`](https://github.com/doctor-school/ds-platform/commit/247b3524c9addd7e7ebf83a19ac8615a79b3e306), [`c754a6d`](https://github.com/doctor-school/ds-platform/commit/c754a6d5a11e8d72ef26d7cc756cc26cafda3977), [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449), [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299), [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a), [`62d2b68`](https://github.com/doctor-school/ds-platform/commit/62d2b6868967ac0c4494173da3481e3524c219a8), [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0), [`026327e`](https://github.com/doctor-school/ds-platform/commit/026327eb09f34c722b68a6a50e0e2b4a3018003c), [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc), [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd), [`b0d5750`](https://github.com/doctor-school/ds-platform/commit/b0d57504a82e638ebc4475fee62943e90bd85d40), [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd), [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb), [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e), [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9), [`4053361`](https://github.com/doctor-school/ds-platform/commit/40533617334ba73a7d9e53b3bf6c6af38c56d744)]:
+  - @ds/schemas@7.0.0
+  - @ds/api-client@3.0.0
+  - @ds/design-system@6.0.0
+  - @ds/congress-submissions@0.2.0
+
 ## 3.0.0
 
 ### Major Changes

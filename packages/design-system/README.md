@@ -269,8 +269,13 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
   header always shows the muted double arrow, the active one a single direction
   arrow in the AA-safe `primary-action` accent; first click ascending, a click on
   the active header reverses, another header replaces — one sort, never cleared.
-  Below `md` the cards have no headers, so `sortSelect` renders a «Сортировка»
-  `NativeSelect` (column × direction). A table without `sortKey` is unchanged.
+  The body cells of the sorted column sit on the faint `table-sorted` surface at
+  rest (the header keeps no fill; a clickable row's hover / pressed tint wins over
+  it). A column's optional `headerDetail` is a smaller second line under its title
+  (one label «title · detail» for the button name, the card term and the select).
+  The sort button follows the column's `align`. Below `md` the cards have no
+  headers, so `sortSelect` renders a «Сортировка» `NativeSelect` (column ×
+  direction). A table without `sortKey` is unchanged.
 - **DataTable row/card (#1578):** whole-record activation remains a real stretched
   link/button. The containing desktop row and mobile card react to that target's
   live `:active` state through `has-[:active]:bg-tint-pressed`: light blue.200 and

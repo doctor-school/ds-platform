@@ -40,13 +40,14 @@ import { eventClassificationSql } from "../setup/event-classification.js";
  *
  *   row | ФИО             | город       | телефон as typed      | специальность
  *   A   | Жукова Анна     | Москва      | +7 (900) 200-00-00    | S1
- *   B   | Ёлкина Анна     | казань      | 8 (900) 300-00-00     | S2
+ *   B   | Ёлкина Анна     | казань      | 8 (900) 000-00-00     | S2
  *   C   | абрамова Анна   | Архангельск | +7 900 100-00-00      | — (unresolved)
  *   D   | Елкина Анна     | Ярославль   | +7 (900) 050-00-00    | S1
  *
  * - ФИО/город: a byte order would put the lowercase «абрамова»/«казань» and
  *   «Ё» (U+0401, before «А») out of place; the Russian collation does not.
- * - телефон: the typed text orders D, A, C, B; the normalised digits D, C, A, B.
+ * - телефон: the typed text orders D, A, C, B; the raw digits (B's «8…» read
+ *   as typed) D, C, A, B; the normalised digits — «8…» ≡ «+7…» — B, D, C, A.
  * - специальность: C has none, so it is last in BOTH directions; A and D tie
  *   and are kept in registration order by the tie-break.
  * - присутствие (23 April): B and D are marked present.
@@ -238,7 +239,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const b = await deskEntry("B", {
         surname: "Ёлкина",
         city: "казань",
-        contactPhone: "8 (900) 300-00-00",
+        contactPhone: "8 (900) 000-00-00",
         specialtyId: s2,
       });
       await deskEntry("C", {
@@ -288,8 +289,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("044 EARS-22.5: телефон sorts by the normalised digits, not by the text as typed", async () => {
-      expect(await order("sort=phone&dir=asc")).toBe("DCAB");
-      expect(await order("sort=phone&dir=desc")).toBe("BACD");
+      // B is typed «8 (900) 000…»: only as +7 does it come first.
+      expect(await order("sort=phone&dir=asc")).toBe("BDCA");
+      expect(await order("sort=phone&dir=desc")).toBe("ACDB");
     });
 
     it("044 EARS-22.6: специальность sorts by its name both ways, an empty cell last in both directions, ties kept in registration order", async () => {
@@ -330,7 +332,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         ),
       ).toBe("AC");
       // Paging walks the sorted order: page 2 of size 2 is the second half.
-      expect(await order("sort=phone&dir=asc&page=2&pageSize=2")).toBe("AB");
+      expect(await order("sort=phone&dir=asc&page=2&pageSize=2")).toBe("CA");
     });
 
     it("044 EARS-37.4: an unknown or no-longer-visible sort key, an unknown direction and sort=presence without a day are refused with 400", async () => {

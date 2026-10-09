@@ -28,12 +28,12 @@ import {
   congressDayShortLabel,
   congressRosterCells,
   congressRosterRowNumber,
+  rosterSortAddressIsStale,
   rosterSortFromAddress,
   rosterSortHref,
   rosterSortKeyOf,
   rosterSortQuery,
   ROSTER_SORT_DEFAULT,
-  ROSTER_SORT_PARAM,
   type AttendanceFilter,
   type CongressRosterCells,
 } from "@/lib/congress-roster";
@@ -168,12 +168,18 @@ export default function CongressRosterPage() {
   const changeAttendanceFilter = (next: AttendanceFilter) => {
     setAttendanceFilter(next);
     setQuery({ ...query, page: 1 });
-    // The presence sort is the chosen day's mark: with the day gone it falls
-    // back to the default in the address too, never to a stale «presence».
-    if (!next.day && searchParams.get(ROSTER_SORT_PARAM) === "presence") {
-      changeSort(ROSTER_SORT_DEFAULT);
-    }
   };
+  // The presence sort is the chosen day's mark: with the day gone — cleared, or
+  // dropped by a reload (the day is not in the address) — the address falls back
+  // to the default too, never keeping a stale «presence» (or an unknown sort).
+  useEffect(() => {
+    if (rosterSortAddressIsStale(searchParams, attendanceFilter.day)) {
+      router.replace(
+        rosterSortHref(pathname, searchParams.toString(), ROSTER_SORT_DEFAULT),
+        { scroll: false },
+      );
+    }
+  }, [attendanceFilter.day, searchParams, pathname, router]);
 
   const { query: request } = useCustom<CongressRosterList>({
     url: congressRosterUrl.list(eventId, {
@@ -214,9 +220,9 @@ export default function CongressRosterPage() {
     fullValue: (row) => row.cells[key],
   });
 
-  // The shares are set so that at the desktop frame (≥ 1280) every header —
-  // its sort arrow and «Присутствие · день ДД.ММ» included — stays on one line
-  // and the full registration date-time («28 сентября 2026 г., 00:00») fits
+  // The shares are set so that at the desktop frame (≥ 1280) every header
+  // title stays on one line beside its sort arrow (the day header's «день
+  // ДД.ММ» is its intended second line) and the full registration date-time («28 сентября 2026 г., 00:00») fits
   // uncut. What gives is the ФИО cell: a long name wraps in full rather than
   // ellipsing (the date column never truncates).
   const columns: DataTableColumn<Row>[] = [
@@ -227,11 +233,13 @@ export default function CongressRosterPage() {
     column("registeredAt", "18%"),
     {
       key: "attendance",
-      header: attendanceFilter.day
-        ? t("congressRoster.columns.attendanceOnDay", {
+      header: t("congressRoster.columns.attendance"),
+      // S1-3: with a day chosen the header gains a second, smaller line.
+      headerDetail: attendanceFilter.day
+        ? t("congressRoster.columns.attendanceDayDetail", {
             day: congressDayShortLabel(attendanceFilter.day),
           })
-        : t("congressRoster.columns.attendance"),
+        : undefined,
       width: "20%",
       sortKey: rosterSortKeyOf("attendance", attendanceFilter.day),
       render: (row) => (

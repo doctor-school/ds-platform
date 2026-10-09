@@ -488,4 +488,104 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
       direction: "asc",
     });
   });
+
+  /** The desktop grid's body cells of one column (record = 0, then `columns`). */
+  function bodyCells(columnIndex: number): HTMLElement[] {
+    const table = first(screen.getAllByRole("table"));
+    return within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => {
+        const cell = row.querySelectorAll("td")[columnIndex];
+        if (!(cell instanceof HTMLElement)) throw new Error("no body cell");
+        return cell;
+      });
+  }
+  const fills = (element: HTMLElement) =>
+    element.className.split(/\s+/).filter((token) => /^bg-/.test(token));
+
+  it("044 EARS-22: the active column's body cells are shaded with the `table-sorted` surface at rest — no other column, never the header (S1)", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "desc" },
+      onSortChange: () => {},
+    });
+    for (const cell of bodyCells(2)) {
+      expect(fills(cell)).toEqual(["bg-table-sorted"]);
+    }
+    for (const cell of [...bodyCells(0), ...bodyCells(1)]) {
+      expect(fills(cell)).toEqual([]);
+    }
+    expect(fills(headerCell("Материалов"))).toEqual([]);
+  });
+
+  it("044 EARS-22: the shade follows the active column", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "parent", direction: "asc" },
+      onSortChange: () => {},
+    });
+    for (const cell of bodyCells(1)) {
+      expect(fills(cell)).toEqual(["bg-table-sorted"]);
+    }
+    for (const cell of bodyCells(2)) expect(fills(cell)).toEqual([]);
+  });
+
+  it("044 EARS-22: a shaded cell of a clickable row yields to the row's hover and pressed tint", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+      onRowClick: () => {},
+    });
+    const cell = first(bodyCells(2));
+    expect(cell.className).toContain("group-hover/row:bg-tint");
+    expect(cell.className).toContain("group-has-[:active]/row:bg-tint-pressed");
+    expect(cell.className).toContain("group-focus-within/row:bg-tint");
+  });
+
+  it("044 EARS-22: a table with no sort props shades no body cell", () => {
+    renderTable({ columns: SORTABLE });
+    for (const index of [0, 1, 2]) {
+      for (const cell of bodyCells(index)) expect(fills(cell)).toEqual([]);
+    }
+  });
+
+  it("044 EARS-22: a header detail is a second, smaller line inside the same sort button, which reads «header · detail»", () => {
+    renderTable({
+      columns: [
+        SORTABLE[0]!,
+        { ...SORTABLE[1]!, headerDetail: "день 23.04" },
+      ],
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+    });
+    const button = screen.getByRole("button", {
+      name: "Материалов · день 23.04",
+    });
+    const detail = within(button).getByText("день 23.04");
+    expect(detail.className).toContain("normal-case");
+    expect(detail.className).toContain("text-xs");
+    expect(within(button).getByText("Материалов").parentElement).toBe(
+      detail.parentElement,
+    );
+    expect(detail.parentElement?.className).toContain("flex-col");
+    expect(button.closest("th")).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("044 EARS-22: a sort button follows its column's alignment", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "parent", direction: "asc" },
+      onSortChange: () => {},
+    });
+    const end = screen.getByRole("button", { name: "Материалов" });
+    expect(end.className).toContain("justify-end");
+    expect(end.className).toContain("text-right");
+    const start = screen.getByRole("button", {
+      name: "Родительское направление",
+    });
+    expect(start.className).toContain("justify-start");
+    expect(start.className).toContain("text-left");
+  });
 });

@@ -4,8 +4,9 @@ import { expect, type Locator, type Page } from "@playwright/test";
 export const ROSTER_DESKTOP_WIDTHS = [1440, 1280] as const;
 
 /**
- * 044 EARS-22/EARS-37 — the roster grid at a desktop frame (#2316): every header,
- * its sort arrow included, sits on ONE line, and every registration date-time is
+ * 044 EARS-22/EARS-37 — the roster grid at a desktop frame (#2316): every header
+ * title sits on ONE line beside its sort arrow — the presence header with a day
+ * chosen is the intended two-line one, «Присутствие» over «день ДД.ММ» (S1-3) — and every registration date-time is
  * shown whole (no ellipsis engaged). The ФИО cell is the one allowed to wrap.
  */
 export async function expectRosterFits(
@@ -17,32 +18,44 @@ export async function expectRosterFits(
     const headers = await table.locator("thead th").evaluateAll((cells) =>
       cells.map((cell) => {
         const box = cell.querySelector("button") ?? cell;
-        // One line = every text fragment of the title shares a top edge.
+        // Each text fragment (the title, and a day header's «день ДД.ММ»
+        // qualifier) must sit on ONE line: all its client rects share a top.
         const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
-        const rects: DOMRect[] = [];
+        const fragments: DOMRect[][] = [];
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const range = document.createRange();
           range.selectNodeContents(node);
-          rects.push(
-            ...[...range.getClientRects()].filter((rect) => rect.width > 0),
+          const rects = [...range.getClientRects()].filter(
+            (rect) => rect.width > 0,
           );
+          if (rects.length > 0) fragments.push(rects);
         }
-        const tops = new Set(rects.map((rect) => Math.round(rect.top)));
+        const wrapped = fragments.some(
+          (rects) => new Set(rects.map((rect) => Math.round(rect.top))).size > 1,
+        );
+        const all = fragments.flat();
+        const top = Math.min(...all.map((rect) => rect.top));
+        const bottom = Math.max(...all.map((rect) => rect.bottom));
         const arrow = box.querySelector("svg")?.getBoundingClientRect();
-        const line = rects[0];
         return {
-          header: box.textContent ?? "",
-          lines: tops.size,
-          // The arrow sits beside the title, on the same line, never under it.
+          header: box.getAttribute("aria-label") ?? box.textContent ?? "",
+          wrapped,
+          // Title lines: 1, or 2 for a header with its qualifier underneath.
+          lines: new Set(all.map((rect) => Math.round(rect.top))).size,
+          fragments: fragments.length,
+          // The arrow sits beside the title block, never under it.
           arrowBeside:
-            !arrow || !line
+            !arrow || all.length === 0
               ? true
-              : arrow.top < line.bottom && arrow.bottom > line.top,
+              : arrow.top < bottom && arrow.bottom > top,
         };
       }),
     );
-    for (const { header, lines, arrowBeside } of headers) {
-      expect(lines, `«${header}» on one line at ${width}px`).toBe(1);
+    for (const { header, wrapped, lines, fragments, arrowBeside } of headers) {
+      expect(wrapped, `«${header}» wraps at ${width}px`).toBe(false);
+      expect(lines, `«${header}» line count at ${width}px`).toBe(
+        fragments,
+      );
       expect(
         arrowBeside,
         `«${header}» arrow beside its title at ${width}px`,

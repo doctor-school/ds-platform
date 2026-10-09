@@ -280,8 +280,9 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
       name: "Присутствие · день 23.04",
       exact: true,
     });
-    // The longest header — the day's — stays on one line with its arrow.
+    // S1-3: «Присутствие» over a smaller «день 23.04», one sort button.
     await expect(presence).toBeVisible();
+    await expect(presence.getByText("день 23.04", { exact: true })).toBeVisible();
     await expectRosterFits(desk, table);
     await presence.click();
     await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
@@ -302,6 +303,15 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     await expect(
       table.locator("thead th").last().locator("button"),
     ).toHaveCount(0);
+    await expect(nameCells(desk)).toHaveText([MARKED, ...OTHERS]);
+
+    // A reload drops the chosen day (it is not in the address): the stale
+    // presence sort is rewritten to the default, never left to revive later.
+    await desk.getByTestId("roster-attendance-day").selectOption(DAY_1);
+    await presence.click();
+    await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
+    await desk.reload();
+    await expect(desk).toHaveURL(/[?&]sort=registeredAt&dir=asc/);
     await expect(nameCells(desk)).toHaveText([MARKED, ...OTHERS]);
   });
 

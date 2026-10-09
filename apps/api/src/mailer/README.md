@@ -27,11 +27,11 @@ and reporting instructions without codes, counts or remaining lock time.
 Intercept, real and fallback transports use the `Doctor.School` display name
 and retain their own configured sender address.
 
-Verified-account login email-OTP uses the same layout and existing SmtpMailer
-route. Zitadel returns its six-digit, 300-second code through `returnCode`
-and sends no duplicate; the mail contains no action or URL. Session verification
-and token exchange remain IdP-owned. SMS keeps its IdP template. Broader provider
-acceptance in #2144/#2145 remains separate from this template migration.
+Verified-account login email-OTP uses the same layout and the same SmtpMailer
+Postbox -> mail.ru -> Resend chain as every other code email (003 EARS-6/31).
+Zitadel returns its six-digit, 300-second code through `returnCode` and sends no
+duplicate; the mail contains no action or URL. Session verification and token
+exchange remain IdP-owned. SMS keeps its IdP template.
 The module shares the `email-delivery-real` Unleash flag with the
 [`delivery-reconcile`](../delivery-reconcile/README.md) module, so one flag flip
 moves both this channel and Zitadel's between Mailpit-intercept and the
@@ -114,8 +114,11 @@ operational reserve. It logs `mailer_channel_readiness` and sets the
 `mailer_channel_readiness{provider,state}` gauge;
 [`delivery-reconcile`](../delivery-reconcile/README.md) consumes and reports it.
 
-Production activation, native OTP readback, rollback, quotas and controlled
-received-artifact checks remain release-blocker #2116
+Production activation is recorded under #2116 (2026-10-09): production env set,
+api recreated, `mailer_channel_readiness` `verified` for all three channels. The
+login-code received-artifact check passed on 2026-10-09 under #2145
+([evidence](https://github.com/doctor-school/ds-platform/issues/2145#issuecomment-6076532211): accepted-by-postbox, Inbox, code present, zero links);
+rollback has not been exercised in production
 ([runbook](../../../../infra/deploy/smtp-activation.md)). Microsoft sender-auth
 and Inbox evidence remain #1120; successful SMTP acceptance does not close it.
 

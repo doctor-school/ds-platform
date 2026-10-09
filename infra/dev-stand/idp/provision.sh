@@ -384,12 +384,13 @@ else
 fi
 
 # ── 6. ensure BOTH SMTP providers → Mailpit (intercept) + real sender ────────
-# Verified-account login OTP remains generated/rendered/sent by Zitadel; BFF
-# verify/reset uses returnCode + MailerModule. The providers retain their stable
+# No product email is Zitadel-sent: login OTP, verify and reset use returnCode +
+# MailerModule (003 design, #2145). The providers retain their stable
 # descriptions across Postbox activation and deliberate mail.ru rollback.
 # Only validated explicit real configuration provisions the real identity.
 # TLS=true on port 465 preserves implicit TLS with certificate verification;
-# no insecure TLS option is introduced. BFF deadlines/Resend do not cover native sends.
+# no insecure TLS option is introduced. BFF deadlines/Resend do not cover the
+# residual native sends (dormant types only).
 # Runtime reconcile validates public SMTP metadata before selecting this identity.
 # Provisioning converges the selected boot provider even without a running BFF.
 #
@@ -820,7 +821,9 @@ api GET /admin/v1/policies/login | jq -r '.policy |
 # `verifyemail`/`passwordreset` are NOT touched here: those types are
 # BFF-sent (returnCode, #910/#1045) and carry no live override at all.
 #
-# (a) verifyemailotp — the LIVE email-OTP login mail (EARS-6). Fully branded,
+# (a) verifyemailotp — the native email-OTP login template. Never rendered: the
+# EARS-6 login code rides returnCode + the BFF mailer (#2145); the override is
+# kept so a stray native send would still be branded and code-only. Fully branded,
 # code-only, matching the #869 copy style: neutral greeting, enlarged
 # letter-spaced one-token {{.OTP}} (the code variable for OTP types — NOT
 # {{.Code}}), explicit expiry (the instance's OTP_EMAIL secret-generator

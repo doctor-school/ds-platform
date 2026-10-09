@@ -122,11 +122,9 @@ falls through to the bundled default label, and the button row + URL render
 unconditionally (custom email HTML templates are an unsupported, long-open
 upstream feature request). A truly **link-free** email is achieved by moving
 the send hop to `returnCode` and delivering through the BFF mailer — shipped
-for the email-verify and password-reset codes (EARS-29, #910/#1045; see
-[`../../mailer/README.md`](../../mailer/README.md)). The still-Zitadel-sent
-login email-OTP (EARS-6) keeps a sanctioned subordinate button whose
-`sendCode.urlTemplate` is the BARE portal `/login` origin — no placeholders,
-nothing a mail scanner's GET prefetch can consume (#878).
+for the email-verify, password-reset and login email-OTP codes (EARS-6/29,
+#910/#1045/#2145; see [`../../mailer/README.md`](../../mailer/README.md)), so no
+code email carries a Zitadel button.
 
 ## SMS OTP message text (`verifysmsotp`, #226)
 

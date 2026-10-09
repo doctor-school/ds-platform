@@ -52,8 +52,8 @@ export const DEFAULT_RETRY: ReconcileRetryConfig = {
 };
 
 /**
- * Reconciles native Zitadel login-OTP SMTP and SMS providers on flag signals.
- * BFF verify/reset sends use MailerModule instead. Explicit real SMTP validates
+ * Reconciles the native Zitadel SMTP and SMS providers on flag signals (003
+ * design §14.3/§14.5). BFF code emails use MailerModule instead (003 EARS-29/31). Explicit real SMTP validates
  * shared configuration and the provisioned identity before activation, including
  * already-active providers. It never repairs credentials or sends mail itself.
  */

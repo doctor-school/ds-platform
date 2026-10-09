@@ -2,16 +2,10 @@
  * Localized notification-email subjects — the single place the portal
  * real-Zitadel browser E2E selects a delivered Mailpit message by subject.
  *
- * Two senders, one catalog (003 design §13):
- *
- * - **BFF mailer** (#910/#1045, EARS-29): the registration verify-email and the
- *   password-reset mails are composed by `apps/api/src/mailer/code-emails.ts`
- *   (`CODE_EMAIL_SUBJECT_TAILS` is the SSOT these constants mirror) — Zitadel
- *   sends nothing for those types (`returnCode`).
- * - **Zitadel `ru` message-text templates**: the login email-OTP
- *   (`verifyemailotp`, branded by `infra/dev-stand/idp/provision.sh` step
- *   8.quinquies, #878) stays IdP-sent. #177 locked the dev-stand IdP to
- *   Russian, so it renders with its Russian subject.
+ * One sender (003 design §13–§14): the BFF mailer (#910/#1045/#2145, EARS-29)
+ * composes the registration verify-email, password-reset and login-code mails in
+ * `apps/api/src/mailer/code-emails.ts` (`CODE_EMAIL_SUBJECT_TAILS` is the SSOT
+ * these constants mirror) — Zitadel sends nothing for those types (`returnCode`).
  *
  * Every branded subject LEADS with the dynamic code (`482913 — код
  * подтверждения Doctor.School`), so the constants below are the STABLE
@@ -30,8 +24,8 @@ export const NOTIFICATION_SUBJECTS = {
    */
   passwordReset: "код сброса пароля Doctor.School",
   /**
-   * Login email-OTP mail (`verifyemailotp` template, branded `ru`, #878 —
-   * still Zitadel-sent). Stable substring — the subject leads with the code.
+   * Login-code mail (BFF `code-emails.ts`, §13.5, EARS-6/34). Stable
+   * substring — the subject leads with the code.
    */
   verifyEmailOtp: "код для входа в Doctor.School",
 } as const;

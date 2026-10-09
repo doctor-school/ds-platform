@@ -221,7 +221,7 @@ to the **real** route, and you should prefer the first:
    the Unleash flags `email-delivery-real` / `sms-delivery-real` and `_activate`s
    the matching provider on a flag change — **no `.env.local` edit, no
    `provision.sh` re-run, no restart**. Toggle the flag in the admin UI
-   (`http://<HOST>:4242`) and the next Zitadel-sent OTP goes real vs intercepted.
+   (`http://<HOST>:4242`) and the next SMS OTP (Zitadel-sent) or BFF email goes real vs intercepted.
    Real mode requires the same explicit provider and complete `IDP_SMTP_REAL_*`
    configuration in both provisioning and the BFF environment. Missing or drifted
    real identity is an error; a flag cannot silently promote Mailpit to real delivery.
@@ -291,8 +291,8 @@ reconcile verifies host/sender/username/TLS before activation and rejects drift,
 even for an already-active identity. Real-email startup failures abort API boot;
 later flag failures log loudly. The BFF cannot suppress independently queued IdP
 emails: the previous active provider may still send until configuration is repaired.
-Verified-account login OTP remains Zitadel-generated/rendered/sent. BFF verify/reset
-uses `returnCode` and MailerModule. `MAILER_FALLBACK_SMTP_ENABLED=false` and
+Verified-account login OTP, like verify/reset, is Zitadel-generated but uses
+`returnCode` and MailerModule (003 design, #2145); Zitadel sends no product email. `MAILER_FALLBACK_SMTP_ENABLED=false` and
 `RESEND_ENABLED=false` are the defaults; enabling
 the mail.ru reserve or Resend affects BFF sends only, as do BFF per-send deadlines.
 

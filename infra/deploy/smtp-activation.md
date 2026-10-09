@@ -41,7 +41,7 @@ Activate the candidate without first deactivating mail.ru. Verify intended activ
 ID and metadata before migration/replacement, then check again after application
 readiness. During replacement the old BFF may still use mail.ru and its reconciler may
 reselect mail.ru. The switch is not atomic and is not complete until the new
-application and projected native selection agree. Verify controlled register/resend/reset and actual native login OTP.
+application and projected native selection agree. Verify controlled register/resend/reset and the login code email.
 
 On failed or uncertain activation, inspect actual state before another attempt.
 Restore the coherent previous BFF environment before canonical rollback to the
@@ -51,8 +51,8 @@ both profile IDs after success or rollback; do not delete/recreate profiles.
 
 ## BFF reserve chain (Postbox -> mail.ru -> Resend)
 
-The BFF verify/reset sends use one ordered chain (003 design §14.3, #2144); native
-Zitadel login OTP is not part of it. Each reserve is configuration-only:
+Every BFF code email — verify, reset, re-registration and the login code (#2145) —
+uses one ordered chain (003 design §14.3, #2144). Each reserve is configuration-only:
 
 - **mail.ru reserve:** `MAILER_FALLBACK_SMTP_ENABLED=true` plus a complete, separate
   set `MAILER_FALLBACK_SMTP_PROVIDER=mail.ru`, `_HOST=smtp.mail.ru`, `_PORT=465`,
@@ -104,8 +104,9 @@ An exhausted readback deadline stops the deploy; it never disables the API guard
 Record SMTP acceptance, received authentication headers and mailbox placement
 separately, with no recipient addresses, OTPs, subjects/bodies or secrets in
 published evidence. Microsoft remains #1120; allow-list-assisted Inbox placement
-is not a pass. Approved quota/headroom precedes mass registration. #2144/#2145
-are independent and are not implemented by this procedure.
+is not a pass. Approved quota/headroom precedes mass registration. The #2144
+chain and the #2145 login delivery are application code, not implemented by this
+procedure.
 
 ## Credential rotation (Postbox API key)
 

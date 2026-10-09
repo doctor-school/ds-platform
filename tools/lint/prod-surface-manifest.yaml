@@ -134,13 +134,10 @@ routes:
 
   # 020 EARS-1 (#1764) — the shared event page mounted on the doctor storefront.
   # The read model, the composition blocks and the server-resolved participation
-  # CTA are REAL and shared with the academy host, but the SCREEN is not whole:
-  # the room entry (#1770), social proof, calendar add and cancel all land as
-  # their own EARS Issues, so a registered doctor on a live event gets a CTA the
-  # host cannot yet route. `deferred` on the same cut-over as its parent feed —
-  # the doctor host is not publicly reachable until ADR-0015 §7's release-time
-  # step. Its Stage-B verdict is recorded (owner GO on #1779, 2026-09-03); the
-  # `deferred` classification is unchanged and rests on that cut-over (#1430).
+  # CTA are REAL and shared with the academy host, and its Stage-B verdict is
+  # recorded (owner GO on #1779, 2026-09-03). The doctor host is public on the
+  # temporary `new.doctor.school` (#1723); `deferred` rests on the root-host
+  # cut-over to `doctor.school` (ADR-0015 §7), which #1430 owns.
   - app: doctor
     route: /events/[slug]
     file: apps/doctor/app/(storefront)/events/[slug]/page.tsx
@@ -151,9 +148,9 @@ routes:
   # storefront. The room itself is the shared `@ds/room` unit the academy already
   # runs in production, and this route is the thin host projection over it
   # (session forward, own upstream, own route table, own copy) — nothing here is
-  # a placeholder. `deferred` for the same reason its parent event page is: the
-  # doctor host is not publicly reachable until ADR-0015 §7's release-time
-  # cut-over (#1430), and the route carries no Stage-B verdict of its own yet.
+  # a placeholder. `deferred` for the same reason as its parent event page: the
+  # root-host cut-over (ADR-0015 §7, #1430); the route carries no Stage-B verdict
+  # of its own yet.
   - app: doctor
     route: /events/[slug]/room
     file: apps/doctor/app/(room)/events/[slug]/room/page.tsx

@@ -208,7 +208,7 @@ Out of scope, as in the allowlist: `loading` / `error` / `not-found` / `template
 | `apps/doctor/app/(storefront)/events/[slug]/page.tsx`    | `@ds/event-page`                                                                               | wave 3 (#2072) |
 | `apps/doctor/app/(storefront)/events/page.tsx`           | `@ds/events-storefront`                                                                        | mounted        |
 | `apps/doctor/app/(storefront)/layout.tsx`                | — brand frame per host (`@ds/storefront-shell` + `DOCTOR_SHELL` + host session projection)     | permanent      |
-| `apps/doctor/app/(storefront)/page.tsx`                  | `@ds/events-storefront`                                                                        | wave 2 (#2028) |
+| `apps/doctor/app/(storefront)/page.tsx`                  | `@ds/events-storefront`                                                                        | wave 2 (#1485) |
 | `apps/doctor/app/layout.tsx`                             | — brand frame per host (root html/body, fonts, theme boot)                                     | permanent      |
 
 ### `apps/portal/app`

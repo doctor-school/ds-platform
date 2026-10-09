@@ -11,6 +11,7 @@ import {
 } from "@ds/e2e/admin-events";
 import { registerDoctorThroughPlatform } from "./support/congress-roster";
 import { bindRegistrarToEvent } from "./support/event-grants";
+import { expectRosterFits } from "./support/roster-fit";
 import { visible } from "./support/visible";
 
 /**
@@ -279,6 +280,9 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
       name: "Присутствие · день 23.04",
       exact: true,
     });
+    // The longest header — the day's — stays on one line with its arrow.
+    await expect(presence).toBeVisible();
+    await expectRosterFits(desk, table);
     await presence.click();
     await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
     await expect(table.locator("thead th").last()).toHaveAttribute(

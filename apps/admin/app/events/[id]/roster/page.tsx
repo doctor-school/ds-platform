@@ -201,10 +201,12 @@ export default function CongressRosterPage() {
   const column = (
     key: keyof CongressRosterCells,
     width: string,
+    overflow?: DataTableColumn<Row>["overflow"],
   ): DataTableColumn<Row> => ({
     key,
     header: t(`congressRoster.columns.${key}`),
     width,
+    overflow,
     sortKey: rosterSortKeyOf(key, attendanceFilter.day),
     render: (row) => (
       <span data-testid={`roster-cell-${key}`}>{row.cells[key]}</span>
@@ -212,12 +214,17 @@ export default function CongressRosterPage() {
     fullValue: (row) => row.cells[key],
   });
 
+  // The shares are set so that at the desktop frame (≥ 1280) every header —
+  // its sort arrow and «Присутствие · день ДД.ММ» included — stays on one line
+  // and the full registration date-time («28 сентября 2026 г., 00:00») fits
+  // uncut. What gives is the ФИО cell: a long name wraps in full rather than
+  // ellipsing (the date column never truncates).
   const columns: DataTableColumn<Row>[] = [
-    column("fullName", "24%"),
-    column("specialtyName", "16%"),
-    column("city", "12%"),
+    column("fullName", "19%", "wrap"),
+    column("specialtyName", "14%"),
+    column("city", "11%"),
     column("phone", "14%"),
-    column("registeredAt", "15%"),
+    column("registeredAt", "18%"),
     {
       key: "attendance",
       header: attendanceFilter.day
@@ -225,7 +232,7 @@ export default function CongressRosterPage() {
             day: congressDayShortLabel(attendanceFilter.day),
           })
         : t("congressRoster.columns.attendance"),
-      width: "14%",
+      width: "20%",
       sortKey: rosterSortKeyOf("attendance", attendanceFilter.day),
       render: (row) => (
         // Above the row's stretched activation overlay (`DataTable`), so a
@@ -425,7 +432,7 @@ export default function CongressRosterPage() {
             caption={t("congressRoster.tableCaption")}
             record={{
               header: t("congressRoster.columns.number"),
-              width: "5%",
+              width: "4%",
               title: (row) => (
                 <span data-testid={`roster-row-${row.registrationId}`}>
                   {row.number}

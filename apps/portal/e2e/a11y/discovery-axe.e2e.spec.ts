@@ -100,6 +100,20 @@ test.describe("004 EARS-13 axe-core a11y scan of the public webinar surfaces", (
     for (const theme of THEMES) await scan(page, theme);
   });
 
+  // 019 EARS-13 (wave-2 gate row 61) — the same feed at 390 px, where the facet
+  // column becomes the «Фильтры» sheet trigger: a different composition, so its
+  // own scan (both themes). Structure + overflow: `month-fidelity.spec.ts`.
+  test("019 EARS-13: the guest feed at 390 px passes WCAG 2 A/AA (both themes)", async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("events-filter-open")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
   // 004 EARS-19 (#1050) + EARS-16/17/18 (#1051) — the month-calendar pane
   // (`?view=month`) is a BLOCK-guard (`playwright-axe`) surface too: the desktop
   // grid AND the mobile dot-grid + agenda are scanned at BOTH breakpoints × both

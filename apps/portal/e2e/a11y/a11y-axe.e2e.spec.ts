@@ -141,6 +141,49 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
     for (const theme of THEMES) await scan(page, theme);
   });
 
+  // 019 EARS-13 (wave-2 gate row 61) — «Мои события» at 390 px, both tabs,
+  // both themes: the mobile composition of the shared page (day groups and the
+  // registered cards in one column) is its own render, so it gets its own scan
+  // plus the no-horizontal-overflow arm the doctor host's twin asserts.
+  test("019 EARS-13: «Мои события» at 390 px passes WCAG 2 A/AA with no overflow (both themes, both tabs)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(
+      `/register?returnTo=${encodeURIComponent(`/webinars/${SEED}`)}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await submitRegisterAndVerify(page);
+    await page.waitForURL(new RegExp(`/webinars/${SEED}(?:$|[?#])`));
+    await expect(
+      page.getByText("Вы записаны", { exact: false }).first(),
+    ).toBeVisible();
+
+    for (const [tab, path] of [
+      [0, "/account/events"],
+      [1, "/account/events?tab=recordings"],
+    ] as const) {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByTestId("event-list-tabs").getByRole("tab").nth(tab),
+      ).toHaveAttribute("aria-selected", "true");
+      if (tab === 0)
+        await expect(
+          page.locator(`a[href="/webinars/${SEED}"]`).first(),
+        ).toBeVisible();
+      const overflow = await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      );
+      expect(
+        overflow,
+        `${path} must not overflow at 390 px`,
+      ).toBeLessThanOrEqual(1);
+      for (const theme of THEMES) await scan(page, theme);
+    }
+  });
+
   // 003 EARS-28 (#770) — the /account profile surface (canvas «Разделы»): the
   // EARS-27 identity rows, the verified badge (`text-success` on `bg-background`),
   // the inline display-name edit affordance, and the destructive sign-out row

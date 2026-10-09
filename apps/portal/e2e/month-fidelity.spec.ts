@@ -123,7 +123,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       page,
     }) => {
       await page.setViewportSize(DESKTOP);
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
 
       // The desktop grid pane (display-only calendar — no ARIA grid roles; the
@@ -133,7 +135,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await expect(grid.locator("a[href^='/webinars/']").first()).toBeVisible();
 
       // The displayed month (МСК, capitalised — «<Месяц> <год>») on the picker trigger.
-      await expect(page.getByTestId("month-toolbar").locator("summary")).toBeVisible();
+      await expect(
+        page.getByTestId("month-toolbar").locator("summary"),
+      ).toBeVisible();
 
       // The state legend — the three labelled swatches (colour is never the only
       // cue). Scoped to the legend container: the «Идёт сейчас» label also
@@ -148,22 +152,25 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       // only `view`, so the current month (no `month` param) returns to the bare feed.
       const toFeed = page.getByTestId("events-view-switch");
       await expect(toFeed).toHaveText("← Лента событий");
-      await expect(toFeed).toHaveAttribute("href", /^\/webinars(\?month=\d{4}-\d{2})?$/);
+      await expect(toFeed).toHaveAttribute(
+        "href",
+        /^\/webinars(\?month=\d{4}-\d{2})?$/,
+      );
 
       // Today is outlined + labelled «· сегодня» in the grid (independent of seed).
       await expect(grid.getByText(/· сегодня/)).toBeVisible();
 
       // At least one event pill links to an event page (EARS-8 pattern).
-      await expect(
-        grid.locator('a[href^="/webinars/"]').first(),
-      ).toBeVisible();
+      await expect(grid.locator('a[href^="/webinars/"]').first()).toBeVisible();
     });
 
     test(`EARS-19: canvas scale invariants — 11px pills, 118px cells, 300px column + month view span the 1240px content column, header/hero one blue (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
 
       const grid = page.getByTestId("month-grid-desktop");
@@ -356,7 +363,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
 
       // Current (seeded) month — muted bg ⇔ weekend/out-of-month ONLY; an
       // empty WEEKDAY cell reads the card surface (transparent cell bg).
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
       const grid = page.getByTestId("month-grid-desktop");
       await expect(grid).toBeVisible();
@@ -392,7 +401,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       page,
     }) => {
       await page.setViewportSize(MOBILE);
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
 
       const mobile = page.getByTestId("month-calendar-mobile");
@@ -411,6 +422,43 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await target.click();
       await expect(target).toHaveAttribute("aria-pressed", "true");
       expect(page.url()).toBe(urlBefore); // client-side presentation state only
+    });
+
+    // 019 EARS-13 (wave-2 gate row 61) — the FEED view at 390 px, the twin of
+    // the month view's mobile pin above: the facet column steps behind
+    // «Фильтры» (row 60), every card title links this host's own event path,
+    // and the page does not overflow horizontally. Its axe arm at 390 lives in
+    // `a11y/discovery-axe.e2e.spec.ts`.
+    test(`019 EARS-13: mobile feed view renders behind «Фильтры» with linked cards and no overflow (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(MOBILE);
+      await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+
+      await expect(page.getByTestId("events-feed-view")).toBeVisible();
+      await expect(page.locator('[data-feed-block="feed"]')).toBeVisible();
+      await expect(page.getByTestId("events-filter-open")).toBeVisible();
+      await expect(page.getByTestId("events-column")).toBeHidden();
+
+      const cards = page.locator("[data-webinar-card]");
+      expect(await cards.count()).toBeGreaterThan(0);
+      for (const card of await cards.all()) {
+        const title = card.getByRole("heading", { level: 3 }).getByRole("link");
+        await expect(title).toHaveAttribute("href", /^\/webinars\/[^/?#]+$/);
+        await expect(title).toHaveAccessibleName(/\S/);
+        await expect(title).toBeVisible();
+      }
+
+      const overflow = await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      );
+      expect(
+        overflow,
+        "the feed must not overflow at 390 px",
+      ).toBeLessThanOrEqual(1);
     });
 
     test(`gate row 50: the feed view's head is the canvas head — title, subline, tense tabs, no hero taglines (${theme})`, async ({
@@ -481,7 +529,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
 
       const picker = page.getByTestId("month-toolbar").locator("details");
@@ -509,7 +559,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
 
       const toolbar = page.getByTestId("month-toolbar");
@@ -534,14 +586,18 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         );
       });
       expect(heights.length).toBe(4);
-      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(
+        1,
+      );
     });
 
     test(`owner verdict #6: the picker year ‹ › pages in place ≥3 steps EACH direction across the former ±1 edge — popover open, no navigation (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
 
       const picker = page.getByTestId("month-toolbar").locator("details");
@@ -600,7 +656,9 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await page.setViewportSize(DESKTOP);
 
       // Current month — the back link is withheld (never motivate going back).
-      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await page.goto("/webinars?view=month", {
+        waitUntil: "domcontentloaded",
+      });
       await applyTheme(page, theme);
       await expect(page.getByTestId("month-grid-desktop")).toBeVisible();
       await expect(page.getByTestId("prev-month-link")).toHaveCount(0);

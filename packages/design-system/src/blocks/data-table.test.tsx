@@ -353,6 +353,26 @@ describe("<DataTable> sortable columns (044 EARS-22)", () => {
     );
   });
 
+  it("044 EARS-22: the active header carries no resting background fill — only its title and arrow mark it (S1, not S2)", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+    });
+    const button = screen.getByRole("button", { name: "Материалов" });
+    const cell = headerCell("Материалов");
+    // A `bg-*` utility without a state variant paints the cell at rest; a
+    // `hover:`/`focus-visible:` tint exists only while hovered or focused.
+    const restingFills = (element: HTMLElement) =>
+      element.className.split(/\s+/).filter((token) => /^bg-/.test(token));
+    expect(restingFills(cell)).toEqual([]);
+    expect(restingFills(button)).toEqual([]);
+    expect(cell).not.toHaveAttribute("style");
+    expect(
+      button.querySelector('[data-sort-icon="asc"]')?.getAttribute("class"),
+    ).toContain("text-primary-action");
+  });
+
   it("044 EARS-22: the first click on a header asks for ascending, a click on the active ascending header reverses it", async () => {
     const user = userEvent.setup();
     const onSortChange = vi.fn();

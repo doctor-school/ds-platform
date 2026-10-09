@@ -94,6 +94,24 @@ export interface EventsFeedPage {
   readonly facetOptions: FeedFacetOptions;
   /** The events this reading matches — the page plus the rest of its reach («Показать N», row 60). */
   readonly matching: number;
+  /**
+   * What the read was targeted on (017 design §5), when the host's read
+   * reports it — the doctor read does; the Academy read carries none. The
+   * home nearest-events block states its kicker and picks its `пусто`
+   * variant from it (017 EARS-9): by `mode`, never by the size of a set.
+   */
+  readonly targeting?: EventsFeedTargeting;
+}
+
+/**
+ * The read's targeting (017 design §5): `targeted` — a managed specialty →
+ * direction chain; `general` — the «Другое» fallback; `all` — no specialty
+ * chosen (or targeting off by request). `adjacentDirectionIds` is empty
+ * exactly when the chosen specialty reaches no adjacent area.
+ */
+export interface EventsFeedTargeting {
+  readonly mode: "targeted" | "general" | "all";
+  readonly adjacentDirectionIds: readonly string[];
 }
 
 /** One facet option: the URL value, its title and its count under the other facets. */

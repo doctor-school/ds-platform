@@ -187,6 +187,18 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
     expect(page.nextBatch).toBe(4);
   });
 
+  it("017 EARS-9: the read's targeting mode and adjacent directions reach the page model (D11)", () => {
+    const page = adaptDoctorEventsFeed(
+      {
+        tense: "upcoming", today: "2026-10-08", from: "2026-10-08", to: "2026-10-22",
+        days: [], totalCount: 0, nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0,
+        targeting: { mode: "targeted", specialtyReference: "kardiologiya", directionIds: ["own"], adjacentDirectionIds: ["adj"] },
+      },
+      { tense: "upcoming" },
+    );
+    expect(page.targeting).toEqual({ mode: "targeted", adjacentDirectionIds: ["adj"] });
+  });
+
   it("NEW: the doctor facet options reach the page model (row 58, D9)", () => {
     const facets = { kind: [{ slug: "webinar", title: "Вебинар", count: 1 }], city: [] };
     const page = adaptDoctorEventsFeed(

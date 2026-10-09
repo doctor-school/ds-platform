@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   normalizeSpecialtyQuery,
   type SpecialtyChoice,
@@ -77,6 +78,7 @@ export function SpecialtyCatalog({
   actor,
   initialChoice,
 }: SpecialtyCatalogProps) {
+  const router = useRouter();
   const [book, setBook] = useState<BookState>({ kind: "loading" });
   const [frequent, setFrequent] = useState<SpecialtyRef[]>([]);
   const [query, setQuery] = useState("");
@@ -241,6 +243,10 @@ export function SpecialtyCatalog({
    * A second activation while the first is still in flight is DROPPED rather
    * than queued: two writes racing would leave the row naming whichever answer
    * landed last, which need not be the entry chosen last.
+   *
+   * «Re-target every block»: the recorded choice re-runs the server render, so
+   * every server-read block below — the nearest events (EARS-9) — re-reads
+   * with the new remembered specialty; this section keeps its client state.
    */
   const saving = useRef(false);
   const onSelect = useCallback(
@@ -258,13 +264,14 @@ export function SpecialtyCatalog({
           // greet the doctor as the state of a question they just closed.
           setQuery("");
           setExpanded(false);
+          router.refresh();
         })
         .catch(() => {
           saving.current = false;
           setChoiceFailed(true);
         });
     },
-    [actor],
+    [actor, router],
   );
 
   /** «сменить» — re-open the full catalog without forgetting what is recorded. */

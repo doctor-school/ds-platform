@@ -65,6 +65,42 @@ export async function fetchEventsFeed(
 }
 
 /**
+ * The home nearest-events read (017 EARS-9, wave-2 gate row 62, §4.3 D11):
+ * the host's ONE feed read with the default upcoming window — general before a
+ * specialty is chosen, targeted after, by the same relayed cookie as the
+ * events page (row 13). «Nearest» must not read as empty because the next
+ * event lies past the default window: when that window holds no card but the
+ * api names a next bound, the read widens ONCE to it (the bound covers the
+ * nearest matching day, the «Показать ещё» step of the page). `window` is the
+ * default read — the compact month's extent, the one `/events` opens with.
+ */
+export async function fetchNearestEvents(
+  config: ReadConfig,
+  request: ReadRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{
+  readonly window: BlockRead<EventsFeedPage>;
+  readonly nearest: BlockRead<EventsFeedPage>;
+}> {
+  const window = await fetchEventsFeed(config, {}, request, fetchImpl);
+  if (
+    !window.ok ||
+    window.value.cards.length > 0 ||
+    window.value.horizon.nextTo === null
+  ) {
+    return { window, nearest: window };
+  }
+  const { from, nextTo } = window.value.horizon;
+  const nearest = await fetchEventsFeed(
+    config,
+    { from, to: nextTo },
+    request,
+    fetchImpl,
+  );
+  return { window, nearest };
+}
+
+/**
  * The «Идёт сейчас» read (019 EARS-6, D5). Viewer-DEPENDENT: the api picks the
  * room or the event page against the viewer's registration, so the session
  * rides with it.

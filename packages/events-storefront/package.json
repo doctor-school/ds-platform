@@ -11,6 +11,7 @@
     "./listing": "./src/ui/events-listing-page.tsx",
     "./adapters": "./src/adapters.ts",
     "./my-events": "./src/ui/my-events-route.tsx",
+    "./home": "./src/ui/home-nearest-events.tsx",
     "./host-config": "./src/host-config.ts",
     "./server": "./src/server/index.ts"
   },

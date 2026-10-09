@@ -16,5 +16,6 @@ export {
   fetchEventsLive,
   fetchMonthCounts,
   fetchMonthEntries,
+  fetchNearestEvents,
   fetchSpecialtyChoices,
 } from "./events-feed";

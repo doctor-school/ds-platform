@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchEventsFeed, fetchEventsLive } from "./events-feed";
+import { fetchEventsFeed, fetchEventsLive, fetchNearestEvents } from "./events-feed";
 
 const page = { today: "2026-10-08", cards: [], horizon: { from: "a", to: "b", nextTo: null, nextFrom: null }, remaining: 0, nextBatch: 0, facetOptions: {}, matching: 0 };
 const contentSet = {
@@ -60,5 +60,50 @@ describe("fetchEventsLive", () => {
     expect(
       await fetchEventsLive("/v1/public/events/live", { cookie: "", userAgent: "", acceptLanguage: "", forwardedFor: "" }, bad as unknown as typeof fetch),
     ).toEqual({ ok: false });
+  });
+});
+
+describe("fetchNearestEvents", () => {
+  const request = { cookie: "ds_specialty=cardio", forwardedFor: "" };
+  const card = {
+    id: "a", slug: "a", startsAt: "2026-09-20T10:00:00.000Z", format: "online" as const, kindTitle: "Вебинар",
+    title: "a", school: "Doctor.School", speakers: [], state: "upcoming" as const, signUpCount: 0, recording: null,
+  };
+
+  it("017 EARS-9: reads the host's feed once with the default upcoming window and the relayed specialty", async () => {
+    const adapt = vi.fn(() => ({ ...page, cards: [card] }));
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
+    const result = await fetchNearestEvents(
+      { contentSet: { ...contentSet, adapt }, filterSet: "doctor" },
+      request,
+      fetchImpl as unknown as typeof fetch,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/v1\/storefront\/doctor\/events\?tense=upcoming$/);
+    expect((init.headers as Record<string, string>).cookie).toBe("ds_specialty=cardio");
+    expect(result.nearest).toEqual(result.window);
+  });
+
+  it("017 EARS-9: an empty default window with matches beyond it widens once to the api's next bound, so «nearest» is never a false empty", async () => {
+    const empty = { ...page, horizon: { from: "2026-09-01", to: "2026-09-15", nextTo: "2026-09-21", nextFrom: null }, remaining: 3 };
+    const adapt = vi.fn().mockReturnValueOnce(empty).mockReturnValueOnce({ ...page, cards: [card] });
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
+    const result = await fetchNearestEvents(
+      { contentSet: { ...contentSet, adapt }, filterSet: "doctor" },
+      request,
+      fetchImpl as unknown as typeof fetch,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [url] = fetchImpl.mock.calls[1] as unknown as [string];
+    expect(url).toMatch(/\?from=2026-09-01&to=2026-09-21&tense=upcoming$/);
+    expect(result.window).toEqual({ ok: true, value: empty });
+    expect(result.nearest).toEqual({ ok: true, value: { ...page, cards: [card] } });
+  });
+
+  it("017 EARS-9: a failed read is a block error for the block, never a thrown page", async () => {
+    const fetchImpl = vi.fn(async () => new Response("", { status: 503 }));
+    const result = await fetchNearestEvents({ contentSet, filterSet: "doctor" }, request, fetchImpl as unknown as typeof fetch);
+    expect(result).toEqual({ window: { ok: false }, nearest: { ok: false } });
   });
 });

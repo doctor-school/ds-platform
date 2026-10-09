@@ -108,5 +108,9 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     nextBatch: feed.nextBatch,
     facetOptions: feed.facets ?? {},
     matching: cards.length + feed.remaining,
+    targeting: {
+      mode: feed.targeting.mode,
+      adjacentDirectionIds: feed.targeting.adjacentDirectionIds,
+    },
   };
 };

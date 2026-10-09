@@ -69,7 +69,8 @@ export function MyEventsSkeleton() {
   );
 }
 
-function FeedSkeletonCard() {
+/** One card's skeleton — the feed's, and the home nearest-events block's (017 EARS-9). */
+export function FeedSkeletonCard() {
   return (
     <div className="flex flex-col border-2 border-hairline bg-card layout:flex-row">
       <div className="flex shrink-0 flex-col gap-3 bg-section px-6 py-7 layout:w-52">

@@ -311,6 +311,45 @@ let feedFailing = false;
 let monthFailing = false;
 
 /**
+ * 017 EARS-9 (gate row 62) — the doctor home nearest-events block reads this
+ * same feed. `POST /__e2e/home` `{ "scenario": … }` picks what it renders:
+ * `normal` (the fixture), `empty` (nothing upcoming, no adjacent area),
+ * `empty-adjacent` (nothing upcoming, the specialty reaches an adjacent area)
+ * or `slow` (the upcoming read answers after a delay, so the card skeletons
+ * are observable).
+ *
+ * Targeting follows the relayed `__Host-ds_specialty` cookie the way the real
+ * read does (gate row 13): no cookie ⇒ `mode: "all"`, the whole fixture; a
+ * remembered specialty ⇒ `mode: "targeted"` over the разборы of 20 September
+ * only — past the default window, so the block's widen-once step is driven.
+ */
+let homeScenario = "normal";
+/** The remembered specialty of the request being answered (set per request). */
+let remembered = null;
+
+function rememberedOf(cookie) {
+  const pair = (cookie ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("__Host-ds_specialty="));
+  if (!pair) return null;
+  const id = decodeURIComponent(pair.slice("__Host-ds_specialty=".length));
+  return SPECIALTIES.find((entry) => entry.id === id || entry.code === id) ?? null;
+}
+
+function homeTargeting() {
+  if (remembered === null) {
+    return { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] };
+  }
+  return {
+    mode: "targeted",
+    specialtyReference: remembered.id,
+    directionIds: ["dir-own"],
+    adjacentDirectionIds: homeScenario === "empty" ? [] : ["dir-adj"],
+  };
+}
+
+/**
  * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
  * read `GET /v1/storefront/doctor/me/events`. No `__Host-ds_session` ⇒ 401 (a
  * guest). The session value `e2e-doctor-empty` is a doctor with no
@@ -355,6 +394,21 @@ const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
   if (url.pathname === "/health") return json(response, 200, { ok: true });
+  remembered = rememberedOf(request.headers.cookie);
+
+  if (url.pathname === "/__e2e/home" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      try {
+        homeScenario = JSON.parse(body || "{}").scenario ?? "normal";
+      } catch {
+        homeScenario = "normal";
+      }
+      json(response, 200, { scenario: homeScenario });
+    });
+    return undefined;
+  }
 
   // Test-only control: flip the live scenario mid-run so a spec can prove the
   // block clears itself on the next read rather than on a reload.
@@ -430,6 +484,12 @@ const server = createServer((request, response) => {
         return { month: index + 1, count: monthEntries(month, url).length };
       }),
     );
+  }
+  // 017 EARS-4 — the home catalog's frequent set, so the catalog beside the
+  // nearest-events block renders its real open form (017 EARS-9: the rest of
+  // the page stays usable in every state of the block).
+  if (url.pathname === "/v1/public/specialties/frequent") {
+    return json(response, 200, { entries: SPECIALTIES });
   }
   if (url.pathname === "/v1/public/specialties") {
     return json(response, 200, { entries: SPECIALTIES, total: SPECIALTIES.length });
@@ -523,7 +583,12 @@ const server = createServer((request, response) => {
       items: group.items.filter((item) => matchesFacets(item, url)),
     }));
     const nextTo = nextToBeyond(to, matched);
-    return json(response, 200, {
+    // 017 EARS-9 — `slow` holds the upcoming read so the card skeletons show.
+    const reply = (body) =>
+      homeScenario === "slow"
+        ? setTimeout(() => json(response, 200, body), 4000)
+        : json(response, 200, body);
+    return reply({
       tense: "upcoming",
       // D10 — every read carries the api's (here: pinned) today.
       today: MONTH_TODAY,
@@ -563,12 +628,7 @@ const server = createServer((request, response) => {
           : itemCount(
               matched.filter((group) => group.day >= to && group.day < nextTo),
             ),
-      targeting: {
-        mode: "general",
-        specialtyReference: null,
-        directionIds: [],
-        adjacentDirectionIds: [],
-      },
+      targeting: homeTargeting(),
     });
   }
 
@@ -589,8 +649,34 @@ const server = createServer((request, response) => {
       roles: ["doctor"],
     });
   }
+  // 017 EARS-6/7 — the remembered choice answers the relayed cookie, and the
+  // choose command records it in that cookie, so a pick in the catalog
+  // re-targets the home blocks on the server re-render (017 EARS-9).
   if (url.pathname === "/v1/public/specialty-choice") {
-    return json(response, 200, { specialty: null, storedIn: "none" });
+    if (request.method === "POST") {
+      let body = "";
+      request.on("data", (chunk) => (body += chunk));
+      request.on("end", () => {
+        let reference = null;
+        try {
+          reference = JSON.parse(body || "{}").specialty ?? null;
+        } catch {
+          reference = null;
+        }
+        const entry = SPECIALTIES.find((s) => s.id === reference) ?? null;
+        if (entry === null) return json(response, 422, { status: 422 });
+        response.setHeader(
+          "set-cookie",
+          `__Host-ds_specialty=${entry.id}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+        );
+        return json(response, 200, { specialty: entry, storedIn: "session" });
+      });
+      return undefined;
+    }
+    return json(response, 200, {
+      specialty: remembered,
+      storedIn: remembered === null ? "none" : "session",
+    });
   }
 
   return json(response, 404, { status: 404 });
@@ -617,6 +703,12 @@ function matchesFacets(item, url) {
   if (formats.length > 0 && !formats.includes(item.format)) return false;
   if (kinds.length > 0 && !kinds.includes(item.kind.slug)) return false;
   if (specialties.length > 0 && !specialties.includes("kardiologiya")) return false;
+  // 017 EARS-9 — the home scenarios and the remembered-specialty targeting
+  // (an explicit `specialty` pick overrides the remembered one, as in the api).
+  if (homeScenario === "empty" || homeScenario === "empty-adjacent") return false;
+  if (specialties.length === 0 && remembered !== null) {
+    return item.kind.slug === RAZBOR.slug;
+  }
   return true;
 }
 

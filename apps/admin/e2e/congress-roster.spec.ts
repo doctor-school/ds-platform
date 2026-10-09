@@ -7,6 +7,7 @@ import {
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
 import { registerDoctorThroughPlatform } from "./support/congress-roster";
+import { expectRosterFits } from "./support/roster-fit";
 import { visible } from "./support/visible";
 
 /**
@@ -322,6 +323,8 @@ test.describe("044 EARS-21 — the congress roster in admin", () => {
     ).toHaveCount(0);
     await expect(nameCells(page).first()).toHaveText(PEOPLE[0]!);
     await shot(page, "roster-sort-default");
+    // Every header with its arrow on one line; the date-time whole (#2316).
+    await expectRosterFits(page, table);
 
     // A sort change returns to page 1.
     await page.getByRole("button", { name: "Вперёд" }).click();

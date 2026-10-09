@@ -170,6 +170,18 @@ export function formatRevisionLastDay(revisionDueAt: Date): string {
 }
 
 /**
+ * 046 EARS-29 — closes a sentence written by someone else (the committee
+ * comment) exactly once: a text already ending in `.` `!` `?` `…` (or `...`)
+ * keeps its own mark, any other gets a full stop. Trailing whitespace is
+ * dropped so the mark sits right after the last word (owner 2026-10-08, #2734:
+ * no «иллюстрация.. Исправить»).
+ */
+export function endSentence(text: string): string {
+  const trimmed = text.trimEnd();
+  return /[.!?…]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+/**
  * 046 EARS-29, EARS-35 — the author's letter after a committee decision
  * (`accepted`, `rejected`, `needs_revision`) or the platform administrator's
  * revision-deadline extension. Copy approved at Stage A (L-2, 2026-10-08,
@@ -205,7 +217,7 @@ export function congressSubmissionDecisionMessage(
       preheader = "Заявку нужно доработать";
       intro =
         `Программный комитет просит доработать заявку ${named}: ` +
-        `${content.comment}. ${until(content.lastDay)}`;
+        `${endSentence(content.comment)} ${until(content.lastDay)}`;
       break;
     case "revision_extended":
       subject = "Doctor.School — срок доработки продлён";

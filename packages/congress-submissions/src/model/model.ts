@@ -302,7 +302,8 @@ export function revisionView(
   if (!s.revisionDueAt) return { open: true, urgent: false, text: "" };
   const due = new Date(s.revisionDueAt);
   const p = parts(new Date(due.getTime() - 1).toISOString(), false, MSK);
-  const day = `${p.day} ${p.month}, 23:59 МСК`;
+  // With its year, as every other date of the section (owner 2026-10-08, #2734).
+  const day = `${p.day} ${p.month} ${p.year}, 23:59 МСК`;
   const left = due.getTime() - now.getTime();
   if (left > 0) {
     return {

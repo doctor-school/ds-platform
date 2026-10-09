@@ -291,8 +291,8 @@ reconcile verifies host/sender/username/TLS before activation and rejects drift,
 even for an already-active identity. Real-email startup failures abort API boot;
 later flag failures log loudly. The BFF cannot suppress independently queued IdP
 emails: the previous active provider may still send until configuration is repaired.
-Verified-account login OTP remains Zitadel-generated/rendered/sent. BFF verify/reset
-uses `returnCode` and MailerModule. `MAILER_FALLBACK_SMTP_ENABLED=false` and
+Verified-account login OTP, like verify/reset, is Zitadel-generated but uses
+`returnCode` and MailerModule (003 design, #2145); Zitadel sends no product email. `MAILER_FALLBACK_SMTP_ENABLED=false` and
 `RESEND_ENABLED=false` are the defaults; enabling
 the mail.ru reserve or Resend affects BFF sends only, as do BFF per-send deadlines.
 

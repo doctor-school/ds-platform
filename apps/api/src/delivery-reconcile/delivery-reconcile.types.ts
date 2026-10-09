@@ -1,4 +1,4 @@
-/** Stable identities shared with provision.sh; native login OTP remains Zitadel-sent. */
+/** Stable identities shared with provision.sh (003 design §14.3, native Zitadel SMTP profile). */
 export const SMTP_DESCRIPTION_INTERCEPT = "dev-stand mailpit";
 export const SMTP_DESCRIPTION_REAL = "real transactional sender";
 export const SMTP_DESCRIPTION_POSTBOX = "real transactional sender:postbox";

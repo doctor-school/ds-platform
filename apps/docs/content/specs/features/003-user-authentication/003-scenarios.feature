@@ -647,7 +647,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When a verified user requests an email login OTP
     Then the BFF obtains the six-digit code through otpEmail returnCode
     And Zitadel sends no native email
-    And the existing BFF mailer sends the code using the shared layout and unchanged delivery route
+    And the existing BFF mailer sends the code using the shared layout through the Postbox → mail.ru → Resend chain
     And HTML and plain text state a five-minute lifetime and entry in the already-open requesting tab
     And neither body nor footer contains a button, anchor or navigation URL
     And the code remains server-only outside the email and is never persisted or logged

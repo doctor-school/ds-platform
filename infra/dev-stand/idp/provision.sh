@@ -970,11 +970,31 @@ api GET /admin/v1/policies/password/complexity | jq -r '.policy |
 # `set -e`), and the step ends with a READ-BACK of every generator against the
 # target shape AND the expiry read before the write: a write Zitadel accepted
 # but did not apply exits non-zero here instead of shipping green.
+#
+# The read-back is FENCED on the write's sequence (#2752). Zitadel is CQRS: the
+# PUT appends an event and answers with its instance `details.sequence`, while
+# the GET serves an asynchronously updated projection whose row carries the
+# sequence of the last event it applied — and the admin API offers no
+# read-your-writes option for this read. A GET right after the PUT can still
+# return the pre-write row (two CI runs read 8 digits ~60 ms after «ensured 6
+# digits»; on the dev stand every such read had a sequence below the PUT's).
+# So the shape is judged only on a row at or past the fence; a row behind it is
+# not yet evidence and is re-read until a deadline, which fails as STALE —
+# distinct from a converged row that has the wrong shape (did NOT converge).
 # `tools/deploy/idp-policy.mjs` parses EMAILED_CODE_LENGTH from this file at the
 # deployed SHA and re-reads the same four generators on the box.
 EMAILED_CODE_LENGTH=6
 EMAILED_CODE_GENERATORS=(SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS)
 EMAILED_CODE_EXPIRIES=()
+# Per generator: the instance sequence the read-back row must reach — the PUT's
+# sequence, or the row's own when nothing was written.
+EMAILED_CODE_FENCES=()
+EMAILED_CODE_READBACK_BUDGET_S=60
+
+# Prints the numeric `details.sequence` of the JSON on stdin; fails when absent.
+emailed_code_sequence() {
+  jq -er '.details.sequence | select(type == "string" or type == "number") | tostring | select(test("^[0-9]+$"))'
+}
 
 # Prints `true` when the generator JSON on stdin is at the target shape: length 6,
 # digits only. Zitadel drops proto3 defaults from the body, so an absent
@@ -997,11 +1017,16 @@ for CODE_GENERATOR in "${EMAILED_CODE_GENERATORS[@]}"; do
     exit 1
   }
   EMAILED_CODE_EXPIRIES+=("$CODE_GENERATOR_EXPIRY")
+  CODE_GENERATOR_FENCE="$(emailed_code_sequence <<< "$CODE_GENERATOR_CURRENT")" || {
+    echo "FATAL: ${CODE_GENERATOR} read back without a numeric details.sequence — the read-back cannot be fenced" >&2
+    exit 1
+  }
   if [[ "$(emailed_code_generator_on_target <<< "$CODE_GENERATOR_CURRENT")" == "true" ]]; then
+    EMAILED_CODE_FENCES+=("$CODE_GENERATOR_FENCE")
     echo "${CODE_GENERATOR}: already ${EMAILED_CODE_LENGTH} digits (expiry ${CODE_GENERATOR_EXPIRY})" >&2
     continue
   fi
-  if ! api_idempotent PUT "/admin/v1/secretgenerators/${CODE_GENERATOR}" \
+  if ! CODE_GENERATOR_WRITE="$(api_idempotent PUT "/admin/v1/secretgenerators/${CODE_GENERATOR}" \
     "$(jq -nc --argjson len "$EMAILED_CODE_LENGTH" --arg exp "$CODE_GENERATOR_EXPIRY" '
       {
         length: $len,
@@ -1011,22 +1036,46 @@ for CODE_GENERATOR in "${EMAILED_CODE_GENERATORS[@]}"; do
         includeDigits: true,
         includeSymbols: false
       }
-    ')" >/dev/null; then
+    ')")"; then
     echo "FATAL: ${CODE_GENERATOR}: the PUT converging it to ${EMAILED_CODE_LENGTH} digits was rejected (see the API line above)" >&2
     exit 1
   fi
+  # An empty body is api_idempotent's absorbed code-9 (a racing writer already
+  # made the change): there is no write of ours to fence on, and the shape check
+  # below judges the row as it stands.
+  if [[ -n "$CODE_GENERATOR_WRITE" ]]; then
+    CODE_GENERATOR_FENCE="$(emailed_code_sequence <<< "$CODE_GENERATOR_WRITE")" || {
+      echo "FATAL: ${CODE_GENERATOR}: the PUT was accepted without a numeric details.sequence — the read-back cannot be fenced" >&2
+      exit 1
+    }
+  fi
+  EMAILED_CODE_FENCES+=("$CODE_GENERATOR_FENCE")
   echo "${CODE_GENERATOR}: ensured ${EMAILED_CODE_LENGTH} digits (expiry ${CODE_GENERATOR_EXPIRY} kept)" >&2
 done
 
 # Read-back: the instance, not the PUT exit code, is the evidence.
+EMAILED_CODE_READBACK_DEADLINE=$((SECONDS + EMAILED_CODE_READBACK_BUDGET_S))
 for i in "${!EMAILED_CODE_GENERATORS[@]}"; do
   CODE_GENERATOR="${EMAILED_CODE_GENERATORS[$i]}"
   CODE_GENERATOR_EXPIRY="${EMAILED_CODE_EXPIRIES[$i]}"
-  CODE_GENERATOR_LIVE="$(api GET "/admin/v1/secretgenerators/${CODE_GENERATOR}" | jq -c '.secretGenerator')"
+  CODE_GENERATOR_FENCE="${EMAILED_CODE_FENCES[$i]}"
+  while :; do
+    CODE_GENERATOR_LIVE="$(api GET "/admin/v1/secretgenerators/${CODE_GENERATOR}" | jq -c '.secretGenerator')"
+    CODE_GENERATOR_LIVE_SEQUENCE="$(emailed_code_sequence <<< "$CODE_GENERATOR_LIVE")" || {
+      echo "FATAL: ${CODE_GENERATOR} read back without a numeric details.sequence; live: ${CODE_GENERATOR_LIVE}" >&2
+      exit 1
+    }
+    (( CODE_GENERATOR_LIVE_SEQUENCE >= CODE_GENERATOR_FENCE )) && break
+    if (( SECONDS >= EMAILED_CODE_READBACK_DEADLINE )); then
+      echo "FATAL: ${CODE_GENERATOR} read-back is STALE — the IdP read model still serves sequence ${CODE_GENERATOR_LIVE_SEQUENCE}, behind the write at ${CODE_GENERATOR_FENCE}, after ${EMAILED_CODE_READBACK_BUDGET_S}s (projection lag, not a shape mismatch); live: ${CODE_GENERATOR_LIVE}" >&2
+      exit 1
+    fi
+    sleep 1
+  done
   CODE_GENERATOR_LIVE_EXPIRY="$(jq -r '.expiry // empty' <<< "$CODE_GENERATOR_LIVE")"
   if [[ "$(emailed_code_generator_on_target <<< "$CODE_GENERATOR_LIVE")" != "true" \
         || "$CODE_GENERATOR_LIVE_EXPIRY" != "$CODE_GENERATOR_EXPIRY" ]]; then
-    echo "FATAL: ${CODE_GENERATOR} read-back did NOT converge — expected length ${EMAILED_CODE_LENGTH}, digits only, expiry ${CODE_GENERATOR_EXPIRY}; live: ${CODE_GENERATOR_LIVE}" >&2
+    echo "FATAL: ${CODE_GENERATOR} read-back did NOT converge at sequence ${CODE_GENERATOR_LIVE_SEQUENCE} (write fence ${CODE_GENERATOR_FENCE}) — expected length ${EMAILED_CODE_LENGTH}, digits only, expiry ${CODE_GENERATOR_EXPIRY}; live: ${CODE_GENERATOR_LIVE}" >&2
     exit 1
   fi
   echo "${CODE_GENERATOR}: read-back ok (${EMAILED_CODE_LENGTH} digits, expiry ${CODE_GENERATOR_LIVE_EXPIRY})" >&2

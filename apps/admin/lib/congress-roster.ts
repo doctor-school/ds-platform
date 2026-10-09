@@ -1,4 +1,11 @@
-import type { CongressRosterRow } from "@ds/schemas";
+import {
+  CONGRESS_ROSTER_SORT_DEFAULT,
+  CongressRosterSortDirSchema,
+  CongressRosterSortKeySchema,
+  type CongressRosterRow,
+  type CongressRosterSortDir,
+  type CongressRosterSortKey,
+} from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
 
 /**
@@ -76,6 +83,86 @@ export function congressDayLongLabel(day: string): string {
     day: "numeric",
     month: "long",
   }).format(new Date(Date.UTC(year, month - 1, date)));
+}
+
+/**
+ * 044 EARS-22/EARS-37 — the one active server sort. It lives in the ADDRESS
+ * (`?sort=&dir=`) so a sorted roster can be linked and survives a reload; the
+ * search, paging and presence filter keep their component state.
+ */
+export interface RosterSort {
+  key: CongressRosterSortKey;
+  direction: CongressRosterSortDir;
+}
+
+export const ROSTER_SORT_PARAM = "sort";
+export const ROSTER_DIR_PARAM = "dir";
+
+export const ROSTER_SORT_DEFAULT: RosterSort = {
+  key: CONGRESS_ROSTER_SORT_DEFAULT.sort,
+  direction: CONGRESS_ROSTER_SORT_DEFAULT.dir,
+};
+
+/**
+ * The route's sort key a visible column carries (EARS-37): № none, and
+ * «Присутствие» only while a congress day is chosen — its order is that day's mark.
+ */
+export function rosterSortKeyOf(
+  column: CongressRosterColumn,
+  attendanceDay: string,
+): CongressRosterSortKey | undefined {
+  switch (column) {
+    case "fullName":
+    case "city":
+    case "phone":
+    case "registeredAt":
+      return column;
+    case "specialtyName":
+      return "specialty";
+    case "attendance":
+      return attendanceDay ? "presence" : undefined;
+    case "number":
+      return undefined;
+  }
+}
+
+/**
+ * The sort the address asks for; anything the route would refuse — an unknown
+ * key or direction, or `presence` without a chosen day — reads as the default.
+ */
+export function rosterSortFromAddress(
+  params: URLSearchParams,
+  attendanceDay: string,
+): RosterSort {
+  const key = CongressRosterSortKeySchema.safeParse(
+    params.get(ROSTER_SORT_PARAM),
+  );
+  const direction = CongressRosterSortDirSchema.safeParse(
+    params.get(ROSTER_DIR_PARAM) ?? ROSTER_SORT_DEFAULT.direction,
+  );
+  if (!key.success || !direction.success) return ROSTER_SORT_DEFAULT;
+  if (key.data === "presence" && !attendanceDay) return ROSTER_SORT_DEFAULT;
+  return { key: key.data, direction: direction.data };
+}
+
+/** The address with `sort` written in, the rest of the query (card, search) kept. */
+export function rosterSortHref(
+  pathname: string,
+  search: string,
+  sort: { key: string; direction: CongressRosterSortDir },
+): string {
+  const params = new URLSearchParams(search);
+  params.set(ROSTER_SORT_PARAM, sort.key);
+  params.set(ROSTER_DIR_PARAM, sort.direction);
+  return `${pathname}?${params.toString()}`;
+}
+
+/** The GET params the sort owes the roster route. */
+export function rosterSortQuery(sort: RosterSort): {
+  sort: CongressRosterSortKey;
+  dir: CongressRosterSortDir;
+} {
+  return { sort: sort.key, dir: sort.direction };
 }
 
 /** The roster's presence filter as the operator set it; `""` = not chosen. */

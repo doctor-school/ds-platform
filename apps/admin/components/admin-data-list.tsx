@@ -10,6 +10,8 @@ import {
   type AppliedFilter,
   type DataTableColumn,
   type DataTableRecordColumn,
+  type DataTableSort,
+  type DataTableSortSelect,
 } from "@ds/design-system/blocks";
 import {
   ADMIN_LIST_PAGE_SIZE_DEFAULT,
@@ -40,15 +42,27 @@ import {
  *     list needs no «Действия» column; a caller with a per-row COMMAND SET and no
  *     record route (the 014 recordings history) renders that set as a column
  *     instead — both shapes are supported, the row link is not a requirement;
- *   • below `md` the rows become record cards, so a phone never scrolls sideways.
+ *   • below `md` the rows become record cards, so a phone never scrolls sideways;
+ *   • a list that passes `query.sort` gets the server-sort headers of `DataTable`
+ *     (044 EARS-22): its columns opt in by `sortKey`, a sort change goes through
+ *     `onQueryChange` with the page reset to 1, and below `md` `sortSelect`
+ *     offers the same sort as a «Сортировка» select. A list without `sort` is
+ *     unchanged.
  */
 
-export interface AdminDataListQueryState<Status extends string = TaxonomyStatus> {
+export interface AdminDataListQueryState<
+  Status extends string = TaxonomyStatus,
+> {
   q: string;
   status: Status | "";
   includeRetired: boolean;
   page: number;
   pageSize: number;
+  /**
+   * The one active server sort — present only on a list that sorts (044
+   * EARS-22). Where it lives (component state, the address) is the route's call.
+   */
+  sort?: DataTableSort;
 }
 
 /** Typed at `never` so one constant seeds any status vocabulary (`never | ""` is `""`). */
@@ -88,6 +102,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
   onQueryChange,
   rowHref,
   onRowClick,
+  sortSelect,
   emptyTitle,
   emptyDescription,
   testId,
@@ -152,6 +167,8 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
    * its participant card in the side panel over the list (EARS-36).
    */
   onRowClick?: (row: Row) => void;
+  /** The below-`md` «Сортировка» select copy, for a list that passes `query.sort`. */
+  sortSelect?: DataTableSortSelect;
   emptyTitle: string;
   emptyDescription: string;
   testId: string;
@@ -322,6 +339,13 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
           getRowKey={getRowKey}
           rowHref={rowHref}
           onRowClick={onRowClick}
+          sort={query.sort}
+          onSortChange={
+            query.sort
+              ? (sort) => onQueryChange({ ...query, sort, page: 1 })
+              : undefined
+          }
+          sortSelect={sortSelect}
           isLoading={isLoading}
           error={
             error ? (
@@ -360,8 +384,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
             navLabel: t("common.list.paginationNav"),
             previousLabel: t("common.list.previous"),
             nextLabel: t("common.list.next"),
-            pageLabel: (page: number) =>
-              t("common.list.pageLabel", { page }),
+            pageLabel: (page: number) => t("common.list.pageLabel", { page }),
             readout: (
               <span data-testid={`${testId}-page`}>
                 {t("common.list.pageReadout", {
@@ -379,13 +402,7 @@ export function AdminDataList<Row, Status extends string = TaxonomyStatus>({
 }
 
 /** The list title at the rank its host surface leaves free (see `headingLevel`). */
-function Heading({
-  level,
-  children,
-}: {
-  level: 1 | 2;
-  children: ReactNode;
-}) {
+function Heading({ level, children }: { level: 1 | 2; children: ReactNode }) {
   const className = "text-xl font-extrabold text-foreground";
   return level === 1 ? (
     <h1 className={className}>{children}</h1>

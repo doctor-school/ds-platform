@@ -3,6 +3,8 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+import { Label } from "../primitives/label";
+import { NativeSelect } from "../primitives/native-select";
 import { Skeleton } from "../primitives/skeleton";
 import { EmptyState, type EmptyStateProps } from "./empty-state";
 import { Pagination, type PaginationProps } from "./pagination";
@@ -48,12 +50,19 @@ import {
  * whole row a click target with a hover cue (ADR-0013 §7). An actions column is
  * rendered ONLY when `actions` is supplied, i.e. when a row genuinely has ≥2 actions.
  *
- * `@tanstack/react-table` is deliberately NOT a dependency: our lists are
- * server-queried (one page of rows arrives already ordered), so a client-side table
- * engine would manage an array we already hold. shadcn's TanStack `DataTable` recipe
- * is the documented upgrade path, taken when a list first needs client-side column ops
- * (resize, hide, multi-sort, batch selection). Recorded in the design constitution so
- * the deferral is a decision, not an untracked seam.
+ * SERVER SORT (044 EARS-22, owner Stage-A pick S1, #2316 issuecomment-6077817101):
+ * a column opts in with a `sortKey`; the table is then CONTROLLED through `sort` +
+ * `onSortChange`. A sortable header is a real `<button>` inside `<th aria-sort>`:
+ * every sortable header always shows a muted double arrow, the active one shows a
+ * single direction arrow in the `primary-action` accent; the first click asks for
+ * ascending, a click on the active column reverses it, and another header replaces
+ * it — there is always exactly one sort, never a cleared one. Below `md` the cards
+ * have no headers, so `sortSelect` renders a «Сортировка» select (field × direction)
+ * over the same contract. The block orders nothing itself: the rows arrive already
+ * ordered by the server, which is why `@tanstack/react-table` is still NOT a
+ * dependency — a client-side engine would manage an array we already hold. shadcn's
+ * TanStack `DataTable` recipe stays the upgrade path for client-side column ops
+ * (resize, hide, multi-sort, batch selection).
  *
  * Presentation only — every string is app-supplied (no i18n inside the package).
  */
@@ -91,6 +100,30 @@ export interface DataTableColumn<Row> {
   fullValue?: (row: Row) => string;
   /** Keep this column off the mobile record card (rarely right — default false). */
   hideOnCard?: boolean;
+  /**
+   * Opt-in server sort: the key `onSortChange` reports for this column. Omitted =
+   * a plain, non-sortable header (byte-identical to a table without sorting).
+   */
+  sortKey?: string;
+}
+
+export type DataTableSortDirection = "asc" | "desc";
+
+/** The one active server sort (EARS-22): a column's `sortKey` and a direction. */
+export interface DataTableSort {
+  key: string;
+  direction: DataTableSortDirection;
+}
+
+/** The below-`md` «Сортировка» select — copy is app-supplied. */
+export interface DataTableSortSelect {
+  /** Visible field label («Сортировка»). */
+  label: string;
+  /** One option per sortable column × direction, e.g. «ФИО — от А до Я». */
+  optionLabel: (
+    column: { key: string; header: string },
+    direction: DataTableSortDirection,
+  ) => string;
 }
 
 export interface DataTableRecordColumn<Row> {
@@ -104,6 +137,8 @@ export interface DataTableRecordColumn<Row> {
   context?: (row: Row) => React.ReactNode;
   /** Accessible name for the row-activation control (plain text). */
   label: (row: Row) => string;
+  /** Opt-in server sort for the record column (see `DataTableColumn.sortKey`). */
+  sortKey?: string;
 }
 
 export interface DataTableProps<Row> {
@@ -132,7 +167,46 @@ export interface DataTableProps<Row> {
   emptyNoRecords: Omit<EmptyStateProps, "variant">;
   emptyNoResults: Omit<EmptyStateProps, "variant">;
   pagination?: PaginationProps;
+  /** The active server sort — controlled; required for any `sortKey` to render. */
+  sort?: DataTableSort;
+  /** Called with the sort a header click / the select asks for. */
+  onSortChange?: (next: DataTableSort) => void;
+  /** Renders the below-`md` «Сортировка» select over the sortable columns. */
+  sortSelect?: DataTableSortSelect;
   className?: string;
+}
+
+const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
+
+/** Square-cap 16px strokes, `currentColor` — the DS inline-icon convention. */
+function SortIcon({ state }: { state: DataTableSortDirection | "none" }) {
+  const paths =
+    state === "asc"
+      ? ["M8 13V3.5", "M3.5 7.5 8 3l4.5 4.5"]
+      : state === "desc"
+        ? ["M8 3v9.5", "M3.5 8.5 8 13l4.5-4.5"]
+        : ["M4.5 6.5 8 3l3.5 3.5", "M4.5 9.5 8 13l3.5-3.5"];
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="square"
+      data-sort-icon={state}
+      className={cn(
+        "shrink-0",
+        state === "none" ? "text-muted-2" : "text-primary-action",
+      )}
+    >
+      {paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
 }
 
 const alignClass = (align: DataTableAlign | undefined) =>
@@ -179,8 +253,70 @@ export function DataTable<Row>({
   emptyNoRecords,
   emptyNoResults,
   pagination,
+  sort,
+  onSortChange,
+  sortSelect,
   className,
 }: DataTableProps<Row>) {
+  const sortSelectId = React.useId();
+  const sortColumns =
+    sort && onSortChange
+      ? [
+          ...(record.sortKey
+            ? [{ key: record.sortKey, header: record.header }]
+            : []),
+          ...columns.flatMap((column) =>
+            column.sortKey
+              ? [{ key: column.sortKey, header: column.header }]
+              : [],
+          ),
+        ]
+      : [];
+
+  /**
+   * A header cell: plain copy, or — for an opted-in column of a controlled table —
+   * the S1 sort button inside `<th aria-sort>`. The button fills the cell (the
+   * cell's padding moves onto it) so the whole header is the click target.
+   */
+  const head = (
+    key: string,
+    header: string,
+    sortKey: string | undefined,
+    className: string | undefined,
+  ) => {
+    if (!sortKey || !sort || !onSortChange) {
+      return (
+        <TableHead key={key} className={className}>
+          {header}
+        </TableHead>
+      );
+    }
+    const active = sort.key === sortKey;
+    return (
+      <TableHead
+        key={key}
+        aria-sort={active ? ARIA_SORT[sort.direction] : "none"}
+        className={cn(className, "p-0")}
+      >
+        <button
+          type="button"
+          onClick={() =>
+            onSortChange({
+              key: sortKey,
+              direction: active && sort.direction === "asc" ? "desc" : "asc",
+            })
+          }
+          className={cn(
+            "flex w-full items-center gap-1.5 px-3.5 py-3 text-left font-extrabold uppercase tracking-tight hover:bg-tint focus-visible:shadow-focus focus-visible:outline-none",
+            active ? "text-tint-foreground" : "text-foreground",
+          )}
+        >
+          <span className="min-w-0">{header}</span>
+          <SortIcon state={active ? sort.direction : "none"} />
+        </button>
+      </TableHead>
+    );
+  };
   const clickable = Boolean(rowHref || onRowClick);
   const columnCount = 1 + columns.length + (actions ? 1 : 0);
   // An actions column declares no width (it absorbs the remainder), so a grid with
@@ -395,15 +531,15 @@ export function DataTable<Row>({
           </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead className={headClass}>{record.header}</TableHead>
-              {columns.map((column) => (
-                <TableHead
-                  key={column.key}
-                  className={cn(alignClass(column.align), headClass)}
-                >
-                  {column.header}
-                </TableHead>
-              ))}
+              {head("record", record.header, record.sortKey, headClass)}
+              {columns.map((column) =>
+                head(
+                  column.key,
+                  column.header,
+                  column.sortKey,
+                  cn(alignClass(column.align), headClass),
+                ),
+              )}
               {actions ? (
                 <TableHead className="text-right">
                   <span className="sr-only">{actionsHeader ?? "Действия"}</span>
@@ -418,6 +554,34 @@ export function DataTable<Row>({
 
       {/* < md — stacked record cards, no horizontal scroll ever. */}
       <div className="flex flex-col gap-3 md:hidden">
+        {sortSelect && sort && onSortChange && sortColumns.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={sortSelectId}>{sortSelect.label}</Label>
+            <NativeSelect
+              id={sortSelectId}
+              value={`${sort.key}:${sort.direction}`}
+              onChange={(event) => {
+                const value = event.target.value;
+                const split = value.lastIndexOf(":");
+                onSortChange({
+                  key: value.slice(0, split),
+                  direction: value.slice(split + 1) as DataTableSortDirection,
+                });
+              }}
+            >
+              {sortColumns.flatMap((column) =>
+                (["asc", "desc"] as const).map((direction) => (
+                  <option
+                    key={`${column.key}:${direction}`}
+                    value={`${column.key}:${direction}`}
+                  >
+                    {sortSelect.optionLabel(column, direction)}
+                  </option>
+                )),
+              )}
+            </NativeSelect>
+          </div>
+        ) : null}
         {cards()}
         {pagination ? (
           <Pagination {...pagination} className="border-t-0 px-0" />

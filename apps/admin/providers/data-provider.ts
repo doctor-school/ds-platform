@@ -42,6 +42,8 @@ import type {
   EventKindAdminDetail,
   EventKindAdminListItem,
   UpdateEventKindRequest,
+  CongressRosterSortDir,
+  CongressRosterSortKey,
 } from "@ds/schemas";
 
 /**
@@ -948,6 +950,9 @@ export const congressRosterUrl = {
       // 044 EARS-34 — the presence filter; `present` only with its day.
       attendanceDay?: string;
       present?: "marked" | "unmarked";
+      // 044 EARS-22 — the one server sort; `presence` only with its day.
+      sort?: CongressRosterSortKey;
+      dir?: CongressRosterSortDir;
     },
   ) =>
     `${ADMIN_BASE}/events/${encodeURIComponent(eventIdOrSlug)}/roster?${relationQuery(query)}`,

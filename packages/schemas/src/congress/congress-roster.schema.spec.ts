@@ -3,6 +3,8 @@ import {
   CONGRESS_ROSTER_PAGE_SIZE_DEFAULT,
   CONGRESS_ROSTER_PAGE_SIZE_MAX,
   CONGRESS_ROSTER_SEARCH_MAX,
+  CONGRESS_ROSTER_SORT_DEFAULT,
+  CONGRESS_ROSTER_SORT_KEYS,
   CongressRosterListSchema,
   CongressRosterQuerySchema,
   CongressRosterRowSchema,
@@ -247,5 +249,64 @@ describe("044 EARS-34 — the attendance mark contract", () => {
         day: "2027-04-23T00:00:00Z",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("044 EARS-22 — the roster sort on the list query", () => {
+  it("044 EARS-22.1: sort takes exactly the visible sortable keys (EARS-37) in both directions; no sort keeps the default registration-date ascending order", () => {
+    expect([...CONGRESS_ROSTER_SORT_KEYS]).toEqual([
+      "fullName",
+      "specialty",
+      "city",
+      "phone",
+      "registeredAt",
+      "presence",
+    ]);
+    expect(CONGRESS_ROSTER_SORT_DEFAULT).toEqual({
+      sort: "registeredAt",
+      dir: "asc",
+    });
+    for (const sort of CONGRESS_ROSTER_SORT_KEYS.filter((k) => k !== "presence")) {
+      for (const dir of ["asc", "desc"] as const) {
+        expect(CongressRosterQuerySchema.parse({ sort, dir })).toMatchObject({
+          sort,
+          dir,
+        });
+      }
+    }
+    // Absent = today's order; the query carries nothing it was not given.
+    expect(CongressRosterQuerySchema.parse({})).not.toHaveProperty("sort");
+  });
+
+  it("044 EARS-37.1: the columns that left the table — workplace, region, email, mail status — and the row counter are not sort keys; an unknown direction is refused", () => {
+    for (const sort of [
+      "workplace",
+      "region",
+      "email",
+      "confirmationMailStatus",
+      "number",
+      "registrationId",
+    ]) {
+      expect(CongressRosterQuerySchema.safeParse({ sort }).success, sort).toBe(
+        false,
+      );
+    }
+    expect(
+      CongressRosterQuerySchema.safeParse({ sort: "city", dir: "up" }).success,
+    ).toBe(false);
+  });
+
+  it("044 EARS-37.2: sort=presence orders by the mark of a chosen congress day, so it is refused without attendanceDay", () => {
+    expect(
+      CongressRosterQuerySchema.safeParse({ sort: "presence", dir: "desc" })
+        .success,
+    ).toBe(false);
+    expect(
+      CongressRosterQuerySchema.parse({
+        sort: "presence",
+        dir: "desc",
+        attendanceDay: "2027-04-24",
+      }),
+    ).toMatchObject({ sort: "presence", dir: "desc", attendanceDay: "2027-04-24" });
   });
 });

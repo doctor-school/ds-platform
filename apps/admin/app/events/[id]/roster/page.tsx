@@ -10,7 +10,7 @@ import {
 import { Authenticated, useCustom } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import { Label, NativeSelect } from "@ds/design-system";
-import type { DataTableColumn } from "@ds/design-system/blocks";
+import type { DataTableColumn, DataTableSort } from "@ds/design-system/blocks";
 import type { CongressRosterList, CongressRosterRow } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { AttendanceCell } from "@/components/attendance-cell";
@@ -28,6 +28,12 @@ import {
   congressDayShortLabel,
   congressRosterCells,
   congressRosterRowNumber,
+  rosterSortFromAddress,
+  rosterSortHref,
+  rosterSortKeyOf,
+  rosterSortQuery,
+  ROSTER_SORT_DEFAULT,
+  ROSTER_SORT_PARAM,
   type AttendanceFilter,
   type CongressRosterCells,
 } from "@/lib/congress-roster";
@@ -56,7 +62,8 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * The roster is SERVER-paged and server-searched (`GET /v1/admin/events/:id/roster`,
  * #2311): `q`, `page` and `pageSize` go to the route and `total` comes back from
  * it, so nothing is sliced here. The query lives in component state exactly as
- * on the baseline lists (specialties, directions) — no address-bar sync.
+ * on the baseline lists (specialties, directions) — no address-bar sync — except
+ * the sort, below.
  *
  * No create button, no row link, no row action (EARS-24), and no lifecycle
  * facet — a registration has no «опубликовано / снято» state to filter by. One
@@ -66,8 +73,16 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * `createHref`. A `?q=` in the address seeds the search. Columns follow EARS-37
  * (№, ФИО, специальность, город, телефон, дата регистрации, присутствие); the
  * table's record column (always first in `DataTable`) is the № counter, so ФИО
- * is the first declared column and the order reads №, ФИО, … exactly. Sort
- * (EARS-22), column filters (EARS-23) and print (EARS-26) are their own handlers.
+ * is the first declared column and the order reads №, ФИО, … exactly. Column
+ * filters (EARS-23) and print (EARS-26) are their own handlers.
+ *
+ * EARS-22/EARS-37 — the server sort (owner Stage-A pick S1, #2316). Every
+ * visible column but № is a sort header of `DataTable`; «Присутствие» sorts by
+ * the chosen congress day's mark, so it is a sort header only while a day is
+ * chosen. One sort is always active — registration date ascending until the
+ * operator picks another — and it lives in the address (`?sort=&dir=`), so a
+ * sorted roster is linkable; any sort change returns to page 1. Below `md` the
+ * same sort is the «Сортировка» select over the record cards.
  *
  * EARS-36 — a row click (or Enter on the row's focused control) opens the
  * participant card in the side panel over the roster; ↑/↓ in the panel walk the
@@ -79,8 +94,8 @@ import { congressRosterUrl } from "@/providers/data-provider";
  * EARS-34 — the other write on this screen: the «Присутствие» column carries a
  * box per congress day (`AttendanceCell`), and the server-side presence filter
  * (day + «Присутствовал» / «Не отмечен») sits in the same filter bar, composing
- * with search and paging. The per-day attendance sort → #2316 (EARS-22/EARS-37
- * server sort; tracked in its AC since 2026-09-28).
+ * with search, paging and the sort — whose «Присутствие» header orders by the
+ * chosen day's mark.
  */
 export default function CongressRosterPage() {
   const t = useTranslations();
@@ -142,9 +157,22 @@ export default function CongressRosterPage() {
   const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>(
     ATTENDANCE_FILTER_INITIAL,
   );
+  // 044 EARS-22 — the sort is read from the address on every render.
+  const sort = rosterSortFromAddress(searchParams, attendanceFilter.day);
+  const changeSort = (next: DataTableSort) => {
+    setQuery({ ...query, page: 1 });
+    router.replace(rosterSortHref(pathname, searchParams.toString(), next), {
+      scroll: false,
+    });
+  };
   const changeAttendanceFilter = (next: AttendanceFilter) => {
     setAttendanceFilter(next);
     setQuery({ ...query, page: 1 });
+    // The presence sort is the chosen day's mark: with the day gone it falls
+    // back to the default in the address too, never to a stale «presence».
+    if (!next.day && searchParams.get(ROSTER_SORT_PARAM) === "presence") {
+      changeSort(ROSTER_SORT_DEFAULT);
+    }
   };
 
   const { query: request } = useCustom<CongressRosterList>({
@@ -153,6 +181,7 @@ export default function CongressRosterPage() {
       page: query.page,
       pageSize: query.pageSize,
       ...attendanceFilterQuery(attendanceFilter),
+      ...rosterSortQuery(sort),
     }),
     method: "get",
   });
@@ -176,6 +205,7 @@ export default function CongressRosterPage() {
     key,
     header: t(`congressRoster.columns.${key}`),
     width,
+    sortKey: rosterSortKeyOf(key, attendanceFilter.day),
     render: (row) => (
       <span data-testid={`roster-cell-${key}`}>{row.cells[key]}</span>
     ),
@@ -190,8 +220,13 @@ export default function CongressRosterPage() {
     column("registeredAt", "15%"),
     {
       key: "attendance",
-      header: t("congressRoster.columns.attendance"),
+      header: attendanceFilter.day
+        ? t("congressRoster.columns.attendanceOnDay", {
+            day: congressDayShortLabel(attendanceFilter.day),
+          })
+        : t("congressRoster.columns.attendance"),
       width: "14%",
+      sortKey: rosterSortKeyOf("attendance", attendanceFilter.day),
       render: (row) => (
         // Above the row's stretched activation overlay (`DataTable`), so a
         // box is its own click target and never opens the card.
@@ -407,8 +442,28 @@ export default function CongressRosterPage() {
             error={
               request.isError ? t("congressRoster.errors.listFailed") : null
             }
-            query={query}
-            onQueryChange={setQuery}
+            query={{ ...query, sort }}
+            onQueryChange={({ sort: nextSort, ...next }) => {
+              if (
+                nextSort &&
+                (nextSort.key !== sort.key ||
+                  nextSort.direction !== sort.direction)
+              ) {
+                changeSort(nextSort);
+              } else {
+                setQuery(next);
+              }
+            }}
+            sortSelect={{
+              label: t("congressRoster.sort.label"),
+              optionLabel: (column, direction) =>
+                t("congressRoster.sort.option", {
+                  column: column.header,
+                  order: t(
+                    `congressRoster.sort.order.${sortOrderKind(column.key)}.${direction}`,
+                  ),
+                }),
+            }}
             emptyTitle={t("congressRoster.empty")}
             emptyDescription={t("congressRoster.emptyDescription")}
             testId="roster"
@@ -426,4 +481,12 @@ export default function CongressRosterPage() {
       </AppShell>
     </Authenticated>
   );
+}
+
+/** Which «order» wording a sort key reads in — «от А до Я», «новые сверху», … */
+function sortOrderKind(key: string): "text" | "number" | "date" | "presence" {
+  if (key === "registeredAt") return "date";
+  if (key === "phone") return "number";
+  if (key === "presence") return "presence";
+  return "text";
 }

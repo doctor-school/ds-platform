@@ -1,0 +1,6 @@
+---
+"@ds/design-system": minor
+"@ds/admin": minor
+---
+
+Congress roster sort in admin (044 EARS-22/EARS-37, owner Stage-A pick S1). `DataTable` gains an opt-in server-sort API: a column (or the record column) declares `sortKey`, the table is controlled through `sort` + `onSortChange`, and a sortable header renders as a `<button>` inside `<th aria-sort>` with an always-visible muted double arrow and, on the active column, a single direction arrow in the `primary-action` accent; below `md` `sortSelect` renders a «Сортировка» select over the record cards. Tables without `sortKey` are unchanged. `AdminDataList` carries an optional `sort` in its query state (a sort change resets to page 1). The roster sorts by ФИО, специальность, город, телефон and дата регистрации, and by «Присутствие» for the chosen congress day; the sort lives in the address (`?sort=&dir=`) and defaults to registration date ascending.

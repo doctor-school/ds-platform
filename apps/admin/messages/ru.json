@@ -1599,7 +1599,21 @@
       "city": "Город",
       "phone": "Телефон",
       "registeredAt": "Дата регистрации",
-      "attendance": "Присутствие"
+      "attendance": "Присутствие",
+      "attendanceOnDay": "Присутствие · день {day}"
+    },
+    "sort": {
+      "label": "Сортировка",
+      "option": "{column} — {order}",
+      "order": {
+        "text": { "asc": "от А до Я", "desc": "от Я до А" },
+        "number": { "asc": "по возрастанию", "desc": "по убыванию" },
+        "date": { "asc": "старые сверху", "desc": "новые сверху" },
+        "presence": {
+          "asc": "сначала не отмеченные",
+          "desc": "сначала отмеченные"
+        }
+      }
     },
     "attendance": {
       "dayLabel": "{short} — присутствие {day}"

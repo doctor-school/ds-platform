@@ -34,7 +34,8 @@ import { visible } from "./support/visible";
  *
  * `E2E_SHOT_DIR` opts into the approved-non-canvas `responsive-web` evidence:
  * `participant-card-panel-{desktop,mobile}-{light,dark}.png`,
- * `participant-card-attendance.png`, `roster-seven-columns.png`. Dark = the
+ * `participant-card-attendance.png`, `roster-seven-columns.png`,
+ * `participant-card-short-email-{desktop,mobile}-light.png`. Dark = the
  * design-system `.dark` token block on the document root.
  */
 const SHOT_DIR = process.env.E2E_SHOT_DIR;
@@ -90,6 +91,41 @@ async function shot(page: Page, name: string): Promise<void> {
   if (!SHOT_DIR) return;
   await mkdir(SHOT_DIR, { recursive: true });
   await page.screenshot({ path: path.join(SHOT_DIR, `${name}.png`) });
+}
+
+/**
+ * The panel at rest: no running animation or transition inside it and its box
+ * unchanged across consecutive frames — a viewport switch re-lays the Sheet
+ * (inspector ↔ full cover) and slides it in, and a capture mid-slide shows the
+ * card shifted off the screen edge.
+ */
+async function settled(panel: Locator): Promise<void> {
+  await panel.evaluate(async (el) => {
+    const frame = () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const box = () => {
+      const r = el.getBoundingClientRect();
+      return `${r.x},${r.y},${r.width},${r.height}`;
+    };
+    for (;;) {
+      await frame();
+      await Promise.all(
+        el
+          .getAnimations({ subtree: true })
+          .map((a) => a.finished.catch(() => undefined)),
+      );
+      const before = box();
+      await frame();
+      await frame();
+      if (
+        box() === before &&
+        el
+          .getAnimations({ subtree: true })
+          .every((a) => a.playState !== "running")
+      )
+        return;
+    }
+  });
 }
 
 function nameCells(page: Page): Locator {
@@ -444,8 +480,10 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
         "data-modal",
         name === "desktop" ? "false" : "true",
       );
+      await settled(panel);
       for (const palette of ["light", "dark"] as const) {
         await setPalette(page, palette);
+        await settled(panel);
         await shot(page, `participant-card-panel-${name}-${palette}`);
       }
     }
@@ -467,5 +505,43 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
     await expect(card(page).getByTestId("participant-card-email")).toHaveText(
       duplicateEmail,
     );
+  });
+  test("044 EARS-36: a short email reads whole on the desktop inspector and the phone cover", async () => {
+    test.skip(!eventId, "depends on the roster seeded above");
+    const page = desk;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/events/${eventId}/roster`);
+    const short = {
+      surname: "Егорова",
+      firstName: "Ольга",
+      patronymic: "Петровна",
+      phone: "+7 (999) 555-33-44",
+      email: `e${Date.now() % 1e6}@ya.ru`,
+    };
+    expect(await addDeskParticipant(page, short)).toBe("accepted");
+    await expect(page.getByTestId("roster-total")).toHaveText("Найдено: 5");
+    await rowControl(page, fullName(short)).click();
+    const panel = card(page);
+    await expect(panel.getByTestId("participant-card-fullName")).toHaveText(
+      fullName(short),
+    );
+    for (const [name, width, height] of [
+      ["desktop", 1440, 900],
+      ["mobile", 390, 844],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect(panel).toHaveAttribute(
+        "data-modal",
+        name === "desktop" ? "false" : "true",
+      );
+      await settled(panel);
+      await expectOneLineValue(
+        panel.getByTestId("participant-card-email"),
+        short.email,
+        width,
+        true,
+      );
+      await shot(page, `participant-card-short-email-${name}-light`);
+    }
   });
 });

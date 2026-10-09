@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { UpcomingBroadcastCardSchema } from "./events.schema.js";
 import {
+  ACADEMY_EVENT_FACETS_QUERY_CODEC,
+  parseAcademyEventFacets,
   PastBroadcastCardSchema,
+  PublicEventFacetOptionsSchema,
   PublicEventListingPageSchema,
   PublicEventListingQuerySchema,
 } from "./public-listing.schema.js";
@@ -93,7 +96,10 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     if (!bare.success) return;
     expect(bare.data.limit).toBeUndefined();
     expect(bare.data.cursor).toBeUndefined();
-    const paged = PublicEventListingQuerySchema.safeParse({ timeframe: "past", limit: "1" });
+    const paged = PublicEventListingQuerySchema.safeParse({
+      timeframe: "past",
+      limit: "1",
+    });
     expect(paged.success && paged.data.limit).toBe(1);
   });
 
@@ -119,6 +125,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
       counts: { upcoming: 5, past: 0, upcomingSchools: 2 },
       pagination: { nextCursor: null, hasMore: true },
       horizon: {
+        today: "2026-10-08",
         from: "2026-10-08",
         to: "2026-10-22",
         nextTo: "2026-11-05",
@@ -130,6 +137,12 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.horizon?.nextTo).toBe("2026-11-05");
+    // D10 — the api's today rides the horizon page; one without it is refused.
+    expect(parsed.data.horizon?.today).toBe("2026-10-08");
+    const { today: _today, ...noToday } = parsed.data.horizon!;
+    expect(
+      PublicEventListingPageSchema.safeParse({ ...parsed.data, horizon: noToday }).success,
+    ).toBe(false);
   });
 
   it("NEW: a past horizon page names the older `from` and the remainder; a horizon without them is refused (rows 30, 32)", () => {
@@ -141,6 +154,7 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
     const parsed = PublicEventListingPageSchema.safeParse({
       ...base,
       horizon: {
+        today: "2026-10-08",
         from: "2026-09-24",
         to: "2026-10-09",
         nextTo: null,
@@ -158,6 +172,92 @@ describe("public event listing contract (wave-2 gate §4.2)", () => {
       PublicEventListingPageSchema.safeParse({
         ...base,
         horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+/**
+ * Wave-2 entry gate §4.2 (PR 2.5) — the Academy facets of 014 EARS-12 on the
+ * listing, month and counts reads, encoded by the one codec grammar the doctor
+ * facets use (repeatable keys, comma form, unknown keys dropped).
+ */
+describe("014 EARS-12 Academy facets contract (wave-2 gate §4.2, PR 2.5)", () => {
+  it("014 EARS-12: decodes project, expert and topic as repeatable slug lists", () => {
+    const parsed = parseAcademyEventFacets({
+      project: ["ortho", "cardio"],
+      expert: "ivanov-ivan,petrov-petr",
+      topic: "rheumatology",
+      tab: "past",
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({
+      project: ["ortho", "cardio"],
+      expert: ["ivanov-ivan", "petrov-petr"],
+      topic: ["rheumatology"],
+    });
+  });
+
+  it("014 EARS-12: no facet means every facet empty, never a filter", () => {
+    expect(parseAcademyEventFacets({}).data).toEqual({
+      project: [],
+      expert: [],
+      topic: [],
+    });
+  });
+
+  it("014 EARS-12: a malformed slug is refused at the boundary", () => {
+    expect(parseAcademyEventFacets({ topic: "Not A Slug" }).success).toBe(
+      false,
+    );
+  });
+
+  it("014 EARS-12: re-encodes in the fixed key order, repeated form only", () => {
+    expect(
+      ACADEMY_EVENT_FACETS_QUERY_CODEC.reencode({
+        topic: "a,b",
+        project: "p",
+      }),
+    ).toEqual([
+      ["project", "p"],
+      ["topic", "a"],
+      ["topic", "b"],
+    ]);
+  });
+
+  it("014 EARS-12: the listing query carries the facets beside the horizon", () => {
+    const parsed = PublicEventListingQuerySchema.parse({
+      timeframe: "past",
+      project: ["ortho"],
+    });
+    expect(parsed.project).toEqual(["ortho"]);
+    expect(parsed.expert).toEqual([]);
+    expect(parsed.topic).toEqual([]);
+  });
+
+  it("014 EARS-12: the page carries the facet options block, additively", () => {
+    const page = {
+      data: [],
+      counts: { upcoming: 0, past: 0, upcomingSchools: 0 },
+      pagination: { nextCursor: null, hasMore: false },
+    };
+    expect(PublicEventListingPageSchema.safeParse(page).success).toBe(true);
+    const withFacets = {
+      ...page,
+      facets: {
+        project: [{ slug: "ortho", title: "Ортобиология", count: 2 }],
+        expert: [{ slug: "ivanov", title: "Иванов Иван", count: 0 }],
+        topic: [],
+      },
+    };
+    expect(PublicEventListingPageSchema.safeParse(withFacets).success).toBe(
+      true,
+    );
+    expect(
+      PublicEventFacetOptionsSchema.safeParse({
+        project: [{ slug: "ortho", title: "x", count: -1 }],
+        expert: [],
+        topic: [],
       }).success,
     ).toBe(false);
   });

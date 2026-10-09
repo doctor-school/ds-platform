@@ -195,6 +195,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(ids).not.toContain(far.id);
       expect(body.horizon?.from).toBe(today);
       expect(body.horizon?.to).toBe(to);
+      // D10 — the horizon page carries the api's today (МСК).
+      expect(body.horizon?.today).toBe(doctorEventsFeedDayOf(new Date()));
       // A horizon page is not a cursor page.
       expect(body.pagination.nextCursor).toBeNull();
     });
@@ -233,6 +235,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const past = await page("timeframe=past");
       expect(past.horizon?.from).toBe(addDoctorEventsFeedDays(today, -14));
+      expect(past.horizon?.today).toBe(doctorEventsFeedDayOf(new Date()));
       expect(past.horizon?.to).toBe(addDoctorEventsFeedDays(today, 1));
       expect(past.data.map((card) => card.id)).toContain(pastNear.id);
       expect(past.data.map((card) => card.id)).not.toContain(pastOld.id);

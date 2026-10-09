@@ -54,6 +54,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let lonelyEventId = "";
     /** Far past the default horizon, on the adjacency-less direction (EARS-3.7/3.8/9.1). */
     let lonelyFarEventId = "";
+    /** The adjacency-less direction (the facet-narrowed «показать ещё» case). */
+    let lonelyDirectionId = "";
     let expertsEventId = "";
     /** «Прошедшие» fixtures on the adjacency-less direction (gate rows 10/30/31/32). */
     let pastMontageEventId = "";
@@ -201,6 +203,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       await linkSpecialty(own, withAdjacency!.id);
       await linkSpecialty(lonelyDirection, lonely!.id);
+      lonelyDirectionId = lonelyDirection;
       const tenseDirection = await makeDirection("Тенз ленты");
       await linkSpecialty(tenseDirection, tenseSpecialty!.id);
       await makeEdge(own, adjacent);
@@ -319,8 +322,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       // Beyond «Будущие» [today, +14): two in the next 14-day step, one far.
       upcomingStepIds = [
-        await makeEvent({ title: "Через 20 дней", startsAt: at(20, 12), directionId: tenseDirection }),
-        await makeEvent({ title: "Через 22 дня", startsAt: at(22, 12), directionId: tenseDirection }),
+        await makeEvent({
+          title: "Через 20 дней",
+          startsAt: at(20, 12),
+          directionId: tenseDirection,
+        }),
+        await makeEvent({
+          title: "Через 22 дня",
+          startsAt: at(22, 12),
+          directionId: tenseDirection,
+        }),
       ];
       upcomingFarId = await makeEvent({
         title: "Через 50 дней",
@@ -491,6 +502,102 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(rejected.statusCode).toBeLessThan(500);
     });
 
+    it("NEW: the feed carries the doctor facet options — every kind of the tense with its count under the other facets, a zero-yield option kept (row 58, D9)", async () => {
+      const feed = await readFeed({ specialtyCode: adjacentCarryingCode });
+      const kinds = feed.facets?.kind ?? [];
+      const card = feed.days.flatMap((day) => day.items).at(0)!;
+      const option = kinds.find((entry) => entry.slug === card.kind.slug);
+      expect(option?.title).toBe(card.kind.title);
+      expect(option!.count).toBeGreaterThanOrEqual(1);
+      // Ordered by title, then slug — the Academy options' order.
+      const order = kinds.map((entry) => `${entry.title}\u0000${entry.slug}`);
+      expect(order).toEqual([...order].sort());
+      // A kind's own selection never narrows its own options …
+      const picked = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: `?kind=${card.kind.slug}`,
+      });
+      expect(picked.facets?.kind.map((entry) => entry.slug)).toEqual(
+        kinds.map((entry) => entry.slug),
+      );
+      // … while another facet that selects nothing keeps every option at 0.
+      const narrowed = await readFeed({
+        specialtyCode: adjacentCarryingCode,
+        query: "?city=Нигдеград",
+      });
+      expect(narrowed.facets?.kind.map((entry) => entry.slug)).toEqual(
+        kinds.map((entry) => entry.slug),
+      );
+      expect(narrowed.facets?.kind.every((entry) => entry.count === 0)).toBe(
+        true,
+      );
+      // No card carries a city today (007 authors none) — so no city option.
+      expect(feed.facets?.city).toEqual([]);
+    });
+
+    it("NEW: a facet-narrowed feed names the next bound and the remainder of the narrowed set — `format` and `kind` live in the one SQL predicate (row 58, #1805)", async () => {
+      // An offline event at +20 sits between the window (+14) and the online
+      // +40 event: unfaceted it is the next bound; under `format=online` the
+      // probe must skip it, and under `format=offline` it is all that remains.
+      const offlineId = await makeEvent({
+        title: "Очное событие",
+        startsAt: at(20, 12),
+        directionId: lonelyDirectionId,
+      });
+      await pool.query(
+        "UPDATE events SET participation_format = 'offline' WHERE id = $1",
+        [offlineId],
+      );
+      try {
+        const all = await readFeed({ specialtyCode: lonelyCode });
+        expect(all.nextTo).toBe(addDoctorEventsFeedDays(today, 28));
+        expect(all.remaining).toBe(2);
+
+        const online = await readFeed({
+          specialtyCode: lonelyCode,
+          query: "?format=online",
+        });
+        expect(online.nextTo).toBe(addDoctorEventsFeedDays(today, 42));
+        expect(online.remaining).toBe(1);
+
+        const offline = await readFeed({
+          specialtyCode: lonelyCode,
+          query: "?format=offline",
+        });
+        // The default window holds no offline event, so the extent opens on
+        // the first match (#1973): the +20 event, nothing beyond it.
+        expect(
+          offline.days.flatMap((day) => day.items.map((item) => item.id)),
+        ).toEqual([offlineId]);
+        expect(offline.to).toBe(addDoctorEventsFeedDays(today, 28));
+        expect(offline.nextTo).toBeNull();
+        expect(offline.remaining).toBe(0);
+
+        const card = all.days.flatMap((day) => day.items).at(0)!;
+        const kindAndOffline = await readFeed({
+          specialtyCode: lonelyCode,
+          query: `?format=offline&kind=${card.kind.slug}`,
+        });
+        expect(kindAndOffline.totalCount + kindAndOffline.remaining).toBe(1);
+        const noKind = await readFeed({
+          specialtyCode: lonelyCode,
+          query: "?kind=no-such-kind",
+        });
+        expect(noKind.nextTo).toBeNull();
+        expect(noKind.remaining).toBe(0);
+        // The kind options count under the `format` selection, in SQL.
+        expect(
+          offline.facets?.kind.find((entry) => entry.slug === card.kind.slug)
+            ?.count,
+        ).toBe(1);
+      } finally {
+        await pool.query("DELETE FROM event_directions WHERE event_id = $1", [
+          offlineId,
+        ]);
+        await pool.query("DELETE FROM events WHERE id = $1", [offlineId]);
+      }
+    });
+
     it("EARS-3.6: a stale specialty cookie degrades to the untargeted feed instead of refusing it (EARS-12)", async () => {
       const response = await app.inject({
         method: "GET",
@@ -543,6 +650,33 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).toContain(lonelyFarEventId);
     });
 
+    it("NEW: a facet whose matches all lie beyond the default window opens on the first match (both tenses, doctor host, #1973)", async () => {
+      const idsOf = (feed: { days: { items: { id: string }[] }[] }) =>
+        feed.days.flatMap((day) => day.items.map((item) => item.id));
+      // Only the +40 event matches: the default [today, +14) window holds none,
+      // so the default extent reaches the step that covers it.
+      const upcoming = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?q=${encodeURIComponent("Через сорок дней")}`,
+      });
+      expect(idsOf(upcoming)).toEqual([lonelyFarEventId]);
+      expect(upcoming.from).toBe(today);
+      expect(upcoming.to).toBe(addDoctorEventsFeedDays(today, 42));
+      expect(upcoming.nextTo).toBeNull();
+      expect(upcoming.remaining).toBe(0);
+
+      // Only the −30 event matches: the default [−14, +1) window holds none,
+      // so the default extent reaches back to the step that covers it.
+      const past = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?tense=past&q=${encodeURIComponent("Прошедший месяц назад")}`,
+      });
+      expect(idsOf(past)).toEqual([pastOldEventId]);
+      expect(past.to).toBe(addDoctorEventsFeedDays(today, 1));
+      expect(past.nextFrom).toBeNull();
+      expect(past.remaining).toBe(0);
+    });
+
     it("EARS-9.1: an empty window whose future is non-empty still offers «показать ещё»", async () => {
       const from = addDoctorEventsFeedDays(today, 20);
       const feed = await readFeed({
@@ -556,6 +690,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // reachable, so the control stays offered and its target covers it.
       expect(feed.nextTo).not.toBeNull();
       expect(feed.nextTo! > addDoctorEventsFeedDays(today, 40)).toBe(true);
+    });
+
+    it("D10: every feed read carries the api's today (МСК), whatever extent the URL echoes", async () => {
+      // A stale shared link: its `from` is days before today.
+      const stale = await readFeed({
+        specialtyCode: lonelyCode,
+        query: `?from=${addDoctorEventsFeedDays(today, -3)}&to=${addDoctorEventsFeedDays(today, 20)}`,
+      });
+      expect(stale.from).toBe(addDoctorEventsFeedDays(today, -3));
+      expect(stale.today).toBe(doctorEventsFeedDayOf(new Date()));
+      const past = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      expect(past.today).toBe(doctorEventsFeedDayOf(new Date()));
     });
 
     it("NEW: «Прошедшие» extends BACKWARD — `nextFrom` covers the nearest older event beyond the 14-day default (rows 30, 32)", async () => {
@@ -675,25 +821,37 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(ids).toContain(todayLiveId);
       expect(ids).not.toContain(todayEndedId);
       // Soonest first.
-      expect(ids.indexOf(todayLiveId)).toBeLessThan(ids.indexOf(todayNotStartedId));
+      expect(ids.indexOf(todayLiveId)).toBeLessThan(
+        ids.indexOf(todayNotStartedId),
+      );
       expect(
-        feed.days.flatMap((day) => day.items).every((item) => item.state !== "recorded"),
+        feed.days
+          .flatMap((day) => day.items)
+          .every((item) => item.state !== "recorded"),
       ).toBe(true);
     });
 
     it("NEW: «Прошедшие» lists today's ended эфир and never today's not-started or live one (row 30)", async () => {
-      const feed = await readFeed({ specialtyCode: tenseCode, query: "?tense=past" });
+      const feed = await readFeed({
+        specialtyCode: tenseCode,
+        query: "?tense=past",
+      });
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
       expect(ids).toContain(todayEndedId);
       expect(ids).not.toContain(todayNotStartedId);
       expect(ids).not.toContain(todayLiveId);
       expect(
-        feed.days.flatMap((day) => day.items).every((item) => item.state === "recorded"),
+        feed.days
+          .flatMap((day) => day.items)
+          .every((item) => item.state === "recorded"),
       ).toBe(true);
     });
 
     it("NEW: «Прошедшие» reads newest first — days and the events within them (row 30, LD-13)", async () => {
-      const feed = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
       const days = feed.days.map((day) => day.day);
       expect(days).toEqual([...days].sort().reverse());
       const ids = feed.days.flatMap((day) => day.items.map((item) => item.id));
@@ -724,21 +882,29 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(widened.nextBatch).toBe(1);
       expect(widened.remaining).toBe(1);
 
-      const past = await readFeed({ specialtyCode: tenseCode, query: "?tense=past" });
+      const past = await readFeed({
+        specialtyCode: tenseCode,
+        query: "?tense=past",
+      });
       expect(past.remaining).toBe(2);
       expect(past.nextBatch).toBe(1);
       const older = await readFeed({
         specialtyCode: tenseCode,
         query: `?tense=past&from=${past.nextFrom!}&to=${past.to}`,
       });
-      const olderIds = older.days.flatMap((day) => day.items.map((item) => item.id));
+      const olderIds = older.days.flatMap((day) =>
+        day.items.map((item) => item.id),
+      );
       expect(olderIds).toContain(pastStepId);
       expect(olderIds).not.toContain(pastFarId);
       expect(older.totalCount - past.totalCount).toBe(past.nextBatch);
     });
 
     it("NEW: a published recording carries its duration for the card's «Запись · N мин» line (rows 10, 31)", async () => {
-      const feed = await readFeed({ specialtyCode: lonelyCode, query: "?tense=past" });
+      const feed = await readFeed({
+        specialtyCode: lonelyCode,
+        query: "?tense=past",
+      });
       const card = (id: string) =>
         feed.days.flatMap((day) => day.items).find((item) => item.id === id);
       expect(card(pastMontageEventId)?.recording?.durationSec).toBe(54 * 60);
@@ -766,7 +932,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
                   $1::timestamptz + $3::int * g * interval '12 hours', 60, $5, ${eventClassificationSql("doctors")}
            FROM generate_series(0, $2::int - 1) AS g
            RETURNING id`,
-          [anchor.toISOString(), CAP_WALK_COUNT, sign, randomUUID().slice(0, 8), state],
+          [
+            anchor.toISOString(),
+            CAP_WALK_COUNT,
+            sign,
+            randomUUID().slice(0, 8),
+            state,
+          ],
         );
         const ids = inserted.rows.map((row) => row.id);
         const links = await pool.query<{ id: string }>(
@@ -804,7 +976,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         feed.days.flatMap((day) => day.items.map((item) => item.id));
 
       it("NEW: «Прошедшие» past the cap — every «Показать ещё» returns new events, the page stays within the cap, the walk reaches the oldest event and ends", async () => {
-        let feed = await readFeed({ specialtyCode: capCode, query: "?tense=past" });
+        let feed = await readFeed({
+          specialtyCode: capCode,
+          query: "?tense=past",
+        });
         let steps = 0;
         let crossed = false;
         while (feed.nextFrom !== null) {

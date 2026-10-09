@@ -5,8 +5,10 @@ import {
   type EventsFeedCard,
   buildFeedItems,
   emptyFeedState,
+  feedReadsEmpty,
   liveStripView,
   myEventsCut,
+  pageTodayOf,
   showMoreLabel,
 } from "./feed";
 
@@ -338,6 +340,33 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     expect(state.action?.href).toBe("/events");
   });
 
+  it("NEW: an Academy facet-emptied feed names the facet by its title and links its removal (row 58)", () => {
+    const state = emptyFeedState(
+      { project: ["orto", "sport"], topic: ["metrics"] },
+      {
+        listing: "/webinars",
+        noun: { one: "эфир", few: "эфира", many: "эфиров" },
+        copy: FEED_COPY,
+        titles: { project: [{ slug: "orto", title: "Школа ортобиологии", count: 0 }] },
+      },
+    );
+    expect(state.title).toBe("Нет эфиров по фильтру «Проект: Школа ортобиологии»");
+    expect(state.action?.href).toBe("/webinars?project=sport&topic=metrics");
+  });
+
+  it("NEW: a kind chip names the kind by its title", () => {
+    const state = emptyFeedState(
+      { kind: ["lecture"] },
+      {
+        listing: "/events",
+        noun: { one: "событие", few: "события", many: "событий" },
+        copy: FEED_COPY,
+        titles: { kind: [{ slug: "lecture", title: "Лекция", count: 0 }] },
+      },
+    );
+    expect(state.title).toBe("Нет событий по фильтру «Вид события: Лекция»");
+  });
+
   it("no facet ⇒ the plain empty feed, no action", () => {
     const state = emptyFeedState(
       {},
@@ -345,5 +374,41 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     );
     expect(state.title).toBe("Эфиров нет");
     expect(state.action).toBeNull();
+  });
+});
+
+describe("the page's one today (wave-2 gate §4.3 D10)", () => {
+  const page = {
+    today: "2026-10-07",
+    cards: [],
+    horizon: { from: "2026-10-05", to: "2026-11-02", nextTo: null, nextFrom: null },
+    remaining: 0,
+    nextBatch: 0,
+    facetOptions: {},
+    matching: 0,
+  };
+
+  it("D10: the page takes the api's today from the feed read — not the extent, not the clock", () => {
+    const clock = new Date("2026-12-31T12:00:00.000Z");
+    expect(pageTodayOf({ ok: true, value: page }, clock)).toBe("2026-10-07");
+  });
+
+  it("D10: only a failed feed read falls back to the МСК day of the page clock", () => {
+    // 22:30 UTC on 7 Oct is 01:30 МСК on 8 Oct.
+    expect(pageTodayOf({ ok: false }, new Date("2026-10-07T22:30:00.000Z"))).toBe("2026-10-08");
+  });
+});
+
+describe("feedReadsEmpty — no empty state while matches lie beyond (#1973)", () => {
+  it("an extent with no cards and nothing beyond is empty", () => {
+    expect(feedReadsEmpty({ cards: [], remaining: 0 })).toBe(true);
+  });
+
+  it("an extent with no cards but matches beyond is NOT empty — «Показать ещё» leads to them", () => {
+    expect(feedReadsEmpty({ cards: [], remaining: 8 })).toBe(false);
+  });
+
+  it("an extent holding cards is never empty", () => {
+    expect(feedReadsEmpty({ cards: [card()], remaining: 0 })).toBe(false);
   });
 });

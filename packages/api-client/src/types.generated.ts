@@ -2228,6 +2228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storefront/doctor/events/month-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["DoctorEventsPublicController_monthCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storefront/doctor/me/events": {
         parameters: {
             query?: never;
@@ -2785,6 +2801,18 @@ export interface components {
                 }[];
                 label: string;
             }[];
+            facets?: {
+                city: {
+                    count: number;
+                    slug: string;
+                    title: string;
+                }[];
+                kind: {
+                    count: number;
+                    slug: string;
+                    title: string;
+                }[];
+            };
             from: string;
             nextBatch: number;
             nextFrom: string | null;
@@ -2800,6 +2828,7 @@ export interface components {
             /** @enum {string} */
             tense: "upcoming" | "past";
             to: string;
+            today: string;
             totalCount: number;
         };
         DoctorEventsMonthGridDto: {
@@ -2807,6 +2836,19 @@ export interface components {
                 count: number;
                 date: string;
                 hasLive: boolean;
+            }[];
+            entries: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                participationFormat: "online" | "offline" | "hybrid";
+                school: string;
+                slug: string;
+                /** Format: date-time */
+                startsAt: string;
+                /** @enum {string} */
+                state: "published" | "live" | "ended" | "in_archive";
+                title: string;
             }[];
             month: string;
             targeting: {
@@ -3028,6 +3070,8 @@ export interface components {
         MonthBroadcastListDto: {
             /** Format: uuid */
             id: string;
+            /** @enum {string} */
+            participationFormat: "online" | "offline" | "hybrid";
             school: string;
             slug: string;
             /** Format: date-time */
@@ -3035,6 +3079,10 @@ export interface components {
             /** @enum {string} */
             state: "published" | "live" | "ended" | "in_archive";
             title: string;
+        }[];
+        MonthlyEventCountsDto: {
+            count: number;
+            month: number;
         }[];
         OtpRequestDto: {
             captchaToken?: string;
@@ -3128,6 +3176,23 @@ export interface components {
                 state: "ended";
                 title: string;
             })[];
+            facets?: {
+                expert: {
+                    count: number;
+                    slug: string;
+                    title: string;
+                }[];
+                project: {
+                    count: number;
+                    slug: string;
+                    title: string;
+                }[];
+                topic: {
+                    count: number;
+                    slug: string;
+                    title: string;
+                }[];
+            };
             horizon?: {
                 from: string;
                 nextBatch: number;
@@ -3135,6 +3200,7 @@ export interface components {
                 nextTo: string | null;
                 remaining: number;
                 to: string;
+                today: string;
             };
             pagination: {
                 hasMore: boolean;
@@ -6131,11 +6197,14 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: string;
+                expert?: string[];
                 from?: string;
                 limit?: number;
                 month?: string;
+                project?: string[];
                 timeframe?: "upcoming" | "past";
                 to?: string;
+                topic?: string[];
             };
             header?: never;
             path?: never;
@@ -6272,6 +6341,9 @@ export interface operations {
     EventsPublicController_monthCounts: {
         parameters: {
             query: {
+                expert?: string[];
+                project?: string[];
+                topic?: string[];
                 year: string;
             };
             header?: never;
@@ -6284,7 +6356,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MonthlyEventCountsDto"];
+                };
             };
         };
     };
@@ -6625,6 +6699,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DoctorEventsMonthGridDto"];
+                };
+            };
+        };
+    };
+    DoctorEventsPublicController_monthCounts: {
+        parameters: {
+            query: {
+                city?: string[];
+                format?: string[];
+                free?: boolean;
+                kind?: string[];
+                nmo?: boolean;
+                q?: unknown;
+                specialty?: string[];
+                /** @description ISO YYYY */
+                year: unknown;
+            };
+            header: {
+                cookie: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyEventCountsDto"];
                 };
             };
         };

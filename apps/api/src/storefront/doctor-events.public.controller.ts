@@ -18,8 +18,10 @@ import {
   type EventsLiveRead,
   type DoctorEventsMonthGrid,
   type EventPageView,
+  type MonthlyEventCount,
   type ParticipationCta,
   parseDoctorEventsFeedQuery,
+  parseDoctorEventsMonthCountsQuery,
   parseDoctorEventsMonthQuery,
   type RawQueryValue,
 } from "@ds/schemas";
@@ -28,6 +30,7 @@ import { EventsService } from "../events/events.service.js";
 import {
   EventLiveStripDto,
   EventPageViewDto,
+  MonthlyEventCountsDto,
   ParticipationCtaDto,
 } from "../events/events.dto.js";
 import type { AroundEventRoutes } from "../events/around-event.resolver.js";
@@ -48,8 +51,8 @@ import { readSpecialtyChoiceCookie } from "./specialty-choice.cookie.js";
  * EARS-4 (#1519) `GET …/events/month`, the `MonthGrid` projection of that same
  * read. Both live on ONE controller because they are one host projection with
  * two shapes (LD-3): same targeting, same cookie, same cache posture. The month
- * route serves BOTH the grid standing beside the feed (#1516) and the dedicated
- * calendar page (#1520) — one contract, two compositions.
+ * route serves the month view and the compact month of the one events page
+ * (`@ds/events-storefront`, wave-2 gate rows 53, 56) — one contract.
  *
  * ## Host projection, not a second engine
  *
@@ -153,11 +156,12 @@ export class DoctorEventsPublicController {
   }
 
   /**
-   * `GET /v1/storefront/doctor/events/month` — the `MonthGrid` of EARS-4.
+   * `GET /v1/storefront/doctor/events/month` — the `MonthGrid` of the month
+   * view and the compact month of the one events page (wave-2 gate rows 53, 56).
    *
-   * There is no `view` query parameter and no `tense`: under F-019-2 Б the grid
-   * and the feed render together (no «Неделя / Месяц» switch is built), and
-   * release 1 reads «Будущие» only per LD-10. A malformed `month` is a 400
+   * There is no `view` query parameter and no `tense`: the view is page state,
+   * and the read covers the whole МСК month, past days included (019
+   * «Amendment — 2026-10-05»). A malformed `month` is a 400
    * Problem Details at the boundary — unlike the feed's `to=`, a month cannot be
    * clamped to something honest, since there is no nearest month a reader could
    * be assumed to have meant.
@@ -195,6 +199,48 @@ export class DoctorEventsPublicController {
     }
 
     return this.feed.month({
+      query: parsed.data,
+      specialtyReference: readSpecialtyChoiceCookie(cookie),
+    });
+  }
+
+  /**
+   * Wave-2 entry gate §4.2 row 54 (PR 2.5) — the doctor month picker's
+   * per-month counts, the counterpart of the Academy
+   * `GET /v1/public/events/month-counts`: the same `year` and the same
+   * `MonthlyEventCount[12]` answer, under the month read's posture (the
+   * specialty cookie relay, session-optional, the same `Cache-Control`) and
+   * its facets. Declared BEFORE `:idOrSlug`, which would capture the segment.
+   */
+  @Get("month-counts")
+  @ApiQuery({ name: "year", required: true, description: "ISO YYYY" })
+  @ApiQuery({ name: "format", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "kind", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "specialty", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "city", required: false, isArray: true, type: String })
+  @ApiQuery({ name: "nmo", required: false, type: Boolean })
+  @ApiQuery({ name: "free", required: false, type: Boolean })
+  @ApiQuery({ name: "q", required: false })
+  @ApiOkResponse({ type: MonthlyEventCountsDto })
+  @Public()
+  @Header("Cache-Control", "private, max-age=30")
+  @Header("Vary", "Cookie")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-4"],
+  })
+  monthCounts(
+    @Query() query: Record<string, RawQueryValue>,
+    @Headers("cookie") cookie?: string,
+  ): Promise<MonthlyEventCount[]> {
+    const parsed = parseDoctorEventsMonthCountsQuery(query ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException("invalid doctor events month counts query");
+    }
+
+    return this.feed.monthCounts({
       query: parsed.data,
       specialtyReference: readSpecialtyChoiceCookie(cookie),
     });

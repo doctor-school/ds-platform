@@ -48,7 +48,15 @@ The webinar event module. It hosts two surfaces over one aggregate:
   and the per-month counts for the month picker
   (`GET /v1/public/events/month-counts?year=YYYY` → `MonthlyEventCount[12]`,
   004 EARS-16: 12 rows incl. zero months, counting only publish-visible states,
-  grouped by МСК month). All are
+  grouped by МСК month; the 12-row fill `denseMonthlyCounts` in
+  `monthly-counts.ts` is shared with the doctor counts read). The listing, the
+  month read and the counts take the 014 EARS-12 Academy facets `project`,
+  `expert`, `topic` — repeatable slug lists of the one listing codec
+  (`ACADEMY_EVENT_FACETS_QUERY_CODEC`), turned into SQL over 012's join tables
+  with the public allow-list at every hop by `academy-facets.ts`; one facet's
+  values OR, the facets AND, an unknown slug reads empty and a malformed one is
+  a 400. A horizon listing page also carries the facet `options` block
+  (`facets`, each option counted under the other facets' selections). All are
   unauthenticated, cacheable, with no per-session variation (004 EARS-10). The
   page's **non-public visibility policy** (004 EARS-6: `draft`/unknown → 404,
   byte-for-byte indistinguishable so a hidden draft leaks no oracle; hidden →

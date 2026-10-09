@@ -123,46 +123,39 @@ routes:
   # thing only, the same one the rest of this host rests on: the doctor host is
   # not publicly reachable until ADR-0015 §7's release-time cut-over, and the
   # route carries no Stage-B verdict of its own yet.
-  # 019 EARS-3 (#1518) — the day-grouped, specialty-targeted events feed. The
-  # read, the targeting and the day grouping are REAL (no placeholder card, no
-  # stubbed count), but the SCREEN is not whole: 017's breadcrumbs, the facet
-  # sidebar (#1523), the month grid beside the feed (#1519) and the «Идёт
-  # сейчас» block (#1521) land separately, and the canvas composition of the
-  # route itself is #1516. `deferred` until that composition carries its
-  # Stage-B verdict.
+  # 019 EARS-3 (#1518) · #2028 wave 2 — the one events page of
+  # `@ds/events-storefront` (feed and month view, the facet column ≥1024 and the
+  # «Фильтры (N)» sheet), mounted with the doctor host config only. The canvas
+  # composition (#1516) is whole and carries the owner's Stage-B GO on #2727.
   - app: doctor
     route: /events
     file: apps/doctor/app/(storefront)/events/page.tsx
-    status: deferred
-    issue: "#1516"
+    status: product-ready
 
   # 020 EARS-1 (#1764) — the shared event page mounted on the doctor storefront.
   # The read model, the composition blocks and the server-resolved participation
-  # CTA are REAL and shared with the academy host, but the SCREEN is not whole:
-  # the room entry (#1770), social proof, calendar add and cancel all land as
-  # their own EARS Issues, so a registered doctor on a live event gets a CTA the
-  # host cannot yet route. `deferred` on the same cut-over as its parent feed —
-  # the doctor host is not publicly reachable until ADR-0015 §7's release-time
-  # step. Its Stage-B verdict is recorded (owner GO on #1779, 2026-09-03); the
-  # `deferred` classification is unchanged and rests on that cut-over (#1516).
+  # CTA are REAL and shared with the academy host, and its Stage-B verdict is
+  # recorded (owner GO on #1779, 2026-09-03). The doctor host is public on the
+  # temporary `new.doctor.school` (#1723); `deferred` rests on the root-host
+  # cut-over to `doctor.school` (ADR-0015 §7), which #1430 owns.
   - app: doctor
     route: /events/[slug]
     file: apps/doctor/app/(storefront)/events/[slug]/page.tsx
     status: deferred
-    issue: "#1516"
+    issue: "#1430"
 
   # 006 EARS-2 · 020 §6.1 (#1722) — the live webinar room mounted on the doctor
   # storefront. The room itself is the shared `@ds/room` unit the academy already
   # runs in production, and this route is the thin host projection over it
   # (session forward, own upstream, own route table, own copy) — nothing here is
-  # a placeholder. `deferred` for the same reason its parent event page is: the
-  # doctor host is not publicly reachable until ADR-0015 §7's release-time
-  # cut-over (#1516), and the route carries no Stage-B verdict of its own yet.
+  # a placeholder. `deferred` for the same reason as its parent event page: the
+  # root-host cut-over (ADR-0015 §7, #1430); the route carries no Stage-B verdict
+  # of its own yet.
   - app: doctor
     route: /events/[slug]/room
     file: apps/doctor/app/(room)/events/[slug]/room/page.tsx
     status: deferred
-    issue: "#1516"
+    issue: "#1430"
 
   - app: doctor
     route: /register

@@ -10,22 +10,22 @@ import {
   parseDoctorEventsFeedQuery,
 } from "./doctor-events-feed.schema.js";
 import type { RawQueryValue } from "./event-listing-query.schema.js";
+import { MonthBroadcastEntrySchema, YEAR_PARAM } from "./events.schema.js";
 
 /**
  * 019 EARS-4 (#1519) — the `MonthGrid` read contract of
  * `GET /v1/storefront/doctor/events/month` (019-design §7, last line).
  *
- * ## One contract, two compositions (LD-3)
+ * ## One contract for the month view of the one events page
  *
- * The SAME projection serves the month grid standing beside the day feed
- * (EARS-4, F-019-2 Б) and the dedicated calendar page (EARS-5, #1520). There is
- * no second month contract to keep in step, and — per 019-design §1.1 — no
- * host-side grid assembly either: the Academy month pane
- * (`@ds/events-storefront` `month-calendar-view.tsx`) assembles its grid with
- * `buildMonthGrid` from the `GET /v1/public/events?month=` entries, which is
- * exactly what the Doctor read does NOT need. Every day of the month is present
- * in `days`, `count: 0` included, so a host renders the grid straight from the
- * response and fills nothing in.
+ * The projection serves the month view of the one events page of
+ * `@ds/events-storefront` (wave-2 gate rows 51, 53) and the compact month
+ * beside its feed (row 56) — one contract, no second month read to keep in
+ * step. The page builds its grid with `buildMonthGrid` from `entries`, the
+ * same `MonthBroadcastEntry` list the Academy month read answers, so both hosts
+ * pass one envelope (`EventsMonthEntriesReadSchema`) into one grid builder.
+ * `days` stays the per-day projection: every day of the month is present,
+ * `count: 0` included.
  *
  * ## The grid is navigation over the SAME targeted read
  *
@@ -37,8 +37,8 @@ import type { RawQueryValue } from "./event-listing-query.schema.js";
  * with one function.
  *
  * `tense`, `day`, `from` and `to` are deliberately absent. The horizon is the
- * month; release 1 reads «Будущие» only (LD-10, #1525), so a day already past
- * carries `count: 0` rather than a historical figure the feed would not show.
+ * whole МСК month, past days included (019 «Amendment — 2026-10-05»): a past
+ * day counts its ended events, which the grid shows as muted pills.
  *
  * ## The two empty reasons stay distinct
  *
@@ -105,11 +105,48 @@ export const DoctorEventsMonthGridSchema = z
     today: DoctorEventsFeedDaySchema,
     /** EVERY day of `month`, ascending — the host fills nothing in. */
     days: z.array(DoctorEventsMonthDaySchema).min(28),
+    /**
+     * Wave-2 entry gate row 53 (PR 2.5) — the month's events behind `days`,
+     * ascending by start: the pills of the package month grid (time · title,
+     * the live pill, the muted past pill). The Academy month read's entry
+     * shape, reused rather than forked; `days[].count` is the size of each
+     * day's slice of this list.
+     */
+    entries: z.array(MonthBroadcastEntrySchema),
     /** The same envelope field the feed carries — see the file docblock. */
     targeting: DoctorEventsFeedTargetingSchema,
   })
   .strict();
 export type DoctorEventsMonthGrid = z.infer<typeof DoctorEventsMonthGridSchema>;
+
+/**
+ * Wave-2 entry gate row 54 (PR 2.5) — the doctor per-month counts read, the
+ * counterpart of the Academy `GET /v1/public/events/month-counts`: the same
+ * `year` (`YYYY`) and the same facets as the month read. Its answer is the
+ * Academy's `MonthlyEventCount[]` (12 dense rows), reused, not forked.
+ */
+export const DoctorEventsMonthCountsQuerySchema =
+  DoctorEventsMonthQuerySchema.omit({ month: true })
+    .extend({ year: z.string().regex(YEAR_PARAM, "expected a year (YYYY)") })
+    .strict();
+export type DoctorEventsMonthCountsQuery = z.infer<
+  typeof DoctorEventsMonthCountsQuerySchema
+>;
+
+/** The counts codec: the month codec's facet half plus the year — no fork. */
+export function parseDoctorEventsMonthCountsQuery(
+  raw: Record<string, RawQueryValue>,
+): z.ZodSafeParseResult<DoctorEventsMonthCountsQuery> {
+  const facets = parseDoctorEventsMonthQuery({ ...raw, month: undefined });
+  if (!facets.success) {
+    return facets as unknown as z.ZodSafeParseResult<DoctorEventsMonthCountsQuery>;
+  }
+  const year = Array.isArray(raw.year) ? raw.year[0] : raw.year;
+  return DoctorEventsMonthCountsQuerySchema.safeParse({
+    ...doctorEventsMonthFacets(facets.data),
+    year,
+  });
+}
 
 /**
  * The month query codec. The facet half is DELEGATED to the feed's codec — the

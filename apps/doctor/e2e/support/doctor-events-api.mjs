@@ -64,10 +64,30 @@ const BASE_DAYS = [
   },
 ];
 
+/**
+ * The day beyond the default extent (row 57). It holds four events, so its
+ * month-grid cell overflows into «+1 ещё» — the day link the month view writes
+ * (row 53). The three extra ones are hybrid разборы — a format and a kind no
+ * spec narrows to — so every count and every empty-by-facet render the specs
+ * take under `format` / `kind` stays as it was.
+ */
+const RAZBOR = {
+  id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+  slug: "razbor",
+  title: "Разбор",
+};
 const WIDENED_DAY = {
   day: "2026-09-20",
   label: "20 сентября, воскресенье",
-  items: [card("evt-4", "2026-09-20T10:00:00.000Z")],
+  items: [
+    card("evt-4", "2026-09-20T10:00:00.000Z"),
+    ...["evt-5", "evt-6", "evt-7"].map((id, i) =>
+      card(id, `2026-09-20T1${2 + i}:00:00.000Z`, {
+        format: "hybrid",
+        kind: RAZBOR,
+      }),
+    ),
+  ],
 };
 
 /** Every day this fixture knows; a read serves the `[from, to)` slice of it. */
@@ -145,11 +165,23 @@ const PAST_DAYS = [
  * contract requires EVERY day of the month to be present).
  */
 const MONTH = "2026-09";
+const KINDS = [
+  { slug: "vebinar", title: "Вебинар" },
+  { slug: "master-klass", title: "Мастер-класс" },
+  // The 2026-09-20 разборы's kind — the real `facetOptions` lists every kind
+  // the reach holds.
+  { slug: RAZBOR.slug, title: RAZBOR.title },
+];
+const SPECIALTIES = [
+  { id: "00000000-0000-4000-8000-000000000001", code: "kardiologiya", name: "Кардиология", isOther: false },
+  { id: "00000000-0000-4000-8000-000000000002", code: "nevrologiya", name: "Неврология", isOther: false },
+];
 const MONTH_TODAY = "2026-09-01";
 const MONTH_COUNTS = {
   "2026-09-02": { count: 2, hasLive: true },
   "2026-09-04": { count: 1, hasLive: false },
-  "2026-09-20": { count: 1, hasLive: false },
+  // evt-4 plus the three разборы of WIDENED_DAY.
+  "2026-09-20": { count: 4, hasLive: false },
 };
 
 const HORIZON_STEP_DAYS = 14;
@@ -186,8 +218,10 @@ const itemCount = (days) =>
   days.reduce((sum, group) => sum + group.items.length, 0);
 
 /** `null` when no fixture day lies at or past `to`; else the covering step boundary. */
-function nextToBeyond(to) {
-  const beyond = ALL_DAYS.map((group) => group.day)
+function nextToBeyond(to, days = ALL_DAYS) {
+  const beyond = days
+    .filter((group) => group.items.length > 0)
+    .map((group) => group.day)
     .filter((day) => day >= to)
     .sort()
     .at(0);
@@ -274,6 +308,7 @@ function liveBody(cookie) {
  * with a retry while the live block and «Мои события» keep rendering.
  */
 let feedFailing = false;
+let monthFailing = false;
 
 /**
  * 019 EARS-11 as amended 2026-10-05 (gate row 46) — the doctor's «Мои события»
@@ -337,6 +372,21 @@ const server = createServer((request, response) => {
     return undefined;
   }
 
+  // Test-only control: fail the month read so the month view states its cause.
+  if (url.pathname === "/__e2e/month" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      try {
+        monthFailing = JSON.parse(body || "{}").failing === true;
+      } catch {
+        monthFailing = false;
+      }
+      json(response, 200, { failing: monthFailing });
+    });
+    return undefined;
+  }
+
   if (url.pathname === "/__e2e/live" && request.method === "POST") {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
@@ -368,11 +418,33 @@ const server = createServer((request, response) => {
     return json(response, 200, myEventsBody(cookie, tab));
   }
 
+  // Wave-2 gate rows 54 / 59 — the picker's per-month counts and the 017
+  // specialty book the doctor specialty facet offers.
+  if (url.pathname === "/v1/storefront/doctor/events/month-counts") {
+    const year = url.searchParams.get("year") ?? MONTH.slice(0, 4);
+    return json(
+      response,
+      200,
+      Array.from({ length: 12 }, (_unused, index) => {
+        const month = `${year}-${String(index + 1).padStart(2, "0")}`;
+        return { month: index + 1, count: monthEntries(month, url).length };
+      }),
+    );
+  }
+  if (url.pathname === "/v1/public/specialties") {
+    return json(response, 200, { entries: SPECIALTIES, total: SPECIALTIES.length });
+  }
+
   if (url.pathname === "/v1/storefront/doctor/events/month") {
+    if (monthFailing) return json(response, 500, { status: 500 });
+    const month = url.searchParams.get("month") ?? MONTH;
     return json(response, 200, {
-      month: url.searchParams.get("month") ?? MONTH,
+      month,
       today: MONTH_TODAY,
       days: monthDays(),
+      // The month grid's pills (gate row 53): the month's fixture events
+      // under the same facets the feed honours.
+      entries: monthEntries(month, url),
       targeting: {
         mode: "general",
         specialtyReference: null,
@@ -394,6 +466,8 @@ const server = createServer((request, response) => {
       const nextFrom = nextFromBefore(from, to);
       return json(response, 200, {
         tense: "past",
+        // D10 — every read carries the api's (here: pinned) today.
+        today: MONTH_TODAY,
         from,
         to,
         days,
@@ -436,19 +510,23 @@ const server = createServer((request, response) => {
     // The `format` facet is honoured (every fixture card is `online`) so a
     // route-level test can prove the facet reached the SERVER through the URL
     // rather than being applied in the browser (019 EARS-8, #1523).
-    const formats = url.searchParams.getAll("format").flatMap((v) => v.split(","));
-    const days =
-      formats.length === 0
-        ? served
-        : served
-            .map((group) => ({
-              ...group,
-              items: group.items.filter((item) => formats.includes(item.format)),
-            }))
-            .filter((group) => group.items.length > 0);
-    const nextTo = nextToBeyond(to);
+    const days = served
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => matchesFacets(item, url)),
+      }))
+      .filter((group) => group.items.length > 0);
+    // The service's beyond-probe, the counts and the next bound run under the
+    // same facet predicate as the served days (`feedWhere`).
+    const matched = ALL_DAYS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => matchesFacets(item, url)),
+    }));
+    const nextTo = nextToBeyond(to, matched);
     return json(response, 200, {
       tense: "upcoming",
+      // D10 — every read carries the api's (here: pinned) today.
+      today: MONTH_TODAY,
       from,
       to,
       days,
@@ -460,18 +538,30 @@ const server = createServer((request, response) => {
       // offered a control walking into an empty widening.
       nextTo,
       nextFrom: null,
+      // D9 — the doctor option block; no fixture event carries a city (007).
+      facets: {
+        city: [],
+        kind: KINDS.map((kind) => ({
+          ...kind,
+          count: itemCount(
+            ALL_DAYS.map((group) => ({
+              items: group.items.filter((item) => item.kind.slug === kind.slug),
+            })),
+          ),
+        })),
+      },
       // The M of «Показать ещё N из M»: the fixture events beyond the extent;
       // `0` exactly when `nextTo` is `null`, as the contract states.
       remaining:
         nextTo === null
           ? 0
-          : itemCount(ALL_DAYS.filter((group) => group.day >= to)),
+          : itemCount(matched.filter((group) => group.day >= to)),
       // N: the events in `[to, nextTo)` — what the next step adds.
       nextBatch:
         nextTo === null
           ? 0
           : itemCount(
-              ALL_DAYS.filter((group) => group.day >= to && group.day < nextTo),
+              matched.filter((group) => group.day >= to && group.day < nextTo),
             ),
       targeting: {
         mode: "general",
@@ -509,6 +599,40 @@ const server = createServer((request, response) => {
 server.listen(port, "127.0.0.1");
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => server.close(() => process.exit(0)));
+}
+
+/**
+ * The facets the real service applies in its SQL predicate (format, kind) and
+ * the specialty targeting: a picked specific specialty no fixture event
+ * targets (`nevrologiya`) reads empty, so the route offers «Показать смежные
+ * специальности» (gate row 59).
+ */
+function matchesFacets(item, url) {
+  const list = (key) => url.searchParams.getAll(key).flatMap((v) => v.split(","));
+  const formats = list("format");
+  const kinds = list("kind");
+  const specialties = list("specialty").filter(
+    (value) => value !== "mine-and-adjacent" && value !== "all",
+  );
+  if (formats.length > 0 && !formats.includes(item.format)) return false;
+  if (kinds.length > 0 && !kinds.includes(item.kind.slug)) return false;
+  if (specialties.length > 0 && !specialties.includes("kardiologiya")) return false;
+  return true;
+}
+
+function monthEntries(month, url) {
+  return ALL_DAYS.filter((group) => group.day.startsWith(month))
+    .flatMap((group) => group.items)
+    .filter((item) => matchesFacets(item, url))
+    .map((item) => ({
+      id: `00000000-0000-4000-8000-${Buffer.from(item.id).toString("hex").padStart(12, "0").slice(-12)}`,
+      slug: item.slug,
+      title: item.title,
+      school: item.source,
+      startsAt: item.startsAt,
+      state: item.startsAt.startsWith("2026-09-02") ? "live" : "published",
+      participationFormat: item.format,
+    }));
 }
 
 function json(response, status, body) {

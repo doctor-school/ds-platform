@@ -49,6 +49,7 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
     throw new Error("The Academy feed read answered without its horizon");
   }
   return {
+    today: horizon.today,
     cards,
     horizon: {
       from: horizon.from,
@@ -59,6 +60,8 @@ export const adaptPublicEventListing: EventsStorefrontAdapter = (dto): EventsFee
     remaining: horizon.remaining,
     nextBatch: horizon.nextBatch,
     summary: { events: page.counts.upcoming, schools: page.counts.upcomingSchools },
+    facetOptions: page.facets ?? {},
+    matching: cards.length + horizon.remaining,
   };
 };
 
@@ -93,6 +96,7 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     ),
   );
   return {
+    today: feed.today,
     cards,
     horizon: {
       from: feed.from,
@@ -102,5 +106,7 @@ export const adaptDoctorEventsFeed: EventsStorefrontAdapter = (dto) => {
     },
     remaining: feed.remaining,
     nextBatch: feed.nextBatch,
+    facetOptions: feed.facets ?? {},
+    matching: cards.length + feed.remaining,
   };
 };

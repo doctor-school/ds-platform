@@ -2,11 +2,14 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   type DoctorEventCard,
   type DoctorEventDayGroup,
+  type DoctorEventFacetOptions,
   type DoctorEventsFeed,
   type DoctorEventsFeedQuery,
   type DoctorEventsFeedTargeting,
+  type DoctorEventsMonthCountsQuery,
   type DoctorEventsMonthGrid,
   type DoctorEventsMonthQuery,
+  type MonthlyEventCount,
   type EventsLiveRead,
   doctorEventsFeedDayOf,
   doctorEventsMonthDayList,
@@ -25,14 +28,19 @@ import {
   clampRequestedPastFrom,
   EVENT_HORIZON_READ_ORDER,
   EVENT_HORIZON_ROW_CAP,
+  type EventHorizonReach,
   eventHorizonInstants,
+  eventHorizonReachingFirstMatch,
+  eventHorizonTenseReach,
   resolveEventHorizon,
   resolveEventHorizonBeyond,
 } from "../events/event-horizon.js";
 import { EventsLiveService } from "../events/events-live.service.js";
+import { denseMonthlyCounts, tallyMonths } from "../events/monthly-counts.js";
 import type { ParticipationRoutes } from "../events/participation-cta.resolver.js";
 import { RecordingsProjectionService } from "../recordings/recordings.projection.js";
 import {
+  type DoctorFeedFilters,
   type DoctorFeedRow,
   DoctorEventsRepository,
 } from "./doctor-events.repository.js";
@@ -126,6 +134,7 @@ export class DoctorEventsService {
       directionIds,
       ...eventHorizonInstants(requested),
       kindSlugs: query.kind,
+      formats: query.format,
       q: query.q,
       // Read from the moving edge, so the cap keeps the batch just asked for;
       // the bound hands the rows back in the tense's display order.
@@ -154,6 +163,7 @@ export class DoctorEventsService {
           directionIds,
           ...range,
           kindSlugs: query.kind,
+          formats: query.format,
           q: query.q,
         });
         return applyCardFacets(
@@ -166,8 +176,32 @@ export class DoctorEventsService {
       },
     );
 
+    // #1973 — an empty default window under matches beyond opens on the
+    // first match: the same read over the bound «Показать ещё» would name.
+    const reach = eventHorizonReachingFirstMatch(
+      query,
+      filtered.length,
+      beyond,
+    );
+    if (reach !== null) {
+      return this.feed({ ...input, now, query: { ...query, ...reach } });
+    }
+
+    // Wave-2 gate §4.3 D9 — the facet panel's options over the tense's whole
+    // reach (the window plus every widening), under the feed's targeting and
+    // `q`; each option counted under the OTHER facets' selection.
+    const facets = await this.facetOptions(
+      query,
+      { ...tenseRead, directionIds },
+      eventHorizonTenseReach(requested, query.tense, today),
+    );
+
     return {
       tense: query.tense,
+      // Wave-2 gate §4.3 D10 — the day this read resolved its horizon
+      // against; the page takes its one today from here.
+      today,
+      facets,
       ...clampRequestedPastFrom(
         bounded.horizon,
         query.tense,
@@ -196,25 +230,27 @@ export class DoctorEventsService {
    *
    * Because there is no second selection path. The month read resolves
    * targeting with {@link resolveTargeting}, selects rows with the SAME
-   * `findFeedRows`, maps them with the SAME `toCards`, and filters them with the
-   * SAME `applyCardFacets` the feed uses — only the horizon differs, and the
-   * grouping key is the same МСК day. A grid count and the size of the feed's
-   * day group for that day are therefore the same number by construction rather
-   * than by a test that would have to be re-proved on every mapper change.
+   * `findFeedRows` and filters them with the SAME `applyCardFacets` over the
+   * SAME `cardFacetsOf` projection the feed uses — only the horizon differs,
+   * and the grouping key is the same МСК day. A grid count and the size of the
+   * feed's day group for that day are therefore the same number by
+   * construction rather than by a test that would have to be re-proved on
+   * every mapper change.
    *
    * ## One aggregate read, never a query per day
    *
-   * The whole month is ONE `findFeedRows` call plus the three per-event lookups
-   * `toCards` already batches. Thirty round trips for thirty cells would be the
-   * shape this explicitly is not.
+   * The whole month is ONE `findFeedRows` call. Thirty round trips for thirty
+   * cells would be the shape this explicitly is not.
    *
-   * ## The horizon is «Будущие» only, per LD-10
+   * ## The whole month, past days included (019 «Amendment — 2026-10-05»)
    *
-   * Release 1 reads the upcoming tense on both 019 routes (#1525 restores the
-   * tense row in wave 2), so the lower bound is `max(first of month, today)`:
-   * a day already past carries `count: 0` rather than a historical figure the
-   * feed beside the grid would not show. `hasLive` is the same `state: "live"`
-   * the card carries — 006's lifecycle, never a start time compared in code.
+   * The month view is a view of the same page (wave-2 gate rows 51, 53): its
+   * grid shows the month's past events as muted pills beside the scheduled
+   * and live ones, so the read covers the whole МСК month in the
+   * `MONTH_BROADCAST_STATES` publish window — the Academy month read's set.
+   * `entries` carries those events (the pills); `hasLive` is the same
+   * `state: "live"` the card carries — 006's lifecycle, never a start time
+   * compared in code.
    */
   async month(input: {
     query: DoctorEventsMonthQuery;
@@ -230,44 +266,19 @@ export class DoctorEventsService {
       facets,
       input.specialtyReference,
     );
-
-    const firstDay = doctorEventsMonthFirstDay(month);
-    const endDay = doctorEventsMonthNextFirstDay(month);
-    // The upcoming-only lower bound. A month wholly in the past yields an empty
-    // window and therefore a grid of zeroes — an honest render of the matrix
-    // row, not a special case.
-    const fromDay = firstDay > today ? firstDay : today;
-
-    const rows =
-      fromDay >= endDay
-        ? []
-        : await this.repository.findFeedRows({
-            states: MONTH_BROADCAST_STATES,
-            order: "asc",
-            directionIds:
-              targeting.mode === "all"
-                ? null
-                : [
-                    ...targeting.directionIds,
-                    ...targeting.adjacentDirectionIds,
-                  ],
-            fromInstant: new Date(`${fromDay}T00:00:00+03:00`),
-            toInstant: new Date(`${endDay}T00:00:00+03:00`),
-            kindSlugs: facets.kind,
-            q: facets.q,
-          });
-
-    const cards = applyCardFacets(await this.toCards(rows), facets);
-    const startsAt = new Map(rows.map((row) => [row.id, row.startsAt]));
+    const rows = await this.monthWindowRows(
+      facets,
+      targeting,
+      doctorEventsMonthFirstDay(month),
+      doctorEventsMonthNextFirstDay(month),
+    );
 
     const counts = new Map<string, { count: number; hasLive: boolean }>();
-    for (const card of cards) {
-      const instant = startsAt.get(card.id);
-      if (instant === undefined) continue;
-      const day = doctorEventsFeedDayOf(instant);
+    for (const row of rows) {
+      const day = doctorEventsFeedDayOf(row.startsAt);
       const cell = counts.get(day) ?? { count: 0, hasLive: false };
       cell.count += 1;
-      if (card.state === "live") cell.hasLive = true;
+      if (row.state === "live") cell.hasLive = true;
       counts.set(day, cell);
     }
 
@@ -281,8 +292,82 @@ export class DoctorEventsService {
         count: counts.get(date)?.count ?? 0,
         hasLive: counts.get(date)?.hasLive ?? false,
       })),
+      entries: rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        school: row.school,
+        startsAt: row.startsAt.toISOString(),
+        state: row.state,
+        participationFormat: row.participationFormat,
+      })),
       targeting,
     };
+  }
+
+  /**
+   * Wave-2 entry gate row 54 (PR 2.5) — the doctor month picker's per-month
+   * counts of `GET /v1/storefront/doctor/events/month-counts`, the
+   * counterpart of the Academy `month-counts`: 12 dense rows for the МСК
+   * year. Each row is the size of that month's {@link month} grid for the same
+   * targeting and facets — the SAME window selection ({@link monthWindowRows})
+   * over the year, bucketed by the same МСК month, so the picker and the grid
+   * cannot disagree.
+   */
+  async monthCounts(input: {
+    query: DoctorEventsMonthCountsQuery;
+    specialtyReference: string | null;
+  }): Promise<MonthlyEventCount[]> {
+    const facets = doctorEventsMonthFacets(input.query);
+    const targeting = await this.resolveTargeting(
+      facets,
+      input.specialtyReference,
+    );
+    const year = Number(input.query.year);
+    const rows = await this.monthWindowRows(
+      facets,
+      targeting,
+      `${year}-01-01`,
+      `${year + 1}-01-01`,
+    );
+    return denseMonthlyCounts(
+      tallyMonths(
+        rows.map((row) =>
+          Number(doctorEventsFeedDayOf(row.startsAt).slice(5, 7)),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * The month read's selection over `[fromDay, toDay)` МСК: the feed's ONE
+   * predicate (`findFeedRows`) in the `MONTH_BROADCAST_STATES` window, then the
+   * feed's card facets over the feed's `cardFacetsOf` projection. Shared by
+   * the grid and the per-month counts.
+   */
+  private async monthWindowRows(
+    facets: ReturnType<typeof doctorEventsMonthFacets>,
+    targeting: DoctorEventsFeedTargeting,
+    fromDay: string,
+    toDay: string,
+  ): Promise<DoctorFeedRow[]> {
+    const rows = await this.repository.findFeedRows({
+      states: MONTH_BROADCAST_STATES,
+      order: "asc",
+      directionIds:
+        targeting.mode === "all"
+          ? null
+          : [...targeting.directionIds, ...targeting.adjacentDirectionIds],
+      fromInstant: new Date(`${fromDay}T00:00:00+03:00`),
+      toInstant: new Date(`${toDay}T00:00:00+03:00`),
+      kindSlugs: facets.kind,
+      formats: facets.format,
+      q: facets.q,
+    });
+    return applyCardFacets(
+      rows.map((row) => ({ ...cardFacetsOf(row), row })),
+      facets,
+    ).map(({ row }) => row);
   }
 
   /**
@@ -417,6 +502,36 @@ export class DoctorEventsService {
     }
   }
 
+  /**
+   * The doctor facet options (wave-2 gate §4.3 D9). `kind` is the Academy SQL
+   * option rule over the feed's own predicate (014-design §9): counted under
+   * the `format` facet in SQL, and under the constant card facts
+   * (`nmo` / `free` / `city`) — which hold for every event or for none, so a
+   * selection they reject zeroes every count. `city` has no source: 007
+   * authors no city on an event (DEBT.md «PR for #1518»), so the panel
+   * receives no city option.
+   */
+  private async facetOptions(
+    query: DoctorEventsFeedQuery,
+    base: Pick<DoctorFeedFilters, "states" | "directionIds">,
+    reach: EventHorizonReach,
+  ): Promise<DoctorEventFacetOptions> {
+    const kind = await this.repository.findKindOptions({
+      ...base,
+      ...reach,
+      formats: query.format,
+      q: query.q,
+    });
+    const factsHold = constantCardFactsMatch(query);
+    return {
+      kind: kind.map((option) => ({
+        ...option,
+        count: factsHold ? option.count : 0,
+      })),
+      city: [],
+    };
+  }
+
   private async toCards(rows: DoctorFeedRow[]): Promise<DoctorEventCard[]> {
     const ids = rows.map((row) => row.id);
     const endedIds = rows
@@ -485,19 +600,18 @@ function cardFacetsOf(row: DoctorFeedRow): CardFacetFields {
 }
 
 /**
- * The card-level facets — the ones 007 does not yet author as columns and that
- * are therefore applied after the mapping. ONE predicate, shared by the day feed
- * and the month grid, so the grid's counts and the feed's day-group sizes cannot
- * disagree about what a facet means (019-design §3, EARS-4).
+ * The card-level facets — the ones 007 does not yet author as columns
+ * (`nmo` / `free` / `city`; `format` and `kind` are columns and live in the SQL
+ * predicate). Today they are constant facts of every event
+ * ({@link eventEconomyFacts}), so they keep or drop a read whole and never
+ * change which bound «показать ещё» names. ONE predicate, shared by the day
+ * feed and the month grid (019-design §3, EARS-4).
  */
 function applyCardFacets<T extends CardFacetFields>(
   cards: T[],
-  facets: Pick<DoctorEventsFeedQuery, "format" | "nmo" | "free" | "city">,
+  facets: Pick<DoctorEventsFeedQuery, "nmo" | "free" | "city">,
 ): T[] {
   return cards.filter((card) => {
-    if (facets.format.length > 0 && !facets.format.includes(card.format)) {
-      return false;
-    }
     if (facets.nmo === true && !card.nmo) return false;
     if (facets.free === true && card.pulCost !== 0) return false;
     if (facets.city.length > 0) {
@@ -505,6 +619,18 @@ function applyCardFacets<T extends CardFacetFields>(
     }
     return true;
   });
+}
+
+/** Whether the constant card facts pass the read's card-level facets. */
+function constantCardFactsMatch(
+  facets: Pick<DoctorEventsFeedQuery, "nmo" | "free" | "city">,
+): boolean {
+  return (
+    applyCardFacets(
+      [{ format: "online" as const, ...eventEconomyFacts() }],
+      facets,
+    ).length === 1
+  );
 }
 
 /** Chronological rows → day groups. A day with no surviving card is not emitted. */

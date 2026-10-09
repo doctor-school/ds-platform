@@ -1,54 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import {
-  DayAgenda,
-  MonthDotGrid,
-  type DayAgendaRow,
-  type DotGridCell,
-} from "@ds/design-system/blocks";
+import { DayAgenda, MonthDotGrid } from "@ds/design-system/blocks";
+
+import type { PluralNoun } from "../model/event-count";
+import type { MonthGrid } from "../model/month-grid";
+import { agendaDaysOf, dotWeeksOf } from "../model/month-view";
+import { type MonthHrefs, linksOf } from "./month-calendar-desktop";
+import { useViewerZone } from "./use-viewer-zone";
 
 /**
- * 004 EARS-19 — the mobile pane's client shell (≤900px). The dot-grid + agenda
- * selection is the ONLY interactive/presentation state on the month view (design
- * §5.4: day selection is client-side, no navigation, no mutation), so it is the
- * single «use client» island; the desktop grid and all data/copy/routing stay in
- * the server component. Everything here is pre-computed and serialisable — the
- * island only tracks which day is selected and swaps the agenda below the grid.
+ * The month view below 1024 px (wave-2 gate row 55, the canvas «месяц
+ * точками»): the dot grid and the agenda of the tapped day. The selected day
+ * is the one client state of the month view — tapping a day swaps the agenda,
+ * no navigation. Agenda times follow the viewer's zone like the feed cards.
  */
-
-/** The pre-composed agenda for one in-month day (title + rows + empty note). */
-export interface AgendaDay {
-  title: string;
-  rows: DayAgendaRow[];
-  emptyText: string;
-}
-
-export interface MonthCalendarMobileProps {
-  weekdays: string[];
-  weeks: DotGridCell[][];
-  /** Per-in-month-day agenda, keyed by day-of-month. */
-  days: Record<number, AgendaDay>;
-  /** The initially-selected day (today МСК, or the month's first day). */
-  defaultDay: number;
-  className?: string;
-}
-
 export function MonthCalendarMobile({
   weekdays,
-  weeks,
-  days,
+  grid,
+  hrefs,
+  noun,
   defaultDay,
-  className,
-}: MonthCalendarMobileProps) {
+}: {
+  weekdays: string[];
+  grid: MonthGrid;
+  hrefs: MonthHrefs;
+  noun: PluralNoun;
+  /** The day the agenda opens on. */
+  defaultDay: number;
+}) {
+  const viewerZone = useViewerZone();
   const [selectedDay, setSelectedDay] = useState(defaultDay);
-  const agenda = days[selectedDay];
-
+  const agenda = agendaDaysOf(grid, linksOf(hrefs), noun, viewerZone)[selectedDay];
   return (
-    <div className={className} data-testid="month-calendar-mobile">
+    <div className="flex flex-col gap-6" data-testid="month-calendar-mobile">
       <MonthDotGrid
         weekdays={weekdays}
-        weeks={weeks}
+        weeks={dotWeeksOf(grid, noun)}
         selectedDay={selectedDay}
         onSelectDay={setSelectedDay}
       />

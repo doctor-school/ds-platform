@@ -3,8 +3,8 @@ import { MAIN_LANDMARK_RULES } from "@ds/e2e";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
- * 019 EARS-13 (#1528): existing R1 feed, cards, live strip and desktop month.
- * Deferred filter mounting / calendar page / past / mine are owned by R1.1.
+ * 019 EARS-13 (#1528), wave-2 gate row 61: the feed, cards, live strip, the
+ * facet column / sheet and the column's compact month, at 390 and 1440 px.
  *
  * ENV SET for playwright.events-live.config.ts (real API + branch DB):
  * E2E_DOCTOR_URL — production-build doctor origin, built with the real API.
@@ -131,6 +131,15 @@ for (const width of [390, 1440]) {
               state === "loaded" ? loadedPath : emptyPath,
             );
             const cards = page.locator("[data-webinar-card]");
+            // Below 1024 px the facets sit behind «Фильтры»; at ≥1024 px in
+            // the sticky column (wave-2 gate rows 52, 60).
+            if (width < 1024) {
+              await expect(page.getByTestId("events-filter-open")).toBeVisible();
+              await expect(page.getByTestId("events-column")).toBeHidden();
+            } else {
+              await expect(page.getByTestId("events-column")).toBeVisible();
+              await expect(page.getByTestId("events-filter-open")).toBeHidden();
+            }
             if (state === "loaded") {
               expect(await cards.count()).toBeGreaterThan(0);
               for (const card of await cards.all()) {
@@ -207,7 +216,8 @@ for (const theme of ["light", "dark"] as const) {
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await presentation(page, theme, loadedPath);
-    const calendar = page.locator("[data-events-month]");
+    // The feed column's compact month (wave-2 gate rows 56, 61).
+    const calendar = page.getByTestId("events-compact-month");
     const day = calendar.locator("button:enabled").first();
     const month = await calendar.getAttribute("data-month");
     const number = (await day.textContent())!.trim();
@@ -219,7 +229,10 @@ for (const theme of ["light", "dark"] as const) {
       new RegExp(`day=${month}-${number.padStart(2, "0")}`),
     );
     await expect(day).toHaveAttribute("aria-pressed", "true");
-    for (const control of ["events-month-next", "events-month-prev"]) {
+    for (const control of [
+      "events-compact-month-next",
+      "events-compact-month-prev",
+    ]) {
       await page.reload();
       const link = page.getByTestId(control);
       const href = await link.getAttribute("href");

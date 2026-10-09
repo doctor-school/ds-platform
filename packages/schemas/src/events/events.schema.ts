@@ -884,6 +884,8 @@ export const MonthBroadcastEntrySchema = z.object({
   school: z.string(),
   startsAt: z.iso.datetime({ offset: true }),
   state: MonthBroadcastStateSchema,
+  /** Picks the pill's time zone like the feed card: offline = МСК, else the viewer's (004). */
+  participationFormat: EventParticipationFormatSchema,
 });
 export type MonthBroadcastEntry = z.infer<typeof MonthBroadcastEntrySchema>;
 

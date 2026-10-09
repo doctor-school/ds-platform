@@ -1,12 +1,18 @@
 import {
   type EventLiveStrip,
   EventsLiveReadSchema,
+  EventsMonthEntriesReadSchema,
+  type MonthBroadcastEntry,
+  type MonthlyEventCount,
+  MonthlyEventCountsSchema,
   type RawQueryRecord,
+  SpecialtyBookSchema,
 } from "@ds/schemas";
 
 import type { EventsStorefrontHostConfig } from "../host-config";
+import type { SpecialtyChoice } from "../model/facets";
 import type { BlockRead, EventsFeedPage } from "../model/feed";
-import { feedReadQuery, feedTenseOf } from "../model/feed-url";
+import { feedReadQuery, feedTenseOf, monthReadQuery } from "../model/feed-url";
 import { type ForwardedSession, forwardedHeaders } from "./registration-state";
 
 const API_BASE = (
@@ -29,12 +35,13 @@ function relayOnly(cookie: string, name: string | undefined): string {
  * remembered specialty on the doctor host — and the client address chain.
  */
 export async function fetchEventsFeed(
-  contentSet: EventsStorefrontHostConfig["contentSet"],
+  config: Pick<EventsStorefrontHostConfig, "contentSet" | "filterSet">,
   raw: RawQueryRecord,
   request: { readonly cookie: string; readonly forwardedFor: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<BlockRead<EventsFeedPage>> {
-  const query = feedReadQuery(raw, contentSet.tenseParam);
+  const { contentSet } = config;
+  const query = feedReadQuery(raw, contentSet.tenseParam, config.filterSet);
   const cookie = relayOnly(request.cookie, contentSet.relayCookie);
   try {
     const res = await fetchImpl(`${API_BASE}${contentSet.feedPath}?${query}`, {
@@ -76,5 +83,94 @@ export async function fetchEventsLive(
     return { ok: true, value: EventsLiveReadSchema.parse(await res.json()) };
   } catch {
     return { ok: false };
+  }
+}
+
+export type ReadRequest = { readonly cookie: string; readonly forwardedFor: string };
+type ReadConfig = Pick<EventsStorefrontHostConfig, "contentSet" | "filterSet">;
+
+async function readJson<T>(
+  config: ReadConfig,
+  path: string,
+  query: URLSearchParams,
+  request: ReadRequest,
+  schema: { parse(value: unknown): T },
+  fetchImpl: typeof fetch,
+): Promise<BlockRead<T>> {
+  const cookie = relayOnly(request.cookie, config.contentSet.relayCookie);
+  try {
+    const res = await fetchImpl(`${API_BASE}${path}?${query}`, {
+      headers: {
+        accept: "application/json",
+        ...(cookie ? { cookie } : {}),
+        ...(request.forwardedFor
+          ? { "x-forwarded-for": request.forwardedFor }
+          : {}),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return { ok: false };
+    return { ok: true, value: schema.parse(await res.json()) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** One month's entries under the page's facets (rows 53, 55). */
+export function fetchMonthEntries(
+  config: ReadConfig,
+  raw: RawQueryRecord,
+  month: string,
+  request: ReadRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BlockRead<MonthBroadcastEntry[]>> {
+  return readJson(
+    config,
+    config.contentSet.monthPath,
+    monthReadQuery(raw, config.filterSet, { month }),
+    request,
+    EventsMonthEntriesReadSchema,
+    fetchImpl,
+  );
+}
+
+/** One year's per-month counts under the page's facets — the picker (row 54). */
+export function fetchMonthCounts(
+  config: ReadConfig,
+  raw: RawQueryRecord,
+  year: string,
+  request: ReadRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BlockRead<MonthlyEventCount[]>> {
+  return readJson(
+    config,
+    config.contentSet.countsPath,
+    monthReadQuery(raw, config.filterSet, { year }),
+    request,
+    MonthlyEventCountsSchema,
+    fetchImpl,
+  );
+}
+
+/**
+ * The specialties the doctor specialty facet offers (row 59) — the 017
+ * specialty book, without its «Другое» entry (no specialty to narrow by). A
+ * failed read offers none; the scope chips still work.
+ */
+export async function fetchSpecialtyChoices(
+  fetchImpl: typeof fetch = fetch,
+): Promise<SpecialtyChoice[]> {
+  try {
+    const res = await fetchImpl(`${API_BASE}/v1/public/specialties`, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const book = SpecialtyBookSchema.parse(await res.json());
+    return book.entries
+      .filter((entry) => !entry.isOther)
+      .map((entry) => ({ code: entry.code, name: entry.name }));
+  } catch {
+    return [];
   }
 }

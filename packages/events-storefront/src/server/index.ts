@@ -7,15 +7,14 @@ export {
   hasSessionCookie,
 } from "./registration-state";
 export { registerForEventAction } from "./register-action";
-export {
-  fetchMonthBroadcasts,
-  fetchMonthlyCounts,
-  fetchPublicEventPage,
-  fetchUpcomingBroadcasts,
-} from "./public-events";
+export { fetchPublicEventPage } from "./public-events";
 export { fetchParticipationCta } from "./participation-cta";
 export { type MyEventsResult, fetchMyEvents } from "./my-events";
 export {
+  type ReadRequest,
   fetchEventsFeed,
   fetchEventsLive,
+  fetchMonthCounts,
+  fetchMonthEntries,
+  fetchSpecialtyChoices,
 } from "./events-feed";

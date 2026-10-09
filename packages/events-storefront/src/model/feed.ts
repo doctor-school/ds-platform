@@ -4,6 +4,7 @@ import {
   type MyEventItem,
   type RawQueryRecord,
   type RecordingProjection,
+  doctorEventsFeedDayOf,
   formatEventTime,
   rawQueryBoolean,
   rawQueryList,
@@ -74,12 +75,36 @@ export interface EventsFeedSummary {
  * M of «Показать ещё N из M»); `nextBatch` = the ones the next step adds (N).
  */
 export interface EventsFeedPage {
+  /**
+   * Wave-2 gate §4.3 D10 — the api's «сегодня» (`YYYY-MM-DD`, МСК), the day
+   * the read resolved its horizon against: the page's one today
+   * ({@link pageTodayOf}).
+   */
+  readonly today: string;
   readonly cards: readonly EventsFeedCard[];
   readonly horizon: EventsFeedHorizon;
   readonly remaining: number;
   readonly nextBatch: number;
   readonly summary?: EventsFeedSummary;
+  /**
+   * The facet panel's options the read names, keyed by facet (`project` …
+   * on the Academy, `kind` / `city` on the doctor host — D9); empty when the
+   * read names none.
+   */
+  readonly facetOptions: FeedFacetOptions;
+  /** The events this reading matches — the page plus the rest of its reach («Показать N», row 60). */
+  readonly matching: number;
 }
+
+/** One facet option: the URL value, its title and its count under the other facets. */
+export interface FeedFacetOption {
+  readonly slug: string;
+  readonly title: string;
+  readonly count: number;
+}
+export type FeedFacetOptions = Readonly<
+  Record<string, readonly FeedFacetOption[]>
+>;
 
 /**
  * The one adapter of gate §4.5: a pure mapping of the host's feed read DTO onto
@@ -95,6 +120,21 @@ export type EventsStorefrontAdapter = (
 export type BlockRead<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false };
+
+/**
+ * Wave-2 gate §4.3 D10 — the page's ONE today: the api's, from the feed read
+ * the page rendered with (both views make that read). The month grid (today,
+ * past days), «Сегодня», the default month, the picker's «архив» and the
+ * day-href tense boundary all take it, so they never disagree with the read.
+ * Only a failed feed read — no read carries a today — falls back to the МСК
+ * day of the page clock.
+ */
+export function pageTodayOf(
+  read: BlockRead<EventsFeedPage>,
+  now: Date = new Date(),
+): string {
+  return read.ok ? read.value.today : doctorEventsFeedDayOf(now);
+}
 
 /** The live block's strip cap (019 «Amendment — 2026-10-05», «Live block»). */
 export const LIVE_STRIP_CAP = 2;
@@ -287,6 +327,19 @@ export function myEventsCut(
     });
 }
 
+/**
+ * #1973 — a reading is EMPTY only when its extent holds no card AND nothing
+ * matching lies beyond it. With matches beyond, the extent is merely short of
+ * them: the feed offers «Показать ещё» toward them, never «Нет … по фильтру»
+ * under a non-zero count.
+ */
+export function feedReadsEmpty(page: {
+  readonly cards: readonly unknown[];
+  readonly remaining: number;
+}): boolean {
+  return page.cards.length === 0 && page.remaining <= 0;
+}
+
 export interface EmptyFeedState {
   readonly title: string;
   readonly description: string;
@@ -304,8 +357,17 @@ export function emptyFeedState(
     listing,
     noun,
     copy,
-  }: { listing: string; noun: PluralNoun; copy: FeedCopy },
+    titles = {},
+  }: {
+    listing: string;
+    noun: PluralNoun;
+    copy: FeedCopy;
+    /** The read's facet options — a facet value is named by its title. */
+    titles?: FeedFacetOptions;
+  },
 ): EmptyFeedState {
+  const titleOf = (key: string, value: string) =>
+    titles[key]?.find((option) => option.slug === value)?.title ?? value;
   const remove = (key: string, value?: string) =>
     withoutFeedParam(listing, query, key, value);
 
@@ -328,13 +390,24 @@ export function emptyFeedState(
     chips.push({ label: `${copy.facet.format}: ${name}`, href: remove("format", value) });
   }
   for (const value of rawQueryList(query.kind) ?? []) {
-    chips.push({ label: copy.facet.kind, href: remove("kind", value) });
+    chips.push({
+      label: `${copy.facet.kind}: ${titleOf("kind", value)}`,
+      href: remove("kind", value),
+    });
   }
   for (const value of rawQueryList(query.city) ?? []) {
     chips.push({ label: `${copy.facet.city}: ${value}`, href: remove("city", value) });
   }
   if (rawQueryBoolean(query.nmo) === true) {
     chips.push({ label: copy.facet.nmo, href: remove("nmo") });
+  }
+  for (const key of ["project", "expert", "topic"] as const) {
+    for (const value of rawQueryList(query[key]) ?? []) {
+      chips.push({
+        label: `${copy.facet[key]}: ${titleOf(key, value)}`,
+        href: remove(key, value),
+      });
+    }
   }
   const q = rawQueryScalar(query.q);
   if (q !== undefined) {

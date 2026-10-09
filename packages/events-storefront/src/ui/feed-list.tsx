@@ -11,6 +11,7 @@ import {
   type EventsFeedCard,
   type FeedTense,
   buildFeedItems,
+  feedReadsEmpty,
 } from "../model/feed";
 import { useViewerZone } from "./use-viewer-zone";
 
@@ -26,10 +27,13 @@ export function FeedList({
   tense,
   registeredSlugs,
   routes,
+  remaining,
   showMore,
   empty,
 }: {
   cards: readonly EventsFeedCard[];
+  /** Matching events beyond the extent — with any, the reading is not empty (#1973). */
+  remaining: number;
   tense: FeedTense;
   registeredSlugs: readonly string[];
   routes: Pick<EventsStorefrontHostConfig["routes"], "eventPage">;
@@ -38,27 +42,22 @@ export function FeedList({
 }) {
   const viewerZone = useViewerZone();
 
+  if (feedReadsEmpty({ cards, remaining })) {
+    return <EmptyFeedBlock empty={empty} testId="events-feed-empty" />;
+  }
+  const more =
+    showMore === null ? null : (
+      <Button asChild className="mt-8" size="lg" variant="outline">
+        <Link data-testid="events-feed-show-more" href={showMore.href}>
+          {showMore.label}
+        </Link>
+      </Button>
+    );
   if (cards.length === 0) {
+    // The extent is short of the matches beyond it: only the way to them.
     return (
-      <section
-        className="border-2 border-dashed border-border"
-        data-feed-block="feed"
-        data-testid="events-feed-empty"
-      >
-        <EmptyState
-          variant="no-records"
-          title={empty.title}
-          {...(empty.description ? { description: empty.description } : {})}
-          {...(empty.action
-            ? {
-                action: (
-                  <Button asChild variant="outline">
-                    <Link href={empty.action.href}>{empty.action.label}</Link>
-                  </Button>
-                ),
-              }
-            : {})}
-        />
+      <section data-feed-block="feed" data-testid="events-feed">
+        {more}
       </section>
     );
   }
@@ -81,20 +80,43 @@ export function FeedList({
           emptyTitle: empty.title,
           pagination: FEED_COPY.feed.pagination,
         }}
-        footer={
-          showMore === null ? null : (
-            <Button
-              asChild
-              className="mt-8"
-              size="lg"
-              variant="outline"
-            >
-              <Link data-testid="events-feed-show-more" href={showMore.href}>
-                {showMore.label}
-              </Link>
-            </Button>
-          )
-        }
+        footer={more}
+      />
+    </section>
+  );
+}
+
+/**
+ * An empty reading (019 EARS-9, LD-9): the cause, and the one action that
+ * widens it — removing the facet that emptied it. Shared by the feed and the
+ * month view (row 55 «пусто по фильтрам»).
+ */
+export function EmptyFeedBlock({
+  empty,
+  testId,
+}: {
+  empty: EmptyFeedState;
+  testId: string;
+}) {
+  return (
+    <section
+      className="border-2 border-dashed border-border"
+      data-feed-block="feed"
+      data-testid={testId}
+    >
+      <EmptyState
+        variant="no-records"
+        title={empty.title}
+        {...(empty.description ? { description: empty.description } : {})}
+        {...(empty.action
+          ? {
+              action: (
+                <Button asChild variant="outline">
+                  <Link href={empty.action.href}>{empty.action.label}</Link>
+                </Button>
+              ),
+            }
+          : {})}
       />
     </section>
   );

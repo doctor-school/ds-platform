@@ -35,7 +35,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         ],
         counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
         pagination: { nextCursor: null, hasMore: true },
-        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
+        horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
       },
       { tense: "upcoming" },
     );
@@ -53,6 +53,8 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
       nextTo: "2026-11-05",
       nextFrom: null,
     });
+    // D10 — the api's today rides the read; the page takes its one today from it.
+    expect(page.today).toBe("2026-10-08");
     expect(page.remaining).toBe(28);
     // N of «Показать ещё N из M» is the api's next batch, carried as is.
     expect(page.nextBatch).toBe(5);
@@ -77,11 +79,27 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         data: [],
         counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0 },
+        horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0 },
       },
       { tense: "past" },
     );
     expect(page.summary).toEqual({ events: 30, schools: 3 });
+  });
+
+  it("NEW: the Academy facet options reach the page model, and the matching count is the page plus the rest of the reach (rows 58, 60)", () => {
+    const options = { project: [{ slug: "p", title: "Проект", count: 2 }], expert: [], topic: [] };
+    const page = adaptPublicEventListing(
+      {
+        data: [{ ...base, state: "published" }],
+        counts: { upcoming: 30, past: 4, upcomingSchools: 3 },
+        pagination: { nextCursor: null, hasMore: true },
+        horizon: { today: "2026-10-08", from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null, remaining: 28, nextBatch: 5 },
+        facets: options,
+      },
+      { tense: "upcoming" },
+    );
+    expect(page.facetOptions).toEqual(options);
+    expect(page.matching).toBe(29);
   });
 
   it("a past card carries its recording projection", () => {
@@ -98,7 +116,7 @@ describe("adaptPublicEventListing — the Academy read onto the one feed model",
         data: [{ ...base, state: "ended", recording }],
         counts: { upcoming: 0, past: 1, upcomingSchools: 0 },
         pagination: { nextCursor: null, hasMore: false },
-        horizon: { from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3, nextBatch: 2 },
+        horizon: { today: "2026-10-08", from: "2026-09-24", to: "2026-10-09", nextTo: null, nextFrom: "2026-09-10", remaining: 3, nextBatch: 2 },
       },
       { tense: "past" },
     );
@@ -133,6 +151,7 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
     const page = adaptDoctorEventsFeed(
       {
         tense: "upcoming",
+        today: "2026-10-08",
         from: "2026-10-08",
         to: "2026-10-22",
         days: [
@@ -163,14 +182,32 @@ describe("adaptDoctorEventsFeed — the doctor read onto the one feed model", ()
       nextTo: "2026-11-05",
       nextFrom: null,
     });
+    expect(page.today).toBe("2026-10-08");
     expect(page.remaining).toBe(7);
     expect(page.nextBatch).toBe(4);
+  });
+
+  it("NEW: the doctor facet options reach the page model (row 58, D9)", () => {
+    const facets = { kind: [{ slug: "webinar", title: "Вебинар", count: 1 }], city: [] };
+    const page = adaptDoctorEventsFeed(
+      {
+        tense: "upcoming", today: "2026-10-08", from: "2026-10-08", to: "2026-10-22",
+        days: [{ day: "2026-10-20", label: "20 октября", items: [card] }],
+        totalCount: 1, nextTo: null, nextFrom: null, remaining: 0, nextBatch: 0,
+        targeting: { mode: "all", specialtyReference: null, directionIds: [], adjacentDirectionIds: [] },
+        facets,
+      },
+      { tense: "upcoming" },
+    );
+    expect(page.facetOptions).toEqual(facets);
+    expect(page.matching).toBe(1);
   });
 
   it("NEW: an ended doctor card is a past card carrying its recording projection", () => {
     const page = adaptDoctorEventsFeed(
       {
         tense: "past",
+        today: "2026-10-08",
         from: "2026-09-24",
         to: "2026-10-09",
         days: [{ day: "2026-10-01", label: "1 октября", items: [{ ...card, state: "recorded", recording: RECORDING }] }],

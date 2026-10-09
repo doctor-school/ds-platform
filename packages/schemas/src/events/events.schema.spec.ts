@@ -700,6 +700,7 @@ describe("004 month-calendar schema (EARS-15/EARS-16)", () => {
       school: "Школа травматологии",
       startsAt: "2031-07-10T09:00:00.000Z",
       state: "ended" as const,
+      participationFormat: "online" as const,
     };
 
     it("accepts a well-formed entry with a publish-visible state", () => {
@@ -725,7 +726,15 @@ describe("004 month-calendar schema (EARS-15/EARS-16)", () => {
         speakers: [{ name: "x" }],
       }) as Record<string, unknown>;
       expect(Object.keys(parsed).sort()).toEqual(
-        ["id", "school", "slug", "startsAt", "state", "title"].sort(),
+        [
+          "id",
+          "participationFormat",
+          "school",
+          "slug",
+          "startsAt",
+          "state",
+          "title",
+        ].sort(),
       );
     });
   });

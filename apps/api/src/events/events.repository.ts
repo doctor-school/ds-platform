@@ -17,11 +17,13 @@ import {
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import { assertEventClassification } from "./event-classification.js";
 import {
+  type AcademyEventFacets,
   type ConfigureStreamRequest,
   type EventAudience,
   type EventAdminListQuery,
   MONTH_BROADCAST_STATES,
   PAST_BROADCAST_STATES,
+  type PublicEventFacetOptions,
   type StreamConfig,
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
@@ -42,6 +44,11 @@ import {
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { eventsOnActiveDirections } from "./event-direction-restriction.js";
 import { countEventSignUps } from "./event-sign-ups.js";
+import {
+  academyFacetClauses,
+  academyFacetOptions,
+  NO_ACADEMY_FACETS,
+} from "./academy-facets.js";
 import {
   afterEventCursor,
   beforeEventCursor,
@@ -115,14 +122,17 @@ export interface EventListingWindow {
  * offered for events the very same predicate would then list (#1803).
  * «Будущие»: `published`/`live` at or after the air-window `cutoff`;
  * «Прошедшие»: the {@link PAST_BROADCAST_STATES} set. A `window` (the horizon)
- * narrows either by start instant.
+ * narrows either by start instant; `facets` (014 EARS-12, built by
+ * {@link academyFacetClauses}) narrow it by the Academy facets.
  */
 function listingWhere(
   timeframe: "upcoming" | "past",
   cutoff: Date | null,
   window?: EventListingWindow,
+  facets: SQL[] = [],
 ): SQL[] {
   const where: SQL[] = [
+    ...facets,
     ACTIVE_EVENT,
     ACADEMY_AUDIENCE,
     timeframe === "upcoming"
@@ -199,6 +209,28 @@ export type EventListingRow = EventAggregate & { startsAtCursor: string };
 @Injectable()
 export class EventsRepository {
   constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
+
+  /** 014 EARS-12 — the applied Academy facets as `events` predicates. */
+  private facetWhere(facets: AcademyEventFacets): SQL[] {
+    return academyFacetClauses(this.db, facets);
+  }
+
+  /**
+   * 014 EARS-12 — the facet options of one listing tense: the tense's
+   * listing-eligible events (no horizon, no facet) as the base, each option
+   * counted under the other facets' selections ({@link academyFacetOptions}).
+   */
+  facetOptions(
+    timeframe: "upcoming" | "past",
+    cutoff: Date | null,
+    facets: AcademyEventFacets,
+  ): Promise<PublicEventFacetOptions> {
+    return academyFacetOptions(
+      this.db,
+      listingWhere(timeframe, cutoff),
+      facets,
+    );
+  }
 
   /** 012 EARS-26 — the kinds of a page of events, in ONE read (retired kinds included). */
   async findKinds(
@@ -456,13 +488,19 @@ export class EventsRepository {
     window?: EventListingWindow,
     /** `desc` = farthest first: the capped horizon read (`EVENT_HORIZON_READ_ORDER`). */
     order: "asc" | "desc" = "asc",
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
   ): Promise<EventListingRow[]> {
     const cursor = after ? afterEventCursor(after) : undefined;
     const direction = order === "asc" ? asc : desc;
     const query = this.db
       .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
-      .where(and(...listingWhere("upcoming", cutoff, window), cursor))
+      .where(
+        and(
+          ...listingWhere("upcoming", cutoff, window, this.facetWhere(facets)),
+          cursor,
+        ),
+      )
       .orderBy(direction(events.startsAt), direction(events.id));
     const selected =
       limit === undefined ? await query : await query.limit(limit);
@@ -487,13 +525,19 @@ export class EventsRepository {
     window?: EventListingWindow,
     /** `asc` = oldest first: the capped horizon read (`EVENT_HORIZON_READ_ORDER`). */
     order: "asc" | "desc" = "desc",
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
   ): Promise<EventListingRow[]> {
     const cursor = after ? beforeEventCursor(after) : undefined;
     const direction = order === "asc" ? asc : desc;
     const query = this.db
       .select({ event: events, startsAtCursor: eventCursorInstant })
       .from(events)
-      .where(and(...listingWhere("past", null, window), cursor))
+      .where(
+        and(
+          ...listingWhere("past", null, window, this.facetWhere(facets)),
+          cursor,
+        ),
+      )
       .orderBy(direction(events.startsAt), direction(events.id));
     const selected =
       limit === undefined ? await query : await query.limit(limit);
@@ -507,7 +551,9 @@ export class EventsRepository {
   /** Counts backing the two controlled `/webinars` tabs. */
   async publicListingCounts(
     cutoff: Date,
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
   ): Promise<{ upcoming: number; past: number; upcomingSchools: number }> {
+    const narrow = this.facetWhere(facets);
     const [upcomingRow, pastRow] = await Promise.all([
       this.db
         .select({
@@ -515,11 +561,11 @@ export class EventsRepository {
           schools: sql<number>`count(DISTINCT ${events.school})::int`,
         })
         .from(events)
-        .where(and(...listingWhere("upcoming", cutoff))),
+        .where(and(...listingWhere("upcoming", cutoff, undefined, narrow))),
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(events)
-        .where(and(...listingWhere("past", null))),
+        .where(and(...listingWhere("past", null, undefined, narrow))),
     ]);
     return {
       upcoming: upcomingRow[0]?.count ?? 0,
@@ -539,6 +585,7 @@ export class EventsRepository {
     timeframe: "upcoming" | "past",
     cutoff: Date | null,
     range: EventListingWindow,
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
   ): Promise<Date[]> {
     if (
       range.fromInstant !== null &&
@@ -549,7 +596,9 @@ export class EventsRepository {
     const rows = await this.db
       .select({ startsAt: events.startsAt })
       .from(events)
-      .where(and(...listingWhere(timeframe, cutoff, range)));
+      .where(
+        and(...listingWhere(timeframe, cutoff, range, this.facetWhere(facets))),
+      );
     return rows.map((row) => row.startsAt);
   }
 
@@ -614,7 +663,11 @@ export class EventsRepository {
    * this returns the bare event rows (the service projects the thin allow-list).
    * An empty month is a valid empty list.
    */
-  async listMonthBroadcasts(start: Date, end: Date): Promise<Event[]> {
+  async listMonthBroadcasts(
+    start: Date,
+    end: Date,
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
+  ): Promise<Event[]> {
     return this.db
       .select()
       .from(events)
@@ -622,6 +675,7 @@ export class EventsRepository {
         and(
           ACTIVE_EVENT,
           ACADEMY_AUDIENCE,
+          ...this.facetWhere(facets),
           inArray(events.state, [...MONTH_BROADCAST_STATES]),
           gte(events.startsAt, start),
           lt(events.startsAt, end),
@@ -639,7 +693,11 @@ export class EventsRepository {
    * `[start, end)`. Returns a `month → count` map for the months that HAVE events
    * only; the service fills the zero months so the response is always 12 rows.
    */
-  async monthlyCounts(start: Date, end: Date): Promise<Map<number, number>> {
+  async monthlyCounts(
+    start: Date,
+    end: Date,
+    facets: AcademyEventFacets = NO_ACADEMY_FACETS,
+  ): Promise<Map<number, number>> {
     const monthExpr = sql<number>`extract(month from (${events.startsAt} at time zone 'Europe/Moscow'))::int`;
     const rows = await this.db
       .select({ month: monthExpr, count: sql<number>`count(*)::int` })
@@ -648,6 +706,7 @@ export class EventsRepository {
         and(
           ACTIVE_EVENT,
           ACADEMY_AUDIENCE,
+          ...this.facetWhere(facets),
           inArray(events.state, [...MONTH_BROADCAST_STATES]),
           gte(events.startsAt, start),
           lt(events.startsAt, end),

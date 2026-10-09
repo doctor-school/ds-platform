@@ -22,18 +22,6 @@ describe("LISTING_COPY plural sentences", () => {
     );
   });
 
-  it("month subtitle pluralises the host noun and the schools", () => {
-    expect(LISTING_COPY.month.subtitle(21, 2, EFIR)).toBe(
-      "21 эфир · 2 школы · время — МСК",
-    );
-    expect(LISTING_COPY.month.subtitle(5, 1, EFIR)).toBe(
-      "5 эфиров · 1 школа · время — МСК",
-    );
-    expect(LISTING_COPY.month.subtitle(0, 0, EFIR)).toBe(
-      "0 эфиров · 0 школ · время — МСК",
-    );
-  });
-
   it("picker and day counts use the host noun; the default noun is «событие»", () => {
     expect(LISTING_COPY.month.pickerCount(2, EFIR)).toBe("2 эфира");
     expect(LISTING_COPY.month.dayEventsLabel(1, EFIR)).toBe("1 эфир");

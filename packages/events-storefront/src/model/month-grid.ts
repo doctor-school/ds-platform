@@ -1,6 +1,6 @@
 import type { MonthBroadcastEntry } from "@ds/schemas";
 
-import { formatMskDayLabel, formatMskParts } from "./msk";
+import { formatMskDayLabel } from "./msk";
 
 /**
  * 004 EARS-19 — the pure month-calendar layout logic behind the `?view=month`
@@ -40,11 +40,6 @@ export function mskDateParts(instant: Date): {
   return { year: y, month: m, day: d };
 }
 
-/** The current МСК calendar month as `YYYY-MM` — the month the `?view=month` pane opens on. */
-export function currentMskMonth(now: Date = new Date()): string {
-  return MSK_ISO_DAY.format(now).slice(0, 7);
-}
-
 /** Days in the given 1-based month (UTC arithmetic — day 0 of next month). */
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -67,24 +62,24 @@ export function shiftMonth(month: string, deltaMonths: number): string {
 }
 
 /**
- * Whether `month` (`YYYY-MM`) is strictly before the current МСК month — the
- * picker mutes an already-past month («прошёл», EARS-16). A lexicographic
- * `YYYY-MM` string compare is exact (fixed width, zero-padded), so no `Date`
- * math is needed; `now` is injected for testability.
+ * Whether `month` (`YYYY-MM`) is strictly before the month of `today` (the
+ * page's one today, wave-2 gate §4.3 D10) — the picker mutes an already-past
+ * month («прошёл», EARS-16). A lexicographic `YYYY-MM` string compare is exact
+ * (fixed width, zero-padded), so no `Date` math is needed.
  */
-export function isMonthPast(month: string, now: Date = new Date()): boolean {
-  return month < currentMskMonth(now);
+export function isMonthPast(month: string, today: string): boolean {
+  return month < today.slice(0, 7);
 }
 
 /**
- * Whether `month` (`YYYY-MM`) is strictly AFTER the current МСК month — the month
+ * Whether `month` (`YYYY-MM`) is strictly AFTER the month of `today` — the month
  * view offers a «← <prev month>» return link only from a future month (004 owner
  * verdict #5 on #1052: from the current or a past month the back link is withheld
  * so the surface never motivates backward browsing). Same exact lexicographic
- * `YYYY-MM` compare as `isMonthPast`; `now` injected for testability.
+ * `YYYY-MM` compare as `isMonthPast`.
  */
-export function isMonthFuture(month: string, now: Date = new Date()): boolean {
-  return month > currentMskMonth(now);
+export function isMonthFuture(month: string, today: string): boolean {
+  return month > today.slice(0, 7);
 }
 
 /**
@@ -138,14 +133,15 @@ export interface MonthGrid {
  * onto their МСК calendar day; days before today are `isPast`, today is flagged,
  * weekends are marked. Leading/trailing filler cells carry the neighbour month's
  * real day numbers (`inMonth: false`) so the 7-column rhythm reads continuously,
- * matching `events-feed-month.dc.html`. Pure — `now` is injected for testability.
+ * matching `events-feed-month.dc.html`. Pure — `today` (`YYYY-MM-DD`, МСК) is
+ * the page's one today, the api's (wave-2 gate §4.3 D10), never a clock read.
  */
 export function buildMonthGrid(params: {
   month: string;
   entries: readonly MonthBroadcastEntry[];
-  now?: Date;
+  today: string;
 }): MonthGrid {
-  const { month, entries, now = new Date() } = params;
+  const { month, entries } = params;
   const year = Number(month.slice(0, 4));
   const monthIndex = Number(month.slice(5, 7));
 
@@ -158,7 +154,11 @@ export function buildMonthGrid(params: {
     else byDay.set(day, [entry]);
   }
 
-  const today = mskDateParts(now);
+  const today = {
+    year: Number(params.today.slice(0, 4)),
+    month: Number(params.today.slice(5, 7)),
+    day: Number(params.today.slice(8, 10)),
+  };
   const isCurrentMonth = today.year === year && today.month === monthIndex;
   const todayOrdinal = ymd(today.year, today.month, today.day);
 
@@ -308,8 +308,4 @@ export function capDayEntries(
     (a, b) => Number(b.state === "live") - Number(a.state === "live"),
   );
   return { visible: sorted.slice(0, max), overflow: Math.max(0, sorted.length - max) };
-}
-
-export function entryTime(entry: MonthBroadcastEntry): string {
-  return formatMskParts(entry.startsAt).time;
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Suspense, isValidElement, type ReactElement, type ReactNode } from "react";
+import { Fragment, Suspense, isValidElement, type ReactElement, type ReactNode } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,12 +15,14 @@ const mocks = vi.hoisted(() => ({
   fetchEventsFeed: vi.fn(),
   fetchEventsLive: vi.fn(),
   fetchMyEvents: vi.fn(),
+  fetchSpecialtyChoices: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
   usePathname: () => "/events",
   useSearchParams: () => new URLSearchParams(),
+  permanentRedirect: vi.fn(),
 }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(mocks.cookie ? { cookie: mocks.cookie } : {}),
@@ -30,14 +32,11 @@ vi.mock("../server", async (importOriginal) => ({
   fetchEventsFeed: mocks.fetchEventsFeed,
   fetchEventsLive: mocks.fetchEventsLive,
   fetchMyEvents: mocks.fetchMyEvents,
+  fetchSpecialtyChoices: mocks.fetchSpecialtyChoices,
 }));
 
-import {
-  EventsFeedView,
-  FeedSection,
-  LiveSection,
-  MyEventsSection,
-} from "./events-feed-view";
+import { EventsListingPage } from "./events-listing-page";
+import { FeedSection, LiveSection, MyEventsSection } from "./feed-sections";
 import { FeedFrame } from "./feed-frame";
 import { LiveBlock } from "./live-block";
 
@@ -49,12 +48,15 @@ const ROUTES = {
 };
 
 const DOCTOR: EventsStorefrontHostConfig = {
+  filterSet: "doctor",
   contentSet: {
     feedPath: "/v1/storefront/doctor/events",
     tenseParam: "tense",
     relayCookie: "__Host-ds_specialty",
     livePath: "/v1/storefront/doctor/events/live",
     myEventsPath: "/v1/storefront/doctor/me/events",
+    monthPath: "/v1/storefront/doctor/events/month",
+    countsPath: "/v1/storefront/doctor/events/month-counts",
     adapt: adaptDoctorEventsFeed,
   },
   headerCopy: {
@@ -65,11 +67,14 @@ const DOCTOR: EventsStorefrontHostConfig = {
 };
 
 const ACADEMY: EventsStorefrontHostConfig = {
+  filterSet: "academy",
   contentSet: {
     feedPath: "/v1/public/events",
     tenseParam: "timeframe",
     livePath: "/v1/public/events/live",
     myEventsPath: "/v1/me/events",
+    monthPath: "/v1/public/events",
+    countsPath: "/v1/public/events/month-counts",
     adapt: adaptPublicEventListing,
   },
   headerCopy: {
@@ -95,7 +100,10 @@ const CARD: EventsFeedCard = {
 };
 
 const PAGE: EventsFeedPage = {
+  facetOptions: {},
+  matching: 0,
   cards: [CARD],
+  today: "2026-10-08",
   horizon: { from: "2026-10-08", to: "2026-10-22", nextTo: "2026-11-05", nextFrom: null },
   remaining: 57,
   nextBatch: 6,
@@ -121,30 +129,41 @@ beforeEach(() => {
   mocks.fetchMyEvents.mockResolvedValue({ authenticated: false });
   mocks.fetchEventsLive.mockResolvedValue({ ok: true, value: [] });
   mocks.fetchEventsFeed.mockResolvedValue({ ok: true, value: PAGE });
+  mocks.fetchSpecialtyChoices.mockResolvedValue([]);
 });
 
-/** The FeedFrame element `EventsFeedView` returns, with its block children. */
+/** The FeedFrame element the one page returns in its feed view. */
 async function frame(
   config: EventsStorefrontHostConfig,
   query: Record<string, string> = {},
 ) {
-  const element = (await EventsFeedView({ config, query })) as ReactElement<{
-    children: ReactNode[];
-  }>;
+  const element = (await EventsListingPage({
+    config,
+    searchParams: Promise.resolve(query),
+  })) as ReactElement<{ children: ReactNode }>;
   expect(element.type).toBe(FeedFrame);
   return element;
 }
 
-/** Each rendered block: its Suspense child's component and fallback test id. */
-function blocks(element: ReactElement<{ children: ReactNode[] }>) {
-  return element.props.children
-    .filter((child): child is ReactElement => isValidElement(child))
-    .map((child) => {
-      expect(child.type).toBe(Suspense);
-      const { children, fallback } = child.props as {
-        children: ReactElement;
-        fallback: ReactElement;
-      };
+/** Every Suspense boundary in the page's own markup, in document order. */
+function boundaries(node: ReactNode): ReactElement[] {
+  if (Array.isArray(node)) return node.flatMap(boundaries);
+  if (!isValidElement(node)) return [];
+  if (node.type === Suspense) return [node];
+  if (typeof node.type === "string" || node.type === Fragment) {
+    return boundaries((node.props as { children?: ReactNode }).children);
+  }
+  return [];
+}
+
+const FEED_BLOCKS: unknown[] = [LiveSection, MyEventsSection, FeedSection];
+
+/** The feed blocks: each Suspense child's component and its fallback test id. */
+function blocks(element: ReactElement<{ children: ReactNode }>) {
+  return boundaries(element.props.children)
+    .map((child) => child.props as { children: ReactElement; fallback: ReactElement })
+    .filter(({ children }) => FEED_BLOCKS.includes(children.type))
+    .map(({ children, fallback }) => {
       render(fallback);
       const skeleton = screen.getByTestId(/skeleton$/).dataset.testid;
       cleanup();
@@ -152,7 +171,7 @@ function blocks(element: ReactElement<{ children: ReactNode[] }>) {
     });
 }
 
-describe("<EventsFeedView> — the feed view of both storefronts", () => {
+describe("<EventsListingPage> — the feed view of both storefronts", () => {
   it.each([
     ["doctor", DOCTOR],
     ["Academy", ACADEMY],

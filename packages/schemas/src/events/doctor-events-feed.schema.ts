@@ -5,10 +5,12 @@ import {
   DoctorEventCardSchema,
   DoctorEventFormatSchema,
 } from "./doctor-event-card.schema.js";
+import { PublicEventFacetOptionSchema } from "./event-facet-option.schema.js";
 import { MOSCOW_TIME_ZONE, formatEventTime } from "./event-time.js";
 import {
   createEventListingQueryCodec,
   type EventListingQueryEntry,
+  type EventListingQueryField,
   type RawQueryRecord,
 } from "./event-listing-query.schema.js";
 
@@ -116,9 +118,38 @@ export type DoctorEventsFeedTargeting = z.infer<
   typeof DoctorEventsFeedTargetingSchema
 >;
 
+/**
+ * The doctor facet panel's options beside a feed page (wave-2 gate §4.3 D9) —
+ * the Academy's option block mirrored: the same item shape, counted under the
+ * OTHER facets' current selection over the tense's reachable range, ordered
+ * by title then slug, a zero-yield option kept. `kind` is the 012 kind
+ * dictionary (slug + title); `city` the value a card's `city` carries (a city
+ * name, hence not slug grammar). `format` and `specialty` need no block — the
+ * format set is fixed and specialties come from `/v1/public/specialties`.
+ */
+export const DoctorEventFacetOptionsSchema = z
+  .object({
+    city: z.array(
+      PublicEventFacetOptionSchema.extend({ slug: z.string().min(1) }),
+    ),
+    kind: z.array(PublicEventFacetOptionSchema),
+  })
+  .strict();
+export type DoctorEventFacetOptions = z.infer<
+  typeof DoctorEventFacetOptionsSchema
+>;
+
 export const DoctorEventsFeedSchema = z
   .object({
     tense: DoctorEventsFeedTenseSchema,
+    /**
+     * Wave-2 gate §4.3 D10 — the api's «сегодня», the codec-zone (МСК)
+     * calendar day the read resolved its horizon against; the month read's
+     * `today` field. The page takes its one today from here (month grid,
+     * «Сегодня», the day-href tense boundary), never from the device clock or
+     * the URL-echoed extent.
+     */
+    today: DoctorEventsFeedDaySchema,
     /** The applied horizon, echoed so the client never has to re-derive it. */
     from: DoctorEventsFeedDaySchema,
     to: DoctorEventsFeedDaySchema,
@@ -150,6 +181,8 @@ export const DoctorEventsFeedSchema = z
      */
     nextBatch: z.number().int().nonnegative(),
     targeting: DoctorEventsFeedTargetingSchema,
+    /** The facet panel's options (D9); additive — an older reader ignores it. */
+    facets: DoctorEventFacetOptionsSchema.optional(),
   })
   .strict();
 export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;
@@ -164,9 +197,8 @@ export type DoctorEventsFeed = z.infer<typeof DoctorEventsFeedSchema>;
  * a missing `specialty` means `mine-and-adjacent`. The field table below is
  * ordered, and that order IS the URL's key order.
  */
-export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
-  schema: DoctorEventsFeedQuerySchema,
-  fields: [
+/** The doctor codec's field table — its order IS the URL's key order. */
+export const DOCTOR_EVENTS_FEED_QUERY_FIELDS = [
     { key: "day", kind: "scalar" },
     { key: "tense", kind: "scalar" },
     { key: "from", kind: "scalar" },
@@ -182,8 +214,12 @@ export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
     { key: "nmo", kind: "boolean" },
     { key: "free", kind: "boolean" },
     { key: "q", kind: "scalar" },
-  ],
-} as const);
+  ] as const satisfies readonly EventListingQueryField[];
+
+export const DOCTOR_EVENTS_FEED_QUERY_CODEC = createEventListingQueryCodec({
+  schema: DoctorEventsFeedQuerySchema,
+  fields: DOCTOR_EVENTS_FEED_QUERY_FIELDS,
+});
 
 /**
  * The single query codec of 019 (019-design §3). The API controller and the

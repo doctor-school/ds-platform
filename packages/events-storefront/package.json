@@ -9,7 +9,6 @@
     "./client": "./src/client/registration-client.ts",
     "./ui": "./src/ui/index.ts",
     "./listing": "./src/ui/events-listing-page.tsx",
-    "./feed": "./src/ui/events-feed-view.tsx",
     "./adapters": "./src/adapters.ts",
     "./my-events": "./src/ui/my-events-route.tsx",
     "./host-config": "./src/host-config.ts",

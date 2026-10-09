@@ -9,6 +9,7 @@ import {
   congressRosterCells,
   congressRosterRowNumber,
   deskEntryFailure,
+  rosterSortAddressIsStale,
   rosterSortFromAddress,
   rosterSortHref,
   rosterSortKeyOf,
@@ -248,6 +249,22 @@ describe("044 EARS-22 server sort state", () => {
       key: "registeredAt",
       direction: "asc",
     });
+  });
+
+  it("EARS-37: an address sort the screen does not honour — presence after a reload drops the day, an unknown key — is stale and gets rewritten to the default", () => {
+    const presence = new URLSearchParams("sort=presence&dir=desc");
+    expect(rosterSortAddressIsStale(presence, "")).toBe(true);
+    expect(rosterSortAddressIsStale(presence, "2026-04-23")).toBe(false);
+    expect(
+      rosterSortAddressIsStale(new URLSearchParams("sort=email&dir=asc"), ""),
+    ).toBe(true);
+    expect(
+      rosterSortAddressIsStale(new URLSearchParams("sort=city&dir=desc"), ""),
+    ).toBe(false);
+    // No sort in the address is the default by definition — nothing to rewrite.
+    expect(rosterSortAddressIsStale(new URLSearchParams("q=x"), "")).toBe(
+      false,
+    );
   });
 
   it("EARS-22: a sort change is written into the address, keeping the rest of the query (the open card, the search)", () => {

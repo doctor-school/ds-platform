@@ -43,6 +43,7 @@
   --color-foreground: oklch(0.21 0.02 250);
   --color-section: oklch(0.955 0.004 250);
   --color-calendar-muted: oklch(0.985 0.002 250);
+  --color-table-sorted: oklch(0.985 0.002 250);
   --color-card: #ffffff;
   --color-card-foreground: oklch(0.21 0.02 250);
   --color-primary: #2d84f2;
@@ -254,6 +255,7 @@
   --color-foreground: #ffffff;
   --color-section: oklch(0.185 0.02 250);
   --color-calendar-muted: oklch(0.185 0.02 250);
+  --color-table-sorted: oklch(0.185 0.02 250);
   --color-card: oklch(0.21 0.02 250);
   --color-card-foreground: #ffffff;
   --color-primary: #2d84f2;
@@ -316,6 +318,7 @@
   --color-foreground: oklch(0.21 0.02 250);
   --color-section: oklch(0.955 0.004 250);
   --color-calendar-muted: oklch(0.985 0.002 250);
+  --color-table-sorted: oklch(0.985 0.002 250);
   --color-card: #ffffff;
   --color-card-foreground: oklch(0.21 0.02 250);
   --color-primary: #2d84f2;
@@ -378,6 +381,7 @@
   --color-foreground: var(--color-foreground);
   --color-section: var(--color-section);
   --color-calendar-muted: var(--color-calendar-muted);
+  --color-table-sorted: var(--color-table-sorted);
   --color-card: var(--color-card);
   --color-card-foreground: var(--color-card-foreground);
   --color-primary: var(--color-primary);

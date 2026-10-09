@@ -56,7 +56,9 @@ import {
  * every sortable header always shows a muted double arrow, the active one shows a
  * single direction arrow in the `primary-action` accent; the first click asks for
  * ascending, a click on the active column reverses it, and another header replaces
- * it — there is always exactly one sort, never a cleared one. Below `md` the cards
+ * it — there is always exactly one sort, never a cleared one. The body cells of the
+ * sorted column sit on the faint `table-sorted` surface (the header keeps no fill);
+ * `headerDetail` stacks a smaller qualifier under a header title. Below `md` the cards
  * have no headers, so `sortSelect` renders a «Сортировка» select (field × direction)
  * over the same contract. The block orders nothing itself: the rows arrive already
  * ordered by the server, which is why `@tanstack/react-table` is still NOT a
@@ -105,6 +107,12 @@ export interface DataTableColumn<Row> {
    * a plain, non-sortable header (byte-identical to a table without sorting).
    */
   sortKey?: string;
+  /**
+   * A short qualifier under the header title — a second, smaller line in the
+   * header (e.g. «день 23.04» under «Присутствие»). The header still reads as one
+   * label «header · detail» (accessible name, card term, sort-select option).
+   */
+  headerDetail?: string;
 }
 
 export type DataTableSortDirection = "asc" | "desc";
@@ -179,6 +187,11 @@ export interface DataTableProps<Row> {
 const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
 
 /** Square-cap 16px strokes, `currentColor` — the DS inline-icon convention. */
+/** A header as one plain label: «title · detail» (accessible name, card term, select). */
+function headerText(header: string, detail: string | undefined): string {
+  return detail ? `${header} · ${detail}` : header;
+}
+
 function SortIcon({ state }: { state: DataTableSortDirection | "none" }) {
   const paths =
     state === "asc"
@@ -267,7 +280,12 @@ export function DataTable<Row>({
             : []),
           ...columns.flatMap((column) =>
             column.sortKey
-              ? [{ key: column.sortKey, header: column.header }]
+              ? [
+                  {
+                    key: column.sortKey,
+                    header: headerText(column.header, column.headerDetail),
+                  },
+                ]
               : [],
           ),
         ]
@@ -281,17 +299,35 @@ export function DataTable<Row>({
   const head = (
     key: string,
     header: string,
+    detail: string | undefined,
     sortKey: string | undefined,
+    align: DataTableAlign | undefined,
     className: string | undefined,
   ) => {
+    const active = Boolean(sort && sort.key === sortKey);
+    const title = detail ? (
+      // Two lines — the title, and under it the smaller qualifier.
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span>{header}</span>
+        <span
+          className={cn(
+            "text-xs font-bold normal-case tracking-normal",
+            active ? "text-tint-foreground" : "text-muted-foreground",
+          )}
+        >
+          {detail}
+        </span>
+      </span>
+    ) : (
+      <span className="min-w-0">{header}</span>
+    );
     if (!sortKey || !sort || !onSortChange) {
       return (
         <TableHead key={key} className={className}>
-          {header}
+          {headerText(header, detail)}
         </TableHead>
       );
     }
-    const active = sort.key === sortKey;
     return (
       <TableHead
         key={key}
@@ -300,6 +336,9 @@ export function DataTable<Row>({
       >
         <button
           type="button"
+          // Two stacked lines would read as «titledetail»; the name stays the
+          // one label the visible text spells.
+          aria-label={detail ? headerText(header, detail) : undefined}
           onClick={() =>
             onSortChange({
               key: sortKey,
@@ -307,17 +346,33 @@ export function DataTable<Row>({
             })
           }
           className={cn(
-            "flex w-full items-center gap-1.5 px-3.5 py-3 text-left font-extrabold uppercase tracking-tight hover:bg-tint focus-visible:shadow-focus focus-visible:outline-none",
+            "flex w-full items-center gap-1.5 px-3.5 py-3 font-extrabold uppercase tracking-tight hover:bg-tint focus-visible:shadow-focus focus-visible:outline-none",
+            align === "end"
+              ? "justify-end text-right"
+              : "justify-start text-left",
             active ? "text-tint-foreground" : "text-foreground",
           )}
         >
-          <span className="min-w-0">{header}</span>
-          <SortIcon state={active ? sort.direction : "none"} />
+          {title}
+          <SortIcon state={active && sort ? sort.direction : "none"} />
         </button>
       </TableHead>
     );
   };
   const clickable = Boolean(rowHref || onRowClick);
+  /**
+   * S1: the body cells of the column the table is sorted by sit on the faint
+   * `table-sorted` surface at rest (the header keeps no fill). A cell paints over
+   * its row, so on a clickable row it hands the hover / pressed tint back.
+   */
+  const sortedCell = (sortKey: string | undefined) =>
+    sortKey && sort && onSortChange && sort.key === sortKey
+      ? cn(
+          "bg-table-sorted",
+          clickable &&
+            "group-hover/row:bg-tint group-has-[:active]/row:bg-tint-pressed group-focus-within/row:bg-tint",
+        )
+      : undefined;
   const columnCount = 1 + columns.length + (actions ? 1 : 0);
   // An actions column declares no width (it absorbs the remainder), so a grid with
   // one is never all-absolute.
@@ -409,7 +464,7 @@ export function DataTable<Row>({
             "cursor-pointer hover:bg-tint has-[:active]:bg-tint-pressed focus-within:bg-tint focus-within:shadow-focus",
         )}
       >
-        <TableCell className="py-3.5">
+        <TableCell className={cn("py-3.5", sortedCell(record.sortKey))}>
           <span className="block">{activation(row)}</span>
           {record.context ? (
             <span
@@ -428,7 +483,11 @@ export function DataTable<Row>({
             <TableCell
               key={column.key}
               title={column.fullValue?.(row)}
-              className={cn(alignClass(column.align), ellipsis && "truncate")}
+              className={cn(
+                alignClass(column.align),
+                ellipsis && "truncate",
+                sortedCell(column.sortKey),
+              )}
               style={column.width ? { maxWidth: column.width } : undefined}
             >
               {column.render(row)}
@@ -496,7 +555,7 @@ export function DataTable<Row>({
             .map((column) => (
               <div key={column.key} className="flex gap-2 text-sm">
                 <dt className="text-caption text-muted-foreground">
-                  {column.header}
+                  {headerText(column.header, column.headerDetail)}
                 </dt>
                 <dd className="text-sm text-foreground">
                   {column.render(row)}
@@ -531,12 +590,21 @@ export function DataTable<Row>({
           </colgroup>
           <TableHeader>
             <TableRow>
-              {head("record", record.header, record.sortKey, headClass)}
+              {head(
+                "record",
+                record.header,
+                undefined,
+                record.sortKey,
+                undefined,
+                headClass,
+              )}
               {columns.map((column) =>
                 head(
                   column.key,
                   column.header,
+                  column.headerDetail,
                   column.sortKey,
+                  column.align,
                   cn(alignClass(column.align), headClass),
                 ),
               )}

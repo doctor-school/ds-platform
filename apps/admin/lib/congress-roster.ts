@@ -145,6 +145,26 @@ export function rosterSortFromAddress(
   return { key: key.data, direction: direction.data };
 }
 
+/**
+ * The address carries a sort the screen does not honour — `presence` with no
+ * day chosen (the day is not in the address, so a reload drops it), or an
+ * unknown key / direction. The screen rewrites it to the default so the
+ * address never holds a stale sort that would come back to life later.
+ */
+export function rosterSortAddressIsStale(
+  params: URLSearchParams,
+  attendanceDay: string,
+): boolean {
+  const key = params.get(ROSTER_SORT_PARAM);
+  const direction = params.get(ROSTER_DIR_PARAM);
+  if (key === null && direction === null) return false;
+  const honoured = rosterSortFromAddress(params, attendanceDay);
+  return (
+    honoured.key !== key ||
+    honoured.direction !== (direction ?? ROSTER_SORT_DEFAULT.direction)
+  );
+}
+
 /** The address with `sort` written in, the rest of the query (card, search) kept. */
 export function rosterSortHref(
   pathname: string,

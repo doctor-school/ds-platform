@@ -1600,7 +1600,7 @@
       "phone": "Телефон",
       "registeredAt": "Дата регистрации",
       "attendance": "Присутствие",
-      "attendanceOnDay": "Присутствие · день {day}"
+      "attendanceDayDetail": "день {day}"
     },
     "sort": {
       "label": "Сортировка",

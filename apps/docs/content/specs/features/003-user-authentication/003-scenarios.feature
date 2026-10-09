@@ -805,11 +805,15 @@ Feature: Net-new web authentication producing a doctor_guest identity
     # Internal mirror proof: apps/api/test/auth/verify.e2e-spec.ts EARS-3.
     # Its EARS-41 test owns the identifier-triad timing proof, not this browser case.
 
-  @EARS-39 @failure
+  @EARS-39 @failure @registration-password-memory
   Scenario: The held registration password is never persisted anywhere
-    Given a registrant moving from /register to /verify
-    When the password hold is inspected on every path including reload and abandonment
-    Then the password is absent from the URL, localStorage, sessionStorage, and cookies
+    Given a uniquely owned Academy registrant whose password persistence is observed before registration
+    When the observed registrant submits the Academy registration form and reaches the unconsumed code step
+    And the observed registrant really reloads verification and abandons it through Change email without submitting a code
+    Then the entered registration password never appears in URLs, browser stores or cookies during transition, reload or abandonment
+    # Whole live transition: registration-password-memory.steps.ts EARS-39.
+    # Retain pending-registration.test.ts isolated memory/storage snapshots and
+    # registration.steps.ts / cold-verification.steps.ts confirmation contracts.
 
   @EARS-40 @failure @bare-verification
   Scenario: A /verify opened with no address goes to the registration door

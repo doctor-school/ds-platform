@@ -405,3 +405,25 @@ along with the existing auth-flow unit contracts. No account is created.
 ```sh
 pnpm e2e:stage <slot> --project academy --grep "A /verify opened with no address goes to the registration door"
 ```
+
+### Registration password persistence (003 EARS-39)
+
+`The held registration password is never persisted anywhere` observes one unique
+owned Academy registration from before the form is submitted, through `/verify`,
+a real document reload, and abandonment through «← Изменить почту». It leaves the
+fresh delivered code unconsumed and requires exactly one registration POST and
+no other auth POST. Each phase asserts no private session or profile access and
+no password in URLs, localStorage, sessionStorage or cookies, including HttpOnly
+cookies. Local write/history hooks, Chromium DOMStorage events and response
+Set-Cookie observation retain only boolean violations, including transient writes
+removed before the next snapshot and percent/base64/JSON-escaped representations.
+The auth fixture keeps traces off; cleanup closes only this owned context.
+`steps/registration-password-memory.steps.ts` reuses the owned registration and
+absent-private-access helpers. The existing isolated `pending-registration.test.ts`
+snapshots and registration/cold-confirmation journeys remain intact. Run only
+this scenario on the lead-selected converged stand; a test-only PR creates no
+owner Stage-B request or new slot:
+
+```sh
+pnpm e2e:stage main --project academy --grep "The held registration password is never persisted anywhere"
+```

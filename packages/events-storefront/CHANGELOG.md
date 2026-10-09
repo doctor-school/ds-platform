@@ -1,5 +1,60 @@
 # @ds/events-storefront
 
+## 1.0.0
+
+### Major Changes
+
+- [#2711](https://github.com/doctor-school/ds-platform/pull/2711) [`b54d3db`](https://github.com/doctor-school/ds-platform/commit/b54d3dbda91585981f3c29b162049031cd7d3336) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Events storefront wave 2 ([#2028](https://github.com/doctor-school/ds-platform/issues/2028)), PR 2.4: both storefronts render the one events feed view of `@ds/events-storefront` per the events-feed canvas — the head with the «Прошедшие | Будущие» tense tabs, «Идёт сейчас» (at most two strips, bounded refresh, its own error and retry), the signed-in reader's three nearest «Мои события», and the day feed whose «Показать ещё N из M» (N the events the next step adds, M all that remain) widens the horizon in the URL («Будущие» forward, «Прошедшие» back) on every URL, the bare `/webinars` and `/webinars?tense=past` included. Cards show the kind and the format, «Коллег записались: N» on upcoming and live cards, «N Pul» only when Pul is required, «НМО» / city / seats when present; a past card reads «Запись · <длительность>» with «Смотреть запись» when a recording is published and «Без записи» otherwise; online and hybrid times follow the viewer zone. A legacy Academy listing URL (`tab`, `cursor`, `cursorTrail`, `page`) permanently redirects to its canonical feed URL. The doctor feed's own composition, live block and resume scroll are removed; the guest account band and the card action leave the feed (a card is one link to its event page).
+
+  **Breaking (`@ds/events-storefront`):** `MAX_CURSOR_TRAIL`, `fetchEventListing`, `fetchEventListingWithCursorFallback`, `InvalidEventCursorError` and `EventListingInput` are removed (the feed reads the horizon, never a cursor trail); the `./adapters` page model requires `nextBatch`, and an Academy listing page without its horizon is refused as a failed read. **Breaking (`@ds/portal`, `@ds/doctor`):** the Academy `/webinars` cursor paging and the doctor feed's own composition are replaced by the shared feed view.
+
+- [#2057](https://github.com/doctor-school/ds-platform/pull/2057) [`5dc1a61`](https://github.com/doctor-school/ds-platform/commit/5dc1a617adcb66eb5716d498b4223a133e6947db) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Forward the client's `x-forwarded-for` on every SSR authed read ([#2054](https://github.com/doctor-school/ds-platform/issues/2054)).
+
+  Since [#1655](https://github.com/doctor-school/ds-platform/issues/1655) the api runs behind `FastifyAdapter({ trustProxy })`, so `request.ip`
+  is the real browser taken from the forwarded chain and the BFF session
+  fingerprint (ADR-0001 §6) is bound to the BROWSER's IP/24. Every server-side read
+  from the Next containers built its own header set and dropped the chain, so the
+  api saw the container address (172.18.0.x), re-derived a different fingerprint and
+  401'd valid sessions — signed-in doctors were bounced off «Мои события» and the
+  event/room pages.
+
+  `ForwardedSession` gains a required `forwardedFor`, and one canonical
+  `forwardedSessionFrom` / `forwardedHeaders` pair in `@ds/events-storefront/server`
+  now builds every hop's headers (`@ds/room` mirrors it as `roomForwardedHeaders`
+  for its own structural `RoomSession`, which likewise gains the field). Both are
+  required-field additions to an exported interface, i.e. breaking for consumers.
+
+### Minor Changes
+
+- [#2663](https://github.com/doctor-school/ds-platform/pull/2663) [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - «Мои события» on both storefronts ([#1972](https://github.com/doctor-school/ds-platform/issues/1972)): the page moves into `@ds/events-storefront` (`./my-events`, `MyEventsRoute`) with its row→card projection and copy, and both hosts mount it — the Academy at `/account/events` as before, the doctor storefront at its new `/account/events`, linked from the `/account` hub. Online and hybrid rows now show the viewer's time zone with an explicit label after hydration; offline rows stay МСК; the page-level «Часовой пояс · Москва · UTC+3» line is gone, each time carries its own zone. The guest door carry `withReturnTarget` moves into `@ds/schemas` (`@ds/auth-flow` uses it from there).
+
+- [#2622](https://github.com/doctor-school/ds-platform/pull/2622) [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - One event-time formatter (004 EARS-12 as amended): `formatEventTime` in `@ds/schemas` presents an online/hybrid event in the viewer's zone and an offline one in Moscow, with an explicit «МСК» / «GMT±N[:MM]» label and grouping keys of the shown time; `@ds/events-storefront` re-exports it and adds `useViewerZone()` (`./ui`); the design system adds the `min-w-zone-label` token. Every former Moscow-time copy (portal, admin, auth-flow, doctor feed, event page, mailer) now delegates to it pinned to Moscow — output unchanged.
+
+### Patch Changes
+
+- [#2493](https://github.com/doctor-school/ds-platform/pull/2493) [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The header «Войти / Регистрация» brings the visitor back to the event page and
+  never registers them ([#2487](https://github.com/doctor-school/ds-platform/issues/2487)): on both storefronts, on an event page the guest
+  link carries that page as a land-only return — the page plus the fixed
+  `?intent=land` marker, one shape in `@ds/schemas`
+  (`formatLandOnlyReturnTarget` / `parseLandOnlyReturnTarget`). The doors carry it
+  end-to-end (the same-origin guard keeps exactly this marker, so the parking
+  cookie keeps it too) and the shared completion lands on the page without
+  `RegisterForEvent`. The event page's own registration button is unchanged. Home,
+  feeds and the auth doors keep the bare route.
+
+- [#2421](https://github.com/doctor-school/ds-platform/pull/2421) [`02891dd`](https://github.com/doctor-school/ds-platform/commit/02891ddabcc0dabe65c912e0a8c038cb90e66d9a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The storefront event page no longer turns into a server error for a signed-in
+  session whose role holds no doctor registration ([#2232](https://github.com/doctor-school/ds-platform/issues/2232)) — today a
+  `platform_admin`. The shared SSR registration read
+  (`fetchEventRegistrationState`) now treats the api's 403 `insufficient role`
+  like 401 and 404: there is no per-user state to compose, so it returns `null`
+  and the doctor `/events/<slug>` and Academy `/webinars/<slug>` pages render as
+  for a guest. A 5xx or network failure still throws. The api's roles are
+  unchanged: an administrator still cannot register for an event or hold a doctor
+  profile.
+- Updated dependencies [[`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`9388284`](https://github.com/doctor-school/ds-platform/commit/9388284e74a18eeb87478fc8ccc405a7caf631c9), [`5922a37`](https://github.com/doctor-school/ds-platform/commit/5922a373daa5fd617f2b3076cf7ea9be97f4c32b), [`b54d3db`](https://github.com/doctor-school/ds-platform/commit/b54d3dbda91585981f3c29b162049031cd7d3336), [`8350915`](https://github.com/doctor-school/ds-platform/commit/835091584a7a9f2e44a3e5dbbc70bd27e7b17495), [`4f6fb18`](https://github.com/doctor-school/ds-platform/commit/4f6fb1869cbf13a68d7433c7aaf798fac21af4ab), [`22c8d1e`](https://github.com/doctor-school/ds-platform/commit/22c8d1ef07a7ebf501389b75ae8b1309eb3e0de9), [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb), [`de024c9`](https://github.com/doctor-school/ds-platform/commit/de024c9daecee663cc52a498712e7641e18759fb), [`8c72f43`](https://github.com/doctor-school/ds-platform/commit/8c72f43cd72f8fad78a7952e6e71309ab055b2b0), [`d2f3d91`](https://github.com/doctor-school/ds-platform/commit/d2f3d91dcae0e6be16cb50c9c598dfd000f4a678), [`3f5fb3e`](https://github.com/doctor-school/ds-platform/commit/3f5fb3efc32cb9b49e61662a57e79157e52fc2eb), [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2), [`1e18f3f`](https://github.com/doctor-school/ds-platform/commit/1e18f3fcad2965d8494fba1339d170eddc8d06d2), [`4016b60`](https://github.com/doctor-school/ds-platform/commit/4016b60050758927b682d76baae9cddbfd2d9330), [`a8eed16`](https://github.com/doctor-school/ds-platform/commit/a8eed16a5c10884386df93c1af1fd650296ef2d9), [`8ae9c15`](https://github.com/doctor-school/ds-platform/commit/8ae9c15f908d94e49a857121c70a4e9390f1ca14), [`247b352`](https://github.com/doctor-school/ds-platform/commit/247b3524c9addd7e7ebf83a19ac8615a79b3e306), [`c754a6d`](https://github.com/doctor-school/ds-platform/commit/c754a6d5a11e8d72ef26d7cc756cc26cafda3977), [`ed94b36`](https://github.com/doctor-school/ds-platform/commit/ed94b36260d4ef98d16a9d8f0f1e1bdbd33c8449), [`dbc5624`](https://github.com/doctor-school/ds-platform/commit/dbc5624ef3cacf00d7fb60119f5045248fe22299), [`87e7143`](https://github.com/doctor-school/ds-platform/commit/87e7143dd89b7d6d9942f7008f92c64899dd8431), [`1853c46`](https://github.com/doctor-school/ds-platform/commit/1853c46b619aa78d69e4da96c6d5e1a7a02d517d), [`b7e535c`](https://github.com/doctor-school/ds-platform/commit/b7e535c34ce4bbd750c5167f750c3e88dd7b381d), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`096f73f`](https://github.com/doctor-school/ds-platform/commit/096f73ff412db2ac636cd04cb624209e7613da93), [`b1e5396`](https://github.com/doctor-school/ds-platform/commit/b1e5396f7a3516895a1e1dcd10a7fd62090d9f61), [`a4c37d2`](https://github.com/doctor-school/ds-platform/commit/a4c37d24812727cbfad64cd969446b0ee234848a), [`e26551d`](https://github.com/doctor-school/ds-platform/commit/e26551d777b683079f7dbed7f68e9ab8475a4508), [`7bb7040`](https://github.com/doctor-school/ds-platform/commit/7bb7040046f9ee2f2f4f0b3c007918bc9d2cba84), [`3ae7607`](https://github.com/doctor-school/ds-platform/commit/3ae7607a52c1143dcd1fae78b854ce627cf94b6b), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`c44edb2`](https://github.com/doctor-school/ds-platform/commit/c44edb23b6ad5ed5955651b8ccad09ce0b86d751), [`1d53550`](https://github.com/doctor-school/ds-platform/commit/1d535508dc5f0bcb0b82964b12ecc1f74d58b52a), [`509bfe2`](https://github.com/doctor-school/ds-platform/commit/509bfe21fa31222013dc78b7d70b78d5e04e51d0), [`026327e`](https://github.com/doctor-school/ds-platform/commit/026327eb09f34c722b68a6a50e0e2b4a3018003c), [`e33baab`](https://github.com/doctor-school/ds-platform/commit/e33baab31e3f594a62470977270848e733a20fcc), [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd), [`b0d5750`](https://github.com/doctor-school/ds-platform/commit/b0d57504a82e638ebc4475fee62943e90bd85d40), [`bb4b540`](https://github.com/doctor-school/ds-platform/commit/bb4b540302e36d4edace761fe5e68e96932cdecd), [`103c74d`](https://github.com/doctor-school/ds-platform/commit/103c74deb7f6e51c0467c520ebfd1813272000bb), [`bc6cc00`](https://github.com/doctor-school/ds-platform/commit/bc6cc0013ce4aeee6fe3b4e990030a7718a0703f), [`5912916`](https://github.com/doctor-school/ds-platform/commit/5912916deaab5efea847a94fada3f0ea232634b1), [`972ccca`](https://github.com/doctor-school/ds-platform/commit/972ccca5d12e9bbe83f2be7c0c4ca90aa9401e9e), [`82697f8`](https://github.com/doctor-school/ds-platform/commit/82697f8e81fdc31989757c83b93a96547eed06a9), [`4053361`](https://github.com/doctor-school/ds-platform/commit/40533617334ba73a7d9e53b3bf6c6af38c56d744)]:
+  - @ds/schemas@7.0.0
+  - @ds/design-system@6.0.0
+
 ## 0.1.0
 
 ### Minor Changes

@@ -497,23 +497,39 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(tokens!.accessToken).toBeTruthy();
     expect(tokens!.refreshToken).toBeTruthy();
     expect(tokens!.claims.sub).toBe(created.sub);
-    // After verification and token exchange the fresh address holds EXACTLY one
-    // mail per login-code request, and every one is the application's login-code
-    // email — no native Zitadel duplicate or any other message rides alongside.
-    const mailbox = await fetch(
-      `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
-    );
-    expect(mailbox.ok).toBe(true);
-    const delivered = (await mailbox.json()) as {
-      messages?: Array<{ Subject?: string }>;
-    };
-    const subjects = (delivered.messages ?? []).map((mail) => mail.Subject);
-    expect(subjects).toHaveLength(evidence.attempts.length);
-    for (const subject of subjects) {
-      expect(subject).toContain(NOTIFICATION_SUBJECTS.verifyEmailOtp);
+    // No native duplicate (003 EARS-6, #2145). Zitadel queues notifications
+    // asynchronously, so a native send could land after the BFF mail we already
+    // read: keep re-counting ALL mail to the fresh address for a settle window.
+    // 10 s covers Zitadel's notification worker requeue interval (2 s default)
+    // several times over plus the Mailpit delivery hop, while keeping the test
+    // well inside its timeout. The native template shares the subject tail and
+    // always carries its unsuppressible CTA anchor (provision.sh step
+    // 8.quinquies), while the application email has none — so each message must
+    // also be anchor-free.
+    const SETTLE_MS = 10_000;
+    const settleUntil = Date.now() + SETTLE_MS;
+    let messages: Array<{ ID?: string; Subject?: string }> = [];
+    do {
+      const mailbox = await fetch(
+        `${MAILPIT_BASE}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
+      );
+      expect(mailbox.ok).toBe(true);
+      messages =
+        ((await mailbox.json()) as { messages?: typeof messages }).messages ??
+        [];
+      expect(messages).toHaveLength(evidence.attempts.length);
+      await sleep(1000);
+    } while (Date.now() < settleUntil);
+    for (const mail of messages) {
+      expect(mail.Subject).toContain(NOTIFICATION_SUBJECTS.verifyEmailOtp);
+      const full = await fetch(`${MAILPIT_BASE}/api/v1/message/${mail.ID}`);
+      expect(full.ok).toBe(true);
+      const body = (await full.json()) as { HTML?: string; Text?: string };
+      expect(body.HTML ?? "").not.toMatch(/<a[\s>]/i);
+      expect(body.Text ?? "").not.toMatch(/https?:\/\//);
     }
     evidence.passed = true;
-  }, 45_000);
+  }, 60_000);
 
   // EARS-7 SMS path — the live round-trip, the SAME bar the EARS-6 email test
   // sets (#170). The dev-stand's generic HTTP SMS provider delivers the code to

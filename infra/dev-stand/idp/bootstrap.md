@@ -221,7 +221,7 @@ to the **real** route, and you should prefer the first:
    the Unleash flags `email-delivery-real` / `sms-delivery-real` and `_activate`s
    the matching provider on a flag change — **no `.env.local` edit, no
    `provision.sh` re-run, no restart**. Toggle the flag in the admin UI
-   (`http://<HOST>:4242`) and the next Zitadel-sent OTP goes real vs intercepted.
+   (`http://<HOST>:4242`) and the next SMS OTP (Zitadel-sent) or BFF email goes real vs intercepted.
    Real mode requires the same explicit provider and complete `IDP_SMTP_REAL_*`
    configuration in both provisioning and the BFF environment. Missing or drifted
    real identity is an error; a flag cannot silently promote Mailpit to real delivery.

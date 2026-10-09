@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
 
 /**
@@ -6,67 +6,69 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * server-side at `/account/events` for an authenticated doctor: their registered
  * upcoming events, day-grouped nearest-first, each with date/time (МСК), title,
  * school, and a link back to `/webinars/:slug`. The canvas empty-state renders
- * when the doctor has no registrations. A guest is redirected to login (the
- * surface is authenticated, EARS-10).
+ * when the doctor has no registrations. A guest is redirected to login carrying
+ * the page as its return target (the surface is authenticated, EARS-10).
  *
- * Live-stand-gated tier (mirrors `event-page-registered.spec.ts` /
- * `webinars-listing.e2e.spec.ts`): needs a running portal whose `/v1/*` rewrite
- * reaches a running api + Postgres, plus a doctor session. It `test.skip`s unless
- * `E2E_PORTAL_URL` is set, so a stray CI invocation is inert. The seed is the
- * 005↔007 fixture seam (lifecycle transitions are feature 007, parent #564):
- *   - `E2E_SESSION_COOKIE` — a `__Host-ds_session` cookie value for a doctor who
- *     is registered for `E2E_MY_EVENT_SLUG` (the one-tap registration is EARS-1).
- *   - `E2E_MY_EVENT_SLUG` / `E2E_MY_EVENT_TITLE` / `E2E_MY_EVENT_SCHOOL` — the
- *     registered upcoming event the Предстоящие list must show, linking to its page.
- *   - `E2E_MY_EVENTS_EMPTY=1` — the session's doctor has NO registrations, so the
- *     empty-state must render (EARS-6).
- *
- * The session cookie is fingerprint-bound (ADR-0001 §6): the SSR read forwards the
- * request's `user-agent` + `accept-language`, so the browser that owns the cookie
- * must present the same surface it bound at login — the operator seeds the cookie
- * for the default Playwright chromium UA.
+ * Live-stand-gated tier: needs a running portal whose `/v1/*` rewrite reaches a
+ * running api + Postgres. It `test.skip`s unless `E2E_PORTAL_URL` is set, so a
+ * stray CI invocation is inert. The signed-in cases additionally need the full
+ * `LIVE_STAND` (real Zitadel + Mailpit): the session is minted the way 003 mints
+ * it — a fresh doctor registers and verifies through Mailpit
+ * (`provisionLoggedInDoctor`) — so the cookie is bound to THIS browser's
+ * fingerprint surface (ADR-0001 §6) and no operator-seeded cookie is involved.
+ *   - `E2E_MY_EVENT_SLUG` / `E2E_MY_EVENT_TITLE` / `E2E_MY_EVENT_SCHOOL` — a
+ *     registrable upcoming event the fresh doctor registers for; the Предстоящие
+ *     list must then show it, linking to its page.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
-const COOKIE = process.env.E2E_SESSION_COOKIE;
 const SLUG = process.env.E2E_MY_EVENT_SLUG;
-const EXPECTED_EMPTY = process.env.E2E_MY_EVENTS_EMPTY === "1";
-const SESSION_COOKIE_NAME = "__Host-ds_session";
 
 test.skip(!process.env.E2E_PORTAL_URL, "requires a live portal");
 
-async function seedSession(context: import("@playwright/test").BrowserContext) {
-  if (!COOKIE) return;
-  await context.addCookies([
-    {
-      name: SESSION_COOKIE_NAME,
-      value: COOKIE,
-      url: BASE,
-      httpOnly: true,
-      secure: BASE.startsWith("https"),
-      sameSite: "Lax",
-    },
-  ]);
+/** The real same-origin `RegisterForEvent` POST the portal client fires. */
+async function registerFor(page: Page, slug: string): Promise<number> {
+  return page.evaluate(async (s) => {
+    const res = await fetch(
+      `/v1/events/${encodeURIComponent(s)}/registration`,
+      {
+        method: "POST",
+        headers: { accept: "application/json" },
+        credentials: "include",
+      },
+    );
+    return res.status;
+  }, slug);
 }
 
-test("EARS-10: a guest hitting «мои события» is redirected to login", async ({
+test("EARS-10: a guest hitting «мои события» is redirected to login carrying the page", async ({
   page,
 }) => {
   await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Faccount%2Fevents$/);
 });
 
-test("EARS-6: the Предстоящие list shows the registered event with МСК date/time, title, school, and a link to its page", async ({
+test("EARS-6: the Предстоящие list shows the registered event with its zone-labelled date/time, title, school, and a link to its page", async ({
   page,
-  context,
 }) => {
-  test.skip(!COOKIE || !SLUG, "requires a doctor session + a registered event");
-  await seedSession(context);
+  test.skip(
+    !LIVE_STAND || !SLUG,
+    "requires a live portal + real Zitadel + Mailpit + a registrable event",
+  );
+  await provisionLoggedInDoctor(page);
+  expect(await registerFor(page, SLUG!)).toBe(200);
   await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
 
-  // The «мои события» heading + the МСК-labeled times (EARS-11, no local drift).
-  await expect(page.getByRole("heading", { name: "Мои события" })).toBeVisible();
-  await expect(page.locator("body")).toContainText("МСК");
+  // The «мои события» heading + an explicitly zone-labelled time (EARS-11 as
+  // carried by 004 EARS-12 amended 2026-10-02, `formatEventTime`): an online
+  // event reads in the viewer's zone — «МСК» at +03:00, «GMT±N» elsewhere — so
+  // the label is asserted by shape, whatever zone the stand browser runs in.
+  await expect(
+    page.getByRole("heading", { name: "Мои события" }),
+  ).toBeVisible();
+  await expect(page.locator("main")).toContainText(
+    /\d{2}:\d{2}\s*(?:МСК|GMT[+-]\d{1,2}(?::\d{2})?)/,
+  );
 
   // The registered event is a card linking to its event page (EARS-6). The title
   // is the card's stretched link; the school kicker is a sibling in the card
@@ -129,7 +131,9 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     }, process.env.E2E_LIVE_SLUG ?? "seed-005-live");
     expect(status).toBe(200);
 
-    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/account/events`, {
+      waitUntil: "domcontentloaded",
+    });
 
     // EXACTLY two tabs — the canvas's third «Сертификаты» tab is owner-decided out
     // of scope (2026-08-17) and must not render, not even as a disabled stub.
@@ -152,13 +156,15 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     ).toHaveAttribute("aria-selected", "true");
 
     // A `hidden` event never surfaces — in EITHER tab (014 EARS-9).
-    await expect(page.locator(`a[href="/webinars/${HIDDEN_SLUG}"]`)).toHaveCount(
-      0,
-    );
-    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(`a[href="/webinars/${HIDDEN_SLUG}"]`)).toHaveCount(
-      0,
-    );
+    await expect(
+      page.locator(`a[href="/webinars/${HIDDEN_SLUG}"]`),
+    ).toHaveCount(0);
+    await page.goto(`${BASE}/account/events`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.locator(`a[href="/webinars/${HIDDEN_SLUG}"]`),
+    ).toHaveCount(0);
 
     // A direct deep link opens Записи straight away (no click needed).
     await page.goto(`${BASE}/account/events?tab=recordings`, {
@@ -174,7 +180,8 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
       .evaluateAll((nodes) =>
         nodes.map((n) => (n as HTMLAnchorElement).getAttribute("href") ?? ""),
       );
-    for (const href of hrefs) expect(href).toMatch(/^\/webinars\/[^/]+(\/room)?$/);
+    for (const href of hrefs)
+      expect(href).toMatch(/^\/webinars\/[^/]+(\/room)?$/);
 
     // A card must never contradict its own badge: «Запись готовится» means nothing
     // is published yet, so that card may NOT also offer «Смотреть запись» (014
@@ -184,14 +191,15 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
     // browser cannot drive a registration to `ended` (005 EARS-1).
     const contradictions = await page
       .locator("[data-webinar-card]")
-      .evaluateAll((nodes) =>
-        nodes.filter((n) => {
-          const text = n.textContent ?? "";
-          return (
-            text.includes("Запись готовится") &&
-            text.includes("Смотреть запись")
-          );
-        }).length,
+      .evaluateAll(
+        (nodes) =>
+          nodes.filter((n) => {
+            const text = n.textContent ?? "";
+            return (
+              text.includes("Запись готовится") &&
+              text.includes("Смотреть запись")
+            );
+          }).length,
       );
     expect(contradictions).toBe(0);
   });
@@ -199,14 +207,12 @@ test.describe("014 EARS-9 my-events tabs (e2e)", () => {
 
 test("EARS-6: with no registrations, the surface renders the empty-state", async ({
   page,
-  context,
 }) => {
-  test.skip(!COOKIE || !EXPECTED_EMPTY, "requires a doctor session with no registrations");
-  await seedSession(context);
+  test.skip(!LIVE_STAND, "requires a live portal + real Zitadel + Mailpit");
+  // A doctor provisioned just now has no registrations by construction.
+  await provisionLoggedInDoctor(page);
   await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
-  await expect(
-    page.getByText("Пока нет предстоящих событий"),
-  ).toBeVisible();
+  await expect(page.getByText("Пока нет предстоящих событий")).toBeVisible();
 });
 
 /**
@@ -250,16 +256,22 @@ test.describe("005 EARS-7 my-events freshness (e2e)", () => {
     // Log the doctor in through the real 003 flow — the session cookie is bound to
     // this browser's fingerprint surface, which the SSR «мои события» read forwards.
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
-    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
-    await page.getByRole("button", { name: /войти|продолжить/i }).click();
+    // Locale-agnostic `autocomplete` selectors (#177): a label regex also matches
+    // the password tab and the «Показать пароль» toggle.
+    await page.locator('input[autocomplete="username"]').fill(DOCTOR_EMAIL!);
+    await page
+      .locator('input[autocomplete="current-password"]')
+      .fill(DOCTOR_PASSWORD!);
+    await page.getByTestId("password-login-submit").click();
     await page.waitForURL(/\/account|\/webinars/);
 
     const cardSelector = `a[href="/webinars/${FRESH_SLUG}"]`;
 
     // Before the write: the fresh event is absent from «мои события» (the read
     // genuinely reflects registration state, not a coincidental pre-population).
-    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/account/events`, {
+      waitUntil: "domcontentloaded",
+    });
     await expect(page.locator(cardSelector)).toHaveCount(0);
 
     // Fire the real `RegisterForEvent` command from the page's own origin (the
@@ -279,7 +291,9 @@ test.describe("005 EARS-7 my-events freshness (e2e)", () => {
 
     // The VERY NEXT read of «мои события» must already list the just-registered
     // event — immediately, no staleness window (EARS-7).
-    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/account/events`, {
+      waitUntil: "domcontentloaded",
+    });
     const card = page.locator(cardSelector).first();
     await expect(card).toBeVisible();
 
@@ -318,17 +332,12 @@ test.describe("006 EARS-6 my-events room-entry CTA (e2e)", () => {
 
     // Register for the seeded LIVE event via the REAL same-origin RegisterForEvent
     // command (the exact POST the portal client fires) — carries the browser session.
-    const status = await page.evaluate(async (slug) => {
-      const res = await fetch(
-        `/v1/events/${encodeURIComponent(slug)}/registration`,
-        { method: "POST", headers: { accept: "application/json" }, credentials: "include" },
-      );
-      return res.status;
-    }, LIVE_SLUG);
-    expect(status).toBe(200);
+    expect(await registerFor(page, LIVE_SLUG)).toBe(200);
 
     // «мои события» now lists the live event; the card carries the room-entry CTA.
-    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/account/events`, {
+      waitUntil: "domcontentloaded",
+    });
     const card = page.locator("[data-webinar-card]", {
       has: page.locator(`a[href="/webinars/${LIVE_SLUG}"]`),
     });
@@ -336,8 +345,14 @@ test.describe("006 EARS-6 my-events room-entry CTA (e2e)", () => {
 
     // The room CTA: catalog copy («Войти в эфир»), the hardened room route, and a
     // SIBLING of the card's stretched title link — no anchor nested in an anchor.
-    const roomCta = card.getByRole("link", { name: "Войти в эфир", exact: true });
-    await expect(roomCta).toHaveAttribute("href", `/webinars/${LIVE_SLUG}/room`);
+    const roomCta = card.getByRole("link", {
+      name: "Войти в эфир",
+      exact: true,
+    });
+    await expect(roomCta).toHaveAttribute(
+      "href",
+      `/webinars/${LIVE_SLUG}/room`,
+    );
     expect(await card.locator("a a").count()).toBe(0);
 
     // The card's own event-page link still resolves (the stretched title link).

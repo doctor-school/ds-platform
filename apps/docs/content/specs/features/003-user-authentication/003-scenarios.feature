@@ -734,12 +734,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the sign-in succeeds
     And the owner is never asked to rotate or re-validate the password
 
-  @EARS-37 @happy
+  @EARS-37 @happy @password-hint
   Scenario: The single password rule is visible before submission
     Given a visitor opens the registration form
     When the password field is rendered and before any interaction
     Then the single rule "Не менее 8 символов" is visible
     And no requirement checklist, strength meter, or second requirement is shown
+    # NEW live preinteraction coverage: password-hint.steps.ts. Retain
+    # packages/design-system/src/primitives/fields/password-field.test.tsx
+    # one-slot unit contract and apps/portal/e2e/identifier-validation.e2e.spec.ts
+    # blur/error copy checks; neither is this untouched live registration proof.
 
   @EARS-37 @failure
   Scenario: The validation error replaces the hint in the one message slot

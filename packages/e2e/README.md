@@ -332,6 +332,23 @@ lead-owned converged slot:
 pnpm e2e:stage pr-<N> --project academy --grep "A password shorter than the minimum length is rejected by the single rule|A password of eight characters with no character classes is accepted"
 ```
 
+### Initial password hint (003 EARS-37)
+
+`The single password rule is visible before submission` opens the Academy
+registration form without touching any control. `steps/password-hint.steps.ts`
+records form focus, input, blur and submit events from document load and requires
+none before checking the empty password field's associated, visible single
+minimum-length message. It rejects a second password message, additional text
+in that field group, a requirement checklist or a strength meter, and requires
+zero registration POSTs. This is NEW live preinteraction coverage; the existing
+`PasswordField` one-slot unit contract and portal identifier-validation blur/error
+checks remain intact. The selected case creates no account, sends no code and
+needs no CAPTCHA test token.
+
+```sh
+pnpm e2e:stage main --project academy --grep "The single password rule is visible before submission"
+```
+
 ### Sign-in method switching (003 EARS-43)
 
 `The typed address survives a switch between the sign-in methods` drives the

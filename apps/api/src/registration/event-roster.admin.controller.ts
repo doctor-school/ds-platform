@@ -19,6 +19,7 @@ import {
   CongressRosterQuerySchema,
   CONGRESS_ROSTER_PAGE_SIZE_MAX,
   CONGRESS_ROSTER_SEARCH_MAX,
+  CONGRESS_ROSTER_SORT_KEYS,
 } from "@ds/schemas";
 import type { AdminSessionPrincipal } from "../auth/admin-session/admin-session.service.js";
 import { Authz, EventGrantPolicy } from "../authz/index.js";
@@ -106,6 +107,14 @@ export class EventRosterAdminController {
     required: false,
     enum: ["marked", "unmarked"],
   })
+  // 044 EARS-22/EARS-37 — one sort column + direction; `presence` needs
+  // `attendanceDay`. Absent = registration date ascending.
+  @ApiQuery({
+    name: "sort",
+    required: false,
+    enum: [...CONGRESS_ROSTER_SORT_KEYS],
+  })
+  @ApiQuery({ name: "dir", required: false, enum: ["asc", "desc"] })
   @ApiOkResponse({ type: CongressRosterListDto })
   // `audit: low-stakes` — a read that writes no domain state owes no terminal
   // ledger row (endpoint-authz design §3), exactly like the 007 admin reads.

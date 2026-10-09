@@ -19,6 +19,7 @@ import {
   type CongressParticipantDay,
   type CongressRosterQuery,
   type CongressRosterRow,
+  CONGRESS_ROSTER_SORT_DEFAULT,
   type EventLifecycleState,
   type EventRosterEntry,
   type MyEventItem,
@@ -426,10 +427,11 @@ export class RegistrationRepository {
    *     it is the pager's denominator, so it must be the same predicate without
    *     `limit`/`offset`.
    *
-   * Sorting and per-column filters are EARS-22/EARS-23, and the «возможный
-   * дубль» marker is EARS-30/EARS-31 — none of them is here. The order is the
-   * `registered_at ASC` the read model has always had, tie-broken by `id` so that
-   * a page boundary is stable when two rows share an instant.
+   * The order is the EARS-22 sort ({@link rosterOrderBy}); without one it is
+   * the `registered_at ASC` the read model has always had, tie-broken by `id` so
+   * that a page boundary is stable when two rows share an instant. Per-column
+   * filters are EARS-23, and the «возможный дубль» marker is EARS-30/EARS-31 —
+   * neither is here.
    */
   async findEventRosterPage(
     eventId: string,
@@ -488,7 +490,14 @@ export class RegistrationRepository {
       .leftJoin(users, eq(users.id, registrations.userId))
       .leftJoin(specialtiesMinzdrav, specialtyJoin)
       .where(where)
-      .orderBy(asc(registrations.registeredAt), asc(registrations.id))
+      .orderBy(
+        ...this.rosterOrderBy(query, {
+          fullName,
+          city,
+          phone,
+          phoneNormalised,
+        }),
+      )
       .limit(pageSize)
       .offset(offset);
 
@@ -524,6 +533,68 @@ export class RegistrationRepository {
       })),
       total: counted?.total ?? 0,
     };
+  }
+
+  /**
+   * 044 EARS-22 (narrowed by EARS-37) — the roster ORDER BY: the one requested
+   * column in the requested direction, then registration date and id ascending
+   * as the tie-break, so equal keys keep today's order and a page boundary is
+   * deterministic. No `sort` is {@link CONGRESS_ROSTER_SORT_DEFAULT}, which
+   * yields exactly `registered_at ASC, id ASC` — the order before EARS-22.
+   *
+   * - Text columns order under the ICU Russian collation (`ru-x-icu`, shipped
+   *   by the pgvector/postgres image on every stand): case-insensitive, «ё»
+   *   beside «е», rather than the database's `en_US` byte-ish order that would
+   *   put «Ё» before «А» and lowercase after uppercase. An empty cell is NULL
+   *   (`nullif`), and `NULLS LAST` keeps it at the end in BOTH directions.
+   * - The phone orders by its digits: the normalised form (EARS-29) where the
+   *   answers carry one, else the rendered value, stripped to digits — never
+   *   by the text as typed, whose brackets and spaces would decide the order.
+   * - присутствие is the `attendanceDay` mark (the schema refuses the key
+   *   without a day): a missing row is «not marked», so ascending puts the
+   *   unmarked first and descending the marked.
+   */
+  private rosterOrderBy(
+    query: CongressRosterQuery,
+    cells: {
+      fullName: SQL<string>;
+      city: SQL<string | null>;
+      phone: SQL<string | null>;
+      phoneNormalised: SQL<string | null>;
+    },
+  ): SQL[] {
+    const sort = query.sort ?? CONGRESS_ROSTER_SORT_DEFAULT.sort;
+    const dir =
+      query.dir === "desc" ? sql.raw("desc") : sql.raw("asc");
+    const russian = (cell: SQL | AnyPgColumn): SQL =>
+      sql`${cell} collate "ru-x-icu"`;
+    const tieBreak = [asc(registrations.registeredAt), asc(registrations.id)];
+    let key: SQL;
+    switch (sort) {
+      case "registeredAt":
+        return [sql`${registrations.registeredAt} ${dir}`, asc(registrations.id)];
+      case "fullName":
+        key = russian(sql`nullif(${cells.fullName}, '')`);
+        break;
+      case "specialty":
+        key = russian(specialtiesMinzdrav.name);
+        break;
+      case "city":
+        key = russian(cells.city);
+        break;
+      case "phone":
+        key = sql`nullif(regexp_replace(coalesce(${cells.phoneNormalised}, ${cells.phone}), '[^0-9]', '', 'g'), '')`;
+        break;
+      case "presence":
+        key = sql`exists (
+          select 1 from ${registrationAttendance}
+           where ${registrationAttendance.registrationId} = ${registrations.id}
+             and ${registrationAttendance.day} = ${query.attendanceDay}
+             and ${registrationAttendance.present} = true
+        )`;
+        break;
+    }
+    return [sql`${key} ${dir} nulls last`, ...tieBreak];
   }
 
   /**

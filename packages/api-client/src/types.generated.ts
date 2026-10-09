@@ -4798,10 +4798,12 @@ export interface operations {
         parameters: {
             query?: {
                 attendanceDay?: string;
+                dir?: "asc" | "desc";
                 page?: number;
                 pageSize?: number;
                 present?: "marked" | "unmarked";
                 q?: string;
+                sort?: "fullName" | "specialty" | "city" | "phone" | "registeredAt" | "presence";
             };
             header?: never;
             path: {

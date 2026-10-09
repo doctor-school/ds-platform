@@ -11,6 +11,7 @@ import {
 } from "./support/congress-submissions";
 import { bindCommitteeToEvent } from "./support/event-grants";
 import { evidenceShot } from "./support/evidence-shot";
+import { expectOneLineValue } from "./support/one-line-value";
 import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
@@ -227,6 +228,12 @@ test.describe("046 V-17 — the programme committee decides on its event's submi
     test.setTimeout(180_000);
     await member.goto(`/events/${eventA}/submissions`);
     await openCard(member, alpha);
+    // The submitter's address reads as plain one-line body text (#2738).
+    await expectOneLineValue(
+      member.getByTestId("submission-card-email"),
+      author!.email,
+      1440,
+    );
 
     // The extension is the administrator's alone.
     await expect(member.getByTestId("submission-extension")).toHaveCount(0);

@@ -14,6 +14,7 @@ import {
   registerDoctorThroughPlatform,
 } from "./support/congress-roster";
 import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
+import { expectOneLineValue } from "./support/one-line-value";
 import { visible } from "./support/visible";
 
 /**
@@ -235,6 +236,21 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
         Math.max(...overflow),
         `a card fact overflows the panel at ${width}px`,
       ).toBeLessThanOrEqual(0);
+      // Contacts read as plain body text: an address is one token, never
+      // broken across lines, cut with an ellipsis only when it cannot fit,
+      // the whole value in its title and selectable in the text.
+      for (const [testId, value] of [
+        ["participant-card-email", duplicateEmail],
+        ["participant-card-phone", DUPLICATE_A.phone],
+      ] as const) {
+        // On the desktop inspector the address has the row to itself and fits.
+        await expectOneLineValue(
+          panel.getByTestId(testId),
+          value,
+          width,
+          width === 1440,
+        );
+      }
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(panel.getByTestId("participant-card-mail")).toHaveText(

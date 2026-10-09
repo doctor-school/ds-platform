@@ -33,10 +33,9 @@ import {
   CardDisclosure,
   CardMeta as CardMetaRow,
   CardSection,
-  EmailChip,
   Fact as CardFact,
   Field,
-  PhoneChip,
+  OneLineValue,
   SECONDARY,
 } from "@/components/admin-card-layout";
 import { formatMskDateTime } from "@/lib/msk";
@@ -330,7 +329,7 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
             {card.submitter.fullName}
           </Fact>
           <Fact label={c("fields.phone")} testId="phone">
-            {phone ? <PhoneChip phone={phone} /> : none}
+            {phone ? <OneLineValue value={phone} /> : none}
           </Fact>
           <Fact
             label={c("fields.email")}
@@ -338,7 +337,7 @@ function CardFacts({ card }: { card: CongressSubmissionCard }) {
             className="sm:col-span-2"
           >
             {card.submitter.email ? (
-              <EmailChip email={card.submitter.email} />
+              <OneLineValue value={card.submitter.email} />
             ) : (
               none
             )}

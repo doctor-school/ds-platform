@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ContactChip, Label, cn } from "@ds/design-system";
+import { Label, cn } from "@ds/design-system";
 
 /**
  * The admin side-panel card's presentation (owner Stage-B on #2724, carried to
@@ -96,7 +96,7 @@ export function Fact({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <dt className={SECONDARY}>{label}</dt>
       <dd
         className={cn(
@@ -111,16 +111,20 @@ export function Fact({
   );
 }
 
-/** A phone as the design system's contact chip, dialable as typed. */
-export function PhoneChip({ phone }: { phone: string }) {
+/**
+ * A single-token value — an email address, a phone — as plain body text on
+ * one line (owner Stage-B on #2738): a token is never broken across lines.
+ * At the card's body size a normal value fits; a longer one is cut with the
+ * ellipsis (the design system's `truncate`, as `account-profile-card` shows
+ * the account email) and keeps the whole value in `title` and in the text,
+ * selectable and copyable. Read-only display: no link chip, no box.
+ */
+export function OneLineValue({ value }: { value: string }) {
   return (
-    <ContactChip href={`tel:${phone.replace(/[^\d+]/g, "")}`} label={phone} />
+    <span className="block truncate" title={value} data-one-line-value="">
+      {value}
+    </span>
   );
-}
-
-/** An email address as the design system's contact chip. */
-export function EmailChip({ email }: { email: string }) {
-  return <ContactChip href={`mailto:${email}`} label={email} />;
 }
 
 /** One labelled form control of a card's write block, with its optional hint. */

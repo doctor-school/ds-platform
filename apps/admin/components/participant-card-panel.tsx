@@ -21,9 +21,8 @@ import {
   CardDisclosure,
   CardMeta,
   CardSection,
-  EmailChip,
   Fact as CardFact,
-  PhoneChip,
+  OneLineValue,
   SECONDARY,
   SECTION_HEADING,
 } from "@/components/admin-card-layout";
@@ -285,10 +284,14 @@ function CardFacts({
         {/* A field the registration does not carry (EARS-16) renders EMPTY. */}
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
           <Fact label={t("fields.phone")} testId="phone">
-            {fields.phone ? <PhoneChip phone={fields.phone} /> : null}
+            {fields.phone ? <OneLineValue value={fields.phone} /> : null}
           </Fact>
-          <Fact label={t("fields.email")} testId="email">
-            {fields.email ? <EmailChip email={fields.email} /> : null}
+          <Fact
+            label={t("fields.email")}
+            testId="email"
+            className="sm:col-span-2"
+          >
+            {fields.email ? <OneLineValue value={fields.email} /> : null}
           </Fact>
         </dl>
       </CardSection>

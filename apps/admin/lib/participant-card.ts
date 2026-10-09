@@ -12,18 +12,16 @@ import { formatMskDateTime } from "./msk";
  * Node-only unit tier can pin them.
  */
 
-/** The text facts of the card, in the order the panel lists them. */
-export const PARTICIPANT_CARD_FIELDS = [
-  "fullName",
-  "specialtyName",
-  "workplace",
-  "city",
-  "region",
-  "phone",
-  "email",
-  "registeredAt",
-] as const;
-export type ParticipantCardField = (typeof PARTICIPANT_CARD_FIELDS)[number];
+/** The text facts of the card; the panel groups them into its sections. */
+export type ParticipantCardField =
+  | "fullName"
+  | "specialtyName"
+  | "workplace"
+  | "city"
+  | "region"
+  | "phone"
+  | "email"
+  | "registeredAt";
 
 /**
  * The card's text facts as display strings. The phone is the one the

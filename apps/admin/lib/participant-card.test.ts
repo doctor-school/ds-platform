@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CongressParticipantCard } from "@ds/schemas";
 import {
-  PARTICIPANT_CARD_FIELDS,
   consentPurposeKey,
   participantCardFailure,
   participantCardFields,
@@ -46,18 +45,20 @@ describe("044 EARS-36 participant card", () => {
     );
   });
 
-  it("EARS-36: shows every stored field in the card's order — the phone exactly as typed, the date in МСК", () => {
-    expect(PARTICIPANT_CARD_FIELDS).toEqual([
-      "fullName",
-      "specialtyName",
-      "workplace",
-      "city",
-      "region",
-      "phone",
-      "email",
-      "registeredAt",
-    ]);
+  it("EARS-36: shows every stored field — the phone exactly as typed, the date in МСК", () => {
     const fields = participantCardFields(card);
+    expect(Object.keys(fields).sort()).toEqual(
+      [
+        "city",
+        "email",
+        "fullName",
+        "phone",
+        "region",
+        "registeredAt",
+        "specialtyName",
+        "workplace",
+      ].sort(),
+    );
     expect(fields.phone).toBe("8 (900) 111-22-33");
     expect(fields.workplace).toBe("ГКБ №1");
     expect(fields.region).toBe("Московская область");

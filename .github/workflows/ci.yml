@@ -266,17 +266,18 @@ jobs:
       # `api-e2e` job against a service container (#66). Keeping them out here
       # lets this step stay service-free and fast.
       #
-      # `--concurrency=2` (#2666): every package's `vitest run` already sizes its
-      # worker pool to the machine (availableParallelism − 1), so turbo's default
-      # of 10 concurrent `test` tasks runs ~10× more workers than the runner has
-      # cores. jsdom tests then get a fraction of a core and cross Vitest's
-      # wall-clock 5000 ms test deadline on unrelated PRs (portal 013 EARS-5,
-      # doctor 005 EARS-2, design-system, room). Two concurrent packages keep the
-      # CPU busy across one package's tail without starving a test. Same bound as
-      # the root `pnpm test` script.
+      # `--concurrency=1` (#2666): every package's `vitest run` already sizes its
+      # worker pool to the machine (availableParallelism − 1), so each further
+      # concurrent turbo `test` task multiplies the workers per core — turbo's
+      # default of 10 ran ~10× more workers than the runner has cores. jsdom
+      # tests then got a fraction of a core and crossed Vitest's wall-clock
+      # 5000 ms test deadline on unrelated PRs (portal 013 EARS-5, doctor
+      # 005 EARS-2, design-system, room, auth-flow). One package at a time is
+      # the only bound that never oversubscribes, on any core count; the
+      # package's own pool keeps the cores busy. Same bound as `pnpm test`.
       - name: unit
         if: needs.changes.outputs.code == 'true'
-        run: pnpm exec turbo run test --concurrency=2 --filter='!@ds/api'
+        run: pnpm exec turbo run test --concurrency=1 --filter='!@ds/api'
       - name: discipline guards (instruction-only changes)
         if: needs.changes.outputs.code != 'true' && needs.changes.outputs.discipline == 'true'
         run: pnpm --filter @ds/lint-guard-tests test

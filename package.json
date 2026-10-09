@@ -91,7 +91,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "eslint . && pnpm lint:oxlint && pnpm lint:stylelint && turbo run lint",
-    "test": "turbo run test --concurrency=2",
+    "test": "turbo run test --concurrency=1",
     "test:tools": "node --test tools/ci/*.test.mjs tools/deploy/*.test.mjs tools/deploy/lib/*.test.mjs tools/gh/*.test.mjs tools/gh/lib/*.test.mjs tools/loadtest/*.test.mjs tools/release/*.test.mjs tools/scripts/*.test.mjs tools/staging/*.test.mjs",
     "typecheck": "turbo run typecheck",
     "changeset": "changeset",

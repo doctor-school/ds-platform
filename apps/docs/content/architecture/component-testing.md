@@ -157,12 +157,13 @@ Component test = fast contract net; live stand = the rendering/paint truth.
 - In CI: these run in the `unit` job (which excludes `@ds/api`); see
   `.claude/rules` and the CI test topology. No `DATABASE_URL` needed — jsdom
   component tests are DB-free.
-- Workspace-wide (`pnpm test`, and the CI `unit` step) runs at most **two**
-  packages' `test` tasks at once (`turbo run test --concurrency=2`, #2666). Each
-  `vitest run` already sizes its worker pool to the machine's cores, so turbo's
-  default of ten concurrent tasks oversubscribes the CPU about tenfold; a jsdom
-  test driven by `user-event` then gets a fraction of a core and crosses Vitest's
-  wall-clock 5000 ms test deadline whatever its own cost. When the deadline fires
-  mid-interaction, the orphan-timer guard also reports the `user-event` `wait()`
-  timer the aborted test left pending — a consequence of the timeout, not a
-  separate leak.
+- Workspace-wide (`pnpm test`, and the CI `unit` step) runs one package's `test`
+  task at a time (`turbo run test --concurrency=1`, #2666). Each `vitest run`
+  already sizes its worker pool to the machine's cores, so every further
+  concurrent package multiplies the workers per core — turbo's default of ten
+  oversubscribed the CPU about tenfold, and even two packages at a time still
+  timed tests out. A jsdom test driven by `user-event` that gets a fraction of a
+  core crosses Vitest's wall-clock 5000 ms test deadline whatever its own cost.
+  When the deadline fires mid-interaction, the orphan-timer guard also reports
+  the `user-event` `wait()` timer the aborted test left pending — a consequence
+  of the timeout, not a separate leak.

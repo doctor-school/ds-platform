@@ -1,4 +1,3 @@
-import { chooseEventClassification } from "../support/event-classification";
 import { expect, type Page } from "@playwright/test";
 import {
   adminOrigin,
@@ -10,9 +9,10 @@ import {
 import {
   bootstrapAdminSession,
   bootstrapDoctorSession,
+  chooseEventClassification,
   E2E_PASSWORD,
-} from "../support/admin-session";
-import { totpCode } from "../support/totp";
+  totpCode,
+} from "@ds/e2e/admin-events";
 
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF");
 const DEFAULT_MSK = "2026-07-17T19:00";

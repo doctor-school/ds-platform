@@ -9,7 +9,8 @@
     "./navigation-model": "./navigation-model.ts",
     "./route-params": "./route-params.ts",
     "./hosts": "./hosts.ts",
-    "./captcha-stub": "./lib/captcha-stub.ts"
+    "./captcha-stub": "./lib/captcha-stub.ts",
+    "./admin-events": "./admin/index.ts"
   },
   "scripts": {
     "check:host-tags": "tsx bin/check-host-tags.ts",

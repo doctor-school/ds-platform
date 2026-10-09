@@ -2,7 +2,7 @@ import { chooseProjectDefaultAudience } from "./support/event-classification";
 import { expect, test, type Page } from "@playwright/test";
 
 type BoundingBox = { x: number; y: number; width: number; height: number };
-import { signInAsAdmin } from "./support/sign-in";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
  * #1674 — the admin expert / project / partner detail screens at a phone width

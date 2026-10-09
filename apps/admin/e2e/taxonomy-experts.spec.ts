@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  ADMIN_ORIGIN,
   bootstrapAdminSession,
   bootstrapDoctorSession,
-} from "./support/admin-session";
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
 import { visible } from "./support/visible";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-19/20/23 — real Refine → NestJS → Postgres expert authoring, plus the

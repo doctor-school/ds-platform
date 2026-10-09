@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsAdmin } from "./support/sign-in";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
  * 014 EARS-25 / EARS-27 (#1741 slice 2b), browser half — what an operator SEES
@@ -82,7 +82,10 @@ async function shot(page: Page, name: string): Promise<void> {
  * applies — so the dark evidence is captured by putting the app under exactly
  * that class rather than by inventing a control this surface does not have.
  */
-async function setPalette(page: Page, palette: "light" | "dark"): Promise<void> {
+async function setPalette(
+  page: Page,
+  palette: "light" | "dark",
+): Promise<void> {
   await page.evaluate((mode) => {
     document.documentElement.classList.toggle("dark", mode === "dark");
   }, palette);

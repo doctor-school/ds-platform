@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootstrapAdminSession } from "./support/admin-session";
-import { totpCode } from "./support/totp";
+import { bootstrapAdminSession, totpCode } from "@ds/e2e/admin-events";
 
 /**
  * 011 Verification rows 6 + 7, browser half — the TOTP challenge on login, and

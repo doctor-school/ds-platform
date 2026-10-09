@@ -1,6 +1,5 @@
-import { chooseEventClassification } from "./support/event-classification";
+import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * 014 EARS-1 / EARS-2 (#1339), browser half — the REAL Refine → NestJS → Postgres

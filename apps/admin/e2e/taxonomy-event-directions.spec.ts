@@ -1,10 +1,9 @@
-import { chooseEventClassification } from "./support/event-classification";
+import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
 import {
   searchRelationshipCombobox,
   selectRelationshipCombobox,
 } from "./support/relationship-combobox";
-import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * 012 EARS-11 (#1293), browser half — the REAL Refine → NestJS → Postgres path

@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createPublishedEvent } from "./support/congress-roster";
+import { createPublishedEvent, signInAsAdmin } from "@ds/e2e/admin-events";
 import { evidenceShot } from "./support/evidence-shot";
-import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * 046 EARS-2 / EARS-3 (#2432) — the platform administrator's congress intake

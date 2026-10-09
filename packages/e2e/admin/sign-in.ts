@@ -3,7 +3,8 @@ import { bootstrapAdminSession, type BootstrapResult } from "./admin-session";
 import { totpCode } from "./totp";
 
 /**
- * The ONE browser sign-in every `apps/admin/e2e` flow spec uses (#1676).
+ * The ONE browser admin sign-in every e2e flow uses (#1676) — the admin flow
+ * specs and, since #2751, the storefront specs that provision admin-side state.
  *
  * Every flow spec used to carry its own `signInAsAdmin` copy, and each copy drove
  * the arc exactly once: login form → `/mfa/enroll` → TOTP → `/events`. That is a

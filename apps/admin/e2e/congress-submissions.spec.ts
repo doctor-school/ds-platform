@@ -1,6 +1,10 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { bootstrapCommitteeAccount } from "./support/admin-session";
-import { createPublishedEvent } from "./support/congress-roster";
+import {
+  ADMIN_ORIGIN,
+  bootstrapCommitteeAccount,
+  createPublishedEvent,
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
 import {
   authorSectionSubmission,
   congressAuthor,
@@ -12,7 +16,6 @@ import {
 import { bindCommitteeToEvent } from "./support/event-grants";
 import { evidenceShot } from "./support/evidence-shot";
 import { expectOneLineValue } from "./support/one-line-value";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 
 /**
  * 046 V-17 (#2437) — the programme committee's admin, driven against the real

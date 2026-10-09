@@ -10,15 +10,15 @@ import {
 import {
   bootstrapAdminSession,
   bootstrapDoctorSession,
-} from "../support/admin-session";
-import { totpCode } from "../support/totp";
+  totpCode,
+} from "@ds/e2e/admin-events";
 
 /**
  * 011 — the browser steps behind `features/admin-mfa-journey.feature`.
  *
  * Every operator-visible fact these steps assert is read from the RUNNING admin
  * app; every code they submit is derived locally from the secret the enrollment
- * screen rendered (`support/totp.ts` — an independent RFC 6238 implementation,
+ * screen rendered (`packages/e2e/admin/totp.ts` — an independent RFC 6238 implementation,
  * the operator's phone modelled). Nothing here seeds a cookie or a factor: a
  * scenario reaches the challenge screen only by walking enrollment first, so a
  * broken gate fails the suite instead of being stepped around.

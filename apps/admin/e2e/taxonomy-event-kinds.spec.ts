@@ -1,10 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  chooseEventClassification,
-  chooseProjectDefaultAudience,
-} from "./support/event-classification";
+import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
+import { chooseProjectDefaultAudience } from "./support/event-classification";
 import { selectRelationshipCombobox } from "./support/relationship-combobox";
-import { signInAsAdmin } from "./support/sign-in";
 import { visible } from "./support/visible";
 
 /**

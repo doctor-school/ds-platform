@@ -8,12 +8,15 @@ import {
   type Page,
 } from "@playwright/test";
 import {
-  addDeskParticipant,
+  ADMIN_ORIGIN,
   createPublishedEvent,
   eventSlugFromRoster,
+  signInAsAdmin,
+} from "@ds/e2e/admin-events";
+import {
+  addDeskParticipant,
   registerDoctorThroughPlatform,
 } from "./support/congress-roster";
-import { ADMIN_ORIGIN, signInAsAdmin } from "./support/sign-in";
 import { expectOneLineValue } from "./support/one-line-value";
 import { visible } from "./support/visible";
 

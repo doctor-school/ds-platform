@@ -1,6 +1,6 @@
 import { test as base } from "playwright-bdd";
 import { createBdd } from "playwright-bdd";
-import { SESSION_COOKIE_NAME } from "./admin-session";
+import { SESSION_COOKIE_NAME } from "@ds/e2e/admin-events";
 
 /**
  * Scenario-scoped world for the admin BDD steps — carries the created event id

@@ -4,7 +4,7 @@ import {
   searchRelationshipCombobox,
   selectRelationshipCombobox,
 } from "./support/relationship-combobox";
-import { signInAsAdmin } from "./support/sign-in";
+import { signInAsAdmin } from "@ds/e2e/admin-events";
 
 /**
  * 012 EARS-10 (#1292), browser half — the REAL Refine → NestJS → Postgres path

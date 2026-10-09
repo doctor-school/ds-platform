@@ -1,7 +1,6 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { CONGRESS_SUBMISSION_PERSONAL_DATA_PURPOSE } from "@ds/schemas";
-import { bootstrapDoctorSession } from "./admin-session";
-import { ADMIN_ORIGIN } from "./sign-in";
+import { ADMIN_ORIGIN, bootstrapDoctorSession } from "@ds/e2e/admin-events";
 
 /**
  * Seeding for the 046 committee specs, through the PRODUCTION writers only —

@@ -1,6 +1,5 @@
-import { chooseEventClassification } from "./support/event-classification";
+import { chooseEventClassification, signInAsAdmin } from "@ds/e2e/admin-events";
 import { expect, test, type Page } from "@playwright/test";
-import { signInAsAdmin } from "./support/sign-in";
 
 /**
  * #1222 — the admin `/events` list at a phone width (390px).

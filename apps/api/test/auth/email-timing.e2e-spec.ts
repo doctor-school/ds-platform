@@ -248,9 +248,12 @@ describe.skipIf(!process.env.DATABASE_URL)("003 email response timing", () => {
             expect(response.body).not.toContain("NATIVE1");
           }
           expect.soft(medianSpread(timing)).toBeLessThanOrEqual(50);
-          expect
-            .soft(Math.max(...first.samples, ...second.samples))
-            .toBeLessThan(200);
+          // The response never waits on the stalled delivery (300–350 ms
+          // bounds above): an awaited send shifts EVERY sample of its class
+          // past 300 ms, so the class MEDIAN carries the verdict — a lone
+          // runner spike on one sample cannot (#2152).
+          for (const measured of timing)
+            expect.soft(measured.median).toBeLessThan(200);
           console.info(
             `EARS-16 ${scenario} ${route}: ${describeTiming(timing)} ms`,
           );

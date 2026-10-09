@@ -16,6 +16,11 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { deleteUserFixture } from "../setup/fixture-cleanup.js";
+import {
+  describeTiming,
+  medianSpread,
+  sampleInterleaved,
+} from "../support/timing-oracle.js";
 
 // Verification (EARS-3, email-only per #202): a correct email OTP code flips
 // `email_verified` via Zitadel; an invalid/expired code returns a generic failure
@@ -231,30 +236,39 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     });
     expect(flip.statusCode).toBe(200);
 
+    // A well-formed code that is not the issued one: it passes the format
+    // check and reaches the account-state check, so every class walks its
+    // own existence branch (a malformed code is refused before any lookup).
+    const WRONG_CODE = "000000";
     async function wrongCode(email: string) {
       const t0 = performance.now();
       const res = await app.inject({
         method: "POST",
         url: "/v1/auth/verify",
-        payload: { email, code: "ZZZZZZ" },
+        payload: { email, code: WRONG_CODE },
       });
       const ms = performance.now() - t0;
       return { status: res.statusCode, body: res.json(), ms };
     }
-    const none = await wrongCode(unknown);
-    const ver = await wrongCode(verified);
-    const unver = await wrongCode(unverified);
-
-    for (const r of [ver, unver]) {
-      expect(r.status).toBe(none.status);
-      expect(r.body).toEqual(none.body);
+    // Round-robin samples per class (unknown, verified, unverified, …) after
+    // one discarded warm-up round; the band bounds the class MEDIANS so a lone
+    // scheduler spike on a shared runner cannot decide the verdict (#2152).
+    const timing = await sampleInterleaved(
+      [unknown, verified, unverified].map((email) => () => wrongCode(email)),
+    );
+    console.info(
+      `EARS-41 unknown/verified/unverified: ${describeTiming(timing)} ms`,
+    );
+    const results = timing.flatMap((c) => c.results);
+    const reference = results[0]!;
+    for (const r of results) {
+      expect(r.status).toBe(reference.status);
+      expect(r.body).toEqual(reference.body);
     }
-    expect(none.status).toBe(400);
-    // The @TimingEqualized floor engages on every branch (≥ 30 ms allows
+    expect(reference.status).toBe(400);
+    // The @TimingEqualized floor engages on every response (≥ 30 ms allows
     // scheduling jitter below the 40 ms floor) and the spread stays in budget.
-    const spread =
-      Math.max(none.ms, ver.ms, unver.ms) - Math.min(none.ms, ver.ms, unver.ms);
-    expect(spread).toBeLessThanOrEqual(50);
-    for (const r of [none, ver, unver]) expect(r.ms).toBeGreaterThanOrEqual(30);
+    expect(medianSpread(timing)).toBeLessThanOrEqual(50);
+    for (const r of results) expect(r.ms).toBeGreaterThanOrEqual(30);
   });
 });

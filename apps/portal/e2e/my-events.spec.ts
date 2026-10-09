@@ -2,7 +2,7 @@ import { test, expect, type Browser, type Page } from "@playwright/test";
 import {
   ADMIN_ORIGIN,
   createPublishedEvent,
-  eventSlugFromRoster,
+  eventSlugFromDetail,
   openEventLive,
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
@@ -352,7 +352,7 @@ async function provisionLiveEvent(browser: Browser): Promise<string> {
       { startsInMs: 5 * 60 * 1000 },
     );
     await openEventLive(admin);
-    return await eventSlugFromRoster(admin, id);
+    return await eventSlugFromDetail(admin, id);
   } finally {
     await context.close();
   }

@@ -73,6 +73,30 @@ export async function openEventLive(page: Page): Promise<void> {
 }
 
 /**
+ * The event's public slug, read from the admin event detail (007 `GET
+ * /v1/admin/events/:id`) with the signed-in admin's session. Any event kind —
+ * the roster read below answers only for an event the congress roster can
+ * serve (event days set).
+ */
+export async function eventSlugFromDetail(
+  page: Page,
+  eventId: string,
+): Promise<string> {
+  const read = await page.evaluate(async (id) => {
+    const res = await fetch(`/v1/admin/events/${id}`, {
+      credentials: "include",
+      headers: { accept: "application/json" },
+    });
+    return {
+      status: res.status,
+      slug: res.ok ? ((await res.json()) as { slug: string }).slug : "",
+    };
+  }, eventId);
+  expect(read.status, "admin event detail").toBe(200);
+  return read.slug;
+}
+
+/**
  * The event's public slug, read from the roster route itself with the signed-in
  * admin's session (the registration endpoint addresses an event by slug).
  */

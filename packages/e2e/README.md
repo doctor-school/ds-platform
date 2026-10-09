@@ -234,8 +234,9 @@ admin screens: `bootstrapAdminSession` (a fresh `platform_admin` granted on the
 stand's IdP; the registrar/committee variants alongside), `signInAsAdmin` (the
 browser login with its TOTP enrollment/challenge, `totp.ts` being the independent
 RFC 6238 generator), and the event writers `createPublishedEvent`,
-`openEventLive` and `eventSlugFromRoster`. The admin flow specs consume them, and so
-does a storefront spec that needs an event in a given state — it drives them on the
+`openEventLive` and the slug read-backs `eventSlugFromDetail` /
+`eventSlugFromRoster`. The admin flow specs consume them, and so does a
+storefront spec that needs an event in a given state — it drives them on the
 admin origin in its own browser context instead of depending on a fixed seed whose
 wall clock drifts:
 
@@ -243,7 +244,7 @@ wall clock drifts:
 import {
   ADMIN_ORIGIN,
   createPublishedEvent,
-  eventSlugFromRoster,
+  eventSlugFromDetail,
   openEventLive,
   signInAsAdmin,
 } from "@ds/e2e/admin-events";
@@ -253,7 +254,7 @@ const admin = await context.newPage();
 await signInAsAdmin(admin);
 const id = await createPublishedEvent(admin, title, { startsInMs: 5 * 60_000 });
 await openEventLive(admin);
-const slug = await eventSlugFromRoster(admin, id);
+const slug = await eventSlugFromDetail(admin, id);
 ```
 
 Dev-stand-gated: needs a running admin (`E2E_ADMIN_URL`) and `IDP_ISSUER` /

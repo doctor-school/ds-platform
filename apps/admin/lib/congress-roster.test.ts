@@ -9,8 +9,16 @@ import {
   congressRosterCells,
   congressRosterRowNumber,
   deskEntryFailure,
+  rosterSortAddressIsStale,
+  rosterSortFromAddress,
+  rosterSortHref,
+  rosterSortKeyOf,
+  rosterSortQuery,
 } from "./congress-roster";
-import { congressAttendanceUrl, congressRosterUrl } from "@/providers/data-provider";
+import {
+  congressAttendanceUrl,
+  congressRosterUrl,
+} from "@/providers/data-provider";
 
 /**
  * 044 EARS-21/25 — the pure half of the roster screen. The unit tier is Node-only,
@@ -112,9 +120,9 @@ describe("044 EARS-34 attendance per congress day", () => {
   it("EARS-34: the presence filter sends a day, and a presence only together with that day", () => {
     expect(attendanceFilterQuery({ day: "", presence: "" })).toEqual({});
     expect(attendanceFilterQuery({ day: "", presence: "marked" })).toEqual({});
-    expect(attendanceFilterQuery({ day: "2027-04-23", presence: "" })).toEqual(
-      { attendanceDay: "2027-04-23" },
-    );
+    expect(attendanceFilterQuery({ day: "2027-04-23", presence: "" })).toEqual({
+      attendanceDay: "2027-04-23",
+    });
     expect(
       attendanceFilterQuery({ day: "2027-04-23", presence: "unmarked" }),
     ).toEqual({ attendanceDay: "2027-04-23", present: "unmarked" });
@@ -150,7 +158,6 @@ describe("044 EARS-34 attendance per congress day", () => {
     expect(attendanceFailureKind(500)).toBe("failed");
   });
 });
-
 
 describe("044 EARS-35 — the desk entry's refusal classes", () => {
   it("EARS-35: builds the desk route in the one url map", () => {
@@ -209,5 +216,88 @@ describe("044 EARS-35 — the desk entry's refusal classes", () => {
       }),
     ).toBe("generic");
     expect(deskEntryFailure(new TypeError("Failed to fetch"))).toBe("generic");
+  });
+});
+
+describe("044 EARS-22 server sort state", () => {
+  it("EARS-22: no sort in the address reads as the server default — registration date ascending", () => {
+    expect(rosterSortFromAddress(new URLSearchParams(""), "")).toEqual({
+      key: "registeredAt",
+      direction: "asc",
+    });
+  });
+
+  it("EARS-22: a sort in the address is read back; an unknown key or direction falls back to the default", () => {
+    expect(
+      rosterSortFromAddress(new URLSearchParams("sort=fullName&dir=desc"), ""),
+    ).toEqual({ key: "fullName", direction: "desc" });
+    expect(
+      rosterSortFromAddress(new URLSearchParams("sort=email&dir=asc"), ""),
+    ).toEqual({ key: "registeredAt", direction: "asc" });
+    expect(
+      rosterSortFromAddress(new URLSearchParams("sort=city&dir=sideways"), ""),
+    ).toEqual({ key: "registeredAt", direction: "asc" });
+  });
+
+  it("EARS-37: the presence sort holds only while a congress day is chosen — without one it is the default", () => {
+    const address = new URLSearchParams("sort=presence&dir=desc");
+    expect(rosterSortFromAddress(address, "2026-04-23")).toEqual({
+      key: "presence",
+      direction: "desc",
+    });
+    expect(rosterSortFromAddress(address, "")).toEqual({
+      key: "registeredAt",
+      direction: "asc",
+    });
+  });
+
+  it("EARS-37: an address sort the screen does not honour — presence after a reload drops the day, an unknown key — is stale and gets rewritten to the default", () => {
+    const presence = new URLSearchParams("sort=presence&dir=desc");
+    expect(rosterSortAddressIsStale(presence, "")).toBe(true);
+    expect(rosterSortAddressIsStale(presence, "2026-04-23")).toBe(false);
+    expect(
+      rosterSortAddressIsStale(new URLSearchParams("sort=email&dir=asc"), ""),
+    ).toBe(true);
+    expect(
+      rosterSortAddressIsStale(new URLSearchParams("sort=city&dir=desc"), ""),
+    ).toBe(false);
+    // No sort in the address is the default by definition — nothing to rewrite.
+    expect(rosterSortAddressIsStale(new URLSearchParams("q=x"), "")).toBe(
+      false,
+    );
+  });
+
+  it("EARS-22: a sort change is written into the address, keeping the rest of the query (the open card, the search)", () => {
+    expect(
+      rosterSortHref("/events/e1/roster", "q=%D0%98&registration=r1", {
+        key: "phone",
+        direction: "desc",
+      }),
+    ).toBe("/events/e1/roster?q=%D0%98&registration=r1&sort=phone&dir=desc");
+  });
+
+  it("EARS-22: the visible columns map onto the route's sort keys; № carries none, presence only with a day", () => {
+    expect(rosterSortKeyOf("fullName", "")).toBe("fullName");
+    expect(rosterSortKeyOf("specialtyName", "")).toBe("specialty");
+    expect(rosterSortKeyOf("city", "")).toBe("city");
+    expect(rosterSortKeyOf("phone", "")).toBe("phone");
+    expect(rosterSortKeyOf("registeredAt", "")).toBe("registeredAt");
+    expect(rosterSortKeyOf("number", "2026-04-23")).toBeUndefined();
+    expect(rosterSortKeyOf("attendance", "")).toBeUndefined();
+    expect(rosterSortKeyOf("attendance", "2026-04-23")).toBe("presence");
+  });
+
+  it("EARS-22: the roster GET carries the sort beside search, the presence filter and the page", () => {
+    expect(
+      congressRosterUrl.list("e1", {
+        q: "",
+        page: 1,
+        pageSize: 20,
+        attendanceDay: "2026-04-23",
+        ...rosterSortQuery({ key: "presence", direction: "desc" }),
+      }),
+    ).toBe(
+      "/v1/admin/events/e1/roster?page=1&pageSize=20&attendanceDay=2026-04-23&sort=presence&dir=desc",
+    );
   });
 });

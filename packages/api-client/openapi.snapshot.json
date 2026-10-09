@@ -6645,6 +6645,31 @@
           },
           {
             "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "fullName",
+                "specialty",
+                "city",
+                "phone",
+                "registeredAt",
+                "presence"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "present",
             "required": false,
             "schema": {

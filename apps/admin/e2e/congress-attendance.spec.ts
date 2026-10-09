@@ -11,6 +11,7 @@ import {
 } from "@ds/e2e/admin-events";
 import { registerDoctorThroughPlatform } from "./support/congress-roster";
 import { bindRegistrarToEvent } from "./support/event-grants";
+import { expectRosterFits } from "./support/roster-fit";
 import { visible } from "./support/visible";
 
 /**
@@ -258,6 +259,60 @@ test.describe("044 EARS-34 — attendance per congress day on the roster", () =>
     await day.selectOption("");
     await expect(presence).toBeDisabled();
     await expect(desk.getByTestId("roster-total")).toHaveText("Найдено: 3");
+  });
+
+  test("044 EARS-22: «Присутствие» sorts by the chosen day's mark — only while a day is chosen — in both directions", async () => {
+    test.skip(!eventId, "depends on the event and desk seeded above");
+    test.setTimeout(120_000);
+    // After the filter test: Абрамова and Борисова are marked on 23.04,
+    // Власова is not.
+    await desk.goto(`/events/${eventId}/roster`);
+    await expect(desk.getByTestId("roster-total")).toHaveText("Найдено: 3");
+    const table = desk.getByTestId("roster-table");
+    // No day — a plain header, no sort control.
+    await expect(table.locator("thead th").last()).toHaveText("Присутствие");
+    await expect(
+      table.locator("thead th").last().locator("button"),
+    ).toHaveCount(0);
+
+    await desk.getByTestId("roster-attendance-day").selectOption(DAY_1);
+    const presence = table.getByRole("button", {
+      name: "Присутствие · день 23.04",
+      exact: true,
+    });
+    // S1-3: «Присутствие» over a smaller «день 23.04», one sort button.
+    await expect(presence).toBeVisible();
+    await expect(presence.getByText("день 23.04", { exact: true })).toBeVisible();
+    await expectRosterFits(desk, table);
+    await presence.click();
+    await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
+    await expect(table.locator("thead th").last()).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    await expect(nameCells(desk).first()).toHaveText(OTHERS[1]!);
+    await shot(desk, "roster-sort-presence-day");
+
+    await presence.click();
+    await expect(desk).toHaveURL(/[?&]sort=presence&dir=desc/);
+    await expect(nameCells(desk).last()).toHaveText(OTHERS[1]!);
+
+    // The day cleared: the sort falls back to the default, address included.
+    await desk.getByTestId("roster-attendance-day").selectOption("");
+    await expect(desk).toHaveURL(/[?&]sort=registeredAt&dir=asc/);
+    await expect(
+      table.locator("thead th").last().locator("button"),
+    ).toHaveCount(0);
+    await expect(nameCells(desk)).toHaveText([MARKED, ...OTHERS]);
+
+    // A reload drops the chosen day (it is not in the address): the stale
+    // presence sort is rewritten to the default, never left to revive later.
+    await desk.getByTestId("roster-attendance-day").selectOption(DAY_1);
+    await presence.click();
+    await expect(desk).toHaveURL(/[?&]sort=presence&dir=asc/);
+    await desk.reload();
+    await expect(desk).toHaveURL(/[?&]sort=registeredAt&dir=asc/);
+    await expect(nameCells(desk)).toHaveText([MARKED, ...OTHERS]);
   });
 
   test("044 EARS-34: the roster with the attendance column is axe-clean (WCAG 2.1 AA)", async () => {

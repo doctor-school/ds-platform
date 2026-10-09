@@ -18,6 +18,10 @@
       "$value": "{color.neutral.50}",
       "$description": "The month-calendar's muted day-cell surface (weekend / out-of-month cells + the legend «Прошёл / пусто» swatch) — canvas-exact (events-feed-month.dc.html), deliberately fainter than `section` so the shaded cells whisper next to the card frame. Dedicated to the calendar: `section` keeps banding the week-listing day band."
     },
+    "table-sorted": {
+      "$value": "{color.neutral.50}",
+      "$description": "The DataTable's active-sort column shade: the body cells of the column the table is sorted by sit on this faint surface at rest (S1 roster sort, #2316), while the header keeps no fill. A row's hover / pressed tint wins over it. Fainter than `section`, so the band reads as a cue, not a block."
+    },
     "card": {
       "$value": "{color.white}",
       "$description": "A raised surface (card, popover, panel) sitting on `background`, framed by the hard `border`. Pair with `card-foreground`."

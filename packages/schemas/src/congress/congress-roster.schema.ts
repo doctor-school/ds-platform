@@ -17,10 +17,10 @@ import {
  * front of them. One schema serving both would force the room gate to carry
  * participant contact data it has no business holding.
  *
- * Sorting and per-column filtering are EARS-22/EARS-23 and are deliberately NOT
- * declared here: the query below is exactly the `AdminDataList` baseline state
- * (`page`, `pageSize`, `q`) so that the later pair extends one shape instead of
- * replacing an invented one. The «возможный дубль» marker is EARS-30/EARS-31 and
+ * The query below is the `AdminDataList` baseline state (`page`, `pageSize`,
+ * `q`) extended by the EARS-34 presence filter and the EARS-22 sort (`sort` +
+ * `dir`); per-column filtering is EARS-23 and is not declared here yet. The
+ * «возможный дубль» marker is EARS-30/EARS-31 and
  * is likewise absent from the row: it already exists on the PII-free
  * `EventRosterEntry` read model, and projecting it onto THIS row is that pair's
  * own handler, not EARS-18's.
@@ -34,6 +34,39 @@ export const CONGRESS_ROSTER_PAGE_SIZE_MAX = 100;
 
 /** Default roster page size. */
 export const CONGRESS_ROSTER_PAGE_SIZE_DEFAULT = 20;
+
+/**
+ * 044 EARS-22 as narrowed by EARS-37 — the roster columns the sort applies to:
+ * ФИО, специальность, город, телефон, дата регистрации, and присутствие on a
+ * chosen congress day. № is a row counter; workplace, region, email and the
+ * mail status left the table for the card and are filterable, never sortable.
+ */
+export const CONGRESS_ROSTER_SORT_KEYS = [
+  "fullName",
+  "specialty",
+  "city",
+  "phone",
+  "registeredAt",
+  "presence",
+] as const;
+export const CongressRosterSortKeySchema = z.enum(CONGRESS_ROSTER_SORT_KEYS);
+export type CongressRosterSortKey = z.infer<typeof CongressRosterSortKeySchema>;
+
+export const CongressRosterSortDirSchema = z.enum(["asc", "desc"]);
+export type CongressRosterSortDir = z.infer<typeof CongressRosterSortDirSchema>;
+
+/**
+ * The order a query without `sort` reads — registration date ascending, the
+ * order the read model has always had. A screen that shows this state omits
+ * `sort`/`dir` from the URL rather than spelling the default out.
+ */
+export const CONGRESS_ROSTER_SORT_DEFAULT = {
+  sort: "registeredAt",
+  dir: "asc",
+} as const satisfies {
+  sort: CongressRosterSortKey;
+  dir: CongressRosterSortDir;
+};
 
 /**
  * The list query, parsed from the raw query string (every value arrives as a
@@ -70,10 +103,26 @@ export const CongressRosterQuerySchema = z
      * without a day, so it is refused without one.
      */
     present: z.enum(["marked", "unmarked"]).optional(),
+    /**
+     * 044 EARS-22 — the one active sort column; absent = the
+     * {@link CONGRESS_ROSTER_SORT_DEFAULT} order. Text columns order by the
+     * Russian collation, empty cells last in both directions, the phone by its
+     * normalised digits; every order is tie-broken by registration date and id
+     * so a page boundary is stable.
+     */
+    sort: CongressRosterSortKeySchema.optional(),
+    /** 044 EARS-22 — the direction of `sort`; absent = ascending. */
+    dir: CongressRosterSortDirSchema.optional(),
   })
   .refine((q) => q.present === undefined || q.attendanceDay !== undefined, {
     message: "present requires attendanceDay",
     path: ["present"],
+  })
+  // EARS-37 — присутствие is a per-day column: without the day there is no
+  // mark to order by, so it is refused exactly like `present`.
+  .refine((q) => q.sort !== "presence" || q.attendanceDay !== undefined, {
+    message: "sort=presence requires attendanceDay",
+    path: ["sort"],
   });
 export type CongressRosterQuery = z.infer<typeof CongressRosterQuerySchema>;
 

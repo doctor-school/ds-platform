@@ -143,7 +143,9 @@ describe("<DataTable>", () => {
     });
     const headers = container.querySelectorAll("thead th");
     expect(headers.length).toBe(3);
-    headers.forEach((th) => expect(th.className).toContain("whitespace-nowrap"));
+    headers.forEach((th) =>
+      expect(th.className).toContain("whitespace-nowrap"),
+    );
   });
 
   it("leaves the PERCENT contract unchanged: no min-width, headers may wrap", () => {
@@ -316,5 +318,274 @@ describe("<DataTable>", () => {
     container.querySelectorAll("thead th").forEach((th) => {
       expect(th).toHaveAttribute("scope", "col");
     });
+  });
+});
+
+/**
+ * 044 EARS-22 — the opt-in server-sort header (owner Stage-A pick S1, #2316
+ * issuecomment-6077817101). The block owns the affordance and the ARIA; the order
+ * itself is the server's, so the harness asserts on what the header announces and
+ * what it asks for — never on reordered rows.
+ */
+describe("<DataTable> sortable columns (044 EARS-22)", () => {
+  const SORTABLE: DataTableColumn<Row>[] = [
+    { ...COLUMNS[0]!, sortKey: "parent" },
+    { ...COLUMNS[1]!, sortKey: "count" },
+  ];
+
+  function headerCell(name: string): HTMLElement {
+    const button = screen.getByRole("button", { name });
+    const cell = button.closest("th");
+    if (!cell) throw new Error(`no <th> around «${name}»`);
+    return cell;
+  }
+
+  it("044 EARS-22: announces the active column through aria-sort and every other sortable header as none", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "desc" },
+      onSortChange: () => {},
+    });
+    expect(headerCell("Материалов")).toHaveAttribute("aria-sort", "descending");
+    expect(headerCell("Родительское направление")).toHaveAttribute(
+      "aria-sort",
+      "none",
+    );
+  });
+
+  it("044 EARS-22: the active header carries no resting background fill — only its title and arrow mark it (S1, not S2)", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+    });
+    const button = screen.getByRole("button", { name: "Материалов" });
+    const cell = headerCell("Материалов");
+    // A `bg-*` utility without a state variant paints the cell at rest; a
+    // `hover:`/`focus-visible:` tint exists only while hovered or focused.
+    const restingFills = (element: HTMLElement) =>
+      element.className.split(/\s+/).filter((token) => /^bg-/.test(token));
+    expect(restingFills(cell)).toEqual([]);
+    expect(restingFills(button)).toEqual([]);
+    expect(cell).not.toHaveAttribute("style");
+    expect(
+      button.querySelector('[data-sort-icon="asc"]')?.getAttribute("class"),
+    ).toContain("text-primary-action");
+  });
+
+  it("044 EARS-22: the first click on a header asks for ascending, a click on the active ascending header reverses it", async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    const { rerender } = renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange,
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Родительское направление" }),
+    );
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "parent",
+      direction: "asc",
+    });
+    await user.click(screen.getByRole("button", { name: "Материалов" }));
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "count",
+      direction: "desc",
+    });
+    rerender(
+      <DataTable<Row>
+        caption="Направления"
+        record={{
+          header: "Направление",
+          title: (row) => row.title,
+          label: (row) => `Открыть «${row.title}»`,
+        }}
+        columns={SORTABLE}
+        rows={ROWS}
+        getRowKey={(row) => row.id}
+        emptyNoRecords={{ title: "Направлений пока нет" }}
+        emptyNoResults={{ title: "Ничего не найдено" }}
+        sort={{ key: "count", direction: "desc" }}
+        onSortChange={onSortChange}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Материалов" }));
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "count",
+      direction: "asc",
+    });
+  });
+
+  it("044 EARS-22: the header button is keyboard-operable", async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange,
+    });
+    screen.getByRole("button", { name: "Родительское направление" }).focus();
+    await user.keyboard("{Enter}");
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "parent",
+      direction: "asc",
+    });
+  });
+
+  it("044 EARS-22: a column without a sortKey keeps a plain header — no button, no aria-sort", () => {
+    renderTable({
+      columns: [SORTABLE[0]!, COLUMNS[1]!],
+      sort: { key: "parent", direction: "asc" },
+      onSortChange: () => {},
+    });
+    expect(screen.queryByRole("button", { name: "Материалов" })).toBeNull();
+    const plain = screen
+      .getAllByRole("columnheader")
+      .find((cell) => cell.textContent === "Материалов");
+    expect(plain).toBeDefined();
+    expect(plain).not.toHaveAttribute("aria-sort");
+  });
+
+  it("044 EARS-22: a table with no sort props renders exactly the plain headers it always did", () => {
+    renderTable();
+    expect(
+      screen
+        .getAllByRole("columnheader")
+        .map((cell) => cell.hasAttribute("aria-sort")),
+    ).toEqual([false, false, false]);
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("044 EARS-22: below md the card list carries a «Сортировка» select over every sortable column and both directions", async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "desc" },
+      onSortChange,
+      sortSelect: {
+        label: "Сортировка",
+        optionLabel: (column, direction) =>
+          `${column.header} — ${direction === "asc" ? "по возрастанию" : "по убыванию"}`,
+      },
+    });
+    const select = screen.getByRole("combobox", { name: "Сортировка" });
+    expect(select).toHaveValue("count:desc");
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual([
+      "Родительское направление — по возрастанию",
+      "Родительское направление — по убыванию",
+      "Материалов — по возрастанию",
+      "Материалов — по убыванию",
+    ]);
+    await user.selectOptions(select, "parent:asc");
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      key: "parent",
+      direction: "asc",
+    });
+  });
+
+  /** The desktop grid's body cells of one column (record = 0, then `columns`). */
+  function bodyCells(columnIndex: number): HTMLElement[] {
+    const table = first(screen.getAllByRole("table"));
+    return within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => {
+        const cell = row.querySelectorAll("td")[columnIndex];
+        if (!(cell instanceof HTMLElement)) throw new Error("no body cell");
+        return cell;
+      });
+  }
+  const fills = (element: HTMLElement) =>
+    element.className.split(/\s+/).filter((token) => /^bg-/.test(token));
+
+  it("044 EARS-22: the active column's body cells are shaded with the `table-sorted` surface at rest — no other column, never the header (S1)", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "desc" },
+      onSortChange: () => {},
+    });
+    for (const cell of bodyCells(2)) {
+      expect(fills(cell)).toEqual(["bg-table-sorted"]);
+    }
+    for (const cell of [...bodyCells(0), ...bodyCells(1)]) {
+      expect(fills(cell)).toEqual([]);
+    }
+    expect(fills(headerCell("Материалов"))).toEqual([]);
+  });
+
+  it("044 EARS-22: the shade follows the active column", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "parent", direction: "asc" },
+      onSortChange: () => {},
+    });
+    for (const cell of bodyCells(1)) {
+      expect(fills(cell)).toEqual(["bg-table-sorted"]);
+    }
+    for (const cell of bodyCells(2)) expect(fills(cell)).toEqual([]);
+  });
+
+  it("044 EARS-22: a shaded cell of a clickable row yields to the row's hover and pressed tint", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+      onRowClick: () => {},
+    });
+    const cell = first(bodyCells(2));
+    expect(cell.className).toContain("group-hover/row:bg-tint");
+    expect(cell.className).toContain("group-has-[:active]/row:bg-tint-pressed");
+    expect(cell.className).toContain("group-focus-within/row:bg-tint");
+  });
+
+  it("044 EARS-22: a table with no sort props shades no body cell", () => {
+    renderTable({ columns: SORTABLE });
+    for (const index of [0, 1, 2]) {
+      for (const cell of bodyCells(index)) expect(fills(cell)).toEqual([]);
+    }
+  });
+
+  it("044 EARS-22: a header detail is a second, smaller line inside the same sort button, which reads «header · detail»", () => {
+    renderTable({
+      columns: [
+        SORTABLE[0]!,
+        { ...SORTABLE[1]!, headerDetail: "день 23.04" },
+      ],
+      sort: { key: "count", direction: "asc" },
+      onSortChange: () => {},
+    });
+    const button = screen.getByRole("button", {
+      name: "Материалов · день 23.04",
+    });
+    const detail = within(button).getByText("день 23.04");
+    expect(detail.className).toContain("normal-case");
+    expect(detail.className).toContain("text-xs");
+    expect(within(button).getByText("Материалов").parentElement).toBe(
+      detail.parentElement,
+    );
+    expect(detail.parentElement?.className).toContain("flex-col");
+    expect(button.closest("th")).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("044 EARS-22: a sort button follows its column's alignment", () => {
+    renderTable({
+      columns: SORTABLE,
+      sort: { key: "parent", direction: "asc" },
+      onSortChange: () => {},
+    });
+    const end = screen.getByRole("button", { name: "Материалов" });
+    expect(end.className).toContain("justify-end");
+    expect(end.className).toContain("text-right");
+    const start = screen.getByRole("button", {
+      name: "Родительское направление",
+    });
+    expect(start.className).toContain("justify-start");
+    expect(start.className).toContain("text-left");
   });
 });

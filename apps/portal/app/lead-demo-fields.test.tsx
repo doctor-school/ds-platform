@@ -1,6 +1,14 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LeadDemoFields, type LeadDemoFieldsProps } from "./lead-demo-fields";
 
@@ -29,81 +37,107 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("Feature 013 Academy partnership form", () => {
-  it("EARS-5: when the visitor reaches the enabled form, portal shall expose the exact validated controls and accessible errors", async () => {
-    const user = userEvent.setup();
-    const submitAction = vi.fn<SubmitAction>();
-    render(<LeadDemoFields submitAction={submitAction} />);
-
-    const nameControl = screen.getByLabelText(/^Имя/);
-    expect(nameControl).toBeEnabled();
-    expect(nameControl).toBeRequired();
-    expect(nameControl).toHaveAttribute("id", "academy-partner-name-field");
-    expect(screen.getByLabelText("Компания или клиника")).toBeEnabled();
-    const contactControl = screen.getByLabelText(/^Email или Telegram/);
-    expect(contactControl).toBeRequired();
-    expect(contactControl).toHaveAttribute(
-      "placeholder",
-      "name@company.ru или @username",
-    );
-    expect(screen.getByLabelText(/^Роль/)).toBeRequired();
-    const consentControl = screen.getByRole("checkbox", {
-      name: /Согласен\(а\) на обработку персональных данных/i,
+  describe("delayed field validation", () => {
+    afterEach(async () => {
+      try {
+        cleanup();
+        if (vi.isFakeTimers()) {
+          await act(async () => {
+            await vi.runOnlyPendingTimersAsync();
+          });
+        }
+      } finally {
+        vi.useRealTimers();
+      }
     });
-    expect(consentControl).toBeRequired();
-    expect(
-      Array.from(
-        screen.getByLabelText(/^Роль/).querySelectorAll("option"),
-        (option) => option.textContent,
-      ).filter((label) =>
-        ROLE_ORDER.includes(label as (typeof ROLE_ORDER)[number]),
-      ),
-    ).toEqual(ROLE_ORDER);
-    expect(
-      screen.getByRole("link", { name: "Политика конфиденциальности" }),
-    ).toHaveAttribute("href", "https://doctor.school/index/privacy-pay");
 
-    await user.type(screen.getByLabelText(/^Email или Telegram/), "@bad-name");
-    await user.click(
-      screen.getByRole("button", { name: "Обсудить партнёрство" }),
-    );
+    it("EARS-5: when the visitor reaches the enabled form, portal shall expose the exact validated controls and accessible errors", async () => {
+      const user = userEvent.setup();
+      const submitAction = vi.fn<SubmitAction>();
+      render(<LeadDemoFields submitAction={submitAction} />);
 
-    expect(await screen.findAllByRole("alert")).not.toHaveLength(0);
-    const summary = screen.getByTestId("academy-form-error-summary");
-    expect(summary).toHaveFocus();
-    expect(consentControl).toHaveAccessibleDescription(
-      "Подтвердите согласие на обработку персональных данных.",
-    );
-    const nameErrorLink = within(summary).getByRole("link", {
-      name: "Укажите имя.",
+      const nameControl = screen.getByLabelText(/^Имя/);
+      expect(nameControl).toBeEnabled();
+      expect(nameControl).toBeRequired();
+      expect(nameControl).toHaveAttribute("id", "academy-partner-name-field");
+      expect(screen.getByLabelText("Компания или клиника")).toBeEnabled();
+      const contactControl = screen.getByLabelText(/^Email или Telegram/);
+      expect(contactControl).toBeRequired();
+      expect(contactControl).toHaveAttribute(
+        "placeholder",
+        "name@company.ru или @username",
+      );
+      expect(screen.getByLabelText(/^Роль/)).toBeRequired();
+      const consentControl = screen.getByRole("checkbox", {
+        name: /Согласен\(а\) на обработку персональных данных/i,
+      });
+      expect(consentControl).toBeRequired();
+      expect(
+        Array.from(
+          screen.getByLabelText(/^Роль/).querySelectorAll("option"),
+          (option) => option.textContent,
+        ).filter((label) =>
+          ROLE_ORDER.includes(label as (typeof ROLE_ORDER)[number]),
+        ),
+      ).toEqual(ROLE_ORDER);
+      expect(
+        screen.getByRole("link", { name: "Политика конфиденциальности" }),
+      ).toHaveAttribute("href", "https://doctor.school/index/privacy-pay");
+
+      await user.type(contactControl, "@bad-name");
+      // userEvent's async wrapper needs real timers; control the blur delay after typing.
+      vi.useFakeTimers();
+      act(() => contactControl.blur());
+      fireEvent.click(
+        screen.getByRole("button", { name: "Обсудить партнёрство" }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      expect(screen.getAllByRole("alert")).not.toHaveLength(0);
+      const summary = screen.getByTestId("academy-form-error-summary");
+      expect(summary).toHaveFocus();
+      expect(consentControl).toHaveAccessibleDescription(
+        "Подтвердите согласие на обработку персональных данных.",
+      );
+      const nameErrorLink = within(summary).getByRole("link", {
+        name: "Укажите имя.",
+      });
+      expect(nameErrorLink).toHaveAttribute(
+        "href",
+        "#academy-partner-name-field",
+      );
+      fireEvent.click(nameErrorLink);
+      expect(nameControl).toHaveFocus();
+      expect(submitAction).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
     });
-    expect(nameErrorLink).toHaveAttribute(
-      "href",
-      "#academy-partner-name-field",
-    );
-    await user.click(nameErrorLink);
-    expect(nameControl).toHaveFocus();
-    expect(submitAction).not.toHaveBeenCalled();
-    await act(
-      () => new Promise((resolve) => globalThis.setTimeout(resolve, 120)),
-    );
-  });
 
-  it("EARS-5: an invalid touched contact shall still validate on blur before submit", async () => {
-    const user = userEvent.setup();
-    const submitAction = vi.fn<SubmitAction>();
-    render(<LeadDemoFields submitAction={submitAction} />);
+    it("EARS-5: an invalid touched contact shall still validate on blur before submit", async () => {
+      const user = userEvent.setup();
+      const submitAction = vi.fn<SubmitAction>();
+      render(<LeadDemoFields submitAction={submitAction} />);
 
-    await user.type(screen.getByLabelText(/^Email или Telegram/), "@bad-name");
-    await user.tab();
+      const contactControl = screen.getByLabelText(/^Email или Telegram/);
+      await user.type(contactControl, "@bad-name");
+      vi.useFakeTimers();
+      act(() => contactControl.blur());
+      const contactError =
+        "Укажите корректный email или Telegram в формате @username.";
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(99);
+      });
+      expect(screen.queryByText(contactError)).not.toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
 
-    expect(
-      (
-        await screen.findAllByText(
-          "Укажите корректный email или Telegram в формате @username.",
-        )
-      )[0],
-    ).toBeVisible();
-    expect(submitAction).not.toHaveBeenCalled();
+      expect(screen.getAllByText(contactError)[0]).toBeVisible();
+      expect(submitAction).not.toHaveBeenCalled();
+    });
   });
 
   it("EARS-6: when persistence accepts valid values, portal shall submit once and replace the form only after success", async () => {

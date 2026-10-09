@@ -114,9 +114,9 @@ operational reserve. It logs `mailer_channel_readiness` and sets the
 `mailer_channel_readiness{provider,state}` gauge;
 [`delivery-reconcile`](../delivery-reconcile/README.md) consumes and reports it.
 
-Production activation, native SMTP readback, rollback, quotas and controlled
-received-artifact checks remain release-blocker #2116
-([runbook](../../../../infra/deploy/smtp-activation.md)). Microsoft sender-auth
+The chain is active in production: activation, native SMTP readback, rollback
+and controlled received-artifact checks completed under #2116 (2026-10-09, all
+three channels verified; [runbook](../../../../infra/deploy/smtp-activation.md)). Microsoft sender-auth
 and Inbox evidence remain #1120; successful SMTP acceptance does not close it.
 
 ## Delivery-mode env defaults — and where SMS lives (not here)

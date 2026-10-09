@@ -108,7 +108,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `pnpm --filter @ds/doctor exec next start -p ${PORT}`,
+    command: `pnpm --filter @ds/doctor exec next start -p ${PORT} --keepAliveTimeout 125000`,
     url: BASE,
     timeout: 120_000,
     reuseExistingServer: false,

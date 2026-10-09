@@ -116,7 +116,8 @@ operational reserve. It logs `mailer_channel_readiness` and sets the
 
 Production activation is recorded under #2116 (2026-10-09): production env set,
 api recreated, `mailer_channel_readiness` `verified` for all three channels. The
-login-code received-artifact check is a post-merge lead check under #2145;
+login-code received-artifact check passed on 2026-10-09 under #2145
+([evidence](https://github.com/doctor-school/ds-platform/issues/2145#issuecomment-6076532211): accepted-by-postbox, Inbox, code present, zero links);
 rollback has not been exercised in production
 ([runbook](../../../../infra/deploy/smtp-activation.md)). Microsoft sender-auth
 and Inbox evidence remain #1120; successful SMTP acceptance does not close it.

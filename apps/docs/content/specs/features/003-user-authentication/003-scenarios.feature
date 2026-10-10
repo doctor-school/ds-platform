@@ -753,15 +753,16 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the hint is no longer rendered in that slot
     And the error names the same single rule as the hint
 
-  @EARS-38 @happy
+  @EARS-38 @happy @password-reveal
   Scenario Outline: Every password field carries a keyboard-operable reveal toggle
-    Given a visitor on the <surface> form
-    When the visitor focuses the password field
-    Then the field is masked by default and renders a show-password toggle
-    When the visitor activates the toggle with the keyboard
-    Then the entered value is rendered in plain text
-    And the accessible state and label of the toggle reflect the revealed state
-    And the entered value and caret position are preserved
+    Given an Academy guest on the <surface> password-reveal form
+    When the reveal visitor enters a password and selects a caret range
+    Then the reveal field is masked by default and its localized toggle is unpressed
+    When the reveal visitor tabs to the toggle and reveals with Space
+    Then the reveal field is plain with a pressed localized hide action and unchanged value and caret
+    When the reveal visitor masks again with Enter
+    Then the reveal field is masked with an unpressed localized show action and unchanged value and caret
+    And revealing issued no registration, password-login or reset-completion request and grants no private access
 
     Examples:
       | surface        |

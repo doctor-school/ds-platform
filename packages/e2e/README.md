@@ -402,6 +402,20 @@ separate direct code-link login journey remains unchanged.
 pnpm e2e:stage pr-<N> --project academy --grep "The typed address survives a switch between the sign-in methods"
 ```
 
+### Password reveal (003 EARS-38)
+
+`Every password field carries a keyboard-operable reveal toggle` runs all three
+outline rows on real Academy registration, password-login and reset-complete
+forms. Each field starts masked, is revealed with Tab/Space and masked again
+with Enter, retaining its entered value and selection while the localized
+accessible action and pressed state change. The reset row reaches the complete
+form through one real, neutrally acknowledged reset request for its unique
+unregistered address and the canonical stage CAPTCHA helper; no code or reset
+completion is submitted. All rows assert no other auth command or private
+access, reuse the auth fixtures and secret-safe registration helpers, and close
+their owned contexts before snapshots. The existing primitive and app-local
+backend-free tests remain as separate coverage.
+
 ### Cold email confirmation (003 EARS-39/41)
 
 `A cold verification step still signs in by the code` registers a unique owned

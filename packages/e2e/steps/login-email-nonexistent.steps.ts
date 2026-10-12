@@ -86,6 +86,37 @@ async function requestThroughAcademy(
   const pending = captureResponse(page, "/v1/auth/login/otp/request");
   await page.getByTestId("otp-send").click();
   const captured = await pending;
+  const requestEvidence = {
+    expectedKeys: false,
+    identifierMatches: false,
+    emailChannel: false,
+  };
+  try {
+    const submitted: unknown = captured.response.request().postDataJSON();
+    if (
+      submitted !== null &&
+      typeof submitted === "object" &&
+      !Array.isArray(submitted)
+    ) {
+      // Academy's auth client carries the CAPTCHA token in its header (003 EARS-17).
+      requestEvidence.expectedKeys =
+        Object.keys(submitted).sort().join(",") === "channel,identifier";
+      requestEvidence.identifierMatches =
+        "identifier" in submitted && submitted.identifier === email;
+      requestEvidence.emailChannel =
+        "channel" in submitted && submitted.channel === "email";
+    }
+  } catch {
+    // Parser diagnostics could quote the submitted identifier or provider token.
+  }
+  expect(
+    requestEvidence,
+    "actual code request targets the supplied mailbox",
+  ).toEqual({
+    expectedKeys: true,
+    identifierMatches: true,
+    emailChannel: true,
+  });
   const code = page.locator('input[autocomplete="one-time-code"]');
   await expect(code).toBeVisible();
   await expect(code).toHaveAttribute("maxlength", "6");

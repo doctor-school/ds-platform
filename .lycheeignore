@@ -124,6 +124,13 @@ design-source/support\.js
 # API cost, not the coverage. Every link to anywhere else — in CHANGELOG.md files
 # included — is still checked. Tracked in DEBT.md.
 ^https://github\.com/doctor-school/ds-platform($|/.*$)
+# The same self-URLs in their raw form: the markdown-links step remaps every
+# `github.com/…/blob/<ref>/<path>` citation to `raw.githubusercontent.com`
+# (#2747), and lychee v0.24.2 matches exclusions AFTER the remap
+# (lychee-lib/src/client.rs `check`: `self.remap(&mut uri)` precedes
+# `self.is_excluded(&uri)`), so without this line this repo's own blob links
+# would escape the exclusion above.
+^https://raw\.githubusercontent\.com/doctor-school/ds-platform/.*$
 
 # GOV.UK Ministry of Justice design-patterns site: since 2026-09 the host
 # answers 401 Unauthorized to unauthenticated clients (lychee included),

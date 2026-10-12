@@ -56,6 +56,15 @@ export function identifierFieldSchema(): z.ZodType<string, string> {
   return IdentifierFieldSchema as unknown as z.ZodType<string, string>;
 }
 
+/**
+ * Whether a union-box value is the PHONE branch of {@link identifierFieldSchema}
+ * — the same E.164 SSOT, never a second phone rule. 003 EARS-54/55 read it to
+ * choose the SMS wording; it inspects only the visitor's own input (EARS-16).
+ */
+export function isPhoneIdentifier(value: string): boolean {
+  return PhoneIdentifierSchema.safeParse(value.trim()).success;
+}
+
 /** 003 EARS-5 password sign-in — one identifier box plus the length-only password rule. */
 export function loginIdentifierFormSchema(): z.ZodType<
   LoginRequest,

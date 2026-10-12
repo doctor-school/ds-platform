@@ -56,6 +56,7 @@ const copy: LoginCardCopy = {
     channelGroupLabel: "copy.otp.channelGroupLabel",
     channelEmail: "copy.otp.channelEmail",
     channelSms: "copy.otp.channelSms",
+    channelSmsHint: "copy.otp.channelSmsHint",
     emailLabel: "copy.otp.emailLabel",
     emailPlaceholder: "copy.otp.emailPlaceholder",
     phoneLabel: "copy.otp.phoneLabel",
@@ -568,5 +569,27 @@ describe("#2027 <LoginCard> canvas parity", () => {
       "text-faint",
     );
     expect(eyebrow.className).not.toMatch(/text-muted-foreground/);
+  });
+});
+
+describe("003 EARS-55 <LoginCard> SMS hint slot", () => {
+  it("003 EARS-55: the hint renders under the channel switch only while «SMS» is selected", () => {
+    setup({ defaultMethod: "otp" });
+
+    expect(screen.queryByText("copy.otp.channelSmsHint")).toBeNull();
+    fireEvent.click(screen.getByTestId("otp-channel-sms"));
+    const hint = screen.getByText("copy.otp.channelSmsHint");
+    // Canvas 130–132: muted small ink under the switch, a token class only.
+    expect(hint).toHaveClass("text-xs", "text-muted-foreground");
+    expect(
+      screen.getByRole("radiogroup").parentElement?.contains(hint),
+    ).toBe(true);
+    fireEvent.click(screen.getByTestId("otp-channel-email"));
+    expect(screen.queryByText("copy.otp.channelSmsHint")).toBeNull();
+  });
+
+  it("003 EARS-55: a one-channel host draws no switch and so no hint", () => {
+    setup({ defaultMethod: "otp", channels: ["email"] });
+    expect(screen.queryByText("copy.otp.channelSmsHint")).toBeNull();
   });
 });

@@ -92,6 +92,10 @@ export interface PasswordRecoveryCardCopy {
   request: {
     identifierLabel: string;
     identifierPlaceholder: string;
+    /** 003 EARS-55 (b) — the static hint under the identifier, as a function of
+     * the LIVE value: the host decides which input earns it (a phone) and
+     * returns `null` otherwise; absent = no hint (canvas 229–231). */
+    identifierHint?: (identifier: string) => React.ReactNode;
     submit: React.ReactNode;
   };
   complete: {
@@ -279,6 +283,7 @@ function RecoveryRequestForm({
     resolver,
     defaultValues: { identifier: "" },
   });
+  const identifierHint = copy.identifierHint?.(form.watch("identifier"));
 
   return (
     <Form {...form}>
@@ -311,6 +316,14 @@ function RecoveryRequestForm({
             />
           )}
         />
+        {identifierHint ? (
+          // Canvas 229–231: muted small ink under the field, above the button.
+          // `-mt-2` pulls it to the canvas 8px under the control out of the
+          // form's `space-y-4` rhythm.
+          <p className="-mt-2 text-xs text-muted-foreground">
+            {identifierHint}
+          </p>
+        ) : null}
         {captchaSlot}
         <Button
           type="submit"

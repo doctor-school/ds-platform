@@ -692,3 +692,94 @@ describe.each(HOSTS)("the ONE recovery flow on the %s host", (_, config) => {
     });
   });
 });
+
+/**
+ * 003 EARS-55 (b) / EARS-54 / EARS-59 — the reset door's SMS truthfulness: a
+ * static hint under the identifier while it holds a phone, and a code-step
+ * sentence that, for a phone, names SMS only conditionally (the door never
+ * knows whether the number is confirmed, EARS-16); an email keeps EARS-42.
+ */
+describe.each(HOSTS)("003 EARS-54/55 on the %s host", (_, config) => {
+  const copy = resolveAuthFlowCopy(config).reset;
+  const PHONE = "+79991234567";
+
+  function mount() {
+    return render(
+      <ResetDoor
+        config={config}
+        loginHref={config.routes.login}
+        landing={config.routes.account}
+        returnTarget={null}
+      />,
+    );
+  }
+
+  it("003 EARS-55: the hint shows while the identifier holds a phone, never for an email", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByTestId("reset-request-submit");
+    const box = screen.getByLabelText(copy.identifierLabel);
+
+    expect(screen.queryByText(copy.identifierPhoneHint)).toBeNull();
+    await user.type(box, IDENTIFIER);
+    expect(screen.queryByText(copy.identifierPhoneHint)).toBeNull();
+
+    await user.clear(box);
+    await user.type(box, PHONE);
+    expect(screen.getByText(copy.identifierPhoneHint)).toBeInTheDocument();
+
+    // Identical for any phone — the sentence reads nothing but the input.
+    await user.clear(box);
+    await user.type(box, "+74951112233");
+    expect(screen.getByText(copy.identifierPhoneHint)).toBeInTheDocument();
+  });
+
+  it("003 EARS-54: a phone's code step names SMS conditionally, the number bold as typed", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByTestId("reset-request-submit");
+    await user.type(screen.getByLabelText(copy.identifierLabel), PHONE);
+    await user.click(screen.getByTestId("reset-request-submit"));
+    await waitFor(() =>
+      expect(screen.getByLabelText(copy.codeLabel)).toBeTruthy(),
+    );
+
+    const number = screen.getByText(PHONE);
+    expect(number.tagName).toBe("STRONG");
+    expect(number.parentElement).toHaveTextContent(
+      copy.completeDescriptionPhone.replace("{destination}", PHONE),
+    );
+  });
+
+  it("003 EARS-54: an email's code step keeps the mailbox sentence", async () => {
+    const user = userEvent.setup();
+    mount();
+    await screen.findByTestId("reset-request-submit");
+    await user.type(screen.getByLabelText(copy.identifierLabel), IDENTIFIER);
+    await user.click(screen.getByTestId("reset-request-submit"));
+    await waitFor(() =>
+      expect(screen.getByLabelText(copy.codeLabel)).toBeTruthy(),
+    );
+
+    expect(screen.getByText(IDENTIFIER).parentElement).toHaveTextContent(
+      copy.completeDescription.replace("{destination}", IDENTIFIER),
+    );
+  });
+});
+
+describe("003 EARS-59: one reset wording on both storefronts", () => {
+  it("003 EARS-59: both hosts resolve the canvas sentences from the package defaults", () => {
+    const academy = resolveAuthFlowCopy(ACADEMY_FIXTURE).reset;
+    const doctor = resolveAuthFlowCopy(DOCTOR_FIXTURE).reset;
+    expect(academy.identifierPhoneHint).toBe(doctor.identifierPhoneHint);
+    expect(academy.completeDescriptionPhone).toBe(
+      doctor.completeDescriptionPhone,
+    );
+    expect(academy.identifierPhoneHint).toBe(
+      "Код по SMS придёт, только если телефон подтверждён в профиле. Если нет — укажите e-mail.",
+    );
+    expect(academy.completeDescriptionPhone).toBe(
+      "Если телефон {destination} подтверждён в профиле, мы отправили на него код по SMS. Введите его и задайте новый пароль.",
+    );
+  });
+});

@@ -111,6 +111,9 @@ export interface LoginCardCopy {
     channelGroupLabel: string;
     channelEmail: React.ReactNode;
     channelSms: React.ReactNode;
+    /** 003 EARS-55 (a) — the static hint under the channel switch, drawn only
+     * while «SMS» is selected (canvas 130–132); absent = no hint. */
+    channelSmsHint?: React.ReactNode;
     emailLabel: string;
     emailPlaceholder: string;
     phoneLabel: string;
@@ -592,6 +595,11 @@ function OtpLogin({
                   </Button>
                 ))}
               </div>
+              {channel === "sms" && copy.channelSmsHint ? (
+                <p className="text-xs text-muted-foreground">
+                  {copy.channelSmsHint}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

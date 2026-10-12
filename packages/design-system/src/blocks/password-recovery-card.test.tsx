@@ -37,6 +37,8 @@ const copy: PasswordRecoveryCardCopy = {
   request: {
     identifierLabel: "copy.request.identifierLabel",
     identifierPlaceholder: "copy.request.identifierPlaceholder",
+    identifierHint: (identifier) =>
+      identifier.startsWith("+") ? "copy.request.identifierHint" : null,
     submit: "copy.request.submit",
   },
   complete: {
@@ -355,4 +357,18 @@ describe("#2027 <PasswordRecoveryCard> pre-hydration submit", () => {
       }
     },
   );
+});
+
+describe("003 EARS-55 <PasswordRecoveryCard> identifier hint slot", () => {
+  it("003 EARS-55: the hint follows the LIVE identifier through the host's function", () => {
+    setup();
+    const box = screen.getByLabelText("copy.request.identifierLabel");
+
+    expect(screen.queryByText("copy.request.identifierHint")).toBeNull();
+    fireEvent.change(box, { target: { value: "+79991234567" } });
+    const hint = screen.getByText("copy.request.identifierHint");
+    expect(hint).toHaveClass("text-xs", "text-muted-foreground");
+    fireEvent.change(box, { target: { value: "doc@example.com" } });
+    expect(screen.queryByText("copy.request.identifierHint")).toBeNull();
+  });
 });

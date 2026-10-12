@@ -2,7 +2,13 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { golden } from "@ds/db/seed/golden";
 
 import type { HostConfig } from "../hosts.js";
-import { Given, Then, When, type EventsFeedWorld, type StepWorld } from "./support/fixtures.js";
+import {
+  Given,
+  Then,
+  When,
+  type EventsFeedWorld,
+  type StepWorld,
+} from "./support/fixtures.js";
 
 /**
  * 019 — the doctor events feed (`/events`) on the golden slot (Issue #2256,
@@ -69,7 +75,9 @@ function liveStrip(page: Page): Locator {
     .getByTestId("events-live-block")
     .getByTestId("live-event-strip")
     .filter({
-      has: page.locator(`a[href="/events/${LIVE.slug}"]`, { hasText: LIVE.title }),
+      has: page.locator(`a[href="/events/${LIVE.slug}"]`, {
+        hasText: LIVE.title,
+      }),
     });
 }
 
@@ -165,9 +173,10 @@ Then(
     await expect(
       tabs.getByRole("tab", { name: "Будущие", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
-    expect(params(page).has("tense"), "the default tense states no `tense`").toBe(
-      false,
-    );
+    expect(
+      params(page).has("tense"),
+      "the default tense states no `tense`",
+    ).toBe(false);
   },
 );
 
@@ -190,7 +199,9 @@ Then(
       .getByTestId("events-feed")
       .locator('section[id^="day-"]');
     await expect(groups.first()).toBeVisible();
-    const ids = await groups.evaluateAll((nodes) => nodes.map((node) => node.id));
+    const ids = await groups.evaluateAll((nodes) =>
+      nodes.map((node) => node.id),
+    );
     for (const id of ids) expect(id).toMatch(/^day-\d{4}-\d{2}-\d{2}$/);
     expect(ids, "day groups nearest first, one per day").toEqual(
       [...new Set(ids)].sort(),
@@ -203,11 +214,14 @@ Then(
   },
 );
 
-When("the {word} activates «Показать ещё»", async ({ page, world }, _actor: string) => {
-  const days = await page.locator('section[id^="day-"]').count();
-  feedOf(world).horizonBefore = { to: params(page).get("to"), days };
-  await showMore(page, world);
-});
+When(
+  "the {word} activates «Показать ещё»",
+  async ({ page, world }, _actor: string) => {
+    const days = await page.locator('section[id^="day-"]').count();
+    feedOf(world).horizonBefore = { to: params(page).get("to"), days };
+    await showMore(page, world);
+  },
+);
 
 Then(
   "the feed extends its horizon and the new range is visible in the URL",
@@ -257,29 +271,38 @@ Then(
     await expect(
       page.getByTestId("events-feed").getByText("Участвовать"),
     ).toHaveCount(0);
+    await expect(page.locator('a[href^="/register"]')).toHaveCount(0);
+    await expect(page.getByTestId("events-my-events-skeleton")).toHaveCount(0);
     // A live card keeps its strip action (019 «Amendment — 2026-10-06»).
-    const card = feedCards(page).filter({ hasNotText: "В эфире" }).first();
-    await expect(card).toBeVisible();
-    const links = card.getByRole("link");
-    await expect(links).toHaveCount(1);
-    await expect(card.getByRole("button")).toHaveCount(0);
-    const href = await links.getAttribute("href");
-    expect(href).toMatch(new RegExp(`^${host.eventsPath}/[^/?#]+$`));
-    const title = (await links.innerText()).trim();
-    expect(title.length).toBeGreaterThan(0);
-    feedOf(world).card = { title, href: href! };
+    const cards = feedCards(page).filter({ hasNotText: "В эфире" });
+    await expect(cards.first()).toBeVisible();
+    const count = await cards.count();
+    for (let index = 0; index < count; index += 1) {
+      const card = cards.nth(index);
+      const links = card.getByRole("link");
+      await expect(links).toHaveCount(1);
+      await expect(card.getByRole("button")).toHaveCount(0);
+      const href = await links.getAttribute("href");
+      expect(href).toMatch(new RegExp(`^${host.eventsPath}/[^/?#]+$`));
+      const title = (await links.innerText()).trim();
+      expect(title.length, "the card link is labelled").toBeGreaterThan(0);
+      feedOf(world).card ??= { title, href: href! };
+    }
   },
 );
 
-When("the {word} opens that upcoming card", async ({ page, world }, _actor: string) => {
-  const card = feedOf(world).card;
-  if (!card) throw new Error("No upcoming card was read before");
-  await page
-    .getByTestId("events-feed")
-    .locator(`a[href="${card.href}"]`)
-    .first()
-    .click();
-});
+When(
+  "the {word} opens that upcoming card",
+  async ({ page, world }, _actor: string) => {
+    const card = feedOf(world).card;
+    if (!card) throw new Error("No upcoming card was read before");
+    await page
+      .getByTestId("events-feed")
+      .locator(`a[href="${card.href}"]`)
+      .first()
+      .click();
+  },
+);
 
 Then(
   "the {word} lands on that event's page showing its title",
@@ -299,16 +322,16 @@ Then(
     await expect(block).toBeVisible();
     await expect(block.getByRole("status")).toHaveText("Идёт сейчас");
     await expect(liveStrip(page)).toHaveCount(1);
-    await expect(liveStrip(page).getByTestId("live-event-strip-title")).toHaveText(
-      LIVE.title,
-    );
+    await expect(
+      liveStrip(page).getByTestId("live-event-strip-title"),
+    ).toHaveText(LIVE.title);
     const feed = page.getByTestId("events-feed");
     expect(
       await block.evaluate(
         (node, feedNode) =>
           Boolean(
             node.compareDocumentPosition(feedNode!) &
-              Node.DOCUMENT_POSITION_FOLLOWING,
+            Node.DOCUMENT_POSITION_FOLLOWING,
           ),
         await feed.elementHandle(),
       ),
@@ -320,10 +343,9 @@ Then(
 Then("the live block offers no route into a room", async ({ page, host }) => {
   const block = page.getByTestId("events-live-block");
   await expect(block.locator('a[href$="/room"]')).toHaveCount(0);
-  await expect(liveStrip(page).getByTestId("live-event-strip-action")).toHaveAttribute(
-    "href",
-    eventPathOf(host, LIVE.slug),
-  );
+  await expect(
+    liveStrip(page).getByTestId("live-event-strip-action"),
+  ).toHaveAttribute("href", eventPathOf(host, LIVE.slug));
 });
 
 When(
@@ -336,7 +358,11 @@ When(
 Then(
   "the doctor lands in the room of the golden doctors' broadcast",
   async ({ page, host }) => {
-    await expectLanding(page, `${eventPathOf(host, LIVE.slug)}/room`, LIVE.title);
+    await expectLanding(
+      page,
+      `${eventPathOf(host, LIVE.slug)}/room`,
+      LIVE.title,
+    );
   },
 );
 
@@ -381,12 +407,19 @@ When(
     }
     expect(await days.count(), "a day carrying events").toBeGreaterThan(0);
     await page.evaluate(() => {
-      (window as unknown as { __shellSentinel?: string }).__shellSentinel = "kept";
+      (window as unknown as { __shellSentinel?: string }).__shellSentinel =
+        "kept";
     });
     feedOf(world).history.push(pathAndQuery(page));
-    await days.last().click();
+    feedOf(world).groupsBeforeDay = await page
+      .locator('section[id^="day-"]')
+      .count();
+    const picked = days.last();
+    const label = (await picked.getAttribute("aria-label")) ?? "";
+    await picked.click();
     await page.waitForURL((url) => url.searchParams.has("day"));
     feedOf(world).pickedDay = params(page).get("day")!;
+    feedOf(world).pickedLabel = label;
   },
 );
 
@@ -403,32 +436,50 @@ Then(
       ),
       "the shell was not reloaded",
     ).toBe("kept");
-    await expect(page.getByTestId("events-compact-month")).toHaveAttribute(
+    const compact = page.getByTestId("events-compact-month");
+    await expect(compact).toHaveAttribute(
       "data-selected-day",
       String(Number(day!.slice(8))),
     );
+    const label = feedOf(world).pickedLabel;
+    if (label) {
+      await expect(
+        compact.getByRole("button", { name: label, exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+    // The pick moves the feed; it never narrows the read to that day.
+    expect(
+      await page.locator('section[id^="day-"]').count(),
+      "the day groups around the picked day stay",
+    ).toBeGreaterThanOrEqual(feedOf(world).groupsBeforeDay ?? 1);
   },
 );
 
 // ── EARS-5: the month view of the same page ─────────────────────────────────
 
-When("the {word} follows «Календарь на месяц →»", async ({ page, world }, _actor: string) => {
-  feedOf(world).history.push(pathAndQuery(page));
-  await page
-    .getByRole("link", { name: "Календарь на месяц →", exact: true })
-    .filter({ visible: true })
-    .click();
-  await page.waitForURL((url) => url.searchParams.get("view") === "month");
-});
+When(
+  "the {word} follows «Календарь на месяц →»",
+  async ({ page, world }, _actor: string) => {
+    feedOf(world).history.push(pathAndQuery(page));
+    await page
+      .getByRole("link", { name: "Календарь на месяц →", exact: true })
+      .filter({ visible: true })
+      .click();
+    await page.waitForURL((url) => url.searchParams.get("view") === "month");
+  },
+);
 
-When("the {word} follows «← Лента событий»", async ({ page, world }, _actor: string) => {
-  feedOf(world).history.push(pathAndQuery(page));
-  await page
-    .getByRole("link", { name: "← Лента событий", exact: true })
-    .filter({ visible: true })
-    .click();
-  await page.waitForURL((url) => url.searchParams.get("view") !== "month");
-});
+When(
+  "the {word} follows «← Лента событий»",
+  async ({ page, world }, _actor: string) => {
+    feedOf(world).history.push(pathAndQuery(page));
+    await page
+      .getByRole("link", { name: "← Лента событий", exact: true })
+      .filter({ visible: true })
+      .click();
+    await page.waitForURL((url) => url.searchParams.get("view") !== "month");
+  },
+);
 
 Then(
   "the month grid renders on the same route with the facet panel beside it",
@@ -518,7 +569,10 @@ Then("no facet is applied and the URL carries none", async ({ page }) => {
 
 When(
   "the {word} opens the same URL in a fresh browser context",
-  async ({ page, browser, baseURL, httpCredentials, locale, world }, _actor: string) => {
+  async (
+    { page, browser, baseURL, httpCredentials, locale, world },
+    _actor: string,
+  ) => {
     const context = await browser.newContext({
       ...(baseURL ? { baseURL } : {}),
       ...(httpCredentials ? { httpCredentials } : {}),
@@ -548,10 +602,26 @@ Then(
           .locator('section[id^="day-"]')
           .evaluateAll((nodes) => nodes.map((node) => node.id));
       expect(await groupsOf(fresh)).toEqual(await groupsOf(page));
+      const cardsOf = (target: Page) =>
+        feedCards(target)
+          .locator("h3 a")
+          .evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute("href")),
+          );
+      expect(await cardsOf(fresh)).toEqual(await cardsOf(page));
+      const tenseOf = (target: Page) =>
+        target
+          .getByTestId("events-tense-tabs")
+          .getByRole("tab", { selected: true })
+          .textContent();
+      expect(await tenseOf(fresh)).toBe(await tenseOf(page));
       const moreOf = (target: Page) =>
-        target.getByTestId("events-feed-show-more").getAttribute("href", {
-          timeout: 1_000,
-        }).catch(() => null);
+        target
+          .getByTestId("events-feed-show-more")
+          .getAttribute("href", {
+            timeout: 1_000,
+          })
+          .catch(() => null);
       expect(await moreOf(fresh)).toBe(await moreOf(page));
     } finally {
       await fresh.context().close();
@@ -560,9 +630,12 @@ Then(
   },
 );
 
-When("the {word} presses the browser back button", async ({ page }, _actor: string) => {
-  await page.goBack();
-});
+When(
+  "the {word} presses the browser back button",
+  async ({ page }, _actor: string) => {
+    await page.goBack();
+  },
+);
 
 Then(
   "the previous feed state is rendered rather than the {word} leaving the feed",
@@ -577,14 +650,17 @@ Then(
 
 // ── EARS-10 / EARS-2: «Прошедшие» ───────────────────────────────────────────
 
-When("the {word} switches the tense to «Прошедшие»", async ({ page, world }, _actor: string) => {
-  feedOf(world).history.push(pathAndQuery(page));
-  await page
-    .getByTestId("events-tense-tabs")
-    .getByRole("tab", { name: "Прошедшие", exact: true })
-    .click();
-  await page.waitForURL((url) => url.searchParams.get("tense") === "past");
-});
+When(
+  "the {word} switches the tense to «Прошедшие»",
+  async ({ page, world }, _actor: string) => {
+    feedOf(world).history.push(pathAndQuery(page));
+    await page
+      .getByTestId("events-tense-tabs")
+      .getByRole("tab", { name: "Прошедшие", exact: true })
+      .click();
+    await page.waitForURL((url) => url.searchParams.get("tense") === "past");
+  },
+);
 
 Then(
   "the URL carries the past tense and the past events are grouped by month, newest first",
@@ -594,9 +670,13 @@ Then(
         .getByTestId("events-tense-tabs")
         .getByRole("tab", { name: "Прошедшие", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
-    const groups = page.getByTestId("events-feed").locator('section[id^="day-"]');
+    const groups = page
+      .getByTestId("events-feed")
+      .locator('section[id^="day-"]');
     await expect(groups.first()).toBeVisible();
-    const ids = await groups.evaluateAll((nodes) => nodes.map((node) => node.id));
+    const ids = await groups.evaluateAll((nodes) =>
+      nodes.map((node) => node.id),
+    );
     for (const id of ids) expect(id).toMatch(/^day-\d{4}-\d{2}$/);
     expect(ids, "month groups newest first, one per month").toEqual(
       [...new Set(ids)].sort().reverse(),
@@ -613,15 +693,12 @@ Then(
   },
 );
 
-Then(
-  "no past card shows the sign-up count of colleagues",
-  async ({ page }) => {
-    await expect(feedCards(page).first()).toBeVisible();
-    await expect(
-      feedCards(page).filter({ hasText: "Коллег записались" }),
-    ).toHaveCount(0);
-  },
-);
+Then("no past card shows the sign-up count of colleagues", async ({ page }) => {
+  await expect(feedCards(page).first()).toBeVisible();
+  await expect(
+    feedCards(page).filter({ hasText: "Коллег записались" }),
+  ).toHaveCount(0);
+});
 
 When(
   "the {word} activates «Показать ещё» on «Прошедшие»",
@@ -643,7 +720,8 @@ Then(
   "the next older past events are added and the extent in the URL reaches further back",
   async ({ page, world }) => {
     const before = feedOf(world).pastBefore;
-    if (!before) throw new Error("«Показать ещё» was not activated on «Прошедшие»");
+    if (!before)
+      throw new Error("«Показать ещё» was not activated on «Прошедшие»");
     const from = params(page).get("from");
     expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     if (before.from) expect(from! < before.from).toBe(true);
@@ -690,12 +768,15 @@ Then(
   },
 );
 
-When("the {word} follows «Все мои события →»", async ({ page }, _actor: string) => {
-  await page
-    .getByTestId("events-my-events")
-    .getByRole("link", { name: "Все мои события →", exact: true })
-    .click();
-});
+When(
+  "the {word} follows «Все мои события →»",
+  async ({ page }, _actor: string) => {
+    await page
+      .getByTestId("events-my-events")
+      .getByRole("link", { name: "Все мои события →", exact: true })
+      .click();
+  },
+);
 
 // ── EARS-13: the 390 sheet ──────────────────────────────────────────────────
 

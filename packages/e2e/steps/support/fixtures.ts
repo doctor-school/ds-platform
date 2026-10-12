@@ -43,6 +43,10 @@ export interface EventsFeedWorld {
   card?: { title: string; href: string };
   /** `YYYY-MM-DD` of the day picked in the compact month. */
   pickedDay?: string;
+  /** The accessible name of the compact-month day button that was picked. */
+  pickedLabel?: string;
+  /** The day groups the feed held before the day was picked. */
+  groupsBeforeDay?: number;
   /** The past screen before «Показать ещё»: its card count and the step it promised. */
   pastBefore?: { cards: number; step: number; from: string | null };
   /** The horizon before «Показать ещё» on «Будущие». */

@@ -71,21 +71,6 @@ test("019 EARS-6: a registered doctor's live strip leads into the room", async (
   ).toBe(true);
 });
 
-test("019 EARS-6: a guest sees the same эфир but is sent to the event page, never the room", async ({
-  page,
-  request,
-}) => {
-  await setScenario(request, "registered");
-  await page.goto("/events");
-
-  const block = page.getByTestId("events-live-block");
-  await expect(block).toBeVisible();
-  const action = block.getByTestId("live-event-strip-action");
-  await expect(action).toHaveText("Открыть страницу события");
-  await expect(action).toHaveAttribute("href", `/events/${SLUG}`);
-  await expect(block.locator('a[href$="/room"]')).toHaveCount(0);
-});
-
 test("019 EARS-6: nothing live ⇒ the block is absent from the tree, not hidden", async ({
   page,
   request,

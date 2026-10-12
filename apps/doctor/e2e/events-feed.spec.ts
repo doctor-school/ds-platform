@@ -21,21 +21,6 @@ test.afterEach(async ({ request }) => {
   await request.post(`${API}/__e2e/live`, { data: { scenario: "none" } });
 });
 
-test("EARS-3: the feed renders its days as groups over the served horizon", async ({
-  page,
-}) => {
-  await page.goto("/events");
-
-  await expect(page.getByTestId("events-feed")).toBeVisible();
-  // One section per day, nearest first — the grouping is the shared unit's,
-  // keyed by the calendar day of the time shown on the card (gate row 33).
-  const groups = page.locator('section[id^="day-"]');
-  await expect(groups).toHaveCount(2);
-  await expect(groups.nth(0)).toHaveAttribute("id", "day-2026-09-02");
-  await expect(groups.nth(1)).toHaveAttribute("id", "day-2026-09-04");
-  await expect(groups.nth(0).getByText("Событие evt-1")).toBeVisible();
-});
-
 test("gate row 32: «Показать ещё N из M» states the batch and the remainder and writes the extent to the URL", async ({
   page,
 }) => {

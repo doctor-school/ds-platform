@@ -42,44 +42,6 @@ test.afterEach(async ({ request }) => {
   await request.post(`${API}/__e2e/live`, { data: { scenario: "none" } });
 });
 
-test("gate rows 40–41: a guest reads every block but «Мои события», with no account band and no card action", async ({
-  page,
-  context,
-  request,
-}) => {
-  await request.post(`${API}/__e2e/live`, {
-    data: { scenario: "unregistered" },
-  });
-  await context.clearCookies();
-  await page.goto("/events");
-
-  // Nothing is withheld from a signed-out reader: the same day groups and
-  // cards the signed-in reader gets, the live block included.
-  await expect(page.getByTestId("events-tense-tabs")).toBeVisible();
-  await expect(page.getByTestId("events-live-block")).toBeVisible();
-  await expect(page.locator('section[id^="day-"]')).toHaveCount(2);
-  const cards = page.locator("[data-webinar-card]");
-  await expect(cards).toHaveCount(3);
-
-  // «Мои события» is a signed-in reader's block only.
-  await expect(page.getByTestId("events-my-events")).toHaveCount(0);
-  await expect(page.getByTestId("events-my-events-skeleton")).toHaveCount(0);
-
-  // No account band, no hand-off.
-  await expect(page.getByTestId("events-guest-gate")).toHaveCount(0);
-  await expect(page.getByText("Участвовать — нужна регистрация.")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Участвовать ↗" })).toHaveCount(0);
-  await expect(page.locator('a[href^="/register"]')).toHaveCount(0);
-
-  // Each upcoming card is ONE labelled link to its own event page.
-  for (const [index, slug] of ["evt-1", "evt-2", "evt-3"].entries()) {
-    const links = cards.nth(index).getByRole("link");
-    await expect(links).toHaveCount(1);
-    await expect(links).toHaveAttribute("href", `/events/${slug}`);
-    await expect(links).toHaveAccessibleName(`Событие ${slug}`);
-  }
-});
-
 test("gate row 42: a `resume` parameter re-seats nothing — the return lands on the event page, not the feed", async ({
   page,
   context,

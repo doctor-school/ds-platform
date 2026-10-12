@@ -254,7 +254,7 @@ export async function waitForResetMail(
 
 /** 003 EARS-16: any addressed mail is a failure, over the full delivery horizon. */
 export async function assertNoAddressedMail(
-  request: APIRequestContext,
+  request: MailRequest,
   baseUrl: string,
   email: string,
   afterIso: string,

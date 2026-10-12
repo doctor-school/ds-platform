@@ -34,7 +34,8 @@ pnpm deploy:prod --release-gate-exempt "<reason>"  # release-gate + stage-main-c
 
 Pipeline, fail-closed, stops at the first red step and prints a rollback pointer:
 
-1. **Pre-flight (DSO-126)** — clean working tree · `HEAD == origin/main` · **green
+1. **Pre-flight (DSO-126)** — **stage `main` check prerequisites** first (#2806 —
+   below) · clean working tree · `HEAD == origin/main` · **green
    CI** for that SHA (latest check-run per name via
    `gh api …/commits/<sha>/check-runs`, restricted to suites of repo-owned
    `.github/workflows/*` runs — GitHub-injected `dynamic/*` workflows such as
@@ -469,11 +470,23 @@ the last pre-flight step, instead of trusting a record someone wrote:
 4. `git worktree remove --force` the checkout, pass or fail.
 
 Any failure refuses the deploy, fail-closed; nothing is written to GitHub — the
-stand is operated by hand (#2202) and the deploy log is the record. The operator
-needs what the slot tool needs (ssh to the box, `STAGE_BASIC_AUTH_PASS`). The
-only bypass is the owner-approved `--release-gate-exempt "<reason>"`, printed as
-the audit record. Unit cover: `tools/deploy/stage-main-check.test.mjs` (every
-spawn injected) and the release-check cases in `tools/staging/e2e-stage.test.mjs`.
+stand is operated by hand (#2202) and the deploy log is the record.
+
+**Prerequisites on the operator's machine** (#2806) — probed as the FIRST
+pre-flight step, before the clean-tree check and long before the checkout, so a
+missing one refuses the deploy in seconds and names itself:
+
+- `STAGE_BASIC_AUTH_PASS` exported — the stand's basic-auth plaintext (the box
+  holds only its bcrypt hash; same refusal text as `stage:slot`).
+- ssh to the stage box (`ds-stage-1`, or `DS_STAGE_SSH`) — one `ssh … true`
+  with `ConnectTimeout=5` / `BatchMode=yes` (the `slot-probe.mjs` options),
+  bounded at 15 s wall-clock.
+
+Both are reported together when both are missing. The only bypass — of the
+check and its prerequisites alike — is the owner-approved
+`--release-gate-exempt "<reason>"`, printed as the audit record. Unit cover:
+`tools/deploy/stage-main-check.test.mjs` (every spawn and the ssh probe
+injected) and the release-check cases in `tools/staging/e2e-stage.test.mjs`.
 
 ## `pnpm deploy:smoke`
 

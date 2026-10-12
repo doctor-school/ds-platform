@@ -19,6 +19,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { sshCapture } from "./lib/remote.mjs";
+import { PROBE_SSH_OPTIONS } from "../staging/slot-probe.mjs";
+import { STAGE_1, requiredOperatorPassword } from "../staging/slot.mjs";
+
 const FULL_SHA_RE = /^[0-9a-f]{40}$/;
 
 /**
@@ -46,6 +50,55 @@ const realEffects = {
     }),
   log: (line) => console.log(line),
 };
+
+/** Wall-clock bound on the reachability probe, on top of ssh's `ConnectTimeout`. */
+export const STAGE_SSH_PROBE_MS = 15000;
+
+async function realProbeSsh(destination) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), STAGE_SSH_PROBE_MS);
+  try {
+    await sshCapture(destination, "true", {
+      sshOptions: PROBE_SSH_OPTIONS,
+      stderr: "pipe",
+      signal: ac.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * What the check needs from the operator's machine, probed in the deploy's first
+ * seconds (#2806): the stand's basic-auth plaintext and ssh to the stage box. Both are
+ * read only after the clean checkout, install and converge have started otherwise, so
+ * a missing one used to cost minutes before the refusal.
+ *
+ * @returns {Promise<{ok: true} | {ok: false, reason: string}>}
+ */
+export async function checkStageMainPrerequisites({
+  env = process.env,
+  destination = STAGE_1,
+  probeSsh = realProbeSsh,
+} = {}) {
+  const missing = [];
+  try {
+    requiredOperatorPassword(env);
+  } catch (e) {
+    missing.push(e.message);
+  }
+  try {
+    await probeSsh(destination);
+  } catch (e) {
+    missing.push(
+      `the stage box \`${destination}\` is unreachable over ssh (${e.message}) — ` +
+        `check the VPN/network and the ssh config for \`${destination}\`` +
+        ` (or set DS_STAGE_SSH to the box's destination), then re-run.`,
+    );
+  }
+  if (missing.length === 0) return { ok: true };
+  return { ok: false, reason: missing.join("\n  ") };
+}
 
 /**
  * Converge the stage `main` slot to `sha` and run the full suite against it.

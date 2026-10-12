@@ -85,7 +85,10 @@ import {
   probeReleaseGate,
 } from "./release-gate.mjs";
 import { composeDigest } from "./release-notes.mjs";
-import { runStageMainCheck } from "./stage-main-check.mjs";
+import {
+  checkStageMainPrerequisites,
+  runStageMainCheck,
+} from "./stage-main-check.mjs";
 import {
   assertPostgresEvidence,
   certifiedTarget,
@@ -347,9 +350,14 @@ function localCap(cmd, args) {
 async function preflight(hotfixRef = null) {
   step(
     hotfixRef
-      ? `Pre-flight (HOTFIX ${REF_FLAG}): clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate · stage main check`
-      : "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · stage main check",
+      ? `Pre-flight (HOTFIX ${REF_FLAG}): stage check prerequisites · clean tree · target on origin · descendant of prod · cherry-picks of main · green CI · no live broadcast · release gate · stage main check`
+      : "Pre-flight: stage check prerequisites · clean tree · HEAD==origin/main · green CI · no live broadcast · release gate · stage main check",
   );
+
+  // 0. stage `main` check prerequisites (#2806): the check is the last step, but
+  //    what it needs from this machine is probed first, so a missing one refuses
+  //    in seconds instead of after the checkout, install and converge.
+  await assertStageMainPrerequisites();
 
   // 1. clean working tree
   const dirty = localCap("git", ["status", "--porcelain"]);
@@ -532,6 +540,31 @@ async function assertReleaseGate(sha) {
   const hold = formatReleaseGateHold(verdict);
   if (hold) die(hold);
   ok(formatReleaseGateClear(probe.basisSha));
+}
+
+// Same owner-go bypass as the check itself: an exempted check needs no prerequisites
+// (its own skip line, printed at step 6, is the audit record).
+async function assertStageMainPrerequisites() {
+  const exempt = parseReleaseGateExempt(process.argv);
+  if (exempt.error) die(exempt.error);
+  if (exempt.exempt) {
+    console.log(
+      `  ⚠ ${RELEASE_GATE_EXEMPT_FLAG}: SKIPPING the stage \`main\` check prerequisites`,
+    );
+    return;
+  }
+  const t = Date.now();
+  const result = await checkStageMainPrerequisites();
+  if (!result.ok) {
+    die(
+      `stage \`main\` check prerequisites missing — refusing before any checkout:\n  ${result.reason}\n` +
+        `  Skipping the stage check needs the owner's go + ${RELEASE_GATE_EXEMPT_FLAG} "<reason>".`,
+    );
+  }
+  ok(
+    "stage `main` check prerequisites: STAGE_BASIC_AUTH_PASS set, stage box reachable over ssh",
+    t,
+  );
 }
 
 // The stage `main` check (tools/deploy/stage-main-check.mjs, unit-tested there);

@@ -139,7 +139,7 @@ Given(
   },
 );
 
-When("the user opens the /account page", async ({ page, world }) => {
+When(/^the user opens the \/account page$/, async ({ page, world }) => {
   const owned = profile(page).page;
   await owned.goto(`${world.hostBaseUrl}/account`, { waitUntil: "load" });
   await expect(owned.getByTestId("profile-name")).toBeVisible();
@@ -179,7 +179,7 @@ Then('the phone row shows the explicit "не указан" state', async ({ page
 });
 
 Then(
-  "a change-password action hands off to the existing /reset flow",
+  /^a change-password action hands off to the existing \/reset flow$/,
   async ({ page, world }) => {
     const owned = profile(page).page;
     await expect(
@@ -219,7 +219,7 @@ Then(
 );
 
 Then(
-  "no raw session claim (sub, roles array, raw mfa boolean) appears anywhere in the page",
+  /^no raw session claim \(sub, roles array, raw mfa boolean\) appears anywhere in the page$/,
   async ({ page }) => {
     const state = profile(page);
     await expect(state.page.getByTestId("session-sub")).toHaveCount(0);

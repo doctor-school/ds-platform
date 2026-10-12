@@ -14,14 +14,15 @@ icom:
   C4: a13
   O1: a05
   O2: a05
-  O3: a06
+  O3: a05
   O4: a07
   M1: M1
-  M2: M3
-  M3: M4
-  M4: M5
-  M5: M7
-  M6: a14
+  M2: M1
+  M3: M3
+  M4: M4
+  M5: M5
+  M6: M7
+  M7: a14
 boxes:
   - id: A41
     name: Промаркировать и присвоить теги
@@ -60,7 +61,9 @@ boxes:
     name: Анонсировать урок
     functions: [F-070, F-071]
     mechanisms: [Медиа-круг — анонсы]
-    note: Шаг 4 — тизер и анонс в соцсетях за неделю до релиза, рилсы, анонс в календаре.
+    note: >-
+      Шаг 4 — базовый анонс, входит в себестоимость единицы: тизер и анонс в соцсетях за неделю до
+      релиза, рилсы, анонс в календаре. Расширенная кампания — отдельная опция пакета (A47).
     leaf: true
     effort:
       role: Медиа-круг — анонсы
@@ -120,6 +123,14 @@ boxes:
       lead_days_basis: "оценка аналитика"
       driver: доля уроков, требующих обновления; глубина (подкаст обновления или пересборка)
       basis: оценка аналитика
+  - id: A47
+    name: Провести расширенную кампанию продвижения
+    functions: []
+    mechanisms: [Медиа-круг — анонсы]
+    note: >-
+      Новое: опция пакета сверх базового анонса A43 — посевы в пабликах, рилсы врачам, рассылка
+      блогерам. Пока чёрный ящик — операции раскроются на следующем шаге декомпозиции.
+    decomposition: pending
 arrows:
   # ---- Boundary ----
   - id: I1
@@ -149,7 +160,10 @@ arrows:
     label: Договор — срок сопровождения
     objects: [O-107, O-170]
     from: { boundary: C3 }
-    to: [{ box: A42, side: C }, { box: A46, side: C }]
+    to:
+      - { box: A42, side: C }
+      - { box: A46, side: C }
+      - { box: A47, side: C }
   - id: C4
     label: Стандарты DS, полнота состава, независимое рецензирование
     objects: [O-141, O-169, O-221]
@@ -158,6 +172,7 @@ arrows:
       - { box: A41, side: C }
       - { box: A43, side: C }
       - { box: A45, side: C }
+      - { box: A47, side: C }
   - id: O1
     label: Опубликованный урок
     objects: [O-041, O-197, O-048]
@@ -169,9 +184,9 @@ arrows:
     from: { box: A43, side: O }
     to: { boundary: O2 }
   - id: O3
-    label: Количество выпущенных уроков
-    objects: [O-180]
-    from: { box: A42, side: O }
+    label: Расширенная кампания — паблики, рилсы врачам, рассылка блогерам
+    objects: [O-062]
+    from: { box: A47, side: O }
     to: { boundary: O3 }
   - id: O4
     label: Задание на актуализацию
@@ -179,37 +194,39 @@ arrows:
     from: { box: A46, side: O }
     to: { boundary: O4 }
   - id: M1
-    label: Медредактор-сценарист, продюсер
-    objects: [O-010, O-004]
+    label: Медредактор-сценарист
+    objects: [O-010]
     from: { boundary: M1 }
-    to:
-      - { box: A41, side: M }
-      - { box: A44, side: M }
-      - { box: A46, side: M }
+    to: { box: A41, side: M }
   - id: M2
-    label: Пул медрецензентов — по сигналу
-    objects: [O-009]
+    label: Продюсер (команда-владелец направления)
+    objects: [O-004]
     from: { boundary: M2 }
-    to: { box: A45, side: M }
+    to: [{ box: A44, side: M }, { box: A46, side: M }]
   - id: M3
-    label: Медиа-круг
-    objects: [O-013]
+    label: Пул медрецензентов (по сигналу)
+    objects: [O-009]
     from: { boundary: M3 }
-    to: { box: A43, side: M }
+    to: { box: A45, side: M }
   - id: M4
-    label: Оператор платформы
-    objects: [O-194]
+    label: Медиа-круг — анонсы
+    objects: [O-013]
     from: { boundary: M4 }
-    to: { box: A42, side: M }
+    to: [{ box: A43, side: M }, { box: A47, side: M }]
   - id: M5
+    label: Сервисный круг — оператор платформы
+    objects: [O-194]
+    from: { boundary: M5 }
+    to: { box: A42, side: M }
+  - id: M6
     label: Платформа DS
     objects: [O-185]
-    from: { boundary: M5 }
-    to: [{ box: A42, side: M }, { box: A44, side: M }]
-  - id: M6
-    label: Команда-владелец направления
-    objects: [O-001]
     from: { boundary: M6 }
+    to: [{ box: A42, side: M }, { box: A44, side: M }]
+  - id: M7
+    label: Команды, роли, пулы
+    objects: [O-001]
+    from: { boundary: M7 }
     to: { box: A46, side: M }
   # ---- Internal ----
   - id: a01
@@ -226,7 +243,7 @@ arrows:
     label: Дата релиза
     objects: [O-127]
     from: { box: A42, side: O }
-    to: { box: A43, side: I }
+    to: [{ box: A43, side: I }, { box: A47, side: I }]
   - id: a04
     label: Затронутые единицы, заявка peer review
     objects: [O-126, O-113]

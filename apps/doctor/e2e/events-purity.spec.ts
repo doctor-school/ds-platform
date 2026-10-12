@@ -5,10 +5,11 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * Every rendered state of the one events page (upcoming, past, month, empty,
  * filtered), for a guest and for a signed-in doctor, at 1440 and 390 px, in
- * light and dark, is scanned for every doctor-facing string the page carries —
- * every text node (a closed mobile sheet included, `script`/`style` excluded),
+ * light and dark, is scanned for every doctor-facing string of the 019 surface
+ * (the page's `<main>`; the shell footer is 017's) — every text node in it (a
+ * closed mobile sheet included, `script`/`style` excluded),
  * every accessible-name / tooltip / placeholder attribute, the document title
- * and the meta description — plus every link target:
+ * and the meta description — plus every link target in it:
  *
  *  1. no Academy podcast episode, Academy / partner news item, project card or
  *     backstage entry — neither as copy nor as a link into those sections — and
@@ -119,10 +120,11 @@ async function scan(page: Page): Promise<Scan> {
     const strings: string[] = [];
     const nmoOutside: string[] = [];
 
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT,
-    );
+    // The 019 surface is the page's <main>: the footer is the 017 shell's one
+    // sanctioned crossing to the Academy (017 EARS-12, LD-4), not this feature.
+    const root = document.querySelector("main");
+    if (!root) throw new Error("the events page renders no <main>");
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
       const text = node.textContent?.trim() ?? "";
@@ -136,7 +138,7 @@ async function scan(page: Page): Promise<Scan> {
         nmoOutside.push(text);
       }
     }
-    for (const element of Array.from(document.body.querySelectorAll("*"))) {
+    for (const element of Array.from(root.querySelectorAll("*"))) {
       for (const name of [
         "aria-label",
         "aria-description",
@@ -166,13 +168,13 @@ async function scan(page: Page): Promise<Scan> {
     const headings = [
       document.title,
       ...Array.from(
-        document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
+        root.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
       ).map((heading) => (heading as HTMLElement).innerText ?? ""),
     ];
 
     // The facet panel's FIRST field — the screen's primary filter — read from
     // every rendered panel, past its «Фильтры» header and applied-count line.
-    const primaryFacetFields = Array.from(document.querySelectorAll(FACET))
+    const primaryFacetFields = Array.from(root.querySelectorAll(FACET))
       .map((panel) =>
         ((panel as HTMLElement).innerText ?? "")
           .split("\n")
@@ -184,7 +186,7 @@ async function scan(page: Page): Promise<Scan> {
 
     return {
       strings,
-      hrefs: Array.from(document.querySelectorAll("a[href]")).map(
+      hrefs: Array.from(root.querySelectorAll("a[href]")).map(
         (link) => link.getAttribute("href") ?? "",
       ),
       headings,

@@ -175,18 +175,8 @@ const KINDS = [
   { slug: RAZBOR.slug, title: RAZBOR.title },
 ];
 const SPECIALTIES = [
-  {
-    id: "00000000-0000-4000-8000-000000000001",
-    code: "kardiologiya",
-    name: "Кардиология",
-    isOther: false,
-  },
-  {
-    id: "00000000-0000-4000-8000-000000000002",
-    code: "nevrologiya",
-    name: "Неврология",
-    isOther: false,
-  },
+  { id: "00000000-0000-4000-8000-000000000001", code: "kardiologiya", name: "Кардиология", isOther: false },
+  { id: "00000000-0000-4000-8000-000000000002", code: "nevrologiya", name: "Неврология", isOther: false },
 ];
 const MONTH_TODAY = "2026-09-01";
 const MONTH_COUNTS = {
@@ -444,10 +434,7 @@ const server = createServer((request, response) => {
     );
   }
   if (url.pathname === "/v1/public/specialties") {
-    return json(response, 200, {
-      entries: SPECIALTIES,
-      total: SPECIALTIES.length,
-    });
+    return json(response, 200, { entries: SPECIALTIES, total: SPECIALTIES.length });
   }
 
   if (url.pathname === "/v1/storefront/doctor/events/month") {
@@ -623,8 +610,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
  * специальности» (gate row 59).
  */
 function matchesFacets(item, url) {
-  const list = (key) =>
-    url.searchParams.getAll(key).flatMap((v) => v.split(","));
+  const list = (key) => url.searchParams.getAll(key).flatMap((v) => v.split(","));
   const formats = list("format");
   const kinds = list("kind");
   const specialties = list("specialty").filter(
@@ -632,8 +618,7 @@ function matchesFacets(item, url) {
   );
   if (formats.length > 0 && !formats.includes(item.format)) return false;
   if (kinds.length > 0 && !kinds.includes(item.kind.slug)) return false;
-  if (specialties.length > 0 && !specialties.includes("kardiologiya"))
-    return false;
+  if (specialties.length > 0 && !specialties.includes("kardiologiya")) return false;
   return true;
 }
 

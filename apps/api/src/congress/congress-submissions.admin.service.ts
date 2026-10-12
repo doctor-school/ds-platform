@@ -31,6 +31,7 @@ import {
   isCongressCommitteeTransition,
   mskClosingInstantAfterLastDay,
   mskDayStartInstant,
+  normaliseContactPhone,
   revisionDueAt,
   revisionExtensionDueAt,
   revisionLastDay,
@@ -304,7 +305,8 @@ export class CongressSubmissionsAdminService {
       submitter: {
         fullName: found.fullName,
         email: found.email ?? null,
-        phone: found.phone ?? null,
+        // 046 EARS-28 / 044 EARS-36: the normalised E.164 value, never the typed one.
+        phone: normaliseContactPhone(found.phone ?? "") || null,
         ageOnEventStart,
       },
       submittedAt: row.submittedAt?.toISOString() ?? null,

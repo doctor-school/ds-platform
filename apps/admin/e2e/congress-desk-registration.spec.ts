@@ -155,7 +155,9 @@ async function fillWalkIn(
   await panel.getByTestId("desk-firstName").fill("Мария");
   await panel.getByTestId("desk-patronymic").fill("Петровна");
   await panel.getByTestId("desk-email").fill(email);
-  await panel.getByTestId("desk-contactPhone").fill("+7 (999) 123-45-67");
+  // Typed in the domestic spelling; the roster shows the one admin format
+  // `+7 (XXX) XXX-XX-XX` built from the normalised value (EARS-36, #2770).
+  await panel.getByTestId("desk-contactPhone").fill("8 999 123 45 67");
   await pickSpecialty(page);
   await panel.getByTestId("desk-workplace").fill("ГКБ №1");
   await fillPlace(page, place);
@@ -329,6 +331,7 @@ test.describe("044 EARS-35 — the registrar's desk entry on the roster screen",
       row.locator("[data-testid='roster-cell-fullName']"),
     ).toHaveText("Сидорова Мария Петровна");
     // EARS-37: the email left the table for the participant card (EARS-36).
+    // EARS-36 (#2770): the phone typed «8 999 123 45 67» reads in the one format.
     await expect(row.locator("[data-testid='roster-cell-phone']")).toHaveText(
       "+7 (999) 123-45-67",
     );

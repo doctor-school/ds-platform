@@ -23,6 +23,7 @@ import {
   submissionRegistryCells,
   submissionRegistryQuery,
   submissionSentRangeChips,
+  submissionSubmitterPhone,
 } from "./congress-submissions";
 import { congressSubmissionsUrl } from "@/providers/data-provider";
 
@@ -520,6 +521,35 @@ describe("046 EARS-35 the revision deadline in the card", () => {
     );
     expect(
       revisionExtensionError("2026-11-28", "2026-11-25", today),
+    ).toBeNull();
+  });
+});
+
+describe("046 EARS-28 the card's submitter phone", () => {
+  it("046 EARS-28: the submitter phone renders in the one admin format, «—» when absent", () => {
+    const submitter = { fullName: "Иванова Мария Петровна", email: null };
+    expect(
+      submissionSubmitterPhone({
+        submitter: {
+          ...submitter,
+          phone: "+79263104502",
+          ageOnEventStart: null,
+        },
+      }),
+    ).toBe("+7 (926) 310-45-02");
+    expect(
+      submissionSubmitterPhone({
+        submitter: {
+          ...submitter,
+          phone: "+442079460958",
+          ageOnEventStart: null,
+        },
+      }),
+    ).toBe("+442079460958");
+    expect(
+      submissionSubmitterPhone({
+        submitter: { ...submitter, phone: null, ageOnEventStart: null },
+      }),
     ).toBeNull();
   });
 });

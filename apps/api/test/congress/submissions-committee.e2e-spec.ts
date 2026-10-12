@@ -793,7 +793,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await row(id)).status).toBe("submitted");
     }, 60_000);
 
-    it("046 EARS-28: a poster card shows the submitter's age on the event start, never the birth date; email and phone come from the 044 answers", async () => {
+    it("046 EARS-28: a poster card shows the submitter's age on the event start, never the birth date; email and phone come from the 044 answers, the phone normalised", async () => {
       const a = await congress(openNow(), "2027-04-23T09:00:00.000Z");
       const doc = await author("v11-poster");
       await register(doc, a.id, {
@@ -818,7 +818,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const card = CongressSubmissionCardSchema.parse(res.json());
       expect(card.submitter).toMatchObject({
         email: "contact@ds.test",
-        phone: "+7 900 111-22-33",
+        // 044 EARS-29/36: the normalised E.164 value, never the typed one.
+        phone: "+79001112233",
         ageOnEventStart: 37,
       });
       expect(res.payload).not.toContain("1990-04-23");

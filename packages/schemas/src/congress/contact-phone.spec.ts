@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { E164 } from "../auth/auth.schema.js";
-import { normaliseContactPhone } from "./contact-phone.js";
+import { formatContactPhone, normaliseContactPhone } from "./contact-phone.js";
 
 /**
  * 044 EARS-29 — the contact-phone normaliser (044 design §«Contact-phone
@@ -61,5 +61,42 @@ describe("044 EARS-29: contact-phone normalisation", () => {
   it("044 EARS-29.7: normalisation is idempotent", () => {
     const once = normaliseContactPhone("8 (999) 123-45-67");
     expect(normaliseContactPhone(once)).toBe(once);
+  });
+});
+
+/**
+ * 044 EARS-36 — the one display format of a congress contact phone in the
+ * admin (roster, participant card, 046 submission card). Built from the
+ * normalised value so the same number written two ways reads identically.
+ */
+describe("formatContactPhone", () => {
+  it("044 EARS-36: every typed shape of one Russian number renders as +7 (XXX) XXX-XX-XX", () => {
+    for (const typed of [
+      "8 926 310 45 02",
+      "+7 (926) 310-45-02",
+      "79263104502",
+      "+7 926 3104502",
+      "+79263104502",
+    ]) {
+      expect(formatContactPhone(typed)).toBe("+7 (926) 310-45-02");
+    }
+  });
+
+  it("044 EARS-36: a non-Russian number renders as its plain normalised E.164", () => {
+    expect(formatContactPhone("+44 20 7946 0958")).toBe("+442079460958");
+  });
+
+  it("044 EARS-36: a 12-digit international number starting with 8 stays plain international", () => {
+    expect(formatContactPhone("+81 90 1234 5678")).toBe("+819012345678");
+  });
+
+  it("044 EARS-36: a value carrying no digits renders as the empty string", () => {
+    expect(formatContactPhone("")).toBe("");
+    expect(formatContactPhone("+")).toBe("");
+  });
+
+  it("044 EARS-36: formatting is idempotent", () => {
+    const once = formatContactPhone("8 (999) 555-11-22");
+    expect(formatContactPhone(once)).toBe(once);
   });
 });

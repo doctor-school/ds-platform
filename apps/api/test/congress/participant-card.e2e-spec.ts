@@ -251,14 +251,22 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await insertEvent(eventA, slugA, "Конгресс А");
       await insertEvent(eventB, slugB, "Конгресс Б");
 
-      registrarA = await adminPrincipal("card-registrar-a", "event-registrar", eventA);
-      registrarB = await adminPrincipal("card-registrar-b", "event-registrar", eventB);
+      registrarA = await adminPrincipal(
+        "card-registrar-a",
+        "event-registrar",
+        eventA,
+      );
+      registrarB = await adminPrincipal(
+        "card-registrar-b",
+        "event-registrar",
+        eventB,
+      );
       unbound = await adminPrincipal("card-registrar-none", "event-registrar");
       admin = await adminPrincipal("card-admin", "platform_admin");
-      await pool.query("UPDATE users SET display_name = $2 WHERE zitadel_sub = $1", [
-        registrarA.sub,
-        REGISTRAR_NAME,
-      ]);
+      await pool.query(
+        "UPDATE users SET display_name = $2 WHERE zitadel_sub = $1",
+        [registrarA.sub, REGISTRAR_NAME],
+      );
 
       ivanovaEmail = uniqueEmail("card-ivanova");
       ivanova = await deskEntry(registrarA.headers, slugA, {
@@ -286,7 +294,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // them: answers present → `site`, no answers → `platform` (the column
       // default).
       const siteUser = await platformUser("card-legacy-site", "Старый Сайт");
-      const feedUser = await platformUser("card-legacy-feed", "Лента Платформы");
+      const feedUser = await platformUser(
+        "card-legacy-feed",
+        "Лента Платформы",
+      );
       const { rows: legacy } = await pool.query<{ id: string }>(
         `INSERT INTO registrations (user_id, event_id, answers, intake_origin)
          VALUES ($1, $3, $4::jsonb, 'site'), ($2, $3, NULL, DEFAULT)
@@ -341,7 +352,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         workplace: "ГКБ №1",
         city: "Москва",
         region: "Московская область",
-        phone: "+7 (900) 111-22-33",
+        // EARS-29/36: the normalised E.164 value — typed «+7 (900) 111-22-33».
+        phone: "+79001112233",
         email: ivanovaEmail,
         intakeOrigin: "desk",
         possibleDuplicate: true,
@@ -368,6 +380,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       expect(twinCard.possibleDuplicate).toBe(true);
       expect(soloCard.possibleDuplicate).toBe(false);
+      // EARS-36: the pair typed «+7 (900) 111-22-33» / «8 900 111 22 33» reads as
+      // ONE value — the API returns the normalised phone, never the typed one.
+      expect(twinCard.phone).toBe("+79001112233");
     });
 
     it("044 EARS-36.3: every congress day is present; an unmarked day reads present null with an empty history", async () => {
@@ -449,7 +464,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         patronymic: null,
         fullName: "Сайтова Ольга",
         city: "Тверь",
-        phone: "+7 (900) 000-00-01",
+        phone: "+79000000001",
         email: "legacy-site@ds.test",
         confirmationMail: { status: null, at: null },
       });
@@ -466,18 +481,23 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it("044 EARS-36.6: the card carries no field about whether the account pre-existed the registration", async () => {
-      const raw = (await card(registrarA.headers, slugA, ivanova)).json() as Record<
-        string,
-        unknown
-      >;
-      expect(JSON.stringify(raw)).not.toMatch(/account_?created|pre-?exist|accountExisted/i);
+      const raw = (
+        await card(registrarA.headers, slugA, ivanova)
+      ).json() as Record<string, unknown>;
+      expect(JSON.stringify(raw)).not.toMatch(
+        /account_?created|pre-?exist|accountExisted/i,
+      );
       // Strict parse: any extra key is a contract failure.
       expect(CongressParticipantCardSchema.safeParse(raw).success).toBe(true);
     });
 
     it("044 EARS-38: a registrar bound to event A reads A's card by slug and by id", async () => {
-      expect((await card(registrarA.headers, slugA, solo)).statusCode).toBe(200);
-      expect((await card(registrarA.headers, eventA, solo)).statusCode).toBe(200);
+      expect((await card(registrarA.headers, slugA, solo)).statusCode).toBe(
+        200,
+      );
+      expect((await card(registrarA.headers, eventA, solo)).statusCode).toBe(
+        200,
+      );
     });
 
     it("044 EARS-38: a registrar bound to event A is refused event B's card, and B's registration id through A's path reads nothing", async () => {
@@ -494,12 +514,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("044 EARS-38: the platform administrator reads any event's card", async () => {
       expect((await card(admin.headers, slugA, ivanova)).statusCode).toBe(200);
-      expect((await card(admin.headers, slugB, otherEvent)).statusCode).toBe(200);
+      expect((await card(admin.headers, slugB, otherEvent)).statusCode).toBe(
+        200,
+      );
     });
 
     it("044 EARS-36: a malformed registration id is a 400, an unknown one a 404", async () => {
-      expect((await card(admin.headers, slugA, "not-a-uuid")).statusCode).toBe(400);
-      expect((await card(admin.headers, slugA, randomUUID())).statusCode).toBe(404);
+      expect((await card(admin.headers, slugA, "not-a-uuid")).statusCode).toBe(
+        400,
+      );
+      expect((await card(admin.headers, slugA, randomUUID())).statusCode).toBe(
+        404,
+      );
     });
   },
 );

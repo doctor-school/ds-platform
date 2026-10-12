@@ -145,7 +145,11 @@ export const CongressRosterRowSchema = z.object({
   workplace: z.string().nullable(),
   city: z.string().nullable(),
   region: z.string().nullable(),
-  /** The phone exactly as the participant typed it (EARS-29), never the normalised form. */
+  /**
+   * The contact phone NORMALISED to E.164 (`normaliseContactPhone`, EARS-29) —
+   * never the typed value, which stays stored but is not displayed. The admin
+   * renders it through `formatContactPhone` in one format (EARS-36).
+   */
   phone: z.string().nullable(),
   email: z.string().nullable(),
   registeredAt: z.iso.datetime(),

@@ -1,6 +1,7 @@
 import {
   CONGRESS_PERSONAL_DATA_PURPOSE,
   type CongressParticipantCard,
+  formatContactPhone,
 } from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
 
@@ -38,7 +39,8 @@ export function participantCardFields(
     workplace: card.workplace ?? "",
     city: card.city ?? "",
     region: card.region ?? "",
-    phone: card.phone ?? "",
+    // EARS-36: one display format, built from the normalised value.
+    phone: formatContactPhone(card.phone ?? ""),
     email: card.email ?? "",
     registeredAt: formatMskDateTime(card.registeredAt),
   };

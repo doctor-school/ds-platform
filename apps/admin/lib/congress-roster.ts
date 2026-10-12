@@ -5,6 +5,7 @@ import {
   type CongressRosterRow,
   type CongressRosterSortDir,
   type CongressRosterSortKey,
+  formatContactPhone,
 } from "@ds/schemas";
 import { formatMskDateTime } from "./msk";
 
@@ -61,7 +62,8 @@ export function congressRosterCells(
     fullName: row.fullName,
     specialtyName: row.specialtyName ?? "",
     city: row.city ?? "",
-    phone: row.phone ?? "",
+    // EARS-36: one display format, built from the normalised value.
+    phone: formatContactPhone(row.phone ?? ""),
     registeredAt: formatMskDateTime(row.registeredAt),
   };
 }

@@ -38,3 +38,28 @@ export function normaliseContactPhone(typed: string): string {
 
   return `+${domestic.slice(0, 15)}`;
 }
+
+/**
+ * 044 EARS-36 — the ONE display format of a congress contact phone in the admin
+ * (roster, participant card, 046 submission card).
+ *
+ * Built from the normalised value, never from what was typed, so one number
+ * written two ways reads identically side by side (the possible-duplicate pair
+ * of EARS-30 is exactly that case). A Russian `+7` number of 10 national digits
+ * groups as `+7 (XXX) XXX-XX-XX`; any other number renders as its plain
+ * normalised E.164 `+<digits>` — per-country grouping is out of scope.
+ *
+ * The input goes through `normaliseContactPhone` first, so a value that is not
+ * yet E.164 (the `users.phone` fallback of a platform-origin row) formats the
+ * same way. No digits → the empty string.
+ *
+ * Not to be confused with `maskPhoneInput` (design-system): that is the input
+ * mask of the form field and is intentionally ungrouped.
+ */
+export function formatContactPhone(value: string): string {
+  const normalised = normaliseContactPhone(value);
+  const russian = /^\+7(\d{3})(\d{3})(\d{2})(\d{2})$/.exec(normalised);
+  if (russian === null) return normalised;
+  const [, area, first, second, third] = russian;
+  return `+7 (${area}) ${first}-${second}-${third}`;
+}

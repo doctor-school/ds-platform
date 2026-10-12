@@ -68,6 +68,11 @@ const DUPLICATE_B = {
   patronymic: "Сергеевич",
   phone: "8 999 555 11 22",
 };
+/**
+ * EARS-36 — the pair typed two ways reads as ONE value in the admin: the
+ * normalised phone in the single format `+7 (XXX) XXX-XX-XX` (#2770).
+ */
+const DUPLICATE_PHONE_SHOWN = "+7 (999) 555-11-22";
 const fullName = (p: typeof DUPLICATE_A) =>
   `${p.surname} ${p.firstName} ${p.patronymic}`;
 
@@ -235,7 +240,7 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
       fullName(DUPLICATE_A),
     );
     await expect(panel.getByTestId("participant-card-phone")).toHaveText(
-      DUPLICATE_A.phone,
+      DUPLICATE_PHONE_SHOWN,
     );
     await expect(panel.getByTestId("participant-card-email")).toHaveText(
       duplicateEmail,
@@ -280,7 +285,7 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
       // the whole value in its title and selectable in the text.
       for (const [testId, value] of [
         ["participant-card-email", duplicateEmail],
-        ["participant-card-phone", DUPLICATE_A.phone],
+        ["participant-card-phone", DUPLICATE_PHONE_SHOWN],
       ] as const) {
         // On the desktop inspector the address has the row to itself and fits.
         await expectOneLineValue(
@@ -305,6 +310,16 @@ test.describe("044 EARS-36/37 — the participant card and the seven-column rost
     ).toHaveCount(0);
     await expect(panel.getByRole("checkbox")).toHaveCount(2);
     await expect(panel).not.toContainText("аккаунт");
+
+    // EARS-36 (#2770): the twin typed «8 999 555 11 22» reads exactly like the
+    // first one typed «+7 (999) 555-11-22» — one format for every phone.
+    await rowControl(page, fullName(DUPLICATE_B)).click();
+    await expect(panel.getByTestId("participant-card-fullName")).toHaveText(
+      fullName(DUPLICATE_B),
+    );
+    await expect(panel.getByTestId("participant-card-phone")).toHaveText(
+      DUPLICATE_PHONE_SHOWN,
+    );
 
     // A platform row: no answers, never a duplicate.
     await rowControl(page, PLATFORM[0]!).click();

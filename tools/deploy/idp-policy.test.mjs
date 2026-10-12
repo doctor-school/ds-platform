@@ -377,6 +377,22 @@ test("#2636: a target with EMAILED_CODE_LENGTH converges all four generators to 
   });
 });
 
+test("003 EARS-47: the generators come from the target's EMAILED_CODE_GENERATORS list", () => {
+  const withPhone = provisionDigits.replace(
+    "SECRET_GENERATOR_TYPE_OTP_SMS)",
+    "SECRET_GENERATOR_TYPE_OTP_SMS SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE)",
+  );
+  assert.deepEqual(parseEmailedCodeShape(withPhone).generators, [
+    ...EMAILED_CODE_GENERATOR_TYPES,
+    "SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE",
+  ]);
+  // A digits target that names no list keeps the four of #2636.
+  assert.deepEqual(
+    parseEmailedCodeShape("EMAILED_CODE_LENGTH=6\n").generators,
+    EMAILED_CODE_GENERATOR_TYPES,
+  );
+});
+
 test("#2555: a pre-#2636 target (LOGIN_OTP_CODE_LENGTH) keeps the upper-alnum OTP pair", () => {
   assert.deepEqual(parseEmailedCodeShape(provisionLegacyAlnum), {
     length: 6,

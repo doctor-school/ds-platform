@@ -862,14 +862,28 @@ api_idempotent PUT /admin/v1/text/message/verifyemailotp/en \
         '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
   && echo "ensured verifyemailotp/en code-only branded login-OTP email" >&2
 
-# (b) dormant types (verifyphone / init) — MINIMAL override: only the greeting
-# is neutralized (the bundled ru/en bodies carry no {{.DisplayName}} — verified
+# (b) the dormant `init` type — MINIMAL override: only the greeting is
+# neutralized (the bundled ru/en bodies carry no {{.DisplayName}} — verified
 # live via GET /admin/v1/text/default/message/{type}/{lang} on v4.15.0);
 # everything else keeps the bundled default. A PUT with only `greeting` leaves
 # the unset fields falling through to the bundled defaults (the #869-proven
 # empty-field semantics). (`password_change` is NOT in this loop — its whole
 # notice is suppressed at the notification-policy level in (c) below.)
-for _mt in verifyphone init; do
+#
+# `verifyphone` is live since 003 EARS-47 (#2449): the `/account` phone
+# confirmation SMS. Branded like `verifysmsotp` (step 8.bis): the code only
+# (`{{.Code}}`, this type's variable — 003-design → Provisioning), no link,
+# no button, no lifetime (Zitadel passes no expiry to this type). The text
+# carries the greeting-free SMS body, so the greeting override is not needed.
+RU_VERIFY_PHONE_TEXT='Doctor.School: код подтверждения номера - {{.Code}}, никому его не сообщайте'
+EN_VERIFY_PHONE_TEXT='Doctor.School: your phone confirmation code is {{.Code}}, do not share it with anyone'
+api_idempotent PUT /admin/v1/text/message/verifyphone/ru \
+  "$(jq -nc --arg t "$RU_VERIFY_PHONE_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured verifyphone/ru branded phone confirmation text" >&2
+api_idempotent PUT /admin/v1/text/message/verifyphone/en \
+  "$(jq -nc --arg t "$EN_VERIFY_PHONE_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured verifyphone/en branded phone confirmation text" >&2
+for _mt in init; do
   api_idempotent PUT "/admin/v1/text/message/${_mt}/ru" \
     '{"greeting":"Здравствуйте!"}' >/dev/null \
     && echo "ensured ${_mt}/ru neutral greeting" >&2
@@ -956,7 +970,9 @@ api GET /admin/v1/policies/password/complexity | jq -r '.policy |
 # reset, login OTP email, login OTP SMS — is exactly 6 digits (003 EARS-27/-28/
 # -31/-41, 003-design → code format). Zitadel ships VERIFY_EMAIL_CODE and
 # PASSWORD_RESET_CODE as 6 upper-alnum and the OTP pair as 8 digits; this step
-# makes provisioning the managed owner of all four generators.
+# makes provisioning the managed owner of those four generators and of
+# VERIFY_PHONE_CODE, the `/account` phone confirmation code (003 EARS-47/48,
+# #2449). The deploy reads this list from the target commit.
 #
 # Only the character shape and length converge. Each lifetime is read and
 # written back unchanged: the mail copy (step 8.quinquies) promises «Код
@@ -982,9 +998,9 @@ api GET /admin/v1/policies/password/complexity | jq -r '.policy |
 # not yet evidence and is re-read until a deadline, which fails as STALE —
 # distinct from a converged row that has the wrong shape (did NOT converge).
 # `tools/deploy/idp-policy.mjs` parses EMAILED_CODE_LENGTH from this file at the
-# deployed SHA and re-reads the same four generators on the box.
+# deployed SHA and re-reads the generators EMAILED_CODE_GENERATORS lists on the box.
 EMAILED_CODE_LENGTH=6
-EMAILED_CODE_GENERATORS=(SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS)
+EMAILED_CODE_GENERATORS=(SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE SECRET_GENERATOR_TYPE_OTP_EMAIL SECRET_GENERATOR_TYPE_OTP_SMS SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE)
 EMAILED_CODE_EXPIRIES=()
 # Per generator: the instance sequence the read-back row must reach — the PUT's
 # sequence, or the row's own when nothing was written.

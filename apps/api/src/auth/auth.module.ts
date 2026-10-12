@@ -10,6 +10,9 @@ import { SessionModule } from "./session/session.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import { ReconcileService } from "./reconcile.service.js";
+import { PhoneController } from "./phone/phone.controller.js";
+import { PhoneConfirmationService } from "./phone/phone-confirmation.service.js";
+import { DrizzlePhoneMirror, PHONE_MIRROR } from "./phone/phone-mirror.js";
 import { ReconcileScheduler } from "./reconcile.scheduler.js";
 import {
   AUTH_WEBHOOK_SECRET,
@@ -47,7 +50,7 @@ import {
   // design §11 "Reconciliation depth"). It is a no-op until a consumer adds a
   // timer, so it does not change the boot of the rest of the module.
   imports: [IdpModule, SessionModule, MailerModule, ScheduleModule.forRoot()],
-  controllers: [AuthController],
+  controllers: [AuthController, PhoneController],
   providers: [
     AuthService,
     // UserMirrorService moved to SessionModule (EARS-26, #709): the session
@@ -55,6 +58,9 @@ import {
     // module resolves the exported single instance via its SessionModule import.
     ReconcileService,
     ReconcileScheduler,
+    // 003 EARS-47…52 (#2449): confirming a phone from `/account`.
+    PhoneConfirmationService,
+    { provide: PHONE_MIRROR, useClass: DrizzlePhoneMirror },
     { provide: APP_PIPE, useClass: ZodValidationPipe },
     {
       provide: AUTH_WEBHOOK_SECRET,

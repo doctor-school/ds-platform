@@ -30,13 +30,14 @@ const step = source.slice(
 
 const SMS = "SECRET_GENERATOR_TYPE_OTP_SMS";
 
-/** A fresh instance: Zitadel's shipped defaults for the four generators. */
+/** A fresh instance: Zitadel's shipped defaults for the five generators. */
 function freshInstance() {
   return {
     SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE: { length: 6, expiry: "3600s", includeUpperLetters: true, includeDigits: true },
     SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE: { length: 6, expiry: "3600s", includeUpperLetters: true, includeDigits: true },
     SECRET_GENERATOR_TYPE_OTP_EMAIL: { length: 8, expiry: "300s", includeDigits: true },
     [SMS]: { length: 8, expiry: "300s", includeDigits: true },
+    SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE: { length: 6, expiry: "3600s", includeUpperLetters: true, includeDigits: true },
   };
 }
 
@@ -123,7 +124,7 @@ test("#2752: a read-back that lags the write waits for the write's sequence, the
   const result = await provisionGenerators({ initial: freshInstance(), lagReads: { [SMS]: 2 } });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /SUCCESS/);
-  assert.equal(result.puts.length, 4);
+  assert.equal(result.puts.length, 5);
   assert.match(result.stderr, new RegExp(`${SMS}: read-back ok \\(6 digits, expiry 300s\\)`));
   assert.doesNotMatch(result.stderr, /FATAL/);
 });
@@ -154,9 +155,10 @@ test("#2752: generators already at six digits are not written and read back ok",
       SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE: digits("3600s"),
       SECRET_GENERATOR_TYPE_OTP_EMAIL: digits("300s"),
       [SMS]: digits("300s"),
+      SECRET_GENERATOR_TYPE_VERIFY_PHONE_CODE: digits("3600s"),
     },
   });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.puts, []);
-  assert.equal((result.stderr.match(/read-back ok/g) ?? []).length, 4);
+  assert.equal((result.stderr.match(/read-back ok/g) ?? []).length, 5);
 });

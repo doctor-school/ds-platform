@@ -78,7 +78,7 @@ export type LoginHandoffResolution =
 // (duplicate, bad code, missing consent) never reaches the client — it would be
 // an enumeration / oracle channel (EARS-16); reasons live in the audit ledger
 // (F6). Same string, same 400, for every failure branch.
-const GENERIC_FAILURE = "the request could not be completed";
+export const GENERIC_FAILURE = "the request could not be completed";
 
 // EARS-14: one generic throttled message for every SMS-budget refusal (per-phone
 // / per-IP / per-ASN ceiling or the global daily breaker). It names no threshold
@@ -99,7 +99,7 @@ const GENERIC_WEAK_PASSWORD =
 // registration path. Per the project's actionable-errors rule (5xx/net →
 // "unavailable") this is a 503, distinct from the deterministic-rejection generic
 // 4xx — a real outage is reported honestly, but never as a bare unhandled 500.
-const GENERIC_UNAVAILABLE = "the service is temporarily unavailable";
+export const GENERIC_UNAVAILABLE = "the service is temporarily unavailable";
 
 /** Postgres unique-constraint violation SQLSTATE (`unique_violation`). */
 const PG_UNIQUE_VIOLATION = "23505";
@@ -140,7 +140,7 @@ export interface PasswordlessAccountCreation {
  * sets `.code` on the error, but drizzle wraps it (e.g. `DrizzleQueryError`)
  * with the pg error on `.cause`, so walk the cause chain.
  */
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   for (let e: unknown = err, depth = 0; e != null && depth < 5; depth++) {
     if (
       typeof e === "object" &&
@@ -161,7 +161,7 @@ function isUniqueViolation(err: unknown): boolean {
  * without an IdP hop. The refusal does not depend on the identifier, so it
  * leaks no account state.
  */
-function issuedCode(code: string): string | null {
+export function issuedCode(code: string): string | null {
   const trimmed = code.trim();
   return VERIFY_CODE_PATTERN.test(trimmed) ? trimmed : null;
 }

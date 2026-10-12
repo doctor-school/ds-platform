@@ -150,6 +150,20 @@ export const HIGH_STAKES_AUDIT_COVERAGE: Record<string, AuditEmissionCoverage> =
       coveredBy:
         "login-otp.e2e (EARS-6/7/8); failure/success both record at the command site",
     },
+    "POST /v1/me/phone": {
+      // 003 EARS-47/49/57: a code request records auth.phone.confirm.requested
+      // and, when it displaces a confirmed phone, auth.phone.changed. The
+      // EARS-51 elsewhere-confirmed branch sends nothing and records nothing.
+      emits: ["PhoneConfirmRequested", "PhoneChanged"],
+      coveredBy:
+        "me/phone.e2e (EARS-47/49/57); phone-confirmation.service.spec (EARS-57)",
+    },
+    "POST /v1/me/phone/confirm": {
+      // 003 EARS-48/57: a confirmed code records auth.phone.confirmed.
+      emits: ["PhoneConfirmed"],
+      coveredBy:
+        "me/phone.e2e (EARS-48/57); phone-confirmation.service.spec (EARS-57)",
+    },
     "POST /v1/auth/login/otp/request": {
       emits: ["OtpSent"],
       coveredBy:

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Combobox, type ComboboxOption } from "@ds/design-system/blocks";
+import type { SlotProps } from "@/components/combobox-slot-props";
 import {
   freeSettlementText,
   freeSettlementValue,
@@ -33,7 +34,8 @@ export function SettlementCombobox({
   anyLabel,
   invalid,
   "aria-describedby": describedBy,
-}: {
+  ...slot
+}: SlotProps & {
   id: string;
   testId: string;
   value: string | null;
@@ -88,6 +90,7 @@ export function SettlementCombobox({
       showSearch
       invalid={invalid}
       aria-describedby={describedBy}
+      {...slot}
     />
   );
 }

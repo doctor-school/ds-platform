@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Combobox, type ComboboxOption } from "@ds/design-system/blocks";
+import type { SlotProps } from "@/components/combobox-slot-props";
 import { fetchSpecialtySearchPage } from "@/lib/desk-entry-references";
 import { useServerCombobox } from "@/lib/use-server-combobox";
 
@@ -32,7 +33,8 @@ export function SpecialtyCombobox({
   onBookFailed,
   onSelectedLabel,
   "aria-describedby": describedBy,
-}: {
+  ...slot
+}: SlotProps & {
   id: string;
   testId: string;
   /** The chosen specialty id, or `null`. */
@@ -107,6 +109,7 @@ export function SpecialtyCombobox({
       showSearch
       invalid={invalid}
       aria-describedby={describedBy}
+      {...slot}
     />
   );
 }

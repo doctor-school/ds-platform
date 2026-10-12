@@ -299,6 +299,7 @@ export async function assertNoAddressedMail(
   const seenIds = checkpoint ? new Set(checkpoint.messageIds) : undefined;
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
+    const finalObservation = Date.now() >= deadline;
     const messages = seenIds
       ? await addressedMail(request, baseUrl, email)
       : await freshAddressedMail(request, baseUrl, email, afterIso);
@@ -309,8 +310,9 @@ export async function assertNoAddressedMail(
           : "Unexpected addressed mail after unknown reset request",
       );
     }
-    if (Date.now() >= deadline) return;
-    await wait(Math.min(500, deadline - Date.now()));
+    if (finalObservation) return;
+    const remaining = deadline - Date.now();
+    if (remaining > 0) await wait(Math.min(500, remaining));
   }
 }
 

@@ -98,6 +98,60 @@ afterEach(() => vi.useRealTimers());
 describe("duplicate-registration mail checkpoint", () => {
   const checkpoint = { recipient: email, messageIds: ["seen"] };
 
+  it.each(["checkpoint", "timestamp"] as const)(
+    "EARS-23: %s absence cannot pass from a pre-deadline snapshot whose response arrives after the horizon",
+    async (mode) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(after));
+      const startedAt = Date.now();
+      const queryStarts: number[] = [];
+      const messages: unknown[] = [
+        addressedMessage({ ID: "seen", Created: "2026-10-11T00:00:00Z" }),
+      ];
+      const request = {
+        get: async () => {
+          const elapsed = Date.now() - startedAt;
+          queryStarts.push(elapsed);
+          const snapshot = [...messages];
+          if (elapsed === 14_500)
+            await new Promise((resolve) => setTimeout(resolve, 700));
+          return {
+            ok: () => true,
+            status: () => 200,
+            json: async () => ({
+              messages_count: snapshot.length,
+              start: 0,
+              messages: snapshot,
+            }),
+          };
+        },
+      };
+      setTimeout(() => {
+        messages.push(
+          addressedMessage({
+            ID: "late",
+            Created: new Date(startedAt + 14_900).toISOString(),
+          }),
+        );
+      }, 14_900);
+      const result = assertNoAddressedMail(
+        request,
+        "https://mailpit.example.test",
+        email,
+        after,
+        mode === "checkpoint" ? checkpoint : undefined,
+      ).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await vi.advanceTimersByTimeAsync(15_200);
+      const error = await result;
+      expect(error).toBeInstanceOf(Error);
+      expect(queryStarts.some((elapsed) => elapsed >= 15_000)).toBe(true);
+      expect(queryStarts).toHaveLength(31);
+    },
+  );
+
   it("EARS-23: captures only exact-recipient IDs without filtering them by the client clock", async () => {
     await expect(
       captureAddressedMailCheckpoint(

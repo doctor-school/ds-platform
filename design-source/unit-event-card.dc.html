@@ -12,12 +12,28 @@
 <link rel="stylesheet" href="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/styles.css">
 <script src="_ds/doctor-school-design-system-1366789c-9a05-4137-952e-61147c7a9550/_ds_bundle.js"></script>
 </helmet>
-<div class="{{ themeClass }}" data-screen-label="unit-event-card" style="display:block;width:100%;min-width:0">
+<div ref="{{ rootRef }}" class="{{ themeClass }}" data-screen-label="unit-event-card" style="display:block;width:100%;min-width:0">
   <x-import component-from-global-scope="DsDesignSystem.WebinarCard" dc-props="{{ card }}" hint-size="100%,220px"></x-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:300},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;scheduled&quot;,&quot;live&quot;,&quot;registered&quot;,&quot;past&quot;],&quot;default&quot;:&quot;scheduled&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;num&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Эфир № 042&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;time&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;19:00&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tz&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;МСК&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;timeSub&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;16 июля · ср&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;school&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа травматологии и ортопедии&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Пластика ахиллова сухожилия: разбор клинических случаев&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;cta&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Участвовать ↗&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;recording&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Запись · 90 мин&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:300},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;scheduled&quot;,&quot;live&quot;,&quot;registered&quot;,&quot;past&quot;],&quot;default&quot;:&quot;scheduled&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;num&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Эфир № 042&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;time&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;19:00&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tz&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;МСК&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;timeSub&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;16 июля · ср&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;school&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа травматологии и ортопедии&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Пластика ахиллова сухожилия: разбор клинических случаев&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;signUps&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:12,&quot;min&quot;:0,&quot;tsType&quot;:&quot;number&quot;},&quot;recording&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Запись · 90 мин&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
+  rootRef = React.createRef();
+  componentDidMount() {
+    // Same as events-feed: DS renders «N label», catalog wording is «label: N».
+    const fix = () => { const r = this.rootRef.current; if (!r) return; if (!this.scoped) { this.scoped = true; this.obs.disconnect(); this.obs.observe(r, { childList: true, subtree: true, characterData: true }); } r.querySelectorAll('[data-signup-count]').forEach(el => {
+      const [a, b] = el.childNodes;
+      if (!a || !b || a.nodeType !== 3 || b.nodeType !== 3 || !/^\d+$/.test(a.nodeValue)) return;
+      if (!el.dataset.suLabel) el.dataset.suLabel = b.nodeValue.trim();
+      const n = a.nodeValue; a.nodeValue = el.dataset.suLabel + ': '; b.nodeValue = n;
+    }); };
+    this.obs = new MutationObserver(fix);
+    this.fix = fix;
+    this.obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    fix();
+  }
+  componentDidUpdate() { if (this.fix) this.fix(); }
+  componentWillUnmount() { if (this.obs) this.obs.disconnect(); }
   renderVals() {
     const p = this.props;
     const variant = p.variant || 'scheduled';
@@ -30,12 +46,10 @@ class Component extends DCLogic {
     ]).map(s => ({ name: s.name, org: s.org }));
 
     const ctaByVariant = {
-      live: [p.cta || 'Войти в эфир ↗', p.ctaHref || 'room.dc.html'],
-      scheduled: [p.cta || 'Участвовать ↗', p.ctaHref || href],
-      registered: ['Отменить', p.ctaHref || '#'],
+      live: ['Войти в эфир ↗', p.ctaHref || 'room.dc.html'],
       past: ['Смотреть запись ↗', p.ctaHref || 'event-page-recording.dc.html']
     };
-    const [ctaLabel, ctaHref] = ctaByVariant[variant] || ctaByVariant.scheduled;
+    const [ctaLabel, ctaHref] = ctaByVariant[variant] || [undefined, undefined];
 
     const card = {
       variant: past ? 'past' : 'upcoming',
@@ -53,6 +67,7 @@ class Component extends DCLogic {
     if (live) { card.live = true; card.liveLabel = 'В эфире'; }
     if (registered) { card.registered = true; card.registeredLabel = 'В календаре'; }
     if (past) card.recordingLabel = p.recording || 'Запись · 90 мин';
+    else { card.signUpCount = typeof p.signUps === 'number' ? p.signUps : 12; card.signUpLabel = 'Коллег записались'; }
 
     return { card, themeClass: p.dark ? 'dark' : '' };
   }

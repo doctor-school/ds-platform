@@ -238,8 +238,8 @@
       "note": "backfill 2026-09-28 from repo bytes (#2389); not re-pulled"
     },
     "unit-event-card.dc.html": {
-      "sha256": "70978a5f152915d972afd35b339036639cfc1953e2798d6b6c09b4220fb8cf35",
-      "pulledAt": "2026-10-12T13:05:50.075Z",
+      "sha256": "27bac5c446585582813b7392fae72b5ab52d46b1542ad5432c97b24f3165e53e",
+      "pulledAt": "2026-10-12T13:23:58.180Z",
       "remotePath": "unit-event-card.dc.html"
     },
     "unit-events-filter.dc.html": {

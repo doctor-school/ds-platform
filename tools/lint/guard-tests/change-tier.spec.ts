@@ -35,7 +35,6 @@ describe("change-tier classifier (#2584)", () => {
       "apps/doctor/next.config.ts",
       "apps/doctor/middleware.ts",
       "apps/api/drizzle/0048_event_kinds.sql",
-      "apps/docs/content/specs/features/001-x/001-design.md",
       "AGENTS.md",
     ])
       expect(classifyChangeTier([copy, mod(path)]).minimum, path).toBe("ask");
@@ -312,5 +311,244 @@ describe("#2699: evidence captures and non-runtime / environment-sensitive paths
       "apps/portal/middleware.test.ts",
     ])
       expect(isEnvironmentSensitivePath(path), path).toBe(false);
+  });
+});
+
+describe("#2807: test-only class, docs follow the code, wider Ship allowlist", () => {
+  const added = (path: string): ChangeTierFile => ({
+    ...mod(path),
+    status: "added",
+  });
+  const feature = (patch?: string, status = "modified"): ChangeTierFile => ({
+    ...mod("apps/docs/content/specs/features/003-x/003-scenarios.feature"),
+    status,
+    ...(patch === undefined ? {} : { patch }),
+  });
+  const TAG_ONLY_PATCH = [
+    "@@ -339,7 +339,9 @@ Feature: Net-new web authentication",
+    "     # status/body and interleaved triad median timing.",
+    " ",
+    "-  @EARS-34 @EARS-16 @happy",
+    "+  @EARS-34 @EARS-16 @EARS-41 @happy @verified-login-email-code",
+    "   Scenario: A login-email-code request arms the challenge unchanged",
+    "+    # Retained native challenge proof: apps/api/src/auth/idp/x.spec.ts",
+    "+",
+  ].join("\n");
+  const STEP_TEXT_PATCH = [
+    "@@ -340,3 +340,3 @@",
+    "   Scenario: A login-email-code request arms the challenge unchanged",
+    "-    Given a verified doctor_guest user",
+    "+    Given a uniquely registered and verified Academy account",
+  ].join("\n");
+
+  it("EARS-1: test-only PRs (packages/e2e, apps/api/test, other test paths) are the test-only ship class", () => {
+    for (const files of [
+      [mod("packages/e2e/tests/auth/login-otp.spec.ts", 200, 40)],
+      [added("packages/e2e/tests/support/academy-mail.ts")],
+      [mod("apps/api/test/auth/login-otp.e2e-spec.ts", 120, 3)],
+      [mod("apps/api/test/support/mail-capture.ts")],
+      [added("packages/db/src/schema/users.spec.ts")],
+      [mod("apps/api/src/auth/auth.service.spec.ts"), mod(".changeset/x.md")],
+    ]) {
+      const result = classifyChangeTier(files);
+      expect(result.minimum, files[0].path).toBe("ship");
+      expect(result.testOnly, files[0].path).toBe(true);
+    }
+  });
+
+  it("EARS-1: a .feature edit that changes only tags, comments or blank lines is a test", () => {
+    const result = classifyChangeTier([
+      feature(TAG_ONLY_PATCH),
+      mod("packages/e2e/tests/auth/login-otp.spec.ts"),
+    ]);
+    expect(result.minimum).toBe("ship");
+    expect(result.testOnly).toBe(true);
+  });
+
+  it("EARS-1: a .feature edit that changes scenario text stays ask (spec change)", () => {
+    for (const patch of [
+      STEP_TEXT_PATCH,
+      "@@ -1 +1 @@\n-Feature: Old\n+Feature: New",
+      "@@ -9 +9 @@\n-  Scenario: Old title\n+  Scenario: New title",
+      "@@ -9 +9 @@\n-      | a | b |\n+      | a | c |",
+    ]) {
+      const result = classifyChangeTier([
+        feature(patch),
+        mod("packages/e2e/tests/auth/login-otp.spec.ts"),
+      ]);
+      expect(result.minimum, patch).toBe("ask");
+      expect(result.testOnly ?? false).toBe(false);
+    }
+  });
+
+  it("EARS-1: a spec .feature without a patch, or added, stays ask (text unproven / new spec)", () => {
+    expect(classifyChangeTier([feature()]).minimum).toBe("ask");
+    expect(classifyChangeTier([feature(TAG_ONLY_PATCH, "added")]).minimum).toBe(
+      "ask",
+    );
+  });
+
+  it("EARS-1: CI / config / dependency files stay ask even when they look like tests", () => {
+    for (const path of [
+      "tools/lint/guard-tests/change-tier.spec.ts",
+      "packages/e2e/package.json",
+      "packages/e2e/playwright.config.ts",
+      ".github/workflows/e2e.yml",
+    ])
+      expect(classifyChangeTier([mod(path)]).minimum, path).toBe("ask");
+  });
+
+  it("EARS-1: a test change alongside runtime code is not test-only", () => {
+    const result = classifyChangeTier([
+      copy,
+      mod("apps/doctor/e2e/home.spec.ts"),
+    ]);
+    expect(result.minimum).toBe("ship");
+    expect(result.testOnly ?? false).toBe(false);
+  });
+
+  it("EARS-2: a modified spec / ADR / skill doc follows the code's tier", () => {
+    for (const path of [
+      "apps/docs/content/specs/features/001-x/001-design.md",
+      "apps/docs/content/specs/features/001-x/001-requirements.md",
+      "apps/docs/content/adr/0013-x.md",
+      "apps/docs/content/skills/x/SKILL.md",
+    ]) {
+      expect(classifyChangeTier([copy, mod(path, 60, 40)]).minimum, path).toBe(
+        "ship",
+      );
+      expect(
+        classifyChangeTier([mod("apps/portal/lib/x.ts"), mod(path)]).minimum,
+        path,
+      ).toBe("show");
+      expect(
+        classifyChangeTier([mod("apps/api/src/x.ts"), mod(path)]).minimum,
+        path,
+      ).toBe("ask");
+    }
+  });
+
+  it("EARS-2: an added spec / ADR / skill, a docs-only change, or instruction files stay ask", () => {
+    const spec = "apps/docs/content/specs/features/001-x/001-design.md";
+    expect(classifyChangeTier([copy, added(spec)]).minimum).toBe("ask");
+    expect(classifyChangeTier([mod(spec)]).minimum).toBe("ask");
+    expect(
+      classifyChangeTier([mod(spec), mod("apps/portal/e2e/x.spec.ts")]).minimum,
+    ).toBe("ask");
+    expect(
+      classifyChangeTier([
+        copy,
+        { ...mod(spec), status: "renamed", previousPath: `${spec}.old` },
+      ]).minimum,
+    ).toBe("ask");
+    for (const path of [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "apps/docs/content/agent-discipline.md",
+      ".claude/rules/change-tiers.md",
+    ])
+      expect(classifyChangeTier([copy, mod(path)]).minimum, path).toBe("ask");
+  });
+
+  it("EARS-3: DEBT.md and package / module README.md are on the Ship allowlist", () => {
+    for (const path of [
+      "DEBT.md",
+      "packages/design-system/README.md",
+      "apps/portal/README.md",
+      "apps/api/src/auth/README.md",
+      "packages/db/README.md",
+    ])
+      expect(classifyChangeTier([copy, mod(path)]).minimum, path).toBe("ship");
+    for (const path of [
+      "packages/design-system/design-source/README.md",
+      "apps/docs/content/specs/product/x/README.md",
+    ])
+      expect(classifyChangeTier([mod(path)]).minimum, path).toBe("ask");
+  });
+
+  it("EARS-3: .feature has one status — non-runtime, a test when its text is unchanged", () => {
+    expect(isNonRuntimePath(feature().path)).toBe(true);
+    expect(classifyChangeTier([feature(TAG_ONLY_PATCH)]).testOnly).toBe(true);
+  });
+
+  it("normalises the REST patch onto the tier file", () => {
+    expect(
+      normalizeTierFiles([
+        {
+          filename: "a.feature",
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          patch: "@@ -1 +1 @@\n-@a\n+@b",
+        },
+      ]),
+    ).toEqual([
+      {
+        path: "a.feature",
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+        patch: "@@ -1 +1 @@\n-@a\n+@b",
+      },
+    ]);
+  });
+});
+
+describe("#2807: change-tier guard reads .feature patches", () => {
+  const dirs: string[] = [];
+  afterAll(() =>
+    dirs.forEach((d) => rmSync(d, { recursive: true, force: true })),
+  );
+  const path = "apps/docs/content/specs/features/003-x/003-scenarios.feature";
+  function run(body: string, patch: string) {
+    const root = mkdtempSync(join(tmpdir(), "change-tier-"));
+    dirs.push(root);
+    const gh = join(root, "gh");
+    mkdirSync(gh);
+    const files = [
+      { path, additions: 1, deletions: 1, changeType: "MODIFIED" },
+    ];
+    writeFileSync(
+      join(gh, "pr-view-2807.json"),
+      JSON.stringify({ number: 2807, body, changedFiles: 1, files }),
+    );
+    writeFileSync(
+      join(gh, "pr-files-2807.json"),
+      JSON.stringify([
+        [
+          {
+            filename: path,
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            patch,
+          },
+        ],
+      ]),
+    );
+    return runGuard("change-tier-lint.ts", root, {
+      env: {
+        GITHUB_EVENT_NAME: "pull_request",
+        PR_NUMBER: "2807",
+        PR_BODY: body,
+        LINT_GH_FIXTURE_DIR: gh,
+      },
+    });
+  }
+  const TEST_ONLY = "Change-tier: ship — test-only: binds 003 steps";
+
+  it("passes a test-only ship declaration over a tag-only .feature edit", () => {
+    const { code, stdout } = run(TEST_ONLY, "@@ -1 +1 @@\n-  @a\n+  @a @b");
+    expect(code).toBe(0);
+    expect(stdout).toContain("tier ship (minimum ship, test-only)");
+  });
+
+  it("blocks ship when the .feature scenario text changed", () => {
+    const { code, stderr } = run(
+      TEST_ONLY,
+      "@@ -1 +1 @@\n-    Given a\n+    Given b",
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("scenario text");
   });
 });

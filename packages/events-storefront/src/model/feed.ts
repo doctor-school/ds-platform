@@ -356,6 +356,12 @@ export function plainEmptyFeedState(noun: PluralNoun, copy: FeedCopy): EmptyFeed
   return { title: copy.feed.empty(noun.many), description: "", action: null };
 }
 
+/**
+ * The most feed reads one empty state may make to count its widening (#2786):
+ * the facet keys come from the URL, so the fan-out per page is fixed here.
+ */
+export const MAX_WIDEN_READS = 4;
+
 /** One applied condition the empty state can offer to drop. */
 interface EmptyFeedChip {
   readonly label: string;
@@ -380,6 +386,13 @@ export type WidenMatching = (without: RawQueryRecord) => Promise<number | null>;
  * that finds any is named with that count and its removal offered (a picked
  * specialty widens to the adjacent ones). When none does, the state says so
  * and offers no widening. Facet values are named by the read's titles.
+ *
+ * At most one widen read per facet key, and at most `MAX_WIDEN_READS` per
+ * empty page: the keys come from the URL, so the read count is bounded by
+ * code, not by the request. A facet with several values selected is passed
+ * over unread — the values OR within the facet, so dropping one of them
+ * leaves a subset of an already-empty result (the canvas would count zero
+ * for each of them). Past the cap the state offers no widening.
  */
 export async function emptyFeedState(
   query: RawQueryRecord,
@@ -401,14 +414,16 @@ export async function emptyFeedState(
   const titleOf = (key: string, value: string) =>
     titles[key]?.find((option) => option.slug === value)?.title ?? value;
   const chips: EmptyFeedChip[] = [];
+  let applied = false;
   const chipsOf = (key: string, label: (value: string) => string, widen?: string) => {
-    for (const value of rawQueryList(query[key]) ?? []) {
-      chips.push({
-        label: label(value),
-        without: withoutFeedQuery(query, key, value),
-        ...(widen ? { widen } : {}),
-      });
-    }
+    const values = rawQueryList(query[key]) ?? [];
+    if (values.length > 0) applied = true;
+    if (values.length !== 1) return;
+    chips.push({
+      label: label(values[0]!),
+      without: withoutFeedQuery(query, key),
+      ...(widen ? { widen } : {}),
+    });
   };
 
   chipsOf("topic", (v) => `${copy.facet.topic}: ${titleOf("topic", v)}`, copy.feed.widenTopic);
@@ -440,7 +455,7 @@ export async function emptyFeedState(
     chips.push({ label: copy.facet.query(q), without: withoutFeedQuery(query, "q") });
   }
 
-  if (chips.length === 0) {
+  if (!applied && chips.length === 0) {
     if (rawQueryBoolean(query.free) !== undefined) {
       return {
         title: copy.feed.emptyFiltered(noun.many),
@@ -452,7 +467,7 @@ export async function emptyFeedState(
   }
 
   // One widen read at a time, stopping at the first that finds events.
-  for (const chip of chips) {
+  for (const chip of chips.slice(0, MAX_WIDEN_READS)) {
     const found = await matching(chip.without);
     if (found === null || found <= 0) continue;
     const count = formatEventCount(found, noun);

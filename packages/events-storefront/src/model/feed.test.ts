@@ -5,6 +5,7 @@ import { FEED_COPY } from "../copy/feed-copy";
 import {
   type EventsFeedCard,
   buildFeedItems,
+  MAX_WIDEN_READS,
   emptyFeedState,
   feedReadsEmpty,
   liveStripView,
@@ -435,6 +436,39 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
       label: "Показать все темы",
       href: "/webinars?project=orto",
     });
+  });
+
+  it("EARS-9: a facet with several values selected is passed over without a read — dropping one value cannot widen (#2786)", async () => {
+    const { asked, matching } = reads(0, 0);
+    const state = await emptyFeedState(
+      { format: ["offline", "online"], kind: ["lecture"] },
+      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+    );
+    expect(asked).toEqual([{ format: ["offline", "online"], kind: undefined }]);
+    expect(state.title).toBe("По выбранным фильтрам событий нет");
+    expect(state.action).toBeNull();
+  });
+
+  it("EARS-9: a crafted URL with many facets makes at most MAX_WIDEN_READS widen reads, then offers no widening (#2786)", async () => {
+    const { asked, matching } = reads(0, 0, 0, 0, 9, 9, 9);
+    const state = await emptyFeedState(
+      {
+        topic: ["t"],
+        specialty: ["cardiology"],
+        format: ["offline"],
+        kind: ["lecture"],
+        city: ["Казань"],
+        nmo: "true",
+        project: ["p"],
+        expert: ["e"],
+        q: "x",
+      },
+      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+    );
+    expect(MAX_WIDEN_READS).toBe(4);
+    expect(asked).toHaveLength(MAX_WIDEN_READS);
+    expect(state.title).toBe("По выбранным фильтрам событий нет");
+    expect(state.action).toBeNull();
   });
 
   it("NEW: a kind chip names the kind by its title", async () => {

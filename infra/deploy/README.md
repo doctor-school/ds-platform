@@ -94,7 +94,7 @@ never touches it.
 | postgres         | 5432 (VPC)    | `POSTGRES_PASSWORD` `PGBACKREST_*`                                                               |
 | redis            | 6379 (VPC)    | — (AOF)                                                                                          |
 
-Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
+Health: `/v1/health` (api), `/v1/ready` (api — Postgres + pgvector + the cached object-storage probe; the deploy/rollback smoke gate, a 503 names the failing check).
 
 **Mail links (api).** No mail the api sends carries a link: the code mails
 (sign-in, verification, re-registration, reset) and the congress letters alike

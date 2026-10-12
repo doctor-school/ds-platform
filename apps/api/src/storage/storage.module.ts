@@ -1,5 +1,10 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { loadEnv } from "../config/env.schema.js";
+import {
+  ObjectStorageReadiness,
+  STORAGE_READINESS_INTERVAL,
+  STORAGE_READINESS_INTERVAL_MS,
+} from "./storage-readiness.js";
 import { FakeObjectStorage } from "./storage.fake.js";
 import { S3ObjectStorage } from "./storage.s3.js";
 import type { ObjectStorage } from "./storage.types.js";
@@ -12,10 +17,21 @@ import { OBJECT_STORAGE } from "./storage.types.js";
  * fake is bound so `apps/api` boots on a dev-stand without MinIO / in a bare
  * unit run (mirrors the IdP fake). `@Global` so the events module injects the
  * port without importing this module explicitly.
+ *
+ * Also provides {@link ObjectStorageReadiness} — the cached bucket probe
+ * `GET /v1/ready` reads (002 EARS-3, #2821). Its SchedulerRegistry comes from
+ * the single global `ScheduleModule.forRoot()` in AuthModule — never import
+ * `forRoot()` here: each call is a distinct dynamic module, so a second one
+ * installs a second explorer and every `@Cron` job runs twice.
  */
 @Global()
 @Module({
   providers: [
+    {
+      provide: STORAGE_READINESS_INTERVAL,
+      useValue: STORAGE_READINESS_INTERVAL_MS,
+    },
+    ObjectStorageReadiness,
     {
       provide: OBJECT_STORAGE,
       useFactory: (): ObjectStorage => {
@@ -42,6 +58,6 @@ import { OBJECT_STORAGE } from "./storage.types.js";
       },
     },
   ],
-  exports: [OBJECT_STORAGE],
+  exports: [OBJECT_STORAGE, ObjectStorageReadiness],
 })
 export class StorageModule {}

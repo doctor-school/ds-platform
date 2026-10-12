@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   COLD_ERROR_MARKERS,
+  checkApiReady,
   checkColdPage,
   checkRegisterClosed,
   findColdErrorMarker,
@@ -284,5 +285,63 @@ describe("doctor probe skip switch (#1723)", () => {
     expect(isDoctorProbeSkipped("skip")).toBe(true);
     expect(isDoctorProbeSkipped("SKIP")).toBe(true);
     expect(isDoctorProbeSkipped(" Skip ")).toBe(true);
+  });
+});
+
+describe("api /v1/ready classification (002 EARS-3, #2821)", () => {
+  const body = (checks: Record<string, string>, status = "ok") =>
+    JSON.stringify({ status, checks, timestamp: "2026-10-12T00:00:00.000Z" });
+
+  it("passes and lists every check when all are ok", () => {
+    expect(
+      checkApiReady({
+        status: 200,
+        body: body({ postgres: "ok", pgvector: "ok", objectStorage: "ok" }),
+      }),
+    ).toBe("200 · postgres=ok · pgvector=ok · objectStorage=ok");
+  });
+
+  it("names the failing check on a 503, so storage is told apart from the DB", () => {
+    expect(() =>
+      checkApiReady({
+        status: 503,
+        body: body(
+          { postgres: "ok", pgvector: "ok", objectStorage: "down" },
+          "down",
+        ),
+      }),
+    ).toThrow("/v1/ready → 503 · objectStorage=down");
+  });
+
+  it("names every failing check", () => {
+    expect(() =>
+      checkApiReady({
+        status: 503,
+        body: body(
+          { postgres: "down", pgvector: "down", objectStorage: "down" },
+          "down",
+        ),
+      }),
+    ).toThrow(
+      "/v1/ready → 503 · postgres=down · pgvector=down · objectStorage=down",
+    );
+  });
+
+  it("still requires postgres and pgvector, and accepts a build that predates objectStorage (rollback)", () => {
+    expect(
+      checkApiReady({
+        status: 200,
+        body: body({ postgres: "ok", pgvector: "ok" }),
+      }),
+    ).toBe("200 · postgres=ok · pgvector=ok");
+    expect(() =>
+      checkApiReady({ status: 200, body: body({ postgres: "ok" }) }),
+    ).toThrow("/v1/ready → 200 · pgvector=undefined");
+  });
+
+  it("reports a non-JSON answer with its status", () => {
+    expect(() =>
+      checkApiReady({ status: 502, body: "<html>Bad Gateway</html>" }),
+    ).toThrow("/v1/ready → 502 (body is not JSON: <html>Bad Gateway</html>)");
   });
 });

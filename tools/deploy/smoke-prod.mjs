@@ -7,7 +7,9 @@
 // end, over real TLS, exactly as a browser / the api's callers reach them:
 //
 //   api    GET https://api.doctor.school/v1/health   → 200 + status:"ok" (+ SHA)
-//          GET https://api.doctor.school/v1/ready     → 200 + postgres+pgvector ok
+//          GET https://api.doctor.school/v1/ready     → 200 + every check ok
+//          (postgres, pgvector, objectStorage — 002 EARS-3); a 503 names each
+//          failing check, so a storage outage reads apart from a DB outage
 //   portal GET https://academy.doctor.school/         → follows redirects; final
 //          page < 500 AND no Next error-boundary markup (#866)
 //          GET https://academy.doctor.school/login    → COLD (cookie-less) 200 +
@@ -293,21 +295,41 @@ async function probeApiHealth() {
   return `200 · status=ok${shown}`;
 }
 
-async function probeApiReady() {
-  const res = await httpsGet(`https://${API_HOST}/v1/ready`);
-  if (res.status !== 200)
-    throw new Error(`/v1/ready → ${res.status} (unready)`);
+// Checks every /v1/ready build must report; any further check the body carries
+// (objectStorage since #2821) must be ok too. Not hard-required so a rollback
+// onto a build that predates it still smokes green on its own checks.
+const READY_REQUIRED_CHECKS = ["postgres", "pgvector"];
+
+/**
+ * Classify a /v1/ready answer (002 EARS-1..3). Returns the PASS detail, or
+ * throws naming the status and EVERY failing check — the 503 body is parsed so
+ * the operator reads `objectStorage=down` vs `postgres=down` straight from the
+ * smoke line. Pure (exported for unit tests).
+ */
+export function checkApiReady(res) {
   let json;
   try {
     json = JSON.parse(res.body);
   } catch {
-    throw new Error(`/v1/ready body is not JSON: ${res.body.slice(0, 120)}`);
+    throw new Error(
+      `/v1/ready → ${res.status} (body is not JSON: ${String(res.body).slice(0, 120)})`,
+    );
   }
-  if (json.checks?.postgres !== "ok")
-    throw new Error(`postgres=${json.checks?.postgres}`);
-  if (json.checks?.pgvector !== "ok")
-    throw new Error(`pgvector=${json.checks?.pgvector}`);
-  return `200 · postgres=ok · pgvector=ok`;
+  const checks = { ...json?.checks };
+  for (const name of READY_REQUIRED_CHECKS) {
+    if (!(name in checks)) checks[name] = undefined;
+  }
+  const entries = Object.entries(checks);
+  const failing = entries.filter(([, state]) => state !== "ok");
+  if (res.status !== 200 || failing.length > 0) {
+    const named = failing.map(([n, state]) => ` · ${n}=${state}`).join("");
+    throw new Error(`/v1/ready → ${res.status}${named || " (unready)"}`);
+  }
+  return [`200`, ...entries.map(([n]) => `${n}=ok`)].join(" · ");
+}
+
+async function probeApiReady() {
+  return checkApiReady(await httpsGet(`https://${API_HOST}/v1/ready`));
 }
 
 async function probePortal() {

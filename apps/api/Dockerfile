@@ -17,7 +17,8 @@
 #   runtime slim non-root image that runs `node dist/main.js`.
 #
 # DSO-100: build-verified ON-BOX (api-prod, 2026-07-03) — image builds, boots, and
-# passes /v1/health + /v1/ready (postgres+pgvector ok) against the prod data plane.
+# passes /v1/health + /v1/ready against the prod data plane (2026-07-03: postgres+
+# pgvector; /v1/ready also reports objectStorage since #2821).
 # `pnpm deploy` REQUIRES `--legacy` on pnpm 10 (ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE
 # otherwise — this workspace does not set inject-workspace-packages).
 FROM node:24-slim AS base

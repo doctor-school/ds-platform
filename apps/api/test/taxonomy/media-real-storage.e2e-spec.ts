@@ -112,6 +112,7 @@ describe.skipIf(!hasLiveDependencies)(
       exists: (key) => validStorage.exists(key),
       getBytes: (key) => validStorage.getBytes(key),
       delete: (key) => validStorage.delete(key),
+      probe: () => validStorage.probe(),
     };
 
     function idempotencyKey(): string {

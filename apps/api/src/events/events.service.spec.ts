@@ -4,6 +4,7 @@ import type { Event } from "@ds/db";
 import type {
   ObjectStorage,
   PutObjectInput,
+  StorageProbeResult,
   StoredObject,
 } from "../storage/index.js";
 import type {
@@ -103,6 +104,10 @@ class RecordingStorage implements ObjectStorage {
     if (this.deleteError) return Promise.reject(this.deleteError);
     this.deleted.push(key);
     return Promise.resolve();
+  }
+
+  probe(): Promise<StorageProbeResult> {
+    return Promise.resolve({ ok: true });
   }
 }
 

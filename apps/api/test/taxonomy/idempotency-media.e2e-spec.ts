@@ -101,6 +101,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         exists: (k) => backing.exists(k),
         getBytes: (k) => backing.getBytes(k),
         delete: (k) => backing.delete(k),
+        probe: () => backing.probe(),
       };
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],

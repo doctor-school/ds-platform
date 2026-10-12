@@ -172,8 +172,9 @@ const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
 
 // `shipTree` replaces the remote tree, so single-file bind mounts stay pinned
 // to the pre-deploy inodes until their containers restart. Compare the shipped
-// host files with copies read through the RUNNING containers: `docker cp` is
-// daemon-side, so this does not assume either image contains a shell/hash tool.
+// host files with copies read through the RUNNING containers via `docker exec
+// cat` — `docker cp` on a single-file bind mount resolves to the HOST source
+// path and so always reads the shipped file (#2801). Both images ship `cat`.
 // A missing/unreadable comparison is conservatively stale. The post-restart
 // comparison is the fail-closed proof that the shipped bytes are really mounted.
 const RUNTIME_CONFIG_SERVICES = ["caddy", "centrifugo"];
@@ -186,7 +187,7 @@ mounted_file_matches() {
   container_id=$(sudo docker compose ps -q "$service")
   [ -n "$container_id" ] || return 1
   mounted_copy=$(mktemp)
-  if sudo docker cp "\${container_id}:\${mounted_path}" "$mounted_copy" >/dev/null 2>&1 \\
+  if sudo docker exec "$container_id" cat "$mounted_path" >"$mounted_copy" 2>/dev/null \\
      && sudo cmp -s "$shipped_path" "$mounted_copy"; then
     result=0
   else

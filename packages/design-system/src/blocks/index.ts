@@ -279,6 +279,15 @@ export type {
   AccountProfileCardProps,
   AccountProfileCardCopy,
 } from "./account-profile-card";
+export {
+  ACCOUNT_PHONE_RESEND_COOLDOWN_SECONDS,
+  formatPhoneForDisplay,
+} from "./account-phone-row";
+export type {
+  AccountPhoneActions,
+  AccountPhoneCopy,
+  AccountPhoneFailure,
+} from "./account-phone-row";
 // #1934 — the ONE canonical registration composition both storefronts mount
 // (Academy `/register` and the doctor storefront door). Copy, transport and the
 // consent read model stay host-side; the block owns the structure the two

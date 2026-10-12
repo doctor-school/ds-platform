@@ -5,12 +5,23 @@ import * as React from "react";
 import type { MyProfile } from "@ds/schemas";
 
 import { Avatar } from "../primitives/avatar";
-import { Badge } from "../primitives/badge";
 import { Button } from "../primitives/button";
 import { Container } from "../primitives/container";
 import { FormError } from "../primitives/form";
 import { Input } from "../primitives/input";
 import { Link as DsLink } from "../primitives/link";
+import {
+  AccountPhoneRow,
+  VerifiedBadge,
+  type AccountPhoneActions,
+  type AccountPhoneCopy,
+} from "./account-phone-row";
+
+export type {
+  AccountPhoneActions,
+  AccountPhoneCopy,
+  AccountPhoneFailure,
+} from "./account-phone-row";
 
 /**
  * `<AccountProfileCard>` (#1958) — the ONE canonical account-profile composition
@@ -27,14 +38,16 @@ import { Link as DsLink } from "../primitives/link";
  * What lives HERE (presentation + the inline-edit mechanic):
  *   • the poster masthead and the three section rules,
  *   • the identity rows — avatar initials + display name, email with its verified
- *     badge, phone with its explicit empty state,
+ *     badge, and the confirmable phone row (`./account-phone-row`, 003
+ *     EARS-47…51 — add / confirm / change through an inline SMS code step),
  *   • the inline display-name edit (Изменить, then input + Сохранить/Отмена; Enter
  *     submits, Escape cancels) including its pending and error presentation,
  *   • the two full-row links and the sign-out action.
  *
  * What stays in the HOST app (the blocks-tier contract, see `./index.ts`): the
  * EARS-27 self-read and its EARS-9 silent-refresh dance, the EARS-10 logout
- * transport and where it routes, the `PUT /v1/me/display-name` write, error
+ * transport and where it routes, the `PUT /v1/me/display-name` write, the
+ * phone doors' transport and its error classification, error
  * mapping, copy (the Academy passes `next-intl`, the doctor storefront RU
  * literals) and the route table.
  *
@@ -64,6 +77,8 @@ export interface AccountProfileCardCopy {
   emailVerified: string;
   phoneLabel: string;
   phoneEmpty: string;
+  /** The confirmable phone row (003 EARS-47…51). */
+  phone: AccountPhoneCopy;
   passwordLabel: string;
   passwordChange: string;
   passwordHelper: string;
@@ -125,6 +140,11 @@ export interface AccountProfileCardProps {
   resolveSaveError: (error: unknown) => string;
   /** EARS-10 sign-out — the host revokes server-side and decides where it lands. */
   onSignOut: () => void | Promise<void>;
+  /**
+   * 003 EARS-47/48 — the host transport of the phone doors (`POST /v1/me/phone`,
+   * `POST /v1/me/phone/confirm`) and the classification of their failures.
+   */
+  phoneActions: AccountPhoneActions;
 }
 
 function defaultRenderLink({
@@ -253,6 +273,7 @@ export function AccountProfileCard({
   onSaveDisplayName,
   resolveSaveError,
   onSignOut,
+  phoneActions,
 }: AccountProfileCardProps) {
   // Inline display-name edit state (canvas: Изменить, then input + Сохранить/Отмена).
   const [editing, setEditing] = React.useState(false);
@@ -383,36 +404,21 @@ export function AccountProfileCard({
                 {profile.email}
               </span>
               {profile.emailVerified ? (
-                // AA remap (#270 precedent, mirrored from the webinar-card
-                // registered marker): the canvas paints the badge green.500,
-                // which fails the 4.5:1 normal-text floor on the light
-                // background and the palette has no darker AA green — so the
-                // LABEL takes AA ink and only the decorative check keeps the
-                // success hue (redundant with the label, WCAG 1.4.11 exempt).
-                <Badge
-                  className="gap-1.5 border-2 border-current bg-transparent text-foreground"
-                  data-testid="profile-email-verified"
-                >
-                  <span aria-hidden="true" className="text-success">
-                    ✓
-                  </span>
-                  {copy.emailVerified}
-                </Badge>
+                <VerifiedBadge
+                  label={copy.emailVerified}
+                  testId="profile-email-verified"
+                />
               ) : null}
             </span>
           </ProfileRow>
 
           <ProfileRow label={copy.phoneLabel}>
-            <span
-              className={
-                profile.phone
-                  ? "font-bold"
-                  : "font-semibold text-muted-foreground"
-              }
-              data-testid="profile-phone"
-            >
-              {profile.phone ?? copy.phoneEmpty}
-            </span>
+            <AccountPhoneRow
+              profile={profile}
+              copy={copy.phone}
+              emptyLabel={copy.phoneEmpty}
+              actions={phoneActions}
+            />
           </ProfileRow>
 
           {passwordHref ? (

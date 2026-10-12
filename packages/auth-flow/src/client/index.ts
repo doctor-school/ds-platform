@@ -10,3 +10,4 @@ export {
   resolveReturnTarget,
 } from "./return-target-store";
 export { completeReturnTarget } from "./return-completion";
+export { accountPhoneActions } from "./account-phone";

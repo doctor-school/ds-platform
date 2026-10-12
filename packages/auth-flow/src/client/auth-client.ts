@@ -1,4 +1,6 @@
 import type {
+  ConfirmPhoneRequest,
+  ConfirmPhoneResponse,
   DoctorVerifyRequest,
   LoginHandoffRequest,
   LoginHandoffResponse,
@@ -15,6 +17,8 @@ import type {
   PasswordResetRequest,
   PasswordResetResponse,
   RefreshResponse,
+  RequestPhoneCodeRequest,
+  RequestPhoneCodeResponse,
   SessionClaims,
   SetDisplayNameRequest,
   VerifyResendRequest,
@@ -48,6 +52,10 @@ const DISPLAY_NAME_PATH = "/v1/me/display-name";
 
 /** The 003 EARS-27 account self-read — the same read on both hosts. */
 const PROFILE_PATH = "/v1/me/profile";
+
+/** The 003 EARS-47/48 phone confirmation of `/account` — the same doors on both hosts. */
+const PHONE_PATH = "/v1/me/phone";
+const PHONE_CONFIRM_PATH = "/v1/me/phone/confirm";
 
 /**
  * The header the api's bot-protection guard reads FIRST
@@ -256,6 +264,25 @@ export function createAuthClient(api: AuthFlowApiConfig) {
 
     /** 003 EARS-27 — the account-profile self-read behind `/account`. */
     profile: () => getOrNull<MyProfile>(PROFILE_PATH),
+
+    /**
+     * 003 EARS-47 — ask for (or re-send) the confirmation code to the typed
+     * number. `already_confirmed` is the no-op success for the account's own
+     * confirmed number; a number confirmed elsewhere answers `code_sent` too
+     * (EARS-51), so the response never discloses it.
+     */
+    requestPhoneCode: (body: RequestPhoneCodeRequest) =>
+      postJson<RequestPhoneCodeRequest, RequestPhoneCodeResponse>(
+        PHONE_PATH,
+        body,
+      ),
+
+    /** 003 EARS-48 — submit the SMS code; resolves the now-confirmed phone. */
+    confirmPhone: (body: ConfirmPhoneRequest) =>
+      postJson<ConfirmPhoneRequest, ConfirmPhoneResponse>(
+        PHONE_CONFIRM_PATH,
+        body,
+      ),
 
     /** 006 EARS-14 — persist the display name through the one existing write. */
     async setDisplayName(body: SetDisplayNameRequest): Promise<MyDisplayName> {

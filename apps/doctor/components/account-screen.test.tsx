@@ -31,6 +31,8 @@ const h = vi.hoisted(() => {
     logoutStorefront: vi.fn(),
     setDoctorDisplayName: vi.fn(),
     fetchCongressSection: vi.fn(),
+    requestPhoneCode: vi.fn(),
+    confirmPhone: vi.fn(),
     replace: vi.fn(),
     refresh: vi.fn(),
   };
@@ -61,6 +63,8 @@ vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
     logout: () => h.logoutStorefront(),
     setDisplayName: (body: { displayName: string }) =>
       h.setDoctorDisplayName(body),
+    requestPhoneCode: (body: { phone: string }) => h.requestPhoneCode(body),
+    confirmPhone: (body: { code: string }) => h.confirmPhone(body),
   },
 }));
 
@@ -87,6 +91,10 @@ beforeEach(() => {
   h.logoutStorefront.mockReset().mockResolvedValue({});
   h.setDoctorDisplayName.mockReset().mockResolvedValue({});
   h.getMyProfile.mockReset().mockResolvedValue(PROFILE);
+  h.requestPhoneCode.mockReset().mockResolvedValue({ status: "code_sent" });
+  h.confirmPhone
+    .mockReset()
+    .mockResolvedValue({ status: "confirmed", phone: "+79134028871" });
   // Default: no congress event configured — the section read answers 404.
   h.fetchCongressSection
     .mockReset()
@@ -297,6 +305,24 @@ describe("017 EARS-1 / 003 EARS-9/10 #1958: the doctor /account projection", () 
     );
     await waitFor(() =>
       expect(screen.queryByTestId("profile-name-input")).toBeNull(),
+    );
+  });
+
+  it("003 EARS-59: the phone row confirms a number through the shared doors of THIS host's client, in this host's RU copy", async () => {
+    const user = userEvent.setup();
+    await renderReady();
+
+    await user.click(screen.getByTestId("profile-phone-action"));
+    await user.type(screen.getByLabelText("Номер телефона"), "+79134028871");
+    await user.click(screen.getByTestId("profile-phone-send"));
+    await screen.findByTestId("profile-phone-code-sent");
+    await user.keyboard("482913");
+
+    expect(h.requestPhoneCode).toHaveBeenCalledWith({ phone: "+79134028871" });
+    expect(h.confirmPhone).toHaveBeenCalledWith({ code: "482913" });
+    await screen.findByTestId("profile-phone-verified");
+    expect(screen.getByTestId("profile-phone").textContent).toBe(
+      "+7 913 402-88-71",
     );
   });
 });

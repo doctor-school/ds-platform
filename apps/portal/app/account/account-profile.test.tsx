@@ -2,6 +2,8 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AuthError } from "@ds/auth-flow/client";
+
 import { AccountProfile } from "./account-profile";
 
 /**
@@ -32,11 +34,15 @@ vi.mock("next-intl", () => ({
 
 const logout = vi.fn().mockResolvedValue({});
 const refresh = vi.fn().mockResolvedValue({});
+const requestPhoneCode = vi.fn();
+const confirmPhone = vi.fn();
 vi.mock("@/lib/auth-flow-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth-flow-client")>()),
   authClient: {
     logout: () => logout(),
     refresh: () => refresh(),
+    requestPhoneCode: (body: { phone: string }) => requestPhoneCode(body),
+    confirmPhone: (body: { code: string }) => confirmPhone(body),
   },
 }));
 
@@ -71,6 +77,10 @@ beforeEach(() => {
   refresh.mockClear();
   setDisplayName.mockClear();
   getMyProfile.mockReset().mockResolvedValue(PROFILE);
+  requestPhoneCode.mockReset().mockResolvedValue({ status: "code_sent" });
+  confirmPhone
+    .mockReset()
+    .mockRejectedValue(new AuthError(400, "invalid code"));
 });
 afterEach(cleanup);
 
@@ -238,5 +248,23 @@ describe("#2664 one main landmark per page", () => {
     render(<AccountProfile />);
     await screen.findByTestId("profile-email");
     expect(screen.queryByRole("main")).toBeNull();
+  });
+
+  it("003 EARS-59: the phone row requests the code through the shared door of THIS host's client and shows the generic wrong-code outcome", async () => {
+    const user = userEvent.setup();
+    render(<AccountProfile />);
+    await screen.findByTestId("profile-phone-action");
+
+    await user.click(screen.getByTestId("profile-phone-action"));
+    await user.type(screen.getByLabelText("phone.inputLabel"), "+79134028871");
+    await user.click(screen.getByTestId("profile-phone-send"));
+    await screen.findByTestId("profile-phone-code-sent");
+    await user.keyboard("000000");
+
+    expect(requestPhoneCode).toHaveBeenCalledWith({ phone: "+79134028871" });
+    expect(confirmPhone).toHaveBeenCalledWith({ code: "000000" });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "phone.wrongCode",
+    );
   });
 });

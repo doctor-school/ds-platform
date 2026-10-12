@@ -39,6 +39,7 @@ import {
   Pagination,
   PasswordRecoveryCard,
   RegistrationSuccessCard,
+  type AccountPhoneActions,
   type AccountProfileCardCopy,
   type ComboboxOption,
   type DataTableColumn,
@@ -4067,6 +4068,27 @@ const ACCOUNT_PROFILE_COPY: AccountProfileCardCopy = {
   emailVerified: "Подтверждена",
   phoneLabel: "Телефон",
   phoneEmpty: "Не указан",
+  phone: {
+    add: "Добавить",
+    confirm: "Подтвердить",
+    change: "Изменить",
+    verified: "Подтверждён",
+    unconfirmedHelper: "Номер не подтверждён",
+    suggestedHelper: "Номер из вашей заявки",
+    confirmedNote: "Номер подтверждён",
+    inputLabel: "Номер телефона",
+    placeholder: "+7…",
+    send: "Получить код",
+    cancel: "Отмена",
+    codeSentTo: "Код отправлен на",
+    codeLabel: "Код из SMS",
+    back: "← Другой номер",
+    resend: "Отправить ещё раз",
+    resendCountdown: (seconds) => `Отправить ещё раз через ${seconds} с`,
+    wrongCode: "Код не подошёл",
+    throttled: "Слишком много попыток",
+    unavailable: "Сервис недоступен",
+  },
   passwordLabel: "Пароль",
   passwordChange: "Изменить пароль",
   passwordHelper: "Мы отправим ссылку для смены пароля",
@@ -4083,6 +4105,15 @@ const FILLED_PROFILE: MyProfile = {
   phoneVerified: true,
   displayName: "Анна Петрова",
   suggestedPhone: null,
+};
+
+const SUGGESTED_PHONE_PROFILE: MyProfile = {
+  email: "you@example.com",
+  emailVerified: true,
+  phone: null,
+  phoneVerified: null,
+  displayName: "Анна Петрова",
+  suggestedPhone: "8 999 000-00-00",
 };
 
 const SPARSE_PROFILE: MyProfile = {
@@ -4158,12 +4189,35 @@ const ACCOUNT_PROFILE_PROPS: PropRow[] = [
     description:
       "The EARS-10 logout transport AND where it routes: both storefronts route to the shared SIGN_OUT_DESTINATION (`/`) from @ds/auth-flow (#2488).",
   },
+  {
+    name: "phoneActions",
+    type: "AccountPhoneActions",
+    required: true,
+    description:
+      "003 EARS-47/48: the phone doors (requestCode / confirm) and the classification of their failures (invalid / throttled / unavailable). Both storefronts pass accountPhoneActions(authClient) from @ds/auth-flow/client.",
+  },
 ];
 
 /* The showcase is a VIEWER: nothing transports here, so the write resolves
    inertly and the error mapper is never reached. */
 const inertSaveDisplayName = async () => {};
 const inertResolveSaveError = () => "Не удалось сохранить имя";
+
+/* Catalogue transport for the phone row, so every step can be driven here:
+   any number gets a code; 123456 confirms it, any other code is the generic
+   wrong-code outcome. */
+let demoPhone = "";
+const DEMO_PHONE_ACTIONS: AccountPhoneActions = {
+  requestCode: async (phone) => {
+    demoPhone = phone;
+    return "code_sent";
+  },
+  confirm: async (code) => {
+    if (code !== "123456") throw new Error("invalid");
+    return demoPhone;
+  },
+  classifyError: () => "invalid",
+};
 
 /** A live `AccountProfileCard` with inert host wiring. */
 function NeutralAccountProfileCard({
@@ -4187,6 +4241,7 @@ function NeutralAccountProfileCard({
       onSaveDisplayName={inertSaveDisplayName}
       resolveSaveError={inertResolveSaveError}
       onSignOut={() => {}}
+      phoneActions={DEMO_PHONE_ACTIONS}
     />
   );
 }
@@ -4215,6 +4270,17 @@ function AccountProfileCardSection() {
           >
             <WideCanvas>
               <NeutralAccountProfileCard profile={SPARSE_PROFILE} />
+            </WideCanvas>
+          </StateCase>
+          <StateCase
+            label="phone from an application"
+            note="suggestedPhone — the number prefilled from the latest congress registration, offered for confirmation (003 EARS-50); 123456 confirms it here"
+          >
+            <WideCanvas>
+              <NeutralAccountProfileCard
+                profile={SUGGESTED_PHONE_PROFILE}
+                initials="АП"
+              />
             </WideCanvas>
           </StateCase>
           <StateCase

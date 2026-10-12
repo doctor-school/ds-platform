@@ -10,7 +10,7 @@ import { initialsFromDisplayName } from "@ds/room/display-name";
 import { Container } from "@ds/design-system/container";
 import { AccountProfileCard } from "@ds/design-system/account-profile-card";
 
-import { AuthError } from "@ds/auth-flow/client";
+import { AuthError, accountPhoneActions } from "@ds/auth-flow/client";
 import { withReturnContext } from "@ds/auth-flow/server";
 import { SIGN_OUT_DESTINATION } from "@ds/auth-flow/host-config";
 import { fetchSection as fetchCongressSection } from "@ds/congress-submissions/client";
@@ -79,6 +79,28 @@ const COPY = {
     emailVerified: "подтверждён",
     phoneLabel: "Телефон",
     phoneEmpty: "не указан",
+    phone: {
+      add: "Добавить",
+      confirm: "Подтвердить",
+      change: "Изменить",
+      verified: "подтверждён",
+      unconfirmedHelper: "Не подтверждён — подтвердите, чтобы входить по SMS",
+      suggestedHelper:
+        "Из заявки на конгресс — подтвердите, чтобы входить по SMS",
+      confirmedNote: "Телефон подтверждён. Теперь можно входить по коду из SMS",
+      inputLabel: "Номер телефона",
+      placeholder: "+7…",
+      send: "Получить код",
+      cancel: "Отмена",
+      codeSentTo: "Код отправлен по SMS на",
+      codeLabel: "Код из SMS",
+      back: "← Изменить номер",
+      resend: "Отправить снова",
+      resendCountdown: (seconds: number) => `Отправить снова · ${seconds} с`,
+      wrongCode: "Неверный код",
+      throttled: "Слишком много попыток. Попробуйте позже",
+      unavailable: "Сервис временно недоступен — попробуйте ещё раз.",
+    },
     passwordLabel: "Пароль",
     passwordChange: "Сменить пароль",
     passwordHelper: "Отправим код для сброса пароля на email",
@@ -92,6 +114,9 @@ const COPY = {
   saveTooMany: "Слишком много попыток — повторите через несколько минут.",
   saveUnavailable: "Сервис временно недоступен — попробуйте ещё раз.",
 } as const;
+
+/** 003 EARS-47/48/59 — the shared phone-row transport over this host's client. */
+const PHONE_ACTIONS = accountPhoneActions(authClient);
 
 type State =
   | { kind: "loading" }
@@ -260,6 +285,7 @@ export function AccountScreen() {
       onSaveDisplayName={onSaveDisplayName}
       resolveSaveError={resolveSaveError}
       onSignOut={onSignOut}
+      phoneActions={PHONE_ACTIONS}
     />
   );
 }

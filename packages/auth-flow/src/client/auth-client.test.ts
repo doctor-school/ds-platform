@@ -332,3 +332,45 @@ describe("021 EARS-19: the doctor-storefront registration command", () => {
     ).rejects.toMatchObject({ status: 500 });
   });
 });
+
+describe("003 #2449: the /account phone confirmation transport", () => {
+  it("003 EARS-47: the code request POSTs the typed number to the relative /v1/me/phone path with the cookie attached, on both hosts", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json({ status: "code_sent" })),
+    );
+    for (const client of [academy, doctor]) {
+      fetchMock.mockClear();
+      await expect(
+        client.requestPhoneCode({ phone: "+7 913 402-88-71" }),
+      ).resolves.toEqual({ status: "code_sent" });
+      const [url, init] = callArgs();
+      expect(url).toBe("/v1/me/phone");
+      expect(init.method).toBe("POST");
+      expect(init.credentials).toBe("include");
+      expect(JSON.parse(String(init.body))).toEqual({
+        phone: "+7 913 402-88-71",
+      });
+    }
+  });
+
+  it("003 EARS-48: the confirmation POSTs the code to /v1/me/phone/confirm; the generic failure is an AuthError carrying its status", async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({ status: "confirmed", phone: "+79134028871" }),
+    );
+    await expect(doctor.confirmPhone({ code: "482913" })).resolves.toEqual({
+      status: "confirmed",
+      phone: "+79134028871",
+    });
+    const [url, init] = callArgs();
+    expect(url).toBe("/v1/me/phone/confirm");
+    expect(init.credentials).toBe("include");
+    expect(JSON.parse(String(init.body))).toEqual({ code: "482913" });
+
+    fetchMock.mockResolvedValueOnce(json({ message: "invalid code" }, 400));
+    const failure = await academy
+      .confirmPhone({ code: "000000" })
+      .catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(AuthError);
+    expect((failure as AuthError).status).toBe(400);
+  });
+});

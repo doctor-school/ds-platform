@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 
 import type { MyProfile } from "@ds/schemas";
 
-import { AuthError } from "@ds/auth-flow/client";
+import { AuthError, accountPhoneActions } from "@ds/auth-flow/client";
 import { SIGN_OUT_DESTINATION } from "@ds/auth-flow/host-config";
 import { authClient } from "@/lib/auth-flow-client";
 import { ACADEMY_AUTH_FLOW } from "@/lib/auth-flow.host-config";
@@ -50,6 +50,9 @@ import { AccountProfileCard } from "@ds/design-system/account-profile-card";
  * before redirecting to /login. Logout (EARS-10) revokes server-side then routes
  * to /login — same `data-testid="logout"` contract as before.
  */
+
+/** 003 EARS-47/48/59 — the shared phone-row transport over this host's client. */
+const PHONE_ACTIONS = accountPhoneActions(authClient);
 
 type State =
   | { kind: "loading" }
@@ -200,6 +203,7 @@ export function AccountProfile() {
       onSaveDisplayName={onSaveDisplayName}
       resolveSaveError={resolveSaveError}
       onSignOut={onLogout}
+      phoneActions={PHONE_ACTIONS}
       copy={{
         title: t("title"),
         subtitle: t("subtitle"),
@@ -219,6 +223,28 @@ export function AccountProfile() {
         emailVerified: t("emailVerified"),
         phoneLabel: t("phoneLabel"),
         phoneEmpty: t("phoneEmpty"),
+        phone: {
+          add: t("phone.add"),
+          confirm: t("phone.confirm"),
+          change: t("phone.change"),
+          verified: t("phone.verified"),
+          unconfirmedHelper: t("phone.unconfirmedHelper"),
+          suggestedHelper: t("phone.suggestedHelper"),
+          confirmedNote: t("phone.confirmedNote"),
+          inputLabel: t("phone.inputLabel"),
+          placeholder: t("phone.placeholder"),
+          send: t("phone.send"),
+          cancel: t("phone.cancel"),
+          codeSentTo: t("phone.codeSentTo"),
+          codeLabel: t("phone.codeLabel"),
+          back: t("phone.back"),
+          resend: t("phone.resend"),
+          resendCountdown: (seconds) =>
+            t("phone.resendCountdown", { seconds }),
+          wrongCode: t("phone.wrongCode"),
+          throttled: t("phone.throttled"),
+          unavailable: t("phone.unavailable"),
+        },
         passwordLabel: t("passwordLabel"),
         passwordChange: t("passwordChange"),
         passwordHelper: t("passwordHelper"),

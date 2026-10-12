@@ -3,6 +3,7 @@ import {
   CongressDayAttendanceSchema,
   CongressDaySchema,
 } from "./congress-attendance.schema.js";
+import { MskCalendarDaySchema } from "./congress-intake-settings.schema.js";
 
 /**
  * 044 EARS-18 — the contract of the admin roster read
@@ -18,9 +19,8 @@ import {
  * participant contact data it has no business holding.
  *
  * The query below is the `AdminDataList` baseline state (`page`, `pageSize`,
- * `q`) extended by the EARS-34 presence filter and the EARS-22 sort (`sort` +
- * `dir`); per-column filtering is EARS-23 and is not declared here yet. The
- * «возможный дубль» marker is EARS-30/EARS-31 and
+ * `q`) extended by the EARS-34 presence filter, the EARS-22 sort (`sort` +
+ * `dir`) and the EARS-23 per-column filters. The «возможный дубль» marker is EARS-30/EARS-31 and
  * is likewise absent from the row: it already exists on the PII-free
  * `EventRosterEntry` read model, and projecting it onto THIS row is that pair's
  * own handler, not EARS-18's.
@@ -69,6 +69,33 @@ export const CONGRESS_ROSTER_SORT_DEFAULT = {
 };
 
 /**
+ * 044 EARS-23 — the confirmation-letter filter values: the two EARS-27 outcomes
+ * plus `none`, a row the mailer never attempted (its status is null).
+ */
+export const CONGRESS_ROSTER_MAIL_STATUS_FILTERS = [
+  "sent",
+  "failed",
+  "none",
+] as const;
+export const CongressRosterMailStatusFilterSchema = z.enum(
+  CONGRESS_ROSTER_MAIL_STATUS_FILTERS,
+);
+export type CongressRosterMailStatusFilter = z.infer<
+  typeof CongressRosterMailStatusFilterSchema
+>;
+
+/**
+ * 044 EARS-23 — one free-text filter value: trimmed, bounded like the search
+ * term. A blank value (`?name=`) is no filter, the same posture `q` has, so a
+ * screen clearing a field may leave the key in its address.
+ */
+const RosterFilterTextSchema = z
+  .string()
+  .trim()
+  .max(CONGRESS_ROSTER_SEARCH_MAX)
+  .optional();
+
+/**
  * The list query, parsed from the raw query string (every value arrives as a
  * string), mirroring `EventAdminListQuerySchema`'s coercion posture.
  */
@@ -113,6 +140,45 @@ export const CongressRosterQuerySchema = z
     sort: CongressRosterSortKeySchema.optional(),
     /** 044 EARS-22 — the direction of `sort`; absent = ascending. */
     dir: CongressRosterSortDirSchema.optional(),
+    /**
+     * 044 EARS-23 — ФИО: a case-insensitive «contains» over the displayed full
+     * name (the answers' name parts, else the account's display name).
+     */
+    name: RosterFilterTextSchema,
+    /** 044 EARS-23 — место работы: a case-insensitive «contains» (EARS-37: a card field, still a filter). */
+    workplace: RosterFilterTextSchema,
+    /** 044 EARS-23 — email: a case-insensitive «contains» over the displayed email (EARS-37: a card field, still a filter). */
+    email: RosterFilterTextSchema,
+    /**
+     * 044 EARS-23 — телефон: a «contains» on DIGITS — the term's digits, an
+     * 11-digit leading `8` read as `7` exactly as the intake normalises
+     * (`normaliseContactPhone`), matched against the row's normalised number.
+     * A term without a digit is not a phone and is refused.
+     */
+    phone: RosterFilterTextSchema.refine(
+      (v) => v === undefined || v === "" || /\d/.test(v),
+      { message: "phone filter must contain a digit" },
+    ),
+    /** 044 EARS-23 — специальность: the `specialties_minzdrav` id the row resolves its name from. */
+    specialtyId: z.uuid().optional(),
+    /**
+     * 044 EARS-23 — город: a directory value (the admin offers the bundled
+     * ОКТМО list through a searchable selector, #2316 owner refinement),
+     * matched by case-insensitive EQUALITY on the stored free text — never a
+     * «contains».
+     */
+    city: RosterFilterTextSchema,
+    /** 044 EARS-23 — область/регион: a directory value, matched like `city`. */
+    region: RosterFilterTextSchema,
+    /** 044 EARS-23 — статус письма: `sent`, `failed`, or `none` (never attempted). */
+    mailStatus: CongressRosterMailStatusFilterSchema.optional(),
+    /**
+     * 044 EARS-23 — дата регистрации, the first Moscow calendar day of the
+     * range (inclusive, from its 00:00 Moscow time).
+     */
+    registeredFrom: MskCalendarDaySchema.optional(),
+    /** 044 EARS-23 — the last Moscow calendar day of the range (inclusive, the whole day). */
+    registeredTo: MskCalendarDaySchema.optional(),
   })
   .refine((q) => q.present === undefined || q.attendanceDay !== undefined, {
     message: "present requires attendanceDay",
@@ -123,7 +189,19 @@ export const CongressRosterQuerySchema = z
   .refine((q) => q.sort !== "presence" || q.attendanceDay !== undefined, {
     message: "sort=presence requires attendanceDay",
     path: ["sort"],
-  });
+  })
+  // EARS-23 — an inverted range is a caller error, not an empty page. ISO
+  // calendar days compare correctly as strings.
+  .refine(
+    (q) =>
+      q.registeredFrom === undefined ||
+      q.registeredTo === undefined ||
+      q.registeredFrom <= q.registeredTo,
+    {
+      message: "registeredFrom must not be after registeredTo",
+      path: ["registeredTo"],
+    },
+  );
 export type CongressRosterQuery = z.infer<typeof CongressRosterQuerySchema>;
 
 /**

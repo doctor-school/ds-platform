@@ -17,6 +17,7 @@ import {
   type CongressRosterList,
   CongressRosterListSchema,
   CongressRosterQuerySchema,
+  CONGRESS_ROSTER_MAIL_STATUS_FILTERS,
   CONGRESS_ROSTER_PAGE_SIZE_MAX,
   CONGRESS_ROSTER_SEARCH_MAX,
   CONGRESS_ROSTER_SORT_KEYS,
@@ -115,6 +116,67 @@ export class EventRosterAdminController {
     enum: [...CONGRESS_ROSTER_SORT_KEYS],
   })
   @ApiQuery({ name: "dir", required: false, enum: ["asc", "desc"] })
+  // 044 EARS-23 — the per-column filters, each composable with the search,
+  // the presence filter, the sort and the page (semantics: the query schema).
+  @ApiQuery({
+    name: "name",
+    required: false,
+    type: String,
+    maxLength: CONGRESS_ROSTER_SEARCH_MAX,
+  })
+  @ApiQuery({
+    name: "workplace",
+    required: false,
+    type: String,
+    maxLength: CONGRESS_ROSTER_SEARCH_MAX,
+  })
+  @ApiQuery({
+    name: "email",
+    required: false,
+    type: String,
+    maxLength: CONGRESS_ROSTER_SEARCH_MAX,
+  })
+  @ApiQuery({
+    name: "phone",
+    required: false,
+    type: String,
+    maxLength: CONGRESS_ROSTER_SEARCH_MAX,
+  })
+  @ApiQuery({
+    name: "specialtyId",
+    required: false,
+    type: String,
+    format: "uuid",
+  })
+  @ApiQuery({
+    name: "city",
+    required: false,
+    type: String,
+    maxLength: CONGRESS_ROSTER_SEARCH_MAX,
+  })
+  @ApiQuery({
+    name: "region",
+    required: false,
+    type: String,
+    maxLength: CONGRESS_ROSTER_SEARCH_MAX,
+  })
+  @ApiQuery({
+    name: "mailStatus",
+    required: false,
+    enum: [...CONGRESS_ROSTER_MAIL_STATUS_FILTERS],
+  })
+  @ApiQuery({
+    name: "registeredFrom",
+    required: false,
+    type: String,
+    format: "date",
+  })
+  @ApiQuery({
+    name: "registeredTo",
+    required: false,
+    type: String,
+    format: "date",
+  })
   @ApiOkResponse({ type: CongressRosterListDto })
   // `audit: low-stakes` — a read that writes no domain state owes no terminal
   // ledger row (endpoint-authz design §3), exactly like the 007 admin reads.

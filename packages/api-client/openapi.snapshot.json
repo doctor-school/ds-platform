@@ -6670,6 +6670,96 @@
           },
           {
             "in": "query",
+            "name": "registeredTo",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "registeredFrom",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mailStatus",
+            "required": false,
+            "schema": {
+              "enum": ["sent", "failed", "none"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialtyId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "phone",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workplace",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "maxLength": 160,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "dir",
             "required": false,
             "schema": {

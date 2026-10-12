@@ -25,10 +25,24 @@ import {
   type MyEventItem,
   type MyEventsCounts,
   type MyEventsTab,
+  mskClosingInstantAfterLastDay,
+  mskDayStartInstant,
   normaliseContactPhone,
   REGISTRABLE_EVENT_STATES,
 } from "@ds/schemas";
-import { and, asc, desc, eq, gte, inArray, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { isParticipant } from "../auth/staff-role.js";
 import { withRequestAuditContext } from "../audit/audit-context.tx.js";
@@ -150,6 +164,15 @@ function registrationCells() {
     city: sql<string | null>`nullif(${registrations.answers}->>'city', '')`,
     region: sql<string | null>`nullif(${registrations.answers}->>'region', '')`,
   };
+}
+
+/**
+ * A caller's term as a literal inside a LIKE pattern: `%`, `_` and the escape
+ * character itself are escaped (paired with `escape '\\'` at the use site), so a
+ * registrar's fragment never turns into a wildcard matching the whole event.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
 /** The `specialties_minzdrav` join by the id the answers carry (EARS-25). */
@@ -433,9 +456,9 @@ export class RegistrationRepository {
    *
    * The order is the EARS-22 sort ({@link rosterOrderBy}); without one it is
    * the `registered_at ASC` the read model has always had, tie-broken by `id` so
-   * that a page boundary is stable when two rows share an instant. Per-column
-   * filters are EARS-23, and the «возможный дубль» marker is EARS-30/EARS-31 —
-   * neither is here.
+   * that a page boundary is stable when two rows share an instant. The per-column
+   * filters are EARS-23 ({@link rosterColumnFilterPredicates}); the «возможный
+   * дубль» marker is EARS-30/EARS-31 and is not here.
    */
   async findEventRosterPage(
     eventId: string,
@@ -472,6 +495,15 @@ export class RegistrationRepository {
         phoneNormalised,
       ),
       this.rosterAttendancePredicate(query),
+      ...this.rosterColumnFilterPredicates(query, {
+        fullName,
+        email,
+        phone,
+        phoneNormalised,
+        workplace,
+        city,
+        region,
+      }),
     );
 
     const pageSize = query.pageSize;
@@ -622,6 +654,94 @@ export class RegistrationRepository {
          and ${registrationAttendance.present} = true
     )`;
     return query.present === "marked" ? markedPresent : sql`not ${markedPresent}`;
+  }
+
+  /**
+   * 044 EARS-23 — the per-column filters, one conjunct each, so they compose
+   * with each other, the search, the presence filter, the paging and the count
+   * by construction. Every filter reads the SAME cell expression the row
+   * projects ({@link registrationCells}, the specialty join), so a filter never
+   * disagrees with what the row — or the card — shows.
+   *
+   * - ФИО, место работы, email: case-insensitive «contains», the caller's
+   *   wildcards escaped.
+   * - телефон: «contains» on digits against the normalised number (the
+   *   account's own number for a platform-origin row) — the EARS-22 phone sort
+   *   key — with the term normalised under the intake's own `8 → 7` rule.
+   * - город / область: case-insensitive EQUALITY with the directory value the
+   *   admin's searchable selector offers (#2316 owner refinement); a stored
+   *   value outside the directory is simply never offered.
+   * - специальность: the resolved `specialties_minzdrav` id.
+   * - статус письма: the EARS-27 outcome, `none` = never attempted (null).
+   * - дата регистрации: an inclusive range of Moscow calendar days, `to`
+   *   covering its whole day (up to 00:00 Moscow of the next day, exclusive).
+   */
+  private rosterColumnFilterPredicates(
+    query: CongressRosterQuery,
+    cells: {
+      fullName: SQL<string>;
+      email: SQL<string | null>;
+      phone: SQL<string | null>;
+      phoneNormalised: SQL<string | null>;
+      workplace: SQL<string | null>;
+      city: SQL<string | null>;
+      region: SQL<string | null>;
+    },
+  ): SQL[] {
+    const predicates: SQL[] = [];
+    const contains = (cell: SQL, term: string | undefined): void => {
+      if (!term) return;
+      predicates.push(
+        sql`coalesce(${cell}, '') ilike ${`%${escapeLike(term)}%`} escape '\\'`,
+      );
+    };
+    const equalsIgnoringCase = (cell: SQL, term: string | undefined): void => {
+      if (!term) return;
+      predicates.push(
+        sql`trim(coalesce(${cell}, '')) ilike ${escapeLike(term)} escape '\\'`,
+      );
+    };
+
+    contains(cells.fullName, query.name);
+    contains(cells.workplace, query.workplace);
+    contains(cells.email, query.email);
+    equalsIgnoringCase(cells.city, query.city);
+    equalsIgnoringCase(cells.region, query.region);
+
+    if (query.phone) {
+      // The leading `+` is dropped so a FRAGMENT matches anywhere in the digits.
+      const digits = normaliseContactPhone(query.phone).replace(/^\+/, "");
+      predicates.push(
+        sql`regexp_replace(coalesce(${cells.phoneNormalised}, ${cells.phone}, ''), '[^0-9]', '', 'g') like ${`%${digits}%`}`,
+      );
+    }
+    if (query.specialtyId !== undefined) {
+      predicates.push(eq(specialtiesMinzdrav.id, query.specialtyId));
+    }
+    if (query.mailStatus !== undefined) {
+      predicates.push(
+        query.mailStatus === "none"
+          ? isNull(registrations.confirmationMailStatus)
+          : eq(registrations.confirmationMailStatus, query.mailStatus),
+      );
+    }
+    if (query.registeredFrom !== undefined) {
+      predicates.push(
+        gte(
+          registrations.registeredAt,
+          mskDayStartInstant(query.registeredFrom),
+        ),
+      );
+    }
+    if (query.registeredTo !== undefined) {
+      predicates.push(
+        lt(
+          registrations.registeredAt,
+          mskClosingInstantAfterLastDay(query.registeredTo),
+        ),
+      );
+    }
+    return predicates;
   }
 
   /** The days each of `registrationIds` is marked present on (EARS-34). */
@@ -911,8 +1031,7 @@ export class RegistrationRepository {
   ): SQL | undefined {
     const term = q?.trim();
     if (!term) return undefined;
-    const escape = (value: string): string =>
-      value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const escape = escapeLike;
     const blob = sql.join(
       Object.values(cells).map((cell) => sql`coalesce(${cell}, '')`),
       sql`, `,

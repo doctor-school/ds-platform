@@ -1,5 +1,7 @@
 # IDEF0 decomposition A32 «Произвести подкаст» (child of A3; format: FORMAT-ru.md). Podcast line of
-# process block 3, steps 19–23 (../process-to-be-ru.md). Leaves carry a DRAFT effort per episode.
+# process block 3, steps 19–23 (../process-to-be-ru.md). Two products share the line: «эпизод подкаста»
+# (simple; Академия смыслов episodes by the A11 plan) and «видеоподкаст» (A324 and A325 decompose the
+# video-only work). Leaves carry a DRAFT effort per episode.
 id: A32
 parent: A3
 title: Произвести подкаст
@@ -13,14 +15,19 @@ icom:
   C4: C5
   C5: C6
   C6: C7
+  C7: C8
   O1: O2
   O2: a01
   O3: a02
   M1: M1
-  M2: M2
-  M3: M4
-  M4: M8
-  M5: M9
+  M2: M1
+  M3: M2
+  M4: M4
+  M5: M4
+  M6: M4
+  M7: M5
+  M8: M8
+  M9: M9
 boxes:
   - id: A321
     name: Принять тезисы и авторизовать спикера
@@ -28,7 +35,8 @@ boxes:
     mechanisms: [Менеджер эксперта]
     note: >-
       Шаг 19: компания присылает тезисы и материалы (внешний шаг); спикер вносится в базу
-      авторизованных — эта база управляет и мероприятиями (A33).
+      авторизованных — эта база управляет и мероприятиями (A33). Для Академии смыслов гости фармы —
+      по плану выпусков A11.
     leaf: true
     effort:
       role: Менеджер эксперта
@@ -70,35 +78,23 @@ boxes:
       driver: длительность эпизода; наличие коммерческой части
       basis: оценка аналитика
   - id: A324
-    name: Записать подкаст в студии
+    name: Записать подкаст
     functions: [F-084, F-085]
-    mechanisms: [Медиа-круг — запись подкаста]
+    mechanisms:
+      - Пул экспертов — спикер
+      - Медиа-круг — запись подкаста
+      - Сервисный круг — режиссёр трансляции
     note: >-
-      Шаг 22: запись в общей студии (В3); чисто коммерческий подкаст — вариант той же линии. Часы
-      спикера — гонорар (переменная), студия — внешняя затрата.
-    leaf: true
-    effort:
-      role: Медиа-круг — запись подкаста
-      unit: эпизод
-      hours_draft: [2, 3]
-      lead_days_draft: [1, 2]
-      lead_days_basis: "оценка аналитика; опора: 1 → 2 записи подкаста в неделю (M:2026-08-11-0959)"
-      driver: длительность эпизода; подкастов в неделю
-      basis: "оценка аналитика; опора: 1 → 2 записи подкаста в неделю (M:2026-08-11-0959)"
+      Шаг 22: запись в общей студии (В3); чисто коммерческий подкаст — вариант той же линии. Эпизод
+      подкаста — гость и запись звука и одной камеры; видеоподкаст добавляет съёмку на несколько камер
+      с режиссёром. Студия — внешняя затрата.
   - id: A325
-    name: Нарезать, выложить и архивировать
+    name: Смонтировать, нарезать, выложить и архивировать
     functions: [F-087, F-088]
-    mechanisms: [Медиа-круг — монтажёр]
-    note: Шаг 23 — нарезки и выкладка; архив или встраивание в урок как компонент.
-    leaf: true
-    effort:
-      role: Медиа-круг — монтажёр
-      unit: эпизод
-      hours_draft: [3, 6]
-      lead_days_draft: [2, 4]
-      lead_days_basis: "оценка аналитика"
-      driver: число нарезок на эпизод
-      basis: оценка аналитика
+    mechanisms: [Медиа-круг — монтажёр, Медиа-круг — анонсы]
+    note: >-
+      Шаг 23: нарезки и выкладка, архив или встраивание в урок как компонент; видеоподкаст добавляет
+      цветокоррекцию и графику, обложки и 5–10 клипов; рилсы Академии смыслов — по плану A11.
 arrows:
   - id: I1
     label: Знания лидера, материалы
@@ -143,9 +139,14 @@ arrows:
       - { box: A323, side: C }
       - { box: A324, side: C }
       - { box: A325, side: C }
+  - id: C7
+    label: План выпусков Академии смыслов, приглашённые гости фармы
+    objects: [O-057, O-058, O-019]
+    from: { boundary: C7 }
+    to: [{ box: A321, side: C }, { box: A324, side: C }]
   - id: O1
-    label: Подкасты и архив
-    objects: [O-048, O-065]
+    label: Подкасты, выпуски и рилсы Академии смыслов, архив
+    objects: [O-048, O-065, O-057, O-058]
     from: { box: A325, side: O }
     to: { boundary: O1 }
   - id: O2
@@ -159,32 +160,49 @@ arrows:
     from: { box: A321, side: O }
     to: { boundary: O3 }
   - id: M1
-    label: Менеджеры экспертов, медредактор
-    objects: [O-001, O-011]
+    label: Менеджер эксперта
+    objects: [O-001]
     from: { boundary: M1 }
-    to:
-      - { box: A321, side: M }
-      - { box: A322, side: M }
-      - { box: A323, side: M }
+    to: [{ box: A321, side: M }, { box: A322, side: M }]
   - id: M2
-    label: Спикеры, второй лектор, база спикеров
-    objects: [O-027, O-029, O-116]
+    label: Медредактор-сценарист
+    objects: [O-011]
     from: { boundary: M2 }
-    to: [{ box: A322, side: M }, { box: A324, side: M }]
+    to: { box: A323, side: M }
   - id: M3
-    label: Медиа-круг
-    objects: [O-012, O-013]
+    label: Пул экспертов — спикер (гость выпуска)
+    objects: [O-027, O-029]
     from: { boundary: M3 }
-    to: [{ box: A324, side: M }, { box: A325, side: M }]
+    to: { box: A324, side: M }
   - id: M4
-    label: Студия
-    objects: [O-187]
+    label: Медиа-круг — запись подкаста
+    objects: [O-012, O-013]
     from: { boundary: M4 }
     to: { box: A324, side: M }
   - id: M5
-    label: База экспертов
-    objects: [O-115]
+    label: Медиа-круг — монтажёр
+    objects: [O-012, O-013]
     from: { boundary: M5 }
+    to: { box: A325, side: M }
+  - id: M6
+    label: Медиа-круг — анонсы
+    objects: [O-012, O-013]
+    from: { boundary: M6 }
+    to: { box: A325, side: M }
+  - id: M7
+    label: Сервисный круг — режиссёр трансляции (видеоподкаст)
+    objects: [O-195]
+    from: { boundary: M7 }
+    to: { box: A324, side: M }
+  - id: M8
+    label: Студия
+    objects: [O-187]
+    from: { boundary: M8 }
+    to: { box: A324, side: M }
+  - id: M9
+    label: Команды, роли, пулы (база экспертов)
+    objects: [O-115]
+    from: { boundary: M9 }
     to: { box: A321, side: M }
   - id: a01
     label: Авторизованный спикер, тезисы

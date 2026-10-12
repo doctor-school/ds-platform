@@ -313,8 +313,8 @@ arrows:
     from: { box: A2, side: O }
     to: { box: A3, side: C }
   - id: a03
-    label: Собранные уроки, подкасты, записи
-    objects: [O-041, O-197, O-048, O-064, O-065, O-093]
+    label: Собранные уроки, подкасты, выпуски Академии смыслов, записи
+    objects: [O-041, O-197, O-048, O-064, O-065, O-093, O-057, O-058]
     from: { box: A3, side: O }
     to: { box: A4, side: I }
   - id: a04

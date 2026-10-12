@@ -47,6 +47,12 @@ diagrams:
   - id: A32
     file: A32.yaml
     parent: A3
+  - id: A324
+    file: A324.yaml
+    parent: A32
+  - id: A325
+    file: A325.yaml
+    parent: A32
   - id: A33
     file: A33.yaml
     parent: A3

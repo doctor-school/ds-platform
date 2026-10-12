@@ -4,9 +4,11 @@ import { prepareCaptchaForJourney } from "../lib/captcha-stub.js";
 import { captureResponse } from "../lib/captured-response.js";
 import {
   assertNoAddressedMail,
+  captureAddressedMailCheckpoint,
   fetchRecoveryMail,
   mailpitUrlFor,
   nativeRecoveryMail,
+  type AddressedMailCheckpoint,
 } from "../lib/mailpit.js";
 import {
   assertNoPrivateRegistrationAccess,
@@ -16,7 +18,7 @@ import {
   registrationUrl,
   type OwnedCredentials,
 } from "../lib/owned-registration.js";
-import { After, Given, Then, When } from "./support/auth-fixtures.js";
+import { After, Given, Then, When, test } from "./support/auth-fixtures.js";
 
 interface RegistrationObservation {
   requestedAt: string;
@@ -30,6 +32,7 @@ interface DuplicateRegistration extends OwnedCredentials {
   initial?: Omit<RegistrationObservation, "requestedAt">;
   firstDuplicate?: RegistrationObservation;
   repeated?: RegistrationObservation;
+  beforeRepeat?: AddressedMailCheckpoint;
 }
 
 const duplicates = new WeakMap<Page, DuplicateRegistration>();
@@ -180,7 +183,24 @@ When(
     const state = duplicate(page);
     if (!state.firstDuplicate)
       throw new Error("First duplicate registration was not observed");
+    state.beforeRepeat = await captureAddressedMailCheckpoint(
+      nativeRecoveryMail(),
+      process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
+      state.email,
+    );
+    expect(
+      state.beforeRepeat.messageIds.length === 2 &&
+        new Set(state.beforeRepeat.messageIds).size === 2,
+      "only account creation and first duplicate deliveries precede the repeat",
+    ).toBe(true);
     state.repeated = await submitDuplicate(state, world.hostBaseUrl);
+    await test.info().attach("registration-mail-checkpoint", {
+      body: JSON.stringify({
+        observedMessageIds: state.beforeRepeat.messageIds,
+        repeatRequestedAt: state.repeated.requestedAt,
+      }),
+      contentType: "application/json",
+    });
     // 003 EARS-23: register-notice-throttle.ts owns the unchanged 900-second window.
     expect(
       Date.parse(state.repeated.requestedAt) -
@@ -195,13 +215,19 @@ Then(
   "no second addressed code mail is sent over the full delivery horizon inside that throttle window",
   async ({ page, world }) => {
     const state = duplicate(page);
-    if (!state.initial || !state.firstDuplicate || !state.repeated)
+    if (
+      !state.initial ||
+      !state.firstDuplicate ||
+      !state.repeated ||
+      !state.beforeRepeat
+    )
       throw new Error("Duplicate registration comparison is incomplete");
     await assertNoAddressedMail(
       nativeRecoveryMail(),
       process.env.E2E_MAILPIT_URL ?? mailpitUrlFor(world.hostBaseUrl),
       state.email,
       state.repeated.requestedAt,
+      state.beforeRepeat,
     );
     expect(
       Date.now() - Date.parse(state.firstDuplicate.requestedAt) < 900_000,

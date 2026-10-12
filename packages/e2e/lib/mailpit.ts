@@ -109,6 +109,11 @@ interface MailRequest {
   get(url: string): Promise<MailResponse>;
 }
 
+export interface AddressedMailCheckpoint {
+  readonly recipient: string;
+  readonly messageIds: readonly string[];
+}
+
 /** Avoid Playwright's HTML child-step diagnostics retaining Basic credentials. */
 export function nativeRecoveryMail(
   credentials = {
@@ -162,14 +167,11 @@ async function readMailJson(response: MailResponse): Promise<unknown> {
   }
 }
 
-async function freshAddressedMail(
+async function addressedMail(
   request: MailRequest,
   baseUrl: string,
   email: string,
-  afterIso: string,
 ): Promise<AddressedMail[]> {
-  const after = Date.parse(afterIso);
-  if (!Number.isFinite(after)) throw new Error("Invalid mail request time");
   const search = await requestMail(
     request,
     `${baseUrl.replace(/\/$/, "")}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1000`,
@@ -193,6 +195,7 @@ async function freshAddressedMail(
   }
   for (const message of list.messages) {
     if (
+      typeof message.ID !== "string" ||
       !message.ID ||
       !message.Created ||
       !Number.isFinite(Date.parse(message.Created)) ||
@@ -202,13 +205,38 @@ async function freshAddressedMail(
       throw new Error("Invalid Mailpit search payload");
     }
   }
-  return list.messages.filter(
-    (message) =>
-      Date.parse(message.Created!) >= after &&
-      message.To.some(
-        (recipient) => recipient.Address.toLowerCase() === email.toLowerCase(),
-      ),
+  return list.messages.filter((message) =>
+    message.To.some(
+      (recipient) => recipient.Address.toLowerCase() === email.toLowerCase(),
+    ),
   );
+}
+
+async function freshAddressedMail(
+  request: MailRequest,
+  baseUrl: string,
+  email: string,
+  afterIso: string,
+): Promise<AddressedMail[]> {
+  const after = Date.parse(afterIso);
+  if (!Number.isFinite(after)) throw new Error("Invalid mail request time");
+  return (await addressedMail(request, baseUrl, email)).filter(
+    (message) => Date.parse(message.Created!) >= after,
+  );
+}
+
+/** 003 EARS-23: keep the observation boundary independent of inbox/client clocks. */
+export async function captureAddressedMailCheckpoint(
+  request: MailRequest,
+  baseUrl: string,
+  email: string,
+): Promise<AddressedMailCheckpoint> {
+  return {
+    recipient: email.toLowerCase(),
+    messageIds: (await addressedMail(request, baseUrl, email)).map(
+      (message) => message.ID!,
+    ),
+  };
 }
 
 /** 003 EARS-11: prove fresh delivery without reading or logging the code. */
@@ -258,11 +286,28 @@ export async function assertNoAddressedMail(
   baseUrl: string,
   email: string,
   afterIso: string,
+  checkpoint?: AddressedMailCheckpoint,
 ): Promise<void> {
+  if (
+    checkpoint &&
+    (checkpoint.recipient !== email.toLowerCase() ||
+      !Array.isArray(checkpoint.messageIds) ||
+      checkpoint.messageIds.some((id) => typeof id !== "string" || !id))
+  ) {
+    throw new Error("Invalid addressed-mail checkpoint");
+  }
+  const seenIds = checkpoint ? new Set(checkpoint.messageIds) : undefined;
   const deadline = Date.now() + DELIVERY_WINDOW_MS;
   while (true) {
-    if ((await freshAddressedMail(request, baseUrl, email, afterIso)).length) {
-      throw new Error("Unexpected addressed mail after unknown reset request");
+    const messages = seenIds
+      ? await addressedMail(request, baseUrl, email)
+      : await freshAddressedMail(request, baseUrl, email, afterIso);
+    if (messages.some((message) => !seenIds || !seenIds.has(message.ID!))) {
+      throw new Error(
+        seenIds
+          ? "Unexpected addressed mail after observed mailbox checkpoint"
+          : "Unexpected addressed mail after unknown reset request",
+      );
     }
     if (Date.now() >= deadline) return;
     await wait(Math.min(500, deadline - Date.now()));

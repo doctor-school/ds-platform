@@ -120,7 +120,18 @@ test.describe("at 1440 px", () => {
   }) => {
     await page.goto(`${MONTH}&kind=master-klass`);
     const empty = page.getByTestId("events-month-empty");
-    await expect(empty).toBeVisible();
+    // The widen path (#2786): the facet named by its title, the count its
+    // removal finds over the tense, its removal as the primary action and
+    // «Сбросить фильтры» beside it (canvas `emptyOf`).
+    await expect(empty).toContainText("Нет событий по фильтру «Вид события: Мастер-класс»");
+    await expect(empty).toContainText("Без этого фильтра найдётся 7 событий.");
+    await expect(
+      empty.getByRole("link", { name: "Убрать фильтр «Вид события: Мастер-класс»" }),
+    ).toHaveAttribute("href", "/events?view=month&month=2026-09");
+    await expect(empty.getByRole("link", { name: "Сбросить фильтры" })).toHaveAttribute(
+      "href",
+      "/events?view=month&month=2026-09",
+    );
     await expect(page.getByTestId("month-grid-desktop")).toHaveCount(0);
   });
 
@@ -172,6 +183,9 @@ test.describe("at 1440 px", () => {
     await specialty.getByRole("combobox").click();
     await page.getByRole("option", { name: "Неврология" }).click();
     await expect(page).toHaveURL(/specialty=nevrologiya/);
+    await expect(page.getByTestId("events-feed-empty")).toContainText(
+      "Нет событий по фильтру «Специальность: Неврология»",
+    );
     const offer = page.getByTestId("events-feed-empty").getByRole("link", {
       name: "Показать смежные специальности",
     });

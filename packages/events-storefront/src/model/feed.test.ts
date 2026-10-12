@@ -331,6 +331,8 @@ describe("myEventsCut — 019 EARS-11", () => {
 describe("emptyFeedState — 019 EARS-9, LD-9", () => {
   const EVENTS = { one: "событие", few: "события", many: "событий" };
   const EFIRS = { one: "эфир", few: "эфира", many: "эфиров" };
+  const DOCTOR_EMPTY = { listing: "/events", noun: EVENTS, copy: FEED_COPY, filterSet: "doctor" } as const;
+  const ACADEMY_EMPTY = { listing: "/webinars", noun: EFIRS, copy: FEED_COPY, filterSet: "academy" } as const;
   /** A widen read answering `counts[i]` for the i-th asked removal; `null` = failed. */
   function reads(...counts: (number | null)[]) {
     const asked: RawQueryRecord[] = [];
@@ -346,14 +348,26 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     const { asked, matching } = reads(3);
     const state = await emptyFeedState(
       { tense: "upcoming", format: ["offline"], city: ["Казань"] },
-      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+      { ...DOCTOR_EMPTY, matching },
     );
     expect(state.title).toBe("Нет событий по фильтру «Формат: Офлайн»");
     expect(state.description).toBe("Без этого фильтра найдётся 3 события.");
-    expect(state.action?.label).toBe("Убрать фильтр «Формат: Офлайн»");
-    expect(state.action?.href).toBe("/events?city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C");
+    expect(state.widen?.label).toBe("Убрать фильтр «Формат: Офлайн»");
+    expect(state.widen?.href).toBe("/events?city=%D0%9A%D0%B0%D0%B7%D0%B0%D0%BD%D1%8C");
     // The tense rides with every widen read; the read stops at the first hit.
     expect(asked).toEqual([{ tense: "upcoming", format: undefined, city: ["Казань"] }]);
+  });
+
+  it("EARS-9: a facet-emptied state carries «Сбросить фильтры» beside the widening — the page without the host's facets, tense and view kept (canvas emptyOf)", async () => {
+    const state = await emptyFeedState(
+      { tense: "past", view: "month", month: "2026-11", kind: ["lecture"], nmo: "true" },
+      { ...DOCTOR_EMPTY, matching: reads(4).matching },
+    );
+    expect(state.widen?.label).toBe("Убрать фильтр «Вид события: lecture»");
+    expect(state.reset).toEqual({
+      label: "Сбросить фильтры",
+      href: "/events?view=month&month=2026-11&tense=past",
+    });
   });
 
   it("EARS-9: a facet whose removal still finds nothing is passed over for the next one (#2786)", async () => {
@@ -361,9 +375,7 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     const state = await emptyFeedState(
       { tense: "past", project: ["golden-school"], topic: ["genetics"] },
       {
-        listing: "/webinars",
-        noun: EFIRS,
-        copy: FEED_COPY,
+        ...ACADEMY_EMPTY,
         titles: {
           project: [{ slug: "golden-school", title: "Золотая школа", count: 0 }],
           topic: [{ slug: "genetics", title: "Генетика", count: 0 }],
@@ -378,22 +390,23 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     ]);
     expect(state.title).toBe("Нет эфиров по фильтру «Проект: Золотая школа»");
     expect(state.description).toBe("Без этого фильтра найдётся 21 эфир.");
-    expect(state.action).toEqual({
+    expect(state.widen).toEqual({
       label: "Убрать фильтр «Проект: Золотая школа»",
       href: "/webinars?tense=past&topic=genetics",
     });
   });
 
-  it("EARS-9: when no single removal finds events, the state says so and offers no widening (#2786)", async () => {
+  it("EARS-9: when no single removal finds events, the state says so, offers no widening and keeps «Сбросить фильтры» (#2786)", async () => {
     const { matching } = reads(0, 0);
     const state = await emptyFeedState(
       { kind: ["lecture"], nmo: "true" },
-      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+      { ...DOCTOR_EMPTY, matching },
     );
     expect(state).toEqual({
       title: "По выбранным фильтрам событий нет",
       description: "Сбросьте фильтры, чтобы увидеть всю ленту.",
-      action: null,
+      widen: null,
+      reset: { label: "Сбросить фильтры", href: "/events" },
     });
   });
 
@@ -401,7 +414,7 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     const { matching } = reads(null, 5);
     const state = await emptyFeedState(
       { format: ["offline"], city: ["Казань"] },
-      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+      { ...DOCTOR_EMPTY, matching },
     );
     expect(state.title).toBe("Нет событий по фильтру «Город: Казань»");
     expect(state.description).toBe("Без этого фильтра найдётся 5 событий.");
@@ -411,12 +424,29 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     const { asked, matching } = reads(2);
     const state = await emptyFeedState(
       { specialty: ["cardiology"], format: ["offline"] },
-      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+      { ...DOCTOR_EMPTY, matching },
     );
     expect(asked).toEqual([{ specialty: undefined, format: ["offline"] }]);
     expect(state.description).toBe("В вашей и смежных специальностях найдётся 2 события.");
-    expect(state.action?.label).toBe("Показать смежные специальности");
-    expect(state.action?.href).toBe("/events?format=offline");
+    expect(state.widen?.label).toBe("Показать смежные специальности");
+    expect(state.widen?.href).toBe("/events?format=offline");
+  });
+
+  it("EARS-9: a picked specialty is named «Специальность: <name>» by the first picked specialty (canvas facetChips)", async () => {
+    const names: Record<string, string> = { neurology: "Неврология", cardiology: "Кардиология" };
+    const state = await emptyFeedState(
+      { specialty: ["neurology", "cardiology"] },
+      { ...DOCTOR_EMPTY, specialtyName: (code) => names[code], matching: reads(7).matching },
+    );
+    expect(state.title).toBe("Нет событий по фильтру «Специальность: Неврология»");
+  });
+
+  it("EARS-9: a picked specialty the specialty book does not name is named by its code", async () => {
+    const state = await emptyFeedState(
+      { specialty: ["x-unknown"] },
+      { ...DOCTOR_EMPTY, matching: reads(1).matching },
+    );
+    expect(state.title).toBe("Нет событий по фильтру «Специальность: x-unknown»");
   });
 
   it("EARS-9: an Academy topic chip comes first and offers «Показать все темы»", async () => {
@@ -424,60 +454,79 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     const state = await emptyFeedState(
       { project: ["orto"], topic: ["metrics"] },
       {
-        listing: "/webinars",
-        noun: EFIRS,
-        copy: FEED_COPY,
+        ...ACADEMY_EMPTY,
         titles: { topic: [{ slug: "metrics", title: "Медико-биологические науки", count: 0 }] },
         matching,
       },
     );
     expect(state.title).toBe("Нет эфиров по фильтру «Тема: Медико-биологические науки»");
-    expect(state.action).toEqual({
+    expect(state.widen).toEqual({
       label: "Показать все темы",
       href: "/webinars?project=orto",
     });
+  });
+
+  it("EARS-9: only the host's own facet keys are widen candidates — a crafted foreign key makes no chip and no read (#2786)", async () => {
+    const { asked, matching } = reads(6);
+    const state = await emptyFeedState(
+      {
+        format: ["offline"],
+        kind: ["lecture"],
+        city: ["Казань"],
+        nmo: "true",
+        q: "x",
+        expert: ["ivanov"],
+      },
+      { ...ACADEMY_EMPTY, matching },
+    );
+    expect(asked).toEqual([
+      { format: ["offline"], kind: ["lecture"], city: ["Казань"], nmo: "true", q: "x", expert: undefined },
+    ]);
+    expect(state.title).toBe("Нет эфиров по фильтру «Эксперт: ivanov»");
+  });
+
+  it("EARS-9: an Academy page whose only facet is a foreign key reads the plain empty feed (#2786)", async () => {
+    const { asked, matching } = reads();
+    const state = await emptyFeedState({ format: ["offline"] }, { ...ACADEMY_EMPTY, matching });
+    expect(state).toEqual({ title: "Эфиров нет", description: "", widen: null, reset: null });
+    expect(asked).toEqual([]);
   });
 
   it("EARS-9: a facet with several values selected is passed over without a read — dropping one value cannot widen (#2786)", async () => {
     const { asked, matching } = reads(0, 0);
     const state = await emptyFeedState(
       { format: ["offline", "online"], kind: ["lecture"] },
-      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+      { ...DOCTOR_EMPTY, matching },
     );
     expect(asked).toEqual([{ format: ["offline", "online"], kind: undefined }]);
     expect(state.title).toBe("По выбранным фильтрам событий нет");
-    expect(state.action).toBeNull();
+    expect(state.widen).toBeNull();
   });
 
   it("EARS-9: a crafted URL with many facets makes at most MAX_WIDEN_READS widen reads, then offers no widening (#2786)", async () => {
     const { asked, matching } = reads(0, 0, 0, 0, 9, 9, 9);
     const state = await emptyFeedState(
       {
-        topic: ["t"],
         specialty: ["cardiology"],
         format: ["offline"],
         kind: ["lecture"],
         city: ["Казань"],
         nmo: "true",
-        project: ["p"],
-        expert: ["e"],
         q: "x",
       },
-      { listing: "/events", noun: EVENTS, copy: FEED_COPY, matching },
+      { ...DOCTOR_EMPTY, matching },
     );
     expect(MAX_WIDEN_READS).toBe(4);
     expect(asked).toHaveLength(MAX_WIDEN_READS);
     expect(state.title).toBe("По выбранным фильтрам событий нет");
-    expect(state.action).toBeNull();
+    expect(state.widen).toBeNull();
   });
 
   it("NEW: a kind chip names the kind by its title", async () => {
     const state = await emptyFeedState(
       { kind: ["lecture"] },
       {
-        listing: "/events",
-        noun: EVENTS,
-        copy: FEED_COPY,
+        ...DOCTOR_EMPTY,
         titles: { kind: [{ slug: "lecture", title: "Лекция", count: 0 }] },
         matching: reads(1).matching,
       },
@@ -485,14 +534,12 @@ describe("emptyFeedState — 019 EARS-9, LD-9", () => {
     expect(state.title).toBe("Нет событий по фильтру «Вид события: Лекция»");
   });
 
-  it("no facet ⇒ the plain empty feed, no action, no widen read", async () => {
+  it("EARS-9: no facet ⇒ the plain empty feed, no action, no widen read", async () => {
     const { asked, matching } = reads();
-    const state = await emptyFeedState(
-      {},
-      { listing: "/webinars", noun: EFIRS, copy: FEED_COPY, matching },
-    );
+    const state = await emptyFeedState({}, { ...ACADEMY_EMPTY, matching });
     expect(state.title).toBe("Эфиров нет");
-    expect(state.action).toBeNull();
+    expect(state.widen).toBeNull();
+    expect(state.reset).toBeNull();
     expect(asked).toEqual([]);
   });
 });

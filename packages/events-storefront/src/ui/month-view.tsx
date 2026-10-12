@@ -5,7 +5,7 @@ import type { RawQueryRecord } from "@ds/schemas";
 
 import { LISTING_COPY, eventNounOf } from "../copy/listing-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
-import { hasAppliedFacets } from "../model/facets";
+import { type SpecialtyChoice, hasAppliedFacets } from "../model/facets";
 import { type BlockRead, type EventsFeedPage, pageTodayOf } from "../model/feed";
 import { dayHref, feedTenseOf, monthHref } from "../model/feed-url";
 import {
@@ -48,12 +48,15 @@ export async function MonthView({
   raw,
   month,
   feed,
+  specialties,
   request,
 }: {
   config: EventsStorefrontHostConfig;
   raw: RawQueryRecord;
   month: string | undefined;
   feed: Promise<BlockRead<EventsFeedPage>>;
+  /** The specialty book — read only to name a picked specialty in the empty state. */
+  specialties: Promise<readonly SpecialtyChoice[]>;
   request: ReadRequest;
 }) {
   const t = LISTING_COPY.month;
@@ -130,7 +133,13 @@ export async function MonthView({
   // tense's whole reach (the canvas rule), its facets named by the read's titles.
   const empty =
     entries.ok && entries.value.length === 0 && hasAppliedFacets(raw, config.filterSet)
-      ? await readEmptyFeedState(config, raw, read.ok ? read.value.facetOptions : {}, request)
+      ? await readEmptyFeedState(
+          config,
+          raw,
+          read.ok ? read.value.facetOptions : {},
+          specialties,
+          request,
+        )
       : null;
 
   const body = (() => {

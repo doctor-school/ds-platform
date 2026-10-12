@@ -19,6 +19,7 @@ import {
   plainEmptyFeedState,
   showMoreLabel,
 } from "../model/feed";
+import type { SpecialtyChoice } from "../model/facets";
 import { feedTenseOf, showMoreHref } from "../model/feed-url";
 import {
   type ForwardedSession,
@@ -53,19 +54,24 @@ export async function readMyEvents(
  * The empty state of either view (019 EARS-9, #2786): each applied condition in
  * the canvas order is counted by a feed read of the same tense without it —
  * one read at a time, stopping at the first that finds events; a failed read
- * counts nothing for its condition. Made only for an empty reading.
+ * counts nothing for its condition. A picked specialty is named from the
+ * specialty book. Made only for an empty reading.
  */
-export function readEmptyFeedState(
+export async function readEmptyFeedState(
   config: EventsStorefrontHostConfig,
   query: RawQueryRecord,
   titles: FeedFacetOptions,
+  specialties: Promise<readonly SpecialtyChoice[]>,
   request: ReadRequest,
 ): Promise<EmptyFeedState> {
+  const book = await specialties;
   return emptyFeedState(query, {
     listing: config.routes.listing,
     noun: eventNounOf(config.copy),
     copy: FEED_COPY,
+    filterSet: config.filterSet,
     titles,
+    specialtyName: (code) => book.find((choice) => choice.code === code)?.name,
     matching: async (without) => {
       const read = await fetchEventsFeed(config, without, request);
       return read.ok ? read.value.matching : null;
@@ -207,12 +213,15 @@ export async function FeedSection({
   query,
   feed,
   mine,
+  specialties,
   request,
 }: {
   config: EventsStorefrontHostConfig;
   query: RawQueryRecord;
   feed: Promise<BlockRead<EventsFeedPage>>;
   mine: Promise<BlockRead<readonly MyEventItem[] | null>>;
+  /** The specialty book — read only to name a picked specialty in the empty state. */
+  specialties: Promise<readonly SpecialtyChoice[]>;
   request: ReadRequest;
 }) {
   const tense = feedTenseOf(query);
@@ -229,7 +238,7 @@ export async function FeedSection({
   const page = read.value;
   const more = showMoreHref(config.routes.listing, query, page.horizon);
   const empty = feedReadsEmpty(page)
-    ? await readEmptyFeedState(config, query, page.facetOptions, request)
+    ? await readEmptyFeedState(config, query, page.facetOptions, specialties, request)
     : plainEmptyFeedState(eventNounOf(config.copy), FEED_COPY);
   return (
     <>

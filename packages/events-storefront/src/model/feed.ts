@@ -10,12 +10,13 @@ import {
   rawQueryList,
   rawQueryScalar,
 } from "@ds/schemas";
-import type { DayAgendaRow, EventListItem } from "@ds/design-system/blocks";
+import type { DayAgendaRow, EventListItem, EventsFilterHost } from "@ds/design-system/blocks";
 
 import type { FeedCopy } from "../copy/feed-copy";
 import { type EventsStorefrontHostConfig, eventPageHref } from "../host-config";
 import { type PluralNoun, formatEventCount } from "./event-count";
-import { pageHref, withoutFeedParam, withoutFeedQuery } from "./feed-url";
+import { hasAppliedFacets, resetFacetsHref } from "./facets";
+import { FACET_KEYS, pageHref, withoutFeedQuery } from "./feed-url";
 import { isRecordingPlayable } from "./recording-cta";
 
 /** The feed's reading: «Будущие» or «Прошедшие» (019 LD-1, LD-13). */
@@ -345,15 +346,27 @@ export function feedReadsEmpty(page: {
   return page.cards.length === 0 && page.remaining <= 0;
 }
 
+/** One action of the empty state — a link to another reading of the page. */
+export interface EmptyFeedAction {
+  readonly label: string;
+  readonly href: string;
+}
+
+/**
+ * The empty state (canvas `emptyOf`): the widening, when one removal finds
+ * events, as the primary action, and «Сбросить фильтры» beside it whenever a
+ * facet is applied.
+ */
 export interface EmptyFeedState {
   readonly title: string;
   readonly description: string;
-  readonly action: { readonly label: string; readonly href: string } | null;
+  readonly widen: EmptyFeedAction | null;
+  readonly reset: EmptyFeedAction | null;
 }
 
 /** The empty state of a feed with nothing to widen — no facet applied. */
 export function plainEmptyFeedState(noun: PluralNoun, copy: FeedCopy): EmptyFeedState {
-  return { title: copy.feed.empty(noun.many), description: "", action: null };
+  return { title: copy.feed.empty(noun.many), description: "", widen: null, reset: null };
 }
 
 /**
@@ -385,7 +398,11 @@ export type WidenMatching = (without: RawQueryRecord) => Promise<number | null>;
  * each asked in turn how many events of the tense its removal finds; the first
  * that finds any is named with that count and its removal offered (a picked
  * specialty widens to the adjacent ones). When none does, the state says so
- * and offers no widening. Facet values are named by the read's titles.
+ * and offers no widening. Either way it offers «Сбросить фильтры» — the page
+ * without the host's facets (canvas `emptyOf`). Facet values are named by the
+ * read's titles, a picked specialty by the specialty book. Only the host's own
+ * facet keys (`FACET_KEYS[filterSet]`) are conditions: a foreign key in a
+ * crafted URL reaches no read, so it makes no chip and spends no widen read.
  *
  * At most one widen read per facet key, and at most `MAX_WIDEN_READS` per
  * empty page: the keys come from the URL, so the read count is bounded by
@@ -400,24 +417,32 @@ export async function emptyFeedState(
     listing,
     noun,
     copy,
+    filterSet,
     titles = {},
+    specialtyName = () => undefined,
     matching,
   }: {
     listing: string;
     noun: PluralNoun;
     copy: FeedCopy;
+    /** The host's facet set — only its keys are conditions of this page. */
+    filterSet: EventsFilterHost;
     /** The read's facet options — a facet value is named by its title. */
     titles?: FeedFacetOptions;
+    /** A picked specialty's name from the specialty book, by its code. */
+    specialtyName?: (code: string) => string | undefined;
     matching: WidenMatching;
   },
 ): Promise<EmptyFeedState> {
+  if (!hasAppliedFacets(query, filterSet)) return plainEmptyFeedState(noun, copy);
+
+  const own = new Set(FACET_KEYS[filterSet]);
   const titleOf = (key: string, value: string) =>
     titles[key]?.find((option) => option.slug === value)?.title ?? value;
   const chips: EmptyFeedChip[] = [];
-  let applied = false;
   const chipsOf = (key: string, label: (value: string) => string, widen?: string) => {
+    if (!own.has(key)) return;
     const values = rawQueryList(query[key]) ?? [];
-    if (values.length > 0) applied = true;
     if (values.length !== 1) return;
     chips.push({
       label: label(values[0]!),
@@ -427,13 +452,15 @@ export async function emptyFeedState(
   };
 
   chipsOf("topic", (v) => `${copy.facet.topic}: ${titleOf("topic", v)}`, copy.feed.widenTopic);
-  const specialty = rawQueryList(query.specialty);
+  const specialty = own.has("specialty") ? rawQueryList(query.specialty) : undefined;
   if (
     specialty !== undefined &&
+    specialty.length > 0 &&
     !(specialty.length === 1 && ["mine-and-adjacent", "all"].includes(specialty[0]!))
   ) {
+    const first = specialty[0]!;
     chips.push({
-      label: copy.facet.specialty,
+      label: `${copy.facet.specialty}: ${specialtyName(first) ?? first}`,
       without: withoutFeedQuery(query, "specialty"),
       widen: copy.feed.widenSpecialty,
       specialty: true,
@@ -445,27 +472,20 @@ export async function emptyFeedState(
   );
   chipsOf("kind", (v) => `${copy.facet.kind}: ${titleOf("kind", v)}`);
   chipsOf("city", (v) => `${copy.facet.city}: ${v}`);
-  if (rawQueryBoolean(query.nmo) === true) {
+  if (own.has("nmo") && rawQueryBoolean(query.nmo) === true) {
     chips.push({ label: copy.facet.nmo, without: withoutFeedQuery(query, "nmo") });
   }
   chipsOf("project", (v) => `${copy.facet.project}: ${titleOf("project", v)}`);
   chipsOf("expert", (v) => `${copy.facet.expert}: ${titleOf("expert", v)}`);
-  const q = rawQueryScalar(query.q);
+  const q = own.has("q") ? rawQueryScalar(query.q) : undefined;
   if (q !== undefined) {
     chips.push({ label: copy.facet.query(q), without: withoutFeedQuery(query, "q") });
   }
 
-  if (!applied && chips.length === 0) {
-    if (rawQueryBoolean(query.free) !== undefined) {
-      return {
-        title: copy.feed.emptyFiltered(noun.many),
-        description: copy.feed.emptyFilteredBody,
-        action: { label: copy.feed.resetFilters, href: withoutFeedParam(listing, query, "free") },
-      };
-    }
-    return plainEmptyFeedState(noun, copy);
-  }
-
+  const reset: EmptyFeedAction = {
+    label: copy.feed.resetFilters,
+    href: resetFacetsHref(listing, query, filterSet),
+  };
   // One widen read at a time, stopping at the first that finds events.
   for (const chip of chips.slice(0, MAX_WIDEN_READS)) {
     const found = await matching(chip.without);
@@ -476,15 +496,17 @@ export async function emptyFeedState(
       description: chip.specialty
         ? copy.feed.widenSpecialtyCount(count)
         : copy.feed.widenCount(count),
-      action: {
+      widen: {
         label: chip.widen ?? copy.feed.removeFacet(chip.label),
         href: pageHref(listing, chip.without),
       },
+      reset,
     };
   }
   return {
     title: copy.feed.emptyFiltered(noun.many),
     description: copy.feed.emptyFilteredBody,
-    action: null,
+    widen: null,
+    reset,
   };
 }

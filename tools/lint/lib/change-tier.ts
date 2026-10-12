@@ -79,6 +79,19 @@ const AREA_ASK_PATH_RES: readonly RegExp[] = [
   /^packages\/(?:db|schemas|api-client)\//,
   /^apps\/api\//,
   /^apps\/docs\/content\/(?:specs|adr|skills)\//,
+  // #2808: auth, server endpoints and server actions — a verified Show merges
+  // before its review, so these must never reach Show. Plain UI route files
+  // (page/layout/loading/error) stay Show.
+  /^packages\/auth-flow\//,
+  /(?:^|\/)lib\/(?:.*\/)?[^/]*auth/i,
+  /(?:^|\/)app\/(?:.*\/)?\(auth\)\//,
+  /(?:^|\/)app\/(?:.*\/)?api\//,
+  /(?:^|\/)route\.[cm]?[jt]sx?$/,
+  /(?:^|\/)actions\//,
+  // `*action*` sources as a word (`register-action.ts`, `actions.ts`,
+  // `submitAction.tsx`), not `interaction` / `transaction`.
+  /(?:^|\/)(?:[^/]*[._-])?actions?[._-][^/]*$/i,
+  /(?:^|\/)[^/]*[a-z]Actions?(?:[A-Z._-][^/]*)?$/,
 ];
 
 /** Ask whatever the file is — CI, tooling, instructions, dependencies,

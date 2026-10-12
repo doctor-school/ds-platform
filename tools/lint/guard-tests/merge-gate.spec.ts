@@ -910,6 +910,37 @@ describe("merge-gate verifyChangeTierMergeOnGreen() (#2584, #2808)", () => {
     ).toBe(false);
   });
 
+  it.each([
+    "packages/auth-flow/src/flow/login.ts",
+    "apps/portal/lib/auth/session.ts",
+    "apps/doctor/app/(auth)/login/page.tsx",
+    "apps/portal/app/api/auth/callback/route.ts",
+    "apps/portal/app/actions/register.ts",
+  ])(
+    "show: an auth / server / action file declared show (%s) still needs the pre-merge verdict",
+    (filename) => {
+      const result = verifyChangeTierMergeOnGreen(
+        [{ ...libFile, filename }],
+        meta(showBody, 1),
+        head,
+        head,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.reason).toContain("minimum ask");
+    },
+  );
+
+  it("show: a page.tsx-only UI change still verifies as show", () => {
+    expect(
+      verifyChangeTierMergeOnGreen(
+        [{ ...libFile, filename: "apps/portal/app/feed/page.tsx" }],
+        meta(showBody, 1),
+        head,
+        head,
+      ),
+    ).toEqual({ ok: true, tier: "show", files: 1, lines: 14 });
+  });
+
   it("show: a PR body with a placeholder show reason is ask and needs the verdict", () => {
     expect(
       verifyChangeTierMergeOnGreen(

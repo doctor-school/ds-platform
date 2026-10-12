@@ -360,7 +360,7 @@ export function modeAVerdictWord(rawBody) {
 export function classifyModeAVerdict(reviews, headSha) {
   const modeA = (Array.isArray(reviews) ? reviews : []).flatMap((r) => {
     const body = normalizeReviewBody(r?.body);
-    const m = modeAVerdictWord(body);
+    const m = modeAVerdictWord(r?.body);
     if (!m) return [];
     return [
       {

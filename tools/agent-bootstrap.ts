@@ -366,12 +366,20 @@ async function ghPRs(): Promise<GhPRGroups> {
 
 // ── post-merge Show review (#2808) ──────────────────────────────────────────
 // A verified Show PR merges on green CI; its Mode (a) review runs after the
-// merge. This section is what keeps that review from being forgotten.
-export const SHOW_REVIEW_WINDOW_DAYS = 14;
+// merge. This section is what keeps that review from being forgotten: a Show
+// PR stays listed until its verdict exists — there is no rolling window.
+//
+// The rule's effective start. PRs merged before it were under the old rule
+// (Show reviewed before merge) and owe nothing. Set when #2808 was finalised
+// (its rework commit, on top of origin/main 118493a0); a pre-rule Show PR
+// merged between this instant and #2808's landing carries its pre-merge
+// verdict pinned to the merged head, which `unreviewedShowPrs` already clears.
+export const SHOW_REVIEW_SINCE = "2026-10-12T10:19:42Z";
+/** `gh pr list --limit`; a full page is reported, never silently truncated. */
+export const SHOW_REVIEW_LIMIT = 100;
 
-/** The `merged:>=` search bound for the window, as a UTC date. */
-export function showReviewSearchSince(nowMs: number, days: number): string {
-  return new Date(nowMs - days * 86_400_000).toISOString().slice(0, 10);
+export function showReviewSearchQuery(): string {
+  return `"Change-tier: show" in:body merged:>=${SHOW_REVIEW_SINCE.slice(0, 10)}`;
 }
 
 interface MergedPR {
@@ -380,17 +388,26 @@ interface MergedPR {
   mergedAt: string | null;
 }
 
+/** The search returned a full page: older Show PRs may be missing. */
+export function showReviewWarning(prs: unknown[] | null): Warn | null {
+  if (prs === null || prs.length < SHOW_REVIEW_LIMIT) return null;
+  return {
+    source: "gh pr list (merged show)",
+    message: `hit the ${SHOW_REVIEW_LIMIT}-row limit — the post-merge Show review list may be incomplete; raise SHOW_REVIEW_LIMIT in tools/agent-bootstrap.ts`,
+  };
+}
+
 /** `null` = the source could not be read (rendered as unavailable, not none). */
-export function renderShowReviewSection(
-  prs: unknown[] | null,
-  days: number,
-): string[] {
+export function renderShowReviewSection(prs: unknown[] | null): string[] {
   const head = "## Show PRs awaiting post-merge Mode (a)";
   if (prs === null)
     return [head, "(unavailable — gh pr list failed; see Warnings)"];
-  const owing = unreviewedShowPrs(prs) as MergedPR[];
+  const sinceMs = Date.parse(SHOW_REVIEW_SINCE);
+  const owing = (unreviewedShowPrs(prs) as MergedPR[]).filter(
+    (p) => Date.parse(p.mergedAt ?? "") >= sinceMs,
+  );
   if (owing.length === 0)
-    return [head, `(none merged in the last ${days} days)`];
+    return [head, `(none merged since ${SHOW_REVIEW_SINCE})`];
   return [
     head,
     ...owing.map(
@@ -401,7 +418,6 @@ export function renderShowReviewSection(
 }
 
 async function ghMergedShowPRs(): Promise<unknown[] | null> {
-  const since = showReviewSearchSince(Date.now(), SHOW_REVIEW_WINDOW_DAYS);
   try {
     const { stdout } = await execa(
       "gh",
@@ -411,9 +427,9 @@ async function ghMergedShowPRs(): Promise<unknown[] | null> {
         "--state",
         "merged",
         "--search",
-        `"Change-tier: show" in:body merged:>=${since}`,
+        showReviewSearchQuery(),
         "--limit",
-        "100",
+        String(SHOW_REVIEW_LIMIT),
         "--json",
         "number,title,body,mergedAt,headRefOid,reviews,comments",
       ],
@@ -1031,7 +1047,9 @@ async function main(): Promise<void> {
   }
   out.push("");
 
-  out.push(...renderShowReviewSection(mergedShow, SHOW_REVIEW_WINDOW_DAYS));
+  out.push(...renderShowReviewSection(mergedShow));
+  const showWarn = showReviewWarning(mergedShow);
+  if (showWarn) warnings.push(showWarn);
   out.push("");
 
   out.push("## Stage slots");

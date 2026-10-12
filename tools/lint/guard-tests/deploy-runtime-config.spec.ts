@@ -57,7 +57,8 @@ describe("deploy runtime config apply (#1175)", () => {
   it("compares the shipped files with the actual running mounts", () => {
     const script = runtimeConfigComparisonScript();
 
-    expect(script).toContain("docker cp");
+    expect(script).toContain('docker exec "$container_id" cat "$mounted_path"');
+    expect(script).not.toContain("docker cp");
     expect(script).toContain("Caddyfile /etc/caddy/Caddyfile");
     expect(script).toContain("centrifugo/config.json /centrifugo/config.json");
   });

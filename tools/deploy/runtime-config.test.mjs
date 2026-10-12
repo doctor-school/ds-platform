@@ -31,7 +31,7 @@ const SHIPPED = {
   "centrifugo/config.json": '{"new":true}\n',
 };
 
-function runComparison({ containerView }) {
+function runComparison({ containerView, failExec = [] }) {
   const dir = mkdtempSync(join(tmpdir(), "runtime-config-"));
   try {
     const bin = join(dir, "bin");
@@ -49,6 +49,8 @@ function runComparison({ containerView }) {
       join(view, "centrifugo", "config.json"),
       containerView.centrifugo,
     );
+    for (const mountedPath of failExec)
+      writeFileSync(`${view}${mountedPath}.fail`, "");
 
     writeFileSync(join(bin, "sudo"), '#!/usr/bin/env bash\nexec "$@"\n');
     // `docker cp` mimics the bind-mount behaviour: it yields the HOST file.
@@ -59,7 +61,10 @@ host_path() { case "$1" in /etc/caddy/Caddyfile) echo "${compose}/Caddyfile";; /
 case "$1" in
   compose) echo "id-$4" ;;
   cp) cat "$(host_path "\${2#*:}")" > "$3" ;;
-  exec) [ "$3" = cat ] || exit 1; cat "${view}$4" ;;
+  exec) [ "$3" = cat ] || exit 1
+    # A failing exec still emits the shipped bytes: only its exit status may decide.
+    if [ -e "${view}$4.fail" ]; then cat "$(host_path "$4")"; exit 125; fi
+    cat "${view}$4" ;;
   *) exit 1 ;;
 esac
 `,
@@ -97,6 +102,18 @@ test("a container still serving the pre-deploy file is reported stale", () => {
   });
   assert.equal(output, "caddy=mismatch\ncentrifugo=match\n");
   assert.deepEqual(runtimeConfigServicesToRestart(output), ["caddy"]);
+});
+
+test("a failing docker exec is reported stale, never match", () => {
+  const output = runComparison({
+    containerView: {
+      caddy: SHIPPED.Caddyfile,
+      centrifugo: SHIPPED["centrifugo/config.json"],
+    },
+    failExec: ["/centrifugo/config.json"],
+  });
+  assert.equal(output, "caddy=match\ncentrifugo=mismatch\n");
+  assert.deepEqual(runtimeConfigServicesToRestart(output), ["centrifugo"]);
 });
 
 test("containers serving the shipped files match", () => {

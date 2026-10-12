@@ -3119,6 +3119,7 @@ export interface components {
         PublicEventListingPageDto: {
             counts: {
                 past: number;
+                pastSchools: number;
                 upcoming: number;
                 upcomingSchools: number;
             };

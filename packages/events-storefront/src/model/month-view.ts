@@ -8,11 +8,13 @@ import type {
 import {
   type MonthBroadcastEntry,
   type MonthlyEventCount,
+  doctorEventsFeedDayOf,
   formatEventTime,
 } from "@ds/schemas";
 
 import { LISTING_COPY } from "../copy/listing-copy";
 import type { PluralNoun } from "./event-count";
+import type { BlockRead, EventsFeedPage, FeedTense } from "./feed";
 import {
   type MonthDayCell,
   type MonthGrid,
@@ -189,4 +191,25 @@ export function pickerYearsOf(
     });
     return { year, months };
   });
+}
+
+/**
+ * The month the view opens on when the URL names none (#2768). «Будущие» opens
+ * on today's month. «Прошедшие» opens on the МСК month of the latest past event
+ * the feed read holds — that read is the tab's own, every facet applied, and
+ * newest first, so its latest card is the latest matching past event — and on
+ * today's month when there is none (or the read failed).
+ */
+export function defaultDisplayedMonth(
+  read: BlockRead<EventsFeedPage>,
+  tense: FeedTense,
+  today: string,
+): string {
+  if (tense === "past" && read.ok && read.value.cards.length > 0) {
+    const latest = Math.max(
+      ...read.value.cards.map((card) => new Date(card.startsAt).getTime()),
+    );
+    return doctorEventsFeedDayOf(new Date(latest)).slice(0, 7);
+  }
+  return today.slice(0, 7);
 }

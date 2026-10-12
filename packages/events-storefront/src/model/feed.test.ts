@@ -236,12 +236,18 @@ describe("buildFeedItems — the one card projection of both hosts", () => {
 });
 
 describe("showMoreLabel", () => {
-  it("NEW: «Показать ещё» states the next batch and the remainder", () => {
+  it("NEW: «Показать ещё» on «Будущие» states the next batch and the remainder", () => {
     // N is the api's `nextBatch` — the events the next widening adds — never a
     // fixed page size: a 14-day step holding 6 of 45 reads «6 из 45».
-    expect(showMoreLabel(6, 45, FEED_COPY)).toBe("Показать ещё 6 из 45");
-    expect(showMoreLabel(3, 3, FEED_COPY)).toBe("Показать ещё 3 из 3");
-    expect(showMoreLabel(0, 0, FEED_COPY)).toBe("Показать ещё");
+    expect(showMoreLabel(6, 45, FEED_COPY, "upcoming")).toBe("Показать ещё 6 из 45");
+    expect(showMoreLabel(3, 3, FEED_COPY, "upcoming")).toBe("Показать ещё 3 из 3");
+    expect(showMoreLabel(0, 0, FEED_COPY, "upcoming")).toBe("Показать ещё");
+  });
+
+  it("NEW: «Показать ещё» on «Прошедшие» names the next step and what is left after this screen (#2768)", () => {
+    expect(showMoreLabel(10, 25, FEED_COPY, "past")).toBe("Показать ещё 10 (осталось 25)");
+    expect(showMoreLabel(5, 5, FEED_COPY, "past")).toBe("Показать ещё 5 (осталось 5)");
+    expect(showMoreLabel(0, 0, FEED_COPY, "past")).toBe("Показать ещё");
   });
 });
 

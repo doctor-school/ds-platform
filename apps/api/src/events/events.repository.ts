@@ -552,7 +552,12 @@ export class EventsRepository {
   async publicListingCounts(
     cutoff: Date,
     facets: AcademyEventFacets = NO_ACADEMY_FACETS,
-  ): Promise<{ upcoming: number; past: number; upcomingSchools: number }> {
+  ): Promise<{
+    upcoming: number;
+    past: number;
+    upcomingSchools: number;
+    pastSchools: number;
+  }> {
     const narrow = this.facetWhere(facets);
     const [upcomingRow, pastRow] = await Promise.all([
       this.db
@@ -563,7 +568,10 @@ export class EventsRepository {
         .from(events)
         .where(and(...listingWhere("upcoming", cutoff, undefined, narrow))),
       this.db
-        .select({ count: sql<number>`count(*)::int` })
+        .select({
+          count: sql<number>`count(*)::int`,
+          schools: sql<number>`count(DISTINCT ${events.school})::int`,
+        })
         .from(events)
         .where(and(...listingWhere("past", null, undefined, narrow))),
     ]);
@@ -571,6 +579,7 @@ export class EventsRepository {
       upcoming: upcomingRow[0]?.count ?? 0,
       past: pastRow[0]?.count ?? 0,
       upcomingSchools: upcomingRow[0]?.schools ?? 0,
+      pastSchools: pastRow[0]?.schools ?? 0,
     };
   }
 

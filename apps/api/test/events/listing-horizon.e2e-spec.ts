@@ -16,7 +16,10 @@ import {
   type UpcomingBroadcastCard,
 } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
-import { EVENT_HORIZON_ROW_CAP } from "../../src/events/event-horizon.js";
+import {
+  EVENT_HORIZON_PAST_STEP,
+  EVENT_HORIZON_ROW_CAP,
+} from "../../src/events/event-horizon.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
@@ -167,8 +170,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       hybrid = await makeEvent({ offsetMs: 3 * DAY, format: "hybrid" });
       far = await makeEvent({ offsetMs: 20 * DAY });
       pastNear = await makeEvent({ offsetMs: -3 * DAY, state: "ended" });
-      // Thirty days back: past the 14-day default, so only a BACKWARD widening
-      // of «Прошедшие» reaches it.
+      // Thirty days back: older than a stated 14-day `from`, so from there only
+      // a BACKWARD widening of «Прошедшие» reaches it.
       pastOld = await makeEvent({ offsetMs: -30 * DAY, state: "ended" });
       // Four hundred days back: older than the widest single «Будущие» horizon
       // — the archive must still reach it (no age floor on «Прошедшие»).
@@ -233,12 +236,23 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(upcoming.horizon?.nextTo).not.toBeNull();
       expect(upcoming.pagination.nextCursor).toBeNull();
 
+      // 019 LD-2 — «Прошедшие» pages by count: the default extent is the 10
+      // most recent past events, its `from` the day of the oldest of them
+      // (whole days, so that day is shown whole).
       const past = await page("timeframe=past");
-      expect(past.horizon?.from).toBe(addDoctorEventsFeedDays(today, -14));
       expect(past.horizon?.today).toBe(doctorEventsFeedDayOf(new Date()));
       expect(past.horizon?.to).toBe(addDoctorEventsFeedDays(today, 1));
-      expect(past.data.map((card) => card.id)).toContain(pastNear.id);
-      expect(past.data.map((card) => card.id)).not.toContain(pastOld.id);
+      expect(past.data.length).toBeGreaterThanOrEqual(
+        Math.min(EVENT_HORIZON_PAST_STEP, past.data.length + past.horizon!.remaining),
+      );
+      const days = past.data.map((card) =>
+        doctorEventsFeedDayOf(new Date(card.startsAt)),
+      );
+      expect(days.at(-1)).toBe(past.horizon?.from);
+      // Past the 10th card only the `from` day's own events follow.
+      expect(
+        days.slice(EVENT_HORIZON_PAST_STEP).every((day) => day === past.horizon?.from),
+      ).toBe(true);
       // «Показать ещё» from the bare past read walks back to the −30 event.
       let extent = past;
       while (extent.horizon?.nextFrom) {
@@ -324,15 +338,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(extent.pagination.hasMore).toBe(false);
     });
 
-    it("NEW: «Прошедшие» has no age floor — an event 400 days back is reached by repeated «Показать ещё» (row 32, 014 archive)", async () => {
+    it("NEW: «Прошедшие» has no age floor — an event 400 days back is reached by repeated «Показать ещё», each step adding the next 10 (row 32, 014 archive, LD-2)", async () => {
       const first = await page("timeframe=past");
-      expect(first.data.map((card) => card.id)).not.toContain(pastAncient.id);
       let extent = first;
-      while (extent.horizon?.nextFrom) {
+      while (
+        extent.horizon?.nextFrom &&
+        !extent.data.some((card) => card.id === pastAncient.id)
+      ) {
+        const before = extent;
         extent = await page(
           `timeframe=past&from=${extent.horizon.nextFrom}&to=${first.horizon!.to}`,
         );
-        if (extent.data.some((card) => card.id === pastAncient.id)) break;
+        // Each step adds the batch it named: the next 10 (or the remainder),
+        // more only when the oldest day holds more.
+        expect(extent.data.length - before.data.length).toBe(
+          before.horizon!.nextBatch,
+        );
+        expect(before.horizon!.nextBatch).toBeGreaterThanOrEqual(
+          Math.min(EVENT_HORIZON_PAST_STEP, before.horizon!.remaining),
+        );
       }
       expect(extent.data.map((card) => card.id)).toContain(pastAncient.id);
       // A hand-edited ancient `from` is never clamped to a year — only to the

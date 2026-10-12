@@ -54,9 +54,20 @@ export type DoctorEventsFeedSpecialtyMode = z.infer<
   typeof DoctorEventsFeedSpecialtyModeSchema
 >;
 
-/** The default horizon width and the step «показать ещё» adds to it, in days. */
+/**
+ * «Будущие»: the default horizon width and the step «показать ещё» adds to it,
+ * in days.
+ */
 export const DOCTOR_EVENTS_FEED_HORIZON_DAYS = 14;
 export const DOCTOR_EVENTS_FEED_HORIZON_STEP_DAYS = 14;
+/**
+ * «Прошедшие» pages by COUNT, not by days (019 LD-2, «Amendment — 2026-10-12»):
+ * the default screen is this many most recent past events and every
+ * «показать ещё» adds this many older ones (the last step the remainder). The
+ * extent stays `from`/`to` in whole МСК days, so a day the step's last event
+ * falls on is shown whole.
+ */
+export const DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS = 10;
 /** The widest horizon a single read will serve; a wider `to` is clamped, never rejected. */
 export const DOCTOR_EVENTS_FEED_MAX_HORIZON_DAYS = 365;
 

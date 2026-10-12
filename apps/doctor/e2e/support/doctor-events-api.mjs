@@ -100,16 +100,19 @@ const ALL_DAYS = [...BASE_DAYS, WIDENED_DAY];
  * FIRST: the real service selects the past tense by lifecycle
  * (`PAST_BROADCAST_STATES`) and orders it `starts_at DESC`
  * (`DoctorEventsRepository.findFeedRows`, proven against the database in
- * `doctor-events-feed.e2e-spec.ts`). The default past window is the service's
- * `[today − 14, tomorrow)` with this fixture's today (2026-09-01). Two ended
- * events sit inside it: one with a published 54-minute recording («Запись · 54
- * мин» + «Смотреть запись») and one with nothing published — the `preparing`
- * projection the real service attaches to every ended card without a published
- * cut («Без записи», no action); one older event lies beyond the window so
- * «Показать ещё» widens `from` backward to it.
+ * `doctor-events-feed.e2e-spec.ts`). «Прошедшие» pages by COUNT (019 LD-2,
+ * «Amendment — 2026-10-12»): the default screen is the 10 most recent past
+ * events before tomorrow (this fixture's today is 2026-09-01), its `from` the
+ * day of the 10th, in whole days. Two of them carry the recording answers: one
+ * with a published 54-minute recording («Запись · 54 мин» + «Смотреть запись»)
+ * and one with nothing published — the `preparing` projection the real service
+ * attaches to every ended card without a published cut («Без записи», no
+ * action); eight разборы of 2026-08-10 complete the ten, and one older event
+ * lies beyond them so «Показать ещё» widens `from` backward to it.
  */
-const PAST_DEFAULT_FROM = "2026-08-18";
 const PAST_DEFAULT_TO = "2026-09-02";
+/** `DOCTOR_EVENTS_FEED_PAST_STEP_EVENTS` (packages/schemas). */
+const PAST_STEP_EVENTS = 10;
 const PUBLISHED_RECORDING = {
   state: "montage",
   primaryKind: "edited",
@@ -146,6 +149,16 @@ const PAST_DAYS = [
         recording: NOTHING_PUBLISHED,
       }),
     ],
+  },
+  {
+    day: "2026-08-10",
+    label: "10 августа, понедельник",
+    items: Array.from({ length: 8 }, (_unused, index) =>
+      card(`past-fill-${index + 1}`, `2026-08-10T0${index + 1}:00:00.000Z`, {
+        state: "recorded",
+        recording: NOTHING_PUBLISHED,
+      }),
+    ).reverse(),
   },
   {
     day: "2026-07-30",
@@ -202,18 +215,17 @@ const dayGap = (from, to) =>
   );
 
 /**
- * The real `resolveEventHorizonBeyond` past branch: the next `from` is
- * `to − (width + k·STEP)`, k the fewest whole steps that cover the newest
- * fixture day before `from`; `null` when none lies before it.
+ * The real `pastStepFrom` (apps/api `event-horizon.ts`): the `from` that takes
+ * in the next `PAST_STEP_EVENTS` fixture events older than `bound` — the day
+ * of the step's last (oldest) one, whole days; `null` when none lies before it.
  */
-function nextFromBefore(from, to) {
-  const before = PAST_DAYS.map((group) => group.day)
-    .filter((day) => day < from)
+function pastStepFrom(bound) {
+  const days = PAST_DAYS.filter((group) => group.day < bound)
+    .flatMap((group) => group.items.map(() => group.day))
     .sort()
-    .at(-1);
-  if (before === undefined) return null;
-  const steps = Math.ceil(dayGap(before, from) / HORIZON_STEP_DAYS);
-  return addDays(to, -(dayGap(from, to) + steps * HORIZON_STEP_DAYS));
+    .reverse();
+  if (days.length === 0) return null;
+  return days[Math.min(PAST_STEP_EVENTS, days.length) - 1];
 }
 
 const itemCount = (days) =>
@@ -459,13 +471,15 @@ const server = createServer((request, response) => {
   if (url.pathname === "/v1/storefront/doctor/events") {
     if (feedFailing) return json(response, 500, { status: 500 });
     if (url.searchParams.get("tense") === "past") {
-      // «Прошедшие» widens BACKWARD: `from` moves, `to` stays (019 LD-2, D2).
-      const from = url.searchParams.get("from") ?? PAST_DEFAULT_FROM;
+      // «Прошедшие» widens BACKWARD by a count step: `from` moves, `to` stays
+      // (019 LD-2, D2).
       const to = url.searchParams.get("to") ?? PAST_DEFAULT_TO;
+      const from =
+        url.searchParams.get("from") ?? pastStepFrom(to) ?? addDays(to, -15);
       const days = PAST_DAYS.filter(
         (group) => group.day >= from && group.day < to,
       );
-      const nextFrom = nextFromBefore(from, to);
+      const nextFrom = pastStepFrom(from);
       return json(response, 200, {
         tense: "past",
         // D10 — every read carries the api's (here: pinned) today.

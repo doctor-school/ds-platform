@@ -62,6 +62,8 @@ export const FEED_COPY = {
     showMore: "Показать ещё",
     showMoreOf: (batch: number, remaining: number) =>
       `Показать ещё ${batch} из ${remaining}`,
+    showMorePast: (batch: number, remaining: number) =>
+      `Показать ещё ${batch} (осталось ${remaining})`,
     errorTitle: "Не удалось загрузить ленту событий",
     errorBody: "Сервер не ответил. Проверьте соединение и попробуйте снова.",
     empty: (manyNoun: string) =>

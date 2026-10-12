@@ -223,9 +223,11 @@ describe("dayHref — one day-href rule over the extent (row 57)", () => {
     const near = params(dayHref("/events", { format: "online" }, "2026-08-25", HORIZON, TODAY));
     expect(near.get("tense")).toBe("past");
     expect(near.get("day")).toBe("2026-08-25");
-    // Inside the default «Прошедшие» extent (14 days back): no bound is written.
-    expect(near.get("from")).toBeNull();
-    expect(near.get("to")).toBeNull();
+    // NEW (#2768): the default «Прошедшие» extent is the 10 most recent past
+    // events — the data's, unknown here — so the switch always writes the
+    // extent back to the day, and the day is inside the read.
+    expect(near.get("from")).toBe("2026-08-25");
+    expect(near.get("to")).toBe("2026-09-02");
     expect(near.get("format")).toBe("online");
 
     const far = params(dayHref("/events", {}, "2026-08-03", HORIZON, TODAY));
@@ -254,12 +256,12 @@ describe("dayHref — one day-href rule over the extent (row 57)", () => {
     expect(query.get("day")).toBe("2026-08-10");
   });
 
-  it("NEW: a tense switch from a widened extent drops it for the other tense's default read", () => {
+  it("NEW: a tense switch from a widened extent drops it for the other tense's extent back to the day", () => {
     const widened = { from: "2026-09-01", to: "2026-09-29" };
     const query = params(dayHref("/events", widened, "2026-08-25", widened, TODAY));
     expect(query.get("tense")).toBe("past");
-    expect(query.get("from")).toBeNull();
-    expect(query.get("to")).toBeNull();
+    expect(query.get("from")).toBe("2026-08-25");
+    expect(query.get("to")).toBe("2026-09-02");
   });
 
   it("D10: the tense boundary is the api's today, never the served extent's anchor", () => {
@@ -267,8 +269,8 @@ describe("dayHref — one day-href rule over the extent (row 57)", () => {
     const stale = { from: "2026-10-05", to: "2026-11-02" };
     const tuesday = params(dayHref("/events", stale, "2026-10-06", stale, "2026-10-07"));
     expect(tuesday.get("tense")).toBe("past");
-    expect(tuesday.get("from")).toBeNull();
-    expect(tuesday.get("to")).toBeNull();
+    expect(tuesday.get("from")).toBe("2026-10-06");
+    expect(tuesday.get("to")).toBe("2026-10-08");
     const wednesday = params(dayHref("/events", stale, "2026-10-07", stale, "2026-10-07"));
     expect(wednesday.get("tense")).toBeNull();
     expect(wednesday.get("from")).toBe("2026-10-05");
